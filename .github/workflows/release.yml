@@ -21,7 +21,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable # or: beta, master (or main)
+          channel: stable
           cache: true
       - run: flutter --version
 
@@ -56,8 +56,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
-          channel: 'stable'
+          channel: stable
           cache: true
 
       - name: Install Melos
