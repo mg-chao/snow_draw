@@ -174,8 +174,10 @@ class ResizeOperation extends EditOperation {
     var snapGuides = const <SnapGuide>[];
     final gridConfig = config.grid;
     final snapConfig = config.snap;
-    // Determine which edges of the selection bounds should snap based on resize mode.
-    // For example, resizing from the right edge means the right edge should snap.
+    // Determine which edges of the selection bounds should snap based on resize
+    // mode.
+    // For example, resizing from the right edge means the right edge should
+    // snap.
     final anchorsX = _resolveAnchorsX(typedContext.resizeMode);
     final anchorsY = _resolveAnchorsY(typedContext.resizeMode);
     final hasAnchors = anchorsX.isNotEmpty || anchorsY.isNotEmpty;
@@ -187,7 +189,8 @@ class ResizeOperation extends EditOperation {
       config: config,
       ctrlPressed: modifiers.snapOverride,
     );
-    // Grid snapping is disabled when maintaining aspect ratio to avoid conflicts
+    // Grid snapping is disabled when maintaining aspect ratio to avoid
+    // conflicts
     // between the aspect ratio constraint and grid alignment.
     final shouldGridSnap =
         canSnap &&
@@ -225,7 +228,8 @@ class ResizeOperation extends EditOperation {
         targetAnchorsY: anchorsY,
       );
       if (result.hasSnap) {
-        // Apply snap offset only to the edges that are being moved during resize
+        // Apply snap offset only to the edges that are being moved during
+        // resize
         final moveMinX = anchorsX.contains(SnapAxisAnchor.start);
         final moveMaxX = anchorsX.contains(SnapAxisAnchor.end);
         final moveMinY = anchorsY.contains(SnapAxisAnchor.start);

@@ -262,7 +262,8 @@ class StyleToolbarAdapter {
   /// 3. If multiple rectangles are selected, compares each property across all
   ///    selected rectangles and marks properties as "mixed" when values differ
   ///
-  /// The boolean flags (colorMixed, fillColorMixed, etc.) track which properties
+  /// The boolean flags (colorMixed, fillColorMixed, etc.) track
+  ///  which properties
   /// have different values across the selection. When a property is mixed, the
   /// returned MixedValue has isMixed=true and value=null, allowing the UI to
   /// display "Mixed" instead of an arbitrary value.
@@ -388,8 +389,10 @@ class StyleToolbarAdapter {
   /// This method implements a multi-selection style resolution algorithm:
   /// 1. If no text elements are selected, returns default values from config
   /// 2. If one text element is selected, returns its actual property values
-  /// 3. If multiple text elements are selected, compares each property across all
-  ///    selected text elements and marks properties as "mixed" when values differ
+  /// 3. If multiple text elements are selected, compares each
+  ///  property across all
+  ///    selected text elements and marks properties as "mixed" when
+  ///  values differ
   ///
   /// The boolean flags (colorMixed, fontSizeMixed, etc.) track which properties
   /// have different values across the selection. When a property is mixed, the

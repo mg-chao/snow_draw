@@ -139,7 +139,8 @@ class EditApply {
         var data = resized.data as TextData;
         var rect = resized.rect;
         final heightDelta = (rect.height - startElement.rect.height).abs();
-        // During vertical resize, allow width scaling if horizontal scale is ~1.0
+        // During vertical resize, allow width scaling
+        // if horizontal scale is ~1.0
         final allowWidthScale =
             isVerticalResize &&
             (scaleX - 1).abs() <= textHeightTolerance;
