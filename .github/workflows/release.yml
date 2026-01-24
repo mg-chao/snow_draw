@@ -113,7 +113,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: Snow Draw ${{ steps.get_version.outputs.version }}
+          name: ${{ steps.get_version.outputs.version }}
           draft: true
           prerelease: false
           files: |
