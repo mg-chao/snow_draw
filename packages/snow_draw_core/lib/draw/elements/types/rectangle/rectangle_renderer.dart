@@ -124,8 +124,8 @@ class RectangleRenderer extends ElementTypeRenderer {
             (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
         const lineToSpacingRatio = 6.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-        const lineAngle = math.pi / 6;
-        const crossLineAngle = lineAngle + math.pi / 2;
+        const lineAngle = -math.pi / 4;
+        const crossLineAngle = math.pi / 4;
         final fillPaint = Paint()
           ..style = PaintingStyle.fill
           ..shader = _lineShaderCache.getOrCreate(
