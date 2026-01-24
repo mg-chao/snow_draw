@@ -1,0 +1,142 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap workspace
+        run: melos bootstrap
+
+      - name: Build Windows app
+        run: |
+          cd apps/snow_draw
+          flutter build windows --release
+
+      - name: Create Windows archive
+        run: |
+          cd apps/snow_draw/build/windows/x64/runner/Release
+          Compress-Archive -Path * -DestinationPath ../../../../../../../snow_draw-windows-x64.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-windows-x64
+          path: snow_draw-windows-x64.zip
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap workspace
+        run: melos bootstrap
+
+      - name: Build Web app
+        run: |
+          cd apps/snow_draw
+          flutter build web --release
+
+      - name: Create Web archive
+        run: |
+          cd apps/snow_draw/build/web
+          tar -czf ../../../snow_draw-web.tar.gz *
+
+      - name: Upload Web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-web
+          path: snow_draw-web.tar.gz
+
+  create-release:
+    needs: [build-windows, build-web]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-windows-x64
+
+      - name: Download Web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-web
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: Snow Draw ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            snow_draw-windows-x64.zip
+            snow_draw-web.tar.gz
+          body: |
+            ## Snow Draw ${{ steps.get_version.outputs.version }}
+
+            ### Downloads
+            - **Windows**: `snow_draw-windows-x64.zip`
+            - **Web**: `snow_draw-web.tar.gz`
+
+            ### Installation
+
+            #### Windows
+            1. Download `snow_draw-windows-x64.zip`
+            2. Extract the archive
+            3. Run `snow_draw.exe`
+
+            #### Web
+            1. Download `snow_draw-web.tar.gz`
+            2. Extract the archive
+            3. Serve the contents with a web server
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
