@@ -1,0 +1,18 @@
+import '../core/core.dart' show DrawContext;
+import '../core/draw_context.dart' show DrawContext;
+import 'core/element_registry.dart';
+import 'types/rectangle/rectangle_definition.dart';
+import 'types/text/text_definition.dart';
+
+/// Registers all built-in element types.
+///
+/// Call this when constructing a [DrawContext] to populate its
+/// `elementRegistry`.
+void registerBuiltInElements(DefaultElementRegistry registry) {
+  if (registry.get(rectangleDefinition.typeId) == null) {
+    registry.register(rectangleDefinition);
+  }
+  if (registry.get(textDefinition.typeId) == null) {
+    registry.register(textDefinition);
+  }
+}

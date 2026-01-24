@@ -1,0 +1,76 @@
+import 'dart:math';
+
+import '../../models/draw_state.dart';
+import '../../models/element_state.dart';
+import '../../models/multi_select_lifecycle.dart';
+import '../../services/selection_geometry_resolver.dart';
+import '../../types/draw_rect.dart';
+import '../../utils/selection_calculator.dart';
+
+/// Normalize angle to [-pi, pi].
+double normalizeAngle(double angle) => atan2(sin(angle), cos(angle));
+
+/// Returns true when the two rectangles intersect (touching counts as
+/// intersecting).
+bool rectsIntersect(DrawRect a, DrawRect b) =>
+    a.minX <= b.maxX &&
+    a.maxX >= b.minX &&
+    a.minY <= b.maxY &&
+    a.maxY >= b.minY;
+
+/// Applies a selection change.
+///
+/// Handles the single-select vs. multi-select cache/bounds behavior
+/// consistently.
+DrawState applySelectionChange(DrawState state, Set<String> selectedIds) {
+  // No-op when the selected set doesn't change. This avoids rebuilding the
+  // selection state and accidentally wiping multi-select overlay state.
+  if (_setEquals(state.domain.selection.selectedIds, selectedIds)) {
+    return state;
+  }
+
+  final document = state.domain.document;
+  final selectedElements = <ElementState>[];
+  for (final id in selectedIds) {
+    final element = document.getElementById(id);
+    if (element != null) {
+      selectedElements.add(element);
+    }
+  }
+  final selectionBounds = SelectionCalculator.computeSelectionBoundsForElements(
+    selectedElements,
+  );
+  final geometry = SelectionGeometryResolver.resolve(
+    selectedElements: selectedElements,
+    selection: state.domain.selection,
+    selectionBounds: selectionBounds,
+    overlayBoundsOverride: selectedElements.length > 1 ? selectionBounds : null,
+    overlayRotationOverride: 0,
+  );
+  final overlayBounds = geometry.isMultiSelect ? geometry.bounds : null;
+
+  final nextSelection = MultiSelectLifecycle.onSelectionChanged(
+    state.domain.selection,
+    selectedIds,
+    newOverlayBounds: overlayBounds,
+  );
+
+  return state.copyWith(
+    domain: state.domain.copyWith(selection: nextSelection),
+  );
+}
+
+bool _setEquals<T>(Set<T> a, Set<T> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (final item in a) {
+    if (!b.contains(item)) {
+      return false;
+    }
+  }
+  return true;
+}

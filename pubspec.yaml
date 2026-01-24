@@ -1,0 +1,35 @@
+name: snow_draw_workspace
+homepage: https://github.com/mg-chao/snow_draw
+repository: https://github.com/mg-chao/snow_draw
+issue_tracker: https://github.com/mg-chao/snow_draw/issues
+publish_to: none
+environment:
+  sdk: ^3.10.7
+  flutter: ">=1.17.0"
+workspace:
+  - apps/snow_draw
+  - packages/snow_draw_core
+dev_dependencies:
+  lint_hard: ^7.1.0
+  melos: ^7.3.0
+
+melos:
+  scripts:
+    lint:
+      description: Run all static analysis checks.
+      run: |
+        melos exec -- flutter analyze
+        melos exec -- dart format .
+        melos exec -- dart fix --apply
+
+    run:windows:
+      description: Run the snow_draw app on Windows.
+      packageFilters:
+        scope: snow_draw
+      exec: flutter run -d windows
+
+    run:chrome:
+      description: Run the snow_draw app on Chrome.
+      packageFilters:
+        scope: snow_draw
+      exec: flutter run -d chrome

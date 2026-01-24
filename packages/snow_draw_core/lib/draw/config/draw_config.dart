@@ -1,0 +1,211 @@
+import 'dart:math' as math;
+import 'dart:ui' show Color;
+
+import 'package:meta/meta.dart';
+
+import '../types/element_style.dart';
+
+part 'selection_config.dart';
+part 'element_config.dart';
+part 'canvas_config.dart';
+part 'grid_config.dart';
+part 'snap_config.dart';
+
+/// Centralized default values for the configuration system.
+///
+/// Keep defaults consistent across config classes and make theme changes
+/// easier.
+abstract class ConfigDefaults {
+  ConfigDefaults._();
+
+  // ===== Colors =====
+  /// Primary accent color (selection outline, etc.).
+  static const primaryColor = Color(0xFF1576FE);
+
+  /// Secondary accent color (box selection, etc.).
+  static const accentColor = Color(0xFF1576FE);
+
+  /// Canvas background color.
+  static const backgroundColor = Color(0xFFFFFFFF);
+
+  /// Default element color.
+  static const defaultColor = Color(0xFF1E1E1E);
+
+  /// Default element fill color.
+  static const defaultFillColor = Color(0x00000000);
+
+  /// Default element corner radius.
+  static const defaultCornerRadius = 4.0;
+
+  /// Default element stroke style.
+  static const StrokeStyle defaultStrokeStyle = StrokeStyle.solid;
+
+  /// Default element fill style.
+  static const FillStyle defaultFillStyle = FillStyle.solid;
+
+  // ===== Text =====
+  static const defaultTextFontSize = 21.0;
+  static const String? defaultTextFontFamily = null;
+  static const defaultTextStrokeColor = Color(0xFFF8F4EC);
+  static const defaultTextStrokeWidth = 0.0;
+  static const defaultTextCornerRadius = 0.0;
+  static const TextHorizontalAlign defaultTextHorizontalAlign =
+      TextHorizontalAlign.left;
+  static const TextVerticalAlign defaultTextVerticalAlign =
+      TextVerticalAlign.center;
+  static const defaultTextAutoResize = true;
+  static const textMinWidth = 24.0;
+  static const textMaxAutoWidth = 240.0;
+
+  /// Control point fill color.
+  static const controlPointFillColor = Color(0xFFFFFFFF);
+
+  // ===== Sizes =====
+  static const defaultStrokeWidth = 1.0;
+  static const controlPointSize = 8.0;
+  static const controlPointRadius = 2.0;
+
+  static const selectionPadding = 3.0;
+  static const rotateHandleOffset = 12.0;
+
+  // ===== Interaction =====
+  static const handleTolerance = 6.0;
+  static const dragThreshold = 0.0;
+
+  // ===== Elements =====
+  static const minValidElementSize = 5.0;
+  static const minCreateElementSize = 8.0;
+  static const double minResizeElementSize = minValidElementSize;
+
+  static const defaultOpacity = 1.0;
+  static const boxSelectionFillOpacity = 0.2;
+
+  /// Rotation snap angle interval in radians (15 degrees).
+  ///
+  /// Use `0.0` to disable snapping when discrete rotation is enabled.
+  static const double rotationSnapAngle = math.pi / 12;
+
+  // ===== Object Snapping =====
+  static const objectSnapEnabled = false;
+  static const double objectSnapDistance = 8;
+  static const objectSnapPointEnabled = true;
+  static const objectSnapGapEnabled = true;
+  static const objectSnapShowGuides = true;
+  static const objectSnapShowGapSize = false;
+  static const objectSnapLineColor = Color(0xFFFF6B6B);
+  static const double objectSnapLineWidth = 1;
+  static const double objectSnapMarkerSize = 8;
+  static const double objectSnapGapDashLength = 4;
+  static const double objectSnapGapDashGap = 4;
+
+  // ===== Grid =====
+  static const gridEnabled = false;
+  static const gridSize = 20.0;
+  static const gridMinSize = 5.0;
+  static const gridMaxSize = 100.0;
+  static const gridSizePresets = [10.0, 20.0, 40.0, 80.0];
+  static const gridLineColor = Color(0xFFBDBDBD);
+  static const gridLineOpacity = 0.45;
+  static const gridMajorLineOpacity = 0.7;
+  static const gridLineWidth = 1.0;
+  static const gridMajorLineEvery = 5;
+  static const gridMinScreenSpacing = 10.0;
+  static const gridMinRenderSpacing = 2.0;
+}
+
+/// Top-level draw configuration.
+@immutable
+class DrawConfig {
+  const DrawConfig({
+    this.selection = const SelectionConfig(),
+    this.element = const ElementConfig(),
+    this.canvas = const CanvasConfig(),
+    this.boxSelection = const BoxSelectionConfig(),
+    this.elementStyle = const ElementStyleConfig(),
+    ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? textStyle,
+    this.grid = const GridConfig(),
+    this.snap = const SnapConfig(),
+  }) : rectangleStyle = rectangleStyle ?? elementStyle,
+       textStyle = textStyle ?? elementStyle;
+  final SelectionConfig selection;
+  final ElementConfig element;
+  final CanvasConfig canvas;
+  final BoxSelectionConfig boxSelection;
+  final ElementStyleConfig elementStyle;
+  final ElementStyleConfig rectangleStyle;
+  final ElementStyleConfig textStyle;
+  final GridConfig grid;
+  final SnapConfig snap;
+
+  static const defaultConfig = DrawConfig();
+
+  DrawConfig copyWith({
+    SelectionConfig? selection,
+    ElementConfig? element,
+    CanvasConfig? canvas,
+    BoxSelectionConfig? boxSelection,
+    ElementStyleConfig? elementStyle,
+    ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? textStyle,
+    GridConfig? grid,
+    SnapConfig? snap,
+  }) {
+    final nextElementStyle = elementStyle ?? this.elementStyle;
+    return DrawConfig(
+      selection: selection ?? this.selection,
+      element: element ?? this.element,
+      canvas: canvas ?? this.canvas,
+      boxSelection: boxSelection ?? this.boxSelection,
+      elementStyle: nextElementStyle,
+      rectangleStyle: rectangleStyle ??
+          (elementStyle != null ? nextElementStyle : this.rectangleStyle),
+      textStyle: textStyle ??
+          (elementStyle != null ? nextElementStyle : this.textStyle),
+      grid: grid ?? this.grid,
+      snap: snap ?? this.snap,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DrawConfig &&
+          other.selection == selection &&
+          other.element == element &&
+          other.canvas == canvas &&
+          other.boxSelection == boxSelection &&
+          other.elementStyle == elementStyle &&
+          other.rectangleStyle == rectangleStyle &&
+          other.textStyle == textStyle &&
+          other.grid == grid &&
+          other.snap == snap;
+
+  @override
+  int get hashCode =>
+      Object.hash(
+        selection,
+        element,
+        canvas,
+        boxSelection,
+        elementStyle,
+        rectangleStyle,
+        textStyle,
+        grid,
+        snap,
+      );
+
+  @override
+  String toString() =>
+      'DrawConfig('
+      'selection: $selection, '
+      'element: $element, '
+      'canvas: $canvas, '
+      'boxSelection: $boxSelection, '
+      'elementStyle: $elementStyle, '
+      'rectangleStyle: $rectangleStyle, '
+      'textStyle: $textStyle, '
+      'grid: $grid, '
+      'snap: $snap'
+      ')';
+}

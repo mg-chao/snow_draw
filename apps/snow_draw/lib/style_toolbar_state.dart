@@ -1,0 +1,187 @@
+import 'package:flutter/material.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+
+/// Represents a style property value that may differ across multiple selected elements.
+///
+/// When multiple elements are selected and they have different values for a property,
+/// [isMixed] is true and [value] is null. This allows the UI to display "Mixed" or
+/// a placeholder instead of showing an arbitrary value from one element.
+///
+/// When [isMixed] is false, [value] contains the actual property value (either from
+/// a single selected element or a common value shared by all selected elements).
+@immutable
+class MixedValue<T> {
+  const MixedValue({required this.value, required this.isMixed});
+
+  final T? value;
+  final bool isMixed;
+
+  T valueOr(T fallback) => value ?? fallback;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MixedValue<T> &&
+          other.value == value &&
+          other.isMixed == isMixed;
+
+  @override
+  int get hashCode => Object.hash(value, isMixed);
+}
+
+/// Resolved style values for rectangle elements, supporting multi-selection.
+///
+/// Each property is wrapped in [MixedValue] to handle cases where multiple
+/// selected rectangles have different values for that property.
+@immutable
+class RectangleStyleValues {
+  const RectangleStyleValues({
+    required this.color,
+    required this.fillColor,
+    required this.strokeStyle,
+    required this.fillStyle,
+    required this.strokeWidth,
+    required this.cornerRadius,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<Color> fillColor;
+  final MixedValue<StrokeStyle> strokeStyle;
+  final MixedValue<FillStyle> fillStyle;
+  final MixedValue<double> strokeWidth;
+  final MixedValue<double> cornerRadius;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RectangleStyleValues &&
+          other.color == color &&
+          other.fillColor == fillColor &&
+          other.strokeStyle == strokeStyle &&
+          other.fillStyle == fillStyle &&
+          other.strokeWidth == strokeWidth &&
+          other.cornerRadius == cornerRadius &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    fillColor,
+    strokeStyle,
+    fillStyle,
+    strokeWidth,
+    cornerRadius,
+    opacity,
+  );
+}
+
+/// Resolved style values for text elements, supporting multi-selection.
+///
+/// Each property is wrapped in [MixedValue] to handle cases where multiple
+/// selected text elements have different values for that property.
+@immutable
+class TextStyleValues {
+  const TextStyleValues({
+    required this.color,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.horizontalAlign,
+    required this.verticalAlign,
+    required this.fillColor,
+    required this.fillStyle,
+    required this.textStrokeColor,
+    required this.textStrokeWidth,
+    required this.cornerRadius,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<double> fontSize;
+  final MixedValue<String> fontFamily;
+  final MixedValue<TextHorizontalAlign> horizontalAlign;
+  final MixedValue<TextVerticalAlign> verticalAlign;
+  final MixedValue<Color> fillColor;
+  final MixedValue<FillStyle> fillStyle;
+  final MixedValue<Color> textStrokeColor;
+  final MixedValue<double> textStrokeWidth;
+  final MixedValue<double> cornerRadius;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextStyleValues &&
+          other.color == color &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.horizontalAlign == horizontalAlign &&
+          other.verticalAlign == verticalAlign &&
+          other.fillColor == fillColor &&
+          other.fillStyle == fillStyle &&
+          other.textStrokeColor == textStrokeColor &&
+          other.textStrokeWidth == textStrokeWidth &&
+          other.cornerRadius == cornerRadius &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    fontSize,
+    fontFamily,
+    horizontalAlign,
+    verticalAlign,
+    fillColor,
+    fillStyle,
+    textStrokeColor,
+    textStrokeWidth,
+    cornerRadius,
+    opacity,
+  );
+}
+
+@immutable
+class StyleToolbarState {
+  const StyleToolbarState({
+    required this.rectangleStyle,
+    required this.textStyle,
+    required this.styleValues,
+    required this.textStyleValues,
+    required this.hasSelection,
+    required this.hasSelectedRectangles,
+    required this.hasSelectedTexts,
+  });
+
+  final ElementStyleConfig rectangleStyle;
+  final ElementStyleConfig textStyle;
+  final RectangleStyleValues styleValues;
+  final TextStyleValues textStyleValues;
+  final bool hasSelection;
+  final bool hasSelectedRectangles;
+  final bool hasSelectedTexts;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StyleToolbarState &&
+          other.rectangleStyle == rectangleStyle &&
+          other.textStyle == textStyle &&
+          other.styleValues == styleValues &&
+          other.textStyleValues == textStyleValues &&
+          other.hasSelection == hasSelection &&
+          other.hasSelectedRectangles == hasSelectedRectangles &&
+          other.hasSelectedTexts == hasSelectedTexts;
+
+  @override
+  int get hashCode => Object.hash(
+    rectangleStyle,
+    textStyle,
+    styleValues,
+    textStyleValues,
+    hasSelection,
+    hasSelectedRectangles,
+    hasSelectedTexts,
+  );
+}

@@ -1,0 +1,12 @@
+.dart_tool/
+.idea
+melos_snow_draw_workspace.iml
+
+# Agents
+.claude
+CLAUDE.md
+AGENTS.md
+
+# DOCS
+/docs/issues
+/docs/prds

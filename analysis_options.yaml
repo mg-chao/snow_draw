@@ -1,0 +1,13 @@
+include: package:lint_hard/all.yaml
+analyzer:
+  exclude:
+    - analysis_options.yaml
+# Ignore Dart files under docs for analyzer/lints.
+# enable lint hards custom lints - these do add a performance overhead.
+plugins:
+  lint_hard:
+    diagnostics:
+      document_thrown_exceptions: true
+      throws_index_up_to_date: true
+      fields_first_constructors_next: true
+      documented_unthrown_exception: true

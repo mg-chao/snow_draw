@@ -1,0 +1,229 @@
+import '../config/draw_config.dart';
+import '../elements/core/element_data.dart';
+import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_type_id.dart';
+import '../models/draw_state_view.dart';
+import '../models/edit_enums.dart';
+import '../models/element_state.dart';
+import '../types/draw_point.dart';
+import 'hit_test.dart';
+
+/// Edit intent detector.
+///
+/// Determines user intent (select / start-move / start-resize /
+/// start-rotate ...)
+/// based on hit-testing and modifier keys.
+///
+/// Note: this belongs to the input layer. Do not confuse it with edit-domain
+/// operations (move/resize/rotate implementations).
+class EditIntentDetector {
+  const EditIntentDetector();
+
+  /// Determines the intent from hit test results and modifiers.
+  EditIntent? detectIntent({
+    required DrawStateView stateView,
+    required DrawPoint position,
+    required bool isShiftPressed,
+    required bool isControlPressed,
+    required bool isAltPressed,
+    required SelectionConfig config,
+    required ElementRegistry registry,
+  }) {
+    final hitResult = hitTest.test(
+      stateView: stateView,
+      position: position,
+      config: config,
+      registry: registry,
+    );
+
+    final state = stateView.state;
+    final selectedIds = state.domain.selection.selectedIds;
+
+    // 1. Handle hit -> resize/rotate.
+    if (hitResult.isHandleHit) {
+      return _getHandleIntent(hitResult.handleType!, config.padding);
+    }
+
+    // 2. Element hit -> select or start move.
+    if (hitResult.elementId != null) {
+      final element = state.domain.document.getElementById(
+        hitResult.elementId!,
+      );
+      if (element != null) {
+        final addToSelection = isShiftPressed || isControlPressed;
+        final isElementHit = _isElementHit(
+          element: element,
+          position: position,
+          config: config,
+          registry: registry,
+        );
+        if (selectedIds.contains(hitResult.elementId)) {
+          if (addToSelection) {
+            if (!isElementHit) {
+              return null;
+            }
+            return SelectIntent(
+              elementId: hitResult.elementId!,
+              addToSelection: true,
+            );
+          }
+          return StartMoveIntent(
+            elementId: hitResult.elementId!,
+            addToSelection: false,
+          );
+        } else {
+          final deferSelectionForDrag =
+              !addToSelection &&
+              selectedIds.length > 1 &&
+              hitTest.isInSelectionPaddedArea(
+                stateView: stateView,
+                position: position,
+                config: config,
+              );
+          return SelectIntent(
+            elementId: hitResult.elementId!,
+            addToSelection: addToSelection,
+            deferSelectionForDrag: deferSelectionForDrag,
+          );
+        }
+      }
+    }
+
+    // 3. Clicked blank area.
+    if (!isShiftPressed && !isControlPressed) {
+      return BoxSelectIntent(startPosition: position);
+    }
+
+    return null;
+  }
+
+  EditIntent _getHandleIntent(HandleType handleType, double selectionPadding) {
+    switch (handleType) {
+      case HandleType.rotate:
+        return const StartRotateIntent();
+      case HandleType.topLeft:
+      case HandleType.top:
+      case HandleType.topRight:
+      case HandleType.right:
+      case HandleType.bottomRight:
+      case HandleType.bottom:
+      case HandleType.bottomLeft:
+      case HandleType.left:
+        final resizeMode = hitTest.getResizeModeForHandle(handleType);
+        return StartResizeIntent(
+          mode: resizeMode!,
+          selectionPadding: selectionPadding,
+        );
+    }
+  }
+
+  /// Returns a create intent if the app is currently creating.
+  CreateIntent? detectCreateIntent({
+    required ElementTypeId<ElementData> elementTypeId,
+    required bool isCreating,
+  }) {
+    if (!isCreating) {
+      return null;
+    }
+    return CreateIntent(typeId: elementTypeId);
+  }
+
+  bool _isElementHit({
+    required ElementState element,
+    required DrawPoint position,
+    required SelectionConfig config,
+    required ElementRegistry registry,
+  }) {
+    final definition = registry.getDefinition(element.typeId);
+    final tolerance = config.interaction.handleTolerance;
+    if (definition == null) {
+      final rect = element.rect;
+      return position.x >= rect.minX &&
+          position.x <= rect.maxX &&
+          position.y >= rect.minY &&
+          position.y <= rect.maxY;
+    }
+    return definition.hitTester.hitTest(
+      element: element,
+      position: position,
+      tolerance: tolerance,
+    );
+  }
+}
+
+/// Shared edit intent detector instance.
+const editIntentDetector = EditIntentDetector();
+
+/// Input-layer edit intent.
+sealed class EditIntent {
+  const EditIntent();
+}
+
+final class SelectIntent extends EditIntent {
+  const SelectIntent({
+    required this.elementId,
+    required this.addToSelection,
+    this.deferSelectionForDrag = false,
+  });
+  final String elementId;
+  final bool addToSelection;
+  final bool deferSelectionForDrag;
+
+  @override
+  String toString() =>
+      'SelectIntent(id: $elementId, addToSelection: $addToSelection, '
+      'deferSelectionForDrag: $deferSelectionForDrag)';
+}
+
+final class StartMoveIntent extends EditIntent {
+  const StartMoveIntent({
+    required this.elementId,
+    required this.addToSelection,
+  });
+  final String elementId;
+  final bool addToSelection;
+
+  @override
+  String toString() =>
+      'StartMoveIntent(id: $elementId, addToSelection: $addToSelection)';
+}
+
+final class StartResizeIntent extends EditIntent {
+  const StartResizeIntent({required this.mode, this.selectionPadding});
+  final ResizeMode mode;
+  final double? selectionPadding;
+
+  @override
+  String toString() =>
+      'StartResizeIntent(mode: $mode, selectionPadding: $selectionPadding)';
+}
+
+final class StartRotateIntent extends EditIntent {
+  const StartRotateIntent();
+
+  @override
+  String toString() => 'StartRotateIntent()';
+}
+
+final class BoxSelectIntent extends EditIntent {
+  const BoxSelectIntent({required this.startPosition});
+  final DrawPoint startPosition;
+
+  @override
+  String toString() => 'BoxSelectIntent(start: $startPosition)';
+}
+
+final class ClearSelectionIntent extends EditIntent {
+  const ClearSelectionIntent();
+
+  @override
+  String toString() => 'ClearSelectionIntent()';
+}
+
+final class CreateIntent {
+  const CreateIntent({required this.typeId});
+  final ElementTypeId<ElementData> typeId;
+
+  @override
+  String toString() => 'CreateIntent(typeId: $typeId)';
+}
