@@ -27,7 +27,7 @@ final ModuleLogger _historyFallbackLog = LogService.fallback.history;
 /// - The **root** node is the initial state (no delta)
 /// - The **current** node is the active state the user sees
 ///
-/// ```
+/// ``` md
 ///        root
 ///         |
 ///      delta1
@@ -249,12 +249,13 @@ class HistoryManager {
   /// are removed by making a deeper node the new root. This algorithm balances
   /// two goals:
   /// 1. **Limit depth**: Keep history within memory bounds
-  /// 2. **Preserve branches**: Maintain recent branch points for user navigation
+  /// 2. **Preserve branches**: Maintain recent branch points for user
+  ///  navigation
   ///
   /// ## Basic Pruning (No Branch Preservation)
   ///
   /// Without branch preservation, pruning simply counts back from current:
-  /// ```
+  /// ``` md
   /// depth = 52, maxHistoryLength = 50
   /// stepsToMove = 52 - 50 = 2
   /// newRoot = current.parent.parent (2 steps up)
@@ -267,7 +268,7 @@ class HistoryManager {
   /// recent [maxBranchPoints] branches are preserved.
   ///
   /// **Example:**
-  /// ```
+  /// ``` md
   /// Path: [root, n1, n2*, n3, n4*, n5, n6, n7, n8, current]
   ///       (* = branch point with multiple children)
   ///
@@ -327,7 +328,8 @@ class HistoryManager {
         for (final branchPoint in branchPoints.reversed.take(maxBranchPoints)) {
           final index = pathIndex[branchPoint];
           if (index != null && index < resolvedIndex) {
-            // This branch point would be pruned, move newRoot back to preserve it.
+            // This branch point would be pruned, move newRoot back to preserve
+            // it.
             resolvedIndex = index;
           }
         }

@@ -112,7 +112,8 @@ class InteractionStateMachine {
   ///    general selection/manipulation. Pointer events during text editing
   ///    should update the text cursor, not trigger element selection.
   ///
-  /// 5. **Selection** - General selection logic (clicking elements, multi-select).
+  /// 5. **Selection** - General selection logic (clicking elements, 
+  /// multi-select).
   ///    Runs after modal interactions but before element manipulation to ensure
   ///    selection state is updated before transforms are applied.
   ///
@@ -126,7 +127,8 @@ class InteractionStateMachine {
   /// ## Adding New Reducers
   ///
   /// When adding a new reducer, consider:
-  /// - Is it a modal interaction (like text editing)? Place it before selection.
+  /// - Is it a modal interaction (like text editing)? Place it before
+  ///  selection.
   /// - Does it manipulate existing elements? Place it after selection.
   /// - Is it a fallback behavior? Place it near the end (before camera).
   /// - Does it need to override all other interactions? Place it first.

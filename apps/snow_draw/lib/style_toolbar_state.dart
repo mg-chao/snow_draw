@@ -2,14 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
-/// Represents a style property value that may differ across multiple selected elements.
+/// Represents a style property value that may differ
+/// across multiple selected elements.
 ///
-/// When multiple elements are selected and they have different values for a property,
-/// [isMixed] is true and [value] is null. This allows the UI to display "Mixed" or
+/// When multiple elements are selected and they have different
+/// values for a property,
+/// [isMixed] is true and [value] is null. This allows the UI 
+/// to display "Mixed" or
 /// a placeholder instead of showing an arbitrary value from one element.
 ///
-/// When [isMixed] is false, [value] contains the actual property value (either from
-/// a single selected element or a common value shared by all selected elements).
+/// When [isMixed] is false, [value] contains the actual 
+/// property value (either from
+/// a single selected element or a common value shared by
+///  all selected elements).
 @immutable
 class MixedValue<T> {
   const MixedValue({required this.value, required this.isMixed});
