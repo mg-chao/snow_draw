@@ -21,7 +21,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
       - run: flutter --version
 
@@ -56,7 +56,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
 
       - name: Install Melos
@@ -114,7 +114,7 @@ jobs:
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Snow Draw ${{ steps.get_version.outputs.version }}
-          draft: false
+          draft: true
           prerelease: false
           files: |
             snow_draw-windows-x64.zip
