@@ -11,8 +11,8 @@ import 'text_layout.dart';
 class TextRenderer extends ElementTypeRenderer {
   const TextRenderer();
 
-  static const double _lineFillAngle = math.pi / 6;
-  static const double _crossLineAngleOffset = math.pi / 2;
+  static const double _lineFillAngle = -math.pi / 4;
+  static const double _crossLineFillAngle = math.pi / 4;
   static final _lineShaderCache = _LruCache<_LineShaderKey, Shader>(
     maxEntries: 128,
   );
@@ -139,7 +139,7 @@ class TextRenderer extends ElementTypeRenderer {
           crossLinePaint = _buildLineFillPaint(
             spacing: spacing,
             lineWidth: fillLineWidth,
-            angle: _lineFillAngle + _crossLineAngleOffset,
+            angle: _crossLineFillAngle,
             color: backgroundColor,
           );
         }
