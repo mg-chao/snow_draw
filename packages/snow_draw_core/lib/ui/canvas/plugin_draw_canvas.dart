@@ -682,6 +682,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _handlePointerSignal(PointerSignalEvent event) {
     _syncKeyboardModifiers();
+    if (event is PointerScaleEvent) {
+      _zoomCamera(event.scale, event.localPosition);
+      return;
+    }
+
     if (event is! PointerScrollEvent) {
       return;
     }
@@ -698,17 +703,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         return;
       }
       final scale = delta > 0 ? 0.9 : 1.1;
-      unawaited(
-        widget.store.dispatch(
-          ZoomCamera(
-            scale: scale,
-            center: DrawPoint(
-              x: event.localPosition.dx,
-              y: event.localPosition.dy,
-            ),
-          ),
-        ),
-      );
+      _zoomCamera(scale, event.localPosition);
       return;
     }
 
@@ -833,6 +828,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       !_doubleEquals(event.scrollDelta.dy, 0)
       ? event.scrollDelta.dy
       : event.scrollDelta.dx;
+
+  void _zoomCamera(double scale, Offset localPosition) {
+    if (!scale.isFinite || scale <= 0 || _doubleEquals(scale, 1)) {
+      return;
+    }
+    unawaited(
+      widget.store.dispatch(
+        ZoomCamera(
+          scale: scale,
+          center: DrawPoint(
+            x: localPosition.dx,
+            y: localPosition.dy,
+          ),
+        ),
+      ),
+    );
+  }
 
   void _adjustStrokeWidth(PointerScrollEvent event) {
     final delta = _resolvePrimaryScrollDelta(event);
