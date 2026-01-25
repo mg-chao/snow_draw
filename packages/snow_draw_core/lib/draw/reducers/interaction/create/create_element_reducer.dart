@@ -88,7 +88,11 @@ class CreateElementReducer {
       maxY: startPosition.y,
     );
     if (data is ArrowData) {
-      final arrowRect = _rectFromPoints(startPosition, startPosition);
+      final arrowRect = _calculateArrowRect(
+        points: [startPosition, startPosition],
+        arrowType: data.arrowType,
+        strokeWidth: data.strokeWidth,
+      );
       final normalizedPoints = ArrowGeometry.normalizePoints(
         worldPoints: [startPosition, startPosition],
         rect: arrowRect,
@@ -195,7 +199,11 @@ class CreateElementReducer {
         arrowType: elementData.arrowType,
       );
       final allPoints = <DrawPoint>[...fixedPoints, adjustedCurrent];
-      final arrowRect = _rectFromPointsList(allPoints);
+      final arrowRect = _calculateArrowRect(
+        points: allPoints,
+        arrowType: elementData.arrowType,
+        strokeWidth: elementData.strokeWidth,
+      );
       final normalizedPoints = ArrowGeometry.normalizePoints(
         worldPoints: allPoints,
         rect: arrowRect,
@@ -327,7 +335,11 @@ class CreateElementReducer {
       if (finalPoints.length < 2) {
         return _cancelCreateElement(state);
       }
-      final arrowRect = _rectFromPointsList(finalPoints);
+      final arrowRect = _calculateArrowRect(
+        points: finalPoints,
+        arrowType: data.arrowType,
+        strokeWidth: data.strokeWidth,
+      );
       final normalizedPoints = ArrowGeometry.normalizePoints(
         worldPoints: finalPoints,
         rect: arrowRect,
@@ -427,7 +439,11 @@ class CreateElementReducer {
       ...updatedFixedPoints,
       position,
     ];
-    final arrowRect = _rectFromPointsList(allPoints);
+    final arrowRect = _calculateArrowRect(
+      points: allPoints,
+      arrowType: elementData.arrowType,
+      strokeWidth: elementData.strokeWidth,
+    );
     final normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: allPoints,
       rect: arrowRect,
@@ -449,6 +465,18 @@ class CreateElementReducer {
 
 enum _CreateAxis { start, end }
 
+/// Calculates accurate bounding rect for arrow, accounting for curved paths.
+DrawRect _calculateArrowRect({
+  required List<DrawPoint> points,
+  required ArrowType arrowType,
+  required double strokeWidth,
+}) {
+  return ArrowGeometry.calculatePathBounds(
+    worldPoints: points,
+    arrowType: arrowType,
+  );
+}
+
 DrawRect _rectFromPoints(DrawPoint a, DrawPoint b) {
   final minX = math.min(a.x, b.x);
   final maxX = math.max(a.x, b.x);
@@ -462,16 +490,10 @@ DrawPoint _resolveArrowSegmentPosition({
   required DrawPoint currentPosition,
   required ArrowType arrowType,
 }) {
-  if (arrowType != ArrowType.polyline) {
-    return currentPosition;
-  }
-
-  final dx = currentPosition.x - segmentStart.x;
-  final dy = currentPosition.y - segmentStart.y;
-  if (dx.abs() >= dy.abs()) {
-    return DrawPoint(x: currentPosition.x, y: segmentStart.y);
-  }
-  return DrawPoint(x: segmentStart.x, y: currentPosition.y);
+  // For all arrow types including polyline, allow free positioning of control points
+  // The three-segment elbow effect for polylines is applied during rendering
+  // in ArrowGeometry.expandPolylinePoints(), not during point creation
+  return currentPosition;
 }
 
 DrawRect _rectFromPointsList(List<DrawPoint> points) {

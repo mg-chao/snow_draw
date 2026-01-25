@@ -1,15 +1,21 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
 import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/text/text_data.dart';
+import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/models/draw_state_view.dart';
+import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/edit_transform.dart';
+import '../../draw/types/element_style.dart';
 import '../../draw/types/snap_guides.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'render_keys.dart';
@@ -79,15 +85,31 @@ class DynamicCanvasPainter extends CustomPainter {
       );
       if (hoveredElement != null) {
         final effectiveElement = stateView.effectiveElement(hoveredElement);
-        elementRenderer.renderSelectionOutline(
-          canvas: canvas,
-          bounds: effectiveElement.rect,
-          scaleFactor: scale,
-          config: renderKey.hoverSelectionConfig,
-          rotation: effectiveElement.rotation,
-          rotationCenter: effectiveElement.center,
-          dashed: false,
-        );
+        // For arrow elements, render an arrow outline instead of a rectangle
+        if (effectiveElement.data is ArrowData) {
+          _drawArrowHoverOutline(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else if (effectiveElement.data is TextData) {
+          // For text elements, render underlines instead of a rectangle
+          _drawTextHoverUnderlines(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else {
+          elementRenderer.renderSelectionOutline(
+            canvas: canvas,
+            bounds: effectiveElement.rect,
+            scaleFactor: scale,
+            config: renderKey.hoverSelectionConfig,
+            rotation: effectiveElement.rotation,
+            rotationCenter: effectiveElement.center,
+            dashed: false,
+          );
+        }
       }
     }
 
@@ -123,14 +145,15 @@ class DynamicCanvasPainter extends CustomPainter {
             stateView.selectedElements.first.data is ArrowData &&
             (stateView.selectedElements.first.data as ArrowData).points.length == 2;
 
+        // Determine corner handle offset for single arrow selections.
+        final cornerHandleOffset = selectedIds.length == 1 &&
+                stateView.selectedElements.isNotEmpty &&
+                stateView.selectedElements.first.data is ArrowData
+            ? 8.0
+            : 0.0;
+
         // Skip selection box and rotation handle for 2-point arrows.
         if (!isSingleTwoPointArrow) {
-          // Determine corner handle offset for single arrow selections.
-          final cornerHandleOffset = selectedIds.length == 1 &&
-                  stateView.selectedElements.isNotEmpty &&
-                  stateView.selectedElements.first.data is ArrowData
-              ? 8.0
-              : 0.0;
 
           elementRenderer
             ..renderSelection(
@@ -425,6 +448,239 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  void _drawArrowHoverOutline({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! ArrowData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final localPoints = ArrowGeometry.resolveLocalPoints(
+      rect: rect,
+      normalizedPoints: data.points,
+    );
+    if (localPoints.length < 2) {
+      return;
+    }
+
+    // Use selection stroke width for shaft, but arrow's actual stroke width for arrowheads
+    final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
+    final arrowheadStrokeWidth = data.strokeWidth;
+
+    // Calculate insets to prevent shaft from penetrating closed arrowheads
+    final startInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.startArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+    final endInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.endArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+    final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.startArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.endArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+
+    final shaftPath = ArrowGeometry.buildShaftPath(
+      points: localPoints,
+      arrowType: data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+    );
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    // Use hover selection color with modified appearance
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = hoverStrokeWidth / scale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = hoverColor
+      ..isAntiAlias = true;
+
+    // Draw shaft (always solid for hover outline)
+    canvas.drawPath(shaftPath, strokePaint);
+
+    // Draw arrowheads (using arrow's actual stroke width for proper sizing)
+    _drawArrowHoverArrowheads(
+      canvas,
+      localPoints,
+      data,
+      strokePaint,
+      arrowheadStrokeWidth,
+      startInset: startInset,
+      endInset: endInset,
+      startDirectionOffset: startDirectionOffset,
+      endDirectionOffset: endDirectionOffset,
+    );
+
+    canvas.restore();
+  }
+
+  void _drawArrowHoverArrowheads(
+    Canvas canvas,
+    List<Offset> points,
+    ArrowData data,
+    Paint paint,
+    double strokeWidth, {
+    required double startInset,
+    required double endInset,
+    required double startDirectionOffset,
+    required double endDirectionOffset,
+  }) {
+    if (points.length < 2 || strokeWidth <= 0) {
+      return;
+    }
+
+    final startDirection = ArrowGeometry.resolveStartDirection(
+      points,
+      data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: startDirectionOffset,
+    );
+    if (startDirection != null &&
+        data.startArrowhead != ArrowheadStyle.none) {
+      final path = ArrowGeometry.buildArrowheadPath(
+        tip: points.first,
+        direction: startDirection,
+        style: data.startArrowhead,
+        strokeWidth: strokeWidth,
+      );
+      canvas.drawPath(path, paint);
+    }
+
+    final endDirection = ArrowGeometry.resolveEndDirection(
+      points,
+      data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: endDirectionOffset,
+    );
+    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
+      final path = ArrowGeometry.buildArrowheadPath(
+        tip: points.last,
+        direction: endDirection,
+        style: data.endArrowhead,
+        strokeWidth: strokeWidth,
+      );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void _drawTextHoverUnderlines({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! TextData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final rotation = element.rotation;
+
+    // Get text layout to access line information
+    final layout = layoutText(
+      data: data,
+      maxWidth: rect.width,
+      minWidth: rect.width,
+      locale: renderKey.locale,
+    );
+
+    // Get text boxes for each line
+    final text = data.text.isEmpty ? ' ' : data.text;
+    final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
+    final textBoxes = layout.painter.getBoxesForSelection(
+      selection,
+      boxHeightStyle: BoxHeightStyle.strut,
+    );
+
+    if (textBoxes.isEmpty) {
+      return;
+    }
+
+    // Calculate text offset based on vertical alignment
+    final textOffset = _resolveTextOffsetForUnderline(
+      containerSize: Size(rect.width, rect.height),
+      textSize: layout.size,
+      verticalAlign: data.verticalAlign,
+    );
+
+    canvas.save();
+    if (rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    // Use hover selection color for underlines
+    final underlineColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final underlinePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 / scale
+      ..color = underlineColor
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    // Draw underline for each line
+    for (final box in textBoxes) {
+      final y = box.bottom + textOffset.dy;
+      final startX = box.left + textOffset.dx;
+      final endX = box.right + textOffset.dx;
+      canvas.drawLine(
+        Offset(startX, y),
+        Offset(endX, y),
+        underlinePaint,
+      );
+    }
+
+    canvas.restore();
+  }
+
+  Offset _resolveTextOffsetForUnderline({
+    required Size containerSize,
+    required Size textSize,
+    required TextVerticalAlign verticalAlign,
+  }) {
+    var dy = 0.0;
+
+    switch (verticalAlign) {
+      case TextVerticalAlign.top:
+        dy = 0;
+      case TextVerticalAlign.center:
+        dy = (containerSize.height - textSize.height) / 2;
+      case TextVerticalAlign.bottom:
+        dy = containerSize.height - textSize.height;
+    }
+
+    if (dy.isNaN || dy.isInfinite || dy < 0) {
+      dy = 0;
+    }
+
+    return Offset(0, dy);
   }
 
   bool _shouldShowDeleteIndicator() {

@@ -220,18 +220,44 @@ class ArrowGeometry {
       final dx = target.dx - prev.dx;
       final dy = target.dy - prev.dy;
 
+      // If already aligned horizontally or vertically, just connect directly
       if (_nearZero(dx) || _nearZero(dy)) {
         expanded.add(target);
         continue;
       }
 
-      final corner = dx.abs() >= dy.abs()
-          ? Offset(target.dx, prev.dy)
-          : Offset(prev.dx, target.dy);
+      // Standard three-segment elbow connection
+      // Choose direction priority based on which distance is greater
+      final isHorizontalPrimary = dx.abs() >= dy.abs();
 
-      if (corner != prev) {
-        expanded.add(corner);
+      if (isHorizontalPrimary) {
+        // Horizontal → vertical → horizontal
+        // This is used when points are more spread out horizontally
+        final midX = prev.dx + dx / 2;
+        final mid1 = Offset(midX, prev.dy);
+        final mid2 = Offset(midX, target.dy);
+
+        if (mid1 != prev) {
+          expanded.add(mid1);
+        }
+        if (mid2 != mid1 && mid2 != target) {
+          expanded.add(mid2);
+        }
+      } else {
+        // Vertical → horizontal → vertical
+        // This is used when points are more spread out vertically
+        final midY = prev.dy + dy / 2;
+        final mid1 = Offset(prev.dx, midY);
+        final mid2 = Offset(target.dx, midY);
+
+        if (mid1 != prev) {
+          expanded.add(mid1);
+        }
+        if (mid2 != mid1 && mid2 != target) {
+          expanded.add(mid2);
+        }
       }
+
       expanded.add(target);
     }
     return expanded;
@@ -568,6 +594,96 @@ class ArrowGeometry {
       direction = _normalize(tangent.vector);
     }
     return direction;
+  }
+
+  /// Calculates accurate bounding box for arrow paths, accounting for curve overshoot.
+  /// For curved arrows, samples the actual path to find true bounds.
+  /// For straight/polyline arrows, uses control points.
+  static DrawRect calculatePathBounds({
+    required List<DrawPoint> worldPoints,
+    required ArrowType arrowType,
+  }) {
+    if (worldPoints.isEmpty) {
+      return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
+    }
+
+    // For straight and polyline arrows, control points define the bounds
+    if (arrowType != ArrowType.curved || worldPoints.length < 3) {
+      return _boundsFromPoints(worldPoints);
+    }
+
+    // For curved arrows, sample the actual path to find accurate bounds
+    final offsetPoints = worldPoints
+        .map((p) => Offset(p.x, p.y))
+        .toList(growable: false);
+    final path = _buildCurvedPath(offsetPoints);
+
+    var minX = double.infinity;
+    var maxX = double.negativeInfinity;
+    var minY = double.infinity;
+    var maxY = double.negativeInfinity;
+
+    // Sample the path to find actual bounds
+    for (final metric in path.computeMetrics()) {
+      final length = metric.length;
+      if (length <= 0) {
+        continue;
+      }
+
+      // Sample at regular intervals (every 2 pixels or at least 10 samples)
+      final sampleCount = math.max(10, (length / 2).ceil());
+      final step = length / sampleCount;
+
+      for (var i = 0; i <= sampleCount; i++) {
+        final distance = math.min(i * step, length);
+        final tangent = metric.getTangentForOffset(distance);
+        if (tangent != null) {
+          final pos = tangent.position;
+          if (pos.dx < minX) minX = pos.dx;
+          if (pos.dx > maxX) maxX = pos.dx;
+          if (pos.dy < minY) minY = pos.dy;
+          if (pos.dy > maxY) maxY = pos.dy;
+        }
+      }
+    }
+
+    // If sampling failed, fall back to control points
+    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
+      return _boundsFromPoints(worldPoints);
+    }
+
+    return DrawRect(
+      minX: minX,
+      minY: minY,
+      maxX: maxX,
+      maxY: maxY,
+    );
+  }
+
+  /// Helper to calculate bounds from a list of points
+  static DrawRect _boundsFromPoints(List<DrawPoint> points) {
+    if (points.isEmpty) {
+      return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
+    }
+
+    var minX = points.first.x;
+    var maxX = points.first.x;
+    var minY = points.first.y;
+    var maxY = points.first.y;
+
+    for (final point in points.skip(1)) {
+      if (point.x < minX) minX = point.x;
+      if (point.x > maxX) maxX = point.x;
+      if (point.y < minY) minY = point.y;
+      if (point.y > maxY) maxY = point.y;
+    }
+
+    return DrawRect(
+      minX: minX,
+      minY: minY,
+      maxX: maxX,
+      maxY: maxY,
+    );
   }
 
   static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {

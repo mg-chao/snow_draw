@@ -15,6 +15,7 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_style.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_errors.dart';
 import '../core/edit_modifiers.dart';
@@ -198,18 +199,23 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final rect = _rectFromPoints(points);
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: points,
-      rect: rect,
-    );
-
     final element = state.domain.document.getElementById(typedContext.elementId);
     if (element == null || element.data is! ArrowData) {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final updatedData = (element.data as ArrowData).copyWith(
+    final data = element.data as ArrowData;
+    final rect = _calculateArrowRect(
+      points: points,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: points,
+      rect: rect,
+    );
+
+    final updatedData = data.copyWith(
       points: normalized,
     );
     final updatedElement = element.copyWith(rect: rect, data: updatedData);
@@ -244,18 +250,23 @@ class ArrowPointOperation extends EditOperation {
       return EditPreview.none;
     }
 
-    final rect = _rectFromPoints(typedTransform.points);
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: typedTransform.points,
-      rect: rect,
-    );
-
     final element = state.domain.document.getElementById(typedContext.elementId);
     if (element == null || element.data is! ArrowData) {
       return EditPreview.none;
     }
 
-    final updatedData = (element.data as ArrowData).copyWith(
+    final data = element.data as ArrowData;
+    final rect = _calculateArrowRect(
+      points: typedTransform.points,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: typedTransform.points,
+      rect: rect,
+    );
+
+    final updatedData = data.copyWith(
       points: normalized,
     );
     final updatedElement = element.copyWith(rect: rect, data: updatedData);
@@ -414,6 +425,18 @@ _ArrowPointComputation _compute({
     shouldDelete: shouldDelete,
     activeIndex: activeIndex,
     hasChanges: hasChanges,
+  );
+}
+
+/// Calculates accurate bounding rect for arrow, accounting for curved paths.
+DrawRect _calculateArrowRect({
+  required List<DrawPoint> points,
+  required ArrowType arrowType,
+  required double strokeWidth,
+}) {
+  return ArrowGeometry.calculatePathBounds(
+    worldPoints: points,
+    arrowType: arrowType,
   );
 }
 

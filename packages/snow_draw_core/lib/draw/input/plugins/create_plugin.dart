@@ -78,7 +78,18 @@ class CreatePlugin extends DrawInputPlugin {
         registry: drawContext.elementRegistry,
         tolerance: tolerance,
       );
+      if (hitResult.isHandleHit) {
+        return unhandled(reason: 'Selection handle hit');
+      }
       if (hitResult.isHit) {
+        // Only defer to selection if the hit element matches the current tool type
+        if (hitResult.elementId != null && _isMatchingToolType(hitResult.elementId!)) {
+          return unhandled();
+        }
+        // Otherwise, ignore the hit and proceed with creating a new element
+      } else if (state.domain.hasSelection) {
+        // If there's a selection and clicking on blank area, defer to selection plugin
+        // to handle deselection instead of creating a new element
         return unhandled();
       }
 
@@ -139,5 +150,15 @@ class CreatePlugin extends DrawInputPlugin {
       throw StateError('CreatePlugin has not been loaded yet');
     }
     return builder.build(state);
+  }
+
+  /// Checks if the element with the given ID matches the current tool type.
+  bool _isMatchingToolType(String elementId) {
+    final toolTypeId = currentToolTypeId;
+    if (toolTypeId == null) {
+      return true; // No tool active, allow all
+    }
+    final element = state.domain.document.getElementById(elementId);
+    return element?.typeId == toolTypeId;
   }
 }

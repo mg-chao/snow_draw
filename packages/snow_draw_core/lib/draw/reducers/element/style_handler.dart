@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
 import '../../elements/core/element_style_updatable_data.dart';
+import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_layout.dart';
 import '../../models/draw_state.dart';
@@ -73,6 +75,14 @@ DrawState handleUpdateElementsStyle(
           if (nextRect != next.rect) {
             next = next.copyWith(rect: nextRect);
           }
+        } else if (data is ArrowData &&
+            updatedData is ArrowData &&
+            _shouldRecalculateArrowRect(data, updatedData)) {
+          final result = _resolveArrowRectAndData(
+            currentRect: next.rect,
+            data: updatedData,
+          );
+          next = next.copyWith(rect: result.rect, data: result.data);
         }
         domainChanged = true;
       }
@@ -195,3 +205,34 @@ DrawRect _resolveTextRect({
 
 bool _shouldRelayoutText(ElementStyleUpdate update) =>
     update.fontSize != null || update.fontFamily != null;
+
+bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
+    oldData.arrowType != newData.arrowType;
+
+({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
+  required DrawRect currentRect,
+  required ArrowData data,
+}) {
+  // Resolve world points from the current rect and normalized points
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: currentRect,
+    normalizedPoints: data.points,
+  ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
+
+  // Calculate new bounds based on arrow type
+  final newRect = ArrowGeometry.calculatePathBounds(
+    worldPoints: worldPoints,
+    arrowType: data.arrowType,
+  );
+
+  // Normalize points to the new rect
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: newRect,
+  );
+
+  // Update data with normalized points to maintain consistency
+  final updatedData = data.copyWith(points: normalizedPoints);
+
+  return (rect: newRect, data: updatedData);
+}

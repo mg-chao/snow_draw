@@ -30,7 +30,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
          },
        );
 
-  static const Duration _doubleClickThreshold = Duration(milliseconds: 320);
+  static const Duration _doubleClickThreshold = Duration(milliseconds: 400);
+  static const double _doubleClickToleranceMultiplier = 1.0;
 
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
@@ -227,6 +228,13 @@ class ArrowCreatePlugin extends DrawInputPlugin {
       registry: drawContext.elementRegistry,
       tolerance: tolerance,
     );
+
+    // If there's a selection and clicking on blank area, don't create
+    // Let the selection plugin handle deselection instead
+    if (!hitResult.isHit && state.domain.hasSelection) {
+      return false;
+    }
+
     return !hitResult.isHit;
   }
 
@@ -239,7 +247,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     if (now.difference(lastTime) > _doubleClickThreshold) {
       return false;
     }
-    final tolerance = selectionConfig.interaction.handleTolerance;
+    final tolerance = selectionConfig.interaction.handleTolerance *
+        _doubleClickToleranceMultiplier;
     return lastPosition.distanceSquared(position) <= tolerance * tolerance;
   }
 
