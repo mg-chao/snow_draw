@@ -1,6 +1,7 @@
 import '../core/core.dart' show DrawContext;
 import '../core/draw_context.dart' show DrawContext;
 import 'core/element_registry.dart';
+import 'types/arrow/arrow_definition.dart';
 import 'types/rectangle/rectangle_definition.dart';
 import 'types/text/text_definition.dart';
 
@@ -11,6 +12,9 @@ import 'types/text/text_definition.dart';
 void registerBuiltInElements(DefaultElementRegistry registry) {
   if (registry.get(rectangleDefinition.typeId) == null) {
     registry.register(rectangleDefinition);
+  }
+  if (registry.get(arrowDefinition.typeId) == null) {
+    registry.register(arrowDefinition);
   }
   if (registry.get(textDefinition.typeId) == null) {
     registry.register(textDefinition);

@@ -128,6 +128,27 @@ class UpdateCreatingElement extends DrawAction {
       'snapOverride: $snapOverride)';
 }
 
+class AddArrowPoint extends DrawAction implements NonRecordable {
+  const AddArrowPoint({
+    required this.position,
+    this.snapOverride = false,
+  });
+
+  final DrawPoint position;
+  final bool snapOverride;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  String get nonRecordableReason =>
+      'AddArrowPoint is an intermediate create state.';
+
+  @override
+  String toString() =>
+      'AddArrowPoint(position: $position, snapOverride: $snapOverride)';
+}
+
 class FinishCreateElement extends DrawAction {
   const FinishCreateElement();
 
@@ -238,6 +259,9 @@ class UpdateElementsStyle extends DrawAction {
     this.strokeStyle,
     this.fillStyle,
     this.cornerRadius,
+    this.arrowType,
+    this.startArrowhead,
+    this.endArrowhead,
     this.fontSize,
     this.fontFamily,
     this.textAlign,
@@ -254,6 +278,9 @@ class UpdateElementsStyle extends DrawAction {
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
   final double? cornerRadius;
+  final ArrowType? arrowType;
+  final ArrowheadStyle? startArrowhead;
+  final ArrowheadStyle? endArrowhead;
   final double? fontSize;
   final String? fontFamily;
   final TextHorizontalAlign? textAlign;

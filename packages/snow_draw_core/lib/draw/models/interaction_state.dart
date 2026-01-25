@@ -190,6 +190,44 @@ class CreatingState extends InteractionState {
 }
 
 @immutable
+class ArrowCreatingState extends CreatingState {
+  const ArrowCreatingState({
+    required super.element,
+    required super.startPosition,
+    required super.currentRect,
+    super.snapGuides = const [],
+    this.fixedPoints = const [],
+    this.currentPoint,
+  });
+
+  /// Fixed turning points in world coordinates.
+  final List<DrawPoint> fixedPoints;
+
+  /// Current (preview) point in world coordinates.
+  final DrawPoint? currentPoint;
+
+  @override
+  ArrowCreatingState copyWith({
+    ElementState? element,
+    DrawPoint? startPosition,
+    DrawRect? currentRect,
+    List<SnapGuide>? snapGuides,
+    List<DrawPoint>? fixedPoints,
+    DrawPoint? currentPoint,
+  }) => ArrowCreatingState(
+    element: element ?? this.element,
+    startPosition: startPosition ?? this.startPosition,
+    currentRect: currentRect ?? this.currentRect,
+    snapGuides: snapGuides ?? this.snapGuides,
+    fixedPoints: fixedPoints ?? this.fixedPoints,
+    currentPoint: currentPoint ?? this.currentPoint,
+  );
+
+  @override
+  String toString() => 'ArrowCreatingState(elementId: $elementId)';
+}
+
+@immutable
 class BoxSelectingState extends InteractionState {
   const BoxSelectingState({
     required this.startPosition,

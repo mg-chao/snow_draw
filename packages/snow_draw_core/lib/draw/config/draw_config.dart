@@ -43,6 +43,11 @@ abstract class ConfigDefaults {
   /// Default element fill style.
   static const FillStyle defaultFillStyle = FillStyle.solid;
 
+  // ===== Arrow =====
+  static const ArrowType defaultArrowType = ArrowType.straight;
+  static const ArrowheadStyle defaultStartArrowhead = ArrowheadStyle.none;
+  static const ArrowheadStyle defaultEndArrowhead = ArrowheadStyle.standard;
+
   // ===== Text =====
   static const defaultTextFontSize = 21.0;
   static const String? defaultTextFontFamily = null;
@@ -123,10 +128,12 @@ class DrawConfig {
     this.boxSelection = const BoxSelectionConfig(),
     this.elementStyle = const ElementStyleConfig(),
     ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? arrowStyle,
     ElementStyleConfig? textStyle,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
+       arrowStyle = arrowStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle;
   final SelectionConfig selection;
   final ElementConfig element;
@@ -134,6 +141,7 @@ class DrawConfig {
   final BoxSelectionConfig boxSelection;
   final ElementStyleConfig elementStyle;
   final ElementStyleConfig rectangleStyle;
+  final ElementStyleConfig arrowStyle;
   final ElementStyleConfig textStyle;
   final GridConfig grid;
   final SnapConfig snap;
@@ -147,6 +155,7 @@ class DrawConfig {
     BoxSelectionConfig? boxSelection,
     ElementStyleConfig? elementStyle,
     ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? arrowStyle,
     ElementStyleConfig? textStyle,
     GridConfig? grid,
     SnapConfig? snap,
@@ -160,6 +169,8 @@ class DrawConfig {
       elementStyle: nextElementStyle,
       rectangleStyle: rectangleStyle ??
           (elementStyle != null ? nextElementStyle : this.rectangleStyle),
+      arrowStyle: arrowStyle ??
+          (elementStyle != null ? nextElementStyle : this.arrowStyle),
       textStyle: textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
       grid: grid ?? this.grid,
@@ -177,6 +188,7 @@ class DrawConfig {
           other.boxSelection == boxSelection &&
           other.elementStyle == elementStyle &&
           other.rectangleStyle == rectangleStyle &&
+          other.arrowStyle == arrowStyle &&
           other.textStyle == textStyle &&
           other.grid == grid &&
           other.snap == snap;
@@ -190,6 +202,7 @@ class DrawConfig {
         boxSelection,
         elementStyle,
         rectangleStyle,
+        arrowStyle,
         textStyle,
         grid,
         snap,
@@ -204,6 +217,7 @@ class DrawConfig {
       'boxSelection: $boxSelection, '
       'elementStyle: $elementStyle, '
       'rectangleStyle: $rectangleStyle, '
+      'arrowStyle: $arrowStyle, '
       'textStyle: $textStyle, '
       'grid: $grid, '
       'snap: $snap'

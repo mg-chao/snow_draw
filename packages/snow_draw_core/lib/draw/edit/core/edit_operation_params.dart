@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../models/edit_enums.dart';
+import '../../elements/types/arrow/arrow_points.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../free_transform/free_transform_context.dart';
@@ -66,4 +67,18 @@ class FreeTransformOperationParams extends EditOperationParams {
     this.initialMode = FreeTransformMode.move,
   });
   final FreeTransformMode initialMode;
+}
+
+@immutable
+class ArrowPointOperationParams extends EditOperationParams {
+  const ArrowPointOperationParams({
+    required this.elementId,
+    required this.pointKind,
+    required this.pointIndex,
+    super.initialSelectionBounds,
+  });
+
+  final String elementId;
+  final ArrowPointKind pointKind;
+  final int pointIndex;
 }

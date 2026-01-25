@@ -1,6 +1,7 @@
 import '../types/edit_operation_id.dart';
 import 'core/edit_operation_base.dart';
 import 'edit_operation_registry_interface.dart';
+import 'arrow/arrow_point_operation.dart';
 import 'free_transform/free_transform_operation.dart';
 import 'move/move_operation.dart';
 import 'resize/resize_operation.dart';
@@ -28,6 +29,7 @@ class DefaultEditOperationRegistry implements EditOperationRegistry {
   /// Default operation set (reused by tests and extension points).
   static const List<EditOperationBase> defaultOperations = [
     MoveOperation(),
+    ArrowPointOperation(),
     ResizeOperation(),
     RotateOperation(),
     FreeTransformOperation(),

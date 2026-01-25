@@ -40,6 +40,18 @@ class EditIntentToOperationMapper {
   factory EditIntentToOperationMapper.withDefaults() =>
       EditIntentToOperationMapper._([
         _IntentMapping(
+          operationId: EditOperationIds.arrowPoint,
+          predicate: (intent, _) => intent is StartArrowPointIntent,
+          paramsBuilder: (intent, _) {
+            final arrowIntent = intent as StartArrowPointIntent;
+            return ArrowPointOperationParams(
+              elementId: arrowIntent.elementId,
+              pointKind: arrowIntent.pointKind,
+              pointIndex: arrowIntent.pointIndex,
+            );
+          },
+        ),
+        _IntentMapping(
           operationId: EditOperationIds.rotate,
           predicate: (intent, _) => intent is StartRotateIntent,
           paramsBuilder: (intent, context) => const RotateOperationParams(),

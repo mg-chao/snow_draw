@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
@@ -6,6 +8,8 @@ import '../../../core/draw_context.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../elements/core/element_style_configurable_data.dart';
 import '../../../elements/core/element_type_id.dart';
+import '../../../elements/types/arrow/arrow_data.dart';
+import '../../../elements/types/arrow/arrow_geometry.dart';
 import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../models/draw_state.dart';
@@ -15,6 +19,7 @@ import '../../../services/grid_snap_service.dart';
 import '../../../services/object_snap_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../../../utils/state_calculator.dart';
@@ -38,6 +43,7 @@ class CreateElementReducer {
           a,
           context,
         ),
+        final AddArrowPoint a => _addArrowPoint(state, a, context),
         FinishCreateElement _ => _finishCreateElement(state, context),
         CancelCreateElement _ => _cancelCreateElement(state),
         _ => null,
@@ -81,6 +87,15 @@ class CreateElementReducer {
       maxX: startPosition.x,
       maxY: startPosition.y,
     );
+    if (data is ArrowData) {
+      final arrowRect = _rectFromPoints(startPosition, startPosition);
+      final normalizedPoints = ArrowGeometry.normalizePoints(
+        worldPoints: [startPosition, startPosition],
+        rect: arrowRect,
+      );
+      data = data.copyWith(points: normalizedPoints);
+    }
+
     final newElement = ElementState(
       id: elementId,
       rect: initialRect,
@@ -93,13 +108,24 @@ class CreateElementReducer {
     final nextDomain = state.domain.copyWith(
       selection: state.domain.selection.cleared(),
     );
-    final nextApplication = state.application.copyWith(
-      interaction: CreatingState(
-        element: newElement,
-        startPosition: startPosition,
-        currentRect: initialRect,
-      ),
-    );
+    final nextApplication =
+        data is ArrowData
+            ? state.application.copyWith(
+              interaction: ArrowCreatingState(
+                element: newElement,
+                startPosition: startPosition,
+                currentRect: initialRect,
+                fixedPoints: List<DrawPoint>.unmodifiable([startPosition]),
+                currentPoint: startPosition,
+              ),
+            )
+            : state.application.copyWith(
+              interaction: CreatingState(
+                element: newElement,
+                startPosition: startPosition,
+                currentRect: initialRect,
+              ),
+            );
     return state.copyWith(domain: nextDomain, application: nextApplication);
   }
 
@@ -109,6 +135,9 @@ class CreateElementReducer {
   ) {
     if (typeId == RectangleData.typeIdToken) {
       return config.rectangleStyle;
+    }
+    if (typeId == ArrowData.typeIdToken) {
+      return config.arrowStyle;
     }
     if (typeId == TextData.typeIdToken) {
       return config.textStyle;
@@ -150,6 +179,46 @@ class CreateElementReducer {
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
     );
+
+    final elementData = interaction.element.data;
+    if (elementData is ArrowData) {
+      final fixedPoints =
+          interaction is ArrowCreatingState
+              ? interaction.fixedPoints
+              : [startPosition];
+      final segmentStart = fixedPoints.isNotEmpty
+          ? fixedPoints.last
+          : startPosition;
+      final adjustedCurrent = _resolveArrowSegmentPosition(
+        segmentStart: segmentStart,
+        currentPosition: currentPosition,
+        arrowType: elementData.arrowType,
+      );
+      final allPoints = <DrawPoint>[...fixedPoints, adjustedCurrent];
+      final arrowRect = _rectFromPointsList(allPoints);
+      final normalizedPoints = ArrowGeometry.normalizePoints(
+        worldPoints: allPoints,
+        rect: arrowRect,
+      );
+      final updatedData = elementData.copyWith(points: normalizedPoints);
+      final updatedElement = interaction.element.copyWith(data: updatedData);
+      final nextInteraction =
+          interaction is ArrowCreatingState
+              ? interaction.copyWith(
+                element: updatedElement,
+                currentRect: arrowRect,
+                snapGuides: const [],
+                currentPoint: adjustedCurrent,
+              )
+              : interaction.copyWith(
+                element: updatedElement,
+                currentRect: arrowRect,
+                snapGuides: const [],
+              );
+      return state.copyWith(
+        application: state.application.copyWith(interaction: nextInteraction),
+      );
+    }
 
     var snapGuides = const <SnapGuide>[];
     final snapConfig = context.config.snap;
@@ -240,13 +309,45 @@ class CreateElementReducer {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final updatedElement = interaction.element.copyWith(
+    var updatedElement = interaction.element.copyWith(
       rect: interaction.currentRect,
       zIndex: state.domain.document.elements.length,
     );
     final minSize = context.config.element.minCreateSize;
 
-    if (updatedElement.rect.width < minSize ||
+    final data = updatedElement.data;
+    if (data is ArrowData) {
+      final finalPoints =
+          interaction is ArrowCreatingState
+              ? _resolveFinalArrowPoints(interaction)
+              : _resolveArrowWorldPoints(
+                rect: updatedElement.rect,
+                normalizedPoints: data.points,
+              );
+      if (finalPoints.length < 2) {
+        return _cancelCreateElement(state);
+      }
+      final arrowRect = _rectFromPointsList(finalPoints);
+      final normalizedPoints = ArrowGeometry.normalizePoints(
+        worldPoints: finalPoints,
+        rect: arrowRect,
+      );
+      updatedElement = updatedElement.copyWith(
+        rect: arrowRect,
+        data: data.copyWith(points: normalizedPoints),
+      );
+      final points = ArrowGeometry.resolveWorldPoints(
+        rect: updatedElement.rect,
+        normalizedPoints: (updatedElement.data as ArrowData).points,
+      );
+      final length = ArrowGeometry.calculateShaftLength(
+        points: points,
+        arrowType: (updatedElement.data as ArrowData).arrowType,
+      );
+      if (!length.isFinite || length < minSize) {
+        return _cancelCreateElement(state);
+      }
+    } else if (updatedElement.rect.width < minSize ||
         updatedElement.rect.height < minSize ||
         !updatedElement.isValidWith(context.config.element)) {
       return _cancelCreateElement(state);
@@ -281,9 +382,145 @@ class CreateElementReducer {
     );
     return state.copyWith(domain: nextDomain, application: nextApplication);
   }
+
+  DrawState _addArrowPoint(
+    DrawState state,
+    AddArrowPoint action,
+    DrawContext context,
+  ) {
+    final interaction = state.application.interaction;
+    if (interaction is! ArrowCreatingState) {
+      return state;
+    }
+    final elementData = interaction.element.data;
+    if (elementData is! ArrowData) {
+      return state;
+    }
+
+    final gridConfig = context.config.grid;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: context.config,
+      ctrlPressed: action.snapOverride,
+    );
+    final snapToGrid = snappingMode == SnappingMode.grid;
+    var position = snapToGrid
+        ? gridSnapService.snapPoint(
+          point: action.position,
+          gridSize: gridConfig.size,
+        )
+        : action.position;
+
+    final fixedPoints = interaction.fixedPoints;
+    final segmentStart = fixedPoints.isNotEmpty
+        ? fixedPoints.last
+        : interaction.startPosition;
+    position = _resolveArrowSegmentPosition(
+      segmentStart: segmentStart,
+      currentPosition: position,
+      arrowType: elementData.arrowType,
+    );
+
+    final updatedFixedPoints = position == segmentStart
+        ? fixedPoints
+        : List<DrawPoint>.unmodifiable([...fixedPoints, position]);
+    final allPoints = <DrawPoint>[
+      ...updatedFixedPoints,
+      position,
+    ];
+    final arrowRect = _rectFromPointsList(allPoints);
+    final normalizedPoints = ArrowGeometry.normalizePoints(
+      worldPoints: allPoints,
+      rect: arrowRect,
+    );
+    final updatedData = elementData.copyWith(points: normalizedPoints);
+    final updatedElement = interaction.element.copyWith(data: updatedData);
+    final nextInteraction = interaction.copyWith(
+      element: updatedElement,
+      currentRect: arrowRect,
+      fixedPoints: updatedFixedPoints,
+      currentPoint: position,
+      snapGuides: const [],
+    );
+    return state.copyWith(
+      application: state.application.copyWith(interaction: nextInteraction),
+    );
+  }
 }
 
 enum _CreateAxis { start, end }
+
+DrawRect _rectFromPoints(DrawPoint a, DrawPoint b) {
+  final minX = math.min(a.x, b.x);
+  final maxX = math.max(a.x, b.x);
+  final minY = math.min(a.y, b.y);
+  final maxY = math.max(a.y, b.y);
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+DrawPoint _resolveArrowSegmentPosition({
+  required DrawPoint segmentStart,
+  required DrawPoint currentPosition,
+  required ArrowType arrowType,
+}) {
+  if (arrowType != ArrowType.polyline) {
+    return currentPosition;
+  }
+
+  final dx = currentPosition.x - segmentStart.x;
+  final dy = currentPosition.y - segmentStart.y;
+  if (dx.abs() >= dy.abs()) {
+    return DrawPoint(x: currentPosition.x, y: segmentStart.y);
+  }
+  return DrawPoint(x: segmentStart.x, y: currentPosition.y);
+}
+
+DrawRect _rectFromPointsList(List<DrawPoint> points) {
+  if (points.isEmpty) {
+    return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
+  }
+  var minX = points.first.x;
+  var maxX = points.first.x;
+  var minY = points.first.y;
+  var maxY = points.first.y;
+  for (final point in points.skip(1)) {
+    if (point.x < minX) {
+      minX = point.x;
+    }
+    if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    }
+    if (point.y > maxY) {
+      maxY = point.y;
+    }
+  }
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+List<DrawPoint> _resolveFinalArrowPoints(ArrowCreatingState interaction) {
+  final points = <DrawPoint>[...interaction.fixedPoints];
+  final currentPoint = interaction.currentPoint;
+  if (currentPoint != null &&
+      (points.isEmpty || points.last != currentPoint)) {
+    points.add(currentPoint);
+  }
+  return points;
+}
+
+List<DrawPoint> _resolveArrowWorldPoints({
+  required DrawRect rect,
+  required List<DrawPoint> normalizedPoints,
+}) {
+  final resolved = ArrowGeometry.resolveWorldPoints(
+    rect: rect,
+    normalizedPoints: normalizedPoints,
+  );
+  return resolved
+      .map((point) => DrawPoint(x: point.dx, y: point.dy))
+      .toList(growable: false);
+}
 
 @immutable
 class _CreateDirection {

@@ -7,6 +7,7 @@ import '../../draw/elements/core/element_registry_interface.dart';
 import '../../draw/models/camera_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
+import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/snap_guides.dart';
 
@@ -144,6 +145,8 @@ class DynamicCanvasRenderKey {
     required this.boxSelectionBounds,
     required this.selectedIds,
     required this.hoveredElementId,
+    required this.hoveredArrowHandle,
+    required this.activeArrowHandle,
     required this.hoverSelectionConfig,
     required this.snapGuides,
     required this.documentVersion,
@@ -172,6 +175,8 @@ class DynamicCanvasRenderKey {
 
   /// Hovered element ID for selection preview outline.
   final String? hoveredElementId;
+  final ArrowPointHandle? hoveredArrowHandle;
+  final ArrowPointHandle? activeArrowHandle;
 
   /// Selection config for hover outlines.
   final SelectionConfig hoverSelectionConfig;
@@ -218,6 +223,8 @@ class DynamicCanvasRenderKey {
       other.boxSelectionBounds == boxSelectionBounds &&
       _setEquals(other.selectedIds, selectedIds) &&
       other.hoveredElementId == hoveredElementId &&
+      other.hoveredArrowHandle == hoveredArrowHandle &&
+      other.activeArrowHandle == activeArrowHandle &&
       other.hoverSelectionConfig == hoverSelectionConfig &&
       _listEquals(other.snapGuides, snapGuides) &&
       other.documentVersion == documentVersion &&
@@ -238,6 +245,8 @@ class DynamicCanvasRenderKey {
     boxSelectionBounds,
     Object.hashAllUnordered(selectedIds),
     hoveredElementId,
+    hoveredArrowHandle,
+    activeArrowHandle,
     hoverSelectionConfig,
     Object.hashAll(snapGuides),
     documentVersion,

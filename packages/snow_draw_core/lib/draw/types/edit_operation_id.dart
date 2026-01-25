@@ -11,4 +11,5 @@ abstract final class EditOperationIds {
   static const resize = 'resize';
   static const rotate = 'rotate';
   static const freeTransform = 'free_transform';
+  static const arrowPoint = 'arrow_point';
 }

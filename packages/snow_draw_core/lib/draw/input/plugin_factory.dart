@@ -1,6 +1,7 @@
 import '../elements/core/element_data.dart';
 import '../elements/core/element_type_id.dart';
 import 'plugin_core.dart';
+import 'plugins/arrow_create_plugin.dart';
 import 'plugins/box_select_plugin.dart';
 import 'plugins/create_plugin.dart';
 import 'plugins/edit_plugin.dart';
@@ -32,6 +33,15 @@ class PluginFactory {
     ElementTypeId<ElementData>? currentToolTypeId,
     InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
   }) => CreatePlugin(
+    currentToolTypeId: currentToolTypeId,
+        routingPolicy: routingPolicy,
+      );
+
+  /// Create an arrow create plugin.
+  ArrowCreatePlugin createArrowCreatePlugin({
+    ElementTypeId<ElementData>? currentToolTypeId,
+    InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
+  }) => ArrowCreatePlugin(
     currentToolTypeId: currentToolTypeId,
     routingPolicy: routingPolicy,
   );
@@ -68,6 +78,10 @@ class PluginFactory {
   }) => [
     EditPlugin(routingPolicy: routingPolicy),
     TextToolPlugin(
+      currentToolTypeId: currentToolTypeId,
+      routingPolicy: routingPolicy,
+    ),
+    ArrowCreatePlugin(
       currentToolTypeId: currentToolTypeId,
       routingPolicy: routingPolicy,
     ),

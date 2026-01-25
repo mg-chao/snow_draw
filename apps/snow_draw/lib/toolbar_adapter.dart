@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
@@ -23,6 +24,7 @@ class StyleToolbarAdapter {
     _selectedIds = _store.state.domain.selection.selectedIds;
     _refreshSelectedElements();
     _styleValues = _resolveRectangleStyles();
+    _arrowStyleValues = _resolveArrowStyles();
     _textStyleValues = _resolveTextStyles();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
@@ -41,9 +43,11 @@ class StyleToolbarAdapter {
   Set<String> _selectedIds = const {};
   List<ElementState> _selectedElements = const [];
   List<ElementState> _selectedRectangles = const [];
+  List<ElementState> _selectedArrows = const [];
   List<ElementState> _selectedTexts = const [];
   Map<String, _ElementStyleSnapshot> _styleSnapshot = const {};
   late RectangleStyleValues _styleValues;
+  late ArrowStyleValues _arrowStyleValues;
   late TextStyleValues _textStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
@@ -67,6 +71,9 @@ class StyleToolbarAdapter {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
     double? fontSize,
     String? fontFamily,
     TextHorizontalAlign? textAlign,
@@ -95,6 +102,9 @@ class StyleToolbarAdapter {
           strokeStyle: strokeStyle,
           fillStyle: fillStyle,
           cornerRadius: cornerRadius,
+          arrowType: arrowType,
+          startArrowhead: startArrowhead,
+          endArrowhead: endArrowhead,
           fontSize: fontSize,
           fontFamily: fontFamily,
           textAlign: textAlign,
@@ -113,6 +123,9 @@ class StyleToolbarAdapter {
       strokeStyle: strokeStyle,
       fillStyle: fillStyle,
       cornerRadius: cornerRadius,
+      arrowType: arrowType,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
       fontSize: fontSize,
       fontFamily: fontFamily,
       textAlign: textAlign,
@@ -158,6 +171,7 @@ class StyleToolbarAdapter {
       _selectedIds = nextSelectedIds;
       _refreshSelectedElements();
       _styleValues = _resolveRectangleStyles();
+      _arrowStyleValues = _resolveArrowStyles();
       _textStyleValues = _resolveTextStyles();
       _publishState();
       return;
@@ -172,6 +186,7 @@ class StyleToolbarAdapter {
       return;
     }
     _styleValues = _resolveRectangleStyles();
+    _arrowStyleValues = _resolveArrowStyles();
     _textStyleValues = _resolveTextStyles();
     _publishState();
   }
@@ -182,13 +197,17 @@ class StyleToolbarAdapter {
     }
     final rectangleStyleChanged =
         config.rectangleStyle != _config.rectangleStyle;
+    final arrowStyleChanged = config.arrowStyle != _config.arrowStyle;
     final textStyleChanged = config.textStyle != _config.textStyle;
     _config = config;
-    if (!rectangleStyleChanged && !textStyleChanged) {
+    if (!rectangleStyleChanged && !arrowStyleChanged && !textStyleChanged) {
       return;
     }
     if (_selectedRectangles.isEmpty && rectangleStyleChanged) {
       _styleValues = _resolveRectangleStyles();
+    }
+    if (_selectedArrows.isEmpty && arrowStyleChanged) {
+      _arrowStyleValues = _resolveArrowStyles();
     }
     if (_selectedTexts.isEmpty && textStyleChanged) {
       _textStyleValues = _resolveTextStyles();
@@ -202,11 +221,13 @@ class StyleToolbarAdapter {
       final changed =
           _selectedElements.isNotEmpty ||
           _selectedRectangles.isNotEmpty ||
+          _selectedArrows.isNotEmpty ||
           _selectedTexts.isNotEmpty ||
           _styleSnapshot.isNotEmpty;
       if (changed) {
         _selectedElements = const [];
         _selectedRectangles = const [];
+        _selectedArrows = const [];
         _selectedTexts = const [];
         _styleSnapshot = const {};
       }
@@ -216,6 +237,7 @@ class StyleToolbarAdapter {
     final document = _store.state.domain.document;
     final selectedElements = <ElementState>[];
     final selectedRectangles = <ElementState>[];
+    final selectedArrows = <ElementState>[];
     final selectedTexts = <ElementState>[];
     final nextSnapshot = <String, _ElementStyleSnapshot>{};
     var snapshotChanged = false;
@@ -228,6 +250,9 @@ class StyleToolbarAdapter {
       selectedElements.add(element);
       if (element.data is RectangleData) {
         selectedRectangles.add(element);
+      }
+      if (element.data is ArrowData) {
+        selectedArrows.add(element);
       }
       if (element.data is TextData) {
         selectedTexts.add(element);
@@ -249,6 +274,7 @@ class StyleToolbarAdapter {
     }
     _selectedElements = selectedElements;
     _selectedRectangles = selectedRectangles;
+    _selectedArrows = selectedArrows;
     _selectedTexts = selectedTexts;
     _styleSnapshot = nextSnapshot;
     return true;
@@ -379,6 +405,143 @@ class StyleToolbarAdapter {
       cornerRadius: MixedValue(
         value: cornerRadiusMixed ? null : cornerRadius,
         isMixed: cornerRadiusMixed,
+      ),
+      opacity: opacity,
+    );
+  }
+
+  /// Resolves arrow style values for the current selection.
+  ArrowStyleValues _resolveArrowStyles() {
+    final defaults = _config.arrowStyle;
+    if (_selectedArrows.isEmpty) {
+      return ArrowStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
+        arrowType: MixedValue(value: defaults.arrowType, isMixed: false),
+        startArrowhead: MixedValue(
+          value: defaults.startArrowhead,
+          isMixed: false,
+        ),
+        endArrowhead: MixedValue(
+          value: defaults.endArrowhead,
+          isMixed: false,
+        ),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    final first = _selectedArrows.first;
+    final firstData = first.data;
+    if (firstData is! ArrowData) {
+      return ArrowStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
+        arrowType: MixedValue(value: defaults.arrowType, isMixed: false),
+        startArrowhead: MixedValue(
+          value: defaults.startArrowhead,
+          isMixed: false,
+        ),
+        endArrowhead: MixedValue(
+          value: defaults.endArrowhead,
+          isMixed: false,
+        ),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    if (_selectedArrows.length == 1) {
+      final opacity = _resolveMixedOpacity(defaults.opacity);
+      return ArrowStyleValues(
+        color: MixedValue(value: firstData.color, isMixed: false),
+        strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
+        arrowType: MixedValue(value: firstData.arrowType, isMixed: false),
+        startArrowhead: MixedValue(
+          value: firstData.startArrowhead,
+          isMixed: false,
+        ),
+        endArrowhead: MixedValue(
+          value: firstData.endArrowhead,
+          isMixed: false,
+        ),
+        opacity: opacity,
+      );
+    }
+
+    final color = firstData.color;
+    final strokeWidth = firstData.strokeWidth;
+    final strokeStyle = firstData.strokeStyle;
+    final arrowType = firstData.arrowType;
+    final startArrowhead = firstData.startArrowhead;
+    final endArrowhead = firstData.endArrowhead;
+
+    var colorMixed = false;
+    var strokeWidthMixed = false;
+    var strokeStyleMixed = false;
+    var arrowTypeMixed = false;
+    var startArrowheadMixed = false;
+    var endArrowheadMixed = false;
+
+    for (final element in _selectedArrows.skip(1)) {
+      final data = element.data;
+      if (data is! ArrowData) {
+        continue;
+      }
+      if (!colorMixed && data.color != color) {
+        colorMixed = true;
+      }
+      if (!strokeWidthMixed &&
+          !_doubleEquals(data.strokeWidth, strokeWidth)) {
+        strokeWidthMixed = true;
+      }
+      if (!strokeStyleMixed && data.strokeStyle != strokeStyle) {
+        strokeStyleMixed = true;
+      }
+      if (!arrowTypeMixed && data.arrowType != arrowType) {
+        arrowTypeMixed = true;
+      }
+      if (!startArrowheadMixed &&
+          data.startArrowhead != startArrowhead) {
+        startArrowheadMixed = true;
+      }
+      if (!endArrowheadMixed && data.endArrowhead != endArrowhead) {
+        endArrowheadMixed = true;
+      }
+      if (colorMixed &&
+          strokeWidthMixed &&
+          strokeStyleMixed &&
+          arrowTypeMixed &&
+          startArrowheadMixed &&
+          endArrowheadMixed) {
+        break;
+      }
+    }
+
+    final opacity = _resolveMixedOpacity(defaults.opacity);
+
+    return ArrowStyleValues(
+      color: MixedValue(value: colorMixed ? null : color, isMixed: colorMixed),
+      strokeWidth: MixedValue(
+        value: strokeWidthMixed ? null : strokeWidth,
+        isMixed: strokeWidthMixed,
+      ),
+      strokeStyle: MixedValue(
+        value: strokeStyleMixed ? null : strokeStyle,
+        isMixed: strokeStyleMixed,
+      ),
+      arrowType: MixedValue(
+        value: arrowTypeMixed ? null : arrowType,
+        isMixed: arrowTypeMixed,
+      ),
+      startArrowhead: MixedValue(
+        value: startArrowheadMixed ? null : startArrowhead,
+        isMixed: startArrowheadMixed,
+      ),
+      endArrowhead: MixedValue(
+        value: endArrowheadMixed ? null : endArrowhead,
+        isMixed: endArrowheadMixed,
       ),
       opacity: opacity,
     );
@@ -628,6 +791,9 @@ class StyleToolbarAdapter {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
     double? fontSize,
     String? fontFamily,
     TextHorizontalAlign? textAlign,
@@ -642,16 +808,20 @@ class StyleToolbarAdapter {
     final updateRectangleDefaults =
         _selectedRectangles.isNotEmpty ||
         (!hasSelection && toolType == ToolType.rectangle);
+    final updateArrowDefaults =
+        _selectedArrows.isNotEmpty ||
+        (!hasSelection && toolType == ToolType.arrow);
     final updateTextDefaults =
         _selectedTexts.isNotEmpty ||
         interaction is TextEditingState ||
         (!hasSelection && toolType == ToolType.text);
 
-    if (!updateRectangleDefaults && !updateTextDefaults) {
+    if (!updateRectangleDefaults && !updateArrowDefaults && !updateTextDefaults) {
       return;
     }
 
     var nextRectangleStyle = _config.rectangleStyle;
+    var nextArrowStyle = _config.arrowStyle;
     var nextTextStyle = _config.textStyle;
 
     if (updateRectangleDefaults) {
@@ -669,6 +839,17 @@ class StyleToolbarAdapter {
         opacity: opacity,
         textStrokeColor: textStrokeColor,
         textStrokeWidth: textStrokeWidth,
+      );
+    }
+    if (updateArrowDefaults) {
+      nextArrowStyle = nextArrowStyle.copyWith(
+        color: color,
+        strokeWidth: strokeWidth,
+        strokeStyle: strokeStyle,
+        arrowType: arrowType,
+        startArrowhead: startArrowhead,
+        endArrowhead: endArrowhead,
+        opacity: opacity,
       );
     }
     if (updateTextDefaults) {
@@ -690,6 +871,7 @@ class StyleToolbarAdapter {
     }
 
     if (nextRectangleStyle == _config.rectangleStyle &&
+        nextArrowStyle == _config.arrowStyle &&
         nextTextStyle == _config.textStyle) {
       return;
     }
@@ -699,6 +881,7 @@ class StyleToolbarAdapter {
         UpdateConfig(
           _config.copyWith(
             rectangleStyle: nextRectangleStyle,
+            arrowStyle: nextArrowStyle,
             textStyle: nextTextStyle,
           ),
         ),
@@ -731,11 +914,14 @@ class StyleToolbarAdapter {
 
   StyleToolbarState _buildState() => StyleToolbarState(
     rectangleStyle: _config.rectangleStyle,
+    arrowStyle: _config.arrowStyle,
     textStyle: _config.textStyle,
     styleValues: _styleValues,
+    arrowStyleValues: _arrowStyleValues,
     textStyleValues: _textStyleValues,
     hasSelection: _selectedIds.isNotEmpty,
     hasSelectedRectangles: _selectedRectangles.isNotEmpty,
+    hasSelectedArrows: _selectedArrows.isNotEmpty,
     hasSelectedTexts: _selectedTexts.isNotEmpty,
   );
 
@@ -747,11 +933,13 @@ class _ElementStyleSnapshot {
   const _ElementStyleSnapshot({
     required this.opacity,
     this.rectangleData,
+    this.arrowData,
     this.textData,
   });
 
   final double opacity;
   final RectangleData? rectangleData;
+  final ArrowData? arrowData;
   final TextData? textData;
 
   factory _ElementStyleSnapshot.fromElement(ElementState element) =>
@@ -759,6 +947,9 @@ class _ElementStyleSnapshot {
         opacity: element.opacity,
         rectangleData: element.data is RectangleData
             ? element.data as RectangleData
+            : null,
+        arrowData: element.data is ArrowData
+            ? element.data as ArrowData
             : null,
         textData: element.data is TextData ? element.data as TextData : null,
       );
@@ -768,6 +959,7 @@ class _ElementStyleSnapshot {
     bool Function(double, double) equals,
   ) =>
       identical(rectangleData, other.rectangleData) &&
+      identical(arrowData, other.arrowData) &&
       identical(textData, other.textData) &&
       equals(opacity, other.opacity);
 }

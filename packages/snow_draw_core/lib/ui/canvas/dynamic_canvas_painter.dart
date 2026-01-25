@@ -1,11 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/draw_state_view.dart';
+import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
+import '../../draw/types/edit_transform.dart';
 import '../../draw/types/snap_guides.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'render_keys.dart';
@@ -133,6 +137,8 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
+    _drawArrowPointOverlay(canvas: canvas, scale: scale);
+
     // Draw dashed border for a single selected text element.
     if (renderKey.selectedIds.length == 1) {
       final selectedId = renderKey.selectedIds.first;
@@ -242,6 +248,177 @@ class DynamicCanvasPainter extends CustomPainter {
       );
     }
   }
+
+  void _drawArrowPointOverlay({
+    required Canvas canvas,
+    required double scale,
+  }) {
+    if (renderKey.selectedIds.length != 1) {
+      return;
+    }
+    final selectedId = renderKey.selectedIds.first;
+    final element = stateView.state.domain.document.getElementById(selectedId);
+    if (element == null || element.data is! ArrowData) {
+      return;
+    }
+
+    final effectiveElement = stateView.effectiveElement(element);
+    final selectionConfig = renderKey.selectionConfig;
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final handleTolerance =
+        selectionConfig.interaction.handleTolerance / effectiveScale;
+    final loopThreshold = handleTolerance * 1.5;
+    final overlay = ArrowPointUtils.buildOverlay(
+      element: effectiveElement,
+      loopThreshold: loopThreshold,
+    );
+    if (overlay.turningPoints.isEmpty &&
+        overlay.addablePoints.isEmpty &&
+        overlay.loopPoints.isEmpty) {
+      return;
+    }
+
+    final handleSize = selectionConfig.render.controlPointSize / effectiveScale;
+    final strokeWidth =
+        selectionConfig.render.strokeWidth / effectiveScale;
+    final fillColor = selectionConfig.render.cornerFillColor;
+    final strokeColor = selectionConfig.render.strokeColor;
+    final highlightFill = strokeColor.withValues(alpha: 0.18);
+    final highlightStroke = strokeColor.withValues(alpha: 0.95);
+
+    final hoveredHandle = renderKey.hoveredArrowHandle;
+    final activeHandle = renderKey.activeArrowHandle;
+    final shouldDelete = _shouldShowDeleteIndicator();
+    final deletePosition =
+        activeHandle == null || !shouldDelete
+            ? null
+            : _resolveHandlePosition(overlay, activeHandle);
+
+    canvas.save();
+    if (effectiveElement.rotation != 0) {
+      canvas
+        ..translate(effectiveElement.rect.centerX, effectiveElement.rect.centerY)
+        ..rotate(effectiveElement.rotation)
+        ..translate(-effectiveElement.rect.centerX, -effectiveElement.rect.centerY);
+    }
+    canvas.translate(effectiveElement.rect.minX, effectiveElement.rect.minY);
+
+    final addableRadius = handleSize * 0.35;
+    final turnRadius = handleSize * 0.45;
+    final loopOuterRadius = handleSize * 0.55;
+    final loopInnerRadius = handleSize * 0.35;
+
+    final addableStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor
+      ..isAntiAlias = true;
+    final turningFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = fillColor
+      ..isAntiAlias = true;
+    final turningStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor
+      ..isAntiAlias = true;
+
+    for (final handle in overlay.addablePoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      final paint = isHighlighted
+          ? (Paint()
+            ..style = PaintingStyle.fill
+            ..color = highlightFill
+            ..isAntiAlias = true)
+          : null;
+      if (paint != null) {
+        canvas.drawCircle(center, addableRadius, paint);
+      }
+      canvas.drawCircle(center, addableRadius, addableStrokePaint);
+    }
+
+    for (final handle in overlay.turningPoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      final fillPaint = isHighlighted
+          ? (Paint()
+            ..style = PaintingStyle.fill
+            ..color = highlightFill
+            ..isAntiAlias = true)
+          : turningFillPaint;
+      final strokePaint = isHighlighted
+          ? (Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = strokeWidth
+            ..color = highlightStroke
+            ..isAntiAlias = true)
+          : turningStrokePaint;
+      canvas
+        ..drawCircle(center, turnRadius, fillPaint)
+        ..drawCircle(center, turnRadius, strokePaint);
+    }
+
+    for (final handle in overlay.loopPoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      final radius = handle.kind == ArrowPointKind.loopEnd
+          ? loopOuterRadius
+          : loopInnerRadius;
+      final strokePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..color = isHighlighted ? highlightStroke : strokeColor
+        ..isAntiAlias = true;
+      canvas.drawCircle(center, radius, strokePaint);
+    }
+
+    if (deletePosition != null) {
+      final center = _localOffset(effectiveElement.rect, deletePosition);
+      final deletePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth * 1.4
+        ..color = Colors.redAccent
+        ..isAntiAlias = true;
+      canvas.drawCircle(center, turnRadius * 1.35, deletePaint);
+    }
+
+    canvas.restore();
+  }
+
+  bool _shouldShowDeleteIndicator() {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState) {
+      return false;
+    }
+    final transform = interaction.currentTransform;
+    return transform is ArrowPointTransform && transform.shouldDelete;
+  }
+
+  DrawPoint? _resolveHandlePosition(
+    ArrowPointOverlay overlay,
+    ArrowPointHandle handle,
+  ) {
+    for (final candidate in overlay.turningPoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    for (final candidate in overlay.addablePoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    for (final candidate in overlay.loopPoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    return null;
+  }
+
+  Offset _localOffset(DrawRect rect, DrawPoint point) =>
+      Offset(point.x - rect.minX, point.y - rect.minY);
 
   /// Draw box-selection overlay.
   void _drawBoxSelection(Canvas canvas, DrawRect bounds, double scale) {
