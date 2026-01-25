@@ -35,6 +35,9 @@ class ZoomControls extends StatefulWidget {
 }
 
 class _ZoomControlsState extends State<ZoomControls> {
+  static const _zoomCompareTolerance = 0.01;
+  static const _zoomBoundaryTolerance = 0.0001;
+
   VoidCallback? _unsubscribe;
   var _cameraZoom = 1.0;
 
@@ -59,7 +62,7 @@ class _ZoomControlsState extends State<ZoomControls> {
     _unsubscribe = store.select<double>(
       SimpleSelector<DrawState, double>(
         (state) => state.application.view.camera.zoom,
-        equals: _doubleEquals,
+        equals: _zoomEquals,
       ),
       _handleZoomChange,
     );
@@ -142,10 +145,10 @@ class _ZoomControlsState extends State<ZoomControls> {
   }
 
   Future<void> _handleZoomTo(double targetZoom) async {
-    final next = CameraState.clampZoom(targetZoom);
+    final next = _snapZoom(targetZoom);
 
     final current = _cameraZoom;
-    if (_doubleEquals(current, next)) {
+    if (_zoomEquals(current, next)) {
       return;
     }
 
@@ -160,8 +163,8 @@ class _ZoomControlsState extends State<ZoomControls> {
 
   Future<void> _handleZoom(double scale) async {
     final current = _cameraZoom;
-    final next = CameraState.clampZoom(current * scale);
-    if (_doubleEquals(current, next)) {
+    final next = _snapZoom(current * scale);
+    if (_zoomEquals(current, next)) {
       return;
     }
     final ratio = next / current;
@@ -173,7 +176,37 @@ class _ZoomControlsState extends State<ZoomControls> {
     );
   }
 
-  bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
+  bool _doubleEquals(
+    double a,
+    double b, {
+    double tolerance = _zoomCompareTolerance,
+  }) => (a - b).abs() <= tolerance;
+
+  bool _zoomEquals(double a, double b) =>
+      _doubleEquals(a, b) && _isZoomBoundary(a) == _isZoomBoundary(b);
+
+  bool _isZoomBoundary(double zoom) =>
+      _doubleEquals(
+        zoom,
+        CameraState.minZoom,
+        tolerance: _zoomBoundaryTolerance,
+      ) ||
+      _doubleEquals(
+        zoom,
+        CameraState.maxZoom,
+        tolerance: _zoomBoundaryTolerance,
+      );
+
+  double _snapZoom(double zoom) {
+    final clamped = CameraState.clampZoom(zoom);
+    if (_doubleEquals(clamped, CameraState.minZoom)) {
+      return CameraState.minZoom;
+    }
+    if (_doubleEquals(clamped, CameraState.maxZoom)) {
+      return CameraState.maxZoom;
+    }
+    return clamped;
+  }
 
   void _handleZoomChange(double zoom) {
     if (!mounted) {
