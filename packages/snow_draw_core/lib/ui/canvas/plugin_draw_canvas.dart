@@ -30,6 +30,8 @@ import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
+import 'grid_shader_painter.dart';
+import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
 
@@ -249,6 +251,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
     );
+
+    // Preload GPU shaders for optimal first-frame performance.
+    unawaited(GridShaderManager.instance.load());
+    unawaited(RectangleShaderManager.instance.load());
 
     _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 

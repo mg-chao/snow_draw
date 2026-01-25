@@ -2,8 +2,10 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart' show Alignment, GradientRotation, LinearGradient;
+import 'package:flutter/painting.dart'
+    show Alignment, GradientRotation, LinearGradient;
 
+import '../../../../ui/canvas/rectangle_shader_manager.dart';
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_renderer.dart';
@@ -13,65 +15,13 @@ class RectangleRenderer extends ElementTypeRenderer {
   const RectangleRenderer();
 
   // Cache expensive stroke/fill paths by size/style to avoid per-frame
-  // rebuilds.
+  // rebuilds. Only used for CPU fallback rendering.
   static final _strokePathCache = _LruCache<_StrokePathKey, Path>(
     maxEntries: 200,
   );
   static final _lineShaderCache = _LruCache<_LineShaderKey, Shader>(
     maxEntries: 128,
   );
-
-  Shader _buildLineShader({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-  }) {
-    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      tileMode: TileMode.repeated,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0x00FFFFFF),
-        Color(0x00FFFFFF),
-      ],
-      stops: [0.0, lineStop, lineStop, 1.0],
-      transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, safeSpacing, safeSpacing));
-  }
-
-  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-    final dashed = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-        distance = next + gapLength;
-      }
-    }
-    return dashed;
-  }
-
-  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-    final dotted = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          dotted.addOval(
-            Rect.fromCircle(center: tangent.position, radius: dotRadius),
-          );
-        }
-        distance += dotSpacing;
-      }
-    }
-    return dotted;
-  }
 
   @override
   void render({
@@ -87,6 +37,79 @@ class RectangleRenderer extends ElementTypeRenderer {
         '${data.runtimeType})',
       );
     }
+
+    // Try GPU shader rendering first (highest performance)
+    if (_renderWithShader(canvas, element, data, scaleFactor)) {
+      return;
+    }
+
+    // Fallback to CPU rendering
+    _renderFallback(canvas, element, data, scaleFactor);
+  }
+
+  /// Renders the rectangle using the GPU fragment shader.
+  ///
+  /// Returns true if shader was used, false if fallback is needed.
+  bool _renderWithShader(
+    Canvas canvas,
+    ElementState element,
+    RectangleData data,
+    double scaleFactor,
+  ) {
+    final shaderManager = RectangleShaderManager.instance;
+    if (!shaderManager.isReady) {
+      return false;
+    }
+
+    final rect = element.rect;
+    final rotation = element.rotation;
+    final opacity = element.opacity;
+    final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
+    final strokeOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
+
+    // Calculate fill pattern parameters (matching CPU fallback logic)
+    final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
+    const lineToSpacingRatio = 6.0;
+    final fillLineSpacing =
+        (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
+
+    // Calculate stroke pattern parameters (matching CPU fallback logic)
+    final dashLength = (8 + data.strokeWidth * 1.5).clamp(6.0, 16.0);
+    final gapLength = (5 + data.strokeWidth * 1).clamp(4.0, 10.0);
+    final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
+    final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
+
+    // Scale-aware anti-aliasing width
+    final aaWidth = 1.5 / (scaleFactor == 0 ? 1.0 : scaleFactor);
+
+    return shaderManager.paintRectangle(
+      canvas: canvas,
+      center: Offset(rect.centerX, rect.centerY),
+      size: Size(rect.width, rect.height),
+      rotation: rotation,
+      cornerRadius: data.cornerRadius,
+      fillStyle: data.fillStyle,
+      fillColor: data.fillColor.withValues(alpha: fillOpacity),
+      fillLineWidth: fillLineWidth,
+      fillLineSpacing: fillLineSpacing,
+      strokeStyle: data.strokeStyle,
+      strokeColor: data.color.withValues(alpha: strokeOpacity),
+      strokeWidth: data.strokeWidth,
+      dashLength: dashLength,
+      gapLength: gapLength,
+      dotSpacing: dotSpacing,
+      dotRadius: dotRadius,
+      aaWidth: aaWidth,
+    );
+  }
+
+  /// CPU fallback rendering for platforms without shader support.
+  void _renderFallback(
+    Canvas canvas,
+    ElementState element,
+    RectangleData data,
+    double scaleFactor,
+  ) {
     final _ = scaleFactor;
 
     final rect = element.rect;
@@ -199,8 +222,7 @@ class RectangleRenderer extends ElementTypeRenderer {
             ..style = PaintingStyle.fill
             ..color = strokePaint.color
             ..isAntiAlias = true;
-          final dotSpacing =
-              math.max(4, data.strokeWidth * 2.5).toDouble();
+          final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
           final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
           final key = _StrokePathKey(
             width: size.width,
@@ -224,6 +246,58 @@ class RectangleRenderer extends ElementTypeRenderer {
     }
 
     canvas.restore();
+  }
+
+  Shader _buildLineShader({
+    required double spacing,
+    required double lineWidth,
+    required double angle,
+  }) {
+    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
+    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      tileMode: TileMode.repeated,
+      colors: const [
+        Color(0xFFFFFFFF),
+        Color(0xFFFFFFFF),
+        Color(0x00FFFFFF),
+        Color(0x00FFFFFF),
+      ],
+      stops: [0.0, lineStop, lineStop, 1.0],
+      transform: GradientRotation(angle),
+    ).createShader(Rect.fromLTWH(0, 0, safeSpacing, safeSpacing));
+  }
+
+  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
+    final dashed = Path();
+    for (final metric in basePath.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = math.min(distance + dashLength, metric.length);
+        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
+        distance = next + gapLength;
+      }
+    }
+    return dashed;
+  }
+
+  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
+    final dotted = Path();
+    for (final metric in basePath.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final tangent = metric.getTangentForOffset(distance);
+        if (tangent != null) {
+          dotted.addOval(
+            Rect.fromCircle(center: tangent.position, radius: dotRadius),
+          );
+        }
+        distance += dotSpacing;
+      }
+    }
+    return dotted;
   }
 }
 
@@ -279,8 +353,7 @@ class _StrokePathKey {
           other.patternSecondary == patternSecondary;
 
   @override
-  int get hashCode =>
-      Object.hash(
+  int get hashCode => Object.hash(
         width,
         height,
         cornerRadius,

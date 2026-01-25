@@ -12,8 +12,7 @@ import '../../draw/config/draw_config.dart';
 class GridShaderManager {
   GridShaderManager._();
 
-  static GridShaderManager? _instance;
-  static GridShaderManager get instance => _instance ??= GridShaderManager._();
+  static final instance = GridShaderManager._();
 
   ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
