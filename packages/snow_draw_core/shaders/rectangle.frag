@@ -124,12 +124,20 @@ float dashedPattern(float arcLength, float dashLen, float gapLen) {
     return dashStart * (1.0 - dashEnd);
 }
 
-// Dotted stroke pattern
+// Dotted stroke pattern with circular dots
 // Returns 1.0 for dot, 0.0 for gap
-float dottedPattern(float arcLength, float dotSpacing, float dotRadius) {
-    float t = mod(arcLength, dotSpacing);
-    float distToCenter = abs(t - dotSpacing * 0.5);
-    return 1.0 - smoothstep(dotRadius - 1.0, dotRadius + 1.0, distToCenter);
+// perpDist is the perpendicular distance from the stroke centerline
+float dottedPattern(float arcLength, float dotSpacing, float dotRadius, float perpDist) {
+    // Find nearest dot center along arc
+    float dotIndex = floor(arcLength / dotSpacing + 0.5);
+    float dotCenter = dotIndex * dotSpacing;
+    float arcDist = arcLength - dotCenter;
+
+    // Calculate 2D distance from dot center (arc distance + perpendicular distance)
+    float dist2D = sqrt(arcDist * arcDist + perpDist * perpDist);
+
+    // Create circular dot with sharper edges (reduced AA width)
+    return 1.0 - smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist2D);
 }
 
 void main() {
@@ -207,7 +215,7 @@ void main() {
             } else if (strokeStyle == 2) {
                 // Dotted stroke
                 float arcLen = calcArcLength(localPos, halfSize, cornerRadius);
-                float dotMask = dottedPattern(arcLen, uDotSpacing, uDotRadius);
+                float dotMask = dottedPattern(arcLen, uDotSpacing, uDotRadius, dist);
                 strokeMask *= dotMask;
             }
             // else: solid stroke (strokeMask unchanged)

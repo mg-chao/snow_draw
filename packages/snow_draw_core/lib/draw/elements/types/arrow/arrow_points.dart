@@ -161,9 +161,9 @@ class ArrowPointUtils {
 
     final localPosition = _toLocalPosition(element, position);
     final visualPointRadius =
-        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 0.6;
+        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 0.5;
     final visualLoopOuterRadius =
-        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 1.2;
+        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
     final loopActive =
         points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;

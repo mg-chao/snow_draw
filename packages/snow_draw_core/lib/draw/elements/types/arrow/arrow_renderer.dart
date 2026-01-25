@@ -39,9 +39,21 @@ class ArrowRenderer extends ElementTypeRenderer {
       return;
     }
 
+    // Calculate insets to prevent shaft from penetrating closed arrowheads
+    final startInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.startArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+    final endInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.endArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+
     final shaftPath = ArrowGeometry.buildShaftPath(
       points: localPoints,
       arrowType: data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
     );
 
     canvas.save();

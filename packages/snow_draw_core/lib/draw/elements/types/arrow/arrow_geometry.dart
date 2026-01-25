@@ -64,14 +64,38 @@ class ArrowGeometry {
   static Path buildShaftPath({
     required List<Offset> points,
     required ArrowType arrowType,
+    double startInset = 0,
+    double endInset = 0,
   }) {
     if (points.length < 2) {
       return Path();
     }
+
+    // If no insets, use original path
+    if (startInset <= 0 && endInset <= 0) {
+      return switch (arrowType) {
+        ArrowType.curved => _buildCurvedPath(points),
+        ArrowType.polyline => _buildPolylinePath(points),
+        ArrowType.straight => _buildStraightPath(points),
+      };
+    }
+
+    // Apply insets to shorten the shaft
+    final adjustedPoints = _applyInsets(
+      points: points,
+      arrowType: arrowType,
+      startInset: startInset,
+      endInset: endInset,
+    );
+
+    if (adjustedPoints.length < 2) {
+      return Path();
+    }
+
     return switch (arrowType) {
-      ArrowType.curved => _buildCurvedPath(points),
-      ArrowType.polyline => _buildPolylinePath(points),
-      ArrowType.straight => _buildStraightPath(points),
+      ArrowType.curved => _buildCurvedPath(adjustedPoints),
+      ArrowType.polyline => _buildPolylinePath(adjustedPoints),
+      ArrowType.straight => _buildStraightPath(adjustedPoints),
     };
   }
 
@@ -363,6 +387,42 @@ class ArrowGeometry {
     return math.max(6, strokeWidth * 6);
   }
 
+  /// Calculates how far back from the tip the shaft should stop to avoid
+  /// penetrating into closed arrowheads (circle, square, diamond, triangle).
+  /// Returns 0 for open arrowheads (standard, verticalLine, none).
+  static double calculateArrowheadInset({
+    required ArrowheadStyle style,
+    required double strokeWidth,
+  }) {
+    if (style == ArrowheadStyle.none || strokeWidth <= 0) {
+      return 0;
+    }
+
+    final length = _resolveArrowheadLength(strokeWidth);
+    if (length <= 0) {
+      return 0;
+    }
+
+    return switch (style) {
+      // Circle: radius = length * 0.3, extends 2*radius from tip
+      // Stop at back edge: 2 * radius = length * 0.6
+      ArrowheadStyle.circle => length * 0.6,
+      // Square: side = length * 0.6, extends side distance from tip
+      // Stop at back edge: side = length * 0.6
+      ArrowheadStyle.square => length * 0.6,
+      // Triangle and diamond: extend length distance from tip
+      // Stop at base: length
+      ArrowheadStyle.triangle => length,
+      ArrowheadStyle.diamond => length,
+      // Inverted triangle: the point is at the back, stop at the tip
+      ArrowheadStyle.invertedTriangle => 0,
+      // Open arrowheads: no inset needed
+      ArrowheadStyle.standard => 0,
+      ArrowheadStyle.verticalLine => 0,
+      ArrowheadStyle.none => 0,
+    };
+  }
+
   static double _clamp01(double value) {
     if (!value.isFinite) {
       return 0;
@@ -394,5 +454,102 @@ class ArrowGeometry {
       return _defaultPoints;
     }
     return [points.first, points.first];
+  }
+
+  /// Applies start and end insets to shorten the arrow shaft.
+  /// This prevents the shaft from penetrating into closed arrowheads.
+  static List<Offset> _applyInsets({
+    required List<Offset> points,
+    required ArrowType arrowType,
+    required double startInset,
+    required double endInset,
+  }) {
+    if (points.length < 2) {
+      return points;
+    }
+
+    // Expand polyline points first if needed
+    final workingPoints = arrowType == ArrowType.polyline
+        ? expandPolylinePoints(points)
+        : points;
+
+    if (workingPoints.length < 2) {
+      return workingPoints;
+    }
+
+    var adjustedPoints = workingPoints;
+
+    // Apply start inset
+    if (startInset > 0) {
+      adjustedPoints = _insetFromStart(adjustedPoints, startInset);
+      if (adjustedPoints.length < 2) {
+        return adjustedPoints;
+      }
+    }
+
+    // Apply end inset
+    if (endInset > 0) {
+      adjustedPoints = _insetFromEnd(adjustedPoints, endInset);
+    }
+
+    return adjustedPoints;
+  }
+
+  /// Shortens the path from the start by the given distance.
+  static List<Offset> _insetFromStart(List<Offset> points, double inset) {
+    if (points.length < 2 || inset <= 0) {
+      return points;
+    }
+
+    var remainingInset = inset;
+    for (var i = 0; i < points.length - 1; i++) {
+      final segmentVector = points[i + 1] - points[i];
+      final segmentLength = segmentVector.distance;
+
+      if (segmentLength <= 0) {
+        continue;
+      }
+
+      if (remainingInset < segmentLength) {
+        // Inset ends within this segment
+        final direction = segmentVector / segmentLength;
+        final newStart = points[i] + direction * remainingInset;
+        return [newStart, ...points.sublist(i + 1)];
+      }
+
+      remainingInset -= segmentLength;
+    }
+
+    // Inset is longer than the entire path
+    return [points.last];
+  }
+
+  /// Shortens the path from the end by the given distance.
+  static List<Offset> _insetFromEnd(List<Offset> points, double inset) {
+    if (points.length < 2 || inset <= 0) {
+      return points;
+    }
+
+    var remainingInset = inset;
+    for (var i = points.length - 1; i > 0; i--) {
+      final segmentVector = points[i - 1] - points[i];
+      final segmentLength = segmentVector.distance;
+
+      if (segmentLength <= 0) {
+        continue;
+      }
+
+      if (remainingInset < segmentLength) {
+        // Inset ends within this segment
+        final direction = segmentVector / segmentLength;
+        final newEnd = points[i] + direction * remainingInset;
+        return [...points.sublist(0, i), newEnd];
+      }
+
+      remainingInset -= segmentLength;
+    }
+
+    // Inset is longer than the entire path
+    return [points.first];
   }
 }

@@ -303,20 +303,29 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     canvas.translate(effectiveElement.rect.minX, effectiveElement.rect.minY);
 
-    final addableRadius = handleSize * 0.6;
-    final turnRadius = handleSize * 0.6;
-    final loopOuterRadius = handleSize * 1.2;
-    final loopInnerRadius = handleSize * 0.6;
+    final addableRadius = handleSize * 0.5;
+    final turnRadius = handleSize * 0.5;
+    final loopOuterRadius = handleSize * 1.0;
+    final loopInnerRadius = handleSize * 0.5;
     final hoverOuterRadius = loopOuterRadius;
 
     final addableStrokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..color = strokeColor
+      ..color = strokeColor.withValues(alpha: 0.35)
       ..isAntiAlias = true;
     final addableFillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.42)
+      ..color = strokeColor.withValues(alpha: 0.18)
+      ..isAntiAlias = true;
+    final addableStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.85)
+      ..isAntiAlias = true;
+    final addableFillPaintHighlighted = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.55)
       ..isAntiAlias = true;
     final turningFillPaint = Paint()
       ..style = PaintingStyle.fill
@@ -338,9 +347,11 @@ class DynamicCanvasPainter extends CustomPainter {
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
+      final fillPaint = isHighlighted ? addableFillPaintHighlighted : addableFillPaint;
+      final strokePaint = isHighlighted ? addableStrokePaintHighlighted : addableStrokePaint;
       canvas
-        ..drawCircle(center, addableRadius, addableFillPaint)
-        ..drawCircle(center, addableRadius, addableStrokePaint);
+        ..drawCircle(center, addableRadius, fillPaint)
+        ..drawCircle(center, addableRadius, strokePaint);
     }
 
     for (final handle in overlay.turningPoints) {
