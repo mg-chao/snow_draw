@@ -25,6 +25,12 @@ class TextRenderer extends ElementTypeRenderer {
   }) {
     final safeSpacing = spacing <= 0 ? 1.0 : spacing;
     final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
+    // For rotated gradients, scale the shader rect to ensure seamless tiling.
+    // The perpendicular spacing changes by cos(angle), so we compensate.
+    final cosAngle = math.cos(angle).abs();
+    final adjustedSpacing = cosAngle > 0.01
+        ? safeSpacing / cosAngle
+        : safeSpacing;
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -37,7 +43,7 @@ class TextRenderer extends ElementTypeRenderer {
       ],
       stops: [0.0, lineStop, lineStop, 1.0],
       transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, safeSpacing, safeSpacing));
+    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
   }
 
   Paint _buildLineFillPaint({
@@ -118,7 +124,10 @@ class TextRenderer extends ElementTypeRenderer {
           ..color = backgroundColor
           ..isAntiAlias = true;
       } else {
-        final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(
+        // Calculate line fill spacing based on font size
+        // Conversion ratio: fontSize / rectangleStrokeWidth = 10
+        final equivalentStrokeWidth = data.fontSize / 42;
+        final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
           0.5,
           3.0,
         );
@@ -302,15 +311,22 @@ class _LruCache<K, V> {
 
 @immutable
 class _LineShaderKey {
-  const _LineShaderKey({
-    required this.spacing,
-    required this.lineWidth,
+  _LineShaderKey({
+    required double spacing,
+    required double lineWidth,
     required this.angle,
-  });
+  }) : spacing = _quantize(spacing),
+       lineWidth = _quantize(lineWidth);
 
   final double spacing;
   final double lineWidth;
   final double angle;
+
+  /// Quantize to 1 decimal place to improve cache hit rate
+  /// by reducing floating-point precision variations
+  static double _quantize(double value) {
+    return (value * 10).roundToDouble() / 10;
+  }
 
   @override
   bool operator ==(Object other) =>
