@@ -161,6 +161,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final hasSelection = state.hasSelection;
       final hasSharedSelection =
           state.hasSelectedRectangles && state.hasSelectedTexts;
+      final showUnifiedShapeControls =
+          showRectangleControls && showArrowControls;
       final styleValues = state.styleValues;
       final arrowStyleValues = state.arrowStyleValues;
       final textStyleValues = state.textStyleValues;
@@ -208,6 +210,39 @@ class _StyleToolbarState extends State<StyleToolbar> {
               _doubleEquals,
             )
           : null;
+
+      // Unified shape controls (rectangles + arrows)
+      final unifiedShapeColor = showUnifiedShapeControls
+          ? _mergeMixedValues(
+              styleValues.color,
+              arrowStyleValues.color,
+              _colorEquals,
+            )
+          : null;
+      final unifiedShapeStrokeStyle = showUnifiedShapeControls
+          ? _mergeMixedValues(
+              styleValues.strokeStyle,
+              arrowStyleValues.strokeStyle,
+              (a, b) => a == b,
+            )
+          : null;
+      final unifiedShapeStrokeWidth = showUnifiedShapeControls
+          ? _mergeMixedValues(
+              styleValues.strokeWidth,
+              arrowStyleValues.strokeWidth,
+              _doubleEquals,
+            )
+          : null;
+      final unifiedShapeOpacity = showUnifiedShapeControls
+          ? _mergeMixedValues(
+              styleValues.opacity,
+              arrowStyleValues.opacity,
+              _doubleEquals,
+            )
+          : null;
+      final unifiedShapeDefaults = tool == ToolType.arrow
+          ? arrowDefaults
+          : rectangleDefaults;
 
       if (!showToolbar) {
         return const SizedBox.shrink();
@@ -267,66 +302,122 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           allowAlpha: true,
                         ),
                       ],
-                      if (showRectangleControls) ...[
-                        if (!hasSharedSelection) ...[
-                          _buildColorRow(
-                            label: widget.strings.color,
-                            colors: _defaultColorPalette,
-                            value: styleValues.color,
-                            customColor: styleValues.color.valueOr(
-                              rectangleDefaults.color,
+                      // 1. Color (unified or separate)
+                      if (showUnifiedShapeControls && !hasSharedSelection) ...[
+                        _buildColorRow(
+                          label: widget.strings.color,
+                          colors: _defaultColorPalette,
+                          value: unifiedShapeColor!,
+                          customColor: unifiedShapeColor.valueOr(
+                            unifiedShapeDefaults.color,
+                          ),
+                          onSelect: (color) => _applyStyleUpdate(color: color),
+                          allowAlpha: true,
+                        ),
+                      ] else if (showRectangleControls && !hasSharedSelection && !showArrowControls) ...[
+                        _buildColorRow(
+                          label: widget.strings.color,
+                          colors: _defaultColorPalette,
+                          value: styleValues.color,
+                          customColor: styleValues.color.valueOr(
+                            rectangleDefaults.color,
+                          ),
+                          onSelect: (color) =>
+                              _applyStyleUpdate(color: color),
+                          allowAlpha: true,
+                        ),
+                      ] else if (showArrowControls && !hasSharedSelection && !showRectangleControls) ...[
+                        _buildColorRow(
+                          label: widget.strings.color,
+                          colors: _defaultColorPalette,
+                          value: arrowStyleValues.color,
+                          customColor: arrowStyleValues.color.valueOr(
+                            arrowDefaults.color,
+                          ),
+                          onSelect: (color) =>
+                              _applyStyleUpdate(color: color),
+                          allowAlpha: true,
+                        ),
+                      ],
+                      // 2. Fill color (rectangle-specific)
+                      if (showRectangleControls && !hasSharedSelection) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildColorRow(
+                          label: widget.strings.fillColor,
+                          colors: const [
+                            Colors.transparent,
+                            Color(0xFFFFCCC7),
+                            Color(0xFFD9F7BE),
+                            Color(0xFFBAE0FF),
+                            Color(0xFFFFF1B8),
+                          ],
+                          value: styleValues.fillColor,
+                          customColor: styleValues.fillColor.valueOr(
+                            rectangleDefaults.fillColor,
+                          ),
+                          onSelect: (color) =>
+                              _applyStyleUpdate(fillColor: color),
+                          allowAlpha: true,
+                        ),
+                      ],
+                      // 3. Fill style (rectangle-specific)
+                      if (showRectangleControls && !hasSharedSelection && showFillStyle) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildStyleOptions(
+                          label: widget.strings.fillStyle,
+                          mixed: styleValues.fillStyle.isMixed,
+                          mixedLabel: widget.strings.mixed,
+                          options: [
+                            _StyleOption(
+                              value: FillStyle.line,
+                              label: widget.strings.lineFill,
+                              icon: const FillStyleLineIcon(),
                             ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(color: color),
-                            allowAlpha: true,
-                          ),
-                          const SizedBox(height: _sectionSpacing),
-                          _buildColorRow(
-                            label: widget.strings.fillColor,
-                            colors: const [
-                              Colors.transparent,
-                              Color(0xFFFFCCC7),
-                              Color(0xFFD9F7BE),
-                              Color(0xFFBAE0FF),
-                              Color(0xFFFFF1B8),
-                            ],
-                            value: styleValues.fillColor,
-                            customColor: styleValues.fillColor.valueOr(
-                              rectangleDefaults.fillColor,
+                            _StyleOption(
+                              value: FillStyle.crossLine,
+                              label: widget.strings.crossLineFill,
+                              icon: const FillStyleCrossLineIcon(),
                             ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(fillColor: color),
-                            allowAlpha: true,
-                          ),
-                        ],
-                        if (showFillStyle) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildStyleOptions(
-                            label: widget.strings.fillStyle,
-                            mixed: styleValues.fillStyle.isMixed,
-                            mixedLabel: widget.strings.mixed,
-                            options: [
-                              _StyleOption(
-                                value: FillStyle.line,
-                                label: widget.strings.lineFill,
-                                icon: const FillStyleLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.crossLine,
-                                label: widget.strings.crossLineFill,
-                                icon: const FillStyleCrossLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.solid,
-                                label: widget.strings.solidFill,
-                                icon: const FillStyleSolidIcon(),
-                              ),
-                            ],
-                            selected: styleValues.fillStyle.value,
-                            onSelect: (value) =>
-                                _applyStyleUpdate(fillStyle: value),
-                          ),
-                        ],
+                            _StyleOption(
+                              value: FillStyle.solid,
+                              label: widget.strings.solidFill,
+                              icon: const FillStyleSolidIcon(),
+                            ),
+                          ],
+                          selected: styleValues.fillStyle.value,
+                          onSelect: (value) =>
+                              _applyStyleUpdate(fillStyle: value),
+                        ),
+                      ],
+                      // 4. Stroke style (unified or separate)
+                      if (showUnifiedShapeControls && !hasSharedSelection) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildStyleOptions(
+                          label: widget.strings.strokeStyle,
+                          mixed: unifiedShapeStrokeStyle!.isMixed,
+                          mixedLabel: widget.strings.mixed,
+                          options: [
+                            _StyleOption(
+                              value: StrokeStyle.solid,
+                              label: widget.strings.solid,
+                              icon: const StrokeStyleSolidIcon(),
+                            ),
+                            _StyleOption(
+                              value: StrokeStyle.dashed,
+                              label: widget.strings.dashed,
+                              icon: const StrokeStyleDashedIcon(),
+                            ),
+                            _StyleOption(
+                              value: StrokeStyle.dotted,
+                              label: widget.strings.dotted,
+                              icon: const StrokeStyleDottedIcon(),
+                            ),
+                          ],
+                          selected: unifiedShapeStrokeStyle.value,
+                          onSelect: (value) =>
+                              _applyStyleUpdate(strokeStyle: value),
+                        ),
+                      ] else if (showRectangleControls && !hasSharedSelection && !showArrowControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildStyleOptions(
                           label: widget.strings.strokeStyle,
@@ -353,85 +444,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           onSelect: (value) =>
                               _applyStyleUpdate(strokeStyle: value),
                         ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildNumericOptions(
-                          label: widget.strings.strokeWidth,
-                          mixed: styleValues.strokeWidth.isMixed,
-                          mixedLabel: widget.strings.mixed,
-                          options: [
-                            _StyleOption(
-                              value: 2,
-                              label: widget.strings.thin,
-                              icon: const StrokeWidthSmallIcon(),
-                            ),
-                            _StyleOption(
-                              value: 4,
-                              label: widget.strings.medium,
-                              icon: const StrokeWidthMediumIcon(),
-                            ),
-                            _StyleOption(
-                              value: 7,
-                              label: widget.strings.thick,
-                              icon: const StrokeWidthLargeIcon(),
-                            ),
-                          ],
-                          selected: styleValues.strokeWidth.value,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(strokeWidth: value),
-                        ),
-                        if (!hasSharedSelection) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildSliderControl(
-                            label: widget.strings.cornerRadius,
-                            value: styleValues.cornerRadius,
-                            defaultValue: rectangleDefaults.cornerRadius,
-                            pendingValue: _pendingCornerRadius,
-                            min: 0,
-                            max: 83,
-                            onChanged: (value) {
-                              setState(() => _pendingCornerRadius = value);
-                              _scheduleStyleUpdate(
-                                () => _applyStyleUpdate(cornerRadius: value),
-                              );
-                            },
-                            onChangeEnd: (value) async {
-                              _flushStyleUpdate();
-                              setState(() => _pendingCornerRadius = null);
-                              await _applyStyleUpdate(cornerRadius: value);
-                            },
-                          ),
-                          const SizedBox(height: _sectionSpacing),
-                          _buildOpacityControl(
-                            styleValues.opacity,
-                            rectangleDefaults.opacity,
-                            pendingValue: _pendingOpacity,
-                            onChanged: (value) {
-                              setState(() => _pendingOpacity = value);
-                              _scheduleStyleUpdate(
-                                () => _applyStyleUpdate(opacity: value),
-                              );
-                            },
-                            onChangeEnd: (value) async {
-                              _flushStyleUpdate();
-                              setState(() => _pendingOpacity = null);
-                              await _applyStyleUpdate(opacity: value);
-                            },
-                          ),
-                        ],
-                      ],
-                      if (showArrowControls) ...[
-                        if (showRectangleControls)
-                          const SizedBox(height: _sectionSpacing),
-                        _buildColorRow(
-                          label: widget.strings.color,
-                          colors: _defaultColorPalette,
-                          value: arrowStyleValues.color,
-                          customColor: arrowStyleValues.color.valueOr(
-                            arrowDefaults.color,
-                          ),
-                          onSelect: (color) => _applyStyleUpdate(color: color),
-                          allowAlpha: true,
-                        ),
+                      ] else if (showArrowControls && !hasSharedSelection && !showRectangleControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildStyleOptions(
                           label: widget.strings.strokeStyle,
@@ -458,6 +471,63 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           onSelect: (value) =>
                               _applyStyleUpdate(strokeStyle: value),
                         ),
+                      ],
+                      // 5. Stroke width (unified or separate)
+                      if (showUnifiedShapeControls && !hasSharedSelection) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildNumericOptions(
+                          label: widget.strings.strokeWidth,
+                          mixed: unifiedShapeStrokeWidth!.isMixed,
+                          mixedLabel: widget.strings.mixed,
+                          options: [
+                            _StyleOption(
+                              value: 2,
+                              label: widget.strings.thin,
+                              icon: const StrokeWidthSmallIcon(),
+                            ),
+                            _StyleOption(
+                              value: 4,
+                              label: widget.strings.medium,
+                              icon: const StrokeWidthMediumIcon(),
+                            ),
+                            _StyleOption(
+                              value: 7,
+                              label: widget.strings.thick,
+                              icon: const StrokeWidthLargeIcon(),
+                            ),
+                          ],
+                          selected: unifiedShapeStrokeWidth.value,
+                          onSelect: (value) =>
+                              _applyStyleUpdate(strokeWidth: value),
+                        ),
+                      ] else if (showRectangleControls && !hasSharedSelection && !showArrowControls) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildNumericOptions(
+                          label: widget.strings.strokeWidth,
+                          mixed: styleValues.strokeWidth.isMixed,
+                          mixedLabel: widget.strings.mixed,
+                          options: [
+                            _StyleOption(
+                              value: 2,
+                              label: widget.strings.thin,
+                              icon: const StrokeWidthSmallIcon(),
+                            ),
+                            _StyleOption(
+                              value: 4,
+                              label: widget.strings.medium,
+                              icon: const StrokeWidthMediumIcon(),
+                            ),
+                            _StyleOption(
+                              value: 7,
+                              label: widget.strings.thick,
+                              icon: const StrokeWidthLargeIcon(),
+                            ),
+                          ],
+                          selected: styleValues.strokeWidth.value,
+                          onSelect: (value) =>
+                              _applyStyleUpdate(strokeWidth: value),
+                        ),
+                      ] else if (showArrowControls && !hasSharedSelection && !showRectangleControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildNumericOptions(
                           label: widget.strings.strokeWidth,
@@ -484,6 +554,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           onSelect: (value) =>
                               _applyStyleUpdate(strokeWidth: value),
                         ),
+                      ],
+                      // 6. Arrow type (arrow-specific)
+                      if (showArrowControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildStyleOptions(
                           label: widget.strings.arrowType,
@@ -510,6 +583,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           onSelect: (value) =>
                               _applyStyleUpdate(arrowType: value),
                         ),
+                      ],
+                      // 7. Arrowheads (arrow-specific)
+                      if (showArrowControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildArrowheadControls(
                           startArrowhead: arrowStyleValues.startArrowhead,
@@ -517,6 +593,68 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           startDefault: arrowDefaults.startArrowhead,
                           endDefault: arrowDefaults.endArrowhead,
                         ),
+                      ],
+                      // 8. Corner radius (rectangle-specific)
+                      if (showRectangleControls && !hasSharedSelection) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildSliderControl(
+                          label: widget.strings.cornerRadius,
+                          value: styleValues.cornerRadius,
+                          defaultValue: rectangleDefaults.cornerRadius,
+                          pendingValue: _pendingCornerRadius,
+                          min: 0,
+                          max: 83,
+                          onChanged: (value) {
+                            setState(() => _pendingCornerRadius = value);
+                            _scheduleStyleUpdate(
+                              () => _applyStyleUpdate(cornerRadius: value),
+                            );
+                          },
+                          onChangeEnd: (value) async {
+                            _flushStyleUpdate();
+                            setState(() => _pendingCornerRadius = null);
+                            await _applyStyleUpdate(cornerRadius: value);
+                          },
+                        ),
+                      ],
+                      // 9. Opacity (unified or separate, at the end)
+                      if (showUnifiedShapeControls && !hasSharedSelection) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildOpacityControl(
+                          unifiedShapeOpacity!,
+                          unifiedShapeDefaults.opacity,
+                          pendingValue: _pendingOpacity,
+                          onChanged: (value) {
+                            setState(() => _pendingOpacity = value);
+                            _scheduleStyleUpdate(
+                              () => _applyStyleUpdate(opacity: value),
+                            );
+                          },
+                          onChangeEnd: (value) async {
+                            _flushStyleUpdate();
+                            setState(() => _pendingOpacity = null);
+                            await _applyStyleUpdate(opacity: value);
+                          },
+                        ),
+                      ] else if (showRectangleControls && !hasSharedSelection && !showArrowControls) ...[
+                        const SizedBox(height: _sectionSpacing),
+                        _buildOpacityControl(
+                          styleValues.opacity,
+                          rectangleDefaults.opacity,
+                          pendingValue: _pendingOpacity,
+                          onChanged: (value) {
+                            setState(() => _pendingOpacity = value);
+                            _scheduleStyleUpdate(
+                              () => _applyStyleUpdate(opacity: value),
+                            );
+                          },
+                          onChangeEnd: (value) async {
+                            _flushStyleUpdate();
+                            setState(() => _pendingOpacity = null);
+                            await _applyStyleUpdate(opacity: value);
+                          },
+                        ),
+                      ] else if (showArrowControls && !hasSharedSelection && !showRectangleControls) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildOpacityControl(
                           arrowStyleValues.opacity,

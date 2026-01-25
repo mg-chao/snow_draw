@@ -48,6 +48,14 @@ class ArrowRenderer extends ElementTypeRenderer {
       style: data.endArrowhead,
       strokeWidth: data.strokeWidth,
     );
+    final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.startArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.endArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
 
     final shaftPath = ArrowGeometry.buildShaftPath(
       points: localPoints,
@@ -74,7 +82,16 @@ class ArrowRenderer extends ElementTypeRenderer {
       ..isAntiAlias = true;
 
     _drawShaft(canvas, shaftPath, strokePaint, data.strokeStyle, data);
-    _drawArrowheads(canvas, localPoints, data, strokePaint);
+    _drawArrowheads(
+      canvas,
+      localPoints,
+      data,
+      strokePaint,
+      startInset: startInset,
+      endInset: endInset,
+      startDirectionOffset: startDirectionOffset,
+      endDirectionOffset: endDirectionOffset,
+    );
 
     canvas.restore();
   }
@@ -117,8 +134,12 @@ class ArrowRenderer extends ElementTypeRenderer {
     Canvas canvas,
     List<Offset> points,
     ArrowData data,
-    Paint paint,
-  ) {
+    Paint paint, {
+    required double startInset,
+    required double endInset,
+    required double startDirectionOffset,
+    required double endDirectionOffset,
+  }) {
     if (points.length < 2 || data.strokeWidth <= 0) {
       return;
     }
@@ -126,6 +147,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     final startDirection = ArrowGeometry.resolveStartDirection(
       points,
       data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: startDirectionOffset,
     );
     if (startDirection != null &&
         data.startArrowhead != ArrowheadStyle.none) {
@@ -141,6 +165,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     final endDirection = ArrowGeometry.resolveEndDirection(
       points,
       data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: endDirectionOffset,
     );
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
       final path = ArrowGeometry.buildArrowheadPath(

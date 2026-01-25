@@ -69,7 +69,7 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     // Calculate fill pattern parameters (matching CPU fallback logic)
     final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    const lineToSpacingRatio = 6.0;
+    const lineToSpacingRatio = 4.0;
     final fillLineSpacing =
         (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
 
@@ -145,7 +145,7 @@ class RectangleRenderer extends ElementTypeRenderer {
       } else {
         final fillLineWidth =
             (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-        const lineToSpacingRatio = 6.0;
+        const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         const lineAngle = -math.pi / 4;
         const crossLineAngle = math.pi / 4;

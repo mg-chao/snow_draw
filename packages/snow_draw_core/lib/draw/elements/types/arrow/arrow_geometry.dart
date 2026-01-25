@@ -127,8 +127,35 @@ class ArrowGeometry {
 
   static Offset? resolveStartDirection(
     List<Offset> points,
-    ArrowType arrowType,
-  ) {
+    ArrowType arrowType, {
+    double startInset = 0,
+    double endInset = 0,
+    double directionOffset = 0,
+  }) {
+    if (points.length < 2) {
+      return null;
+    }
+
+    if (arrowType == ArrowType.curved || startInset > 0 || endInset > 0) {
+      final path = buildShaftPath(
+        points: points,
+        arrowType: arrowType,
+        startInset: startInset,
+        endInset: endInset,
+      );
+      final effectiveOffset =
+          arrowType == ArrowType.curved
+              ? math.max(0.0, directionOffset - startInset)
+              : 0.0;
+      final direction = _resolvePathStartDirection(
+        path,
+        offset: effectiveOffset,
+      );
+      if (direction != null) {
+        return Offset(-direction.dx, -direction.dy);
+      }
+    }
+
     final resolvedPoints = arrowType == ArrowType.polyline
         ? expandPolylinePoints(points)
         : points;
@@ -141,8 +168,35 @@ class ArrowGeometry {
 
   static Offset? resolveEndDirection(
     List<Offset> points,
-    ArrowType arrowType,
-  ) {
+    ArrowType arrowType, {
+    double startInset = 0,
+    double endInset = 0,
+    double directionOffset = 0,
+  }) {
+    if (points.length < 2) {
+      return null;
+    }
+
+    if (arrowType == ArrowType.curved || startInset > 0 || endInset > 0) {
+      final path = buildShaftPath(
+        points: points,
+        arrowType: arrowType,
+        startInset: startInset,
+        endInset: endInset,
+      );
+      final effectiveOffset =
+          arrowType == ArrowType.curved
+              ? math.max(0.0, directionOffset - endInset)
+              : 0.0;
+      final direction = _resolvePathEndDirection(
+        path,
+        offset: effectiveOffset,
+      );
+      if (direction != null) {
+        return direction;
+      }
+    }
+
     final resolvedPoints = arrowType == ArrowType.polyline
         ? expandPolylinePoints(points)
         : points;
@@ -384,7 +438,7 @@ class ArrowGeometry {
     if (strokeWidth <= 0) {
       return 0;
     }
-    return math.max(6, strokeWidth * 6);
+    return strokeWidth * 4 + 12.0;
   }
 
   /// Calculates how far back from the tip the shaft should stop to avoid
@@ -423,6 +477,33 @@ class ArrowGeometry {
     };
   }
 
+  /// Calculates how far from the tip to sample the curve direction.
+  /// This helps orient arrowheads to follow the curve near the base.
+  static double calculateArrowheadDirectionOffset({
+    required ArrowheadStyle style,
+    required double strokeWidth,
+  }) {
+    if (style == ArrowheadStyle.none || strokeWidth <= 0) {
+      return 0;
+    }
+
+    final length = _resolveArrowheadLength(strokeWidth);
+    if (length <= 0) {
+      return 0;
+    }
+
+    return switch (style) {
+      ArrowheadStyle.circle => length * 0.6,
+      ArrowheadStyle.square => length * 0.6,
+      ArrowheadStyle.standard => length,
+      ArrowheadStyle.triangle => length,
+      ArrowheadStyle.diamond => length,
+      ArrowheadStyle.invertedTriangle => length,
+      ArrowheadStyle.verticalLine => length * 0.6,
+      ArrowheadStyle.none => 0,
+    };
+  }
+
   static double _clamp01(double value) {
     if (!value.isFinite) {
       return 0;
@@ -444,6 +525,49 @@ class ArrowGeometry {
       return null;
     }
     return Offset(value.dx / length, value.dy / length);
+  }
+
+  static Offset? _resolvePathStartDirection(
+    Path path, {
+    double offset = 0,
+  }) {
+    final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
+    for (final metric in path.computeMetrics()) {
+      if (metric.length <= 0) {
+        continue;
+      }
+      final distance = safeOffset == 0
+          ? 0.0
+          : math.min(safeOffset, metric.length);
+      final tangent = metric.getTangentForOffset(distance);
+      if (tangent == null) {
+        continue;
+      }
+      return _normalize(tangent.vector);
+    }
+    return null;
+  }
+
+  static Offset? _resolvePathEndDirection(
+    Path path, {
+    double offset = 0,
+  }) {
+    final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
+    Offset? direction;
+    for (final metric in path.computeMetrics()) {
+      if (metric.length <= 0) {
+        continue;
+      }
+      final distance = safeOffset == 0
+          ? metric.length
+          : math.max(0.0, metric.length - safeOffset);
+      final tangent = metric.getTangentForOffset(distance);
+      if (tangent == null) {
+        continue;
+      }
+      direction = _normalize(tangent.vector);
+    }
+    return direction;
   }
 
   static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {

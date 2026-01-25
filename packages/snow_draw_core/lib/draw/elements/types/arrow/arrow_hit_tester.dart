@@ -99,9 +99,29 @@ class ArrowHitTester implements ElementHitTester {
     Offset position,
     double radius,
   ) {
+    final startInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.startArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+    final endInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.endArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+    final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.startArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.endArrowhead,
+      strokeWidth: data.strokeWidth,
+    );
+
     final startDirection = ArrowGeometry.resolveStartDirection(
       points,
       data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: startDirectionOffset,
     );
     if (startDirection != null &&
         data.startArrowhead != ArrowheadStyle.none) {
@@ -119,6 +139,9 @@ class ArrowHitTester implements ElementHitTester {
     final endDirection = ArrowGeometry.resolveEndDirection(
       points,
       data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: endDirectionOffset,
     );
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
       final path = ArrowGeometry.buildArrowheadPath(

@@ -176,7 +176,7 @@ class TextRenderer extends ElementTypeRenderer {
           0.5,
           3.0,
         );
-        const lineToSpacingRatio = 6.0;
+        const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         backgroundPaint = _buildLineFillPaint(
           spacing: spacing,
