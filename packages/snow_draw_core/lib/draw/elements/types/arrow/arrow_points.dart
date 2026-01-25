@@ -1,8 +1,11 @@
+import 'dart:ui';
+
 import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
+import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 
@@ -105,7 +108,7 @@ class ArrowPointUtils {
 
     final addablePoints = <ArrowPointHandle>[];
     for (var i = 0; i < points.length - 1; i++) {
-      final mid = _midpoint(points[i], points[i + 1]);
+      final mid = _calculateMidpoint(points, i, data.arrowType);
       addablePoints.add(
         ArrowPointHandle(
           elementId: element.id,
@@ -240,7 +243,7 @@ class ArrowPointUtils {
       addableHitRadius = visualPointRadius;
     }
     for (var i = 0; i < points.length - 1; i++) {
-      final mid = _midpoint(points[i], points[i + 1]);
+      final mid = _calculateMidpoint(points, i, data.arrowType);
       final distanceSq = localPosition.distanceSquared(mid);
       if (distanceSq <= addableHitRadius * addableHitRadius) {
         return ArrowPointHandle(
@@ -275,6 +278,37 @@ class ArrowPointUtils {
     final rect = element.rect;
     final space = ElementSpace(rotation: element.rotation, origin: rect.center);
     return space.fromWorld(position);
+  }
+
+  /// Calculates the midpoint for an addable point between two control points.
+  /// For curved arrows, this uses the actual curve position at t=0.5.
+  /// For straight and polyline arrows, this uses linear interpolation.
+  static DrawPoint _calculateMidpoint(
+    List<DrawPoint> points,
+    int segmentIndex,
+    ArrowType arrowType,
+  ) {
+    if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
+      return points.first;
+    }
+
+    // For curved arrows with 3+ points, calculate point on the actual curve
+    if (arrowType == ArrowType.curved && points.length >= 3) {
+      final offsetPoints = points
+          .map((p) => Offset(p.x, p.y))
+          .toList(growable: false);
+      final curvePoint = ArrowGeometry.calculateCurvePoint(
+        points: offsetPoints,
+        segmentIndex: segmentIndex,
+        t: 0.5,
+      );
+      if (curvePoint != null) {
+        return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
+      }
+    }
+
+    // For straight and polyline arrows, use linear midpoint
+    return _midpoint(points[segmentIndex], points[segmentIndex + 1]);
   }
 
   static DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>

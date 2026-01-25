@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:meta/meta.dart';
 
 import '../../config/draw_config.dart';
@@ -87,6 +89,7 @@ class ArrowPointOperation extends EditOperation {
       points: points,
       kind: typedParams.pointKind,
       index: typedParams.pointIndex,
+      arrowType: data.arrowType,
     );
     final dragOffset = pointPosition - localStartPosition;
     final selectedIdsAtStart = {...state.domain.selection.selectedIds};
@@ -478,11 +481,29 @@ DrawPoint _resolvePointPosition({
   required List<DrawPoint> points,
   required ArrowPointKind kind,
   required int index,
+  required ArrowType arrowType,
 }) {
   if (kind == ArrowPointKind.addable) {
     if (index < 0 || index >= points.length - 1) {
       return points.first;
     }
+
+    // For curved arrows with 3+ points, calculate point on the actual curve
+    if (arrowType == ArrowType.curved && points.length >= 3) {
+      final offsetPoints = points
+          .map((p) => Offset(p.x, p.y))
+          .toList(growable: false);
+      final curvePoint = ArrowGeometry.calculateCurvePoint(
+        points: offsetPoints,
+        segmentIndex: index,
+        t: 0.5,
+      );
+      if (curvePoint != null) {
+        return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
+      }
+    }
+
+    // For straight and polyline arrows, use linear midpoint
     final start = points[index];
     final end = points[index + 1];
     return DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);

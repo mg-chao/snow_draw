@@ -320,6 +320,10 @@ class SelectPlugin extends DrawInputPlugin {
         if (!_isSelectableElement(elementId)) {
           return null;
         }
+      case BoxSelectIntent():
+        // Box selection should only be allowed when selection tool is active.
+        // When another tool is active, convert to clear selection intent.
+        return const ClearSelectionIntent();
       default:
         break;
     }

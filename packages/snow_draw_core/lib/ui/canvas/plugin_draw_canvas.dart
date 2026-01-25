@@ -501,6 +501,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String, ElementState>{};
     }
 
+    // When creating a new text element, add it to the dynamic layer preview
+    // so its background is rendered on top of existing elements.
+    if (interaction is TextEditingState && interaction.isNew) {
+      final textElement = ElementState(
+        id: interaction.elementId,
+        rect: interaction.rect,
+        rotation: interaction.rotation,
+        opacity: interaction.opacity,
+        zIndex: view.state.domain.document.elements.length,
+        data: interaction.draftData,
+      );
+      return {interaction.elementId: textElement};
+    }
+
     final previewElements = view.previewElementsById;
     if (previewElements.isEmpty) {
       return previewElements;
@@ -518,6 +532,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) {
+    // When creating a new text element, render all existing elements in the
+    // static layer so the text element's background appears on top.
+    final interaction = view.state.application.interaction;
+    if (interaction is TextEditingState && interaction.isNew) {
+      return 0;
+    }
+
     final selectedIds = view.selectedIds;
     if (selectedIds.isEmpty) {
       return null;
@@ -1112,7 +1133,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
     final hitRadius = selectionConfig.interaction.handleTolerance;
-    final handleSize = selectionConfig.render.controlPointSize;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = selectionConfig.render.controlPointSize * ConfigDefaults.arrowPointSizeMultiplier;
     final loopThreshold = hitRadius * 1.5;
     return ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),

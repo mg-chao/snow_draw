@@ -227,18 +227,15 @@ class ArrowGeometry {
           _nearZero(dx) ? prev.dx : target.dx,
           _nearZero(dy) ? prev.dy : target.dy,
         );
-        if (alignedTarget != prev) {
+        if (!_isSamePoint(alignedTarget, prev)) {
           expanded.add(alignedTarget);
-        }
-        if (alignedTarget != target) {
-          expanded.add(target);
         }
         continue;
       }
 
       // Standard three-segment elbow connection
       // Choose direction priority based on which distance is greater
-      final isHorizontalPrimary = dx.abs() > dy.abs();
+      final isHorizontalPrimary = _segmentIsHorizontal(prev, target);
 
       if (isHorizontalPrimary) {
         // Horizontal → vertical → horizontal
@@ -270,7 +267,7 @@ class ArrowGeometry {
 
       expanded.add(target);
     }
-    return expanded;
+    return _simplifyPolylinePoints(expanded);
   }
 
   static Path buildArrowheadPath({
@@ -375,6 +372,55 @@ class ArrowGeometry {
       path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
     }
     return path;
+  }
+
+  /// Calculates a point on the curved path at parameter t (0.0 to 1.0) between
+  /// two consecutive control points at segmentIndex and segmentIndex+1.
+  /// Uses the same Catmull-Rom spline formula as _buildCurvedPath.
+  /// Returns null if the segment is invalid.
+  static Offset? calculateCurvePoint({
+    required List<Offset> points,
+    required int segmentIndex,
+    required double t,
+  }) {
+    if (points.length < 2 || segmentIndex < 0 || segmentIndex >= points.length - 1) {
+      return null;
+    }
+
+    // For straight segments (less than 3 points), use linear interpolation
+    if (points.length < 3) {
+      final p1 = points[segmentIndex];
+      final p2 = points[segmentIndex + 1];
+      return Offset(
+        p1.dx + (p2.dx - p1.dx) * t,
+        p1.dy + (p2.dy - p1.dy) * t,
+      );
+    }
+
+    // Use Catmull-Rom spline with same tension as _buildCurvedPath
+    const tension = 1.0;
+    final i = segmentIndex;
+    final p0 = i == 0 ? points[i] : points[i - 1];
+    final p1 = points[i];
+    final p2 = points[i + 1];
+    final p3 = i + 2 < points.length ? points[i + 2] : points[i + 1];
+
+    // Calculate control points for cubic Bezier
+    final cp1 = p1 + (p2 - p0) * (tension / 6);
+    final cp2 = p2 - (p3 - p1) * (tension / 6);
+
+    // Evaluate cubic Bezier at parameter t
+    // B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+    final t2 = t * t;
+    final t3 = t2 * t;
+    final mt = 1 - t;
+    final mt2 = mt * mt;
+    final mt3 = mt2 * mt;
+
+    final x = mt3 * p1.dx + 3 * mt2 * t * cp1.dx + 3 * mt * t2 * cp2.dx + t3 * p2.dx;
+    final y = mt3 * p1.dy + 3 * mt2 * t * cp1.dy + 3 * mt * t2 * cp2.dy + t3 * p2.dy;
+
+    return Offset(x, y);
   }
 
   static Path _buildVArrowhead(
@@ -555,6 +601,65 @@ class ArrowGeometry {
 
   static bool _nearZero(double value) =>
       value.abs() <= _polylineSnapTolerance;
+
+  static bool _isSamePoint(Offset a, Offset b) =>
+      _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
+
+  static bool _segmentIsHorizontal(Offset start, Offset end) {
+    final dx = end.dx - start.dx;
+    final dy = end.dy - start.dy;
+    if (_nearZero(dy) && !_nearZero(dx)) {
+      return true;
+    }
+    if (_nearZero(dx) && !_nearZero(dy)) {
+      return false;
+    }
+    return dx.abs() > dy.abs();
+  }
+
+  static List<Offset> _simplifyPolylinePoints(List<Offset> points) {
+    if (points.length < 3) {
+      return points;
+    }
+
+    final simplified = <Offset>[points.first];
+    for (var i = 1; i < points.length - 1; i++) {
+      final prev = simplified.last;
+      final current = points[i];
+      final next = points[i + 1];
+
+      if (_isSamePoint(prev, current)) {
+        continue;
+      }
+
+      final prevIsHorizontal = _segmentIsHorizontal(prev, current);
+      final nextIsHorizontal = _segmentIsHorizontal(current, next);
+
+      if (prevIsHorizontal == nextIsHorizontal) {
+        final prevDelta = current - prev;
+        final nextDelta = next - current;
+        final isReverse =
+            prevIsHorizontal
+                ? !_nearZero(prevDelta.dx) &&
+                    !_nearZero(nextDelta.dx) &&
+                    (prevDelta.dx * nextDelta.dx) < 0
+                : !_nearZero(prevDelta.dy) &&
+                    !_nearZero(nextDelta.dy) &&
+                    (prevDelta.dy * nextDelta.dy) < 0;
+        if (!isReverse) {
+          continue;
+        }
+      }
+
+      simplified.add(current);
+    }
+
+    final last = points.last;
+    if (simplified.isEmpty || !_isSamePoint(simplified.last, last)) {
+      simplified.add(last);
+    }
+    return simplified;
+  }
 
   static Offset? _normalize(Offset value) {
     final length = value.distance;

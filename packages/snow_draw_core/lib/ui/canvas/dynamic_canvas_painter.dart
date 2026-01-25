@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../draw/config/draw_config.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
@@ -252,8 +253,10 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     visibleElements.sort((a, b) {
-      final indexA = document.getOrderIndex(a.id) ?? -1;
-      final indexB = document.getOrderIndex(b.id) ?? -1;
+      // Use element's zIndex for preview elements not in document,
+      // otherwise use document order index for consistency.
+      final indexA = document.getOrderIndex(a.id) ?? a.zIndex;
+      final indexB = document.getOrderIndex(b.id) ?? b.zIndex;
       return indexA.compareTo(indexB);
     });
 
@@ -320,7 +323,9 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final handleSize = selectionConfig.render.controlPointSize / effectiveScale;
+    final baseHandleSize = selectionConfig.render.controlPointSize / effectiveScale;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final strokeWidth =
         selectionConfig.render.strokeWidth / effectiveScale;
     final fillColor = selectionConfig.render.cornerFillColor;

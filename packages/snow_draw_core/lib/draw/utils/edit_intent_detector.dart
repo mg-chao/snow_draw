@@ -181,7 +181,8 @@ class EditIntentDetector {
     }
 
     final hitRadius = config.interaction.handleTolerance;
-    final handleSize = config.render.controlPointSize;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = config.render.controlPointSize * ConfigDefaults.arrowPointSizeMultiplier;
     final loopThreshold = hitRadius * 1.5;
     final handle = ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),

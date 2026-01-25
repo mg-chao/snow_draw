@@ -131,6 +131,14 @@ class TextToolPlugin extends DrawInputPlugin {
 
     if (_isTextToolActive) {
       final hitId = _hitTextElementId(event.position);
+
+      // If there's a selection and we're clicking on a blank area (not hitting
+      // any text element), defer to SelectPlugin to clear the selection instead
+      // of creating a new text element.
+      if (hitId == null && state.domain.hasSelection) {
+        return unhandled(reason: 'Defer to selection clearing');
+      }
+
       await dispatch(StartTextEdit(elementId: hitId, position: event.position));
       return handled(message: 'Text edit started');
     }
