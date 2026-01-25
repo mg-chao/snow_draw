@@ -352,9 +352,7 @@ class _StrokePathKey {
 
   /// Quantize to 1 decimal place to improve cache hit rate
   /// by reducing floating-point precision variations
-  static double _quantize(double value) {
-    return (value * 10).roundToDouble() / 10;
-  }
+  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
   @override
   bool operator ==(Object other) =>
@@ -393,9 +391,7 @@ class _LineShaderKey {
 
   /// Quantize to 1 decimal place to improve cache hit rate
   /// by reducing floating-point precision variations
-  static double _quantize(double value) {
-    return (value * 10).roundToDouble() / 10;
-  }
+  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
   @override
   bool operator ==(Object other) =>
