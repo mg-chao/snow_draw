@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -44,23 +45,18 @@ class TextRenderer extends ElementTypeRenderer {
     required double lineWidth,
     required double angle,
     required Color color,
-  }) =>
-      Paint()
-        ..style = PaintingStyle.fill
-        ..shader = _lineShaderCache.getOrCreate(
-          _LineShaderKey(
-            spacing: spacing,
-            lineWidth: lineWidth,
-            angle: angle,
-          ),
-          () => _buildLineShader(
-            spacing: spacing,
-            lineWidth: lineWidth,
-            angle: angle,
-          ),
-        )
-        ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
-        ..isAntiAlias = true;
+  }) => Paint()
+    ..style = PaintingStyle.fill
+    ..shader = _lineShaderCache.getOrCreate(
+      _LineShaderKey(spacing: spacing, lineWidth: lineWidth, angle: angle),
+      () => _buildLineShader(
+        spacing: spacing,
+        lineWidth: lineWidth,
+        angle: angle,
+      ),
+    )
+    ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
+    ..isAntiAlias = true;
 
   @override
   void render({
@@ -82,8 +78,7 @@ class TextRenderer extends ElementTypeRenderer {
     final opacity = element.opacity;
     final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
     final strokeOpacity = (data.strokeColor.a * opacity).clamp(0.0, 1.0);
-    final backgroundOpacity =
-        (data.fillColor.a * opacity).clamp(0.0, 1.0);
+    final backgroundOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
     final shouldDrawBackground = backgroundOpacity > 0;
 
     final shouldDrawStroke = data.strokeWidth > 0 && strokeOpacity > 0;
@@ -113,9 +108,7 @@ class TextRenderer extends ElementTypeRenderer {
       verticalAlign: data.verticalAlign,
     );
     final paintOffset = textOffset;
-    final backgroundColor = data.fillColor.withValues(
-      alpha: backgroundOpacity,
-    );
+    final backgroundColor = data.fillColor.withValues(alpha: backgroundOpacity);
     Paint? backgroundPaint;
     Paint? crossLinePaint;
     if (shouldDrawBackground) {
@@ -125,8 +118,10 @@ class TextRenderer extends ElementTypeRenderer {
           ..color = backgroundColor
           ..isAntiAlias = true;
       } else {
-        final fillLineWidth =
-            (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
+        final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(
+          0.5,
+          3.0,
+        );
         const lineToSpacingRatio = 6.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         backgroundPaint = _buildLineFillPaint(
@@ -184,9 +179,10 @@ class TextRenderer extends ElementTypeRenderer {
         ..strokeWidth = data.strokeWidth
         ..color = data.strokeColor.withValues(alpha: strokeOpacity)
         ..isAntiAlias = true;
-      final strokeStyle = buildTextStyle(data: data, locale: locale).copyWith(
-        foreground: strokePaint,
-      );
+      final strokeStyle = buildTextStyle(
+        data: data,
+        locale: locale,
+      ).copyWith(foreground: strokePaint);
       final strokeLayout = layoutText(
         data: data,
         maxWidth: layoutWidth,
@@ -241,11 +237,11 @@ class TextRenderer extends ElementTypeRenderer {
     if (text.isEmpty) {
       return;
     }
-    final selection = TextSelection(
-      baseOffset: 0,
-      extentOffset: text.length,
+    final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
+    final boxes = painter.getBoxesForSelection(
+      selection,
+      boxHeightStyle: BoxHeightStyle.strut,
     );
-    final boxes = painter.getBoxesForSelection(selection);
     if (boxes.isEmpty) {
       return;
     }
@@ -281,7 +277,6 @@ class TextRenderer extends ElementTypeRenderer {
     }
     return cornerRadius;
   }
-
 }
 
 class _LruCache<K, V> {
