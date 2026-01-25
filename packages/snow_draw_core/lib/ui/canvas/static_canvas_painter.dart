@@ -8,6 +8,7 @@ import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'grid_shader_painter.dart';
 import 'render_keys.dart';
 
 /// Static canvas painter.
@@ -43,11 +44,6 @@ class StaticCanvasPainter extends CustomPainter {
     // Draw background.
     _drawBackground(canvas, size);
 
-    canvas
-      ..save()
-      ..translate(camera.position.x, camera.position.y)
-      ..scale(scale, scale);
-
     // Calculate viewport in world coordinates.
     // Viewport is (0,0) to (width, height) in screen coordinates.
     // Transform to world: (screen - translate) / scale
@@ -58,7 +54,18 @@ class StaticCanvasPainter extends CustomPainter {
       maxY: (size.height - camera.position.y) / scale,
     );
 
-    _drawGrid(canvas, viewportRect, scale);
+    // Try GPU-accelerated shader grid first (drawn in screen coordinates).
+    final shaderUsed = _drawGridWithShader(canvas, size, scale);
+
+    canvas
+      ..save()
+      ..translate(camera.position.x, camera.position.y)
+      ..scale(scale, scale);
+
+    // Fall back to CPU-based grid if shader not available.
+    if (!shaderUsed) {
+      _drawGridFallback(canvas, viewportRect, scale);
+    }
 
     // Query visible elements. Preview elements are handled below to avoid
     // lifting them into a higher render layer.
@@ -137,7 +144,61 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
   }
 
-  void _drawGrid(Canvas canvas, DrawRect viewportRect, double scale) {
+  /// Draws the grid using the GPU-accelerated fragment shader.
+  ///
+  /// Returns true if the shader was used successfully, false if fallback
+  /// rendering should be used instead.
+  bool _drawGridWithShader(Canvas canvas, Size size, double scale) {
+    final config = renderKey.gridConfig;
+    if (!config.enabled) {
+      return true; // Grid disabled, no need for fallback.
+    }
+
+    final baseSize = config.size;
+    if (baseSize <= 0) {
+      return true; // Invalid config, no need for fallback.
+    }
+
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    if (baseSize * effectiveScale < config.minRenderSpacing) {
+      return true; // Grid too small to render, no need for fallback.
+    }
+
+    final shaderManager = GridShaderManager.instance;
+    if (!shaderManager.isReady) {
+      return false; // Shader not ready, use fallback.
+    }
+
+    final minorOpacityRatio = _resolveMinorOpacityRatio(
+      baseSize: baseSize,
+      scale: effectiveScale,
+      minScreenSpacing: config.minScreenSpacing,
+    );
+    final majorEveryFactor = _resolveMajorEveryFactor(
+      baseSize: baseSize,
+      majorEvery: config.majorLineEvery,
+      scale: effectiveScale,
+      minSpacing: config.minScreenSpacing,
+    );
+
+    return shaderManager.paintGrid(
+      canvas: canvas,
+      size: size,
+      cameraPosition: Offset(
+        renderKey.camera.position.x,
+        renderKey.camera.position.y,
+      ),
+      scale: effectiveScale,
+      config: config,
+      minorOpacityRatio: minorOpacityRatio,
+      majorEveryFactor: majorEveryFactor,
+    );
+  }
+
+  /// Fallback grid rendering using CPU-based drawRawPoints.
+  ///
+  /// Used when the fragment shader is not available.
+  void _drawGridFallback(Canvas canvas, DrawRect viewportRect, double scale) {
     final config = renderKey.gridConfig;
     if (!config.enabled) {
       return;
