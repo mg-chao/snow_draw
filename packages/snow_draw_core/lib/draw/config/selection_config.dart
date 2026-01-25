@@ -7,8 +7,8 @@ part of 'draw_config.dart';
 @immutable
 class SelectionRenderConfig {
   const SelectionRenderConfig({
-    this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
-    this.strokeColor = ConfigDefaults.primaryColor,
+    this.strokeWidth = ConfigDefaults.selectionStrokeWidth,
+    this.strokeColor = ConfigDefaults.accentColor,
     this.cornerFillColor = ConfigDefaults.controlPointFillColor,
     this.cornerRadius = ConfigDefaults.controlPointRadius,
     this.controlPointSize = ConfigDefaults.controlPointSize,

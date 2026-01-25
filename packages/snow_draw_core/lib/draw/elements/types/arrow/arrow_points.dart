@@ -148,6 +148,7 @@ class ArrowPointUtils {
     required DrawPoint position,
     required double hitRadius,
     required double loopThreshold,
+    double? handleSize,
   }) {
     final data = element.data;
     if (data is! ArrowData) {
@@ -159,14 +160,33 @@ class ArrowPointUtils {
     }
 
     final localPosition = _toLocalPosition(element, position);
+    final visualPointRadius =
+        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 0.6;
+    final visualLoopOuterRadius =
+        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 1.2;
+    final visualLoopInnerRadius = visualPointRadius;
     final loopActive =
         points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;
 
     if (loopActive) {
-      final distanceSq = localPosition.distanceSquared(points.first);
-      final outerRadiusSq = hitRadius * hitRadius;
-      final innerRadius = hitRadius * 0.6;
+      // Use the midpoint between first and last as the loop center for hit testing
+      final loopCenter = _midpoint(points.first, points.last);
+      final distanceSq = localPosition.distanceSquared(loopCenter);
+
+      // Loop outer radius: 0.65 (was 0.55), scale hit radius proportionally
+      var outerRadius = hitRadius * 1.18;
+      if (visualLoopOuterRadius > outerRadius) {
+        outerRadius = visualLoopOuterRadius;
+      }
+      final outerRadiusSq = outerRadius * outerRadius;
+      // Loop inner radius: 0.40 (was 0.35), scale hit radius proportionally
+      var innerRadius = hitRadius * 0.69;
+      if (visualLoopInnerRadius > innerRadius) {
+        innerRadius = visualLoopInnerRadius;
+      }
       final innerRadiusSq = innerRadius * innerRadius;
+
+      // Check inner loop point first (higher priority)
       if (distanceSq <= innerRadiusSq) {
         return ArrowPointHandle(
           elementId: element.id,
@@ -175,6 +195,8 @@ class ArrowPointUtils {
           position: points.first,
         );
       }
+
+      // Check outer loop ring (between inner and outer radius)
       if (distanceSq <= outerRadiusSq) {
         return ArrowPointHandle(
           elementId: element.id,
@@ -187,12 +209,17 @@ class ArrowPointUtils {
 
     ArrowPointHandle? nearest;
     var nearestDistance = double.infinity;
+    // Turning point radius: 0.50 (was 0.45), scale hit radius proportionally
+    var turningHitRadius = hitRadius * 1.11;
+    if (visualPointRadius > turningHitRadius) {
+      turningHitRadius = visualPointRadius;
+    }
     for (var i = 0; i < points.length; i++) {
       if (loopActive && (i == 0 || i == points.length - 1)) {
         continue;
       }
       final distanceSq = localPosition.distanceSquared(points[i]);
-      if (distanceSq <= hitRadius * hitRadius &&
+      if (distanceSq <= turningHitRadius * turningHitRadius &&
           distanceSq < nearestDistance) {
         nearestDistance = distanceSq;
         nearest = ArrowPointHandle(
@@ -207,10 +234,15 @@ class ArrowPointUtils {
       return nearest;
     }
 
+    // Addable point radius: 0.50 (was 0.35), scale hit radius proportionally
+    var addableHitRadius = hitRadius * 1.43;
+    if (visualPointRadius > addableHitRadius) {
+      addableHitRadius = visualPointRadius;
+    }
     for (var i = 0; i < points.length - 1; i++) {
       final mid = _midpoint(points[i], points[i + 1]);
       final distanceSq = localPosition.distanceSquared(mid);
-      if (distanceSq <= hitRadius * hitRadius) {
+      if (distanceSq <= addableHitRadius * addableHitRadius) {
         return ArrowPointHandle(
           elementId: element.id,
           kind: ArrowPointKind.addable,

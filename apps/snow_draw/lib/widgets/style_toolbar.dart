@@ -361,17 +361,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           mixedLabel: widget.strings.mixed,
                           options: [
                             _StyleOption(
-                              value: 1,
+                              value: 2,
                               label: widget.strings.thin,
                               icon: const StrokeWidthSmallIcon(),
                             ),
                             _StyleOption(
-                              value: 3,
+                              value: 4,
                               label: widget.strings.medium,
                               icon: const StrokeWidthMediumIcon(),
                             ),
                             _StyleOption(
-                              value: 5,
+                              value: 7,
                               label: widget.strings.thick,
                               icon: const StrokeWidthLargeIcon(),
                             ),

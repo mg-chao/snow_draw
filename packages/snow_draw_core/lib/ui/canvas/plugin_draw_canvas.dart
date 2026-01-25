@@ -1112,12 +1112,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
     final hitRadius = selectionConfig.interaction.handleTolerance;
+    final handleSize = selectionConfig.render.controlPointSize;
     final loopThreshold = hitRadius * 1.5;
     return ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,
       hitRadius: hitRadius,
       loopThreshold: loopThreshold,
+      handleSize: handleSize,
     );
   }
 
@@ -1169,7 +1171,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final interaction = selectionConfig.interaction;
+    final render = selectionConfig.render;
     return selectionConfig.copyWith(
+      render: render.copyWith(
+        strokeWidth: render.strokeWidth / effectiveScale,
+        cornerRadius: render.cornerRadius / effectiveScale,
+        controlPointSize: render.controlPointSize / effectiveScale,
+      ),
       padding: selectionConfig.padding / effectiveScale,
       rotateHandleOffset: selectionConfig.rotateHandleOffset / effectiveScale,
       interaction: interaction.copyWith(

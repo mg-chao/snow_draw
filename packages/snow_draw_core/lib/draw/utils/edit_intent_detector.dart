@@ -177,12 +177,14 @@ class EditIntentDetector {
     }
 
     final hitRadius = config.interaction.handleTolerance;
+    final handleSize = config.render.controlPointSize;
     final loopThreshold = hitRadius * 1.5;
     final handle = ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,
       hitRadius: hitRadius,
       loopThreshold: loopThreshold,
+      handleSize: handleSize,
     );
     if (handle == null) {
       return null;

@@ -303,50 +303,53 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     canvas.translate(effectiveElement.rect.minX, effectiveElement.rect.minY);
 
-    final addableRadius = handleSize * 0.35;
-    final turnRadius = handleSize * 0.45;
-    final loopOuterRadius = handleSize * 0.55;
-    final loopInnerRadius = handleSize * 0.35;
+    final addableRadius = handleSize * 0.6;
+    final turnRadius = handleSize * 0.6;
+    final loopOuterRadius = handleSize * 1.2;
+    final loopInnerRadius = handleSize * 0.6;
+    final hoverOuterRadius = loopOuterRadius;
 
     final addableStrokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..color = strokeColor
       ..isAntiAlias = true;
+    final addableFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.42)
+      ..isAntiAlias = true;
     final turningFillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = fillColor
+      ..color = fillColor.withValues(alpha: 0.90)
       ..isAntiAlias = true;
     final turningStrokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..color = strokeColor
       ..isAntiAlias = true;
+    final hoverOuterFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.25)
+      ..isAntiAlias = true;
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
-      final paint = isHighlighted
-          ? (Paint()
-            ..style = PaintingStyle.fill
-            ..color = highlightFill
-            ..isAntiAlias = true)
-          : null;
-      if (paint != null) {
-        canvas.drawCircle(center, addableRadius, paint);
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      canvas.drawCircle(center, addableRadius, addableStrokePaint);
+      canvas
+        ..drawCircle(center, addableRadius, addableFillPaint)
+        ..drawCircle(center, addableRadius, addableStrokePaint);
     }
 
     for (final handle in overlay.turningPoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
-      final fillPaint = isHighlighted
-          ? (Paint()
-            ..style = PaintingStyle.fill
-            ..color = highlightFill
-            ..isAntiAlias = true)
-          : turningFillPaint;
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+      }
+      final fillPaint = turningFillPaint;
       final strokePaint = isHighlighted
           ? (Paint()
             ..style = PaintingStyle.stroke
@@ -362,6 +365,9 @@ class DynamicCanvasPainter extends CustomPainter {
     for (final handle in overlay.loopPoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+      }
       final radius = handle.kind == ArrowPointKind.loopEnd
           ? loopOuterRadius
           : loopInnerRadius;
@@ -370,6 +376,11 @@ class DynamicCanvasPainter extends CustomPainter {
         ..strokeWidth = strokeWidth
         ..color = isHighlighted ? highlightStroke : strokeColor
         ..isAntiAlias = true;
+
+      // Inner loop point (loopStart) has filled style like bend points
+      if (handle.kind == ArrowPointKind.loopStart) {
+        canvas.drawCircle(center, radius, turningFillPaint);
+      }
       canvas.drawCircle(center, radius, strokePaint);
     }
 

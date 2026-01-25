@@ -30,7 +30,7 @@ class BoxSelectionConfig {
     this.fillColor = ConfigDefaults.accentColor,
     this.fillOpacity = ConfigDefaults.boxSelectionFillOpacity,
     this.strokeColor = ConfigDefaults.accentColor,
-    this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
+    this.strokeWidth = ConfigDefaults.selectionStrokeWidth,
   }) : assert(
          fillOpacity >= 0 && fillOpacity <= 1,
          'fillOpacity must be in [0, 1]',

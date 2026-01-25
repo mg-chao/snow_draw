@@ -20,10 +20,10 @@ abstract class ConfigDefaults {
 
   // ===== Colors =====
   /// Primary accent color (selection outline, etc.).
-  static const primaryColor = Color(0xFF1576FE);
+  static const primaryColor = Color(0xFF1677FF);
 
   /// Secondary accent color (box selection, etc.).
-  static const accentColor = Color(0xFF1576FE);
+  static const accentColor = Color(0xFF4096FF);
 
   /// Canvas background color.
   static const backgroundColor = Color(0xFFFFFFFF);
@@ -66,11 +66,12 @@ abstract class ConfigDefaults {
   static const controlPointFillColor = Color(0xFFFFFFFF);
 
   // ===== Sizes =====
-  static const defaultStrokeWidth = 1.0;
-  static const controlPointSize = 8.0;
+  static const defaultStrokeWidth = 2.0;
+  static const controlPointSize = 9.0;
   static const controlPointRadius = 2.0;
 
   static const selectionPadding = 3.0;
+  static const selectionStrokeWidth = 1.0;
   static const rotateHandleOffset = 12.0;
 
   // ===== Interaction =====
