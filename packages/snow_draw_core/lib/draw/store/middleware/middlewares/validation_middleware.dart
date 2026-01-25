@@ -183,6 +183,9 @@ ValidationResult _validateUpdateElementsStyle(
       update.strokeStyle == null &&
       update.fillStyle == null &&
       update.cornerRadius == null &&
+      update.arrowType == null &&
+      update.startArrowhead == null &&
+      update.endArrowhead == null &&
       update.fontSize == null &&
       update.fontFamily == null &&
       update.textAlign == null &&

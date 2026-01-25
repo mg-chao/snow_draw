@@ -67,7 +67,7 @@ abstract class ConfigDefaults {
 
   // ===== Sizes =====
   static const defaultStrokeWidth = 2.0;
-  static const controlPointSize = 9.0;
+  static const controlPointSize = 8.0;
   static const controlPointRadius = 2.0;
 
   static const selectionPadding = 3.0;

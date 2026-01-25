@@ -1176,49 +1176,63 @@ class _StyleToolbarState extends State<StyleToolbar> {
     required ValueChanged<ArrowheadStyle> onSelect,
   }) {
     final theme = Theme.of(context);
+    final styles = ArrowheadStyle.values;
+
+    // Create 2 rows with 4 items each
+    final rows = <List<ArrowheadStyle>>[];
+    for (var i = 0; i < styles.length; i += 4) {
+      rows.add(styles.sublist(i, math.min(i + 4, styles.length)));
+    }
+
     return Material(
       color: theme.colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: SizedBox(
-          width: 200,
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final style in ArrowheadStyle.values)
-                Tooltip(
-                  message: _arrowheadLabel(style),
-                  child: InkWell(
-                    onTap: () => onSelect(style),
-                    borderRadius: BorderRadius.circular(_toggleButtonRadius),
-                    child: Container(
-                      width: _toggleButtonHeight,
-                      height: _toggleButtonHeight,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: selectedStyle == style
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.outlineVariant,
-                          width: selectedStyle == style ? 2 : 1,
-                        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < rows[rowIndex].length; i++) ...[
+                    Tooltip(
+                      message: _arrowheadLabel(rows[rowIndex][i]),
+                      child: InkWell(
+                        onTap: () => onSelect(rows[rowIndex][i]),
                         borderRadius: BorderRadius.circular(_toggleButtonRadius),
-                        color: selectedStyle == style
-                            ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                            : null,
-                      ),
-                      child: Center(
-                        child: _buildArrowheadIcon(
-                          style: style,
-                          isStart: isStart,
-                          size: _iconSize,
+                        child: Container(
+                          width: _toggleButtonHeight,
+                          height: _toggleButtonHeight,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedStyle == rows[rowIndex][i]
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outlineVariant,
+                              width: selectedStyle == rows[rowIndex][i] ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(_toggleButtonRadius),
+                            color: selectedStyle == rows[rowIndex][i]
+                                ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                                : null,
+                          ),
+                          child: Center(
+                            child: _buildArrowheadIcon(
+                              style: rows[rowIndex][i],
+                              isStart: isStart,
+                              size: _iconSize,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                    if (i < rows[rowIndex].length - 1) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+              if (rowIndex < rows.length - 1) const SizedBox(height: 8),
             ],
-          ),
+          ],
         ),
       ),
     );

@@ -95,6 +95,7 @@ class ElementRenderer {
     double? rotation,
     DrawPoint? rotationCenter,
     bool dashed = true,
+    double cornerHandleOffset = 0.0,
   }) {
     final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
     renderSelectionOutline(
@@ -128,12 +129,21 @@ class ElementRenderer {
         ..translate(-rotationCenter.x, -rotationCenter.y);
     }
 
+    // Apply additional offset to corner handles (for arrow elements).
+    final handleOffset = cornerHandleOffset / scale;
+    final handleBounds = DrawRect(
+      minX: paddedBounds.minX - handleOffset,
+      minY: paddedBounds.minY - handleOffset,
+      maxX: paddedBounds.maxX + handleOffset,
+      maxY: paddedBounds.maxY + handleOffset,
+    );
+
     // Draw handles (keep 4 corners only).
     final handles = [
-      Offset(paddedBounds.minX, paddedBounds.minY), // top-left
-      Offset(paddedBounds.maxX, paddedBounds.minY), // top-right
-      Offset(paddedBounds.maxX, paddedBounds.maxY), // bottom-right
-      Offset(paddedBounds.minX, paddedBounds.maxY), // bottom-left
+      Offset(handleBounds.minX, handleBounds.minY), // top-left
+      Offset(handleBounds.maxX, handleBounds.minY), // top-right
+      Offset(handleBounds.maxX, handleBounds.maxY), // bottom-right
+      Offset(handleBounds.minX, handleBounds.maxY), // bottom-left
     ];
 
     final handlePaint = Paint()

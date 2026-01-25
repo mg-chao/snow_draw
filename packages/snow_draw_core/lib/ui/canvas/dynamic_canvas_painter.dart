@@ -115,25 +115,44 @@ class DynamicCanvasPainter extends CustomPainter {
           }
         }
 
-        elementRenderer
-          ..renderSelection(
-            canvas: canvas,
-            bounds: bounds,
-            scaleFactor: scale,
-            config: renderKey.selectionConfig,
-            rotation: effectiveSelection.rotation,
-            rotationCenter: rotationCenter,
-            dashed: selectedIds.length > 1,
-          )
-          // Draw rotation handle.
-          ..renderRotationHandle(
-            canvas: canvas,
-            bounds: bounds,
-            scaleFactor: scale,
-            config: renderKey.selectionConfig,
-            rotation: effectiveSelection.rotation,
-            rotationCenter: rotationCenter,
-          );
+        // Check if this is a single 2-point arrow selection.
+        // For 2-point arrows, skip selection box rendering since all operations
+        // can be performed through the point editor.
+        final isSingleTwoPointArrow = selectedIds.length == 1 &&
+            stateView.selectedElements.isNotEmpty &&
+            stateView.selectedElements.first.data is ArrowData &&
+            (stateView.selectedElements.first.data as ArrowData).points.length == 2;
+
+        // Skip selection box and rotation handle for 2-point arrows.
+        if (!isSingleTwoPointArrow) {
+          // Determine corner handle offset for single arrow selections.
+          final cornerHandleOffset = selectedIds.length == 1 &&
+                  stateView.selectedElements.isNotEmpty &&
+                  stateView.selectedElements.first.data is ArrowData
+              ? 8.0
+              : 0.0;
+
+          elementRenderer
+            ..renderSelection(
+              canvas: canvas,
+              bounds: bounds,
+              scaleFactor: scale,
+              config: renderKey.selectionConfig,
+              rotation: effectiveSelection.rotation,
+              rotationCenter: rotationCenter,
+              dashed: selectedIds.length > 1,
+              cornerHandleOffset: cornerHandleOffset,
+            )
+            // Draw rotation handle.
+            ..renderRotationHandle(
+              canvas: canvas,
+              bounds: bounds,
+              scaleFactor: scale,
+              config: renderKey.selectionConfig,
+              rotation: effectiveSelection.rotation,
+              rotationCenter: rotationCenter,
+            );
+        }
       }
     }
 

@@ -1,6 +1,7 @@
 import '../config/draw_config.dart';
 import '../core/coordinates/overlay_space.dart';
 import '../elements/core/element_registry_interface.dart';
+import '../elements/types/arrow/arrow_data.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
 import '../models/element_state.dart';
@@ -136,8 +137,24 @@ class HitTest {
     final selectedIds = selectionState.selectedIds;
 
     final actualTolerance = tolerance ?? config.interaction.handleTolerance;
-    // 1. Check selection handles first.
-    if (selection.hasSelection) {
+
+    // Determine corner handle offset for single arrow selections.
+    final cornerHandleOffset = selectedIds.length == 1 &&
+            stateView.selectedElements.isNotEmpty &&
+            stateView.selectedElements.first.data is ArrowData
+        ? 8.0
+        : 0.0;
+
+    // Check if this is a single 2-point arrow selection.
+    // For 2-point arrows, skip handle hit testing since all operations
+    // can be performed through the point editor.
+    final isSingleTwoPointArrow = selectedIds.length == 1 &&
+        stateView.selectedElements.isNotEmpty &&
+        stateView.selectedElements.first.data is ArrowData &&
+        (stateView.selectedElements.first.data as ArrowData).points.length == 2;
+
+    // 1. Check selection handles first (skip for 2-point arrows).
+    if (selection.hasSelection && !isSingleTwoPointArrow) {
       final bounds = selection.bounds;
       if (bounds != null) {
         // Use the same rotation/center as rendering.
@@ -151,6 +168,7 @@ class HitTest {
           config: config,
           rotation: rotation,
           center: center,
+          cornerHandleOffset: cornerHandleOffset,
         );
         if (handleResult != null) {
           return handleResult;
@@ -179,8 +197,8 @@ class HitTest {
 
     // 3. Check the padded selection area (allows dragging from padding).
     // (Used to support starting a move by dragging from the selection
-    // padding area.)
-    if (selection.hasSelection) {
+    // padding area.) Skip for 2-point arrows.
+    if (selection.hasSelection && !isSingleTwoPointArrow) {
       final bounds = selection.bounds;
       if (bounds != null) {
         final rotation = selection.rotation ?? 0.0;
@@ -216,6 +234,7 @@ class HitTest {
     required SelectionConfig config,
     required double rotation,
     required DrawPoint center,
+    double cornerHandleOffset = 0.0,
   }) {
     final space = OverlaySpace(rotation: rotation, origin: center);
 
@@ -226,6 +245,14 @@ class HitTest {
       minY: bounds.minY - padding,
       maxX: bounds.maxX + padding,
       maxY: bounds.maxY + padding,
+    );
+
+    // Apply additional offset to corner handles (for arrow elements).
+    final handleBounds = DrawRect(
+      minX: paddedBounds.minX - cornerHandleOffset,
+      minY: paddedBounds.minY - cornerHandleOffset,
+      maxX: paddedBounds.maxX + cornerHandleOffset,
+      maxY: paddedBounds.maxY + cornerHandleOffset,
     );
 
     // Transform the pointer position into the overlay's un-rotated local
@@ -251,14 +278,14 @@ class HitTest {
     }
 
     // Check 4 corner handles first (higher priority for precise
-    // resizing).
+    // resizing). Use handleBounds for corner positions.
     final cornerHandles = <DrawPoint, HandleType>{
-      DrawPoint(x: paddedBounds.minX, y: paddedBounds.minY): HandleType.topLeft,
-      DrawPoint(x: paddedBounds.maxX, y: paddedBounds.minY):
+      DrawPoint(x: handleBounds.minX, y: handleBounds.minY): HandleType.topLeft,
+      DrawPoint(x: handleBounds.maxX, y: handleBounds.minY):
           HandleType.topRight,
-      DrawPoint(x: paddedBounds.maxX, y: paddedBounds.maxY):
+      DrawPoint(x: handleBounds.maxX, y: handleBounds.maxY):
           HandleType.bottomRight,
-      DrawPoint(x: paddedBounds.minX, y: paddedBounds.maxY):
+      DrawPoint(x: handleBounds.minX, y: handleBounds.maxY):
           HandleType.bottomLeft,
     };
 
