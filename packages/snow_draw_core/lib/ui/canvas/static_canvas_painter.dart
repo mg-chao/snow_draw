@@ -1,4 +1,5 @@
-import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import '../../draw/models/draw_state_view.dart';
@@ -7,6 +8,7 @@ import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'grid_shader_painter.dart';
 import 'render_keys.dart';
 
 /// Static canvas painter.
@@ -42,11 +44,6 @@ class StaticCanvasPainter extends CustomPainter {
     // Draw background.
     _drawBackground(canvas, size);
 
-    canvas
-      ..save()
-      ..translate(camera.position.x, camera.position.y)
-      ..scale(scale, scale);
-
     // Calculate viewport in world coordinates.
     // Viewport is (0,0) to (width, height) in screen coordinates.
     // Transform to world: (screen - translate) / scale
@@ -57,7 +54,18 @@ class StaticCanvasPainter extends CustomPainter {
       maxY: (size.height - camera.position.y) / scale,
     );
 
-    _drawGrid(canvas, viewportRect, scale);
+    // Try GPU-accelerated shader grid first (drawn in screen coordinates).
+    final shaderUsed = _drawGridWithShader(canvas, size, scale);
+
+    canvas
+      ..save()
+      ..translate(camera.position.x, camera.position.y)
+      ..scale(scale, scale);
+
+    // Fall back to CPU-based grid if shader not available.
+    if (!shaderUsed) {
+      _drawGridFallback(canvas, viewportRect, scale);
+    }
 
     // Query visible elements. Preview elements are handled below to avoid
     // lifting them into a higher render layer.
@@ -136,7 +144,61 @@ class StaticCanvasPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
   }
 
-  void _drawGrid(Canvas canvas, DrawRect viewportRect, double scale) {
+  /// Draws the grid using the GPU-accelerated fragment shader.
+  ///
+  /// Returns true if the shader was used successfully, false if fallback
+  /// rendering should be used instead.
+  bool _drawGridWithShader(Canvas canvas, Size size, double scale) {
+    final config = renderKey.gridConfig;
+    if (!config.enabled) {
+      return true; // Grid disabled, no need for fallback.
+    }
+
+    final baseSize = config.size;
+    if (baseSize <= 0) {
+      return true; // Invalid config, no need for fallback.
+    }
+
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    if (baseSize * effectiveScale < config.minRenderSpacing) {
+      return true; // Grid too small to render, no need for fallback.
+    }
+
+    final shaderManager = GridShaderManager.instance;
+    if (!shaderManager.isReady) {
+      return false; // Shader not ready, use fallback.
+    }
+
+    final minorOpacityRatio = _resolveMinorOpacityRatio(
+      baseSize: baseSize,
+      scale: effectiveScale,
+      minScreenSpacing: config.minScreenSpacing,
+    );
+    final majorEveryFactor = _resolveMajorEveryFactor(
+      baseSize: baseSize,
+      majorEvery: config.majorLineEvery,
+      scale: effectiveScale,
+      minSpacing: config.minScreenSpacing,
+    );
+
+    return shaderManager.paintGrid(
+      canvas: canvas,
+      size: size,
+      cameraPosition: Offset(
+        renderKey.camera.position.x,
+        renderKey.camera.position.y,
+      ),
+      scale: effectiveScale,
+      config: config,
+      minorOpacityRatio: minorOpacityRatio,
+      majorEveryFactor: majorEveryFactor,
+    );
+  }
+
+  /// Fallback grid rendering using CPU-based drawRawPoints.
+  ///
+  /// Used when the fragment shader is not available.
+  void _drawGridFallback(Canvas canvas, DrawRect viewportRect, double scale) {
     final config = renderKey.gridConfig;
     if (!config.enabled) {
       return;
@@ -152,10 +214,12 @@ class StaticCanvasPainter extends CustomPainter {
       return;
     }
 
-    final strokeWidth = config.lineWidth / effectiveScale;
+    final minorStrokeWidth = config.lineWidth / effectiveScale;
+    // Major lines are 1.5x thicker for clear visual distinction.
+    final majorStrokeWidth = minorStrokeWidth * 1.5;
     final screenSpacing = baseSize * effectiveScale;
     final showMinorLines = screenSpacing >= config.minScreenSpacing;
-    final dashOpacityRatio = _resolveDashOpacityRatio(
+    final minorOpacityRatio = _resolveMinorOpacityRatio(
       baseSize: baseSize,
       scale: effectiveScale,
       minScreenSpacing: config.minScreenSpacing,
@@ -167,97 +231,135 @@ class StaticCanvasPainter extends CustomPainter {
       minSpacing: config.minScreenSpacing,
     );
     final majorStep = baseSize * majorEveryFactor;
-    const minorOpacityMultiplier = 0.75;
+
+    // Use solid lines with opacity and thickness differentiation for clear
+    // visual distinction between major and minor grid lines.
+    // Minor lines use reduced opacity (0.5x) for subtlety.
     final minorColor = config.lineColor.withValues(
-      alpha: config.lineOpacity * minorOpacityMultiplier * dashOpacityRatio,
+      alpha: config.lineOpacity * minorOpacityRatio * 0.5,
     );
     final majorColor = config.lineColor.withValues(
       alpha: config.majorLineOpacity,
     );
     final minorPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = minorColor
-      ..isAntiAlias = true;
+      ..strokeWidth = minorStrokeWidth
+      ..color = minorColor;
     final majorPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = majorColor
-      ..isAntiAlias = true;
+      ..strokeWidth = majorStrokeWidth
+      ..color = majorColor;
 
-    const dashLengthScreen = 4.0;
-    const dashGapScreen = 4.0;
-    final dashLength = dashLengthScreen / effectiveScale;
-    final dashGap = dashGapScreen / effectiveScale;
     if (showMinorLines) {
       final step = baseSize;
       final startXIndex = (viewportRect.minX / step).floor();
       final endXIndex = (viewportRect.maxX / step).ceil();
+      final startYIndex = (viewportRect.minY / step).floor();
+      final endYIndex = (viewportRect.maxY / step).ceil();
+
+      final verticalLineCount = endXIndex - startXIndex + 1;
+      final horizontalLineCount = endYIndex - startYIndex + 1;
+
+      // Count major vs minor lines for pre-allocation.
+      var majorVerticalCount = 0;
+      var majorHorizontalCount = 0;
+      for (var ix = startXIndex; ix <= endXIndex; ix++) {
+        if (_isMajorLine(ix, majorEveryFactor)) {
+          majorVerticalCount++;
+        }
+      }
+      for (var iy = startYIndex; iy <= endYIndex; iy++) {
+        if (_isMajorLine(iy, majorEveryFactor)) {
+          majorHorizontalCount++;
+        }
+      }
+      final minorVerticalCount = verticalLineCount - majorVerticalCount;
+      final minorHorizontalCount = horizontalLineCount - majorHorizontalCount;
+
+      // Pre-allocate Float32Lists for maximum performance.
+      // Each line needs 4 floats: x1, y1, x2, y2.
+      final majorPoints = Float32List(
+        (majorVerticalCount + majorHorizontalCount) * 4,
+      );
+      final minorPoints = Float32List(
+        (minorVerticalCount + minorHorizontalCount) * 4,
+      );
+
+      var majorIdx = 0;
+      var minorIdx = 0;
+
+      // Batch vertical lines.
       for (var ix = startXIndex; ix <= endXIndex; ix++) {
         final x = ix * step;
         if (_isMajorLine(ix, majorEveryFactor)) {
-          canvas.drawLine(
-            Offset(x, viewportRect.minY),
-            Offset(x, viewportRect.maxY),
-            majorPaint,
-          );
+          majorPoints[majorIdx++] = x;
+          majorPoints[majorIdx++] = viewportRect.minY;
+          majorPoints[majorIdx++] = x;
+          majorPoints[majorIdx++] = viewportRect.maxY;
         } else {
-          _drawDashedVerticalLine(
-            canvas,
-            x,
-            viewportRect.minY,
-            viewportRect.maxY,
-            minorPaint,
-            dashLength,
-            dashGap,
-          );
+          minorPoints[minorIdx++] = x;
+          minorPoints[minorIdx++] = viewportRect.minY;
+          minorPoints[minorIdx++] = x;
+          minorPoints[minorIdx++] = viewportRect.maxY;
         }
       }
 
-      final startYIndex = (viewportRect.minY / step).floor();
-      final endYIndex = (viewportRect.maxY / step).ceil();
+      // Batch horizontal lines.
       for (var iy = startYIndex; iy <= endYIndex; iy++) {
         final y = iy * step;
         if (_isMajorLine(iy, majorEveryFactor)) {
-          canvas.drawLine(
-            Offset(viewportRect.minX, y),
-            Offset(viewportRect.maxX, y),
-            majorPaint,
-          );
+          majorPoints[majorIdx++] = viewportRect.minX;
+          majorPoints[majorIdx++] = y;
+          majorPoints[majorIdx++] = viewportRect.maxX;
+          majorPoints[majorIdx++] = y;
         } else {
-          _drawDashedHorizontalLine(
-            canvas,
-            y,
-            viewportRect.minX,
-            viewportRect.maxX,
-            minorPaint,
-            dashLength,
-            dashGap,
-          );
+          minorPoints[minorIdx++] = viewportRect.minX;
+          minorPoints[minorIdx++] = y;
+          minorPoints[minorIdx++] = viewportRect.maxX;
+          minorPoints[minorIdx++] = y;
         }
       }
+
+      // Draw all lines with just 2 GPU draw calls.
+      if (minorPoints.isNotEmpty) {
+        canvas.drawRawPoints(ui.PointMode.lines, minorPoints, minorPaint);
+      }
+      if (majorPoints.isNotEmpty) {
+        canvas.drawRawPoints(ui.PointMode.lines, majorPoints, majorPaint);
+      }
     } else {
+      // Only major lines visible at this zoom level.
       final startXIndex = (viewportRect.minX / majorStep).floor();
       final endXIndex = (viewportRect.maxX / majorStep).ceil();
-      for (var ix = startXIndex; ix <= endXIndex; ix++) {
-        final x = ix * majorStep;
-        canvas.drawLine(
-          Offset(x, viewportRect.minY),
-          Offset(x, viewportRect.maxY),
-          majorPaint,
-        );
-      }
-
       final startYIndex = (viewportRect.minY / majorStep).floor();
       final endYIndex = (viewportRect.maxY / majorStep).ceil();
+
+      final verticalCount = endXIndex - startXIndex + 1;
+      final horizontalCount = endYIndex - startYIndex + 1;
+      final majorPoints = Float32List((verticalCount + horizontalCount) * 4);
+
+      var idx = 0;
+
+      // Batch vertical major lines.
+      for (var ix = startXIndex; ix <= endXIndex; ix++) {
+        final x = ix * majorStep;
+        majorPoints[idx++] = x;
+        majorPoints[idx++] = viewportRect.minY;
+        majorPoints[idx++] = x;
+        majorPoints[idx++] = viewportRect.maxY;
+      }
+
+      // Batch horizontal major lines.
       for (var iy = startYIndex; iy <= endYIndex; iy++) {
         final y = iy * majorStep;
-        canvas.drawLine(
-          Offset(viewportRect.minX, y),
-          Offset(viewportRect.maxX, y),
-          majorPaint,
-        );
+        majorPoints[idx++] = viewportRect.minX;
+        majorPoints[idx++] = y;
+        majorPoints[idx++] = viewportRect.maxX;
+        majorPoints[idx++] = y;
       }
+
+      // Single GPU draw call for all major lines.
+      canvas.drawRawPoints(ui.PointMode.lines, majorPoints, majorPaint);
     }
   }
 
@@ -283,7 +385,7 @@ class StaticCanvasPainter extends CustomPainter {
     return factor;
   }
 
-  double _resolveDashOpacityRatio({
+  double _resolveMinorOpacityRatio({
     required double baseSize,
     required double scale,
     required double minScreenSpacing,
@@ -314,98 +416,6 @@ class StaticCanvasPainter extends CustomPainter {
       a.maxX >= b.minX &&
       a.minY <= b.maxY &&
       a.maxY >= b.minY;
-
-  void _drawDashedVerticalLine(
-    Canvas canvas,
-    double x,
-    double minY,
-    double maxY,
-    Paint paint,
-    double dashLength,
-    double gapLength,
-  ) {
-    if (maxY <= minY || dashLength <= 0) {
-      return;
-    }
-    final patternLength = dashLength + gapLength;
-    if (patternLength <= 0) {
-      return;
-    }
-
-    final offset = _positiveModulo(minY, patternLength);
-    double current;
-    if (offset < dashLength) {
-      final dashStart = minY - offset;
-      final dashEnd = dashStart + dashLength;
-      final start = math.max(minY, dashStart);
-      final end = math.min(maxY, dashEnd);
-      if (end > start) {
-        canvas.drawLine(Offset(x, start), Offset(x, end), paint);
-      }
-      current = dashStart + patternLength;
-    } else {
-      current = minY - offset + patternLength;
-    }
-
-    for (; current < maxY; current += patternLength) {
-      final dashEnd = current + dashLength;
-      final start = math.max(current, minY);
-      final end = math.min(dashEnd, maxY);
-      if (end > start) {
-        canvas.drawLine(Offset(x, start), Offset(x, end), paint);
-      }
-    }
-  }
-
-  void _drawDashedHorizontalLine(
-    Canvas canvas,
-    double y,
-    double minX,
-    double maxX,
-    Paint paint,
-    double dashLength,
-    double gapLength,
-  ) {
-    if (maxX <= minX || dashLength <= 0) {
-      return;
-    }
-    final patternLength = dashLength + gapLength;
-    if (patternLength <= 0) {
-      return;
-    }
-
-    final offset = _positiveModulo(minX, patternLength);
-    double current;
-    if (offset < dashLength) {
-      final dashStart = minX - offset;
-      final dashEnd = dashStart + dashLength;
-      final start = math.max(minX, dashStart);
-      final end = math.min(maxX, dashEnd);
-      if (end > start) {
-        canvas.drawLine(Offset(start, y), Offset(end, y), paint);
-      }
-      current = dashStart + patternLength;
-    } else {
-      current = minX - offset + patternLength;
-    }
-
-    for (; current < maxX; current += patternLength) {
-      final dashEnd = current + dashLength;
-      final start = math.max(current, minX);
-      final end = math.min(dashEnd, maxX);
-      if (end > start) {
-        canvas.drawLine(Offset(start, y), Offset(end, y), paint);
-      }
-    }
-  }
-
-  double _positiveModulo(double value, double modulo) {
-    if (modulo == 0) {
-      return 0;
-    }
-    final result = value % modulo;
-    return result < 0 ? result + modulo : result;
-  }
 
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) =>
