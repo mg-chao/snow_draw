@@ -24,7 +24,6 @@ class EditIntentDetector {
     required DrawStateView stateView,
     required DrawPoint position,
     required bool isShiftPressed,
-    required bool isControlPressed,
     required bool isAltPressed,
     required SelectionConfig config,
     required ElementRegistry registry,
@@ -50,7 +49,7 @@ class EditIntentDetector {
         hitResult.elementId!,
       );
       if (element != null) {
-        final addToSelection = isShiftPressed || isControlPressed;
+        final addToSelection = isShiftPressed;
         final isElementHit = _isElementHit(
           element: element,
           position: position,
@@ -90,7 +89,7 @@ class EditIntentDetector {
     }
 
     // 3. Clicked blank area.
-    if (!isShiftPressed && !isControlPressed) {
+    if (!isShiftPressed) {
       return BoxSelectIntent(startPosition: position);
     }
 

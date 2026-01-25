@@ -1144,7 +1144,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    if (_isShiftPressed || _isControlPressed) {
+    if (_isShiftPressed) {
       return false;
     }
 

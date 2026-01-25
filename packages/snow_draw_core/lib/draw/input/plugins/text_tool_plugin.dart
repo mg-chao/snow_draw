@@ -304,7 +304,7 @@ class TextToolPlugin extends DrawInputPlugin {
     if (!_isSelectionToolActive) {
       return false;
     }
-    if (event.modifiers.shift || event.modifiers.control) {
+    if (event.modifiers.shift) {
       return false;
     }
     if (!state.domain.hasSelection) {

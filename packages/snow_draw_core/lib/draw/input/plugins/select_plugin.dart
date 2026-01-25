@@ -81,7 +81,6 @@ class SelectPlugin extends DrawInputPlugin {
         stateView: stateView,
         position: position,
         isShiftPressed: modifiers.shift,
-        isControlPressed: modifiers.control,
         isAltPressed: modifiers.alt,
         config: selectionConfig,
         registry: drawContext.elementRegistry,
