@@ -55,41 +55,27 @@ class CreatePlugin extends DrawInputPlugin {
         return unhandled();
       }
 
-      final document = state.domain.document;
       final tolerance = selectionConfig.interaction.handleTolerance;
-      if (!state.domain.hasSelection &&
-          !document.hasElementAtPoint(event.position, tolerance)) {
-        await dispatch(
-          CreateElement(
-            typeId: toolTypeId,
-            position: event.position,
-            maintainAspectRatio: event.modifiers.shift,
-            createFromCenter: event.modifiers.alt,
-            snapOverride: event.modifiers.control,
-          ),
-        );
-        return handled(message: 'Create started');
-      }
-
       final hitResult = hitTest.test(
         stateView: _stateView,
         position: event.position,
         config: selectionConfig,
         registry: drawContext.elementRegistry,
         tolerance: tolerance,
+        filterTypeId: toolTypeId,
       );
       if (hitResult.isHandleHit) {
         return unhandled(reason: 'Selection handle hit');
       }
+
+      // If we hit an element of the current tool type, defer to selection
       if (hitResult.isHit) {
-        // Only defer to selection if the hit element matches the current tool type
-        if (hitResult.elementId != null && _isMatchingToolType(hitResult.elementId!)) {
-          return unhandled();
-        }
-        // Otherwise, ignore the hit and proceed with creating a new element
-      } else if (state.domain.hasSelection) {
-        // If there's a selection and clicking on blank area, defer to selection plugin
-        // to handle deselection instead of creating a new element
+        return unhandled();
+      }
+
+      // If there's a selection and clicking on blank area, defer to selection plugin
+      // to handle deselection instead of creating a new element
+      if (state.domain.hasSelection) {
         return unhandled();
       }
 

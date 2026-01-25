@@ -214,28 +214,29 @@ class ArrowCreatePlugin extends DrawInputPlugin {
   }
 
   bool _shouldStartCreate(DrawPoint position) {
-    final document = state.domain.document;
     final tolerance = selectionConfig.interaction.handleTolerance;
-    if (!state.domain.hasSelection &&
-        !document.hasElementAtPoint(position, tolerance)) {
-      return true;
-    }
-
     final hitResult = hitTest.test(
       stateView: _stateView,
       position: position,
       config: selectionConfig,
       registry: drawContext.elementRegistry,
       tolerance: tolerance,
+      filterTypeId: ArrowData.typeIdToken,
     );
 
-    // If there's a selection and clicking on blank area, don't create
-    // Let the selection plugin handle deselection instead
-    if (!hitResult.isHit && state.domain.hasSelection) {
+    // If we hit an arrow element, defer to selection
+    if (hitResult.isHit) {
       return false;
     }
 
-    return !hitResult.isHit;
+    // If there's a selection and clicking on blank area, don't create
+    // Let the selection plugin handle deselection instead
+    if (state.domain.hasSelection) {
+      return false;
+    }
+
+    // No arrow hit and no selection - allow creation
+    return true;
   }
 
   bool _isDoubleClick(DrawPoint position, DateTime now) {

@@ -1,6 +1,8 @@
 import '../config/draw_config.dart';
 import '../core/coordinates/overlay_space.dart';
+import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_type_id.dart';
 import '../elements/types/arrow/arrow_data.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
@@ -124,12 +126,15 @@ class HitTest {
   /// Performs hit testing on the canvas.
   ///
   /// Returns information about the hit element or handle, if any.
+  ///
+  /// If [filterTypeId] is provided, only elements matching that type will be considered.
   HitTestResult test({
     required DrawStateView stateView,
     required DrawPoint position,
     required SelectionConfig config,
     required ElementRegistry registry,
     double? tolerance,
+    ElementTypeId<ElementData>? filterTypeId,
   }) {
     final state = stateView.state;
     final selection = stateView.effectiveSelection;
@@ -185,7 +190,12 @@ class HitTest {
         return indexB.compareTo(indexA);
       });
 
-    for (final candidate in candidates) {
+    // Filter candidates by type if filterTypeId is provided
+    final filteredCandidates = filterTypeId != null
+        ? candidates.where((element) => element.typeId == filterTypeId).toList()
+        : candidates;
+
+    for (final candidate in filteredCandidates) {
       final element = stateView.effectiveElement(candidate);
       if (_testElement(element, position, registry, actualTolerance)) {
         return HitTestResult(

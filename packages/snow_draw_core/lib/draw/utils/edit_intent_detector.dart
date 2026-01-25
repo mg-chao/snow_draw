@@ -22,6 +22,8 @@ class EditIntentDetector {
   const EditIntentDetector();
 
   /// Determines the intent from hit test results and modifiers.
+  ///
+  /// If [filterTypeId] is provided, only elements matching that type will be considered.
   EditIntent? detectIntent({
     required DrawStateView stateView,
     required DrawPoint position,
@@ -29,6 +31,7 @@ class EditIntentDetector {
     required bool isAltPressed,
     required SelectionConfig config,
     required ElementRegistry registry,
+    ElementTypeId<ElementData>? filterTypeId,
   }) {
     final arrowPointIntent = _detectArrowPointIntent(
       stateView: stateView,
@@ -44,6 +47,7 @@ class EditIntentDetector {
       position: position,
       config: config,
       registry: registry,
+      filterTypeId: filterTypeId,
     );
 
     final state = stateView.state;

@@ -12,6 +12,7 @@ class ArrowGeometry {
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
   ];
+  static const double _polylineSnapTolerance = 1.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -222,13 +223,22 @@ class ArrowGeometry {
 
       // If already aligned horizontally or vertically, just connect directly
       if (_nearZero(dx) || _nearZero(dy)) {
-        expanded.add(target);
+        final alignedTarget = Offset(
+          _nearZero(dx) ? prev.dx : target.dx,
+          _nearZero(dy) ? prev.dy : target.dy,
+        );
+        if (alignedTarget != prev) {
+          expanded.add(alignedTarget);
+        }
+        if (alignedTarget != target) {
+          expanded.add(target);
+        }
         continue;
       }
 
       // Standard three-segment elbow connection
       // Choose direction priority based on which distance is greater
-      final isHorizontalPrimary = dx.abs() >= dy.abs();
+      final isHorizontalPrimary = dx.abs() > dy.abs();
 
       if (isHorizontalPrimary) {
         // Horizontal → vertical → horizontal
@@ -543,7 +553,8 @@ class ArrowGeometry {
     return value;
   }
 
-  static bool _nearZero(double value) => value.abs() <= 0.00001;
+  static bool _nearZero(double value) =>
+      value.abs() <= _polylineSnapTolerance;
 
   static Offset? _normalize(Offset value) {
     final length = value.distance;

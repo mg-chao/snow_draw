@@ -190,6 +190,7 @@ class TextToolPlugin extends DrawInputPlugin {
       position: position,
       config: selectionConfig,
       registry: drawContext.elementRegistry,
+      filterTypeId: currentToolTypeId,
     );
 
     if (hitResult.isHandleHit) {
@@ -222,6 +223,7 @@ class TextToolPlugin extends DrawInputPlugin {
       position: position,
       config: selectionConfig,
       registry: drawContext.elementRegistry,
+      filterTypeId: currentToolTypeId,
     );
 
     final isSelectionHit =

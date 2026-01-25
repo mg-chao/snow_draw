@@ -1064,13 +1064,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final rawHitResult = draw_hit_test.hitTest.test(
+    final hitResult = draw_hit_test.hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
       registry: widget.store.context.elementRegistry,
+      filterTypeId: widget.currentToolTypeId,
     );
-    final hitResult = _filterHitResultForTool(state, rawHitResult);
     if (hitResult.isHandleHit) {
       return null;
     }
@@ -1435,13 +1435,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final rawHitResult = draw_hit_test.hitTest.test(
+    final hitResult = draw_hit_test.hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
       registry: widget.store.context.elementRegistry,
+      filterTypeId: widget.currentToolTypeId,
     );
-    final hitResult = _filterHitResultForTool(state, rawHitResult);
     if (_shouldForceDefaultCursor(
       state: state,
       position: position,
@@ -1464,25 +1464,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _defaultCursor;
     }
     return _cursorResolver.resolveForHitTest(hitResult);
-  }
-
-  draw_hit_test.HitTestResult _filterHitResultForTool(
-    DrawState state,
-    draw_hit_test.HitTestResult hitResult,
-  ) {
-    final toolTypeId = widget.currentToolTypeId;
-    if (toolTypeId == null || hitResult.isHandleHit) {
-      return hitResult;
-    }
-    final elementId = hitResult.elementId;
-    if (elementId == null) {
-      return hitResult;
-    }
-    final element = state.domain.document.getElementById(elementId);
-    if (element?.typeId != toolTypeId) {
-      return draw_hit_test.HitTestResult.none;
-    }
-    return hitResult;
   }
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;

@@ -84,6 +84,7 @@ class SelectPlugin extends DrawInputPlugin {
         isAltPressed: modifiers.alt,
         config: selectionConfig,
         registry: drawContext.elementRegistry,
+        filterTypeId: currentToolTypeId,
       ),
     );
     if (intent == null) {
