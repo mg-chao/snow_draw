@@ -109,33 +109,59 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Generate Release Notes
+        id: release_notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.generateReleaseNotes({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ steps.get_version.outputs.version }}'
+            });
+
+            // Add custom installation instructions
+            const customBody = `${data.body}
+
+            ## 🌐 Try It Online
+
+            **[Launch Snow Draw Web App](https://mg-chao.github.io/snow_draw/)** - Try the app directly in your browser!
+
+            ## 📦 Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🪟 Windows | \`snow_draw-windows-x64.zip\` | Windows x64 executable |
+            | 🌐 Web | \`snow_draw-web.tar.gz\` | Web application bundle |
+
+            ## 📖 Installation Instructions
+
+            ### Windows
+            1. Download \`snow_draw-windows-x64.zip\`
+            2. Extract the archive to your desired location
+            3. Run \`snow_draw.exe\`
+
+            ### Web
+            1. Download \`snow_draw-web.tar.gz\`
+            2. Extract the archive: \`tar -xzf snow_draw-web.tar.gz\`
+            3. Serve the contents with a web server (e.g., \`python -m http.server\`)
+
+            ---
+            *Built with Flutter • Released via GitHub Actions*`;
+
+            return customBody;
+          result-encoding: string
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: ${{ steps.get_version.outputs.version }}
+          name: Release ${{ steps.get_version.outputs.version }}
           draft: true
           prerelease: false
           files: |
             snow_draw-windows-x64.zip
             snow_draw-web.tar.gz
-          body: |
-            ## Snow Draw ${{ steps.get_version.outputs.version }}
-
-            ### Downloads
-            - **Windows**: `snow_draw-windows-x64.zip`
-            - **Web**: `snow_draw-web.tar.gz`
-
-            ### Installation
-
-            #### Windows
-            1. Download `snow_draw-windows-x64.zip`
-            2. Extract the archive
-            3. Run `snow_draw.exe`
-
-            #### Web
-            1. Download `snow_draw-web.tar.gz`
-            2. Extract the archive
-            3. Serve the contents with a web server
+          body: ${{ steps.release_notes.outputs.result }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
