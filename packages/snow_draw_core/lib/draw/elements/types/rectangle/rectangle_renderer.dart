@@ -255,6 +255,11 @@ class RectangleRenderer extends ElementTypeRenderer {
   }) {
     final safeSpacing = spacing <= 0 ? 1.0 : spacing;
     final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
+    // For rotated gradients, scale the shader rect to ensure seamless tiling.
+    // The perpendicular spacing changes by cos(angle), so we compensate.
+    final cosAngle = math.cos(angle).abs();
+    final adjustedSpacing =
+        cosAngle > 0.01 ? safeSpacing / cosAngle : safeSpacing;
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -267,7 +272,7 @@ class RectangleRenderer extends ElementTypeRenderer {
       ],
       stops: [0.0, lineStop, lineStop, 1.0],
       transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, safeSpacing, safeSpacing));
+    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
   }
 
   Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
@@ -324,14 +329,18 @@ class _LruCache<K, V> {
 
 @immutable
 class _StrokePathKey {
-  const _StrokePathKey({
-    required this.width,
-    required this.height,
-    required this.cornerRadius,
+  _StrokePathKey({
+    required double width,
+    required double height,
+    required double cornerRadius,
     required this.strokeStyle,
-    required this.patternPrimary,
-    required this.patternSecondary,
-  });
+    required double patternPrimary,
+    required double patternSecondary,
+  })  : width = _quantize(width),
+        height = _quantize(height),
+        cornerRadius = _quantize(cornerRadius),
+        patternPrimary = _quantize(patternPrimary),
+        patternSecondary = _quantize(patternSecondary);
 
   final double width;
   final double height;
@@ -340,6 +349,10 @@ class _StrokePathKey {
   // Dash length/gap length for dashed, dot spacing/radius for dotted.
   final double patternPrimary;
   final double patternSecondary;
+
+  /// Quantize to 1 decimal place to improve cache hit rate
+  /// by reducing floating-point precision variations
+  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
   @override
   bool operator ==(Object other) =>
@@ -365,15 +378,20 @@ class _StrokePathKey {
 
 @immutable
 class _LineShaderKey {
-  const _LineShaderKey({
-    required this.spacing,
-    required this.lineWidth,
+  _LineShaderKey({
+    required double spacing,
+    required double lineWidth,
     required this.angle,
-  });
+  })  : spacing = _quantize(spacing),
+        lineWidth = _quantize(lineWidth);
 
   final double spacing;
   final double lineWidth;
   final double angle;
+
+  /// Quantize to 1 decimal place to improve cache hit rate
+  /// by reducing floating-point precision variations
+  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
   @override
   bool operator ==(Object other) =>
