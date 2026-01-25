@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 import '../icons/svg_icons.dart';
@@ -466,17 +465,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           mixedLabel: widget.strings.mixed,
                           options: [
                             _StyleOption(
-                              value: 1,
+                              value: 2,
                               label: widget.strings.thin,
                               icon: const StrokeWidthSmallIcon(),
                             ),
                             _StyleOption(
-                              value: 3,
+                              value: 4,
                               label: widget.strings.medium,
                               icon: const StrokeWidthMediumIcon(),
                             ),
                             _StyleOption(
-                              value: 8,
+                              value: 7,
                               label: widget.strings.thick,
                               icon: const StrokeWidthLargeIcon(),
                             ),
@@ -494,26 +493,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
                             _StyleOption(
                               value: ArrowType.straight,
                               label: widget.strings.arrowTypeStraight,
-                              icon: const _ArrowTypeIcon(
-                                arrowType: ArrowType.straight,
-                                size: _iconSize,
-                              ),
+                              icon: const ArrowTypeStraightIcon(),
                             ),
                             _StyleOption(
                               value: ArrowType.curved,
                               label: widget.strings.arrowTypeCurved,
-                              icon: const _ArrowTypeIcon(
-                                arrowType: ArrowType.curved,
-                                size: _iconSize,
-                              ),
+                              icon: const ArrowTypeCurvedIcon(),
                             ),
                             _StyleOption(
                               value: ArrowType.polyline,
                               label: widget.strings.arrowTypePolyline,
-                              icon: const _ArrowTypeIcon(
-                                arrowType: ArrowType.polyline,
-                                size: _iconSize,
-                              ),
+                              icon: const ArrowTypeElbowIcon(),
                             ),
                           ],
                           selected: arrowStyleValues.arrowType.value,
@@ -1111,30 +1101,124 @@ class _StyleToolbarState extends State<StyleToolbar> {
     final selectedStyle = isMixed ? null : value.value ?? defaultValue;
     final borderColor = theme.colorScheme.outlineVariant;
 
-    return PopupMenuButton<ArrowheadStyle>(
-      tooltip: label,
-      padding: EdgeInsets.zero,
-      onSelected: onSelect,
-      itemBuilder: (_) => _buildArrowheadMenuItems(
-        selectedStyle: selectedStyle,
-        isStart: isStart,
-      ),
-      child: Container(
-        width: _toggleButtonWidth,
-        height: _toggleButtonHeight,
-        decoration: BoxDecoration(
-          border: Border.all(color: borderColor),
-          borderRadius: BorderRadius.circular(_toggleButtonRadius),
-        ),
-        child: Center(
-          child:
-              isMixed
-                  ? const Icon(Icons.more_horiz, size: _iconSize)
-                  : _ArrowheadIcon(
-                    style: selectedStyle ?? defaultValue,
+    return Tooltip(
+      message: label,
+      child: Builder(
+        builder: (context) => InkWell(
+          onTap: () async {
+            final button = context.findRenderObject()! as RenderBox;
+            final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+            final position = RelativeRect.fromRect(
+              Rect.fromPoints(
+                button.localToGlobal(Offset.zero, ancestor: overlay),
+                button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+              ),
+              Offset.zero & overlay.size,
+            );
+
+            final result = await showMenu<ArrowheadStyle>(
+              context: context,
+              position: position,
+              color: theme.colorScheme.surface,
+              items: [
+                PopupMenuItem<ArrowheadStyle>(
+                  enabled: false,
+                  padding: EdgeInsets.zero,
+                  child: _buildArrowheadPopoverContent(
+                    selectedStyle: selectedStyle,
                     isStart: isStart,
-                    size: _iconSize,
+                    onSelect: (style) {
+                      Navigator.of(context).pop(style);
+                    },
                   ),
+                ),
+              ],
+            );
+
+            if (result != null) {
+              onSelect(result);
+            }
+          },
+          customBorder: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_toggleButtonRadius),
+          ),
+          child: CustomPaint(
+            painter: _DashedBorderPainter(
+              color: borderColor,
+              borderRadius: _toggleButtonRadius,
+            ),
+            child: Container(
+              width: _toggleButtonHeight,
+              height: _toggleButtonHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_toggleButtonRadius),
+              ),
+              child: Center(
+                child:
+                    isMixed
+                        ? const Icon(Icons.more_horiz, size: _iconSize)
+                        : _buildArrowheadIcon(
+                          style: selectedStyle ?? defaultValue,
+                          isStart: isStart,
+                          size: _iconSize,
+                        ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArrowheadPopoverContent({
+    required ArrowheadStyle? selectedStyle,
+    required bool isStart,
+    required ValueChanged<ArrowheadStyle> onSelect,
+  }) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: 200,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final style in ArrowheadStyle.values)
+                Tooltip(
+                  message: _arrowheadLabel(style),
+                  child: InkWell(
+                    onTap: () => onSelect(style),
+                    borderRadius: BorderRadius.circular(_toggleButtonRadius),
+                    child: Container(
+                      width: _toggleButtonHeight,
+                      height: _toggleButtonHeight,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: selectedStyle == style
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outlineVariant,
+                          width: selectedStyle == style ? 2 : 1,
+                        ),
+                        borderRadius: BorderRadius.circular(_toggleButtonRadius),
+                        color: selectedStyle == style
+                            ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                            : null,
+                      ),
+                      child: Center(
+                        child: _buildArrowheadIcon(
+                          style: style,
+                          isStart: isStart,
+                          size: _iconSize,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1150,13 +1234,52 @@ class _StyleToolbarState extends State<StyleToolbar> {
         checked: selectedStyle == style,
         child: Row(
           children: [
-            _ArrowheadIcon(style: style, isStart: isStart, size: _iconSize),
+            _buildArrowheadIcon(
+              style: style,
+              isStart: isStart,
+              size: _iconSize,
+            ),
             const SizedBox(width: 8),
             Text(_arrowheadLabel(style)),
           ],
         ),
       ),
   ];
+
+  Widget _buildArrowheadIcon({
+    required ArrowheadStyle style,
+    required bool isStart,
+    required double size,
+  }) {
+    Widget icon;
+    switch (style) {
+      case ArrowheadStyle.none:
+        icon = ArrowheadNoneIcon(size: size);
+      case ArrowheadStyle.standard:
+        icon = ArrowheadStandardIcon(size: size);
+      case ArrowheadStyle.triangle:
+        icon = ArrowheadTriangleIcon(size: size);
+      case ArrowheadStyle.square:
+        icon = ArrowheadSquareIcon(size: size);
+      case ArrowheadStyle.circle:
+        icon = ArrowheadCircleIcon(size: size);
+      case ArrowheadStyle.diamond:
+        icon = ArrowheadDiamondIcon(size: size);
+      case ArrowheadStyle.invertedTriangle:
+        icon = ArrowheadInvertedTriangleIcon(size: size);
+      case ArrowheadStyle.verticalLine:
+        icon = ArrowheadVerticalLineIcon(size: size);
+    }
+
+    // Flip horizontally for start arrowheads
+    if (isStart) {
+      return Transform.scale(
+        scaleX: -1,
+        child: icon,
+      );
+    }
+    return icon;
+  }
 
   String _arrowheadLabel(ArrowheadStyle style) {
     switch (style) {
@@ -1695,193 +1818,6 @@ class _StyleOption<T> {
   final Widget icon;
 }
 
-class _ArrowTypeIcon extends StatelessWidget {
-  const _ArrowTypeIcon({
-    required this.arrowType,
-    required this.size,
-  });
-
-  final ArrowType arrowType;
-  final double size;
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties
-      ..add(EnumProperty<ArrowType>('arrowType', arrowType))
-      ..add(DoubleProperty('size', size));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = IconTheme.of(context).color ?? Colors.black;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _ArrowTypeIconPainter(
-          arrowType: arrowType,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _ArrowTypeIconPainter extends CustomPainter {
-  const _ArrowTypeIconPainter({
-    required this.arrowType,
-    required this.color,
-  });
-
-  final ArrowType arrowType;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final strokeWidth = math.max(1, size.shortestSide * 0.08).toDouble();
-    final padding = size.shortestSide * 0.2;
-    final points = _buildPoints(size, padding);
-    final path = ArrowGeometry.buildShaftPath(
-      points: points,
-      arrowType: arrowType,
-    );
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color
-      ..isAntiAlias = true;
-
-    canvas.drawPath(path, paint);
-
-    final direction =
-        ArrowGeometry.resolveEndDirection(points, arrowType) ??
-        const Offset(1, 0);
-    final arrowheadPath = ArrowGeometry.buildArrowheadPath(
-      tip: points.last,
-      direction: direction,
-      style: ArrowheadStyle.standard,
-      strokeWidth: strokeWidth,
-    );
-    canvas.drawPath(arrowheadPath, paint);
-  }
-
-  List<Offset> _buildPoints(Size size, double padding) {
-    final width = size.width;
-    final height = size.height;
-    switch (arrowType) {
-      case ArrowType.straight:
-        return [
-          Offset(padding, height * 0.7),
-          Offset(width - padding, height * 0.3),
-        ];
-      case ArrowType.curved:
-        return [
-          Offset(padding, height * 0.7),
-          Offset(width * 0.5, height * 0.2),
-          Offset(width - padding, height * 0.7),
-        ];
-      case ArrowType.polyline:
-        return [
-          Offset(padding, height * 0.75),
-          Offset(width - padding, height * 0.25),
-        ];
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ArrowTypeIconPainter oldDelegate) =>
-      oldDelegate.arrowType != arrowType || oldDelegate.color != color;
-}
-
-class _ArrowheadIcon extends StatelessWidget {
-  const _ArrowheadIcon({
-    required this.style,
-    required this.isStart,
-    required this.size,
-  });
-
-  final ArrowheadStyle style;
-  final bool isStart;
-  final double size;
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties
-      ..add(EnumProperty<ArrowheadStyle>('style', style))
-      ..add(DiagnosticsProperty<bool>('isStart', isStart))
-      ..add(DoubleProperty('size', size));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = IconTheme.of(context).color ?? Colors.black;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(
-        painter: _ArrowheadIconPainter(
-          style: style,
-          isStart: isStart,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _ArrowheadIconPainter extends CustomPainter {
-  const _ArrowheadIconPainter({
-    required this.style,
-    required this.isStart,
-    required this.color,
-  });
-
-  final ArrowheadStyle style;
-  final bool isStart;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final strokeWidth = math.max(1, size.shortestSide * 0.08).toDouble();
-    final padding = size.shortestSide * 0.2;
-    final centerY = size.height / 2;
-    final start = Offset(padding, centerY);
-    final end = Offset(size.width - padding, centerY);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color
-      ..isAntiAlias = true;
-
-    canvas.drawLine(start, end, paint);
-    if (style == ArrowheadStyle.none) {
-      return;
-    }
-
-    final tip = isStart ? start : end;
-    final direction = isStart ? const Offset(-1, 0) : const Offset(1, 0);
-    final path = ArrowGeometry.buildArrowheadPath(
-      tip: tip,
-      direction: direction,
-      style: style,
-      strokeWidth: strokeWidth,
-    );
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _ArrowheadIconPainter oldDelegate) =>
-      oldDelegate.style != style ||
-      oldDelegate.isStart != isStart ||
-      oldDelegate.color != color;
-}
-
 class _NoPaddingTrackShape extends RoundedRectSliderTrackShape {
   @override
   Rect getPreferredRect({
@@ -1897,4 +1833,74 @@ class _NoPaddingTrackShape extends RoundedRectSliderTrackShape {
     final trackWidth = parentBox.size.width;
     return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({
+    required this.color,
+    required this.borderRadius,
+    this.strokeWidth = 1.0,
+    this.dashWidth = 4.0,
+    this.dashSpace = 4.0,
+  });
+
+  final Color color;
+  final double borderRadius;
+  final double strokeWidth;
+  final double dashWidth;
+  final double dashSpace;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            strokeWidth / 2,
+            strokeWidth / 2,
+            size.width - strokeWidth,
+            size.height - strokeWidth,
+          ),
+          Radius.circular(borderRadius),
+        ),
+      );
+
+    final dashPath = _createDashedPath(path);
+    canvas.drawPath(dashPath, paint);
+  }
+
+  Path _createDashedPath(Path source) {
+    final dashedPath = Path();
+    final metricsIterator = source.computeMetrics().iterator;
+
+    while (metricsIterator.moveNext()) {
+      final metric = metricsIterator.current;
+      var distance = 0.0;
+
+      while (distance < metric.length) {
+        final nextDistance = distance + dashWidth;
+        final extractPath = metric.extractPath(
+          distance,
+          nextDistance > metric.length ? metric.length : nextDistance,
+        );
+        dashedPath.addPath(extractPath, Offset.zero);
+        distance = nextDistance + dashSpace;
+      }
+    }
+
+    return dashedPath;
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.dashSpace != dashSpace;
 }
