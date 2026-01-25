@@ -65,7 +65,7 @@ DrawState handleUpdateElementsStyle(
             currentRect: next.rect,
             data: updatedData,
             autoResize: updatedData.autoResize,
-            allowShrinkHeight: updatedData.autoResize,
+            allowShrinkHeight: true,
           );
           if (nextRect != next.rect) {
             next = next.copyWith(rect: nextRect);
@@ -134,6 +134,7 @@ TextEditingState? _applyTextEditingStyleUpdate(
         currentRect: interaction.rect,
         data: nextData,
         autoResize: nextData.autoResize,
+        allowShrinkHeight: true,
       );
       if (nextRect != interaction.rect) {
         changed = true;
