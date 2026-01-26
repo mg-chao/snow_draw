@@ -11,24 +11,24 @@ class PropertyUtils {
     bool Function(T, T) equals,
   ) {
     if (values.isEmpty) {
-      return const MixedValue(value: null, isMixed: true);
+      return MixedValue<T>(value: null, isMixed: true);
     }
 
     // If any value is mixed, result is mixed
     if (values.any((v) => v.isMixed)) {
-      return const MixedValue(value: null, isMixed: true);
+      return MixedValue<T>(value: null, isMixed: true);
     }
 
     // Get first non-null value
     final firstValue = values.first.value;
     if (firstValue == null) {
-      return const MixedValue(value: null, isMixed: true);
+      return MixedValue<T>(value: null, isMixed: true);
     }
 
     // Check if all values equal the first
     for (final value in values.skip(1)) {
       if (value.value == null || !equals(firstValue, value.value as T)) {
-        return const MixedValue(value: null, isMixed: true);
+        return MixedValue<T>(value: null, isMixed: true);
       }
     }
 

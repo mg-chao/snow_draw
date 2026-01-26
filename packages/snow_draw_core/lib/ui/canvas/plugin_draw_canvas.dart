@@ -109,12 +109,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   StreamSubscription<DrawEvent>? _eventSubscription;
   StreamSubscription<DrawConfig>? _configSubscription;
   final _focusNode = FocusNode();
-  final _textFocusNode = FocusNode();
+  late final FocusNode _textFocusNode;
   TextEditingController? _textController;
   String? _editingElementId;
   var _suppressTextControllerChange = false;
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
+  TextLayoutMetrics? _editingTextLayout;
+  TextSelection? _lastVerticalSelection;
+  double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
   final _cursorNotifier = ValueNotifier<MouseCursor>(_defaultCursor);
 
@@ -250,6 +253,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   void initState() {
     super.initState();
+    _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
@@ -1386,6 +1390,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
+    if (_hasMultipleSelectedTextElements(state)) {
+      return false;
+    }
+
     return _isInsideSelectedTextElement(stateView, position);
   }
 
@@ -1472,6 +1480,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final element = state.domain.document.getElementById(id);
       if (element?.data is TextData) {
         return true;
+      }
+    }
+    return false;
+  }
+
+  bool _hasMultipleSelectedTextElements(DrawState state) {
+    var count = 0;
+    for (final id in state.domain.selection.selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is TextData) {
+        count += 1;
+        if (count > 1) {
+          return true;
+        }
       }
     }
     return false;
@@ -1630,6 +1652,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final layoutWidth = rect.width;
     final height = rect.height;
     if (layoutWidth <= 0 || height <= 0) {
+      _editingTextLayout = null;
       return null;
     }
     // RenderEditable subtracts a caret margin from maxWidth when laying out.
@@ -1653,6 +1676,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widthBasis: TextWidthBasis.parent,
       locale: locale,
     );
+    _editingTextLayout = layout;
     final textHeight = layout.size.height;
     final verticalOffset = _resolveVerticalOffset(
       containerHeight: height,
@@ -1665,6 +1689,28 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       rect: rect,
       layout: layout,
       verticalOffset: verticalOffset,
+    );
+
+    Widget textField = TextField(
+      controller: _textController,
+      focusNode: _textFocusNode,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      maxLines: null,
+      style: inputTextStyle,
+      strutStyle: resolveTextStrutStyle(textStyle),
+      textAlign: _toFlutterAlign(data.horizontalAlign),
+      textDirection: TextDirection.ltr,
+      clipBehavior: Clip.none,
+      // Avoid InputDecorator so RenderEditable uses tight
+      // constraints, keeping vertical caret runs valid.
+      decoration: null,
+      cursorColor: textColor,
+      cursorWidth: textCursorWidth,
+    );
+    textField = Listener(
+      onPointerDown: (_) => _resetVerticalCaretRun(),
+      child: textField,
     );
 
     return Positioned(
@@ -1692,27 +1738,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                     ).copyWith(textScaler: textLayoutTextScaler),
                     child: DefaultTextHeightBehavior(
                       textHeightBehavior: textLayoutHeightBehavior,
-                      child: TextField(
-                        controller: _textController,
-                        focusNode: _textFocusNode,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                        maxLines: null,
-                        style: inputTextStyle,
-                        strutStyle: resolveTextStrutStyle(textStyle),
-                        textAlign: _toFlutterAlign(data.horizontalAlign),
-                        textAlignVertical: TextAlignVertical.top,
-                        textDirection: TextDirection.ltr,
-                        clipBehavior: Clip.none,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          isCollapsed: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        cursorColor: textColor,
-                        cursorWidth: textCursorWidth,
-                      ),
+                      child: textField,
                     ),
                   ),
                 ),
@@ -1732,6 +1758,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ..addListener(_handleTextControllerChanged);
       _editingElementId = interaction.elementId;
       _initialSelectionApplied = false;
+      _resetVerticalCaretRun();
     } else if (!_suppressTextControllerChange &&
         controller.text != interaction.draftData.text) {
       _suppressTextControllerChange = true;
@@ -1752,6 +1779,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _editingElementId = null;
     _initialSelectionApplied = false;
+    _editingTextLayout = null;
+    _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
       _textFocusNode.unfocus();
     }
@@ -1789,7 +1818,161 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (nextText == interaction.draftData.text) {
       return;
     }
+    _resetVerticalCaretRun();
     unawaited(widget.store.dispatch(UpdateTextEdit(text: nextText)));
+  }
+
+  void _resetVerticalCaretRun() {
+    _lastVerticalSelection = null;
+    _verticalCaretX = null;
+  }
+
+  KeyEventResult _handleTextFocusKeyEvent(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final logicalKey = event.logicalKey;
+    final isArrowUp = logicalKey == LogicalKeyboardKey.arrowUp;
+    final isArrowDown = logicalKey == LogicalKeyboardKey.arrowDown;
+    final isPageUp = logicalKey == LogicalKeyboardKey.pageUp;
+    final isPageDown = logicalKey == LogicalKeyboardKey.pageDown;
+    if (isArrowUp || isArrowDown || isPageUp || isPageDown) {
+      final interaction = widget.store.state.application.interaction;
+      if (interaction is! TextEditingState) {
+        return KeyEventResult.ignored;
+      }
+      if (interaction.draftData.horizontalAlign == TextHorizontalAlign.left) {
+        return KeyEventResult.ignored;
+      }
+      // Work around VerticalCaretMovementRun assertions for non-left alignment.
+      final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
+      final isShiftPressed =
+          keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          keysPressed.contains(LogicalKeyboardKey.shiftRight) ||
+          keysPressed.contains(LogicalKeyboardKey.shift);
+      final layout = _editingTextLayout;
+      _handleVerticalCaretMovement(
+        forward: isArrowDown || isPageDown,
+        collapseSelection: !isShiftPressed,
+        pageOffset: (isPageUp || isPageDown) && layout != null
+            ? layout.size.height
+            : null,
+      );
+      return KeyEventResult.handled;
+    }
+
+    _resetVerticalCaretRun();
+    return KeyEventResult.ignored;
+  }
+
+  void _handleVerticalCaretMovement({
+    required bool forward,
+    required bool collapseSelection,
+    double? pageOffset,
+  }) {
+    final controller = _textController;
+    final layout = _editingTextLayout;
+    if (controller == null || layout == null) {
+      return;
+    }
+    final selection = controller.selection;
+    if (!selection.isValid) {
+      return;
+    }
+
+    final lineMetrics = layout.painter.computeLineMetrics();
+    if (lineMetrics.isEmpty) {
+      return;
+    }
+
+    final textLength = controller.text.length;
+    final currentPosition = selection.extent;
+    final caretPrototype = Rect.fromLTWH(
+      0,
+      0,
+      textCursorWidth,
+      layout.lineHeight,
+    );
+
+    final caretOffset = layout.painter.getOffsetForCaret(
+      currentPosition,
+      caretPrototype,
+    );
+    if (_lastVerticalSelection == null ||
+        _lastVerticalSelection != selection ||
+        _verticalCaretX == null) {
+      _verticalCaretX = caretOffset.dx;
+    }
+
+    final currentLineIndex = _lineIndexForCaretOffset(
+      caretOffset.dy,
+      lineMetrics,
+    );
+    int targetLineIndex;
+    if (pageOffset != null) {
+      final currentBaseline = lineMetrics[currentLineIndex].baseline;
+      final targetBaseline =
+          currentBaseline + (forward ? pageOffset : -pageOffset);
+      targetLineIndex = _lineIndexForBaseline(
+        baseline: targetBaseline,
+        lineMetrics: lineMetrics,
+        forward: forward,
+      );
+    } else {
+      targetLineIndex = currentLineIndex + (forward ? 1 : -1);
+    }
+
+    TextPosition newExtent;
+    if (targetLineIndex < 0) {
+      newExtent = const TextPosition(offset: 0);
+    } else if (targetLineIndex >= lineMetrics.length) {
+      newExtent = TextPosition(offset: textLength);
+    } else {
+      final targetBaseline = lineMetrics[targetLineIndex].baseline;
+      final targetOffset = Offset(_verticalCaretX ?? 0, targetBaseline);
+      newExtent = layout.painter.getPositionForOffset(targetOffset);
+    }
+
+    final nextSelection = collapseSelection
+        ? TextSelection.collapsed(offset: newExtent.offset)
+        : selection.extendTo(newExtent);
+    controller.selection = nextSelection;
+    _lastVerticalSelection = nextSelection;
+  }
+
+  int _lineIndexForCaretOffset(
+    double caretDy,
+    List<LineMetrics> lineMetrics,
+  ) {
+    for (var i = 0; i < lineMetrics.length; i++) {
+      if (lineMetrics[i].baseline > caretDy) {
+        return i;
+      }
+    }
+    return lineMetrics.isEmpty ? 0 : lineMetrics.length - 1;
+  }
+
+  int _lineIndexForBaseline({
+    required double baseline,
+    required List<LineMetrics> lineMetrics,
+    required bool forward,
+  }) {
+    if (forward) {
+      for (var i = 0; i < lineMetrics.length; i++) {
+        if (lineMetrics[i].baseline >= baseline) {
+          return i;
+        }
+      }
+      return lineMetrics.length - 1;
+    }
+
+    for (var i = lineMetrics.length - 1; i >= 0; i--) {
+      if (lineMetrics[i].baseline <= baseline) {
+        return i;
+      }
+    }
+    return 0;
   }
 
   void _applyInitialSelection({
@@ -1910,17 +2093,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _updateToolPlugins(ElementTypeId<ElementData>? toolTypeId) {
-    final arrowCreatePlugin = _pluginCoordinator.registry.getPlugin(
-      'arrow_create',
-    );
-    if (arrowCreatePlugin is ArrowCreatePlugin) {
-      arrowCreatePlugin.currentToolTypeId = toolTypeId;
-    }
     final createPlugin = _pluginCoordinator.registry.getPlugin('create');
     if (createPlugin is CreatePlugin) {
-      createPlugin.currentToolTypeId = toolTypeId == ArrowData.typeIdToken
-          ? null
-          : toolTypeId;
+      createPlugin.currentToolTypeId = toolTypeId;
     }
     final textPlugin = _pluginCoordinator.registry.getPlugin('text_tool');
     if (textPlugin is TextToolPlugin) {

@@ -139,6 +139,10 @@ class TextToolPlugin extends DrawInputPlugin {
         return unhandled(reason: 'Defer to selection clearing');
       }
 
+      if (hitId != null && _hasMultipleSelectedTextElements()) {
+        return unhandled(reason: 'Multiple text selection blocks editing');
+      }
+
       await dispatch(StartTextEdit(elementId: hitId, position: event.position));
       return handled(message: 'Text edit started');
     }
@@ -259,6 +263,20 @@ class TextToolPlugin extends DrawInputPlugin {
     return false;
   }
 
+  bool _hasMultipleSelectedTextElements() {
+    var count = 0;
+    for (final id in state.domain.selection.selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is TextData) {
+        count += 1;
+        if (count > 1) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   bool _isInsideSelectedTextElement(DrawPoint position) {
     for (final id in state.domain.selection.selectedIds) {
       final element = state.domain.document.getElementById(id);
@@ -318,6 +336,9 @@ class TextToolPlugin extends DrawInputPlugin {
       return false;
     }
     if (!state.domain.hasSelection) {
+      return false;
+    }
+    if (_hasMultipleSelectedTextElements()) {
       return false;
     }
     final hitId = _hitTextElementId(
