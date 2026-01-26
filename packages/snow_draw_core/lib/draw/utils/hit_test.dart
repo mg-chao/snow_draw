@@ -127,7 +127,8 @@ class HitTest {
   ///
   /// Returns information about the hit element or handle, if any.
   ///
-  /// If [filterTypeId] is provided, only elements matching that type will be considered.
+  /// If [filterTypeId] is provided, only elements matching that type will
+  /// be considered.
   HitTestResult test({
     required DrawStateView stateView,
     required DrawPoint position,
@@ -144,7 +145,8 @@ class HitTest {
     final actualTolerance = tolerance ?? config.interaction.handleTolerance;
 
     // Determine corner handle offset for single arrow selections.
-    final cornerHandleOffset = selectedIds.length == 1 &&
+    final cornerHandleOffset =
+        selectedIds.length == 1 &&
             stateView.selectedElements.isNotEmpty &&
             stateView.selectedElements.first.data is ArrowData
         ? 8.0
@@ -153,7 +155,8 @@ class HitTest {
     // Check if this is a single 2-point arrow selection.
     // For 2-point arrows, skip handle hit testing since all operations
     // can be performed through the point editor.
-    final isSingleTwoPointArrow = selectedIds.length == 1 &&
+    final isSingleTwoPointArrow =
+        selectedIds.length == 1 &&
         stateView.selectedElements.isNotEmpty &&
         stateView.selectedElements.first.data is ArrowData &&
         (stateView.selectedElements.first.data as ArrowData).points.length == 2;

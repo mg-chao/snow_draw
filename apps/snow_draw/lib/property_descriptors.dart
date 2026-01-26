@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'property_descriptor.dart';
 import 'property_utils.dart';
@@ -8,14 +7,14 @@ import 'style_toolbar_state.dart';
 /// Property descriptor for stroke color
 class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
   const ColorPropertyDescriptor()
-      : super(
-          id: 'color',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.arrow,
-            ElementType.text,
-          },
-        );
+    : super(
+        id: 'color',
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.arrow,
+          ElementType.text,
+        },
+      );
 
   @override
   MixedValue<Color> extractValue(StylePropertyContext context) {
@@ -52,13 +51,10 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
 /// Property descriptor for stroke width
 class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
   const StrokeWidthPropertyDescriptor()
-      : super(
-          id: 'strokeWidth',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.arrow,
-          },
-        );
+    : super(
+        id: 'strokeWidth',
+        supportedElementTypes: const {ElementType.rectangle, ElementType.arrow},
+      );
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
@@ -82,20 +78,17 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.strokeWidth;
     }
-    return 2.0;
+    return 2;
   }
 }
 
 /// Property descriptor for stroke style
 class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
   const StrokeStylePropertyDescriptor()
-      : super(
-          id: 'strokeStyle',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.arrow,
-          },
-        );
+    : super(
+        id: 'strokeStyle',
+        supportedElementTypes: const {ElementType.rectangle, ElementType.arrow},
+      );
 
   @override
   MixedValue<StrokeStyle> extractValue(StylePropertyContext context) {
@@ -126,13 +119,10 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
 /// Property descriptor for fill color
 class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
   const FillColorPropertyDescriptor()
-      : super(
-          id: 'fillColor',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.text,
-          },
-        );
+    : super(
+        id: 'fillColor',
+        supportedElementTypes: const {ElementType.rectangle, ElementType.text},
+      );
 
   @override
   MixedValue<Color> extractValue(StylePropertyContext context) {
@@ -163,13 +153,10 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
 /// Property descriptor for fill style
 class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
   const FillStylePropertyDescriptor()
-      : super(
-          id: 'fillStyle',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.text,
-          },
-        );
+    : super(
+        id: 'fillStyle',
+        supportedElementTypes: const {ElementType.rectangle, ElementType.text},
+      );
 
   @override
   MixedValue<FillStyle> extractValue(StylePropertyContext context) {
@@ -200,14 +187,14 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
 /// Property descriptor for opacity
 class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
   const OpacityPropertyDescriptor()
-      : super(
-          id: 'opacity',
-          supportedElementTypes: const {
-            ElementType.rectangle,
-            ElementType.arrow,
-            ElementType.text,
-          },
-        );
+    : super(
+        id: 'opacity',
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.arrow,
+          ElementType.text,
+        },
+      );
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
@@ -237,17 +224,17 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.opacity;
     }
-    return 1.0;
+    return 1;
   }
 }
 
 /// Property descriptor for corner radius
 class CornerRadiusPropertyDescriptor extends PropertyDescriptor<double> {
   const CornerRadiusPropertyDescriptor()
-      : super(
-          id: 'cornerRadius',
-          supportedElementTypes: const {ElementType.rectangle, ElementType.text},
-        );
+    : super(
+        id: 'cornerRadius',
+        supportedElementTypes: const {ElementType.rectangle, ElementType.text},
+      );
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
@@ -275,17 +262,14 @@ class CornerRadiusPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.cornerRadius;
     }
-    return 0.0;
+    return 0;
   }
 }
 
 /// Property descriptor for font size
 class FontSizePropertyDescriptor extends PropertyDescriptor<double> {
   const FontSizePropertyDescriptor()
-      : super(
-          id: 'fontSize',
-          supportedElementTypes: const {ElementType.text},
-        );
+    : super(id: 'fontSize', supportedElementTypes: const {ElementType.text});
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
@@ -296,18 +280,14 @@ class FontSizePropertyDescriptor extends PropertyDescriptor<double> {
   }
 
   @override
-  double getDefaultValue(StylePropertyContext context) {
-    return context.textDefaults.fontSize;
-  }
+  double getDefaultValue(StylePropertyContext context) =>
+      context.textDefaults.fontSize;
 }
 
 /// Property descriptor for font family
 class FontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
   const FontFamilyPropertyDescriptor()
-      : super(
-          id: 'fontFamily',
-          supportedElementTypes: const {ElementType.text},
-        );
+    : super(id: 'fontFamily', supportedElementTypes: const {ElementType.text});
 
   @override
   MixedValue<String> extractValue(StylePropertyContext context) {
@@ -318,18 +298,15 @@ class FontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
   }
 
   @override
-  String getDefaultValue(StylePropertyContext context) {
-    return context.textDefaults.fontFamily ?? 'Arial';
-  }
+  String getDefaultValue(StylePropertyContext context) =>
+      context.textDefaults.fontFamily ?? 'Arial';
 }
 
 /// Property descriptor for text alignment
-class TextAlignPropertyDescriptor extends PropertyDescriptor<TextHorizontalAlign> {
+class TextAlignPropertyDescriptor
+    extends PropertyDescriptor<TextHorizontalAlign> {
   const TextAlignPropertyDescriptor()
-      : super(
-          id: 'textAlign',
-          supportedElementTypes: const {ElementType.text},
-        );
+    : super(id: 'textAlign', supportedElementTypes: const {ElementType.text});
 
   @override
   MixedValue<TextHorizontalAlign> extractValue(StylePropertyContext context) {
@@ -340,18 +317,14 @@ class TextAlignPropertyDescriptor extends PropertyDescriptor<TextHorizontalAlign
   }
 
   @override
-  TextHorizontalAlign getDefaultValue(StylePropertyContext context) {
-    return context.textDefaults.textAlign;
-  }
+  TextHorizontalAlign getDefaultValue(StylePropertyContext context) =>
+      context.textDefaults.textAlign;
 }
 
 /// Property descriptor for arrowhead style
 class ArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle> {
   const ArrowheadPropertyDescriptor()
-      : super(
-          id: 'arrowhead',
-          supportedElementTypes: const {ElementType.arrow},
-        );
+    : super(id: 'arrowhead', supportedElementTypes: const {ElementType.arrow});
 
   @override
   MixedValue<ArrowheadStyle> extractValue(StylePropertyContext context) {
@@ -362,18 +335,18 @@ class ArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle> {
   }
 
   @override
-  ArrowheadStyle getDefaultValue(StylePropertyContext context) {
-    return context.arrowDefaults.endArrowhead;
-  }
+  ArrowheadStyle getDefaultValue(StylePropertyContext context) =>
+      context.arrowDefaults.endArrowhead;
 }
 
 /// Property descriptor for start arrowhead style
-class StartArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle> {
+class StartArrowheadPropertyDescriptor
+    extends PropertyDescriptor<ArrowheadStyle> {
   const StartArrowheadPropertyDescriptor()
-      : super(
-          id: 'startArrowhead',
-          supportedElementTypes: const {ElementType.arrow},
-        );
+    : super(
+        id: 'startArrowhead',
+        supportedElementTypes: const {ElementType.arrow},
+      );
 
   @override
   MixedValue<ArrowheadStyle> extractValue(StylePropertyContext context) {
@@ -384,18 +357,18 @@ class StartArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle
   }
 
   @override
-  ArrowheadStyle getDefaultValue(StylePropertyContext context) {
-    return context.arrowDefaults.startArrowhead;
-  }
+  ArrowheadStyle getDefaultValue(StylePropertyContext context) =>
+      context.arrowDefaults.startArrowhead;
 }
 
 /// Property descriptor for end arrowhead style
-class EndArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle> {
+class EndArrowheadPropertyDescriptor
+    extends PropertyDescriptor<ArrowheadStyle> {
   const EndArrowheadPropertyDescriptor()
-      : super(
-          id: 'endArrowhead',
-          supportedElementTypes: const {ElementType.arrow},
-        );
+    : super(
+        id: 'endArrowhead',
+        supportedElementTypes: const {ElementType.arrow},
+      );
 
   @override
   MixedValue<ArrowheadStyle> extractValue(StylePropertyContext context) {
@@ -406,18 +379,14 @@ class EndArrowheadPropertyDescriptor extends PropertyDescriptor<ArrowheadStyle> 
   }
 
   @override
-  ArrowheadStyle getDefaultValue(StylePropertyContext context) {
-    return context.arrowDefaults.endArrowhead;
-  }
+  ArrowheadStyle getDefaultValue(StylePropertyContext context) =>
+      context.arrowDefaults.endArrowhead;
 }
 
 /// Property descriptor for arrow type
 class ArrowTypePropertyDescriptor extends PropertyDescriptor<ArrowType> {
   const ArrowTypePropertyDescriptor()
-      : super(
-          id: 'arrowType',
-          supportedElementTypes: const {ElementType.arrow},
-        );
+    : super(id: 'arrowType', supportedElementTypes: const {ElementType.arrow});
 
   @override
   MixedValue<ArrowType> extractValue(StylePropertyContext context) {
@@ -428,18 +397,17 @@ class ArrowTypePropertyDescriptor extends PropertyDescriptor<ArrowType> {
   }
 
   @override
-  ArrowType getDefaultValue(StylePropertyContext context) {
-    return context.arrowDefaults.arrowType;
-  }
+  ArrowType getDefaultValue(StylePropertyContext context) =>
+      context.arrowDefaults.arrowType;
 }
 
 /// Property descriptor for text stroke color
 class TextStrokeColorPropertyDescriptor extends PropertyDescriptor<Color> {
   const TextStrokeColorPropertyDescriptor()
-      : super(
-          id: 'textStrokeColor',
-          supportedElementTypes: const {ElementType.text},
-        );
+    : super(
+        id: 'textStrokeColor',
+        supportedElementTypes: const {ElementType.text},
+      );
 
   @override
   MixedValue<Color> extractValue(StylePropertyContext context) {
@@ -450,18 +418,17 @@ class TextStrokeColorPropertyDescriptor extends PropertyDescriptor<Color> {
   }
 
   @override
-  Color getDefaultValue(StylePropertyContext context) {
-    return context.textDefaults.textStrokeColor;
-  }
+  Color getDefaultValue(StylePropertyContext context) =>
+      context.textDefaults.textStrokeColor;
 }
 
 /// Property descriptor for text stroke width
 class TextStrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
   const TextStrokeWidthPropertyDescriptor()
-      : super(
-          id: 'textStrokeWidth',
-          supportedElementTypes: const {ElementType.text},
-        );
+    : super(
+        id: 'textStrokeWidth',
+        supportedElementTypes: const {ElementType.text},
+      );
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
@@ -472,7 +439,6 @@ class TextStrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
   }
 
   @override
-  double getDefaultValue(StylePropertyContext context) {
-    return context.textDefaults.textStrokeWidth;
-  }
+  double getDefaultValue(StylePropertyContext context) =>
+      context.textDefaults.textStrokeWidth;
 }

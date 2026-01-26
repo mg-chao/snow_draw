@@ -90,27 +90,29 @@ class ArrowPointUtils {
 
     final isPolyline = data.arrowType == ArrowType.polyline;
     final loopActive =
-        points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;
+        points.first.distanceSquared(points.last) <=
+        loopThreshold * loopThreshold;
 
     final turningPoints = <ArrowPointHandle>[];
     if (isPolyline) {
       if (!loopActive) {
-        turningPoints.add(
-          ArrowPointHandle(
-            elementId: element.id,
-            kind: ArrowPointKind.turning,
-            index: 0,
-            position: points.first,
-          ),
-        );
-        turningPoints.add(
-          ArrowPointHandle(
-            elementId: element.id,
-            kind: ArrowPointKind.turning,
-            index: points.length - 1,
-            position: points.last,
-          ),
-        );
+        turningPoints
+          ..add(
+            ArrowPointHandle(
+              elementId: element.id,
+              kind: ArrowPointKind.turning,
+              index: 0,
+              position: points.first,
+            ),
+          )
+          ..add(
+            ArrowPointHandle(
+              elementId: element.id,
+              kind: ArrowPointKind.turning,
+              index: points.length - 1,
+              position: points.last,
+            ),
+          );
       }
     } else {
       for (var i = 0; i < points.length; i++) {
@@ -143,22 +145,23 @@ class ArrowPointUtils {
 
     final loopPoints = <ArrowPointHandle>[];
     if (loopActive) {
-      loopPoints.add(
-        ArrowPointHandle(
-          elementId: element.id,
-          kind: ArrowPointKind.loopStart,
-          index: 0,
-          position: points.first,
-        ),
-      );
-      loopPoints.add(
-        ArrowPointHandle(
-          elementId: element.id,
-          kind: ArrowPointKind.loopEnd,
-          index: points.length - 1,
-          position: points.last,
-        ),
-      );
+      loopPoints
+        ..add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.loopStart,
+            index: 0,
+            position: points.first,
+          ),
+        )
+        ..add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.loopEnd,
+            index: points.length - 1,
+            position: points.last,
+          ),
+        );
     }
 
     return ArrowPointOverlay(
@@ -185,17 +188,21 @@ class ArrowPointUtils {
     }
 
     final localPosition = _toLocalPosition(element, position);
-    final visualPointRadius =
-        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 0.5;
-    final visualLoopOuterRadius =
-        handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 1.0;
+    final visualPointRadius = handleSize == null || handleSize <= 0
+        ? 0.0
+        : handleSize * 0.5;
+    final visualLoopOuterRadius = handleSize == null || handleSize <= 0
+        ? 0.0
+        : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
     final isPolyline = data.arrowType == ArrowType.polyline;
     final loopActive =
-        points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;
+        points.first.distanceSquared(points.last) <=
+        loopThreshold * loopThreshold;
 
     if (loopActive) {
-      // Use the midpoint between first and last as the loop center for hit testing
+      // Use the midpoint between first and last as the loop center for hit
+      // testing
       final loopCenter = _midpoint(points.first, points.last);
       final distanceSq = localPosition.distanceSquared(loopCenter);
 

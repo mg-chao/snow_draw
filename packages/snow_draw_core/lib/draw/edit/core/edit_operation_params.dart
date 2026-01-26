@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
-import '../../models/edit_enums.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../models/edit_enums.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../free_transform/free_transform_context.dart';

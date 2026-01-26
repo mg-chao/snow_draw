@@ -39,11 +39,8 @@ class ApplicationState {
   /// Whether the state is idle.
   bool get isIdle => interaction is IdleState;
 
-  /// Whether it is pending select.
-  bool get isPendingSelect => interaction is PendingSelectState;
-
-  /// Whether it is pending move.
-  bool get isPendingMove => interaction is PendingMoveState;
+  /// Whether it is pending (select or move).
+  bool get isPending => interaction is DragPendingState;
 
   ApplicationState copyWith({ViewState? view, InteractionState? interaction}) =>
       ApplicationState(

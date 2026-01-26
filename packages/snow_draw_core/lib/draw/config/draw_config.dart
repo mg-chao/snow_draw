@@ -70,7 +70,8 @@ abstract class ConfigDefaults {
   static const controlPointSize = 8.0;
   static const controlPointRadius = 2.0;
 
-  /// Multiplier for arrow point editor control points (makes them larger than standard control points)
+  /// Multiplier for arrow point editor control points
+  /// (makes them larger than standard control points)
   static const arrowPointSizeMultiplier = 1.25;
 
   static const selectionPadding = 3.0;

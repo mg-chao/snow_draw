@@ -95,10 +95,12 @@ class SelectPlugin extends DrawInputPlugin {
 
     if (intent is SelectIntent && intent.deferSelectionForDrag) {
       await dispatch(
-        SetPendingSelect(
-          elementId: intent.elementId,
-          addToSelection: intent.addToSelection,
+        SetDragPending(
           pointerDownPosition: position,
+          intent: PendingSelectIntent(
+            elementId: intent.elementId,
+            addToSelection: intent.addToSelection,
+          ),
         ),
       );
       return handled(message: 'Pending select');
@@ -109,57 +111,37 @@ class SelectPlugin extends DrawInputPlugin {
   }
 
   Future<PluginResult> _handlePointerMove(PointerMoveInputEvent event) async {
-    final pendingInfo = switch (state.application.interaction) {
-      final PendingSelectState s => s.pendingSelect,
-      _ => null,
-    };
-    if (pendingInfo != null) {
-      final dx = event.position.x - pendingInfo.pointerDownPosition.x;
-      final dy = event.position.y - pendingInfo.pointerDownPosition.y;
-      final threshold = _dragStartThreshold;
-      if ((dx * dx + dy * dy) >= (threshold * threshold)) {
-        await dispatch(const ClearPendingSelect());
+    final interaction = state.application.interaction;
 
-        if (state.domain.hasSelection) {
-          final didStart = await _dispatchStartEditForIntent(
-            intent: StartMoveIntent(
-              elementId: pendingInfo.elementId,
-              addToSelection: pendingInfo.addToSelection,
-            ),
-            position: pendingInfo.pointerDownPosition,
-            modifiers: _toEditModifiers(event.modifiers),
-          );
-          if (didStart) {
-            await _updateEditFromEvent(event);
-          }
-        }
-      }
-
-      return handled(message: 'Pending select drag');
-    }
-
-    final pendingMoveStart = switch (state.application.interaction) {
-      final PendingMoveState s => s.pointerDownPosition,
-      _ => null,
-    };
-    if (pendingMoveStart == null) {
+    if (interaction is! DragPendingState) {
       return unhandled();
     }
 
-    final dx = event.position.x - pendingMoveStart.x;
-    final dy = event.position.y - pendingMoveStart.y;
+    final pendingIntent = interaction.intent;
+    final pointerDownPosition = interaction.pointerDownPosition;
+    final dx = event.position.x - pointerDownPosition.x;
+    final dy = event.position.y - pointerDownPosition.y;
     final threshold = _dragStartThreshold;
+
     if ((dx * dx + dy * dy) >= (threshold * threshold)) {
-      await dispatch(const ClearPendingMove());
+      await dispatch(const ClearDragPending());
 
       if (state.domain.hasSelection) {
-        final selectedIds = state.domain.selection.selectedIds;
+        final elementId = switch (pendingIntent) {
+          PendingSelectIntent(:final elementId) => elementId,
+          PendingMoveIntent() => state.domain.selection.selectedIds.first,
+        };
+        final addToSelection = switch (pendingIntent) {
+          PendingSelectIntent(:final addToSelection) => addToSelection,
+          PendingMoveIntent() => false,
+        };
+
         final didStart = await _dispatchStartEditForIntent(
           intent: StartMoveIntent(
-            elementId: selectedIds.first,
-            addToSelection: false,
+            elementId: elementId,
+            addToSelection: addToSelection,
           ),
-          position: pendingMoveStart,
+          position: pointerDownPosition,
           modifiers: _toEditModifiers(event.modifiers),
         );
         if (didStart) {
@@ -168,42 +150,38 @@ class SelectPlugin extends DrawInputPlugin {
       }
     }
 
-    return handled(message: 'Pending move drag');
+    return handled(message: 'Pending drag');
   }
 
   Future<PluginResult> _handlePointerUp(PointerUpInputEvent event) async {
-    final pendingSelect = switch (state.application.interaction) {
-      final PendingSelectState s => s.pendingSelect,
-      _ => null,
-    };
-    if (pendingSelect == null) {
-      if (state.application.interaction is! PendingMoveState) {
-        return unhandled();
-      }
-      await dispatch(const ClearPendingMove());
-      return handled(message: 'Pending move cleared');
+    final interaction = state.application.interaction;
+
+    if (interaction is! DragPendingState) {
+      return unhandled();
     }
 
-    await dispatch(
-      SelectElement(
-        elementId: pendingSelect.elementId,
-        addToSelection: pendingSelect.addToSelection,
-        position: pendingSelect.pointerDownPosition,
-      ),
-    );
-    await dispatch(const ClearPendingSelect());
-    return handled(message: 'Selection applied');
+    final pendingIntent = interaction.intent;
+    if (pendingIntent is PendingSelectIntent) {
+      await dispatch(
+        SelectElement(
+          elementId: pendingIntent.elementId,
+          addToSelection: pendingIntent.addToSelection,
+          position: interaction.pointerDownPosition,
+        ),
+      );
+    }
+    await dispatch(const ClearDragPending());
+    return handled(message: 'Pending cleared');
   }
 
   Future<PluginResult> _handlePointerCancel() async {
-    if (state.application.interaction is PendingSelectState) {
-      await dispatch(const ClearPendingSelect());
-      return consumed(message: 'Pending select canceled');
+    final interaction = state.application.interaction;
+
+    if (interaction is DragPendingState) {
+      await dispatch(const ClearDragPending());
+      return consumed(message: 'Pending canceled');
     }
-    if (state.application.interaction is PendingMoveState) {
-      await dispatch(const ClearPendingMove());
-      return consumed(message: 'Pending move canceled');
-    }
+
     return unhandled();
   }
 
@@ -225,7 +203,12 @@ class SelectPlugin extends DrawInputPlugin {
         ),
       );
       if (!intent.addToSelection) {
-        await dispatch(SetPendingMove(pointerDownPosition: position));
+        await dispatch(
+          SetDragPending(
+            pointerDownPosition: position,
+            intent: const PendingMoveIntent(),
+          ),
+        );
       }
       return true;
     }
@@ -240,7 +223,12 @@ class SelectPlugin extends DrawInputPlugin {
           ),
         );
       }
-      await dispatch(SetPendingMove(pointerDownPosition: position));
+      await dispatch(
+        SetDragPending(
+          pointerDownPosition: position,
+          intent: const PendingMoveIntent(),
+        ),
+      );
       return true;
     }
 

@@ -29,8 +29,8 @@ import '../../draw/services/draw_state_view_builder.dart';
 import '../../draw/store/draw_store_interface.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
-import '../../draw/types/element_style.dart';
 import '../../draw/types/edit_transform.dart';
+import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
@@ -874,10 +874,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widget.store.dispatch(
         ZoomCamera(
           scale: scale,
-          center: DrawPoint(
-            x: localPosition.dx,
-            y: localPosition.dy,
-          ),
+          center: DrawPoint(x: localPosition.dx, y: localPosition.dy),
         ),
       ),
     );
@@ -894,9 +891,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Determine base stroke width from selected elements or config
     final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
     final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
-    final base = arrowAverage ??
-                 rectangleAverage ??
-                 config.arrowStyle.strokeWidth;
+    final base =
+        arrowAverage ?? rectangleAverage ?? config.arrowStyle.strokeWidth;
 
     // Find next stepped value
     final next = _findNextSteppedValue(
@@ -1018,7 +1014,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     if (decrease) {
       // Find the largest step that is less than current value
-      for (int i = steps.length - 1; i >= 0; i--) {
+      for (var i = steps.length - 1; i >= 0; i--) {
         if (steps[i] < currentValue - 0.01) {
           return steps[i];
         }
@@ -1027,7 +1023,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return steps.first;
     } else {
       // Find the smallest step that is greater than current value
-      for (int i = 0; i < steps.length; i++) {
+      for (var i = 0; i < steps.length; i++) {
         if (steps[i] > currentValue + 0.01) {
           return steps[i];
         }
@@ -1239,7 +1235,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final selectionConfig = _resolveSelectionConfigForInput(state);
     final hitRadius = selectionConfig.interaction.handleTolerance;
     // Apply multiplier for arrow point handles to make them larger
-    final handleSize = selectionConfig.render.controlPointSize * ConfigDefaults.arrowPointSizeMultiplier;
+    final handleSize =
+        selectionConfig.render.controlPointSize *
+        ConfigDefaults.arrowPointSizeMultiplier;
     final loopThreshold = hitRadius * 1.5;
     return ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),
@@ -1920,8 +1918,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final createPlugin = _pluginCoordinator.registry.getPlugin('create');
     if (createPlugin is CreatePlugin) {
-      createPlugin.currentToolTypeId =
-          toolTypeId == ArrowData.typeIdToken ? null : toolTypeId;
+      createPlugin.currentToolTypeId = toolTypeId == ArrowData.typeIdToken
+          ? null
+          : toolTypeId;
     }
     final textPlugin = _pluginCoordinator.registry.getPlugin('text_tool');
     if (textPlugin is TextToolPlugin) {
@@ -1949,10 +1948,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       await widget.store.dispatch(const CancelEdit());
     } else if (interaction is BoxSelectingState) {
       await widget.store.dispatch(const CancelBoxSelect());
-    } else if (interaction is PendingSelectState) {
-      await widget.store.dispatch(const ClearPendingSelect());
-    } else if (interaction is PendingMoveState) {
-      await widget.store.dispatch(const ClearPendingMove());
+    } else if (interaction is DragPendingState) {
+      await widget.store.dispatch(const ClearDragPending());
     }
 
     await widget.store.dispatch(const ClearSelection());

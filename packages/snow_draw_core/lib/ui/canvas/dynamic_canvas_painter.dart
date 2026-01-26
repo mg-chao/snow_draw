@@ -70,11 +70,7 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw snapping guides.
     final snapGuides = renderKey.snapGuides;
     if (snapGuides.isNotEmpty && renderKey.snapConfig.showGuides) {
-      _drawSnapGuides(
-        canvas: canvas,
-        guides: snapGuides,
-        scale: scale,
-      );
+      _drawSnapGuides(canvas: canvas, guides: snapGuides, scale: scale);
     }
 
     // Draw hover outline when selection is possible.
@@ -141,13 +137,18 @@ class DynamicCanvasPainter extends CustomPainter {
         // Check if this is a single 2-point arrow selection.
         // For 2-point arrows, skip selection box rendering since all operations
         // can be performed through the point editor.
-        final isSingleTwoPointArrow = selectedIds.length == 1 &&
+        final isSingleTwoPointArrow =
+            selectedIds.length == 1 &&
             stateView.selectedElements.isNotEmpty &&
             stateView.selectedElements.first.data is ArrowData &&
-            (stateView.selectedElements.first.data as ArrowData).points.length == 2;
+            (stateView.selectedElements.first.data as ArrowData)
+                    .points
+                    .length ==
+                2;
 
         // Determine corner handle offset for single arrow selections.
-        final cornerHandleOffset = selectedIds.length == 1 &&
+        final cornerHandleOffset =
+            selectedIds.length == 1 &&
                 stateView.selectedElements.isNotEmpty &&
                 stateView.selectedElements.first.data is ArrowData
             ? 8.0
@@ -155,7 +156,6 @@ class DynamicCanvasPainter extends CustomPainter {
 
         // Skip selection box and rotation handle for 2-point arrows.
         if (!isSingleTwoPointArrow) {
-
           elementRenderer
             ..renderSelection(
               canvas: canvas,
@@ -232,10 +232,10 @@ class DynamicCanvasPainter extends CustomPainter {
     );
 
     final visibleElements = document.getElementsInRect(viewportRect)
-    ..removeWhere((element) {
-      final orderIndex = document.getOrderIndex(element.id) ?? -1;
-      return orderIndex < dynamicLayerStartIndex;
-    });
+      ..removeWhere((element) {
+        final orderIndex = document.getOrderIndex(element.id) ?? -1;
+        return orderIndex < dynamicLayerStartIndex;
+      });
 
     final previewElements = renderKey.previewElementsById;
     if (previewElements.isNotEmpty) {
@@ -294,10 +294,7 @@ class DynamicCanvasPainter extends CustomPainter {
     }
   }
 
-  void _drawArrowPointOverlay({
-    required Canvas canvas,
-    required double scale,
-  }) {
+  void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
     if (renderKey.selectedIds.length != 1) {
       return;
     }
@@ -323,11 +320,11 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final baseHandleSize = selectionConfig.render.controlPointSize / effectiveScale;
+    final baseHandleSize =
+        selectionConfig.render.controlPointSize / effectiveScale;
     // Apply multiplier for arrow point handles to make them larger
     final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
-    final strokeWidth =
-        selectionConfig.render.strokeWidth / effectiveScale;
+    final strokeWidth = selectionConfig.render.strokeWidth / effectiveScale;
     final fillColor = selectionConfig.render.cornerFillColor;
     final strokeColor = selectionConfig.render.strokeColor;
     final highlightStroke = strokeColor.withValues(alpha: 0.95);
@@ -335,17 +332,22 @@ class DynamicCanvasPainter extends CustomPainter {
     final hoveredHandle = renderKey.hoveredArrowHandle;
     final activeHandle = renderKey.activeArrowHandle;
     final shouldDelete = _shouldShowDeleteIndicator();
-    final deletePosition =
-        activeHandle == null || !shouldDelete
-            ? null
-            : _resolveHandlePosition(overlay, activeHandle);
+    final deletePosition = activeHandle == null || !shouldDelete
+        ? null
+        : _resolveHandlePosition(overlay, activeHandle);
 
     canvas.save();
     if (effectiveElement.rotation != 0) {
       canvas
-        ..translate(effectiveElement.rect.centerX, effectiveElement.rect.centerY)
+        ..translate(
+          effectiveElement.rect.centerX,
+          effectiveElement.rect.centerY,
+        )
         ..rotate(effectiveElement.rotation)
-        ..translate(-effectiveElement.rect.centerX, -effectiveElement.rect.centerY);
+        ..translate(
+          -effectiveElement.rect.centerX,
+          -effectiveElement.rect.centerY,
+        );
     }
     canvas.translate(effectiveElement.rect.minX, effectiveElement.rect.minY);
 
@@ -394,8 +396,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final arrowData = effectiveElement.data as ArrowData;
     final isPolyline = arrowData.arrowType == ArrowType.polyline;
-    final lastSegmentIndex =
-        overlay.addablePoints.isEmpty ? -1 : overlay.addablePoints.length - 1;
+    final lastSegmentIndex = overlay.addablePoints.isEmpty
+        ? -1
+        : overlay.addablePoints.length - 1;
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
@@ -403,21 +406,20 @@ class DynamicCanvasPainter extends CustomPainter {
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      final isBendControl = isPolyline &&
-          handle.index > 0 &&
-          handle.index < lastSegmentIndex;
+      final isBendControl =
+          isPolyline && handle.index > 0 && handle.index < lastSegmentIndex;
       final fillPaint = isBendControl
           ? turningFillPaint
           : isHighlighted
-              ? addableFillPaintHighlighted
-              : addableFillPaint;
+          ? addableFillPaintHighlighted
+          : addableFillPaint;
       final strokePaint = isBendControl
           ? isHighlighted
-              ? turningStrokePaintHighlighted
-              : turningStrokePaint
+                ? turningStrokePaintHighlighted
+                : turningStrokePaint
           : isHighlighted
-              ? addableStrokePaintHighlighted
-              : addableStrokePaint;
+          ? addableStrokePaintHighlighted
+          : addableStrokePaint;
       final radius = isBendControl ? turnRadius : addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
@@ -431,8 +433,9 @@ class DynamicCanvasPainter extends CustomPainter {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
       final fillPaint = turningFillPaint;
-      final strokePaint =
-          isHighlighted ? turningStrokePaintHighlighted : turningStrokePaint;
+      final strokePaint = isHighlighted
+          ? turningStrokePaintHighlighted
+          : turningStrokePaint;
       canvas
         ..drawCircle(center, turnRadius, fillPaint)
         ..drawCircle(center, turnRadius, strokePaint);
@@ -492,7 +495,8 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    // Use selection stroke width for shaft, but arrow's actual stroke width for arrowheads
+    // Use selection stroke width for shaft, but arrow's actual stroke width for
+    // arrowheads
     final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
     final arrowheadStrokeWidth = data.strokeWidth;
 
@@ -505,10 +509,11 @@ class DynamicCanvasPainter extends CustomPainter {
       style: data.endArrowhead,
       strokeWidth: arrowheadStrokeWidth,
     );
-    final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-      style: data.startArrowhead,
-      strokeWidth: arrowheadStrokeWidth,
-    );
+    final startDirectionOffset =
+        ArrowGeometry.calculateArrowheadDirectionOffset(
+          style: data.startArrowhead,
+          strokeWidth: arrowheadStrokeWidth,
+        );
     final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
       style: data.endArrowhead,
       strokeWidth: arrowheadStrokeWidth,
@@ -581,8 +586,7 @@ class DynamicCanvasPainter extends CustomPainter {
       endInset: endInset,
       directionOffset: startDirectionOffset,
     );
-    if (startDirection != null &&
-        data.startArrowhead != ArrowheadStyle.none) {
+    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       final path = ArrowGeometry.buildArrowheadPath(
         tip: points.first,
         direction: startDirection,
@@ -677,11 +681,7 @@ class DynamicCanvasPainter extends CustomPainter {
       final y = box.bottom + textOffset.dy;
       final startX = box.left + textOffset.dx;
       final endX = box.right + textOffset.dx;
-      canvas.drawLine(
-        Offset(startX, y),
-        Offset(endX, y),
-        underlinePaint,
-      );
+      canvas.drawLine(Offset(startX, y), Offset(endX, y), underlinePaint);
     }
 
     canvas.restore();
@@ -810,11 +810,7 @@ class DynamicCanvasPainter extends CustomPainter {
           paint: paint,
         );
       } else {
-        canvas.drawLine(
-          Offset(start.x, start.y),
-          Offset(end.x, end.y),
-          paint,
-        );
+        canvas.drawLine(Offset(start.x, start.y), Offset(end.x, end.y), paint);
       }
 
       if (isGap && drawMarkers) {

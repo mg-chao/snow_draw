@@ -30,7 +30,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
          },
        );
 
-  static const Duration _doubleClickThreshold = Duration(milliseconds: 500);
+  static const _doubleClickThreshold = Duration(milliseconds: 500);
   static const double _doubleClickToleranceMultiplier = 2;
 
   final InputRoutingPolicy _routingPolicy;
@@ -39,9 +39,9 @@ class ArrowCreatePlugin extends DrawInputPlugin {
   ElementTypeId<ElementData>? currentToolTypeId;
 
   DrawPoint? _pointerDownPosition;
-  bool _isDragging = false;
-  bool _isMultiPoint = false;
-  bool _justFinishedDragCreate = false;
+  var _isDragging = false;
+  var _isMultiPoint = false;
+  var _justFinishedDragCreate = false;
   DateTime? _lastClickTime;
   DrawPoint? _lastClickPosition;
 
@@ -176,7 +176,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     if (wasDragging && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetInteractionState();
-      _justFinishedDragCreate = true; // Set flag to allow immediate next creation
+      _justFinishedDragCreate =
+          true; // Set flag to allow immediate next creation
       return handled(message: 'Arrow create finished');
     }
 
@@ -189,8 +190,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     }
 
     // Check for double-click BEFORE adding the point
-    final isDoubleClick =
-        !wasDragging && _isDoubleClick(event.position, now);
+    final isDoubleClick = !wasDragging && _isDoubleClick(event.position, now);
 
     if (isDoubleClick) {
       // Double-click detected - finish without adding another point
@@ -243,7 +243,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
       return false;
     }
 
-    // No arrow hit and (no selection OR just finished drag create) - allow creation
+    // No arrow hit and
+    // (no selection OR just finished drag create) - allow creation
     return true;
   }
 
@@ -256,7 +257,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     if (now.difference(lastTime) > _doubleClickThreshold) {
       return false;
     }
-    final tolerance = selectionConfig.interaction.handleTolerance *
+    final tolerance =
+        selectionConfig.interaction.handleTolerance *
         _doubleClickToleranceMultiplier;
     return lastPosition.distanceSquared(position) <= tolerance * tolerance;
   }

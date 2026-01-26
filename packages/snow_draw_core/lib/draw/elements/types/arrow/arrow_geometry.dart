@@ -12,7 +12,7 @@ class ArrowGeometry {
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
   ];
-  static const double _polylineSnapTolerance = 1.0;
+  static const _polylineSnapTolerance = 1.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -35,10 +35,8 @@ class ArrowGeometry {
     final height = rect.height;
     return points
         .map(
-          (point) => Offset(
-            rect.minX + point.x * width,
-            rect.minY + point.y * height,
-          ),
+          (point) =>
+              Offset(rect.minX + point.x * width, rect.minY + point.y * height),
         )
         .toList(growable: false);
   }
@@ -54,10 +52,7 @@ class ArrowGeometry {
       points.map((point) {
         final x = width == 0 ? 0.0 : (point.x - rect.minX) / width;
         final y = height == 0 ? 0.0 : (point.y - rect.minY) / height;
-        return DrawPoint(
-          x: _clamp01(x),
-          y: _clamp01(y),
-        );
+        return DrawPoint(x: _clamp01(x), y: _clamp01(y));
       }),
     );
   }
@@ -144,13 +139,12 @@ class ArrowGeometry {
         startInset: startInset,
         endInset: endInset,
       );
-      final effectiveOffset =
-          arrowType == ArrowType.curved
-              ? math.max(0.0, directionOffset - startInset)
-              : 0.0;
+      final effectiveOffset = arrowType == ArrowType.curved
+          ? math.max(0, directionOffset - startInset)
+          : 0.0;
       final direction = _resolvePathStartDirection(
         path,
-        offset: effectiveOffset,
+        offset: effectiveOffset.toDouble(),
       );
       if (direction != null) {
         return Offset(-direction.dx, -direction.dy);
@@ -185,13 +179,12 @@ class ArrowGeometry {
         startInset: startInset,
         endInset: endInset,
       );
-      final effectiveOffset =
-          arrowType == ArrowType.curved
-              ? math.max(0.0, directionOffset - endInset)
-              : 0.0;
+      final effectiveOffset = arrowType == ArrowType.curved
+          ? math.max(0, directionOffset - endInset)
+          : 0.0;
       final direction = _resolvePathEndDirection(
         path,
-        offset: effectiveOffset,
+        offset: effectiveOffset.toDouble(),
       );
       if (direction != null) {
         return direction;
@@ -204,8 +197,8 @@ class ArrowGeometry {
     if (resolvedPoints.length < 2) {
       return null;
     }
-    final vector = resolvedPoints.last -
-        resolvedPoints[resolvedPoints.length - 2];
+    final vector =
+        resolvedPoints.last - resolvedPoints[resolvedPoints.length - 2];
     return _normalize(vector);
   }
 
@@ -332,11 +325,7 @@ class ArrowGeometry {
         length,
         width,
       ),
-      ArrowheadStyle.verticalLine => _buildLineArrowhead(
-        tip,
-        perp,
-        width,
-      ),
+      ArrowheadStyle.verticalLine => _buildLineArrowhead(tip, perp, width),
       ArrowheadStyle.none => Path(),
     };
   }
@@ -383,7 +372,9 @@ class ArrowGeometry {
     required int segmentIndex,
     required double t,
   }) {
-    if (points.length < 2 || segmentIndex < 0 || segmentIndex >= points.length - 1) {
+    if (points.length < 2 ||
+        segmentIndex < 0 ||
+        segmentIndex >= points.length - 1) {
       return null;
     }
 
@@ -391,10 +382,7 @@ class ArrowGeometry {
     if (points.length < 3) {
       final p1 = points[segmentIndex];
       final p2 = points[segmentIndex + 1];
-      return Offset(
-        p1.dx + (p2.dx - p1.dx) * t,
-        p1.dy + (p2.dy - p1.dy) * t,
-      );
+      return Offset(p1.dx + (p2.dx - p1.dx) * t, p1.dy + (p2.dy - p1.dy) * t);
     }
 
     // Use Catmull-Rom spline with same tension as _buildCurvedPath
@@ -417,8 +405,10 @@ class ArrowGeometry {
     final mt2 = mt * mt;
     final mt3 = mt2 * mt;
 
-    final x = mt3 * p1.dx + 3 * mt2 * t * cp1.dx + 3 * mt * t2 * cp2.dx + t3 * p2.dx;
-    final y = mt3 * p1.dy + 3 * mt2 * t * cp1.dy + 3 * mt * t2 * cp2.dy + t3 * p2.dy;
+    final x =
+        mt3 * p1.dx + 3 * mt2 * t * cp1.dx + 3 * mt * t2 * cp2.dx + t3 * p2.dx;
+    final y =
+        mt3 * p1.dy + 3 * mt2 * t * cp1.dy + 3 * mt * t2 * cp2.dy + t3 * p2.dy;
 
     return Offset(x, y);
   }
@@ -478,11 +468,7 @@ class ArrowGeometry {
       ..close();
   }
 
-  static Path _buildCircleArrowhead(
-    Offset tip,
-    Offset dir,
-    double length,
-  ) {
+  static Path _buildCircleArrowhead(Offset tip, Offset dir, double length) {
     final radius = length * 0.3;
     final center = tip - dir * radius;
     return Path()..addOval(Rect.fromCircle(center: center, radius: radius));
@@ -599,8 +585,7 @@ class ArrowGeometry {
     return value;
   }
 
-  static bool _nearZero(double value) =>
-      value.abs() <= _polylineSnapTolerance;
+  static bool _nearZero(double value) => value.abs() <= _polylineSnapTolerance;
 
   static bool _isSamePoint(Offset a, Offset b) =>
       _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
@@ -677,10 +662,7 @@ class ArrowGeometry {
     return Offset(value.dx / length, value.dy / length);
   }
 
-  static Offset? _resolvePathStartDirection(
-    Path path, {
-    double offset = 0,
-  }) {
+  static Offset? _resolvePathStartDirection(Path path, {double offset = 0}) {
     final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
     for (final metric in path.computeMetrics()) {
       if (metric.length <= 0) {
@@ -698,10 +680,7 @@ class ArrowGeometry {
     return null;
   }
 
-  static Offset? _resolvePathEndDirection(
-    Path path, {
-    double offset = 0,
-  }) {
+  static Offset? _resolvePathEndDirection(Path path, {double offset = 0}) {
     final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
     Offset? direction;
     for (final metric in path.computeMetrics()) {
@@ -710,8 +689,8 @@ class ArrowGeometry {
       }
       final distance = safeOffset == 0
           ? metric.length
-          : math.max(0.0, metric.length - safeOffset);
-      final tangent = metric.getTangentForOffset(distance);
+          : math.max(0, metric.length - safeOffset);
+      final tangent = metric.getTangentForOffset(distance.toDouble());
       if (tangent == null) {
         continue;
       }
@@ -720,7 +699,8 @@ class ArrowGeometry {
     return direction;
   }
 
-  /// Calculates accurate bounding box for arrow paths, accounting for curve overshoot.
+  /// Calculates accurate bounding box for arrow paths, accounting for
+  /// curve overshoot.
   /// For curved arrows, samples the actual path to find true bounds.
   /// For straight/polyline arrows, uses control points.
   static DrawRect calculatePathBounds({
@@ -728,7 +708,7 @@ class ArrowGeometry {
     required ArrowType arrowType,
   }) {
     if (worldPoints.isEmpty) {
-      return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
+      return const DrawRect();
     }
 
     // For straight and polyline arrows, control points define the bounds
@@ -763,10 +743,18 @@ class ArrowGeometry {
         final tangent = metric.getTangentForOffset(distance);
         if (tangent != null) {
           final pos = tangent.position;
-          if (pos.dx < minX) minX = pos.dx;
-          if (pos.dx > maxX) maxX = pos.dx;
-          if (pos.dy < minY) minY = pos.dy;
-          if (pos.dy > maxY) maxY = pos.dy;
+          if (pos.dx < minX) {
+            minX = pos.dx;
+          }
+          if (pos.dx > maxX) {
+            maxX = pos.dx;
+          }
+          if (pos.dy < minY) {
+            minY = pos.dy;
+          }
+          if (pos.dy > maxY) {
+            maxY = pos.dy;
+          }
         }
       }
     }
@@ -776,18 +764,13 @@ class ArrowGeometry {
       return _boundsFromPoints(worldPoints);
     }
 
-    return DrawRect(
-      minX: minX,
-      minY: minY,
-      maxX: maxX,
-      maxY: maxY,
-    );
+    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
 
   /// Helper to calculate bounds from a list of points
   static DrawRect _boundsFromPoints(List<DrawPoint> points) {
     if (points.isEmpty) {
-      return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
+      return const DrawRect();
     }
 
     var minX = points.first.x;
@@ -796,18 +779,21 @@ class ArrowGeometry {
     var maxY = points.first.y;
 
     for (final point in points.skip(1)) {
-      if (point.x < minX) minX = point.x;
-      if (point.x > maxX) maxX = point.x;
-      if (point.y < minY) minY = point.y;
-      if (point.y > maxY) maxY = point.y;
+      if (point.x < minX) {
+        minX = point.x;
+      }
+      if (point.x > maxX) {
+        maxX = point.x;
+      }
+      if (point.y < minY) {
+        minY = point.y;
+      }
+      if (point.y > maxY) {
+        maxY = point.y;
+      }
     }
 
-    return DrawRect(
-      minX: minX,
-      minY: minY,
-      maxX: maxX,
-      maxY: maxY,
-    );
+    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
 
   static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {

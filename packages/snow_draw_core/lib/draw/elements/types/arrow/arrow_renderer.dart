@@ -48,10 +48,11 @@ class ArrowRenderer extends ElementTypeRenderer {
       style: data.endArrowhead,
       strokeWidth: data.strokeWidth,
     );
-    final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-      style: data.startArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
+    final startDirectionOffset =
+        ArrowGeometry.calculateArrowheadDirectionOffset(
+          style: data.startArrowhead,
+          strokeWidth: data.strokeWidth,
+        );
     final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
       style: data.endArrowhead,
       strokeWidth: data.strokeWidth,
@@ -91,7 +92,8 @@ class ArrowRenderer extends ElementTypeRenderer {
       ..color = data.color.withValues(alpha: strokeOpacity)
       ..isAntiAlias = true;
 
-    // Combine shaft and arrowheads into a single path to prevent transparency overlap
+    // Combine shaft and arrowheads into a single path to prevent transparency
+    // overlap
     _drawCombinedArrow(
       canvas,
       shaftPath,
@@ -175,8 +177,7 @@ class ArrowRenderer extends ElementTypeRenderer {
       endInset: endInset,
       directionOffset: startDirectionOffset,
     );
-    if (startDirection != null &&
-        data.startArrowhead != ArrowheadStyle.none) {
+    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       final path = ArrowGeometry.buildArrowheadPath(
         tip: points.first,
         direction: startDirection,

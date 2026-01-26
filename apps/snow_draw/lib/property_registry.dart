@@ -7,31 +7,28 @@ import 'property_descriptor.dart';
 class PropertyRegistry {
   PropertyRegistry._();
 
-  static final PropertyRegistry instance = PropertyRegistry._();
+  static final instance = PropertyRegistry._();
 
-  final List<PropertyDescriptor> _properties = [];
+  final List<PropertyDescriptor<dynamic>> _properties = [];
 
   /// Register a property descriptor
-  void register(PropertyDescriptor descriptor) {
+  void register(PropertyDescriptor<dynamic> descriptor) {
     _properties.add(descriptor);
   }
 
   /// Get all properties that are applicable for the given context
-  List<PropertyDescriptor> getApplicableProperties(
+  List<PropertyDescriptor<dynamic>> getApplicableProperties(
     StylePropertyContext context,
-  ) {
-    return _properties
-        .where((prop) => prop.isApplicable(context))
-        .toList();
-  }
+  ) => _properties.where((prop) => prop.isApplicable(context)).toList();
 
   /// Get a specific property by ID
-  PropertyDescriptor? getProperty(String id) {
-    try {
-      return _properties.firstWhere((prop) => prop.id == id);
-    } catch (_) {
-      return null;
+  PropertyDescriptor<dynamic>? getProperty(String id) {
+    for (final prop in _properties) {
+      if (prop.id == id) {
+        return prop;
+      }
     }
+    return null;
   }
 
   /// Clear all registered properties (useful for testing)
@@ -40,5 +37,6 @@ class PropertyRegistry {
   }
 
   /// Get all registered properties
-  List<PropertyDescriptor> get allProperties => List.unmodifiable(_properties);
+  List<PropertyDescriptor<dynamic>> get allProperties =>
+      List.unmodifiable(_properties);
 }

@@ -23,7 +23,8 @@ class EditIntentDetector {
 
   /// Determines the intent from hit test results and modifiers.
   ///
-  /// If [filterTypeId] is provided, only elements matching that type will be considered.
+  /// If [filterTypeId] is provided, only elements matching that type will
+  /// be considered.
   EditIntent? detectIntent({
     required DrawStateView stateView,
     required DrawPoint position,
@@ -182,7 +183,9 @@ class EditIntentDetector {
 
     final hitRadius = config.interaction.handleTolerance;
     // Apply multiplier for arrow point handles to make them larger
-    final handleSize = config.render.controlPointSize * ConfigDefaults.arrowPointSizeMultiplier;
+    final handleSize =
+        config.render.controlPointSize *
+        ConfigDefaults.arrowPointSizeMultiplier;
     final loopThreshold = hitRadius * 1.5;
     final handle = ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),

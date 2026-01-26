@@ -15,34 +15,53 @@ sealed class InteractionState {
   const InteractionState();
 }
 
+// ============================================================================
+// Pending Intent (unified pending state discriminator)
+// ============================================================================
+
 @immutable
-class PendingSelectInfo {
-  const PendingSelectInfo({
+sealed class PendingIntent {
+  const PendingIntent();
+}
+
+@immutable
+class PendingSelectIntent extends PendingIntent {
+  const PendingSelectIntent({
     required this.elementId,
     required this.addToSelection,
-    required this.pointerDownPosition,
   });
   final String elementId;
   final bool addToSelection;
-  final DrawPoint pointerDownPosition;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is PendingSelectInfo &&
+      other is PendingSelectIntent &&
           other.elementId == elementId &&
-          other.addToSelection == addToSelection &&
-          other.pointerDownPosition == pointerDownPosition;
+          other.addToSelection == addToSelection;
 
   @override
-  int get hashCode =>
-      Object.hash(elementId, addToSelection, pointerDownPosition);
+  int get hashCode => Object.hash(elementId, addToSelection);
 
   @override
   String toString() =>
-      'PendingSelectInfo(elementId: $elementId, '
-      'addToSelection: $addToSelection, '
-      'pointerDownPosition: $pointerDownPosition)';
+      'PendingSelectIntent(elementId: $elementId, '
+      'addToSelection: $addToSelection)';
+}
+
+@immutable
+class PendingMoveIntent extends PendingIntent {
+  const PendingMoveIntent();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is PendingMoveIntent;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'PendingMoveIntent()';
 }
 
 @immutable
@@ -54,39 +73,27 @@ class IdleState extends InteractionState {
 }
 
 @immutable
-class PendingSelectState extends InteractionState {
-  const PendingSelectState({required this.pendingSelect});
-  final PendingSelectInfo pendingSelect;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is PendingSelectState && other.pendingSelect == pendingSelect;
-
-  @override
-  int get hashCode => pendingSelect.hashCode;
-
-  @override
-  String toString() => 'PendingSelectState($pendingSelect)';
-}
-
-@immutable
-class PendingMoveState extends InteractionState {
-  const PendingMoveState({required this.pointerDownPosition});
+class DragPendingState extends InteractionState {
+  const DragPendingState({
+    required this.pointerDownPosition,
+    required this.intent,
+  });
   final DrawPoint pointerDownPosition;
+  final PendingIntent intent;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is PendingMoveState &&
-          other.pointerDownPosition == pointerDownPosition;
+      other is DragPendingState &&
+          other.pointerDownPosition == pointerDownPosition &&
+          other.intent == intent;
 
   @override
-  int get hashCode => pointerDownPosition.hashCode;
+  int get hashCode => Object.hash(pointerDownPosition, intent);
 
   @override
   String toString() =>
-      'PendingMoveState(pointerDownPosition: $pointerDownPosition)';
+      'DragPendingState(position: $pointerDownPosition, intent: $intent)';
 }
 
 @immutable
@@ -158,47 +165,36 @@ class EditingState extends InteractionState {
   String toString() => 'EditingState(operationId: $operationId)';
 }
 
+// ============================================================================
+// Creation Mode (unified creation discriminator)
+// ============================================================================
+
+/// Discriminator for creation mode within [CreatingState].
 @immutable
-class CreatingState extends InteractionState {
-  const CreatingState({
-    required this.element,
-    required this.startPosition,
-    required this.currentRect,
-    this.snapGuides = const [],
-  });
-  final ElementState element;
-  final DrawPoint startPosition;
-  final DrawRect currentRect;
-  final List<SnapGuide> snapGuides;
-
-  String get elementId => element.id;
-
-  CreatingState copyWith({
-    ElementState? element,
-    DrawPoint? startPosition,
-    DrawRect? currentRect,
-    List<SnapGuide>? snapGuides,
-  }) => CreatingState(
-    element: element ?? this.element,
-    startPosition: startPosition ?? this.startPosition,
-    currentRect: currentRect ?? this.currentRect,
-    snapGuides: snapGuides ?? this.snapGuides,
-  );
-
-  @override
-  String toString() => 'CreatingState(elementId: $elementId)';
+sealed class CreationMode {
+  const CreationMode();
 }
 
+/// Rect-based creation mode (default for rectangles, text, etc.).
 @immutable
-class ArrowCreatingState extends CreatingState {
-  const ArrowCreatingState({
-    required super.element,
-    required super.startPosition,
-    required super.currentRect,
-    super.snapGuides = const [],
-    this.fixedPoints = const [],
-    this.currentPoint,
-  });
+class RectCreationMode extends CreationMode {
+  const RectCreationMode();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is RectCreationMode;
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() => 'RectCreationMode()';
+}
+
+/// Point-based creation mode (for arrows and polylines).
+@immutable
+class PointCreationMode extends CreationMode {
+  const PointCreationMode({this.fixedPoints = const [], this.currentPoint});
 
   /// Fixed turning points in world coordinates.
   final List<DrawPoint> fixedPoints;
@@ -206,25 +202,99 @@ class ArrowCreatingState extends CreatingState {
   /// Current (preview) point in world coordinates.
   final DrawPoint? currentPoint;
 
-  @override
-  ArrowCreatingState copyWith({
-    ElementState? element,
-    DrawPoint? startPosition,
-    DrawRect? currentRect,
-    List<SnapGuide>? snapGuides,
+  PointCreationMode copyWith({
     List<DrawPoint>? fixedPoints,
     DrawPoint? currentPoint,
-  }) => ArrowCreatingState(
-    element: element ?? this.element,
-    startPosition: startPosition ?? this.startPosition,
-    currentRect: currentRect ?? this.currentRect,
-    snapGuides: snapGuides ?? this.snapGuides,
+  }) => PointCreationMode(
     fixedPoints: fixedPoints ?? this.fixedPoints,
     currentPoint: currentPoint ?? this.currentPoint,
   );
 
   @override
-  String toString() => 'ArrowCreatingState(elementId: $elementId)';
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PointCreationMode &&
+          _listEquals(other.fixedPoints, fixedPoints) &&
+          other.currentPoint == currentPoint;
+
+  @override
+  int get hashCode => Object.hash(Object.hashAll(fixedPoints), currentPoint);
+
+  @override
+  String toString() =>
+      'PointCreationMode(fixedPoints: ${fixedPoints.length}, '
+      'currentPoint: $currentPoint)';
+
+  static bool _listEquals<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+// ============================================================================
+// Creating State (unified)
+// ============================================================================
+
+@immutable
+class CreatingState extends InteractionState {
+  const CreatingState({
+    required this.element,
+    required this.startPosition,
+    required this.currentRect,
+    this.snapGuides = const [],
+    this.creationMode = const RectCreationMode(),
+  });
+  final ElementState element;
+  final DrawPoint startPosition;
+  final DrawRect currentRect;
+  final List<SnapGuide> snapGuides;
+  final CreationMode creationMode;
+
+  String get elementId => element.id;
+
+  /// Fixed points for point-based creation (arrows/polylines).
+  List<DrawPoint> get fixedPoints => switch (creationMode) {
+    PointCreationMode(:final fixedPoints) => fixedPoints,
+    _ => const [],
+  };
+
+  /// Current preview point for point-based creation.
+  DrawPoint? get currentPoint => switch (creationMode) {
+    PointCreationMode(:final currentPoint) => currentPoint,
+    _ => null,
+  };
+
+  /// Whether this is a point-based creation (arrow/polyline).
+  bool get isPointCreation => creationMode is PointCreationMode;
+
+  CreatingState copyWith({
+    ElementState? element,
+    DrawPoint? startPosition,
+    DrawRect? currentRect,
+    List<SnapGuide>? snapGuides,
+    CreationMode? creationMode,
+  }) => CreatingState(
+    element: element ?? this.element,
+    startPosition: startPosition ?? this.startPosition,
+    currentRect: currentRect ?? this.currentRect,
+    snapGuides: snapGuides ?? this.snapGuides,
+    creationMode: creationMode ?? this.creationMode,
+  );
+
+  @override
+  String toString() =>
+      'CreatingState(elementId: $elementId, '
+      'mode: ${creationMode.runtimeType})';
 }
 
 @immutable
@@ -299,11 +369,9 @@ class TextEditingState extends InteractionState {
     isNew: isNew ?? this.isNew,
     opacity: opacity ?? this.opacity,
     rotation: rotation ?? this.rotation,
-    initialCursorPosition:
-        initialCursorPosition ?? this.initialCursorPosition,
+    initialCursorPosition: initialCursorPosition ?? this.initialCursorPosition,
   );
 
   @override
-  String toString() =>
-      'TextEditingState(elementId: $elementId, isNew: $isNew)';
+  String toString() => 'TextEditingState(elementId: $elementId, isNew: $isNew)';
 }

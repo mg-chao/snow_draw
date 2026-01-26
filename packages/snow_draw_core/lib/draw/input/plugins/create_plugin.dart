@@ -73,7 +73,8 @@ class CreatePlugin extends DrawInputPlugin {
         return unhandled();
       }
 
-      // If there's a selection and clicking on blank area, defer to selection plugin
+      // If there's a selection and clicking on blank area, defer to selection
+      // plugin
       // to handle deselection instead of creating a new element
       if (state.domain.hasSelection) {
         return unhandled();
@@ -138,13 +139,4 @@ class CreatePlugin extends DrawInputPlugin {
     return builder.build(state);
   }
 
-  /// Checks if the element with the given ID matches the current tool type.
-  bool _isMatchingToolType(String elementId) {
-    final toolTypeId = currentToolTypeId;
-    if (toolTypeId == null) {
-      return true; // No tool active, allow all
-    }
-    final element = state.domain.document.getElementById(elementId);
-    return element?.typeId == toolTypeId;
-  }
 }

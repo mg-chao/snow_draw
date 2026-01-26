@@ -6,6 +6,7 @@ import '../elements/core/element_data.dart';
 import '../elements/core/element_type_id.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
+import '../models/interaction_state.dart';
 import '../types/draw_point.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
@@ -474,44 +475,30 @@ class EditIntentAction extends DrawAction {
   String toString() => 'EditIntentAction(intent: $intent, position: $position)';
 }
 
-class SetPendingSelect extends DrawAction {
-  const SetPendingSelect({
-    required this.elementId,
-    required this.addToSelection,
+class SetDragPending extends DrawAction {
+  const SetDragPending({
     required this.pointerDownPosition,
+    required this.intent,
   });
-  final String elementId;
-  final bool addToSelection;
   final DrawPoint pointerDownPosition;
-
-  @override
-  bool get conflictsWithEditing => true;
-}
-
-class ClearPendingSelect extends DrawAction {
-  const ClearPendingSelect();
-
-  @override
-  bool get conflictsWithEditing => true;
-}
-
-class SetPendingMove extends DrawAction {
-  const SetPendingMove({required this.pointerDownPosition});
-  final DrawPoint pointerDownPosition;
+  final PendingIntent intent;
 
   @override
   bool get conflictsWithEditing => true;
 
   @override
   String toString() =>
-      'SetPendingMove(pointerDownPosition: $pointerDownPosition)';
+      'SetDragPending(position: $pointerDownPosition, intent: $intent)';
 }
 
-class ClearPendingMove extends DrawAction {
-  const ClearPendingMove();
+class ClearDragPending extends DrawAction {
+  const ClearDragPending();
 
   @override
   bool get conflictsWithEditing => true;
+
+  @override
+  String toString() => 'ClearDragPending()';
 }
 
 // ============================================================================

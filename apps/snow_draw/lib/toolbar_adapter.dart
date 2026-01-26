@@ -423,10 +423,7 @@ class StyleToolbarAdapter {
           value: defaults.startArrowhead,
           isMixed: false,
         ),
-        endArrowhead: MixedValue(
-          value: defaults.endArrowhead,
-          isMixed: false,
-        ),
+        endArrowhead: MixedValue(value: defaults.endArrowhead, isMixed: false),
         opacity: MixedValue(value: defaults.opacity, isMixed: false),
       );
     }
@@ -443,10 +440,7 @@ class StyleToolbarAdapter {
           value: defaults.startArrowhead,
           isMixed: false,
         ),
-        endArrowhead: MixedValue(
-          value: defaults.endArrowhead,
-          isMixed: false,
-        ),
+        endArrowhead: MixedValue(value: defaults.endArrowhead, isMixed: false),
         opacity: MixedValue(value: defaults.opacity, isMixed: false),
       );
     }
@@ -462,10 +456,7 @@ class StyleToolbarAdapter {
           value: firstData.startArrowhead,
           isMixed: false,
         ),
-        endArrowhead: MixedValue(
-          value: firstData.endArrowhead,
-          isMixed: false,
-        ),
+        endArrowhead: MixedValue(value: firstData.endArrowhead, isMixed: false),
         opacity: opacity,
       );
     }
@@ -492,8 +483,7 @@ class StyleToolbarAdapter {
       if (!colorMixed && data.color != color) {
         colorMixed = true;
       }
-      if (!strokeWidthMixed &&
-          !_doubleEquals(data.strokeWidth, strokeWidth)) {
+      if (!strokeWidthMixed && !_doubleEquals(data.strokeWidth, strokeWidth)) {
         strokeWidthMixed = true;
       }
       if (!strokeStyleMixed && data.strokeStyle != strokeStyle) {
@@ -502,8 +492,7 @@ class StyleToolbarAdapter {
       if (!arrowTypeMixed && data.arrowType != arrowType) {
         arrowTypeMixed = true;
       }
-      if (!startArrowheadMixed &&
-          data.startArrowhead != startArrowhead) {
+      if (!startArrowheadMixed && data.startArrowhead != startArrowhead) {
         startArrowheadMixed = true;
       }
       if (!endArrowheadMixed && data.endArrowhead != endArrowhead) {
@@ -816,7 +805,9 @@ class StyleToolbarAdapter {
         interaction is TextEditingState ||
         (!hasSelection && toolType == ToolType.text);
 
-    if (!updateRectangleDefaults && !updateArrowDefaults && !updateTextDefaults) {
+    if (!updateRectangleDefaults &&
+        !updateArrowDefaults &&
+        !updateTextDefaults) {
       return;
     }
 
@@ -948,9 +939,7 @@ class _ElementStyleSnapshot {
         rectangleData: element.data is RectangleData
             ? element.data as RectangleData
             : null,
-        arrowData: element.data is ArrowData
-            ? element.data as ArrowData
-            : null,
+        arrowData: element.data is ArrowData ? element.data as ArrowData : null,
         textData: element.data is TextData ? element.data as TextData : null,
       );
 

@@ -61,7 +61,7 @@ class ArrowPointOperation extends EditOperation {
     );
     final element = state.domain.document.getElementById(typedParams.elementId);
     if (element == null || element.data is! ArrowData) {
-      throw EditMissingDataError(
+      throw const EditMissingDataError(
         dataName: 'arrow element',
         operationName: 'ArrowPointOperation.createContext',
       );
@@ -69,7 +69,7 @@ class ArrowPointOperation extends EditOperation {
     final data = element.data as ArrowData;
     final points = _resolveWorldPoints(element, data);
     if (points.length < 2) {
-      throw EditMissingDataError(
+      throw const EditMissingDataError(
         dataName: 'arrow points',
         operationName: 'ArrowPointOperation.createContext',
       );
@@ -125,8 +125,6 @@ class ArrowPointOperation extends EditOperation {
     return ArrowPointTransform(
       currentPosition: startPosition,
       points: typedContext.initialPoints,
-      activeIndex: null,
-      hasChanges: false,
     );
   }
 
@@ -192,7 +190,7 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    var points = List<DrawPoint>.from(typedTransform.points);
+    final points = List<DrawPoint>.from(typedTransform.points);
     if (typedTransform.shouldDelete &&
         typedTransform.activeIndex != null &&
         typedTransform.activeIndex! > 0 &&
@@ -204,7 +202,9 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final element = state.domain.document.getElementById(typedContext.elementId);
+    final element = state.domain.document.getElementById(
+      typedContext.elementId,
+    );
     if (element == null || element.data is! ArrowData) {
       return state.copyWith(application: state.application.toIdle());
     }
@@ -227,9 +227,7 @@ class ArrowPointOperation extends EditOperation {
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(
-      points: normalized,
-    );
+    final updatedData = data.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,
@@ -265,7 +263,9 @@ class ArrowPointOperation extends EditOperation {
       return EditPreview.none;
     }
 
-    final element = state.domain.document.getElementById(typedContext.elementId);
+    final element = state.domain.document.getElementById(
+      typedContext.elementId,
+    );
     if (element == null || element.data is! ArrowData) {
       return EditPreview.none;
     }
@@ -288,9 +288,7 @@ class ArrowPointOperation extends EditOperation {
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(
-      points: normalized,
-    );
+    final updatedData = data.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,
@@ -371,8 +369,7 @@ _ArrowPointComputation _compute({
   int? activeIndex;
 
   if (context.pointKind == ArrowPointKind.addable) {
-    if (context.pointIndex < 0 ||
-        context.pointIndex >= basePoints.length - 1) {
+    if (context.pointIndex < 0 || context.pointIndex >= basePoints.length - 1) {
       return _ArrowPointComputation(
         points: basePoints,
         didInsert: false,
@@ -383,8 +380,9 @@ _ArrowPointComputation _compute({
     }
     if (isPolyline) {
       if (!nextDidInsert) {
-        final distanceSq =
-            currentPosition.distanceSquared(context.startPosition);
+        final distanceSq = currentPosition.distanceSquared(
+          context.startPosition,
+        );
         if (distanceSq >= addThreshold * addThreshold) {
           nextDidInsert = true;
         } else {
@@ -409,8 +407,9 @@ _ArrowPointComputation _compute({
       );
     } else {
       if (!nextDidInsert) {
-        final distanceSq =
-            currentPosition.distanceSquared(context.startPosition);
+        final distanceSq = currentPosition.distanceSquared(
+          context.startPosition,
+        );
         if (distanceSq >= addThreshold * addThreshold) {
           nextDidInsert = true;
         } else {
@@ -512,33 +511,31 @@ DrawRect _calculateArrowRect({
   required List<DrawPoint> points,
   required ArrowType arrowType,
   required double strokeWidth,
-}) {
-  return ArrowGeometry.calculatePathBounds(
-    worldPoints: points,
-    arrowType: arrowType,
-  );
-}
+}) => ArrowGeometry.calculatePathBounds(
+  worldPoints: points,
+  arrowType: arrowType,
+);
 
 /// Result of computing the new rect and adjusted local points.
 @immutable
 final class _RectAndPointsResult {
-  const _RectAndPointsResult({
-    required this.rect,
-    required this.localPoints,
-  });
+  const _RectAndPointsResult({required this.rect, required this.localPoints});
 
   final DrawRect rect;
   final List<DrawPoint> localPoints;
 }
 
-/// Computes the new rect and transforms points to preserve world-space positions.
+/// Computes the new rect and transforms points to preserve world-space
+///  positions.
 ///
 /// When a control point is dragged outside the current bounding rect, the rect
-/// must be recalculated. If the element is rotated, simply recalculating the rect
+/// must be recalculated. If the element is rotated, simply recalculating the
+/// rect
 /// would change the rotation pivot (rect center), causing other points to shift
 /// in world space.
 ///
-/// This function finds the optimal rect center C such that when world points are
+/// This function finds the optimal rect center C such that when world points
+/// are
 /// transformed to local space using C, the bounding box of local points has
 /// center C. This ensures all points maintain their world-space positions.
 ///
@@ -562,21 +559,22 @@ _RectAndPointsResult _computeRectAndPoints({
     return _RectAndPointsResult(rect: rect, localPoints: localPoints);
   }
 
-  // Step 1: Transform local-space points to world space using the old rect center
+  // Step 1: Transform local-space points to world space using the old rect
+  // center
   final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
-  final worldPoints = localPoints
-      .map((point) => oldSpace.toWorld(point))
-      .toList(growable: false);
+  final worldPoints = localPoints.map(oldSpace.toWorld).toList(growable: false);
 
   // Step 2: Rotate world points by -θ around the origin
   final cosTheta = math.cos(rotation);
   final sinTheta = math.sin(rotation);
-  final rotatedPoints = worldPoints.map((w) {
-    return DrawPoint(
-      x: w.x * cosTheta + w.y * sinTheta,
-      y: -w.x * sinTheta + w.y * cosTheta,
-    );
-  }).toList(growable: false);
+  final rotatedPoints = worldPoints
+      .map(
+        (w) => DrawPoint(
+          x: w.x * cosTheta + w.y * sinTheta,
+          y: -w.x * sinTheta + w.y * cosTheta,
+        ),
+      )
+      .toList(growable: false);
 
   // Step 3: Calculate the bounding box of rotated points
   var minX = rotatedPoints.first.x;
@@ -584,10 +582,18 @@ _RectAndPointsResult _computeRectAndPoints({
   var minY = rotatedPoints.first.y;
   var maxY = rotatedPoints.first.y;
   for (final p in rotatedPoints.skip(1)) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
+    if (p.x < minX) {
+      minX = p.x;
+    }
+    if (p.x > maxX) {
+      maxX = p.x;
+    }
+    if (p.y < minY) {
+      minY = p.y;
+    }
+    if (p.y > maxY) {
+      maxY = p.y;
+    }
   }
   final rotatedCenterX = (minX + maxX) / 2;
   final rotatedCenterY = (minY + maxY) / 2;
@@ -601,7 +607,7 @@ _RectAndPointsResult _computeRectAndPoints({
   // Step 5: Transform world points to local space using the new center
   final newSpace = ElementSpace(rotation: rotation, origin: newCenter);
   final newLocalPoints = worldPoints
-      .map((point) => newSpace.fromWorld(point))
+      .map(newSpace.fromWorld)
       .toList(growable: false);
 
   // Step 6: Calculate the rect from local points
@@ -613,30 +619,6 @@ _RectAndPointsResult _computeRectAndPoints({
   );
 
   return _RectAndPointsResult(rect: rect, localPoints: newLocalPoints);
-}
-
-DrawRect _rectFromPoints(List<DrawPoint> points) {
-  var minX = points.first.x;
-  var minY = points.first.y;
-  var maxX = points.first.x;
-  var maxY = points.first.y;
-
-  for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
 
 List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
@@ -691,11 +673,7 @@ DrawPoint _resolvePointPosition({
   return points[resolvedIndex.clamp(0, points.length - 1)];
 }
 
-DrawPoint _toLocalPosition(
-  DrawRect rect,
-  double rotation,
-  DrawPoint position,
-) {
+DrawPoint _toLocalPosition(DrawRect rect, double rotation, DrawPoint position) {
   if (rotation == 0) {
     return position;
   }
@@ -767,19 +745,9 @@ List<DrawPoint> _offsetPolylineEndpointSegment({
       ? DrawPoint(x: end.x, y: target.y)
       : DrawPoint(x: target.x, y: end.y);
   if (segmentIndex == 0) {
-    return [
-      start,
-      movedStart,
-      movedEnd,
-      ...points.sublist(2),
-    ];
+    return [start, movedStart, movedEnd, ...points.sublist(2)];
   }
-  return [
-    ...points.sublist(0, points.length - 2),
-    movedStart,
-    movedEnd,
-    end,
-  ];
+  return [...points.sublist(0, points.length - 2), movedStart, movedEnd, end];
 }
 
 int? _resolveNearestSegmentIndex({

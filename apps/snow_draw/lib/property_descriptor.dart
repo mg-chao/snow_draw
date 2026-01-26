@@ -1,14 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'style_toolbar_state.dart';
 import 'tool_controller.dart';
 
 /// Element types that can be selected
-enum ElementType {
-  rectangle,
-  arrow,
-  text,
-}
+enum ElementType { rectangle, arrow, text }
 
 /// Context containing all style information needed for property evaluation
 class StylePropertyContext {
@@ -33,20 +28,17 @@ class StylePropertyContext {
   final ToolType? currentTool;
 
   /// Check if any of the given element types are selected
-  bool hasAnySelected(Set<ElementType> types) {
-    return types.any(selectedElementTypes.contains);
-  }
+  bool hasAnySelected(Set<ElementType> types) =>
+      types.any(selectedElementTypes.contains);
 
   /// Check if all of the given element types are selected
-  bool hasAllSelected(Set<ElementType> types) {
-    return types.every(selectedElementTypes.contains);
-  }
+  bool hasAllSelected(Set<ElementType> types) =>
+      types.every(selectedElementTypes.contains);
 
   /// Check if only the given element types are selected (no others)
-  bool hasOnlySelected(Set<ElementType> types) {
-    return selectedElementTypes.length == types.length &&
-        types.every(selectedElementTypes.contains);
-  }
+  bool hasOnlySelected(Set<ElementType> types) =>
+      selectedElementTypes.length == types.length &&
+      types.every(selectedElementTypes.contains);
 }
 
 /// Abstract descriptor for a style property
@@ -69,10 +61,10 @@ abstract class PropertyDescriptor<T> {
 
   /// Check if this property should be shown given the current context
   ///
-  /// Default implementation: show if any selected element supports this property
-  bool isApplicable(StylePropertyContext context) {
-    return context.hasAnySelected(supportedElementTypes);
-  }
+  /// Default implementation: show if any selected element supports this
+  /// property
+  bool isApplicable(StylePropertyContext context) =>
+      context.hasAnySelected(supportedElementTypes);
 
   /// Extract the current value of this property from the context
   ///

@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 
 import '../../draw/config/draw_config.dart';
 import '../../draw/elements/core/element_registry_interface.dart';
+import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/models/camera_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
-import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/snap_guides.dart';
 

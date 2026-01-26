@@ -13,6 +13,9 @@ typedef PropertyChangeCallback<T> = void Function(T value);
 abstract class PropertyRenderer<T> {
   const PropertyRenderer();
 
+  /// Debug-friendly label for logs and UI diagnostics.
+  String get debugLabel => runtimeType.toString();
+
   /// Build the widget for this property
   Widget build(
     BuildContext context,
@@ -38,7 +41,6 @@ class ColorPropertyRenderer extends PropertyRenderer<Color> {
         ? descriptor.getDefaultValue(propertyContext)
         : (value.value ?? descriptor.getDefaultValue(propertyContext));
 
-    // TODO: Implement color picker UI
     return Container(
       width: 32,
       height: 32,
@@ -77,7 +79,6 @@ class SliderPropertyRenderer extends PropertyRenderer<double> {
         ? descriptor.getDefaultValue(propertyContext)
         : (value.value ?? descriptor.getDefaultValue(propertyContext));
 
-    // TODO: Implement slider UI
     return Slider(
       value: displayValue.clamp(min, max),
       min: min,
@@ -91,13 +92,13 @@ class SliderPropertyRenderer extends PropertyRenderer<double> {
 
 /// Renderer for enum dropdown properties
 class DropdownPropertyRenderer<T> extends PropertyRenderer<T> {
-  const DropdownPropertyRenderer({
+  DropdownPropertyRenderer({
     required this.options,
-    required this.labelBuilder,
-  });
+    required String Function(T) labelBuilder,
+  }) : labelBuilder = ((value) => labelBuilder(value as T));
 
   final List<T> options;
-  final String Function(T) labelBuilder;
+  final String Function(Object?) labelBuilder;
 
   @override
   Widget build(
@@ -111,15 +112,16 @@ class DropdownPropertyRenderer<T> extends PropertyRenderer<T> {
         ? descriptor.getDefaultValue(propertyContext)
         : (value.value ?? descriptor.getDefaultValue(propertyContext));
 
-    // TODO: Implement dropdown UI
     return DropdownButton<T>(
       value: displayValue,
-      items: options.map((option) {
-        return DropdownMenuItem<T>(
-          value: option,
-          child: Text(labelBuilder(option)),
-        );
-      }).toList(),
+      items: options
+          .map(
+            (option) => DropdownMenuItem<T>(
+              value: option,
+              child: Text(labelBuilder(option)),
+            ),
+          )
+          .toList(),
       onChanged: (newValue) {
         if (newValue != null) {
           onChanged(newValue);
@@ -131,13 +133,13 @@ class DropdownPropertyRenderer<T> extends PropertyRenderer<T> {
 
 /// Renderer for button group properties (text align, etc.)
 class ButtonGroupPropertyRenderer<T> extends PropertyRenderer<T> {
-  const ButtonGroupPropertyRenderer({
+  ButtonGroupPropertyRenderer({
     required this.options,
-    required this.iconBuilder,
-  });
+    required IconData Function(T) iconBuilder,
+  }) : iconBuilder = ((value) => iconBuilder(value as T));
 
   final List<T> options;
-  final IconData Function(T) iconBuilder;
+  final IconData Function(Object?) iconBuilder;
 
   @override
   Widget build(
@@ -151,7 +153,6 @@ class ButtonGroupPropertyRenderer<T> extends PropertyRenderer<T> {
         ? descriptor.getDefaultValue(propertyContext)
         : (value.value ?? descriptor.getDefaultValue(propertyContext));
 
-    // TODO: Implement button group UI
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: options.map((option) {

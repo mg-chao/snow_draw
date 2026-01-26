@@ -161,90 +161,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
           .toDouble();
       final resolvedWidth = widget.width;
       final hasSelection = state.hasSelection;
-      final hasSharedSelection =
-          state.hasSelectedRectangles && state.hasSelectedTexts;
-      final showUnifiedShapeControls =
-          showRectangleControls && showArrowControls;
-      final styleValues = state.styleValues;
-      final arrowStyleValues = state.arrowStyleValues;
-      final textStyleValues = state.textStyleValues;
-      final rectangleDefaults = state.rectangleStyle;
-      final arrowDefaults = state.arrowStyle;
-      final textDefaults = state.textStyle;
-      final sharedDefaults = tool == ToolType.text
-          ? textDefaults
-          : rectangleDefaults;
-      final fillColorValue = styleValues.fillColor.value;
-      final showFillStyle = fillColorValue == null || fillColorValue.a > 0;
-      final textFillColorValue = textStyleValues.fillColor.value;
-      final showTextFillStyle =
-          textFillColorValue == null || textFillColorValue.a > 0;
-      final showTextStrokeColor =
-          textStyleValues.textStrokeWidth.isMixed ||
-          (textStyleValues.textStrokeWidth.value ??
-                  textDefaults.textStrokeWidth) >
-              0;
-      final sharedColorValues = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.color,
-              textStyleValues.color,
-              _colorEquals,
-            )
-          : null;
-      final sharedFillColorValues = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.fillColor,
-              textStyleValues.fillColor,
-              _colorEquals,
-            )
-          : null;
-      final sharedCornerRadius = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.cornerRadius,
-              textStyleValues.cornerRadius,
-              _doubleEquals,
-            )
-          : null;
-      final sharedOpacity = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.opacity,
-              textStyleValues.opacity,
-              _doubleEquals,
-            )
-          : null;
-
-      // Unified shape controls (rectangles + arrows)
-      final unifiedShapeColor = showUnifiedShapeControls
-          ? _mergeMixedValues(
-              styleValues.color,
-              arrowStyleValues.color,
-              _colorEquals,
-            )
-          : null;
-      final unifiedShapeStrokeStyle = showUnifiedShapeControls
-          ? _mergeMixedValues(
-              styleValues.strokeStyle,
-              arrowStyleValues.strokeStyle,
-              (a, b) => a == b,
-            )
-          : null;
-      final unifiedShapeStrokeWidth = showUnifiedShapeControls
-          ? _mergeMixedValues(
-              styleValues.strokeWidth,
-              arrowStyleValues.strokeWidth,
-              _doubleEquals,
-            )
-          : null;
-      final unifiedShapeOpacity = showUnifiedShapeControls
-          ? _mergeMixedValues(
-              styleValues.opacity,
-              arrowStyleValues.opacity,
-              _doubleEquals,
-            )
-          : null;
-      final unifiedShapeDefaults = tool == ToolType.arrow
-          ? arrowDefaults
-          : rectangleDefaults;
 
       if (!showToolbar) {
         return const SizedBox.shrink();
@@ -273,12 +189,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-// This is the new children array content to replace lines 276-914
+                    // This is the new children array content to replace
+                    // lines 276-914
                     children: [
-                      // Build property controls using the property-centric approach
+                      // Build property controls using the property-centric
+                      // approach
                       ...() {
                         final propertyContext = _createPropertyContext(state);
-                        final applicableProperties = _getApplicableProperties(state);
+                        final applicableProperties = _getApplicableProperties(
+                          state,
+                        );
                         final widgets = <Widget>[];
 
                         for (var i = 0; i < applicableProperties.length; i++) {
@@ -291,7 +211,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
                           if (widget != null) {
                             if (widgets.isNotEmpty) {
-                              widgets.add(const SizedBox(height: _sectionSpacing));
+                              widgets.add(
+                                const SizedBox(height: _sectionSpacing),
+                              );
                             }
                             widgets.add(widget);
                           }
@@ -634,11 +556,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
         builder: (context) => InkWell(
           onTap: () async {
             final button = context.findRenderObject()! as RenderBox;
-            final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+            final overlay =
+                Navigator.of(context).overlay!.context.findRenderObject()!
+                    as RenderBox;
             final position = RelativeRect.fromRect(
               Rect.fromPoints(
                 button.localToGlobal(Offset.zero, ancestor: overlay),
-                button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+                button.localToGlobal(
+                  button.size.bottomRight(Offset.zero),
+                  ancestor: overlay,
+                ),
               ),
               Offset.zero & overlay.size,
             );
@@ -681,14 +608,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
                 borderRadius: BorderRadius.circular(_toggleButtonRadius),
               ),
               child: Center(
-                child:
-                    isMixed
-                        ? const Icon(Icons.more_horiz, size: _iconSize)
-                        : _buildArrowheadIcon(
-                          style: selectedStyle ?? defaultValue,
-                          isStart: isStart,
-                          size: _iconSize,
-                        ),
+                child: isMixed
+                    ? const Icon(Icons.more_horiz, size: _iconSize)
+                    : _buildArrowheadIcon(
+                        style: selectedStyle ?? defaultValue,
+                        isStart: isStart,
+                        size: _iconSize,
+                      ),
               ),
             ),
           ),
@@ -703,7 +629,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     required ValueChanged<ArrowheadStyle> onSelect,
   }) {
     final theme = Theme.of(context);
-    final styles = ArrowheadStyle.values;
+    const styles = ArrowheadStyle.values;
 
     // Create 2 rows with 4 items each
     final rows = <List<ArrowheadStyle>>[];
@@ -727,7 +653,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
                       message: _arrowheadLabel(rows[rowIndex][i]),
                       child: InkWell(
                         onTap: () => onSelect(rows[rowIndex][i]),
-                        borderRadius: BorderRadius.circular(_toggleButtonRadius),
+                        borderRadius: BorderRadius.circular(
+                          _toggleButtonRadius,
+                        ),
                         child: Container(
                           width: _toggleButtonHeight,
                           height: _toggleButtonHeight,
@@ -738,9 +666,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
                                   : theme.colorScheme.outlineVariant,
                               width: selectedStyle == rows[rowIndex][i] ? 2 : 1,
                             ),
-                            borderRadius: BorderRadius.circular(_toggleButtonRadius),
+                            borderRadius: BorderRadius.circular(
+                              _toggleButtonRadius,
+                            ),
                             color: selectedStyle == rows[rowIndex][i]
-                                ? theme.colorScheme.primary.withValues(alpha: 0.1)
+                                ? theme.colorScheme.primary.withValues(
+                                    alpha: 0.1,
+                                  )
                                 : null,
                           ),
                           child: Center(
@@ -764,28 +696,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
       ),
     );
   }
-
-  List<PopupMenuEntry<ArrowheadStyle>> _buildArrowheadMenuItems({
-    required ArrowheadStyle? selectedStyle,
-    required bool isStart,
-  }) => [
-    for (final style in ArrowheadStyle.values)
-      CheckedPopupMenuItem<ArrowheadStyle>(
-        value: style,
-        checked: selectedStyle == style,
-        child: Row(
-          children: [
-            _buildArrowheadIcon(
-              style: style,
-              isStart: isStart,
-              size: _iconSize,
-            ),
-            const SizedBox(width: 8),
-            Text(_arrowheadLabel(style)),
-          ],
-        ),
-      ),
-  ];
 
   Widget _buildArrowheadIcon({
     required ArrowheadStyle style,
@@ -814,10 +724,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
     // Flip horizontally for start arrowheads
     if (isStart) {
-      return Transform.scale(
-        scaleX: -1,
-        child: icon,
-      );
+      return Transform.scale(scaleX: -1, child: icon);
     }
     return icon;
   }
@@ -916,47 +823,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
                 (option) => Tooltip(message: option.label, child: option.icon),
               )
               .toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOpacityControl(
-    MixedValue<double> opacity,
-    double defaultOpacity, {
-    double? pendingValue,
-    ValueChanged<double>? onChanged,
-    ValueChanged<double>? onChangeEnd,
-  }) {
-    final baseOpacity = opacity.valueOr(defaultOpacity);
-    final resolvedOpacity = pendingValue ?? baseOpacity;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(widget.strings.opacity),
-        const SizedBox(height: _sectionGap),
-        Row(
-          children: [
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: _sliderTrackHeight,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: _sliderThumbRadius,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: _sliderOverlayRadius,
-                  ),
-                  trackShape: _NoPaddingTrackShape(),
-                ),
-                child: Slider(
-                  value: resolvedOpacity.clamp(0, 1),
-                  onChanged: onChanged,
-                  onChangeEnd: onChangeEnd,
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -1221,27 +1087,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
-  bool _colorEquals(Color a, Color b) => a == b;
-
-  MixedValue<T> _mergeMixedValues<T>(
-    MixedValue<T> first,
-    MixedValue<T> second,
-    bool Function(T, T) equals,
-  ) {
-    if (first.isMixed || second.isMixed) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    final firstValue = first.value;
-    final secondValue = second.value;
-    if (firstValue == null || secondValue == null) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    if (!equals(firstValue, secondValue)) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    return MixedValue(value: firstValue, isMixed: false);
-  }
-
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
 
   void _scheduleStyleUpdate(Future<void> Function() action) {
@@ -1304,9 +1149,15 @@ class _StyleToolbarState extends State<StyleToolbar> {
   /// Create a StylePropertyContext from the current state
   StylePropertyContext _createPropertyContext(StyleToolbarState state) {
     final selectedTypes = <ElementType>{};
-    if (state.hasSelectedRectangles) selectedTypes.add(ElementType.rectangle);
-    if (state.hasSelectedArrows) selectedTypes.add(ElementType.arrow);
-    if (state.hasSelectedTexts) selectedTypes.add(ElementType.text);
+    if (state.hasSelectedRectangles) {
+      selectedTypes.add(ElementType.rectangle);
+    }
+    if (state.hasSelectedArrows) {
+      selectedTypes.add(ElementType.arrow);
+    }
+    if (state.hasSelectedTexts) {
+      selectedTypes.add(ElementType.text);
+    }
 
     // If no elements are selected, use the current tool to determine which
     // properties to show (for styling the element to be created)
@@ -1315,14 +1166,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
-          break;
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
-          break;
         case ToolType.text:
           selectedTypes.add(ElementType.text);
-          break;
-        default:
+        case ToolType.selection:
           break;
       }
     }
@@ -1340,20 +1188,29 @@ class _StyleToolbarState extends State<StyleToolbar> {
   }
 
   /// Get the list of properties that should be shown for the current context
-  List<PropertyDescriptor> _getApplicableProperties(StyleToolbarState state) {
+  List<PropertyDescriptor<dynamic>> _getApplicableProperties(
+    StyleToolbarState state,
+  ) {
     final context = _createPropertyContext(state);
-    final allProperties = PropertyRegistry.instance.getApplicableProperties(context);
+    final allProperties = PropertyRegistry.instance.getApplicableProperties(
+      context,
+    );
 
     // Filter properties based on conditional visibility rules
     return allProperties.where((property) {
       // Hide fillStyle if fillColor is transparent
       if (property.id == 'fillStyle') {
-        final fillColorProp = PropertyRegistry.instance.getProperty('fillColor');
+        final fillColorProp = PropertyRegistry.instance.getProperty(
+          'fillColor',
+        );
         if (fillColorProp != null) {
-          final fillColor = fillColorProp.extractValue(context) as MixedValue<Color>;
+          final fillColor =
+              fillColorProp.extractValue(context) as MixedValue<Color>;
           final fillColorValue = fillColor.value;
           // Show fillStyle only if color is mixed or has alpha > 0
-          if (!fillColor.isMixed && fillColorValue != null && fillColorValue.alpha == 0) {
+          if (!fillColor.isMixed &&
+              fillColorValue != null &&
+              fillColorValue.a == 0) {
             return false;
           }
         }
@@ -1361,12 +1218,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
       // Hide textStrokeColor if textStrokeWidth is 0
       if (property.id == 'textStrokeColor') {
-        final textStrokeWidthProp = PropertyRegistry.instance.getProperty('textStrokeWidth');
+        final textStrokeWidthProp = PropertyRegistry.instance.getProperty(
+          'textStrokeWidth',
+        );
         if (textStrokeWidthProp != null) {
-          final textStrokeWidth = textStrokeWidthProp.extractValue(context) as MixedValue<double>;
-          final defaultWidth = textStrokeWidthProp.getDefaultValue(context) as double;
+          final textStrokeWidth =
+              textStrokeWidthProp.extractValue(context) as MixedValue<double>;
+          final defaultWidth =
+              textStrokeWidthProp.getDefaultValue(context) as double;
           // Show textStrokeColor only if width is mixed or > 0
-          if (!textStrokeWidth.isMixed && (textStrokeWidth.value ?? defaultWidth) <= 0) {
+          if (!textStrokeWidth.isMixed &&
+              (textStrokeWidth.value ?? defaultWidth) <= 0) {
             return false;
           }
         }
@@ -1376,12 +1238,18 @@ class _StyleToolbarState extends State<StyleToolbar> {
       if (property.id == 'cornerRadius') {
         // Only apply this rule if we have text elements selected
         if (context.selectedElementTypes.contains(ElementType.text)) {
-          final fillColorProp = PropertyRegistry.instance.getProperty('fillColor');
+          final fillColorProp = PropertyRegistry.instance.getProperty(
+            'fillColor',
+          );
           if (fillColorProp != null) {
-            final fillColor = fillColorProp.extractValue(context) as MixedValue<Color>;
+            final fillColor =
+                fillColorProp.extractValue(context) as MixedValue<Color>;
             final fillColorValue = fillColor.value;
-            // For text, show cornerRadius only if fillColor is mixed or has alpha > 0
-            if (!fillColor.isMixed && fillColorValue != null && fillColorValue.alpha == 0) {
+            // For text, show cornerRadius only if fillColor is mixed or has
+            // alpha > 0
+            if (!fillColor.isMixed &&
+                fillColorValue != null &&
+                fillColorValue.a == 0) {
               return false;
             }
           }
@@ -1394,7 +1262,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   /// Build the widget for a specific property
   Widget? _buildPropertyWidget(
-    PropertyDescriptor property,
+    PropertyDescriptor<dynamic> property,
     StylePropertyContext context,
     StyleToolbarState state,
   ) {
@@ -1545,9 +1413,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           pendingValue: _pendingOpacity,
           onChanged: (newValue) {
             setState(() => _pendingOpacity = newValue);
-            _scheduleStyleUpdate(
-              () => _applyStyleUpdate(opacity: newValue),
-            );
+            _scheduleStyleUpdate(() => _applyStyleUpdate(opacity: newValue));
           },
           onChangeEnd: (newValue) async {
             _flushStyleUpdate();
@@ -1589,14 +1455,21 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
       case 'endArrowhead':
         // Render both start and end arrowhead controls together
-        final startProp = PropertyRegistry.instance.getProperty('startArrowhead');
+        final startProp = PropertyRegistry.instance.getProperty(
+          'startArrowhead',
+        );
         final endProp = property;
 
-        if (startProp == null) return null;
+        if (startProp == null) {
+          return null;
+        }
 
-        final startValue = startProp.extractValue(context) as MixedValue<ArrowheadStyle>;
-        final endValue = endProp.extractValue(context) as MixedValue<ArrowheadStyle>;
-        final startDefault = startProp.getDefaultValue(context) as ArrowheadStyle;
+        final startValue =
+            startProp.extractValue(context) as MixedValue<ArrowheadStyle>;
+        final endValue =
+            endProp.extractValue(context) as MixedValue<ArrowheadStyle>;
+        final startDefault =
+            startProp.getDefaultValue(context) as ArrowheadStyle;
         final endDefault = endProp.getDefaultValue(context) as ArrowheadStyle;
 
         return _buildArrowheadControls(
@@ -1646,7 +1519,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case 'textAlign':
-        final value = property.extractValue(context) as MixedValue<TextHorizontalAlign>;
+        final value =
+            property.extractValue(context) as MixedValue<TextHorizontalAlign>;
         return _buildTextAlignmentControl(
           horizontalAlign: value,
           onHorizontalSelect: (align) => _applyStyleUpdate(textAlign: align),
@@ -1660,22 +1534,22 @@ class _StyleToolbarState extends State<StyleToolbar> {
           mixedLabel: widget.strings.mixed,
           options: [
             const _StyleOption(
-              value: 0.0,
+              value: 0,
               label: 'None',
               icon: Icon(Icons.not_interested, size: _iconSize),
             ),
             _StyleOption(
-              value: 2.0,
+              value: 2,
               label: widget.strings.thin,
               icon: const StrokeWidthSmallIcon(),
             ),
             _StyleOption(
-              value: 3.0,
+              value: 3,
               label: widget.strings.medium,
               icon: const StrokeWidthMediumIcon(),
             ),
             _StyleOption(
-              value: 5.0,
+              value: 5,
               label: widget.strings.thick,
               icon: const StrokeWidthLargeIcon(),
             ),
@@ -1706,20 +1580,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
         return null;
     }
   }
-
-  TextHorizontalAlign _textAlignToHorizontal(TextAlign align) {
-    switch (align) {
-      case TextAlign.left:
-        return TextHorizontalAlign.left;
-      case TextAlign.center:
-        return TextHorizontalAlign.center;
-      case TextAlign.right:
-        return TextHorizontalAlign.right;
-      default:
-        return TextHorizontalAlign.left;
-    }
-  }
-
 
   Future<void> _applyStyleUpdate({
     Color? color,
@@ -1797,19 +1657,13 @@ class _NoPaddingTrackShape extends RoundedRectSliderTrackShape {
 }
 
 class _DashedBorderPainter extends CustomPainter {
-  _DashedBorderPainter({
-    required this.color,
-    required this.borderRadius,
-    this.strokeWidth = 1.0,
-    this.dashWidth = 4.0,
-    this.dashSpace = 4.0,
-  });
+  _DashedBorderPainter({required this.color, required this.borderRadius});
 
   final Color color;
   final double borderRadius;
-  final double strokeWidth;
-  final double dashWidth;
-  final double dashSpace;
+  final strokeWidth = 1.0;
+  final dashWidth = 4.0;
+  final dashSpace = 4.0;
 
   @override
   void paint(Canvas canvas, Size size) {
