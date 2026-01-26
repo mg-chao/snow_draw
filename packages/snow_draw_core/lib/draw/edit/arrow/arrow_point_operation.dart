@@ -400,7 +400,7 @@ _ArrowPointComputation _compute({
         segmentIndex: context.pointIndex,
         target: target,
       );
-      updatedPoints = _simplifyPolylinePoints(updatedPoints);
+      updatedPoints = _normalizePolylinePoints(updatedPoints);
       activeIndex = _resolveNearestSegmentIndex(
         points: updatedPoints,
         target: target,
@@ -456,7 +456,7 @@ _ArrowPointComputation _compute({
         index: index,
         target: target,
       );
-      updatedPoints = _simplifyPolylinePoints(updatedPoints);
+      updatedPoints = _normalizePolylinePoints(updatedPoints);
     } else {
       updatedPoints = List<DrawPoint>.from(basePoints);
       updatedPoints[index] = target;
@@ -539,9 +539,9 @@ final class _RectAndPointsResult {
 /// transformed to local space using C, the bounding box of local points has
 /// center C. This ensures all points maintain their world-space positions.
 ///
-/// The mathematical solution is: C = rotate(W'_center, θ)
+/// The mathematical solution is: C = rotate(W'_center, theta)
 /// Where W'_center is the center of the bounding box of world points rotated
-/// by -θ around the origin.
+/// by -theta around the origin.
 _RectAndPointsResult _computeRectAndPoints({
   required List<DrawPoint> localPoints,
   required DrawRect oldRect,
@@ -564,7 +564,7 @@ _RectAndPointsResult _computeRectAndPoints({
   final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
   final worldPoints = localPoints.map(oldSpace.toWorld).toList(growable: false);
 
-  // Step 2: Rotate world points by -θ around the origin
+  // Step 2: Rotate world points by -theta around the origin
   final cosTheta = math.cos(rotation);
   final sinTheta = math.sin(rotation);
   final rotatedPoints = worldPoints
@@ -598,8 +598,8 @@ _RectAndPointsResult _computeRectAndPoints({
   final rotatedCenterX = (minX + maxX) / 2;
   final rotatedCenterY = (minY + maxY) / 2;
 
-  // Step 4: The new rect center is the rotated center rotated back by θ
-  // C = rotate(W'_center, θ)
+  // Step 4: The new rect center is the rotated center rotated back by theta
+  // C = rotate(W'_center, theta)
   final newCenterX = rotatedCenterX * cosTheta - rotatedCenterY * sinTheta;
   final newCenterY = rotatedCenterX * sinTheta + rotatedCenterY * cosTheta;
   final newCenter = DrawPoint(x: newCenterX, y: newCenterY);
@@ -734,9 +734,6 @@ List<DrawPoint> _offsetPolylineEndpointSegment({
   }
   final start = points[segmentIndex];
   final end = points[segmentIndex + 1];
-  if (points.length == 2) {
-    return [start, target, end];
-  }
   final isHorizontal = _segmentIsHorizontal(start, end);
   final movedStart = isHorizontal
       ? DrawPoint(x: start.x, y: target.y)
@@ -807,59 +804,14 @@ List<DrawPoint> _movePolylineEndpoint({
   return updated;
 }
 
-List<DrawPoint> _simplifyPolylinePoints(List<DrawPoint> points) {
-  if (points.length < 3) {
-    return points;
+List<DrawPoint> _normalizePolylinePoints(List<DrawPoint> points) {
+  if (points.length < 2) {
+    return List<DrawPoint>.from(points);
   }
-  final simplified = <DrawPoint>[points.first];
-  for (var i = 1; i < points.length - 1; i++) {
-    final prev = simplified.last;
-    final current = points[i];
-    final next = points[i + 1];
-
-    if (_isSamePoint(prev, current)) {
-      continue;
-    }
-
-    if (_isCollinear(prev, current, next) &&
-        _isSameDirection(prev, current, next)) {
-      continue;
-    }
-    simplified.add(current);
-  }
-  final last = points.last;
-  if (simplified.isEmpty || !_isSamePoint(simplified.last, last)) {
-    simplified.add(last);
-  }
-  return simplified.length < 2 ? points : simplified;
+  return List<DrawPoint>.from(ArrowGeometry.normalizePolylinePoints(points));
 }
 
 bool _nearZero(double value) => value.abs() <= 1.0;
-
-bool _isSamePoint(DrawPoint a, DrawPoint b) =>
-    _nearZero(a.x - b.x) && _nearZero(a.y - b.y);
-
-bool _isCollinear(DrawPoint a, DrawPoint b, DrawPoint c) {
-  const tolerance = 1.0;
-  final acx = c.x - a.x;
-  final acy = c.y - a.y;
-  final lengthSq = acx * acx + acy * acy;
-  if (lengthSq <= tolerance * tolerance) {
-    return true;
-  }
-  final abx = b.x - a.x;
-  final aby = b.y - a.y;
-  final cross = abx * acy - aby * acx;
-  return cross * cross <= tolerance * tolerance * lengthSq;
-}
-
-bool _isSameDirection(DrawPoint a, DrawPoint b, DrawPoint c) {
-  final abx = b.x - a.x;
-  final aby = b.y - a.y;
-  final bcx = c.x - b.x;
-  final bcy = c.y - b.y;
-  return (abx * bcx + aby * bcy) >= 0;
-}
 
 bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) {
   final dx = end.x - start.x;

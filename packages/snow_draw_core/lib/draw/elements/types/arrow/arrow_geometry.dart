@@ -231,7 +231,7 @@ class ArrowGeometry {
       final isHorizontalPrimary = _segmentIsHorizontal(prev, target);
 
       if (isHorizontalPrimary) {
-        // Horizontal → vertical → horizontal
+        // Horizontal -> vertical -> horizontal
         // This is used when points are more spread out horizontally
         final midX = prev.dx + dx / 2;
         final mid1 = Offset(midX, prev.dy);
@@ -244,7 +244,7 @@ class ArrowGeometry {
           expanded.add(mid2);
         }
       } else {
-        // Vertical → horizontal → vertical
+        // Vertical -> horizontal -> vertical
         // This is used when points are more spread out vertically
         final midY = prev.dy + dy / 2;
         final mid1 = Offset(prev.dx, midY);
@@ -261,6 +261,25 @@ class ArrowGeometry {
       expanded.add(target);
     }
     return _simplifyPolylinePoints(expanded);
+  }
+
+  static List<DrawPoint> normalizePolylinePoints(List<DrawPoint> points) {
+    if (points.length < 2) {
+      return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
+    }
+
+    final offsets = points
+        .map((point) => Offset(point.x, point.y))
+        .toList(growable: false);
+    final normalized = expandPolylinePoints(offsets);
+    if (normalized.length < 2) {
+      return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
+    }
+    return List<DrawPoint>.unmodifiable(
+      normalized
+          .map((point) => DrawPoint(x: point.dx, y: point.dy))
+          .toList(growable: false),
+    );
   }
 
   static Path buildArrowheadPath({
@@ -398,7 +417,7 @@ class ArrowGeometry {
     final cp2 = p2 - (p3 - p1) * (tension / 6);
 
     // Evaluate cubic Bezier at parameter t
-    // B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+    // B(t) = (1 - t)^3 P0 + 3(1 - t)^2 t P1 + 3(1 - t) t^2 P2 + t^3 P3
     final t2 = t * t;
     final t3 = t2 * t;
     final mt = 1 - t;

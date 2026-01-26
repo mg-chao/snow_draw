@@ -2,11 +2,13 @@ import '../../actions/draw_actions.dart';
 import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
+import '../../elements/types/arrow/arrow_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
 import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
+import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
@@ -217,6 +219,11 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
+    if (_shouldAutoFinishPolyline()) {
+      await dispatch(const FinishCreateElement());
+      _resetPointCreationState();
+      return handled(message: 'Create finished (polyline)');
+    }
 
     _recordClick(event.position, now);
     return handled(message: 'Create point added');
@@ -271,6 +278,18 @@ class CreatePlugin extends DrawInputPlugin {
   bool _isPointCreating(DrawState state) {
     final interaction = state.application.interaction;
     return interaction is CreatingState && interaction.isPointCreation;
+  }
+
+  bool _shouldAutoFinishPolyline() {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState) {
+      return false;
+    }
+    final data = interaction.elementData;
+    if (data is! ArrowData || data.arrowType != ArrowType.polyline) {
+      return false;
+    }
+    return interaction.fixedPoints.length >= 2;
   }
 
   bool _isDoubleClick(DrawPoint position, DateTime now) {

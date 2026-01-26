@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
@@ -119,23 +117,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     snapGuides = snapResult.guides;
 
     final isPolyline = elementData.arrowType == ArrowType.polyline;
-    if (isPolyline && fixedPoints.length >= 2) {
-      final handleTolerance = _resolveCreateHandleTolerance(state, config);
-      final loopThreshold = handleTolerance * 1.5;
-      final loopTarget = fixedPoints.first;
-      final isLoopSnap =
-          adjustedCurrent.distanceSquared(loopTarget) <=
-          loopThreshold * loopThreshold;
-      if (isLoopSnap) {
-        adjustedCurrent = loopTarget;
-        snapGuides = const <SnapGuide>[];
-      }
-    }
-
-    final allPoints = _appendCurrentPoint(
-      fixedPoints: fixedPoints,
-      currentPoint: adjustedCurrent,
-    );
+    final allPoints = isPolyline
+        ? _resolvePolylineCreatePoints(
+            start:
+                fixedPoints.isNotEmpty ? fixedPoints.first : startPosition,
+            end: adjustedCurrent,
+          )
+        : _appendCurrentPoint(
+            fixedPoints: fixedPoints,
+            currentPoint: adjustedCurrent,
+          );
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
@@ -184,8 +175,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
           )
         : position;
 
-    var fixedPoints = creatingState.fixedPoints;
-    var segmentStart = fixedPoints.isNotEmpty
+    final fixedPoints = creatingState.fixedPoints;
+    final segmentStart = fixedPoints.isNotEmpty
         ? fixedPoints.last
         : creatingState.startPosition;
     adjustedPosition = _resolveArrowSegmentPosition(
@@ -200,48 +191,37 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       snappingMode: snappingMode,
     );
     adjustedPosition = snapResult.position;
-    var snapGuides = snapResult.guides;
+    final snapGuides = snapResult.guides;
 
     final isPolyline = elementData.arrowType == ArrowType.polyline;
-    var isLoopSnap = false;
-    if (isPolyline && fixedPoints.length >= 2) {
-      final handleTolerance = _resolveCreateHandleTolerance(state, config);
-      final loopThreshold = handleTolerance * 1.5;
-      final loopTarget = fixedPoints.first;
-      isLoopSnap =
-          adjustedPosition.distanceSquared(loopTarget) <=
-          loopThreshold * loopThreshold;
-      if (isLoopSnap) {
-        if (creatingState.currentPoint == loopTarget) {
-          return null;
-        }
-        adjustedPosition = loopTarget;
-        snapGuides = const <SnapGuide>[];
-      } else {
-        fixedPoints = _rollbackPolylineFixedPoint(
-          fixedPoints: fixedPoints,
-          currentPoint: adjustedPosition,
-          tolerance: handleTolerance,
-        );
-        segmentStart = fixedPoints.isNotEmpty
-            ? fixedPoints.last
-            : creatingState.startPosition;
-      }
-    }
 
     var updatedFixedPoints = fixedPoints;
-    if (!isLoopSnap &&
-        (updatedFixedPoints.isEmpty ||
-            updatedFixedPoints.last != adjustedPosition)) {
+    if (updatedFixedPoints.isEmpty ||
+        updatedFixedPoints.last != adjustedPosition) {
       updatedFixedPoints = List<DrawPoint>.unmodifiable([
         ...updatedFixedPoints,
         adjustedPosition,
       ]);
     }
-    final allPoints = _appendCurrentPoint(
-      fixedPoints: updatedFixedPoints,
-      currentPoint: adjustedPosition,
-    );
+    if (isPolyline && updatedFixedPoints.length > 1) {
+      updatedFixedPoints = List<DrawPoint>.unmodifiable([
+        updatedFixedPoints.first,
+        updatedFixedPoints.last,
+      ]);
+    }
+    final allPoints = isPolyline
+        ? _resolvePolylineCreatePoints(
+            start: updatedFixedPoints.isNotEmpty
+                ? updatedFixedPoints.first
+                : creatingState.startPosition,
+            end: updatedFixedPoints.isNotEmpty
+                ? updatedFixedPoints.last
+                : adjustedPosition,
+          )
+        : _appendCurrentPoint(
+            fixedPoints: updatedFixedPoints,
+            currentPoint: adjustedPosition,
+          );
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
@@ -279,12 +259,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     }
 
     final minSize = config.element.minCreateSize;
-    final finalPoints = creatingState.isPointCreation
+    final isPolyline = data.arrowType == ArrowType.polyline;
+    final rawPoints = creatingState.isPointCreation
         ? _resolveFinalArrowPoints(creatingState)
         : _resolveArrowWorldPoints(
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
           );
+    final finalPoints = isPolyline
+        ? _resolvePolylineFinalPoints(rawPoints)
+        : rawPoints;
     if (finalPoints.length < 2) {
       return CreationFinishResult(
         data: data,
@@ -342,19 +326,9 @@ DrawPoint _resolveArrowSegmentPosition({
   required DrawPoint currentPosition,
   required ArrowType arrowType,
 }) =>
-    // For all arrow types including polyline, allow
-    // free positioning of control points
-    // The three-segment elbow effect for
-    // polylines is applied during rendering
-    // in ArrowGeometry.expandPolylinePoints(), not
-    // during point creation
+    // For all arrow types including polyline, allow free positioning.
+    // Polyline orthogonalization is handled during creation/update.
     currentPosition;
-
-double _resolveCreateHandleTolerance(DrawState state, DrawConfig config) {
-  final zoom = state.application.view.camera.zoom;
-  final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-  return config.selection.interaction.handleTolerance / effectiveZoom;
-}
 
 List<DrawPoint> _appendCurrentPoint({
   required List<DrawPoint> fixedPoints,
@@ -369,55 +343,18 @@ List<DrawPoint> _appendCurrentPoint({
   return [...fixedPoints, currentPoint];
 }
 
-// Roll back the last fixed point when the end point folds a straight segment.
-List<DrawPoint> _rollbackPolylineFixedPoint({
-  required List<DrawPoint> fixedPoints,
-  required DrawPoint currentPoint,
-  required double tolerance,
-}) {
-  if (fixedPoints.length < 2) {
-    return fixedPoints;
-  }
-  final prev = fixedPoints[fixedPoints.length - 2];
-  final last = fixedPoints[fixedPoints.length - 1];
-  final toleranceSq = tolerance * tolerance;
-  if (last.distanceSquared(currentPoint) <= toleranceSq) {
-    return fixedPoints;
-  }
-  if (prev.distanceSquared(last) <= toleranceSq) {
-    return List<DrawPoint>.unmodifiable(
-      fixedPoints.sublist(0, fixedPoints.length - 1),
-    );
-  }
-  if (_areCollinear(prev, last, currentPoint, tolerance) &&
-      (_isBetween(prev, last, currentPoint, tolerance) ||
-          _isBetween(prev, currentPoint, last, tolerance))) {
-    return List<DrawPoint>.unmodifiable(
-      fixedPoints.sublist(0, fixedPoints.length - 1),
-    );
-  }
-  return fixedPoints;
-}
+List<DrawPoint> _resolvePolylineCreatePoints({
+  required DrawPoint start,
+  required DrawPoint end,
+}) => ArrowGeometry.normalizePolylinePoints([start, end]);
 
-bool _areCollinear(DrawPoint a, DrawPoint b, DrawPoint c, double tolerance) {
-  final acx = c.x - a.x;
-  final acy = c.y - a.y;
-  final lengthSq = acx * acx + acy * acy;
-  if (lengthSq <= tolerance * tolerance) {
-    return true;
+List<DrawPoint> _resolvePolylineFinalPoints(List<DrawPoint> points) {
+  if (points.length < 2) {
+    return points;
   }
-  final abx = b.x - a.x;
-  final aby = b.y - a.y;
-  final cross = abx * acy - aby * acx;
-  return cross * cross <= tolerance * tolerance * lengthSq;
-}
-
-bool _isBetween(DrawPoint a, DrawPoint b, DrawPoint c, double tolerance) {
-  final minX = math.min(a.x, c.x) - tolerance;
-  final maxX = math.max(a.x, c.x) + tolerance;
-  final minY = math.min(a.y, c.y) - tolerance;
-  final maxY = math.max(a.y, c.y) + tolerance;
-  return b.x >= minX && b.x <= maxX && b.y >= minY && b.y <= maxY;
+  return ArrowGeometry.normalizePolylinePoints(
+    [points.first, points.last],
+  );
 }
 
 List<DrawPoint> _resolveFinalArrowPoints(CreatingState interaction) {
