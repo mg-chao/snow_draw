@@ -41,6 +41,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
   DrawPoint? _pointerDownPosition;
   bool _isDragging = false;
   bool _isMultiPoint = false;
+  bool _justFinishedDragCreate = false;
   DateTime? _lastClickTime;
   DrawPoint? _lastClickPosition;
 
@@ -106,6 +107,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     // Clear all state before starting a new arrow to ensure clean slate
     _resetInteractionState();
     _pointerDownPosition = event.position;
+    _justFinishedDragCreate = false; // Clear flag when starting new creation
 
     await dispatch(
       CreateElement(
@@ -174,6 +176,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     if (wasDragging && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetInteractionState();
+      _justFinishedDragCreate = true; // Set flag to allow immediate next creation
       return handled(message: 'Arrow create finished');
     }
 
@@ -233,13 +236,14 @@ class ArrowCreatePlugin extends DrawInputPlugin {
       return false;
     }
 
-    // If there's a selection and clicking on blank area, don't create
-    // Let the selection plugin handle deselection instead
-    if (state.domain.hasSelection) {
+    // If there's a selection and clicking on blank area, check context:
+    // - If we just finished drag-creating, allow immediate next creation
+    // - Otherwise, let the selection plugin handle deselection first
+    if (state.domain.hasSelection && !_justFinishedDragCreate) {
       return false;
     }
 
-    // No arrow hit and no selection - allow creation
+    // No arrow hit and (no selection OR just finished drag create) - allow creation
     return true;
   }
 
@@ -277,6 +281,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
+    _justFinishedDragCreate = false;
     _clearClickState();
   }
 
