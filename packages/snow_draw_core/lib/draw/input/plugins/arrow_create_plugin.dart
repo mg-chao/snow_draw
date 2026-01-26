@@ -169,11 +169,18 @@ class ArrowCreatePlugin extends DrawInputPlugin {
 
     final wasDragging = _isDragging;
     final wasMultiPoint = _isMultiPoint;
+    final downPosition = _pointerDownPosition;
     _pointerDownPosition = null;
     _isDragging = false;
 
     // Only finish on drag if the user actually dragged a meaningful distance
-    if (wasDragging && !wasMultiPoint) {
+    final minCreateSize = drawContext.config.element.minCreateSize;
+    final wasMeaningfulDrag =
+        wasDragging &&
+        downPosition != null &&
+        downPosition.distanceSquared(event.position) >=
+            minCreateSize * minCreateSize;
+    if (wasMeaningfulDrag && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetInteractionState();
       _justFinishedDragCreate =
@@ -190,7 +197,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     }
 
     // Check for double-click BEFORE adding the point
-    final isDoubleClick = !wasDragging && _isDoubleClick(event.position, now);
+    final isDoubleClick =
+        !wasMeaningfulDrag && _isDoubleClick(event.position, now);
 
     if (isDoubleClick) {
       // Double-click detected - finish without adding another point

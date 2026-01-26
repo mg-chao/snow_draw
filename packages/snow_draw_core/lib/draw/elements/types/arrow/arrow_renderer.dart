@@ -127,8 +127,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     }
 
     if (strokeStyle == StrokeStyle.dashed) {
-      final dashLength = (8 + data.strokeWidth * 1.5).clamp(6.0, 16.0);
-      final gapLength = (5 + data.strokeWidth * 1).clamp(4.0, 10.0);
+      // Dash pattern proportional to stroke width
+      final dashLength = data.strokeWidth * 2.0;
+      final gapLength = dashLength * 1.2;
       final dashedShaft = _buildDashedPath(shaftPath, dashLength, gapLength);
       combinedPath.addPath(dashedShaft, Offset.zero);
       for (final arrowheadPath in arrowheadPaths) {
@@ -139,8 +140,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     }
 
     // Dotted style - dots are filled circles, so we need different paint
-    final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
-    final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
+    // Dot pattern proportional to stroke width
+    final dotSpacing = data.strokeWidth * 2.0;
+    final dotRadius = data.strokeWidth * 0.5;
     final dottedShaft = _buildDottedPath(shaftPath, dotSpacing, dotRadius);
     combinedPath.addPath(dottedShaft, Offset.zero);
 
