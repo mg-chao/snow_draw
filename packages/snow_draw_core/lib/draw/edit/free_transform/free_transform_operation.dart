@@ -150,22 +150,22 @@ class FreeTransformOperation extends EditOperation {
       replacementsById: result.updatedElements,
     );
 
-    final newSelection = typedContext.isMultiSelect
-        ? state.domain.selection.copyWith(
+    final newOverlay = typedContext.isMultiSelect
+        ? state.application.selectionOverlay.copyWith(
             multiSelectOverlay: MultiSelectOverlayState(
               bounds: result.multiSelectBounds ?? typedContext.startBounds,
               rotation:
                   result.multiSelectRotation ?? typedContext.selectionRotation,
             ),
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: newSelection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: newOverlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);

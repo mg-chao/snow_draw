@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'creation_strategy.dart';
 import 'element_data.dart';
 import 'element_hit_tester.dart';
 import 'element_renderer.dart';
@@ -18,6 +19,7 @@ class ElementDefinition<T extends ElementData> {
     required this.hitTester,
     required this.createDefaultData,
     required this.fromJson,
+    this.creationStrategy,
     this.icon,
   });
   final ElementTypeId<T> typeId;
@@ -27,4 +29,5 @@ class ElementDefinition<T extends ElementData> {
   final ElementHitTester hitTester;
   final T Function() createDefaultData;
   final T Function(Map<String, dynamic> json) fromJson;
+  final CreationStrategy? creationStrategy;
 }

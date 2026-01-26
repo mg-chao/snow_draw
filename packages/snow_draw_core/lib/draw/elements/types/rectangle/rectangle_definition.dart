@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/element_definition.dart';
+import '../../core/rect_creation_strategy.dart';
 import 'rectangle_data.dart';
 import 'rectangle_hit_tester.dart';
 import 'rectangle_renderer.dart';
@@ -13,4 +14,5 @@ final rectangleDefinition = ElementDefinition<RectangleData>(
   hitTester: const RectangleHitTester(),
   createDefaultData: () => const RectangleData(),
   fromJson: RectangleData.fromJson,
+  creationStrategy: const RectCreationStrategy(),
 );

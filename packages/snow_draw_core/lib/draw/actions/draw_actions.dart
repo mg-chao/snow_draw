@@ -1,5 +1,6 @@
 import 'dart:ui' show Color;
 
+import '../edit/core/edit_cancel_reason.dart';
 import '../edit/core/edit_modifiers.dart';
 import '../edit/core/edit_operation_params.dart';
 import '../elements/core/element_data.dart';
@@ -454,11 +455,15 @@ class FinishEdit extends DrawAction implements Recordable {
 }
 
 class CancelEdit extends DrawAction implements NonRecordable {
-  const CancelEdit();
+  const CancelEdit({this.reason = EditCancelReason.userCancelled});
+  final EditCancelReason reason;
 
   @override
   String get nonRecordableReason =>
       'CancelEdit indicates the session was aborted.';
+
+  @override
+  String toString() => 'CancelEdit(reason: $reason)';
 }
 
 class EditIntentAction extends DrawAction {

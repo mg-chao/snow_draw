@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
-import '../../../core/draw_context.dart';
+import '../../../core/dependency_interfaces.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_layout.dart';
 import '../../../models/draw_state.dart';
@@ -11,13 +11,18 @@ import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../core/reducer_utils.dart';
 
 /// Reducer for text editing interactions.
 @immutable
 class TextEditReducer {
   const TextEditReducer();
 
-  DrawState? reduce(DrawState state, DrawAction action, DrawContext context) =>
+  DrawState? reduce(
+    DrawState state,
+    DrawAction action,
+    TextEditReducerDeps context,
+  ) =>
       switch (action) {
         final StartTextEdit a => _startTextEdit(state, a, context),
         final UpdateTextEdit a => _updateTextEdit(state, a),
@@ -29,7 +34,7 @@ class TextEditReducer {
   DrawState _startTextEdit(
     DrawState state,
     StartTextEdit action,
-    DrawContext context,
+    TextEditReducerDeps context,
   ) {
     if (state.application.interaction is TextEditingState) {
       return state;
@@ -65,13 +70,11 @@ class TextEditReducer {
       resolvedId = context.idGenerator();
     }
 
-    final nextSelection = isNew
-        ? state.domain.selection.cleared()
-        : state.domain.selection.withSelected(resolvedId);
+    final selectionIds = isNew ? const <String>{} : {resolvedId};
+    final nextState = applySelectionChange(state, selectionIds);
 
-    return state.copyWith(
-      domain: state.domain.copyWith(selection: nextSelection),
-      application: state.application.copyWith(
+    return nextState.copyWith(
+      application: nextState.application.copyWith(
         interaction: TextEditingState(
           elementId: resolvedId,
           draftData: draftData,
@@ -109,7 +112,7 @@ class TextEditReducer {
   DrawState _finishTextEdit(
     DrawState state,
     FinishTextEdit action,
-    DrawContext context,
+    TextEditReducerDeps context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
@@ -127,12 +130,12 @@ class TextEditReducer {
           .toList();
       final nextDomain = state.domain.copyWith(
         document: state.domain.document.copyWith(elements: remainingElements),
-        selection: state.domain.selection.cleared(),
       );
-      return state.copyWith(
-        domain: nextDomain,
-        application: state.application.toIdle(),
+      final nextState = applySelectionChange(
+        state.copyWith(domain: nextDomain),
+        const {},
       );
+      return nextState.copyWith(application: nextState.application.toIdle());
     }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
@@ -156,12 +159,12 @@ class TextEditReducer {
       final nextElements = [...state.domain.document.elements, element];
       final nextDomain = state.domain.copyWith(
         document: state.domain.document.copyWith(elements: nextElements),
-        selection: state.domain.selection.cleared(),
       );
-      return state.copyWith(
-        domain: nextDomain,
-        application: state.application.toIdle(),
+      final nextState = applySelectionChange(
+        state.copyWith(domain: nextDomain),
+        const {},
       );
+      return nextState.copyWith(application: nextState.application.toIdle());
     }
 
     final elements = <ElementState>[];
@@ -175,12 +178,12 @@ class TextEditReducer {
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: elements),
-      selection: state.domain.selection.cleared(),
     );
-    return state.copyWith(
-      domain: nextDomain,
-      application: state.application.toIdle(),
+    final nextState = applySelectionChange(
+      state.copyWith(domain: nextDomain),
+      const {},
     );
+    return nextState.copyWith(application: nextState.application.toIdle());
   }
 
   DrawState _cancelTextEdit(DrawState state) {

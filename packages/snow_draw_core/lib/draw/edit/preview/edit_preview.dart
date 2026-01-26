@@ -61,7 +61,7 @@ SelectionPreview? buildSelectionPreview({
 
   final geometry = SelectionGeometryResolver.resolve(
     selectedElements: selectedElements,
-    selection: state.domain.selection,
+    selectionOverlay: state.application.selectionOverlay,
     overlayBoundsOverride: multiSelectBounds ?? context.startBounds,
     overlayRotationOverride: multiSelectRotation,
   );

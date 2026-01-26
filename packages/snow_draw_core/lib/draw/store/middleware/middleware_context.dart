@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
@@ -45,7 +45,7 @@ class DispatchContext {
   factory DispatchContext.initial({
     required DrawAction action,
     required DrawState state,
-    required DrawContext drawContext,
+    required InteractionReducerDeps drawContext,
     required HistoryManager historyManager,
     required SnapshotBuilder snapshotBuilder,
     required EditSessionService editSessionService,
@@ -74,7 +74,7 @@ class DispatchContext {
     traceId: traceId ?? _generateTraceId(),
   );
   final DrawAction action;
-  final DrawContext drawContext;
+  final InteractionReducerDeps drawContext;
   final DrawState initialState;
   final DrawState currentState;
   final HistoryManager historyManager;
@@ -94,7 +94,7 @@ class DispatchContext {
 
   DispatchContext copyWith({
     DrawAction? action,
-    DrawContext? drawContext,
+    InteractionReducerDeps? drawContext,
     DrawState? initialState,
     DrawState? currentState,
     HistoryManager? historyManager,

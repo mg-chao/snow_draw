@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -17,7 +17,7 @@ import '../../types/element_style.dart';
 DrawState handleUpdateElementsStyle(
   DrawState state,
   UpdateElementsStyle action,
-  DrawContext _,
+  ElementReducerDeps _,
 ) {
   final ids = action.elementIds.toSet();
   if (ids.isEmpty) {

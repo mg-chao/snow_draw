@@ -312,19 +312,19 @@ class ResizeOperation extends EditOperation {
     );
 
     // Update multi-select overlay state after committing a resize.
-    final newSelection = typedContext.isMultiSelect
+    final newOverlay = typedContext.isMultiSelect
         ? MultiSelectLifecycle.onResizeFinished(
-            state.domain.selection,
+            state.application.selectionOverlay,
             newBounds: result.multiSelectBounds!,
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: newSelection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: newOverlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);

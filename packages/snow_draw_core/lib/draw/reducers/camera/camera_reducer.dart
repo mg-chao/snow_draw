@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../models/camera_state.dart';
 import '../../models/draw_state.dart';
 import '../../types/draw_point.dart';
@@ -7,7 +7,7 @@ import '../../types/draw_point.dart';
 DrawState? cameraReducer(
   DrawState state,
   DrawAction action,
-  DrawContext context,
+  CameraReducerDeps context,
 ) => switch (action) {
   final MoveCamera a => state.copyWith(
     application: state.application.copyWith(
@@ -20,7 +20,11 @@ DrawState? cameraReducer(
   _ => null,
 };
 
-DrawState _handleZoomCamera(DrawState state, ZoomCamera action, DrawContext _) {
+DrawState _handleZoomCamera(
+  DrawState state,
+  ZoomCamera action,
+  CameraReducerDeps _,
+) {
   final camera = state.application.view.camera;
   final currentZoom = camera.zoom <= 0 ? 1.0 : camera.zoom;
   final targetZoom = CameraState.clampZoom(currentZoom * action.scale);

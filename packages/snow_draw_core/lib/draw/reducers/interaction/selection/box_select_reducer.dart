@@ -27,16 +27,14 @@ class BoxSelectReducer {
   };
 
   DrawState _startBoxSelect(DrawState state, StartBoxSelect action) {
-    final nextDomain = state.domain.copyWith(
-      selection: state.domain.selection.cleared(),
-    );
-    final nextApplication = state.application.copyWith(
+    final nextState = applySelectionChange(state, const {});
+    final nextApplication = nextState.application.copyWith(
       interaction: BoxSelectingState(
         startPosition: action.startPosition,
         currentPosition: action.startPosition,
       ),
     );
-    return state.copyWith(domain: nextDomain, application: nextApplication);
+    return nextState.copyWith(application: nextApplication);
   }
 
   DrawState _updateBoxSelect(DrawState state, UpdateBoxSelect action) {

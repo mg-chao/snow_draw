@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
 import '../models/interaction_state.dart';
+import '../models/selection_overlay_state.dart';
 import '../models/selection_state.dart';
 
 abstract interface class HistorySnapshot {
@@ -50,7 +51,10 @@ class PersistentSnapshot implements HistorySnapshot {
       document: state.domain.document.copyWith(elements: elements),
       selection: includeSelection ? selection : state.domain.selection,
     ),
-    application: state.application.copyWith(interaction: const IdleState()),
+    application: state.application.copyWith(
+      interaction: const IdleState(),
+      selectionOverlay: SelectionOverlayState.empty,
+    ),
   );
 
   @override

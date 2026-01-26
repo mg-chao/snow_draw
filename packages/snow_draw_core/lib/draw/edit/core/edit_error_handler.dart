@@ -47,14 +47,14 @@ class EditErrorHandler {
         ErrorStatePolicy.keepState => state,
       };
 
-  static EditResult createFailure({
+  static EditOutcome createFailure({
     required DrawState state,
     required EditErrorHandlerConfig config,
     required EditFailureReason reason,
     EditOperationId? operationId,
-  }) => EditResult.failure(
+  }) => (
     state: computeNextState(state, config.statePolicy),
-    reason: reason,
+    failureReason: reason,
     operationId: operationId ?? extractOperationId(state),
   );
 
@@ -112,10 +112,10 @@ class EditErrorHandler {
 
 /// Higher-order wrapper for unified error handling.
 extension EditErrorHandlerExtension on EditErrorHandler {
-  static EditResult runWithErrorHandling({
+  static EditOutcome runWithErrorHandling({
     required DrawState state,
     required EditErrorHandlerConfig config,
-    required EditResult Function() operation,
+    required EditOutcome Function() operation,
     EditOperationId? fallbackOperationId,
     String? operationName,
     ModuleLogger? log,

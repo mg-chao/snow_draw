@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../elements/core/element_data.dart';
 import '../elements/types/text/text_data.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
@@ -171,7 +172,7 @@ class EditingState extends InteractionState {
 
 /// Discriminator for creation mode within [CreatingState].
 @immutable
-sealed class CreationMode {
+abstract class CreationMode {
   const CreationMode();
 }
 
@@ -247,20 +248,47 @@ class PointCreationMode extends CreationMode {
 
 @immutable
 class CreatingState extends InteractionState {
-  const CreatingState({
-    required this.element,
+  CreatingState({
+    required ElementState element,
     required this.startPosition,
     required this.currentRect,
     this.snapGuides = const [],
     this.creationMode = const RectCreationMode(),
-  });
-  final ElementState element;
+  }) : elementId = element.id,
+       elementData = element.data,
+       elementRect = element.rect,
+       elementRotation = element.rotation,
+       elementOpacity = element.opacity,
+       elementZIndex = element.zIndex;
+
+  /// Stable element id used while creating (not yet in the document).
+  final String elementId;
+
+  /// Draft element data (UI-only, not persisted until creation finishes).
+  final ElementData elementData;
+
+  /// Draft element rect captured at creation start.
+  final DrawRect elementRect;
+  final double elementRotation;
+  final double elementOpacity;
+  final int elementZIndex;
   final DrawPoint startPosition;
   final DrawRect currentRect;
   final List<SnapGuide> snapGuides;
   final CreationMode creationMode;
 
-  String get elementId => element.id;
+  /// Backward-compatible access to the draft element.
+  ///
+  /// This is synthesized from creation context fields to avoid storing a
+  /// full ElementState in application state.
+  ElementState get element => ElementState(
+    id: elementId,
+    rect: elementRect,
+    rotation: elementRotation,
+    opacity: elementOpacity,
+    zIndex: elementZIndex,
+    data: elementData,
+  );
 
   /// Fixed points for point-based creation (arrows/polylines).
   List<DrawPoint> get fixedPoints => switch (creationMode) {

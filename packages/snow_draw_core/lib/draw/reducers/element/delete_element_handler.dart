@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -10,7 +10,7 @@ import '../core/reducer_utils.dart';
 DrawState handleDeleteElements(
   DrawState state,
   DeleteElements action,
-  DrawContext _,
+  ElementReducerDeps _,
 ) {
   final newElements = state.domain.document.elements
       .where((element) => !action.elementIds.contains(element.id))
@@ -31,7 +31,7 @@ DrawState handleDeleteElements(
 DrawState handleDuplicateElements(
   DrawState state,
   DuplicateElements action,
-  DrawContext context,
+  ElementReducerDeps context,
 ) {
   if (action.elementIds.isEmpty) {
     context.log.store.warning('Duplicate failed: empty selection', {

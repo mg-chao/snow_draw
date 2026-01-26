@@ -6,7 +6,6 @@ import '../middleware_context.dart';
 ///
 /// This is the core middleware that transforms state based on actions.
 /// It handles:
-/// - Conflict-driven cancellation
 /// - Edit operations
 /// - Other state transitions
 ///
@@ -29,7 +28,6 @@ class ReductionMiddleware extends MiddlewareBase {
       context: context.drawContext,
       editSessionService: context.editSessionService,
       sessionIdGenerator: context.sessionIdGenerator,
-      historyAvailability: context.historyAvailability,
     );
 
     // Update context with new state and events
