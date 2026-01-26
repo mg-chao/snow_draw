@@ -202,66 +202,8 @@ class ArrowGeometry {
     return _normalize(vector);
   }
 
-  static List<Offset> expandPolylinePoints(List<Offset> points) {
-    if (points.length < 2) {
-      return points;
-    }
-
-    final expanded = <Offset>[points.first];
-    for (var i = 1; i < points.length; i++) {
-      final prev = expanded.last;
-      final target = points[i];
-      final dx = target.dx - prev.dx;
-      final dy = target.dy - prev.dy;
-
-      // If already aligned horizontally or vertically, just connect directly
-      if (_nearZero(dx) || _nearZero(dy)) {
-        final alignedTarget = Offset(
-          _nearZero(dx) ? prev.dx : target.dx,
-          _nearZero(dy) ? prev.dy : target.dy,
-        );
-        if (!_isSamePoint(alignedTarget, prev)) {
-          expanded.add(alignedTarget);
-        }
-        continue;
-      }
-
-      // Standard three-segment elbow connection
-      // Choose direction priority based on which distance is greater
-      final isHorizontalPrimary = _segmentIsHorizontal(prev, target);
-
-      if (isHorizontalPrimary) {
-        // Horizontal -> vertical -> horizontal
-        // This is used when points are more spread out horizontally
-        final midX = prev.dx + dx / 2;
-        final mid1 = Offset(midX, prev.dy);
-        final mid2 = Offset(midX, target.dy);
-
-        if (mid1 != prev) {
-          expanded.add(mid1);
-        }
-        if (mid2 != mid1 && mid2 != target) {
-          expanded.add(mid2);
-        }
-      } else {
-        // Vertical -> horizontal -> vertical
-        // This is used when points are more spread out vertically
-        final midY = prev.dy + dy / 2;
-        final mid1 = Offset(prev.dx, midY);
-        final mid2 = Offset(target.dx, midY);
-
-        if (mid1 != prev) {
-          expanded.add(mid1);
-        }
-        if (mid2 != mid1 && mid2 != target) {
-          expanded.add(mid2);
-        }
-      }
-
-      expanded.add(target);
-    }
-    return _simplifyPolylinePoints(expanded);
-  }
+  static List<Offset> expandPolylinePoints(List<Offset> points) =>
+      List<Offset>.from(points);
 
   static List<DrawPoint> normalizePolylinePoints(List<DrawPoint> points) {
     if (points.length < 2) {
@@ -271,7 +213,7 @@ class ArrowGeometry {
     final offsets = points
         .map((point) => Offset(point.x, point.y))
         .toList(growable: false);
-    final normalized = expandPolylinePoints(offsets);
+    final normalized = _simplifyPolylinePoints(offsets);
     if (normalized.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
@@ -608,18 +550,6 @@ class ArrowGeometry {
 
   static bool _isSamePoint(Offset a, Offset b) =>
       _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
-
-  static bool _segmentIsHorizontal(Offset start, Offset end) {
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    if (_nearZero(dy) && !_nearZero(dx)) {
-      return true;
-    }
-    if (_nearZero(dx) && !_nearZero(dy)) {
-      return false;
-    }
-    return dx.abs() > dy.abs();
-  }
 
   static List<Offset> _simplifyPolylinePoints(List<Offset> points) {
     if (points.length < 3) {

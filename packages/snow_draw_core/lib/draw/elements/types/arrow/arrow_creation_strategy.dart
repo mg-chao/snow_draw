@@ -327,7 +327,6 @@ DrawPoint _resolveArrowSegmentPosition({
   required ArrowType arrowType,
 }) =>
     // For all arrow types including polyline, allow free positioning.
-    // Polyline orthogonalization is handled during creation/update.
     currentPosition;
 
 List<DrawPoint> _appendCurrentPoint({
