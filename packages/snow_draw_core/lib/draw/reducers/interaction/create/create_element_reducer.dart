@@ -186,19 +186,45 @@ class CreateElementReducer {
 
     final elementData = interaction.element.data;
     if (elementData is ArrowData) {
-      final fixedPoints =
+      var fixedPoints =
           interaction is ArrowCreatingState
               ? interaction.fixedPoints
               : [startPosition];
       final segmentStart = fixedPoints.isNotEmpty
           ? fixedPoints.last
           : startPosition;
-      final adjustedCurrent = _resolveArrowSegmentPosition(
+      var adjustedCurrent = _resolveArrowSegmentPosition(
         segmentStart: segmentStart,
         currentPosition: currentPosition,
         arrowType: elementData.arrowType,
       );
-      final allPoints = <DrawPoint>[...fixedPoints, adjustedCurrent];
+      var snapGuides = const <SnapGuide>[];
+      final snapResult = _snapCreatePoint(
+        state: state,
+        config: context.config,
+        position: adjustedCurrent,
+        snappingMode: snappingMode,
+      );
+      adjustedCurrent = snapResult.position;
+      snapGuides = snapResult.guides;
+      final isPolyline = elementData.arrowType == ArrowType.polyline;
+      if (isPolyline && fixedPoints.length >= 2) {
+        final handleTolerance =
+            _resolveCreateHandleTolerance(state, context.config);
+        final loopThreshold = handleTolerance * 1.5;
+        final loopTarget = fixedPoints.first;
+        final isLoopSnap =
+            adjustedCurrent.distanceSquared(loopTarget) <=
+            loopThreshold * loopThreshold;
+        if (isLoopSnap) {
+          adjustedCurrent = loopTarget;
+          snapGuides = const <SnapGuide>[];
+        }
+      }
+      final allPoints = _appendCurrentPoint(
+        fixedPoints: fixedPoints,
+        currentPoint: adjustedCurrent,
+      );
       final arrowRect = _calculateArrowRect(
         points: allPoints,
         arrowType: elementData.arrowType,
@@ -215,13 +241,14 @@ class CreateElementReducer {
               ? interaction.copyWith(
                 element: updatedElement,
                 currentRect: arrowRect,
-                snapGuides: const [],
+                fixedPoints: fixedPoints,
+                snapGuides: snapGuides,
                 currentPoint: adjustedCurrent,
               )
               : interaction.copyWith(
                 element: updatedElement,
                 currentRect: arrowRect,
-                snapGuides: const [],
+                snapGuides: snapGuides,
               );
       return state.copyWith(
         application: state.application.copyWith(interaction: nextInteraction),
@@ -310,6 +337,51 @@ class CreateElementReducer {
       state.domain.document.elements
           .where((element) => element.opacity > 0)
           .toList();
+
+  _PointSnapResult _snapCreatePoint({
+    required DrawState state,
+    required DrawConfig config,
+    required DrawPoint position,
+    required SnappingMode snappingMode,
+  }) {
+    if (snappingMode != SnappingMode.object) {
+      return _PointSnapResult(position: position);
+    }
+    final snapConfig = config.snap;
+    if (!snapConfig.enablePointSnaps && !snapConfig.enableGapSnaps) {
+      return _PointSnapResult(position: position);
+    }
+    final referenceElements = _resolveReferenceElements(state);
+    if (referenceElements.isEmpty) {
+      return _PointSnapResult(position: position);
+    }
+    final zoom = state.application.view.camera.zoom;
+    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+    final snapDistance = snapConfig.distance / effectiveZoom;
+    if (snapDistance <= 0) {
+      return _PointSnapResult(position: position);
+    }
+    final result = objectSnapService.snapRect(
+      targetRect: DrawRect(
+        minX: position.x,
+        minY: position.y,
+        maxX: position.x,
+        maxY: position.y,
+      ),
+      referenceElements: referenceElements,
+      snapDistance: snapDistance,
+      targetAnchorsX: const [SnapAxisAnchor.center],
+      targetAnchorsY: const [SnapAxisAnchor.center],
+      enablePointSnaps: snapConfig.enablePointSnaps,
+      enableGapSnaps: snapConfig.enableGapSnaps,
+    );
+    final snappedPosition = result.hasSnap
+        ? DrawPoint(x: position.x + result.dx, y: position.y + result.dy)
+        : position;
+    final guides =
+        snapConfig.showGuides ? result.guides : const <SnapGuide>[];
+    return _PointSnapResult(position: snappedPosition, guides: guides);
+  }
 
   DrawState _finishCreateElement(DrawState state, DrawContext context) {
     final interaction = state.application.interaction;
@@ -422,8 +494,8 @@ class CreateElementReducer {
         )
         : action.position;
 
-    final fixedPoints = interaction.fixedPoints;
-    final segmentStart = fixedPoints.isNotEmpty
+    var fixedPoints = interaction.fixedPoints;
+    var segmentStart = fixedPoints.isNotEmpty
         ? fixedPoints.last
         : interaction.startPosition;
     position = _resolveArrowSegmentPosition(
@@ -431,14 +503,55 @@ class CreateElementReducer {
       currentPosition: position,
       arrowType: elementData.arrowType,
     );
+    final snapResult = _snapCreatePoint(
+      state: state,
+      config: context.config,
+      position: position,
+      snappingMode: snappingMode,
+    );
+    position = snapResult.position;
+    var snapGuides = snapResult.guides;
 
-    final updatedFixedPoints = position == segmentStart
-        ? fixedPoints
-        : List<DrawPoint>.unmodifiable([...fixedPoints, position]);
-    final allPoints = <DrawPoint>[
-      ...updatedFixedPoints,
-      position,
-    ];
+    final isPolyline = elementData.arrowType == ArrowType.polyline;
+    var isLoopSnap = false;
+    if (isPolyline && fixedPoints.length >= 2) {
+      final handleTolerance =
+          _resolveCreateHandleTolerance(state, context.config);
+      final loopThreshold = handleTolerance * 1.5;
+      final loopTarget = fixedPoints.first;
+      isLoopSnap =
+          position.distanceSquared(loopTarget) <= loopThreshold * loopThreshold;
+      if (isLoopSnap) {
+        if (interaction.currentPoint == loopTarget) {
+          return state;
+        }
+        position = loopTarget;
+        snapGuides = const <SnapGuide>[];
+      } else {
+        fixedPoints = _rollbackPolylineFixedPoint(
+          fixedPoints: fixedPoints,
+          currentPoint: position,
+          tolerance: handleTolerance,
+        );
+        segmentStart = fixedPoints.isNotEmpty
+            ? fixedPoints.last
+            : interaction.startPosition;
+      }
+    }
+
+    var updatedFixedPoints = fixedPoints;
+    if (!isLoopSnap &&
+        (updatedFixedPoints.isEmpty ||
+            updatedFixedPoints.last != position)) {
+      updatedFixedPoints = List<DrawPoint>.unmodifiable([
+        ...updatedFixedPoints,
+        position,
+      ]);
+    }
+    final allPoints = _appendCurrentPoint(
+      fixedPoints: updatedFixedPoints,
+      currentPoint: position,
+    );
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
@@ -455,7 +568,7 @@ class CreateElementReducer {
       currentRect: arrowRect,
       fixedPoints: updatedFixedPoints,
       currentPoint: position,
-      snapGuides: const [],
+      snapGuides: snapGuides,
     );
     return state.copyWith(
       application: state.application.copyWith(interaction: nextInteraction),
@@ -496,6 +609,86 @@ DrawPoint _resolveArrowSegmentPosition({
   return currentPosition;
 }
 
+double _resolveCreateHandleTolerance(DrawState state, DrawConfig config) {
+  final zoom = state.application.view.camera.zoom;
+  final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+  return config.selection.interaction.handleTolerance / effectiveZoom;
+}
+
+List<DrawPoint> _appendCurrentPoint({
+  required List<DrawPoint> fixedPoints,
+  required DrawPoint currentPoint,
+}) {
+  if (fixedPoints.isEmpty) {
+    return [currentPoint];
+  }
+  if (fixedPoints.last == currentPoint) {
+    return fixedPoints;
+  }
+  return [...fixedPoints, currentPoint];
+}
+
+// Roll back the last fixed point when the end point folds a straight segment.
+List<DrawPoint> _rollbackPolylineFixedPoint({
+  required List<DrawPoint> fixedPoints,
+  required DrawPoint currentPoint,
+  required double tolerance,
+}) {
+  if (fixedPoints.length < 2) {
+    return fixedPoints;
+  }
+  final prev = fixedPoints[fixedPoints.length - 2];
+  final last = fixedPoints[fixedPoints.length - 1];
+  final toleranceSq = tolerance * tolerance;
+  if (last.distanceSquared(currentPoint) <= toleranceSq) {
+    return fixedPoints;
+  }
+  if (prev.distanceSquared(last) <= toleranceSq) {
+    return List<DrawPoint>.unmodifiable(
+      fixedPoints.sublist(0, fixedPoints.length - 1),
+    );
+  }
+  if (_areCollinear(prev, last, currentPoint, tolerance) &&
+      (_isBetween(prev, last, currentPoint, tolerance) ||
+          _isBetween(prev, currentPoint, last, tolerance))) {
+    return List<DrawPoint>.unmodifiable(
+      fixedPoints.sublist(0, fixedPoints.length - 1),
+    );
+  }
+  return fixedPoints;
+}
+
+bool _areCollinear(
+  DrawPoint a,
+  DrawPoint b,
+  DrawPoint c,
+  double tolerance,
+) {
+  final acx = c.x - a.x;
+  final acy = c.y - a.y;
+  final lengthSq = acx * acx + acy * acy;
+  if (lengthSq <= tolerance * tolerance) {
+    return true;
+  }
+  final abx = b.x - a.x;
+  final aby = b.y - a.y;
+  final cross = abx * acy - aby * acx;
+  return cross * cross <= tolerance * tolerance * lengthSq;
+}
+
+bool _isBetween(
+  DrawPoint a,
+  DrawPoint b,
+  DrawPoint c,
+  double tolerance,
+) {
+  final minX = math.min(a.x, c.x) - tolerance;
+  final maxX = math.max(a.x, c.x) + tolerance;
+  final minY = math.min(a.y, c.y) - tolerance;
+  final maxY = math.max(a.y, c.y) + tolerance;
+  return b.x >= minX && b.x <= maxX && b.y >= minY && b.y <= maxY;
+}
+
 DrawRect _rectFromPointsList(List<DrawPoint> points) {
   if (points.isEmpty) {
     return const DrawRect(minX: 0, minY: 0, maxX: 0, maxY: 0);
@@ -529,6 +722,17 @@ List<DrawPoint> _resolveFinalArrowPoints(ArrowCreatingState interaction) {
     points.add(currentPoint);
   }
   return points;
+}
+
+@immutable
+class _PointSnapResult {
+  const _PointSnapResult({
+    required this.position,
+    this.guides = const <SnapGuide>[],
+  });
+
+  final DrawPoint position;
+  final List<SnapGuide> guides;
 }
 
 List<DrawPoint> _resolveArrowWorldPoints({

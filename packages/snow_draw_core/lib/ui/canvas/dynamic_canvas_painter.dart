@@ -330,7 +330,6 @@ class DynamicCanvasPainter extends CustomPainter {
         selectionConfig.render.strokeWidth / effectiveScale;
     final fillColor = selectionConfig.render.cornerFillColor;
     final strokeColor = selectionConfig.render.strokeColor;
-    final highlightFill = strokeColor.withValues(alpha: 0.18);
     final highlightStroke = strokeColor.withValues(alpha: 0.95);
 
     final hoveredHandle = renderKey.hoveredArrowHandle;
@@ -383,10 +382,20 @@ class DynamicCanvasPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..color = strokeColor
       ..isAntiAlias = true;
+    final turningStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = highlightStroke
+      ..isAntiAlias = true;
     final hoverOuterFillPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = strokeColor.withValues(alpha: 0.25)
       ..isAntiAlias = true;
+
+    final arrowData = effectiveElement.data as ArrowData;
+    final isPolyline = arrowData.arrowType == ArrowType.polyline;
+    final lastSegmentIndex =
+        overlay.addablePoints.isEmpty ? -1 : overlay.addablePoints.length - 1;
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
@@ -394,11 +403,25 @@ class DynamicCanvasPainter extends CustomPainter {
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      final fillPaint = isHighlighted ? addableFillPaintHighlighted : addableFillPaint;
-      final strokePaint = isHighlighted ? addableStrokePaintHighlighted : addableStrokePaint;
+      final isBendControl = isPolyline &&
+          handle.index > 0 &&
+          handle.index < lastSegmentIndex;
+      final fillPaint = isBendControl
+          ? turningFillPaint
+          : isHighlighted
+              ? addableFillPaintHighlighted
+              : addableFillPaint;
+      final strokePaint = isBendControl
+          ? isHighlighted
+              ? turningStrokePaintHighlighted
+              : turningStrokePaint
+          : isHighlighted
+              ? addableStrokePaintHighlighted
+              : addableStrokePaint;
+      final radius = isBendControl ? turnRadius : addableRadius;
       canvas
-        ..drawCircle(center, addableRadius, fillPaint)
-        ..drawCircle(center, addableRadius, strokePaint);
+        ..drawCircle(center, radius, fillPaint)
+        ..drawCircle(center, radius, strokePaint);
     }
 
     for (final handle in overlay.turningPoints) {
@@ -408,13 +431,8 @@ class DynamicCanvasPainter extends CustomPainter {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
       final fillPaint = turningFillPaint;
-      final strokePaint = isHighlighted
-          ? (Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = strokeWidth
-            ..color = highlightStroke
-            ..isAntiAlias = true)
-          : turningStrokePaint;
+      final strokePaint =
+          isHighlighted ? turningStrokePaintHighlighted : turningStrokePaint;
       canvas
         ..drawCircle(center, turnRadius, fillPaint)
         ..drawCircle(center, turnRadius, strokePaint);
@@ -652,6 +670,10 @@ class DynamicCanvasPainter extends CustomPainter {
 
     // Draw underline for each line
     for (final box in textBoxes) {
+      // Filter out boxes with width less than 0.5 (blank lines)
+      if (box.right - box.left < 0.5) {
+        continue;
+      }
       final y = box.bottom + textOffset.dy;
       final startX = box.left + textOffset.dx;
       final endX = box.right + textOffset.dx;

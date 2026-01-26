@@ -227,10 +227,8 @@ class TextEditReducer {
     final nextWidth = autoResize
         ? layout.size.width + horizontalPadding * 2
         : currentRect.width;
-    final shouldShrinkHeight = autoResize || allowShrinkHeight;
-    final desiredHeight = shouldShrinkHeight
-        ? minHeight
-        : math.max(currentRect.height, minHeight);
+    // Always adjust height to match actual content during text editing
+    final desiredHeight = minHeight;
 
     return DrawRect(
       minX: origin.x,

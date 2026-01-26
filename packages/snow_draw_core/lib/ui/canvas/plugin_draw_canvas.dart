@@ -101,10 +101,8 @@ class PluginDrawCanvas extends StatefulWidget {
 
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
-  static const _scrollStrokeWidthStep = 1.0;
-  static const _scrollFontSizeStep = 1.0;
-  static const _minFontSize = 12.0;
-  static const _minStrokeWidth = 1.0;
+  static const _strokeWidthSteps = [2.0, 4.0, 7.0];
+  static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
 
@@ -746,7 +744,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _adjustFontSize(event);
       return;
     }
-    if (toolTypeId == RectangleData.typeIdToken || toolTypeId == null) {
+    if (toolTypeId == RectangleData.typeIdToken ||
+        toolTypeId == ArrowData.typeIdToken ||
+        toolTypeId == null) {
       _adjustStrokeWidth(event);
       return;
     }
@@ -888,29 +888,58 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (delta == null) {
       return;
     }
-    final step = delta > 0 ? -_scrollStrokeWidthStep : _scrollStrokeWidthStep;
     final state = widget.store.state;
     final config = widget.store.config;
-    final base =
-        _resolveAverageSelectedStrokeWidth(state) ??
-        config.rectangleStyle.strokeWidth;
-    var next = base + step;
-    if (next < _minStrokeWidth) {
-      next = _minStrokeWidth;
-    }
+
+    // Determine base stroke width from selected elements or config
+    final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
+    final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
+    final base = arrowAverage ??
+                 rectangleAverage ??
+                 config.arrowStyle.strokeWidth;
+
+    // Find next stepped value
+    final next = _findNextSteppedValue(
+      base,
+      _strokeWidthSteps,
+      delta > 0, // scrolling up decreases value
+    );
+
     if (_doubleEquals(next, base)) {
       return;
     }
 
-    final targetIds = _resolveRectangleSelectionIds(state);
-    if (targetIds.isNotEmpty) {
+    // Update selected arrows
+    final arrowIds = _resolveArrowSelectionIds(state);
+    if (arrowIds.isNotEmpty) {
       unawaited(
         widget.store.dispatch(
-          UpdateElementsStyle(elementIds: targetIds, strokeWidth: next),
+          UpdateElementsStyle(elementIds: arrowIds, strokeWidth: next),
         ),
       );
     }
 
+    // Update selected rectangles
+    final rectangleIds = _resolveRectangleSelectionIds(state);
+    if (rectangleIds.isNotEmpty) {
+      unawaited(
+        widget.store.dispatch(
+          UpdateElementsStyle(elementIds: rectangleIds, strokeWidth: next),
+        ),
+      );
+    }
+
+    // Update arrow style config if needed
+    if (!_doubleEquals(next, config.arrowStyle.strokeWidth)) {
+      final nextStyle = config.arrowStyle.copyWith(strokeWidth: next);
+      unawaited(
+        widget.store.dispatch(
+          UpdateConfig(config.copyWith(arrowStyle: nextStyle)),
+        ),
+      );
+    }
+
+    // Update rectangle style config if needed
     if (!_doubleEquals(next, config.rectangleStyle.strokeWidth)) {
       final nextStyle = config.rectangleStyle.copyWith(strokeWidth: next);
       unawaited(
@@ -926,17 +955,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (delta == null) {
       return;
     }
-    final step = delta > 0 ? -_scrollFontSizeStep : _scrollFontSizeStep;
     final state = widget.store.state;
     final config = widget.store.config;
     final base =
         _resolveEditingFontSize(state) ??
         _resolveAverageSelectedFontSize(state) ??
         config.textStyle.fontSize;
-    var next = base + step;
-    if (next < _minFontSize) {
-      next = _minFontSize;
-    }
+
+    // Find next stepped value
+    final next = _findNextSteppedValue(
+      base,
+      _fontSizeSteps,
+      delta > 0, // scrolling up decreases value
+    );
+
     if (_doubleEquals(next, base)) {
       return;
     }
@@ -968,6 +1000,43 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return null;
   }
 
+  /// Finds the next stepped value based on current value and scroll direction.
+  ///
+  /// [currentValue] - The current value
+  /// [steps] - List of stepped values (must be sorted in ascending order)
+  /// [decrease] - true to find previous step, false to find next step
+  ///
+  /// Returns the next stepped value, or the current value if at the edge.
+  double _findNextSteppedValue(
+    double currentValue,
+    List<double> steps,
+    bool decrease,
+  ) {
+    if (steps.isEmpty) {
+      return currentValue;
+    }
+
+    if (decrease) {
+      // Find the largest step that is less than current value
+      for (int i = steps.length - 1; i >= 0; i--) {
+        if (steps[i] < currentValue - 0.01) {
+          return steps[i];
+        }
+      }
+      // Already at or below minimum, return first step
+      return steps.first;
+    } else {
+      // Find the smallest step that is greater than current value
+      for (int i = 0; i < steps.length; i++) {
+        if (steps[i] > currentValue + 0.01) {
+          return steps[i];
+        }
+      }
+      // Already at or above maximum, return last step
+      return steps.last;
+    }
+  }
+
   double? _resolveAverageSelectedStrokeWidth(DrawState state) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
@@ -979,6 +1048,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final element = state.domain.document.getElementById(id);
       final data = element?.data;
       if (data is RectangleData) {
+        total += data.strokeWidth;
+        count += 1;
+      }
+    }
+    if (count == 0) {
+      return null;
+    }
+    return total / count;
+  }
+
+  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return null;
+    }
+    var count = 0;
+    var total = 0.0;
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      final data = element?.data;
+      if (data is ArrowData) {
         total += data.strokeWidth;
         count += 1;
       }
@@ -1019,6 +1109,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     for (final id in selectedIds) {
       final element = state.domain.document.getElementById(id);
       if (element?.data is RectangleData) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  List<String> _resolveArrowSelectionIds(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const [];
+    }
+    final ids = <String>[];
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is ArrowData) {
         ids.add(id);
       }
     }

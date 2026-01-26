@@ -64,6 +64,16 @@ class ArrowRenderer extends ElementTypeRenderer {
       endInset: endInset,
     );
 
+    // Build arrowhead paths
+    final arrowheadPaths = _buildArrowheadPaths(
+      localPoints,
+      data,
+      startInset: startInset,
+      endInset: endInset,
+      startDirectionOffset: startDirectionOffset,
+      endDirectionOffset: endDirectionOffset,
+    );
+
     canvas.save();
     if (element.rotation != 0) {
       canvas
@@ -81,67 +91,81 @@ class ArrowRenderer extends ElementTypeRenderer {
       ..color = data.color.withValues(alpha: strokeOpacity)
       ..isAntiAlias = true;
 
-    _drawShaft(canvas, shaftPath, strokePaint, data.strokeStyle, data);
-    _drawArrowheads(
+    // Combine shaft and arrowheads into a single path to prevent transparency overlap
+    _drawCombinedArrow(
       canvas,
-      localPoints,
-      data,
+      shaftPath,
+      arrowheadPaths,
       strokePaint,
-      startInset: startInset,
-      endInset: endInset,
-      startDirectionOffset: startDirectionOffset,
-      endDirectionOffset: endDirectionOffset,
+      data.strokeStyle,
+      data,
     );
 
     canvas.restore();
   }
 
-  void _drawShaft(
+  void _drawCombinedArrow(
     Canvas canvas,
     Path shaftPath,
+    List<Path> arrowheadPaths,
     Paint strokePaint,
     StrokeStyle strokeStyle,
     ArrowData data,
   ) {
+    // Combine all paths into one to prevent transparency overlap issues
+    final combinedPath = Path();
+
     if (strokeStyle == StrokeStyle.solid) {
-      canvas.drawPath(shaftPath, strokePaint);
+      combinedPath.addPath(shaftPath, Offset.zero);
+      for (final arrowheadPath in arrowheadPaths) {
+        combinedPath.addPath(arrowheadPath, Offset.zero);
+      }
+      canvas.drawPath(combinedPath, strokePaint);
       return;
     }
 
     if (strokeStyle == StrokeStyle.dashed) {
       final dashLength = (8 + data.strokeWidth * 1.5).clamp(6.0, 16.0);
       final gapLength = (5 + data.strokeWidth * 1).clamp(4.0, 10.0);
-      final dashedPath = _buildDashedPath(
-        shaftPath,
-        dashLength,
-        gapLength,
-      );
-      canvas.drawPath(dashedPath, strokePaint);
+      final dashedShaft = _buildDashedPath(shaftPath, dashLength, gapLength);
+      combinedPath.addPath(dashedShaft, Offset.zero);
+      for (final arrowheadPath in arrowheadPaths) {
+        combinedPath.addPath(arrowheadPath, Offset.zero);
+      }
+      canvas.drawPath(combinedPath, strokePaint);
       return;
     }
 
+    // Dotted style - dots are filled circles, so we need different paint
     final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
     final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
-    final dottedPath = _buildDottedPath(shaftPath, dotSpacing, dotRadius);
+    final dottedShaft = _buildDottedPath(shaftPath, dotSpacing, dotRadius);
+    combinedPath.addPath(dottedShaft, Offset.zero);
+
     final dotPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = strokePaint.color
       ..isAntiAlias = true;
-    canvas.drawPath(dottedPath, dotPaint);
+    canvas.drawPath(combinedPath, dotPaint);
+
+    // Draw arrowheads with stroke paint for dotted style
+    for (final arrowheadPath in arrowheadPaths) {
+      canvas.drawPath(arrowheadPath, strokePaint);
+    }
   }
 
-  void _drawArrowheads(
-    Canvas canvas,
+  List<Path> _buildArrowheadPaths(
     List<Offset> points,
-    ArrowData data,
-    Paint paint, {
+    ArrowData data, {
     required double startInset,
     required double endInset,
     required double startDirectionOffset,
     required double endDirectionOffset,
   }) {
+    final paths = <Path>[];
+
     if (points.length < 2 || data.strokeWidth <= 0) {
-      return;
+      return paths;
     }
 
     final startDirection = ArrowGeometry.resolveStartDirection(
@@ -159,7 +183,7 @@ class ArrowRenderer extends ElementTypeRenderer {
         style: data.startArrowhead,
         strokeWidth: data.strokeWidth,
       );
-      canvas.drawPath(path, paint);
+      paths.add(path);
     }
 
     final endDirection = ArrowGeometry.resolveEndDirection(
@@ -176,8 +200,10 @@ class ArrowRenderer extends ElementTypeRenderer {
         style: data.endArrowhead,
         strokeWidth: data.strokeWidth,
       );
-      canvas.drawPath(path, paint);
+      paths.add(path);
     }
+
+    return paths;
   }
 
   Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
