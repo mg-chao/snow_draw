@@ -19,6 +19,12 @@ final _textLayoutCache = _LruCache<_TextLayoutCacheKey, TextLayoutMetrics>(
   maxEntries: 256,
 );
 
+// Tier 1: Font metrics cache (width-independent) for better cache utilization
+// during resize operations
+final _fontMetricsCache = _LruCache<_FontMetricsCacheKey, _FontMetrics>(
+  maxEntries: 64,
+);
+
 StrutStyle resolveTextStrutStyle(TextStyle style) =>
     StrutStyle.fromTextStyle(style, forceStrutHeight: true);
 
@@ -93,6 +99,7 @@ TextLayoutMetrics layoutText({
   TextWidthBasis widthBasis = TextWidthBasis.longestLine,
   TextStyle? styleOverride,
   Locale? locale,
+  bool isResizing = false,
 }) {
   final safeMaxWidth = maxWidth <= 0 ? 1.0 : maxWidth;
   final safeMinWidth = _resolveMinWidth(minWidth, safeMaxWidth);
@@ -123,6 +130,19 @@ TextLayoutMetrics layoutText({
     widthBasis: widthBasis,
     paintKey: _TextPaintKey.fromStyle(resolvedStyle),
     locale: locale,
+    isResizing: isResizing,
+  );
+
+  // Create font metrics cache key (width-independent)
+  final fontMetricsKey = _FontMetricsCacheKey(
+    fontSize: resolvedStyle.fontSize ?? data.fontSize,
+    fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
+    fontWeight: resolvedStyle.fontWeight,
+    fontStyle: resolvedStyle.fontStyle,
+    letterSpacing: resolvedStyle.letterSpacing,
+    wordSpacing: resolvedStyle.wordSpacing,
+    height: resolvedStyle.height,
+    locale: locale,
   );
 
   // Try to get from cache
@@ -144,29 +164,41 @@ TextLayoutMetrics layoutText({
     )..layout(minWidth: safeMinWidth, maxWidth: safeMaxWidth);
 
     final lineMetrics = painter.computeLineMetrics();
-    final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
-    final baseline = primaryLine?.baseline ??
-        painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-    final lineHeight = primaryLine?.height ?? painter.preferredLineHeight;
-    final ascent = primaryLine?.ascent ?? baseline;
-    final descent = primaryLine?.descent ?? _nonNegative(lineHeight - ascent);
-    final unscaledAscent = primaryLine?.unscaledAscent ?? ascent;
-    final leading = primaryLine == null
-        ? _nonNegative(lineHeight - ascent - descent)
-        : _nonNegative(
-            primaryLine.height - primaryLine.ascent - primaryLine.descent,
-          );
+
+    // Try to get font metrics from cache (width-independent)
+    final fontMetrics = _fontMetricsCache.getOrCreate(fontMetricsKey, () {
+      final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
+      final baseline = primaryLine?.baseline ??
+          painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+      final lineHeight = primaryLine?.height ?? painter.preferredLineHeight;
+      final ascent = primaryLine?.ascent ?? baseline;
+      final descent = primaryLine?.descent ?? _nonNegative(lineHeight - ascent);
+      final unscaledAscent = primaryLine?.unscaledAscent ?? ascent;
+      final leading = primaryLine == null
+          ? _nonNegative(lineHeight - ascent - descent)
+          : _nonNegative(
+              primaryLine.height - primaryLine.ascent - primaryLine.descent,
+            );
+      return _FontMetrics(
+        lineHeight: lineHeight,
+        baseline: baseline,
+        ascent: ascent,
+        descent: descent,
+        unscaledAscent: unscaledAscent,
+        leading: leading,
+      );
+    });
 
     return TextLayoutMetrics(
       painter: painter,
       size: painter.size,
-      lineHeight: lineHeight,
+      lineHeight: fontMetrics.lineHeight,
       lineMetrics: lineMetrics,
-      baseline: baseline,
-      ascent: ascent,
-      descent: descent,
-      unscaledAscent: unscaledAscent,
-      leading: leading,
+      baseline: fontMetrics.baseline,
+      ascent: fontMetrics.ascent,
+      descent: fontMetrics.descent,
+      unscaledAscent: fontMetrics.unscaledAscent,
+      leading: fontMetrics.leading,
     );
   });
 }
@@ -244,8 +276,9 @@ class _TextLayoutCacheKey {
     required this.widthBasis,
     required this.paintKey,
     required this.locale,
-  })  : maxWidth = _quantize(maxWidth),
-        minWidth = _quantize(minWidth);
+    required bool isResizing,
+  })  : maxWidth = isResizing ? _quantizeCoarse(maxWidth) : _quantize(maxWidth),
+        minWidth = isResizing ? _quantizeCoarse(minWidth) : _quantize(minWidth);
 
   final String text;
   final double fontSize;
@@ -263,7 +296,12 @@ class _TextLayoutCacheKey {
   final _TextPaintKey paintKey;
   final Locale? locale;
 
+  // Fine quantization for normal operations (0.1px precision)
   static double _quantize(double value) => (value * 10).roundToDouble() / 10;
+
+  // Coarse quantization for resize operations (5px precision)
+  static double _quantizeCoarse(double value) =>
+      (value / 5).roundToDouble() * 5;
 
   @override
   bool operator ==(Object other) =>
@@ -386,5 +424,74 @@ class _TextPaintKey {
         isAntiAlias,
         blendMode,
         shaderId,
+      );
+}
+
+/// Width-independent font metrics for two-tier caching
+@immutable
+class _FontMetrics {
+  const _FontMetrics({
+    required this.lineHeight,
+    required this.baseline,
+    required this.ascent,
+    required this.descent,
+    required this.unscaledAscent,
+    required this.leading,
+  });
+
+  final double lineHeight;
+  final double baseline;
+  final double ascent;
+  final double descent;
+  final double unscaledAscent;
+  final double leading;
+}
+
+/// Cache key for width-independent font metrics
+@immutable
+class _FontMetricsCacheKey {
+  const _FontMetricsCacheKey({
+    required this.fontSize,
+    required this.fontFamily,
+    required this.fontWeight,
+    required this.fontStyle,
+    required this.letterSpacing,
+    required this.wordSpacing,
+    required this.height,
+    required this.locale,
+  });
+
+  final double fontSize;
+  final String? fontFamily;
+  final FontWeight? fontWeight;
+  final FontStyle? fontStyle;
+  final double? letterSpacing;
+  final double? wordSpacing;
+  final double? height;
+  final Locale? locale;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _FontMetricsCacheKey &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.fontWeight == fontWeight &&
+          other.fontStyle == fontStyle &&
+          other.letterSpacing == letterSpacing &&
+          other.wordSpacing == wordSpacing &&
+          other.height == height &&
+          other.locale == locale;
+
+  @override
+  int get hashCode => Object.hash(
+        fontSize,
+        fontFamily,
+        fontWeight,
+        fontStyle,
+        letterSpacing,
+        wordSpacing,
+        height,
+        locale,
       );
 }

@@ -632,23 +632,9 @@ class ArrowGeometry {
         continue;
       }
 
-      final prevIsHorizontal = _segmentIsHorizontal(prev, current);
-      final nextIsHorizontal = _segmentIsHorizontal(current, next);
-
-      if (prevIsHorizontal == nextIsHorizontal) {
-        final prevDelta = current - prev;
-        final nextDelta = next - current;
-        final isReverse =
-            prevIsHorizontal
-                ? !_nearZero(prevDelta.dx) &&
-                    !_nearZero(nextDelta.dx) &&
-                    (prevDelta.dx * nextDelta.dx) < 0
-                : !_nearZero(prevDelta.dy) &&
-                    !_nearZero(nextDelta.dy) &&
-                    (prevDelta.dy * nextDelta.dy) < 0;
-        if (!isReverse) {
-          continue;
-        }
+      if (_isCollinear(prev, current, next) &&
+          _isSameDirection(prev, current, next)) {
+        continue;
       }
 
       simplified.add(current);
@@ -659,6 +645,28 @@ class ArrowGeometry {
       simplified.add(last);
     }
     return simplified;
+  }
+
+  static bool _isCollinear(Offset a, Offset b, Offset c) {
+    final acx = c.dx - a.dx;
+    final acy = c.dy - a.dy;
+    final lengthSq = acx * acx + acy * acy;
+    if (lengthSq <= _polylineSnapTolerance * _polylineSnapTolerance) {
+      return true;
+    }
+    final abx = b.dx - a.dx;
+    final aby = b.dy - a.dy;
+    final cross = abx * acy - aby * acx;
+    return cross * cross <=
+        _polylineSnapTolerance * _polylineSnapTolerance * lengthSq;
+  }
+
+  static bool _isSameDirection(Offset a, Offset b, Offset c) {
+    final abx = b.dx - a.dx;
+    final aby = b.dy - a.dy;
+    final bcx = c.dx - b.dx;
+    final bcy = c.dy - b.dy;
+    return (abx * bcx + aby * bcy) >= 0;
   }
 
   static Offset? _normalize(Offset value) {

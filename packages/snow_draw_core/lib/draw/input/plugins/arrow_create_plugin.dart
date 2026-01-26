@@ -30,8 +30,8 @@ class ArrowCreatePlugin extends DrawInputPlugin {
          },
        );
 
-  static const Duration _doubleClickThreshold = Duration(milliseconds: 400);
-  static const double _doubleClickToleranceMultiplier = 1.0;
+  static const Duration _doubleClickThreshold = Duration(milliseconds: 500);
+  static const double _doubleClickToleranceMultiplier = 2;
 
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
@@ -103,10 +103,9 @@ class ArrowCreatePlugin extends DrawInputPlugin {
       return unhandled();
     }
 
+    // Clear all state before starting a new arrow to ensure clean slate
+    _resetInteractionState();
     _pointerDownPosition = event.position;
-    _isDragging = false;
-    _isMultiPoint = false;
-    _clearClickState();
 
     await dispatch(
       CreateElement(
@@ -171,6 +170,7 @@ class ArrowCreatePlugin extends DrawInputPlugin {
     _pointerDownPosition = null;
     _isDragging = false;
 
+    // Only finish on drag if the user actually dragged a meaningful distance
     if (wasDragging && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetInteractionState();
@@ -179,26 +179,30 @@ class ArrowCreatePlugin extends DrawInputPlugin {
 
     final now = DateTime.now();
     if (!wasMultiPoint) {
+      // First click after initial point - enter multi-point mode
       _isMultiPoint = true;
       _recordClick(event.position, now);
       return handled(message: 'Arrow create multi-point started');
     }
 
+    // Check for double-click BEFORE adding the point
     final isDoubleClick =
         !wasDragging && _isDoubleClick(event.position, now);
 
+    if (isDoubleClick) {
+      // Double-click detected - finish without adding another point
+      await dispatch(const FinishCreateElement());
+      _resetInteractionState();
+      return handled(message: 'Arrow create finished (double-click)');
+    }
+
+    // Single click - add the point and continue
     await dispatch(
       AddArrowPoint(
         position: event.position,
         snapOverride: event.modifiers.control,
       ),
     );
-
-    if (isDoubleClick) {
-      await dispatch(const FinishCreateElement());
-      _resetInteractionState();
-      return handled(message: 'Arrow create finished');
-    }
 
     _recordClick(event.position, now);
     return handled(message: 'Arrow create point added');

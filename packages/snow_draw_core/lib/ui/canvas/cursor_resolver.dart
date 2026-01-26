@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/edit/free_transform/free_transform_context.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/types/edit_context.dart';
@@ -32,13 +33,16 @@ class CursorResolver {
       return _cursorForResizeMode(context.resizeMode, context.rotation);
     }
     if (context is RotateEditContext) {
-      return _grabCursor();
+      return _grabbingCursor();
     }
     if (context is MoveEditContext) {
       return SystemMouseCursors.move;
     }
     if (context is FreeTransformEditContext) {
       return _cursorForFreeTransform(context);
+    }
+    if (context is ArrowPointEditContext) {
+      return _grabbingCursor();
     }
 
     return SystemMouseCursors.move;
@@ -47,7 +51,7 @@ class CursorResolver {
   MouseCursor _cursorForFreeTransform(FreeTransformEditContext context) =>
       switch (context.currentMode) {
         FreeTransformMode.move => SystemMouseCursors.move,
-        FreeTransformMode.rotate => _grabCursor(),
+        FreeTransformMode.rotate => _grabbingCursor(),
         FreeTransformMode.resize => _cursorFromHint(
           CursorHint.resizeUpLeftDownRight,
         ),
@@ -193,10 +197,20 @@ class CursorResolver {
     }
   }
 
-  MouseCursor _grabCursor() {
+  MouseCursor grabCursor() {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       return SystemMouseCursors.click;
     }
     return SystemMouseCursors.grab;
   }
+
+  MouseCursor grabbingCursor() {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      return SystemMouseCursors.click;
+    }
+    return SystemMouseCursors.grabbing;
+  }
+
+  MouseCursor _grabCursor() => grabCursor();
+  MouseCursor _grabbingCursor() => grabbingCursor();
 }

@@ -1157,11 +1157,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     var kind = context.pointKind;
     var index = context.pointIndex;
     final transform = interaction.currentTransform;
-    if (transform is ArrowPointTransform &&
-        kind == ArrowPointKind.addable &&
-        transform.didInsert) {
-      kind = ArrowPointKind.turning;
-      index = context.pointIndex + 1;
+    if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
+      if (context.arrowType == ArrowType.polyline) {
+        final resolvedIndex = transform.activeIndex;
+        if (resolvedIndex != null) {
+          index = resolvedIndex;
+        }
+      } else if (transform.didInsert) {
+        kind = ArrowPointKind.turning;
+        index = context.pointIndex + 1;
+      }
     }
     return ArrowPointHandle(
       elementId: context.elementId,
@@ -1452,7 +1457,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
     );
     if (arrowHandle != null) {
-      return SystemMouseCursors.grab;
+      return _cursorResolver.grabCursor();
     }
 
     final stateView = _buildStateView(state);

@@ -88,22 +88,44 @@ class ArrowPointUtils {
       );
     }
 
+    final isPolyline = data.arrowType == ArrowType.polyline;
     final loopActive =
         points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;
 
     final turningPoints = <ArrowPointHandle>[];
-    for (var i = 0; i < points.length; i++) {
-      if (loopActive && (i == 0 || i == points.length - 1)) {
-        continue;
+    if (isPolyline) {
+      if (!loopActive) {
+        turningPoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: 0,
+            position: points.first,
+          ),
+        );
+        turningPoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: points.length - 1,
+            position: points.last,
+          ),
+        );
       }
-      turningPoints.add(
-        ArrowPointHandle(
-          elementId: element.id,
-          kind: ArrowPointKind.turning,
-          index: i,
-          position: points[i],
-        ),
-      );
+    } else {
+      for (var i = 0; i < points.length; i++) {
+        if (loopActive && (i == 0 || i == points.length - 1)) {
+          continue;
+        }
+        turningPoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: i,
+            position: points[i],
+          ),
+        );
+      }
     }
 
     final addablePoints = <ArrowPointHandle>[];
@@ -168,6 +190,7 @@ class ArrowPointUtils {
     final visualLoopOuterRadius =
         handleSize == null || handleSize <= 0 ? 0.0 : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
+    final isPolyline = data.arrowType == ArrowType.polyline;
     final loopActive =
         points.first.distanceSquared(points.last) <= loopThreshold * loopThreshold;
 
@@ -217,20 +240,39 @@ class ArrowPointUtils {
     if (visualPointRadius > turningHitRadius) {
       turningHitRadius = visualPointRadius;
     }
-    for (var i = 0; i < points.length; i++) {
-      if (loopActive && (i == 0 || i == points.length - 1)) {
-        continue;
+    if (isPolyline) {
+      if (!loopActive) {
+        final endpoints = <int>[0, points.length - 1];
+        for (final i in endpoints) {
+          final distanceSq = localPosition.distanceSquared(points[i]);
+          if (distanceSq <= turningHitRadius * turningHitRadius &&
+              distanceSq < nearestDistance) {
+            nearestDistance = distanceSq;
+            nearest = ArrowPointHandle(
+              elementId: element.id,
+              kind: ArrowPointKind.turning,
+              index: i,
+              position: points[i],
+            );
+          }
+        }
       }
-      final distanceSq = localPosition.distanceSquared(points[i]);
-      if (distanceSq <= turningHitRadius * turningHitRadius &&
-          distanceSq < nearestDistance) {
-        nearestDistance = distanceSq;
-        nearest = ArrowPointHandle(
-          elementId: element.id,
-          kind: ArrowPointKind.turning,
-          index: i,
-          position: points[i],
-        );
+    } else {
+      for (var i = 0; i < points.length; i++) {
+        if (loopActive && (i == 0 || i == points.length - 1)) {
+          continue;
+        }
+        final distanceSq = localPosition.distanceSquared(points[i]);
+        if (distanceSq <= turningHitRadius * turningHitRadius &&
+            distanceSq < nearestDistance) {
+          nearestDistance = distanceSq;
+          nearest = ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: i,
+            position: points[i],
+          );
+        }
       }
     }
     if (nearest != null) {
@@ -266,7 +308,10 @@ class ArrowPointUtils {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    return resolved
+    final effective = data.arrowType == ArrowType.polyline
+        ? ArrowGeometry.expandPolylinePoints(resolved)
+        : resolved;
+    return effective
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }

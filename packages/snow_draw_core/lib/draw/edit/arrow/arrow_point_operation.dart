@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
@@ -104,6 +105,7 @@ class ArrowPointOperation extends EditOperation {
       elementRect: element.rect,
       rotation: element.rotation,
       initialPoints: List<DrawPoint>.unmodifiable(points),
+      arrowType: data.arrowType,
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
       dragOffset: dragOffset,
@@ -208,20 +210,30 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
-    final rect = _calculateArrowRect(
-      points: points,
+
+    // Transform local-space points to world space, then back to local space
+    // with the new rect center. This preserves world-space positions while
+    // keeping the same rotation angle.
+    final result = _computeRectAndPoints(
+      localPoints: points,
+      oldRect: typedContext.elementRect,
+      rotation: typedContext.rotation,
       arrowType: data.arrowType,
       strokeWidth: data.strokeWidth,
     );
+
     final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: points,
-      rect: rect,
+      worldPoints: result.localPoints,
+      rect: result.rect,
     );
 
     final updatedData = data.copyWith(
       points: normalized,
     );
-    final updatedElement = element.copyWith(rect: rect, data: updatedData);
+    final updatedElement = element.copyWith(
+      rect: result.rect,
+      data: updatedData,
+    );
     final updatedElements = EditApply.replaceElementsById(
       elements: state.domain.document.elements,
       replacementsById: {updatedElement.id: updatedElement},
@@ -259,20 +271,30 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
-    final rect = _calculateArrowRect(
-      points: typedTransform.points,
+
+    // Transform local-space points to world space, then back to local space
+    // with the new rect center. This preserves world-space positions while
+    // keeping the same rotation angle.
+    final result = _computeRectAndPoints(
+      localPoints: typedTransform.points,
+      oldRect: typedContext.elementRect,
+      rotation: typedContext.rotation,
       arrowType: data.arrowType,
       strokeWidth: data.strokeWidth,
     );
+
     final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: typedTransform.points,
-      rect: rect,
+      worldPoints: result.localPoints,
+      rect: result.rect,
     );
 
     final updatedData = data.copyWith(
       points: normalized,
     );
-    final updatedElement = element.copyWith(rect: rect, data: updatedData);
+    final updatedElement = element.copyWith(
+      rect: result.rect,
+      data: updatedData,
+    );
 
     return buildEditPreview(
       state: state,
@@ -294,6 +316,7 @@ final class ArrowPointEditContext extends EditContext {
     required this.elementRect,
     required this.rotation,
     required this.initialPoints,
+    required this.arrowType,
     required this.pointKind,
     required this.pointIndex,
     required this.dragOffset,
@@ -303,6 +326,7 @@ final class ArrowPointEditContext extends EditContext {
   final DrawRect elementRect;
   final double rotation;
   final List<DrawPoint> initialPoints;
+  final ArrowType arrowType;
   final ArrowPointKind pointKind;
   final int pointIndex;
   final DrawPoint dragOffset;
@@ -339,6 +363,7 @@ _ArrowPointComputation _compute({
   final addThreshold = handleTolerance;
   final deleteThreshold = handleTolerance;
   final loopThreshold = handleTolerance * 1.5;
+  final isPolyline = context.arrowType == ArrowType.polyline;
 
   final target = currentPosition.translate(context.dragOffset);
   var updatedPoints = basePoints;
@@ -356,24 +381,52 @@ _ArrowPointComputation _compute({
         hasChanges: false,
       );
     }
-    if (!nextDidInsert) {
-      final distanceSq =
-          currentPosition.distanceSquared(context.startPosition);
-      if (distanceSq >= addThreshold * addThreshold) {
-        nextDidInsert = true;
-      } else {
-        return _ArrowPointComputation(
-          points: basePoints,
-          didInsert: false,
-          shouldDelete: false,
-          activeIndex: null,
-          hasChanges: false,
-        );
+    if (isPolyline) {
+      if (!nextDidInsert) {
+        final distanceSq =
+            currentPosition.distanceSquared(context.startPosition);
+        if (distanceSq >= addThreshold * addThreshold) {
+          nextDidInsert = true;
+        } else {
+          return _ArrowPointComputation(
+            points: basePoints,
+            didInsert: false,
+            shouldDelete: false,
+            activeIndex: null,
+            hasChanges: false,
+          );
+        }
       }
+      updatedPoints = _movePolylineSegment(
+        points: basePoints,
+        segmentIndex: context.pointIndex,
+        target: target,
+      );
+      updatedPoints = _simplifyPolylinePoints(updatedPoints);
+      activeIndex = _resolveNearestSegmentIndex(
+        points: updatedPoints,
+        target: target,
+      );
+    } else {
+      if (!nextDidInsert) {
+        final distanceSq =
+            currentPosition.distanceSquared(context.startPosition);
+        if (distanceSq >= addThreshold * addThreshold) {
+          nextDidInsert = true;
+        } else {
+          return _ArrowPointComputation(
+            points: basePoints,
+            didInsert: false,
+            shouldDelete: false,
+            activeIndex: null,
+            hasChanges: false,
+          );
+        }
+      }
+      activeIndex = context.pointIndex + 1;
+      updatedPoints = List<DrawPoint>.from(basePoints)
+        ..insert(activeIndex, target);
     }
-    activeIndex = context.pointIndex + 1;
-    updatedPoints = List<DrawPoint>.from(basePoints)
-      ..insert(activeIndex, target);
   } else {
     final index = switch (context.pointKind) {
       ArrowPointKind.loopStart => 0,
@@ -389,12 +442,31 @@ _ArrowPointComputation _compute({
         hasChanges: false,
       );
     }
-    updatedPoints = List<DrawPoint>.from(basePoints);
-    updatedPoints[index] = target;
+    if (isPolyline && index != 0 && index != basePoints.length - 1) {
+      return _ArrowPointComputation(
+        points: basePoints,
+        didInsert: nextDidInsert,
+        shouldDelete: false,
+        activeIndex: null,
+        hasChanges: false,
+      );
+    }
+    if (isPolyline) {
+      updatedPoints = _movePolylineEndpoint(
+        points: basePoints,
+        index: index,
+        target: target,
+      );
+      updatedPoints = _simplifyPolylinePoints(updatedPoints);
+    } else {
+      updatedPoints = List<DrawPoint>.from(basePoints);
+      updatedPoints[index] = target;
+    }
     activeIndex = index;
   }
 
-  if (activeIndex == 0 || activeIndex == updatedPoints.length - 1) {
+  if (context.pointKind != ArrowPointKind.addable &&
+      (activeIndex == 0 || activeIndex == updatedPoints.length - 1)) {
     final start = updatedPoints.first;
     final end = updatedPoints.last;
     if (start.distanceSquared(end) <= loopThreshold * loopThreshold) {
@@ -407,16 +479,20 @@ _ArrowPointComputation _compute({
   }
 
   var shouldDelete = false;
-  final resolvedIndex = activeIndex;
-  if (resolvedIndex > 0 && resolvedIndex < updatedPoints.length - 1) {
-    final targetPoint = updatedPoints[resolvedIndex];
-    final prev = updatedPoints[resolvedIndex - 1];
-    final next = updatedPoints[resolvedIndex + 1];
-    if (targetPoint.distanceSquared(prev) <=
-            deleteThreshold * deleteThreshold ||
-        targetPoint.distanceSquared(next) <=
-            deleteThreshold * deleteThreshold) {
-      shouldDelete = true;
+  if (!isPolyline) {
+    final resolvedIndex = activeIndex;
+    if (resolvedIndex != null &&
+        resolvedIndex > 0 &&
+        resolvedIndex < updatedPoints.length - 1) {
+      final targetPoint = updatedPoints[resolvedIndex];
+      final prev = updatedPoints[resolvedIndex - 1];
+      final next = updatedPoints[resolvedIndex + 1];
+      if (targetPoint.distanceSquared(prev) <=
+              deleteThreshold * deleteThreshold ||
+          targetPoint.distanceSquared(next) <=
+              deleteThreshold * deleteThreshold) {
+        shouldDelete = true;
+      }
     }
   }
 
@@ -441,6 +517,102 @@ DrawRect _calculateArrowRect({
     worldPoints: points,
     arrowType: arrowType,
   );
+}
+
+/// Result of computing the new rect and adjusted local points.
+@immutable
+final class _RectAndPointsResult {
+  const _RectAndPointsResult({
+    required this.rect,
+    required this.localPoints,
+  });
+
+  final DrawRect rect;
+  final List<DrawPoint> localPoints;
+}
+
+/// Computes the new rect and transforms points to preserve world-space positions.
+///
+/// When a control point is dragged outside the current bounding rect, the rect
+/// must be recalculated. If the element is rotated, simply recalculating the rect
+/// would change the rotation pivot (rect center), causing other points to shift
+/// in world space.
+///
+/// This function finds the optimal rect center C such that when world points are
+/// transformed to local space using C, the bounding box of local points has
+/// center C. This ensures all points maintain their world-space positions.
+///
+/// The mathematical solution is: C = rotate(W'_center, θ)
+/// Where W'_center is the center of the bounding box of world points rotated
+/// by -θ around the origin.
+_RectAndPointsResult _computeRectAndPoints({
+  required List<DrawPoint> localPoints,
+  required DrawRect oldRect,
+  required double rotation,
+  required ArrowType arrowType,
+  required double strokeWidth,
+}) {
+  // For non-rotated elements, no transformation needed
+  if (rotation == 0) {
+    final rect = _calculateArrowRect(
+      points: localPoints,
+      arrowType: arrowType,
+      strokeWidth: strokeWidth,
+    );
+    return _RectAndPointsResult(rect: rect, localPoints: localPoints);
+  }
+
+  // Step 1: Transform local-space points to world space using the old rect center
+  final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
+  final worldPoints = localPoints
+      .map((point) => oldSpace.toWorld(point))
+      .toList(growable: false);
+
+  // Step 2: Rotate world points by -θ around the origin
+  final cosTheta = math.cos(rotation);
+  final sinTheta = math.sin(rotation);
+  final rotatedPoints = worldPoints.map((w) {
+    return DrawPoint(
+      x: w.x * cosTheta + w.y * sinTheta,
+      y: -w.x * sinTheta + w.y * cosTheta,
+    );
+  }).toList(growable: false);
+
+  // Step 3: Calculate the bounding box of rotated points
+  var minX = rotatedPoints.first.x;
+  var maxX = rotatedPoints.first.x;
+  var minY = rotatedPoints.first.y;
+  var maxY = rotatedPoints.first.y;
+  for (final p in rotatedPoints.skip(1)) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  final rotatedCenterX = (minX + maxX) / 2;
+  final rotatedCenterY = (minY + maxY) / 2;
+
+  // Step 4: The new rect center is the rotated center rotated back by θ
+  // C = rotate(W'_center, θ)
+  final newCenterX = rotatedCenterX * cosTheta - rotatedCenterY * sinTheta;
+  final newCenterY = rotatedCenterX * sinTheta + rotatedCenterY * cosTheta;
+  final newCenter = DrawPoint(x: newCenterX, y: newCenterY);
+
+  // Step 5: Transform world points to local space using the new center
+  final newSpace = ElementSpace(rotation: rotation, origin: newCenter);
+  final newLocalPoints = worldPoints
+      .map((point) => newSpace.fromWorld(point))
+      .toList(growable: false);
+
+  // Step 6: Calculate the rect from local points
+  // The bounding box center should now equal newCenter
+  final rect = _calculateArrowRect(
+    points: newLocalPoints,
+    arrowType: arrowType,
+    strokeWidth: strokeWidth,
+  );
+
+  return _RectAndPointsResult(rect: rect, localPoints: newLocalPoints);
 }
 
 DrawRect _rectFromPoints(List<DrawPoint> points) {
@@ -472,7 +644,10 @@ List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  return resolved
+  final effective = data.arrowType == ArrowType.polyline
+      ? ArrowGeometry.expandPolylinePoints(resolved)
+      : resolved;
+  return effective
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
 }
@@ -538,4 +713,194 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
     }
   }
   return true;
+}
+
+List<DrawPoint> _movePolylineSegment({
+  required List<DrawPoint> points,
+  required int segmentIndex,
+  required DrawPoint target,
+}) {
+  if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
+    return points;
+  }
+  if (segmentIndex == 0 || segmentIndex == points.length - 2) {
+    return _offsetPolylineEndpointSegment(
+      points: points,
+      segmentIndex: segmentIndex,
+      target: target,
+    );
+  }
+  final start = points[segmentIndex];
+  final end = points[segmentIndex + 1];
+  final isHorizontal = _segmentIsHorizontal(start, end);
+  final updated = List<DrawPoint>.from(points);
+  if (isHorizontal) {
+    updated[segmentIndex] = DrawPoint(x: start.x, y: target.y);
+    updated[segmentIndex + 1] = DrawPoint(x: end.x, y: target.y);
+  } else {
+    updated[segmentIndex] = DrawPoint(x: target.x, y: start.y);
+    updated[segmentIndex + 1] = DrawPoint(x: target.x, y: end.y);
+  }
+  return updated;
+}
+
+List<DrawPoint> _offsetPolylineEndpointSegment({
+  required List<DrawPoint> points,
+  required int segmentIndex,
+  required DrawPoint target,
+}) {
+  if (points.length < 2 ||
+      segmentIndex < 0 ||
+      segmentIndex >= points.length - 1) {
+    return points;
+  }
+  final start = points[segmentIndex];
+  final end = points[segmentIndex + 1];
+  if (points.length == 2) {
+    return [start, target, end];
+  }
+  final isHorizontal = _segmentIsHorizontal(start, end);
+  final movedStart = isHorizontal
+      ? DrawPoint(x: start.x, y: target.y)
+      : DrawPoint(x: target.x, y: start.y);
+  final movedEnd = isHorizontal
+      ? DrawPoint(x: end.x, y: target.y)
+      : DrawPoint(x: target.x, y: end.y);
+  if (segmentIndex == 0) {
+    return [
+      start,
+      movedStart,
+      movedEnd,
+      ...points.sublist(2),
+    ];
+  }
+  return [
+    ...points.sublist(0, points.length - 2),
+    movedStart,
+    movedEnd,
+    end,
+  ];
+}
+
+int? _resolveNearestSegmentIndex({
+  required List<DrawPoint> points,
+  required DrawPoint target,
+}) {
+  if (points.length < 2) {
+    return null;
+  }
+  var nearestIndex = 0;
+  var nearestDistance = double.infinity;
+  for (var i = 0; i < points.length - 1; i++) {
+    final mid = DrawPoint(
+      x: (points[i].x + points[i + 1].x) / 2,
+      y: (points[i].y + points[i + 1].y) / 2,
+    );
+    final distance = target.distanceSquared(mid);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestIndex = i;
+    }
+  }
+  return nearestIndex;
+}
+
+List<DrawPoint> _movePolylineEndpoint({
+  required List<DrawPoint> points,
+  required int index,
+  required DrawPoint target,
+}) {
+  final updated = List<DrawPoint>.from(points);
+  if (index < 0 || index >= updated.length) {
+    return updated;
+  }
+  updated[index] = target;
+  if (updated.length < 3) {
+    return updated;
+  }
+  if (index == 0) {
+    final next = updated[1];
+    final wasHorizontal = _segmentIsHorizontal(points[0], points[1]);
+    updated[1] = DrawPoint(
+      x: wasHorizontal ? next.x : target.x,
+      y: wasHorizontal ? target.y : next.y,
+    );
+  } else if (index == updated.length - 1) {
+    final prev = updated[updated.length - 2];
+    final wasHorizontal = _segmentIsHorizontal(
+      points[points.length - 2],
+      points[points.length - 1],
+    );
+    updated[updated.length - 2] = DrawPoint(
+      x: wasHorizontal ? prev.x : target.x,
+      y: wasHorizontal ? target.y : prev.y,
+    );
+  }
+  return updated;
+}
+
+List<DrawPoint> _simplifyPolylinePoints(List<DrawPoint> points) {
+  if (points.length < 3) {
+    return points;
+  }
+  final simplified = <DrawPoint>[points.first];
+  for (var i = 1; i < points.length - 1; i++) {
+    final prev = simplified.last;
+    final current = points[i];
+    final next = points[i + 1];
+
+    if (_isSamePoint(prev, current)) {
+      continue;
+    }
+
+    if (_isCollinear(prev, current, next) &&
+        _isSameDirection(prev, current, next)) {
+      continue;
+    }
+    simplified.add(current);
+  }
+  final last = points.last;
+  if (simplified.isEmpty || !_isSamePoint(simplified.last, last)) {
+    simplified.add(last);
+  }
+  return simplified.length < 2 ? points : simplified;
+}
+
+bool _nearZero(double value) => value.abs() <= 1.0;
+
+bool _isSamePoint(DrawPoint a, DrawPoint b) =>
+    _nearZero(a.x - b.x) && _nearZero(a.y - b.y);
+
+bool _isCollinear(DrawPoint a, DrawPoint b, DrawPoint c) {
+  const tolerance = 1.0;
+  final acx = c.x - a.x;
+  final acy = c.y - a.y;
+  final lengthSq = acx * acx + acy * acy;
+  if (lengthSq <= tolerance * tolerance) {
+    return true;
+  }
+  final abx = b.x - a.x;
+  final aby = b.y - a.y;
+  final cross = abx * acy - aby * acx;
+  return cross * cross <= tolerance * tolerance * lengthSq;
+}
+
+bool _isSameDirection(DrawPoint a, DrawPoint b, DrawPoint c) {
+  final abx = b.x - a.x;
+  final aby = b.y - a.y;
+  final bcx = c.x - b.x;
+  final bcy = c.y - b.y;
+  return (abx * bcx + aby * bcy) >= 0;
+}
+
+bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) {
+  final dx = end.x - start.x;
+  final dy = end.y - start.y;
+  if (_nearZero(dy) && !_nearZero(dx)) {
+    return true;
+  }
+  if (_nearZero(dx) && !_nearZero(dy)) {
+    return false;
+  }
+  return dx.abs() > dy.abs();
 }
