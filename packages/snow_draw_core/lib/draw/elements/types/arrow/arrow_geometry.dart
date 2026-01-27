@@ -15,6 +15,7 @@ class ArrowGeometry {
     DrawPoint(x: 1, y: 1),
   ];
   static const _polylineSnapTolerance = 1.0;
+  static const _polylineCreationOffset = 40.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -239,7 +240,57 @@ class ArrowGeometry {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
+    if (points.length == 2) {
+      final start = points.first;
+      final end = points.last;
+      final created = _createPolylineCreationPoints(start: start, end: end);
+      return normalizePolylinePoints(created);
+    }
     return normalizePolylinePoints(points);
+  }
+
+  static List<DrawPoint> _createPolylineCreationPoints({
+    required DrawPoint start,
+    required DrawPoint end,
+  }) {
+    final startOffset = Offset(start.x, start.y);
+    final endOffset = Offset(end.x, end.y);
+    if (_isSamePoint(startOffset, endOffset)) {
+      return [start, end];
+    }
+
+    final dx = end.x - start.x;
+    final dy = end.y - start.y;
+    final alignedVertical = _nearZero(dx);
+    final alignedHorizontal = _nearZero(dy);
+    var firstAxis = _dominantPolylineAxis(startOffset, endOffset);
+    if (alignedVertical && !alignedHorizontal) {
+      firstAxis = _PolylineAxis.horizontal;
+    } else if (alignedHorizontal && !alignedVertical) {
+      firstAxis = _PolylineAxis.vertical;
+    }
+
+    if (firstAxis == _PolylineAxis.horizontal) {
+      final midX = alignedVertical
+          ? start.x + _resolveCreationOffset(dy)
+          : (start.x + end.x) / 2;
+      return [
+        start,
+        DrawPoint(x: midX, y: start.y),
+        DrawPoint(x: midX, y: end.y),
+        end,
+      ];
+    }
+
+    final midY = alignedHorizontal
+        ? start.y + _resolveCreationOffset(dx)
+        : (start.y + end.y) / 2;
+    return [
+      start,
+      DrawPoint(x: start.x, y: midY),
+      DrawPoint(x: end.x, y: midY),
+      end,
+    ];
   }
 
   static Path buildArrowheadPath({
@@ -565,6 +616,15 @@ class ArrowGeometry {
   }
 
   static bool _nearZero(double value) => value.abs() <= _polylineSnapTolerance;
+
+  static double _resolveCreationOffset(double delta) {
+    if (_nearZero(delta)) {
+      return 0;
+    }
+    final magnitude = delta.abs();
+    final offset = math.min(magnitude / 2, _polylineCreationOffset);
+    return delta.isNegative ? -offset : offset;
+  }
 
   static bool _isSamePoint(Offset a, Offset b) =>
       _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
