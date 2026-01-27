@@ -533,7 +533,9 @@ _BindingSnapResult _snapBindingPoint({
   if (bindingDistance <= 0) {
     return _BindingSnapResult(position: position);
   }
-  final targets = _resolveBindingTargets(state, position, bindingDistance);
+  final bindingSearchDistance =
+      ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
+  final targets = _resolveBindingTargets(state, position, bindingSearchDistance);
   if (targets.isEmpty) {
     return _BindingSnapResult(position: position);
   }

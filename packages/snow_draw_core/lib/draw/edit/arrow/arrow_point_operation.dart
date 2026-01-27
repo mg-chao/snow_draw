@@ -191,6 +191,8 @@ class ArrowPointOperation extends EditOperation {
     final zoom = state.application.view.camera.zoom;
     final effectiveZoom = zoom == 0 ? 1.0 : zoom;
     final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
+    final bindingSearchDistance =
+        ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
     final allowNewBinding =
         snapConfig.enableArrowBinding &&
         !modifiers.snapOverride &&
@@ -200,14 +202,14 @@ class ArrowPointOperation extends EditOperation {
       typedContext.rotation,
       localPosition.translate(typedContext.dragOffset),
     );
-  final bindingTargets =
+    final bindingTargets =
         element == null || bindingDistance <= 0
             ? const <ElementState>[]
             : _resolveBindingTargetsCached(
                 state: state,
                 context: typedContext,
                 position: bindingSearchPoint,
-                distance: bindingDistance,
+                distance: bindingSearchDistance,
               );
     final result = _compute(
       context: typedContext,

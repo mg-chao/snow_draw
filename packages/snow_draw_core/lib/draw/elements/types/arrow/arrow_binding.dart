@@ -89,6 +89,9 @@ final class ArrowBindingResult {
 class ArrowBindingUtils {
   const ArrowBindingUtils._();
 
+  static double resolveBindingSearchDistance(double snapDistance) =>
+      snapDistance * (1 + _bindingHitToleranceFactor);
+
   static ArrowBindingResult? resolveBindingCandidate({
     required DrawPoint worldPoint,
     required Iterable<ElementState> targets,
@@ -253,7 +256,8 @@ final class _BindingHit {
   final double distance;
 }
 
-const _bindingGapBase = 10.0;
+const _bindingGapBase = 6.0;
+const _bindingHitToleranceFactor = 0.4;
 const _intersectionEpsilon = 1e-6;
 const _insideEpsilon = 1e-6;
 
@@ -378,7 +382,7 @@ _BindingHit? _resolveBindingHit({
     localReference: localReference,
   );
   final distance = localPoint.distance(anchorPoint);
-  if (distance > snapDistance) {
+  if (distance > snapDistance * (1 + _bindingHitToleranceFactor)) {
     return null;
   }
 
