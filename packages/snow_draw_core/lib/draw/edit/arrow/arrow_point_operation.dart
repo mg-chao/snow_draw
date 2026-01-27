@@ -465,15 +465,27 @@ _ArrowPointComputation _compute({
     }
   }
 
+  final resolvedActiveIndex = activeIndex;
   if (context.pointKind != ArrowPointKind.addable &&
-      (activeIndex == 0 || activeIndex == updatedPoints.length - 1)) {
+      resolvedActiveIndex != null &&
+      (resolvedActiveIndex == 0 ||
+          resolvedActiveIndex == updatedPoints.length - 1)) {
     final start = updatedPoints.first;
     final end = updatedPoints.last;
     if (start.distanceSquared(end) <= loopThreshold * loopThreshold) {
-      if (activeIndex == 0) {
-        updatedPoints[0] = end;
+      if (isPolyline) {
+        updatedPoints = _mergePolylineLoopPoints(
+          points: updatedPoints,
+          activeIndex: resolvedActiveIndex,
+        );
+        activeIndex =
+            resolvedActiveIndex == 0 ? 0 : updatedPoints.length - 1;
       } else {
-        updatedPoints[updatedPoints.length - 1] = start;
+        if (resolvedActiveIndex == 0) {
+          updatedPoints[0] = end;
+        } else {
+          updatedPoints[updatedPoints.length - 1] = start;
+        }
       }
     }
   }
@@ -810,6 +822,56 @@ List<DrawPoint> _normalizePolylinePoints(List<DrawPoint> points) {
     return List<DrawPoint>.from(points);
   }
   return List<DrawPoint>.from(ArrowGeometry.normalizePolylinePoints(points));
+}
+
+DrawPoint _alignPolylineNeighbor({
+  required DrawPoint anchor,
+  required DrawPoint neighbor,
+  required bool wasHorizontal,
+}) =>
+    wasHorizontal
+        ? DrawPoint(x: neighbor.x, y: anchor.y)
+        : DrawPoint(x: anchor.x, y: neighbor.y);
+
+List<DrawPoint> _mergePolylineLoopPoints({
+  required List<DrawPoint> points,
+  required int activeIndex,
+}) {
+  if (points.length < 2) {
+    return List<DrawPoint>.from(points);
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  final lastIndex = updated.length - 1;
+
+  if (activeIndex == 0) {
+    final end = updated[lastIndex];
+    updated[0] = end;
+    if (updated.length > 1) {
+      final wasHorizontal = _segmentIsHorizontal(points[0], points[1]);
+      updated[1] = _alignPolylineNeighbor(
+        anchor: end,
+        neighbor: updated[1],
+        wasHorizontal: wasHorizontal,
+      );
+    }
+  } else if (activeIndex == lastIndex) {
+    final start = updated[0];
+    updated[lastIndex] = start;
+    if (updated.length > 1) {
+      final wasHorizontal = _segmentIsHorizontal(
+        points[lastIndex - 1],
+        points[lastIndex],
+      );
+      updated[lastIndex - 1] = _alignPolylineNeighbor(
+        anchor: start,
+        neighbor: updated[lastIndex - 1],
+        wasHorizontal: wasHorizontal,
+      );
+    }
+  }
+
+  return _normalizePolylinePoints(updated);
 }
 
 bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
