@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
@@ -217,6 +218,18 @@ class FreeTransformOperation extends EditOperation {
         }
       }
       updatedById[entry.key] = updated;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     final newSelectionBounds = transform.applyToRect(

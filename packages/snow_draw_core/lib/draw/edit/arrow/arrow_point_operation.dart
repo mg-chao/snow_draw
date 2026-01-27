@@ -1,13 +1,15 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
 import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
+import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
+import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -122,9 +124,17 @@ class ArrowPointOperation extends EditOperation {
       context,
       operationName: 'ArrowPointOperation.initialTransform',
     );
+    final element = state.domain.document.getElementById(
+      typedContext.elementId,
+    );
+    final data = element?.data is ArrowData
+        ? element!.data as ArrowData
+        : null;
     return ArrowPointTransform(
       currentPosition: startPosition,
       points: typedContext.initialPoints,
+      startBinding: data?.startBinding,
+      endBinding: data?.endBinding,
     );
   }
 
@@ -151,13 +161,32 @@ class ArrowPointOperation extends EditOperation {
       typedContext.rotation,
       currentPosition,
     );
+    final element = state.domain.document.getElementById(
+      typedContext.elementId,
+    );
+    final data = element?.data is ArrowData
+        ? element!.data as ArrowData
+        : null;
+    final bindingTargets = element == null
+        ? const <ElementState>[]
+        : _resolveBindingTargets(state, element.id);
     final zoom = state.application.view.camera.zoom;
+    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+    final snapConfig = config.snap;
+    final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
+    final allowNewBinding =
+        snapConfig.enableArrowBinding && !modifiers.snapOverride;
     final result = _compute(
       context: typedContext,
       currentPosition: localPosition,
       didInsert: typedTransform.didInsert,
       config: config,
       zoom: zoom,
+      startBinding: typedTransform.startBinding ?? data?.startBinding,
+      endBinding: typedTransform.endBinding ?? data?.endBinding,
+      bindingTargets: bindingTargets,
+      bindingDistance: bindingDistance,
+      allowNewBinding: allowNewBinding,
     );
 
     final nextTransform = typedTransform.copyWith(
@@ -167,6 +196,8 @@ class ArrowPointOperation extends EditOperation {
       didInsert: result.didInsert,
       shouldDelete: result.shouldDelete,
       hasChanges: result.hasChanges,
+      startBinding: result.startBinding,
+      endBinding: result.endBinding,
     );
 
     return EditUpdateResult<EditTransform>(transform: nextTransform);
@@ -214,7 +245,7 @@ class ArrowPointOperation extends EditOperation {
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = _computeRectAndPoints(
+    final result = computeArrowRectAndPoints(
       localPoints: points,
       oldRect: typedContext.elementRect,
       rotation: typedContext.rotation,
@@ -227,7 +258,11 @@ class ArrowPointOperation extends EditOperation {
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(points: normalized);
+    final updatedData = data.copyWith(
+      points: normalized,
+      startBinding: typedTransform.startBinding,
+      endBinding: typedTransform.endBinding,
+    );
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,
@@ -275,7 +310,7 @@ class ArrowPointOperation extends EditOperation {
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = _computeRectAndPoints(
+    final result = computeArrowRectAndPoints(
       localPoints: typedTransform.points,
       oldRect: typedContext.elementRect,
       rotation: typedContext.rotation,
@@ -288,7 +323,11 @@ class ArrowPointOperation extends EditOperation {
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(points: normalized);
+    final updatedData = data.copyWith(
+      points: normalized,
+      startBinding: typedTransform.startBinding,
+      endBinding: typedTransform.endBinding,
+    );
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,
@@ -338,6 +377,8 @@ final class _ArrowPointComputation {
     required this.shouldDelete,
     required this.activeIndex,
     required this.hasChanges,
+    required this.startBinding,
+    required this.endBinding,
   });
 
   final List<DrawPoint> points;
@@ -345,6 +386,8 @@ final class _ArrowPointComputation {
   final bool shouldDelete;
   final int? activeIndex;
   final bool hasChanges;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
 }
 
 _ArrowPointComputation _compute({
@@ -353,6 +396,11 @@ _ArrowPointComputation _compute({
   required bool didInsert,
   required DrawConfig config,
   required double zoom,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required List<ElementState> bindingTargets,
+  required double bindingDistance,
+  required bool allowNewBinding,
 }) {
   final basePoints = List<DrawPoint>.from(context.initialPoints);
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
@@ -363,9 +411,11 @@ _ArrowPointComputation _compute({
   final loopThreshold = handleTolerance * 1.5;
   final isPolyline = context.arrowType == ArrowType.polyline;
 
-  final target = currentPosition.translate(context.dragOffset);
+  var target = currentPosition.translate(context.dragOffset);
   var updatedPoints = basePoints;
   var nextDidInsert = didInsert;
+  var nextStartBinding = startBinding;
+  var nextEndBinding = endBinding;
   int? activeIndex;
 
   if (context.pointKind == ArrowPointKind.addable) {
@@ -376,6 +426,8 @@ _ArrowPointComputation _compute({
         shouldDelete: false,
         activeIndex: null,
         hasChanges: false,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
       );
     }
     if (isPolyline) {
@@ -392,6 +444,8 @@ _ArrowPointComputation _compute({
             shouldDelete: false,
             activeIndex: null,
             hasChanges: false,
+            startBinding: nextStartBinding,
+            endBinding: nextEndBinding,
           );
         }
       }
@@ -419,6 +473,8 @@ _ArrowPointComputation _compute({
             shouldDelete: false,
             activeIndex: null,
             hasChanges: false,
+            startBinding: nextStartBinding,
+            endBinding: nextEndBinding,
           );
         }
       }
@@ -439,6 +495,8 @@ _ArrowPointComputation _compute({
         shouldDelete: false,
         activeIndex: null,
         hasChanges: false,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
       );
     }
     if (isPolyline && index != 0 && index != basePoints.length - 1) {
@@ -448,7 +506,50 @@ _ArrowPointComputation _compute({
         shouldDelete: false,
         activeIndex: null,
         hasChanges: false,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
       );
+    }
+    final isEndpoint = index == 0 || index == basePoints.length - 1;
+    if (isEndpoint) {
+      final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
+      final referencePoint = basePoints.length > 1
+          ? _toWorldPosition(
+              context.elementRect,
+              context.rotation,
+              basePoints[index == 0 ? 1 : basePoints.length - 2],
+            )
+          : null;
+      final candidate = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: _toWorldPosition(
+          context.elementRect,
+          context.rotation,
+          target,
+        ),
+        targets: bindingTargets,
+        snapDistance: bindingDistance,
+        preferredBinding: existingBinding,
+        allowNewBinding: allowNewBinding,
+        referencePoint: referencePoint,
+      );
+      if (candidate != null) {
+        target = _toLocalPosition(
+          context.elementRect,
+          context.rotation,
+          candidate.snapPoint,
+        );
+        if (index == 0) {
+          nextStartBinding = candidate.binding;
+        } else {
+          nextEndBinding = candidate.binding;
+        }
+      } else {
+        if (index == 0) {
+          nextStartBinding = null;
+        } else {
+          nextEndBinding = null;
+        }
+      }
     }
     if (isPolyline) {
       updatedPoints = _movePolylineEndpoint(
@@ -509,130 +610,20 @@ _ArrowPointComputation _compute({
   }
 
   final hasChanges = !_pointsEqual(basePoints, updatedPoints) || nextDidInsert;
+  final bindingChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
 
   return _ArrowPointComputation(
     points: List<DrawPoint>.unmodifiable(updatedPoints),
     didInsert: nextDidInsert,
     shouldDelete: shouldDelete,
     activeIndex: activeIndex,
-    hasChanges: hasChanges,
+    hasChanges: hasChanges || bindingChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
   );
 }
 
-/// Calculates accurate bounding rect for arrow, accounting for curved paths.
-DrawRect _calculateArrowRect({
-  required List<DrawPoint> points,
-  required ArrowType arrowType,
-  required double strokeWidth,
-}) => ArrowGeometry.calculatePathBounds(
-  worldPoints: points,
-  arrowType: arrowType,
-);
-
-/// Result of computing the new rect and adjusted local points.
-@immutable
-final class _RectAndPointsResult {
-  const _RectAndPointsResult({required this.rect, required this.localPoints});
-
-  final DrawRect rect;
-  final List<DrawPoint> localPoints;
-}
-
-/// Computes the new rect and transforms points to preserve world-space
-///  positions.
-///
-/// When a control point is dragged outside the current bounding rect, the rect
-/// must be recalculated. If the element is rotated, simply recalculating the
-/// rect
-/// would change the rotation pivot (rect center), causing other points to shift
-/// in world space.
-///
-/// This function finds the optimal rect center C such that when world points
-/// are
-/// transformed to local space using C, the bounding box of local points has
-/// center C. This ensures all points maintain their world-space positions.
-///
-/// The mathematical solution is: C = rotate(W'_center, theta)
-/// Where W'_center is the center of the bounding box of world points rotated
-/// by -theta around the origin.
-_RectAndPointsResult _computeRectAndPoints({
-  required List<DrawPoint> localPoints,
-  required DrawRect oldRect,
-  required double rotation,
-  required ArrowType arrowType,
-  required double strokeWidth,
-}) {
-  // For non-rotated elements, no transformation needed
-  if (rotation == 0) {
-    final rect = _calculateArrowRect(
-      points: localPoints,
-      arrowType: arrowType,
-      strokeWidth: strokeWidth,
-    );
-    return _RectAndPointsResult(rect: rect, localPoints: localPoints);
-  }
-
-  // Step 1: Transform local-space points to world space using the old rect
-  // center
-  final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
-  final worldPoints = localPoints.map(oldSpace.toWorld).toList(growable: false);
-
-  // Step 2: Rotate world points by -theta around the origin
-  final cosTheta = math.cos(rotation);
-  final sinTheta = math.sin(rotation);
-  final rotatedPoints = worldPoints
-      .map(
-        (w) => DrawPoint(
-          x: w.x * cosTheta + w.y * sinTheta,
-          y: -w.x * sinTheta + w.y * cosTheta,
-        ),
-      )
-      .toList(growable: false);
-
-  // Step 3: Calculate the bounding box of rotated points
-  var minX = rotatedPoints.first.x;
-  var maxX = rotatedPoints.first.x;
-  var minY = rotatedPoints.first.y;
-  var maxY = rotatedPoints.first.y;
-  for (final p in rotatedPoints.skip(1)) {
-    if (p.x < minX) {
-      minX = p.x;
-    }
-    if (p.x > maxX) {
-      maxX = p.x;
-    }
-    if (p.y < minY) {
-      minY = p.y;
-    }
-    if (p.y > maxY) {
-      maxY = p.y;
-    }
-  }
-  final rotatedCenterX = (minX + maxX) / 2;
-  final rotatedCenterY = (minY + maxY) / 2;
-
-  // Step 4: The new rect center is the rotated center rotated back by theta
-  // C = rotate(W'_center, theta)
-  final newCenterX = rotatedCenterX * cosTheta - rotatedCenterY * sinTheta;
-  final newCenterY = rotatedCenterX * sinTheta + rotatedCenterY * cosTheta;
-  final newCenter = DrawPoint(x: newCenterX, y: newCenterY);
-
-  // Step 5: Transform world points to local space using the new center
-  final newSpace = ElementSpace(rotation: rotation, origin: newCenter);
-  final newLocalPoints = worldPoints
-      .map(newSpace.fromWorld)
-      .toList(growable: false);
-
-  // Step 6: Calculate the rect from local points
-  // The bounding box center should now equal newCenter
-  final rect = _calculateArrowRect(
-    points: newLocalPoints,
-    arrowType: arrowType,
-    strokeWidth: strokeWidth,
-  );
-
-  return _RectAndPointsResult(rect: rect, localPoints: newLocalPoints);
-}
 
 List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
@@ -646,6 +637,16 @@ List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
 }
+
+List<ElementState> _resolveBindingTargets(DrawState state, String excludeId) =>
+    state.domain.document.elements
+        .where(
+          (element) =>
+              element.opacity > 0 &&
+              element.id != excludeId &&
+              element.data is RectangleData,
+        )
+        .toList();
 
 DrawPoint _resolvePointPosition({
   required List<DrawPoint> points,
@@ -692,6 +693,14 @@ DrawPoint _toLocalPosition(DrawRect rect, double rotation, DrawPoint position) {
   }
   final space = ElementSpace(rotation: rotation, origin: rect.center);
   return space.fromWorld(position);
+}
+
+DrawPoint _toWorldPosition(DrawRect rect, double rotation, DrawPoint position) {
+  if (rotation == 0) {
+    return position;
+  }
+  final space = ElementSpace(rotation: rotation, origin: rect.center);
+  return space.toWorld(position);
 }
 
 bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {

@@ -9,10 +9,14 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import 'arrow_binding.dart';
 
 @immutable
 final class ArrowData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
+  static const _startBindingUnset = Object();
+  static const _endBindingUnset = Object();
+
   const ArrowData({
     this.points = const [
       DrawPoint.zero,
@@ -24,6 +28,8 @@ final class ArrowData extends ElementData
     this.arrowType = ConfigDefaults.defaultArrowType,
     this.startArrowhead = ConfigDefaults.defaultStartArrowhead,
     this.endArrowhead = ConfigDefaults.defaultEndArrowhead,
+    this.startBinding,
+    this.endBinding,
   });
 
   factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
@@ -50,6 +56,8 @@ final class ArrowData extends ElementData
       (style) => style.name == json['endArrowhead'],
       orElse: () => ConfigDefaults.defaultEndArrowhead,
     ),
+    startBinding: _decodeBinding(json['startBinding']),
+    endBinding: _decodeBinding(json['endBinding']),
   );
 
   static const typeIdToken = ElementTypeId<ArrowData>('arrow');
@@ -62,6 +70,8 @@ final class ArrowData extends ElementData
   final ArrowType arrowType;
   final ArrowheadStyle startArrowhead;
   final ArrowheadStyle endArrowhead;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
 
   @override
   ElementTypeId<ArrowData> get typeId => ArrowData.typeIdToken;
@@ -74,6 +84,8 @@ final class ArrowData extends ElementData
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
+    Object? startBinding = _startBindingUnset,
+    Object? endBinding = _endBindingUnset,
   }) => ArrowData(
     points:
         points == null ? this.points : List<DrawPoint>.unmodifiable(points),
@@ -83,6 +95,12 @@ final class ArrowData extends ElementData
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,
     endArrowhead: endArrowhead ?? this.endArrowhead,
+    startBinding: startBinding == _startBindingUnset
+        ? this.startBinding
+        : startBinding as ArrowBinding?,
+    endBinding: endBinding == _endBindingUnset
+        ? this.endBinding
+        : endBinding as ArrowBinding?,
   );
 
   @override
@@ -115,6 +133,8 @@ final class ArrowData extends ElementData
     'arrowType': arrowType.name,
     'startArrowhead': startArrowhead.name,
     'endArrowhead': endArrowhead.name,
+    'startBinding': startBinding?.toJson(),
+    'endBinding': endBinding?.toJson(),
   };
 
   static List<DrawPoint> _decodePoints(Object? rawPoints) {
@@ -151,7 +171,9 @@ final class ArrowData extends ElementData
           other.strokeStyle == strokeStyle &&
           other.arrowType == arrowType &&
           other.startArrowhead == startArrowhead &&
-          other.endArrowhead == endArrowhead;
+          other.endArrowhead == endArrowhead &&
+          other.startBinding == startBinding &&
+          other.endBinding == endBinding;
 
   @override
   int get hashCode => Object.hash(
@@ -162,6 +184,8 @@ final class ArrowData extends ElementData
     arrowType,
     startArrowhead,
     endArrowhead,
+    startBinding,
+    endBinding,
   );
 
   static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
@@ -174,5 +198,15 @@ final class ArrowData extends ElementData
       }
     }
     return true;
+  }
+
+  static ArrowBinding? _decodeBinding(Object? raw) {
+    if (raw is Map<String, dynamic>) {
+      return ArrowBinding.fromJson(raw);
+    }
+    if (raw is Map) {
+      return ArrowBinding.fromJson(raw.cast<String, dynamic>());
+    }
+    return null;
   }
 }

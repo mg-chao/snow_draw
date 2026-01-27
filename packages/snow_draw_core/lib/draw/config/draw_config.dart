@@ -107,6 +107,8 @@ abstract class ConfigDefaults {
   static const double objectSnapMarkerSize = 8;
   static const double objectSnapGapDashLength = 4;
   static const double objectSnapGapDashGap = 4;
+  static const arrowBindingEnabled = true;
+  static const double arrowBindingDistance = 10;
 
   // ===== Grid =====
   static const gridEnabled = false;

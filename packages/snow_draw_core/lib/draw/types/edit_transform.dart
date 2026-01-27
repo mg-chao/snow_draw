@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
+import '../elements/types/arrow/arrow_binding.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 
@@ -214,9 +215,13 @@ final class RotateTransform extends EditTransform {
 
 @immutable
 final class ArrowPointTransform extends EditTransform {
+  static const _bindingUnset = Object();
+
   const ArrowPointTransform({
     required this.currentPosition,
     required this.points,
+    this.startBinding,
+    this.endBinding,
     this.activeIndex,
     this.didInsert = false,
     this.shouldDelete = false,
@@ -225,6 +230,8 @@ final class ArrowPointTransform extends EditTransform {
 
   final DrawPoint currentPosition;
   final List<DrawPoint> points;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
   final int? activeIndex;
   final bool didInsert;
   final bool shouldDelete;
@@ -233,6 +240,8 @@ final class ArrowPointTransform extends EditTransform {
   ArrowPointTransform copyWith({
     DrawPoint? currentPosition,
     List<DrawPoint>? points,
+    Object? startBinding = _bindingUnset,
+    Object? endBinding = _bindingUnset,
     int? activeIndex,
     bool? didInsert,
     bool? shouldDelete,
@@ -240,6 +249,12 @@ final class ArrowPointTransform extends EditTransform {
   }) => ArrowPointTransform(
     currentPosition: currentPosition ?? this.currentPosition,
     points: points ?? this.points,
+    startBinding: startBinding == _bindingUnset
+        ? this.startBinding
+        : startBinding as ArrowBinding?,
+    endBinding: endBinding == _bindingUnset
+        ? this.endBinding
+        : endBinding as ArrowBinding?,
     activeIndex: activeIndex ?? this.activeIndex,
     didInsert: didInsert ?? this.didInsert,
     shouldDelete: shouldDelete ?? this.shouldDelete,
@@ -261,6 +276,8 @@ final class ArrowPointTransform extends EditTransform {
       other is ArrowPointTransform &&
           other.currentPosition == currentPosition &&
           _pointsEqual(other.points, points) &&
+          other.startBinding == startBinding &&
+          other.endBinding == endBinding &&
           other.activeIndex == activeIndex &&
           other.didInsert == didInsert &&
           other.shouldDelete == shouldDelete &&
@@ -271,6 +288,8 @@ final class ArrowPointTransform extends EditTransform {
       Object.hash(
         currentPosition,
         Object.hashAll(points),
+        startBinding,
+        endBinding,
         activeIndex,
         didInsert,
         shouldDelete,

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
 import '../../core/geometry/move_geometry.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -279,6 +280,18 @@ class MoveOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     final translatedBounds = context.startBounds.translate(

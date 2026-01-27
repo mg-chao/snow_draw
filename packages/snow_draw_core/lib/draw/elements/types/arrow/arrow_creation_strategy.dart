@@ -13,6 +13,8 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
+import '../arrow/arrow_binding.dart';
+import '../rectangle/rectangle_data.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 
@@ -83,7 +85,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
-    final startPosition = snapToGrid
+    var startPosition = snapToGrid
         ? gridSnapService.snapPoint(
             point: creatingState.startPosition,
             gridSize: gridConfig.size,
@@ -96,7 +98,20 @@ class ArrowCreationStrategy extends PointCreationStrategy {
           )
         : currentPosition;
 
-    final fixedPoints = creatingState.fixedPoints;
+    final startBindingResult = _snapBindingPoint(
+      state: state,
+      config: config,
+      position: startPosition,
+      snappingMode: snappingMode,
+      preferredBinding: elementData.startBinding,
+      referencePoint: adjustedCurrent,
+    );
+    startPosition = startBindingResult.position;
+
+    final fixedPoints = _applyBoundStartToFixedPoints(
+      fixedPoints: creatingState.fixedPoints,
+      boundStart: startPosition,
+    );
     final segmentStart = fixedPoints.isNotEmpty
         ? fixedPoints.last
         : startPosition;
@@ -115,6 +130,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     );
     adjustedCurrent = snapResult.position;
     snapGuides = snapResult.guides;
+
+    final bindingResult = _snapBindingPoint(
+      state: state,
+      config: config,
+      position: adjustedCurrent,
+      snappingMode: snappingMode,
+      preferredBinding: elementData.endBinding,
+      referencePoint: segmentStart,
+    );
+    adjustedCurrent = bindingResult.position;
 
     final isPolyline = elementData.arrowType == ArrowType.polyline;
     final allPoints = isPolyline
@@ -136,7 +161,11 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       worldPoints: allPoints,
       rect: arrowRect,
     );
-    final updatedData = elementData.copyWith(points: normalizedPoints);
+    final updatedData = elementData.copyWith(
+      points: normalizedPoints,
+      startBinding: startBindingResult.binding,
+      endBinding: bindingResult.binding,
+    );
 
     return CreationUpdateResult(
       data: updatedData,
@@ -175,10 +204,28 @@ class ArrowCreationStrategy extends PointCreationStrategy {
           )
         : position;
 
-    final fixedPoints = creatingState.fixedPoints;
-    final segmentStart = fixedPoints.isNotEmpty
-        ? fixedPoints.last
+    var startPosition = snapToGrid
+        ? gridSnapService.snapPoint(
+            point: creatingState.startPosition,
+            gridSize: gridConfig.size,
+          )
         : creatingState.startPosition;
+    final startBindingResult = _snapBindingPoint(
+      state: state,
+      config: config,
+      position: startPosition,
+      snappingMode: snappingMode,
+      preferredBinding: elementData.startBinding,
+      referencePoint: adjustedPosition,
+    );
+    startPosition = startBindingResult.position;
+
+    final fixedPoints = _applyBoundStartToFixedPoints(
+      fixedPoints: creatingState.fixedPoints,
+      boundStart: startPosition,
+    );
+    final segmentStart =
+        fixedPoints.isNotEmpty ? fixedPoints.last : startPosition;
     adjustedPosition = _resolveArrowSegmentPosition(
       segmentStart: segmentStart,
       currentPosition: adjustedPosition,
@@ -193,6 +240,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     adjustedPosition = snapResult.position;
     final snapGuides = snapResult.guides;
 
+    final bindingResult = _snapBindingPoint(
+      state: state,
+      config: config,
+      position: adjustedPosition,
+      snappingMode: snappingMode,
+      preferredBinding: elementData.endBinding,
+      referencePoint: segmentStart,
+    );
+    adjustedPosition = bindingResult.position;
+
     final isPolyline = elementData.arrowType == ArrowType.polyline;
 
     var updatedFixedPoints = fixedPoints;
@@ -203,6 +260,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         adjustedPosition,
       ]);
     }
+    updatedFixedPoints = _applyBoundStartToFixedPoints(
+      fixedPoints: updatedFixedPoints,
+      boundStart: startPosition,
+    );
     if (isPolyline && updatedFixedPoints.length > 1) {
       updatedFixedPoints = List<DrawPoint>.unmodifiable([
         updatedFixedPoints.first,
@@ -213,7 +274,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         ? _resolvePolylineCreatePoints(
             start: updatedFixedPoints.isNotEmpty
                 ? updatedFixedPoints.first
-                : creatingState.startPosition,
+                : startPosition,
             end: updatedFixedPoints.isNotEmpty
                 ? updatedFixedPoints.last
                 : adjustedPosition,
@@ -231,7 +292,11 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       worldPoints: allPoints,
       rect: arrowRect,
     );
-    final updatedData = elementData.copyWith(points: normalizedPoints);
+    final updatedData = elementData.copyWith(
+      points: normalizedPoints,
+      startBinding: startBindingResult.binding,
+      endBinding: bindingResult.binding,
+    );
 
     return CreationUpdateResult(
       data: updatedData,
@@ -422,11 +487,61 @@ _PointSnapResult _snapCreatePoint({
   return _PointSnapResult(position: snappedPosition, guides: guides);
 }
 
+_BindingSnapResult _snapBindingPoint({
+  required DrawState state,
+  required DrawConfig config,
+  required DrawPoint position,
+  required SnappingMode snappingMode,
+  ArrowBinding? preferredBinding,
+  DrawPoint? referencePoint,
+}) {
+  final snapConfig = config.snap;
+  final bindingEnabled = _shouldAttemptBinding(
+    snapConfig: snapConfig,
+    snappingMode: snappingMode,
+  );
+  if (!bindingEnabled) {
+    return _BindingSnapResult(position: position);
+  }
+  final targets = _resolveBindingTargets(state);
+  if (targets.isEmpty) {
+    return _BindingSnapResult(position: position);
+  }
+  final zoom = state.application.view.camera.zoom;
+  final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+  final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
+  if (bindingDistance <= 0) {
+    return _BindingSnapResult(position: position);
+  }
+
+  final candidate = ArrowBindingUtils.resolveBindingCandidate(
+    worldPoint: position,
+    targets: targets,
+    snapDistance: bindingDistance,
+    preferredBinding: preferredBinding,
+    referencePoint: referencePoint,
+  );
+  if (candidate == null) {
+    return _BindingSnapResult(position: position);
+  }
+  return _BindingSnapResult(
+    position: candidate.snapPoint,
+    binding: candidate.binding,
+  );
+}
+
 List<ElementState> _resolveReferenceElements(DrawState state) => state
     .domain
     .document
     .elements
     .where((element) => element.opacity > 0)
+    .toList();
+
+List<ElementState> _resolveBindingTargets(DrawState state) => state
+    .domain
+    .document
+    .elements
+    .where((element) => element.opacity > 0 && element.data is RectangleData)
     .toList();
 
 @immutable
@@ -438,4 +553,44 @@ class _PointSnapResult {
 
   final DrawPoint position;
   final List<SnapGuide> guides;
+}
+
+@immutable
+class _BindingSnapResult {
+  const _BindingSnapResult({required this.position, this.binding});
+
+  final DrawPoint position;
+  final ArrowBinding? binding;
+}
+
+bool _shouldAttemptBinding({
+  required SnapConfig snapConfig,
+  required SnappingMode snappingMode,
+}) {
+  if (!snapConfig.enableArrowBinding) {
+    return false;
+  }
+  if (snappingMode == SnappingMode.grid) {
+    return false;
+  }
+  if (snapConfig.enabled && snappingMode == SnappingMode.none) {
+    return false;
+  }
+  return true;
+}
+
+List<DrawPoint> _applyBoundStartToFixedPoints({
+  required List<DrawPoint> fixedPoints,
+  required DrawPoint boundStart,
+}) {
+  if (fixedPoints.isEmpty) {
+    return fixedPoints;
+  }
+  if (fixedPoints.first == boundStart) {
+    return fixedPoints;
+  }
+  return List<DrawPoint>.unmodifiable([
+    boundStart,
+    ...fixedPoints.skip(1),
+  ]);
 }
