@@ -452,7 +452,10 @@ _ArrowPointComputation _compute({
       );
     }
     if (isPolyline) {
-      if (!nextDidInsert) {
+      final isBendControl =
+          context.pointIndex > 0 &&
+          context.pointIndex < basePoints.length - 2;
+      if (!nextDidInsert && !isBendControl) {
         final distanceSq = currentPosition.distanceSquared(
           context.startPosition,
         );
