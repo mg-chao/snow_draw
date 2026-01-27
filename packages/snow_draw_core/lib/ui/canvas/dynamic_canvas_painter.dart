@@ -4,9 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../draw/config/draw_config.dart';
+import '../../draw/core/coordinates/element_space.dart';
+import '../../draw/edit/arrow/arrow_point_operation.dart';
+import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/models/draw_state_view.dart';
@@ -180,6 +184,7 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
+    _drawArrowBindingHighlight(canvas: canvas, scale: scale);
     _drawArrowPointOverlay(canvas: canvas, scale: scale);
 
     // Draw dashed border for a single selected text element.
@@ -476,6 +481,38 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.restore();
   }
 
+  void _drawArrowBindingHighlight({
+    required Canvas canvas,
+    required double scale,
+  }) {
+    final highlight = _resolveArrowBindingHighlight();
+    if (highlight == null) {
+      return;
+    }
+    final element = stateView.state.domain.document.getElementById(
+      highlight.elementId,
+    );
+    if (element == null || element.data is! RectangleData) {
+      return;
+    }
+    final effectiveElement = stateView.effectiveElement(element);
+    final edgeLine = _resolveEdgeLine(effectiveElement, highlight.edge);
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final strokeColor = renderKey.selectionConfig.render.strokeColor;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth =
+          renderKey.selectionConfig.render.strokeWidth * 1.5 / effectiveScale
+      ..color = strokeColor.withValues(alpha: 0.9)
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    canvas.drawLine(
+      Offset(edgeLine.start.x, edgeLine.start.y),
+      Offset(edgeLine.end.x, edgeLine.end.y),
+      paint,
+    );
+  }
+
   void _drawArrowHoverOutline({
     required Canvas canvas,
     required ElementState element,
@@ -743,6 +780,137 @@ class DynamicCanvasPainter extends CustomPainter {
 
   Offset _localOffset(DrawRect rect, DrawPoint point) =>
       Offset(point.x - rect.minX, point.y - rect.minY);
+
+  _ArrowBindingHighlight? _resolveArrowBindingHighlight() {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is EditingState &&
+        interaction.context is ArrowPointEditContext) {
+      final handle = renderKey.activeArrowHandle;
+      if (handle == null) {
+        return null;
+      }
+      final element = stateView.state.domain.document.getElementById(
+        handle.elementId,
+      );
+      if (element == null || element.data is! ArrowData) {
+        return null;
+      }
+      final effectiveElement = stateView.effectiveElement(element);
+      final data = effectiveElement.data as ArrowData;
+      final points = _resolveArrowWorldPoints(
+        effectiveElement,
+        data,
+      );
+      final endpoint = _resolveEndpointForHandle(handle, points.length);
+      final binding = switch (endpoint) {
+        _ArrowEndpoint.start => data.startBinding,
+        _ArrowEndpoint.end => data.endBinding,
+        null => null,
+      };
+      return _highlightFromBinding(binding);
+    }
+    if (interaction is CreatingState) {
+      final element = interaction.element;
+      final data = element.data;
+      if (data is! ArrowData || !interaction.isPointCreation) {
+        return null;
+      }
+      return _highlightFromBinding(data.endBinding);
+    }
+    return null;
+  }
+
+  _ArrowBindingHighlight? _highlightFromBinding(ArrowBinding? binding) {
+    if (binding == null || binding.mode != ArrowBindingMode.orbit) {
+      return null;
+    }
+    final edge = _edgeForAnchor(binding.anchor);
+    if (edge == null) {
+      return null;
+    }
+    return _ArrowBindingHighlight(elementId: binding.elementId, edge: edge);
+  }
+
+  _BoundEdge? _edgeForAnchor(DrawPoint anchor) {
+    const tolerance = 0.002;
+    if ((anchor.y - 0).abs() <= tolerance) {
+      return _BoundEdge.top;
+    }
+    if ((anchor.y - 1).abs() <= tolerance) {
+      return _BoundEdge.bottom;
+    }
+    if ((anchor.x - 0).abs() <= tolerance) {
+      return _BoundEdge.left;
+    }
+    if ((anchor.x - 1).abs() <= tolerance) {
+      return _BoundEdge.right;
+    }
+    return null;
+  }
+
+  _ArrowEndpoint? _resolveEndpointForHandle(
+    ArrowPointHandle handle,
+    int pointCount,
+  ) {
+    if (pointCount < 2) {
+      return null;
+    }
+    return switch (handle.kind) {
+      ArrowPointKind.loopStart => _ArrowEndpoint.start,
+      ArrowPointKind.loopEnd => _ArrowEndpoint.end,
+      ArrowPointKind.turning => handle.index == 0
+          ? _ArrowEndpoint.start
+          : handle.index == pointCount - 1
+          ? _ArrowEndpoint.end
+          : null,
+      _ => null,
+    };
+  }
+
+  List<DrawPoint> _resolveArrowWorldPoints(
+    ElementState element,
+    ArrowData data,
+  ) {
+    final resolved = ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final effective = data.arrowType == ArrowType.polyline
+        ? ArrowGeometry.expandPolylinePoints(resolved)
+        : resolved;
+    return effective
+        .map((point) => DrawPoint(x: point.dx, y: point.dy))
+        .toList(growable: false);
+  }
+
+  _EdgeLine _resolveEdgeLine(ElementState element, _BoundEdge edge) {
+    final rect = element.rect;
+    DrawPoint start;
+    DrawPoint end;
+    switch (edge) {
+      case _BoundEdge.top:
+        start = DrawPoint(x: rect.minX, y: rect.minY);
+        end = DrawPoint(x: rect.maxX, y: rect.minY);
+      case _BoundEdge.right:
+        start = DrawPoint(x: rect.maxX, y: rect.minY);
+        end = DrawPoint(x: rect.maxX, y: rect.maxY);
+      case _BoundEdge.bottom:
+        start = DrawPoint(x: rect.maxX, y: rect.maxY);
+        end = DrawPoint(x: rect.minX, y: rect.maxY);
+      case _BoundEdge.left:
+        start = DrawPoint(x: rect.minX, y: rect.maxY);
+        end = DrawPoint(x: rect.minX, y: rect.minY);
+    }
+    if (element.rotation != 0) {
+      final space = ElementSpace(
+        rotation: element.rotation,
+        origin: rect.center,
+      );
+      start = space.toWorld(start);
+      end = space.toWorld(end);
+    }
+    return _EdgeLine(start: start, end: end);
+  }
 
   /// Draw box-selection overlay.
   void _drawBoxSelection(Canvas canvas, DrawRect bounds, double scale) {
@@ -1104,4 +1272,25 @@ class DynamicCanvasPainter extends CustomPainter {
 
   @override
   int get hashCode => renderKey.hashCode;
+}
+
+enum _ArrowEndpoint { start, end }
+
+enum _BoundEdge { top, right, bottom, left }
+
+class _ArrowBindingHighlight {
+  const _ArrowBindingHighlight({
+    required this.elementId,
+    required this.edge,
+  });
+
+  final String elementId;
+  final _BoundEdge edge;
+}
+
+class _EdgeLine {
+  const _EdgeLine({required this.start, required this.end});
+
+  final DrawPoint start;
+  final DrawPoint end;
 }
