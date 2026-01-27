@@ -14,6 +14,7 @@ import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
+import '../../services/grid_snap_service.dart';
 import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
@@ -21,6 +22,7 @@ import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
+import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_errors.dart';
 import '../core/edit_modifiers.dart';
@@ -156,7 +158,7 @@ class ArrowPointOperation extends EditOperation {
       operationName: 'ArrowPointOperation.update',
     );
 
-    final localPosition = _toLocalPosition(
+    var localPosition = _toLocalPosition(
       typedContext.elementRect,
       typedContext.rotation,
       currentPosition,
@@ -170,12 +172,31 @@ class ArrowPointOperation extends EditOperation {
     final bindingTargets = element == null
         ? const <ElementState>[]
         : _resolveBindingTargets(state, element.id);
+    final snapConfig = config.snap;
+    final gridConfig = config.grid;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: modifiers.snapOverride,
+    );
+    final shouldGridSnap = snappingMode == SnappingMode.grid;
+    if (shouldGridSnap) {
+      final target = localPosition.translate(typedContext.dragOffset);
+      final snappedTarget = _snapTargetToGrid(
+        target: target,
+        rect: typedContext.elementRect,
+        rotation: typedContext.rotation,
+        gridSize: gridConfig.size,
+      );
+      localPosition = snappedTarget - typedContext.dragOffset;
+    }
+
     final zoom = state.application.view.camera.zoom;
     final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-    final snapConfig = config.snap;
     final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
     final allowNewBinding =
-        snapConfig.enableArrowBinding && !modifiers.snapOverride;
+        snapConfig.enableArrowBinding &&
+        !modifiers.snapOverride &&
+        snappingMode != SnappingMode.grid;
     final result = _compute(
       context: typedContext,
       currentPosition: localPosition,
@@ -701,6 +722,23 @@ DrawPoint _toWorldPosition(DrawRect rect, double rotation, DrawPoint position) {
   }
   final space = ElementSpace(rotation: rotation, origin: rect.center);
   return space.toWorld(position);
+}
+
+DrawPoint _snapTargetToGrid({
+  required DrawPoint target,
+  required DrawRect rect,
+  required double rotation,
+  required double gridSize,
+}) {
+  if (gridSize <= 0) {
+    return target;
+  }
+  final worldTarget = _toWorldPosition(rect, rotation, target);
+  final snappedWorld = gridSnapService.snapPoint(
+    point: worldTarget,
+    gridSize: gridSize,
+  );
+  return _toLocalPosition(rect, rotation, snappedWorld);
 }
 
 bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
