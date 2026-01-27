@@ -82,5 +82,3 @@ class EditCancelFailed extends EditSessionEvent {
   String toString() =>
       'EditCancelFailed(reason: $reason, operationId: $operationId)';
 }
-
-

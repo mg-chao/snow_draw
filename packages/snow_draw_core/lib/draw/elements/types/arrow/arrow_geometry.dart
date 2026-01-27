@@ -208,10 +208,7 @@ class ArrowGeometry {
       List<Offset>.from(points);
 
   static bool isPolylineSegmentHorizontal(DrawPoint start, DrawPoint end) =>
-      _resolvePolylineAxis(
-        Offset(start.x, start.y),
-        Offset(end.x, end.y),
-      ) ==
+      _resolvePolylineAxis(Offset(start.x, start.y), Offset(end.x, end.y)) ==
       _PolylineAxis.horizontal;
 
   static List<DrawPoint> normalizePolylinePoints(List<DrawPoint> points) {
@@ -233,17 +230,12 @@ class ArrowGeometry {
     );
   }
 
-  static List<DrawPoint> ensurePolylineCreationPoints(
-    List<DrawPoint> points,
-  ) {
+  static List<DrawPoint> ensurePolylineCreationPoints(List<DrawPoint> points) {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
     final created = points.length == 2
-        ? _buildPolylineCreationPoints(
-            start: points.first,
-            end: points.last,
-          )
+        ? _buildPolylineCreationPoints(start: points.first, end: points.last)
         : points;
     return normalizePolylinePoints(created);
   }
@@ -644,14 +636,10 @@ class ArrowGeometry {
     return dx >= dy ? _PolylineAxis.horizontal : _PolylineAxis.vertical;
   }
 
-  static Offset _snapToAxis(
-    Offset start,
-    Offset end,
-    _PolylineAxis axis,
-  ) =>
+  static Offset _snapToAxis(Offset start, Offset end, _PolylineAxis axis) =>
       axis == _PolylineAxis.horizontal
-          ? Offset(end.dx, start.dy)
-          : Offset(start.dx, end.dy);
+      ? Offset(end.dx, start.dy)
+      : Offset(start.dx, end.dy);
 
   static List<Offset> _simplifyPolylinePoints(List<Offset> points) {
     if (points.length < 2) {
@@ -697,7 +685,9 @@ class ArrowGeometry {
       }
 
       final next = i + 1 < points.length ? points[i + 1] : null;
-      final nextAxis = next == null ? null : _alignedPolylineAxis(current, next);
+      final nextAxis = next == null
+          ? null
+          : _alignedPolylineAxis(current, next);
       final routedPoints = _routeDiagonalSegment(
         prev: prev,
         current: current,
@@ -718,9 +708,7 @@ class ArrowGeometry {
     required _PolylineAxis? previousAxis,
     required _PolylineAxis? nextAxis,
   }) {
-    if (previousAxis != null &&
-        nextAxis != null &&
-        previousAxis == nextAxis) {
+    if (previousAxis != null && nextAxis != null && previousAxis == nextAxis) {
       return [_snapToAxis(prev, current, previousAxis)];
     }
 

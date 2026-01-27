@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
 
 import '../core/coordinates/element_space.dart';
@@ -5,27 +6,48 @@ import '../models/element_state.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 
+@immutable
+class SpatialIndexEntry {
+  const SpatialIndexEntry({required this.id, required this.zIndex});
+
+  final String id;
+  final int zIndex;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is SpatialIndexEntry && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 class SpatialIndex {
-  SpatialIndex() : _tree = RBushDirect<String>();
+  SpatialIndex() : _tree = RBushDirect<SpatialIndexEntry>();
 
   factory SpatialIndex.fromElements(List<ElementState> elements) =>
       SpatialIndex()..bulkLoad(elements);
-  final RBushDirect<String> _tree;
+  final RBushDirect<SpatialIndexEntry> _tree;
 
   void bulkLoad(List<ElementState> elements) {
     if (elements.isEmpty) {
       return;
     }
-    final items = elements.map(_entryFromElement).toList();
+    final items = <RBushElement<SpatialIndexEntry>>[];
+    for (var i = 0; i < elements.length; i++) {
+      items.add(_entryFromElement(elements[i], i));
+    }
     _tree.load(items);
   }
 
   void insert(ElementState element) {
-    _tree.insert(_boxFromElement(element), element.id);
+    _tree.insert(
+      _boxFromElement(element),
+      SpatialIndexEntry(id: element.id, zIndex: element.zIndex),
+    );
   }
 
   void remove(ElementState element) {
-    _tree.remove(element.id);
+    _tree.remove(SpatialIndexEntry(id: element.id, zIndex: element.zIndex));
   }
 
   List<String> searchPoint(DrawPoint point, double tolerance) {
@@ -36,8 +58,9 @@ class SpatialIndex {
         maxX: point.x + tolerance,
         maxY: point.y + tolerance,
       ),
-    );
-    return results.toList();
+    ).toList()
+      ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
+    return results.map((entry) => entry.id).toList(growable: false);
   }
 
   List<String> searchRect(DrawRect rect) {
@@ -48,24 +71,32 @@ class SpatialIndex {
         maxX: rect.maxX,
         maxY: rect.maxY,
       ),
-    );
-    return results.toList();
+    ).toList()
+      ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
+    return results.map((entry) => entry.id).toList(growable: false);
   }
 
-  List<String> getAllIds() => _tree.all();
+  List<String> getAllIds() =>
+      _tree.all().map((entry) => entry.id).toList(growable: false);
 
   int get size => _tree.all().length;
 
   void clear() => _tree.clear();
 
-  RBushElement<String> _entryFromElement(ElementState element) {
+  RBushElement<SpatialIndexEntry> _entryFromElement(
+    ElementState element,
+    int? orderIndex,
+  ) {
     final rect = _aabbFromElement(element);
-    return RBushElement<String>(
+    return RBushElement<SpatialIndexEntry>(
       minX: rect.minX,
       minY: rect.minY,
       maxX: rect.maxX,
       maxY: rect.maxY,
-      data: element.id,
+      data: SpatialIndexEntry(
+        id: element.id,
+        zIndex: orderIndex ?? element.zIndex,
+      ),
     );
   }
 

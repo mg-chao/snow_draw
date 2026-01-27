@@ -128,8 +128,7 @@ class ArrowBindingUtils {
       }
 
       var score = result.distance;
-      if (preferredBinding != null &&
-          preferredBinding.elementId == target.id) {
+      if (preferredBinding != null && preferredBinding.elementId == target.id) {
         score = math.max(0, score - snapDistance * 0.25);
       }
 
@@ -162,8 +161,9 @@ class ArrowBindingUtils {
     }
 
     final gap = _resolveBindingGap(target);
-    final localReference =
-        referencePoint == null ? null : space.fromWorld(referencePoint);
+    final localReference = referencePoint == null
+        ? null
+        : space.fromWorld(referencePoint);
     final snapPoint = _resolveOrbitSnapPoint(
       rect: rect,
       anchorPoint: localAnchor,
@@ -188,10 +188,7 @@ class ArrowBindingUtils {
     );
     return ArrowBinding(
       elementId: target.id,
-      anchor: DrawPoint(
-        x: _clamp01(normalized.x),
-        y: _clamp01(normalized.y),
-      ),
+      anchor: DrawPoint(x: _clamp01(normalized.x), y: _clamp01(normalized.y)),
       mode: mode,
     );
   }
@@ -209,8 +206,9 @@ class ArrowBindingUtils {
 
     final space = ElementSpace(rotation: target.rotation, origin: rect.center);
     final localPoint = space.fromWorld(worldPoint);
-    final localReference =
-        referencePoint == null ? null : space.fromWorld(referencePoint);
+    final localReference = referencePoint == null
+        ? null
+        : space.fromWorld(referencePoint);
     final hit = _resolveBindingHit(
       rect: rect,
       localPoint: localPoint,
@@ -255,15 +253,16 @@ final class _BindingHit {
   final double distance;
 }
 
-const double _bindingGapBase = 10.0;
-const double _intersectionEpsilon = 1e-6;
-const double _insideEpsilon = 1e-6;
+const _bindingGapBase = 10.0;
+const _intersectionEpsilon = 1e-6;
+const _insideEpsilon = 1e-6;
 
 DrawPoint _nearestPointOnRectBoundary(DrawRect rect, DrawPoint point) {
   final clampedX = _clamp(point.x, rect.minX, rect.maxX);
   final clampedY = _clamp(point.y, rect.minY, rect.maxY);
 
-  final inside = point.x >= rect.minX &&
+  final inside =
+      point.x >= rect.minX &&
       point.x <= rect.maxX &&
       point.y >= rect.minY &&
       point.y <= rect.maxY;
@@ -318,7 +317,7 @@ _BindingHit? _resolveBindingHit({
         anchorPoint: anchorPoint,
         snapPoint: anchorPoint,
         mode: ArrowBindingMode.inside,
-        distance: 0.0,
+        distance: 0,
       );
     }
 
@@ -338,7 +337,7 @@ _BindingHit? _resolveBindingHit({
       anchorPoint: anchorPoint,
       snapPoint: snapPoint,
       mode: ArrowBindingMode.orbit,
-      distance: 0.0,
+      distance: 0,
     );
   }
 
@@ -465,7 +464,8 @@ DrawPoint? _intersectRectAlongLine({
     DrawPoint? best;
     var bestT = double.infinity;
     for (final intersection in intersections) {
-      final t = (intersection.x - reference.x) * dirX +
+      final t =
+          (intersection.x - reference.x) * dirX +
           (intersection.y - reference.y) * dirY;
       if (t < -_intersectionEpsilon) {
         continue;
@@ -483,9 +483,8 @@ DrawPoint? _intersectRectAlongLine({
 
   final sortPoint = preferPoint ?? reference;
   intersections.sort(
-    (a, b) => sortPoint.distanceSquared(a).compareTo(
-      sortPoint.distanceSquared(b),
-    ),
+    (a, b) =>
+        sortPoint.distanceSquared(a).compareTo(sortPoint.distanceSquared(b)),
   );
   return intersections.first;
 }

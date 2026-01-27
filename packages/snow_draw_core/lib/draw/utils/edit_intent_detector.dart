@@ -6,7 +6,6 @@ import '../elements/types/arrow/arrow_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
-import '../models/element_state.dart';
 import '../types/draw_point.dart';
 import 'hit_test.dart';
 
@@ -66,15 +65,9 @@ class EditIntentDetector {
       );
       if (element != null) {
         final addToSelection = isShiftPressed;
-        final isElementHit = _isElementHit(
-          element: element,
-          position: position,
-          config: config,
-          registry: registry,
-        );
         if (selectedIds.contains(hitResult.elementId)) {
           if (addToSelection) {
-            if (!isElementHit) {
+            if (hitResult.isSelectionPaddingHit) {
               return null;
             }
             return SelectIntent(
@@ -141,28 +134,6 @@ class EditIntentDetector {
       return null;
     }
     return CreateIntent(typeId: elementTypeId);
-  }
-
-  bool _isElementHit({
-    required ElementState element,
-    required DrawPoint position,
-    required SelectionConfig config,
-    required ElementRegistry registry,
-  }) {
-    final definition = registry.getDefinition(element.typeId);
-    final tolerance = config.interaction.handleTolerance;
-    if (definition == null) {
-      final rect = element.rect;
-      return position.x >= rect.minX &&
-          position.x <= rect.maxX &&
-          position.y >= rect.minY &&
-          position.y <= rect.maxY;
-    }
-    return definition.hitTester.hitTest(
-      element: element,
-      position: position,
-      tolerance: tolerance,
-    );
   }
 
   EditIntent? _detectArrowPointIntent({
