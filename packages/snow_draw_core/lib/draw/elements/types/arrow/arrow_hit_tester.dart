@@ -14,7 +14,13 @@ class ArrowHitTester implements ElementHitTester {
   const ArrowHitTester();
 
   static const _cacheLimit = 512;
+  static const _hotCacheSize = 6;
   static final _cache = <String, _ArrowHitTestCacheEntry>{};
+  static final _hotCache = List<_ArrowHitTestCacheEntry?>.filled(
+    _hotCacheSize,
+    null,
+  );
+  static var _hotCacheCursor = 0;
 
   @override
   bool hitTest({
@@ -33,15 +39,20 @@ class ArrowHitTester implements ElementHitTester {
       return false;
     }
 
-    final cache = _resolveCache(element, data);
     final localPosition = _toLocalPosition(element, position);
     final rect = element.rect;
+    final radius = (data.strokeWidth / 2) + tolerance;
+    final boundsPadding = radius + _arrowheadExtent(data);
+    if (!_isInsideRect(rect, localPosition, boundsPadding)) {
+      return false;
+    }
+
+    final cache = _resolveCache(element, data);
     final testPoint = Offset(
       localPosition.x - rect.minX,
       localPosition.y - rect.minY,
     );
 
-    final radius = (data.strokeWidth / 2) + tolerance;
     final radiusSq = radius * radius;
 
     if (cache.hasCurvedShaft) {
@@ -66,11 +77,7 @@ class ArrowHitTester implements ElementHitTester {
     return space.fromWorld(position);
   }
 
-  bool _hitTestSegments(
-    List<Offset> points,
-    Offset position,
-    double radiusSq,
-  ) {
+  bool _hitTestSegments(List<Offset> points, Offset position, double radiusSq) {
     if (points.length < 2) {
       return false;
     }
@@ -88,11 +95,7 @@ class ArrowHitTester implements ElementHitTester {
     return false;
   }
 
-  bool _hitTestSamples(
-    List<Offset> samples,
-    Offset position,
-    double radiusSq,
-  ) {
+  bool _hitTestSamples(List<Offset> samples, Offset position, double radiusSq) {
     for (final sample in samples) {
       final dx = sample.dx - position.dx;
       final dy = sample.dy - position.dy;
@@ -125,19 +128,35 @@ class ArrowHitTester implements ElementHitTester {
   }
 
   _ArrowHitTestCacheEntry _resolveCache(ElementState element, ArrowData data) {
-    final cached = _cache[element.id];
+    final id = element.id;
+    for (final entry in _hotCache) {
+      if (entry != null &&
+          entry.id == id &&
+          entry.matches(element.rect, data)) {
+        return entry;
+      }
+    }
+
+    final cached = _cache[id];
     if (cached != null && cached.matches(element.rect, data)) {
-      _cache.remove(element.id);
-      _cache[element.id] = cached;
+      _touchHotCache(cached);
+      _cache.remove(id);
+      _cache[id] = cached;
       return cached;
     }
 
     final next = _ArrowHitTestCacheEntry.build(element: element, data: data);
-    _cache[element.id] = next;
+    _cache[id] = next;
+    _touchHotCache(next);
     if (_cache.length > _cacheLimit) {
       _cache.remove(_cache.keys.first);
     }
     return next;
+  }
+
+  void _touchHotCache(_ArrowHitTestCacheEntry entry) {
+    _hotCache[_hotCacheCursor] = entry;
+    _hotCacheCursor = (_hotCacheCursor + 1) % _hotCacheSize;
   }
 
   @override
@@ -146,6 +165,7 @@ class ArrowHitTester implements ElementHitTester {
 
 class _ArrowHitTestCacheEntry {
   _ArrowHitTestCacheEntry({
+    required this.id,
     required this.rect,
     required this.data,
     required this.shaftPoints,
@@ -154,6 +174,7 @@ class _ArrowHitTestCacheEntry {
     required this.hasCurvedShaft,
   });
 
+  final String id;
   final DrawRect rect;
   final ArrowData data;
   final List<Offset> shaftPoints;
@@ -176,23 +197,18 @@ class _ArrowHitTestCacheEntry {
     final hasCurvedShaft =
         data.arrowType == ArrowType.curved && points.length > 2;
     final shaftPoints = hasCurvedShaft
-        ? const <Offset>[]
+        ? points
         : (data.arrowType == ArrowType.polyline
-            ? ArrowGeometry.expandPolylinePoints(points)
-            : points);
+              ? ArrowGeometry.expandPolylinePoints(points)
+              : points);
     final samples = hasCurvedShaft
-        ? _samplePath(
-            ArrowGeometry.buildShaftPath(
-              points: points,
-              arrowType: data.arrowType,
-            ),
-            _sampleStep(data.strokeWidth),
-          )
+        ? _sampleCurvedShaft(points, _sampleStep(data.strokeWidth))
         : const <Offset>[];
 
     final arrowheadSamples = _buildArrowheadSamples(points, data);
 
     return _ArrowHitTestCacheEntry(
+      id: element.id,
       rect: rect,
       data: data,
       shaftPoints: shaftPoints,
@@ -203,8 +219,51 @@ class _ArrowHitTestCacheEntry {
   }
 }
 
-double _sampleStep(double strokeWidth) =>
-    math.max(1, strokeWidth * 0.5).toDouble();
+double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
+
+double _arrowheadExtent(ArrowData data) {
+  final hasArrowhead =
+      data.startArrowhead != ArrowheadStyle.none ||
+      data.endArrowhead != ArrowheadStyle.none;
+  if (!hasArrowhead || data.strokeWidth <= 0) {
+    return 0;
+  }
+  final length = _arrowheadLength(data.strokeWidth);
+  return length * 0.3;
+}
+
+double _arrowheadLength(double strokeWidth) => strokeWidth * 4 + 12.0;
+
+bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
+    position.x >= rect.minX - padding &&
+    position.x <= rect.maxX + padding &&
+    position.y >= rect.minY - padding &&
+    position.y <= rect.maxY + padding;
+
+List<Offset> _sampleCurvedShaft(List<Offset> points, double step) {
+  if (points.length < 2 || step <= 0) {
+    return const <Offset>[];
+  }
+
+  final samples = <Offset>[];
+  for (var i = 0; i < points.length - 1; i++) {
+    final chord = (points[i + 1] - points[i]).distance;
+    final sampleCount = math.max(1, (chord / step).ceil());
+    final start = i == 0 ? 0 : 1;
+    for (var s = start; s <= sampleCount; s++) {
+      final t = s / sampleCount;
+      final point = ArrowGeometry.calculateCurvePoint(
+        points: points,
+        segmentIndex: i,
+        t: t,
+      );
+      if (point != null) {
+        samples.add(point);
+      }
+    }
+  }
+  return samples;
+}
 
 List<Offset> _samplePath(Path path, double step) {
   if (step <= 0) {

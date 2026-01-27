@@ -83,11 +83,7 @@ class EditIntentDetector {
           final deferSelectionForDrag =
               !addToSelection &&
               selectedIds.length > 1 &&
-              hitTest.isInSelectionPaddedArea(
-                stateView: stateView,
-                position: position,
-                config: config,
-              );
+              hitResult.isInSelectionPadding;
           return SelectIntent(
             elementId: hitResult.elementId!,
             addToSelection: addToSelection,

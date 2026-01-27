@@ -209,11 +209,7 @@ class TextToolPlugin extends DrawInputPlugin {
       return true;
     }
 
-    return hitTest.isInSelectionPaddedArea(
-      stateView: stateView,
-      position: position,
-      config: selectionConfig,
-    );
+    return hitResult.isInSelectionPadding;
   }
 
   bool _shouldDeferToSelectionBox(DrawPoint position) {
@@ -239,12 +235,7 @@ class TextToolPlugin extends DrawInputPlugin {
     );
 
     final isSelectionHit =
-        hitResult.isHandleHit ||
-        hitTest.isInSelectionPaddedArea(
-          stateView: stateView,
-          position: position,
-          config: selectionConfig,
-        );
+        hitResult.isHandleHit || hitResult.isInSelectionPadding;
 
     if (!isSelectionHit) {
       return false;

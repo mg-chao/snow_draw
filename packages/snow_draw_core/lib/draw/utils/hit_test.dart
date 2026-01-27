@@ -14,15 +14,12 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
-var _hitTestCacheEntry = _HitTestCacheEntry.empty();
+const _hitTestCacheSize = 4;
+const _hitTestCacheGridSize = 4.0;
+final _hitTestCache = _HitTestCache();
 
 /// Hit test target.
-enum HitTestTarget {
-  none,
-  handle,
-  element,
-  selectionPadding,
-}
+enum HitTestTarget { none, handle, element, selectionPadding }
 
 /// Hit test result.
 class HitTestResult {
@@ -32,6 +29,7 @@ class HitTestResult {
     this.cursorHint,
     this.selectionRotation,
     this.target = HitTestTarget.none,
+    this.isInSelectionPadding = false,
   });
 
   /// Hit element id.
@@ -48,6 +46,9 @@ class HitTestResult {
 
   /// Target type for the hit result.
   final HitTestTarget target;
+
+  /// True if the position is inside the selection padded area.
+  final bool isInSelectionPadding;
 
   /// True if either an element or a handle was hit.
   bool get isHit => target != HitTestTarget.none;
@@ -68,7 +69,7 @@ class HitTestResult {
   String toString() =>
       'HitTestResult(elementId: $elementId, handleType: $handleType, '
       'cursorHint: $cursorHint, selectionRotation: $selectionRotation, '
-      'target: $target)';
+      'target: $target, isInSelectionPadding: $isInSelectionPadding)';
 }
 
 /// Selection handle type.
@@ -129,6 +130,18 @@ class HitTest {
     required SelectionConfig config,
   }) {
     final selection = stateView.effectiveSelection;
+    final selectedIds = stateView.state.domain.selection.selectedIds;
+    if (selectedIds.length == 1) {
+      final element = stateView.state.domain.document.getElementById(
+        selectedIds.first,
+      );
+      if (element != null && element.data is ArrowData) {
+        final data = element.data as ArrowData;
+        if (data.points.length == 2) {
+          return false;
+        }
+      }
+    }
     final context = _buildSelectionContext(
       selection: selection,
       position: position,
@@ -160,39 +173,43 @@ class HitTest {
     final actualTolerance = tolerance ?? config.interaction.handleTolerance;
     final quantizedX = _quantizePosition(position.x);
     final quantizedY = _quantizePosition(position.y);
-    final cached = _hitTestCacheEntry;
-    if (cached.matches(
+    final cachedResult = _hitTestCache.lookup(
       state: state,
       config: config,
       tolerance: actualTolerance,
       filterTypeId: filterTypeId,
       positionX: quantizedX,
       positionY: quantizedY,
-    )) {
-      return cached.result;
+    );
+    if (cachedResult != null) {
+      return cachedResult;
     }
 
     final selection = stateView.effectiveSelection;
     final selectedIds = state.domain.selection.selectedIds;
 
     // Determine corner handle offset for single arrow selections.
-    final cornerHandleOffset =
-        selectedIds.length == 1 &&
-            stateView.selectedElements.isNotEmpty &&
-            stateView.selectedElements.first.data is ArrowData
-        ? 8
-        : 0;
+    ArrowData? singleSelectedArrow;
+    if (selectedIds.length == 1) {
+      final element = state.domain.document.getElementById(selectedIds.first);
+      if (element != null) {
+        final effectiveElement = stateView.effectiveElement(element);
+        final data = effectiveElement.data;
+        if (data is ArrowData) {
+          singleSelectedArrow = data;
+        }
+      }
+    }
+    final cornerHandleOffset = singleSelectedArrow != null ? 8 : 0;
 
     // Check if this is a single 2-point arrow selection.
     // For 2-point arrows, skip handle hit testing since all operations
     // can be performed through the point editor.
     final isSingleTwoPointArrow =
-        selectedIds.length == 1 &&
-        stateView.selectedElements.isNotEmpty &&
-        stateView.selectedElements.first.data is ArrowData &&
-        (stateView.selectedElements.first.data as ArrowData).points.length == 2;
+        singleSelectedArrow != null && singleSelectedArrow.points.length == 2;
 
     _SelectionHitContext? selectionContext;
+    var isInSelectionPadding = false;
     // 1. Check selection handles first (skip for 2-point arrows).
     if (selection.hasSelection && !isSingleTwoPointArrow) {
       selectionContext = _buildSelectionContext(
@@ -202,11 +219,15 @@ class HitTest {
         cornerHandleOffset: cornerHandleOffset,
       );
       if (selectionContext != null) {
+        isInSelectionPadding = _testPaddedSelectionAreaWithContext(
+          selectionContext,
+        );
         final handleResult = _testHandles(
           context: selectionContext,
           position: position,
           tolerance: actualTolerance,
           config: config,
+          isInSelectionPadding: isInSelectionPadding,
         );
         if (handleResult != null) {
           return _storeCache(
@@ -224,8 +245,15 @@ class HitTest {
 
     // 2. Check elements using spatial index (top-most first).
     final document = state.domain.document;
-    final candidates = document.getElementsAtPoint(position, actualTolerance);
-    for (final candidate in candidates) {
+    final candidates = document.spatialIndex.searchPointEntries(
+      position,
+      actualTolerance,
+    );
+    for (final entry in candidates) {
+      final candidate = document.getElementById(entry.id);
+      if (candidate == null) {
+        continue;
+      }
       if (filterTypeId != null && candidate.typeId != filterTypeId) {
         continue;
       }
@@ -236,6 +264,7 @@ class HitTest {
             elementId: element.id,
             cursorHint: CursorHint.move,
             target: HitTestTarget.element,
+            isInSelectionPadding: isInSelectionPadding,
           ),
           state: state,
           config: config,
@@ -251,13 +280,14 @@ class HitTest {
     // (Used to support starting a move by dragging from the selection
     // padding area.) Skip for 2-point arrows.
     if (selectionContext != null && selectedIds.isNotEmpty) {
-      if (_testPaddedSelectionAreaWithContext(selectionContext)) {
+      if (isInSelectionPadding) {
         final firstSelectedId = selectedIds.first;
         return _storeCache(
           result: HitTestResult(
             elementId: firstSelectedId,
             cursorHint: CursorHint.move,
             target: HitTestTarget.selectionPadding,
+            isInSelectionPadding: true,
           ),
           state: state,
           config: config,
@@ -270,7 +300,10 @@ class HitTest {
     }
 
     return _storeCache(
-      result: HitTestResult.none,
+      result: HitTestResult(
+        cursorHint: HitTestResult.none.cursorHint,
+        isInSelectionPadding: isInSelectionPadding,
+      ),
       state: state,
       config: config,
       tolerance: actualTolerance,
@@ -286,6 +319,7 @@ class HitTest {
     required DrawPoint position,
     required double tolerance,
     required SelectionConfig config,
+    required bool isInSelectionPadding,
   }) {
     final bounds = context.bounds;
     final paddedBounds = context.paddedBounds;
@@ -310,6 +344,7 @@ class HitTest {
         cursorHint: CursorHint.rotate,
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -332,6 +367,7 @@ class HitTest {
         cursorHint: _cursorHintForHandle(HandleType.topLeft),
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -347,6 +383,7 @@ class HitTest {
         cursorHint: _cursorHintForHandle(HandleType.topRight),
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -362,6 +399,7 @@ class HitTest {
         cursorHint: _cursorHintForHandle(HandleType.bottomRight),
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -377,6 +415,7 @@ class HitTest {
         cursorHint: _cursorHintForHandle(HandleType.bottomLeft),
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -388,6 +427,7 @@ class HitTest {
         cursorHint: CursorHint.resizeUp,
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
     if (_testRightEdge(paddedBounds, testPosition, tolerance)) {
@@ -396,6 +436,7 @@ class HitTest {
         cursorHint: CursorHint.resizeRight,
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
     if (_testBottomEdge(paddedBounds, testPosition, tolerance)) {
@@ -404,6 +445,7 @@ class HitTest {
         cursorHint: CursorHint.resizeDown,
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
     if (_testLeftEdge(paddedBounds, testPosition, tolerance)) {
@@ -412,6 +454,7 @@ class HitTest {
         cursorHint: CursorHint.resizeLeft,
         selectionRotation: rotation,
         target: HitTestTarget.handle,
+        isInSelectionPadding: isInSelectionPadding,
       );
     }
 
@@ -454,9 +497,13 @@ class HitTest {
     final testPosition = rotation == 0
         ? position
         : DrawPoint(
-            x: origin.x + (position.x - origin.x) * cos +
+            x:
+                origin.x +
+                (position.x - origin.x) * cos +
                 (position.y - origin.y) * sin,
-            y: origin.y - (position.x - origin.x) * sin +
+            y:
+                origin.y -
+                (position.x - origin.x) * sin +
                 (position.y - origin.y) * cos,
           );
 
@@ -490,19 +537,22 @@ class HitTest {
     required int positionX,
     required int positionY,
   }) {
-    _hitTestCacheEntry = _HitTestCacheEntry(
-      state: state,
-      config: config,
-      tolerance: tolerance,
-      filterTypeId: filterTypeId,
-      positionX: positionX,
-      positionY: positionY,
-      result: result,
+    _hitTestCache.store(
+      _HitTestCacheEntry(
+        state: state,
+        config: config,
+        tolerance: tolerance,
+        filterTypeId: filterTypeId,
+        positionX: positionX,
+        positionY: positionY,
+        result: result,
+      ),
     );
     return result;
   }
 
-  int _quantizePosition(double value) => value.round();
+  int _quantizePosition(double value) =>
+      (value / _hitTestCacheGridSize).floor();
 
   /// Tests whether the pointer hits the element itself.
   bool _testElement(
@@ -703,16 +753,6 @@ class _HitTestCacheEntry {
   final int positionY;
   final HitTestResult result;
 
-  factory _HitTestCacheEntry.empty() => _HitTestCacheEntry(
-    state: DrawState.initial(),
-    config: const SelectionConfig(),
-    tolerance: double.nan,
-    filterTypeId: null,
-    positionX: -1,
-    positionY: -1,
-    result: HitTestResult.none,
-  );
-
   bool matches({
     required DrawState state,
     required SelectionConfig config,
@@ -727,6 +767,46 @@ class _HitTestCacheEntry {
       this.tolerance == tolerance &&
       this.filterTypeId == filterTypeId &&
       this.config == config;
+}
+
+class _HitTestCache {
+  final _entries = <_HitTestCacheEntry>[];
+
+  HitTestResult? lookup({
+    required DrawState state,
+    required SelectionConfig config,
+    required double tolerance,
+    required ElementTypeId<ElementData>? filterTypeId,
+    required int positionX,
+    required int positionY,
+  }) {
+    for (var i = 0; i < _entries.length; i++) {
+      final entry = _entries[i];
+      if (entry.matches(
+        state: state,
+        config: config,
+        tolerance: tolerance,
+        filterTypeId: filterTypeId,
+        positionX: positionX,
+        positionY: positionY,
+      )) {
+        if (i != 0) {
+          _entries
+            ..removeAt(i)
+            ..insert(0, entry);
+        }
+        return entry.result;
+      }
+    }
+    return null;
+  }
+
+  void store(_HitTestCacheEntry entry) {
+    if (_entries.length >= _hitTestCacheSize) {
+      _entries.removeLast();
+    }
+    _entries.insert(0, entry);
+  }
 }
 
 /// Shared hit-test helper instance.

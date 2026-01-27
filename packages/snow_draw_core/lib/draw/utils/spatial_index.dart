@@ -1,7 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
-
-import '../core/coordinates/element_space.dart';
 import '../models/element_state.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
@@ -22,11 +22,20 @@ class SpatialIndexEntry {
 }
 
 class SpatialIndex {
-  SpatialIndex() : _tree = RBushDirect<SpatialIndexEntry>();
+  SpatialIndex()
+    : _tree = RBushDirect<SpatialIndexEntry>(),
+      _pointSearchBuffer = <SpatialIndexEntry>[],
+      _rectSearchBuffer = <SpatialIndexEntry>[],
+      _pointIdBuffer = <String>[],
+      _rectIdBuffer = <String>[];
 
   factory SpatialIndex.fromElements(List<ElementState> elements) =>
       SpatialIndex()..bulkLoad(elements);
   final RBushDirect<SpatialIndexEntry> _tree;
+  final List<SpatialIndexEntry> _pointSearchBuffer;
+  final List<SpatialIndexEntry> _rectSearchBuffer;
+  final List<String> _pointIdBuffer;
+  final List<String> _rectIdBuffer;
 
   void bulkLoad(List<ElementState> elements) {
     if (elements.isEmpty) {
@@ -50,7 +59,10 @@ class SpatialIndex {
     _tree.remove(SpatialIndexEntry(id: element.id, zIndex: element.zIndex));
   }
 
-  List<String> searchPoint(DrawPoint point, double tolerance) {
+  List<SpatialIndexEntry> searchPointEntries(
+    DrawPoint point,
+    double tolerance,
+  ) {
     final results = _tree.search(
       RBushBox(
         minX: point.x - tolerance,
@@ -58,12 +70,15 @@ class SpatialIndex {
         maxX: point.x + tolerance,
         maxY: point.y + tolerance,
       ),
-    ).toList()
+    );
+    final buffer = _pointSearchBuffer
+      ..clear()
+      ..addAll(results)
       ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
-    return results.map((entry) => entry.id).toList(growable: false);
+    return buffer;
   }
 
-  List<String> searchRect(DrawRect rect) {
+  List<SpatialIndexEntry> searchRectEntries(DrawRect rect) {
     final results = _tree.search(
       RBushBox(
         minX: rect.minX,
@@ -71,9 +86,30 @@ class SpatialIndex {
         maxX: rect.maxX,
         maxY: rect.maxY,
       ),
-    ).toList()
+    );
+    final buffer = _rectSearchBuffer
+      ..clear()
+      ..addAll(results)
       ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
-    return results.map((entry) => entry.id).toList(growable: false);
+    return buffer;
+  }
+
+  List<String> searchPoint(DrawPoint point, double tolerance) {
+    final results = searchPointEntries(point, tolerance);
+    final ids = _pointIdBuffer..clear();
+    for (final entry in results) {
+      ids.add(entry.id);
+    }
+    return ids;
+  }
+
+  List<String> searchRect(DrawRect rect) {
+    final results = searchRectEntries(rect);
+    final ids = _rectIdBuffer..clear();
+    for (final entry in results) {
+      ids.add(entry.id);
+    }
+    return ids;
   }
 
   List<String> getAllIds() =>
@@ -81,7 +117,13 @@ class SpatialIndex {
 
   int get size => _tree.all().length;
 
-  void clear() => _tree.clear();
+  void clear() {
+    _tree.clear();
+    _pointSearchBuffer.clear();
+    _rectSearchBuffer.clear();
+    _pointIdBuffer.clear();
+    _rectIdBuffer.clear();
+  }
 
   RBushElement<SpatialIndexEntry> _entryFromElement(
     ElementState element,
@@ -118,26 +160,19 @@ class SpatialIndex {
     }
 
     final center = rect.center;
-    final space = ElementSpace(rotation: rotation, origin: center);
+    final cos = math.cos(rotation);
+    final sin = math.sin(rotation);
     final halfWidth = rect.width / 2;
     final halfHeight = rect.height / 2;
-
-    final corners = <DrawPoint>[
-      DrawPoint(x: center.x - halfWidth, y: center.y - halfHeight),
-      DrawPoint(x: center.x + halfWidth, y: center.y - halfHeight),
-      DrawPoint(x: center.x + halfWidth, y: center.y + halfHeight),
-      DrawPoint(x: center.x - halfWidth, y: center.y + halfHeight),
-    ];
 
     var minX = double.infinity;
     var minY = double.infinity;
     var maxX = double.negativeInfinity;
     var maxY = double.negativeInfinity;
 
-    for (final corner in corners) {
-      final rotated = space.toWorld(corner);
-      final x = rotated.x;
-      final y = rotated.y;
+    void update(double dx, double dy) {
+      final x = center.x + dx * cos - dy * sin;
+      final y = center.y + dx * sin + dy * cos;
       if (x < minX) {
         minX = x;
       }
@@ -151,6 +186,11 @@ class SpatialIndex {
         maxY = y;
       }
     }
+
+    update(-halfWidth, -halfHeight);
+    update(halfWidth, -halfHeight);
+    update(halfWidth, halfHeight);
+    update(-halfWidth, halfHeight);
 
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
