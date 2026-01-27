@@ -15,7 +15,6 @@ class ArrowGeometry {
     DrawPoint(x: 1, y: 1),
   ];
   static const _polylineSnapTolerance = 1.0;
-  static const _polylineCreationOffset = 40.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -240,40 +239,43 @@ class ArrowGeometry {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
-    if (points.length == 2) {
-      final start = points.first;
-      final end = points.last;
-      final created = _createPolylineCreationPoints(start: start, end: end);
-      return normalizePolylinePoints(created);
-    }
-    return normalizePolylinePoints(points);
+    final created = points.length == 2
+        ? _buildPolylineCreationPoints(
+            start: points.first,
+            end: points.last,
+          )
+        : points;
+    return normalizePolylinePoints(created);
   }
 
-  static List<DrawPoint> _createPolylineCreationPoints({
+  static List<DrawPoint> _buildPolylineCreationPoints({
     required DrawPoint start,
     required DrawPoint end,
   }) {
     final startOffset = Offset(start.x, start.y);
     final endOffset = Offset(end.x, end.y);
-    if (_isSamePoint(startOffset, endOffset)) {
+    if (_isSamePoint(startOffset, endOffset) || _isAxisAligned(start, end)) {
       return [start, end];
     }
 
-    final dx = end.x - start.x;
-    final dy = end.y - start.y;
-    final alignedVertical = _nearZero(dx);
-    final alignedHorizontal = _nearZero(dy);
-    var firstAxis = _dominantPolylineAxis(startOffset, endOffset);
-    if (alignedVertical && !alignedHorizontal) {
-      firstAxis = _PolylineAxis.horizontal;
-    } else if (alignedHorizontal && !alignedVertical) {
-      firstAxis = _PolylineAxis.vertical;
-    }
+    final firstAxis = _dominantPolylineAxis(startOffset, endOffset);
+    return _buildElbowPolylinePoints(
+      start: start,
+      end: end,
+      firstAxis: firstAxis,
+    );
+  }
 
+  static bool _isAxisAligned(DrawPoint start, DrawPoint end) =>
+      start.x == end.x || start.y == end.y;
+
+  static List<DrawPoint> _buildElbowPolylinePoints({
+    required DrawPoint start,
+    required DrawPoint end,
+    required _PolylineAxis firstAxis,
+  }) {
     if (firstAxis == _PolylineAxis.horizontal) {
-      final midX = alignedVertical
-          ? start.x + _resolveCreationOffset(dy)
-          : (start.x + end.x) / 2;
+      final midX = (start.x + end.x) / 2;
       return [
         start,
         DrawPoint(x: midX, y: start.y),
@@ -282,9 +284,7 @@ class ArrowGeometry {
       ];
     }
 
-    final midY = alignedHorizontal
-        ? start.y + _resolveCreationOffset(dx)
-        : (start.y + end.y) / 2;
+    final midY = (start.y + end.y) / 2;
     return [
       start,
       DrawPoint(x: start.x, y: midY),
@@ -616,15 +616,6 @@ class ArrowGeometry {
   }
 
   static bool _nearZero(double value) => value.abs() <= _polylineSnapTolerance;
-
-  static double _resolveCreationOffset(double delta) {
-    if (_nearZero(delta)) {
-      return 0;
-    }
-    final magnitude = delta.abs();
-    final offset = math.min(magnitude / 2, _polylineCreationOffset);
-    return delta.isNegative ? -offset : offset;
-  }
 
   static bool _isSamePoint(Offset a, Offset b) =>
       _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
