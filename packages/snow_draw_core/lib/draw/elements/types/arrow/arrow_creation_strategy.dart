@@ -324,9 +324,13 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     }
 
     final minSize = config.element.minCreateSize;
+    final finishTolerance = config.selection.interaction.handleTolerance;
     final isPolyline = data.arrowType == ArrowType.polyline;
     final rawPoints = creatingState.isPointCreation
-        ? _resolveFinalArrowPoints(creatingState)
+        ? _resolveFinalArrowPoints(
+            interaction: creatingState,
+            finishTolerance: finishTolerance,
+          )
         : _resolveArrowWorldPoints(
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
@@ -421,12 +425,32 @@ List<DrawPoint> _resolvePolylineFinalPoints(List<DrawPoint> points) {
   );
 }
 
-List<DrawPoint> _resolveFinalArrowPoints(CreatingState interaction) {
+List<DrawPoint> _resolveFinalArrowPoints({
+  required CreatingState interaction,
+  required double finishTolerance,
+}) {
   final points = <DrawPoint>[...interaction.fixedPoints];
   final currentPoint = interaction.currentPoint;
-  if (currentPoint != null && (points.isEmpty || points.last != currentPoint)) {
-    points.add(currentPoint);
+  if (currentPoint == null) {
+    return points;
   }
+  if (points.isEmpty) {
+    points.add(currentPoint);
+    return points;
+  }
+
+  final lastPoint = points.last;
+  if (lastPoint == currentPoint) {
+    return points;
+  }
+
+  // Avoid creating an extra tiny segment when finishing multi-point arrows.
+  if (points.length >= 2 &&
+      lastPoint.distanceSquared(currentPoint) <=
+          finishTolerance * finishTolerance) {
+    return points;
+  }
+  points.add(currentPoint);
   return points;
 }
 
