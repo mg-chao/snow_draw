@@ -81,6 +81,7 @@ DrawState handleUpdateElementsStyle(
           final result = _resolveArrowRectAndData(
             currentRect: next.rect,
             data: updatedData,
+            previousArrowType: data.arrowType,
           );
           next = next.copyWith(rect: result.rect, data: result.data);
         }
@@ -212,12 +213,19 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
 ({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
   required DrawRect currentRect,
   required ArrowData data,
+  required ArrowType previousArrowType,
 }) {
   // Resolve world points from the current rect and normalized points
-  final worldPoints = ArrowGeometry.resolveWorldPoints(
+  var worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: currentRect,
     normalizedPoints: data.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
+  if (data.arrowType == ArrowType.polyline &&
+      previousArrowType != ArrowType.polyline) {
+    worldPoints = ArrowGeometry.ensurePolylineCreationPoints(
+      [worldPoints.first, worldPoints.last],
+    );
+  }
 
   // Calculate new bounds based on arrow type
   final newRect = ArrowGeometry.calculatePathBounds(

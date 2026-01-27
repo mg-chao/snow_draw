@@ -345,13 +345,13 @@ List<DrawPoint> _appendCurrentPoint({
 List<DrawPoint> _resolvePolylineCreatePoints({
   required DrawPoint start,
   required DrawPoint end,
-}) => ArrowGeometry.normalizePolylinePoints([start, end]);
+}) => ArrowGeometry.ensurePolylineCreationPoints([start, end]);
 
 List<DrawPoint> _resolvePolylineFinalPoints(List<DrawPoint> points) {
   if (points.length < 2) {
     return points;
   }
-  return ArrowGeometry.normalizePolylinePoints(
+  return ArrowGeometry.ensurePolylineCreationPoints(
     [points.first, points.last],
   );
 }

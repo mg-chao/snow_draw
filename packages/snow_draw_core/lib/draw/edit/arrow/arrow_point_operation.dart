@@ -457,11 +457,12 @@ _ArrowPointComputation _compute({
         target: target,
       );
       updatedPoints = _normalizePolylinePoints(updatedPoints);
+      activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
     } else {
       updatedPoints = List<DrawPoint>.from(basePoints);
       updatedPoints[index] = target;
+      activeIndex = index;
     }
-    activeIndex = index;
   }
 
   if (context.pointKind != ArrowPointKind.addable &&
@@ -811,16 +812,5 @@ List<DrawPoint> _normalizePolylinePoints(List<DrawPoint> points) {
   return List<DrawPoint>.from(ArrowGeometry.normalizePolylinePoints(points));
 }
 
-bool _nearZero(double value) => value.abs() <= 1.0;
-
-bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) {
-  final dx = end.x - start.x;
-  final dy = end.y - start.y;
-  if (_nearZero(dy) && !_nearZero(dx)) {
-    return true;
-  }
-  if (_nearZero(dx) && !_nearZero(dy)) {
-    return false;
-  }
-  return dx.abs() > dy.abs();
-}
+bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
+    ArrowGeometry.isPolylineSegmentHorizontal(start, end);
