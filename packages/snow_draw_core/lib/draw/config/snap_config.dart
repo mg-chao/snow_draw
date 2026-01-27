@@ -39,7 +39,7 @@ class SnapConfig {
   /// Enable gap snapping (equal spacing).
   final bool enableGapSnaps;
 
-  /// Enable arrow endpoint binding to element edges.
+  /// Enable arrow endpoint binding to elements.
   final bool enableArrowBinding;
 
   /// Snap distance for arrow binding in screen pixels.

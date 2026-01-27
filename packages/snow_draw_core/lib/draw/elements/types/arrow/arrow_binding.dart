@@ -257,6 +257,28 @@ const _bindingGapBase = 10.0;
 const _intersectionEpsilon = 1e-6;
 const _insideEpsilon = 1e-6;
 
+double _resolveInsideBindingThreshold({
+  required DrawRect rect,
+  required double snapDistance,
+}) {
+  if (snapDistance <= 0) {
+    return 0;
+  }
+  final maxDepth = math.min(rect.width.abs(), rect.height.abs()) / 2;
+  if (maxDepth <= 0) {
+    return 0;
+  }
+  return math.min(snapDistance, maxDepth);
+}
+
+double _resolveInsideDepth(DrawRect rect, DrawPoint point) {
+  final left = (point.x - rect.minX).abs();
+  final right = (rect.maxX - point.x).abs();
+  final top = (point.y - rect.minY).abs();
+  final bottom = (rect.maxY - point.y).abs();
+  return math.min(math.min(left, right), math.min(top, bottom));
+}
+
 DrawPoint _nearestPointOnRectBoundary(DrawRect rect, DrawPoint point) {
   final clampedX = _clamp(point.x, rect.minX, rect.maxX);
   final clampedY = _clamp(point.y, rect.minY, rect.maxY);
@@ -311,7 +333,16 @@ _BindingHit? _resolveBindingHit({
   if (_isStrictlyInsideRect(rect, localPoint)) {
     final referenceInside =
         localReference != null && _isStrictlyInsideRect(rect, localReference);
-    if (localReference == null || referenceInside) {
+    var allowInside = localReference == null || referenceInside;
+    if (!allowInside) {
+      final insideDepth = _resolveInsideDepth(rect, localPoint);
+      final insideThreshold = _resolveInsideBindingThreshold(
+        rect: rect,
+        snapDistance: snapDistance,
+      );
+      allowInside = insideDepth >= insideThreshold;
+    }
+    if (allowInside) {
       final anchorPoint = _clampPointToRect(rect, localPoint);
       return _BindingHit(
         anchorPoint: anchorPoint,

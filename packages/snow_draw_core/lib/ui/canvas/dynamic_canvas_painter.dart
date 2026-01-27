@@ -753,7 +753,7 @@ class DynamicCanvasPainter extends CustomPainter {
   }
 
   _ArrowBindingHighlight? _highlightFromBinding(ArrowBinding? binding) {
-    if (binding == null || binding.mode != ArrowBindingMode.orbit) {
+    if (binding == null) {
       return null;
     }
     return _ArrowBindingHighlight(elementId: binding.elementId);
