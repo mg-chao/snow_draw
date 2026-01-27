@@ -527,14 +527,14 @@ _BindingSnapResult _snapBindingPoint({
   if (!bindingEnabled) {
     return _BindingSnapResult(position: position);
   }
-  final targets = _resolveBindingTargets(state);
-  if (targets.isEmpty) {
-    return _BindingSnapResult(position: position);
-  }
   final zoom = state.application.view.camera.zoom;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
   final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
   if (bindingDistance <= 0) {
+    return _BindingSnapResult(position: position);
+  }
+  final targets = _resolveBindingTargets(state, position, bindingDistance);
+  if (targets.isEmpty) {
     return _BindingSnapResult(position: position);
   }
 
@@ -561,12 +561,26 @@ List<ElementState> _resolveReferenceElements(DrawState state) => state
     .where((element) => element.opacity > 0)
     .toList();
 
-List<ElementState> _resolveBindingTargets(DrawState state) => state
-    .domain
-    .document
-    .elements
-    .where((element) => element.opacity > 0 && element.data is RectangleData)
-    .toList();
+List<ElementState> _resolveBindingTargets(
+  DrawState state,
+  DrawPoint position,
+  double distance,
+) {
+  final document = state.domain.document;
+  final entries = document.spatialIndex.searchPointEntries(position, distance);
+  final targets = <ElementState>[];
+  for (final entry in entries) {
+    final element = document.getElementById(entry.id);
+    if (element == null) {
+      continue;
+    }
+    if (element.opacity <= 0 || element.data is! RectangleData) {
+      continue;
+    }
+    targets.add(element);
+  }
+  return targets;
+}
 
 @immutable
 class _PointSnapResult {

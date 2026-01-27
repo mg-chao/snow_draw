@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
+import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
@@ -16,13 +17,27 @@ final class ArrowBindingResolver {
   static Map<String, ElementState> resolveBoundArrows({
     required Map<String, ElementState> elementsById,
     required Set<String> changedElementIds,
+    DocumentState? document,
   }) {
     if (changedElementIds.isEmpty) {
       return const {};
     }
 
     final updates = <String, ElementState>{};
-    for (final element in elementsById.values) {
+    final arrowIds = _resolveBoundArrowIds(
+      changedElementIds: changedElementIds,
+      elementsById: elementsById,
+      document: document,
+    );
+    if (arrowIds.isEmpty) {
+      return const {};
+    }
+
+    for (final arrowId in arrowIds) {
+      final element = elementsById[arrowId];
+      if (element == null) {
+        continue;
+      }
       final data = element.data;
       if (data is! ArrowData) {
         continue;
@@ -57,6 +72,184 @@ final class ArrowBindingResolver {
 
     return updates;
   }
+}
+
+var _cachedElementsVersion = -1;
+var _cachedBindingIndex = <String, Set<String>>{};
+var _cachedArrowBindings = <String, _ArrowBindingEntry>{};
+
+Set<String> _resolveBoundArrowIds({
+  required Set<String> changedElementIds,
+  required Map<String, ElementState> elementsById,
+  DocumentState? document,
+}) {
+  final bindingIndex = _resolveBindingIndex(
+    changedElementIds: changedElementIds,
+    elementsById: elementsById,
+    document: document,
+  );
+  final arrowIds = <String>{};
+  for (final id in changedElementIds) {
+    final bound = bindingIndex[id];
+    if (bound != null) {
+      arrowIds.addAll(bound);
+    }
+  }
+  return arrowIds;
+}
+
+Map<String, Set<String>> _resolveBindingIndex({
+  required Set<String> changedElementIds,
+  required Map<String, ElementState> elementsById,
+  DocumentState? document,
+}) {
+  final documentVersion = document?.elementsVersion;
+  if (_cachedElementsVersion == -1 ||
+      (documentVersion != null && documentVersion < _cachedElementsVersion)) {
+    _rebuildBindingIndex(document?.elements ?? elementsById.values);
+    if (documentVersion != null) {
+      _cachedElementsVersion = documentVersion;
+    } else if (_cachedElementsVersion == -1) {
+      _cachedElementsVersion = 0;
+    }
+    return _cachedBindingIndex;
+  }
+
+  if (documentVersion != null &&
+      _cachedElementsVersion >= 0 &&
+      documentVersion > _cachedElementsVersion + 1) {
+    _rebuildBindingIndex(document?.elements ?? elementsById.values);
+    _cachedElementsVersion = documentVersion;
+    return _cachedBindingIndex;
+  }
+
+  final shouldUpdate =
+      documentVersion == null ||
+      documentVersion != _cachedElementsVersion ||
+      changedElementIds.isNotEmpty;
+  if (!shouldUpdate) {
+    return _cachedBindingIndex;
+  }
+
+  if (changedElementIds.isEmpty) {
+    _rebuildBindingIndex(document?.elements ?? elementsById.values);
+  } else {
+    _updateBindingIndex(
+      changedElementIds: changedElementIds,
+      elementsById: elementsById,
+    );
+  }
+
+  if (documentVersion != null) {
+    _cachedElementsVersion = documentVersion;
+  } else if (_cachedElementsVersion == -1) {
+    _cachedElementsVersion = 0;
+  }
+  return _cachedBindingIndex;
+}
+
+void _rebuildBindingIndex(Iterable<ElementState> elements) {
+  _cachedBindingIndex = <String, Set<String>>{};
+  _cachedArrowBindings = <String, _ArrowBindingEntry>{};
+
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! ArrowData) {
+      continue;
+    }
+    final entry = _ArrowBindingEntry(
+      startId: data.startBinding?.elementId,
+      endId: data.endBinding?.elementId,
+    );
+    if (entry.isEmpty) {
+      continue;
+    }
+    _cachedArrowBindings[element.id] = entry;
+    _addBindingEntry(element.id, entry);
+  }
+}
+
+void _updateBindingIndex({
+  required Set<String> changedElementIds,
+  required Map<String, ElementState> elementsById,
+}) {
+  for (final id in changedElementIds) {
+    final element = elementsById[id];
+    if (element == null || element.data is! ArrowData) {
+      final previous = _cachedArrowBindings.remove(id);
+      if (previous != null) {
+        _removeBindingEntry(id, previous);
+      }
+      continue;
+    }
+
+    final data = element.data as ArrowData;
+    final next = _ArrowBindingEntry(
+      startId: data.startBinding?.elementId,
+      endId: data.endBinding?.elementId,
+    );
+    final previous = _cachedArrowBindings[id];
+    if (previous != null && previous == next) {
+      continue;
+    }
+    if (previous != null) {
+      _removeBindingEntry(id, previous);
+    }
+    if (next.isEmpty) {
+      _cachedArrowBindings.remove(id);
+      continue;
+    }
+    _cachedArrowBindings[id] = next;
+    _addBindingEntry(id, next);
+  }
+}
+
+void _addBindingEntry(String arrowId, _ArrowBindingEntry entry) {
+  for (final targetId in entry.targetIds) {
+    (_cachedBindingIndex[targetId] ??= <String>{}).add(arrowId);
+  }
+}
+
+void _removeBindingEntry(String arrowId, _ArrowBindingEntry entry) {
+  for (final targetId in entry.targetIds) {
+    final arrows = _cachedBindingIndex[targetId];
+    if (arrows == null) {
+      continue;
+    }
+    arrows.remove(arrowId);
+    if (arrows.isEmpty) {
+      _cachedBindingIndex.remove(targetId);
+    }
+  }
+}
+
+@immutable
+class _ArrowBindingEntry {
+  const _ArrowBindingEntry({this.startId, this.endId});
+
+  final String? startId;
+  final String? endId;
+
+  bool get isEmpty => startId == null && endId == null;
+
+  Iterable<String> get targetIds sync* {
+    if (startId != null) {
+      yield startId!;
+    }
+    if (endId != null && endId != startId) {
+      yield endId!;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ArrowBindingEntry &&
+          other.startId == startId &&
+          other.endId == endId;
+
+  @override
+  int get hashCode => Object.hash(startId, endId);
 }
 
 ElementState? _applyBindings({

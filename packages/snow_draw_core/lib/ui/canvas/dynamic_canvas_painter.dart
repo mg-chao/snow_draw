@@ -10,6 +10,7 @@ import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
@@ -524,44 +525,13 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final rect = element.rect;
-    final localPoints = ArrowGeometry.resolveLocalPoints(
-      rect: rect,
-      normalizedPoints: data.points,
-    );
-    if (localPoints.length < 2) {
+    final cached = arrowVisualCache.resolve(element: element, data: data);
+    if (cached.geometry.localPoints.length < 2) {
       return;
     }
 
-    // Use selection stroke width for shaft, but arrow's actual stroke width for
-    // arrowheads
+    // Use selection stroke width for the hover outline.
     final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
-    final arrowheadStrokeWidth = data.strokeWidth;
-
-    // Calculate insets to prevent shaft from penetrating closed arrowheads
-    final startInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.startArrowhead,
-      strokeWidth: arrowheadStrokeWidth,
-    );
-    final endInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.endArrowhead,
-      strokeWidth: arrowheadStrokeWidth,
-    );
-    final startDirectionOffset =
-        ArrowGeometry.calculateArrowheadDirectionOffset(
-          style: data.startArrowhead,
-          strokeWidth: arrowheadStrokeWidth,
-        );
-    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-      style: data.endArrowhead,
-      strokeWidth: arrowheadStrokeWidth,
-    );
-
-    final shaftPath = ArrowGeometry.buildShaftPath(
-      points: localPoints,
-      arrowType: data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-    );
 
     canvas.save();
     if (element.rotation != 0) {
@@ -583,72 +553,13 @@ class DynamicCanvasPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     // Draw shaft (always solid for hover outline)
-    canvas.drawPath(shaftPath, strokePaint);
+    canvas.drawPath(cached.shaftPath, strokePaint);
 
-    // Draw arrowheads (using arrow's actual stroke width for proper sizing)
-    _drawArrowHoverArrowheads(
-      canvas,
-      localPoints,
-      data,
-      strokePaint,
-      arrowheadStrokeWidth,
-      startInset: startInset,
-      endInset: endInset,
-      startDirectionOffset: startDirectionOffset,
-      endDirectionOffset: endDirectionOffset,
-    );
+    for (final arrowheadPath in cached.arrowheadPaths) {
+      canvas.drawPath(arrowheadPath, strokePaint);
+    }
 
     canvas.restore();
-  }
-
-  void _drawArrowHoverArrowheads(
-    Canvas canvas,
-    List<Offset> points,
-    ArrowData data,
-    Paint paint,
-    double strokeWidth, {
-    required double startInset,
-    required double endInset,
-    required double startDirectionOffset,
-    required double endDirectionOffset,
-  }) {
-    if (points.length < 2 || strokeWidth <= 0) {
-      return;
-    }
-
-    final startDirection = ArrowGeometry.resolveStartDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: startDirectionOffset,
-    );
-    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      final path = ArrowGeometry.buildArrowheadPath(
-        tip: points.first,
-        direction: startDirection,
-        style: data.startArrowhead,
-        strokeWidth: strokeWidth,
-      );
-      canvas.drawPath(path, paint);
-    }
-
-    final endDirection = ArrowGeometry.resolveEndDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: endDirectionOffset,
-    );
-    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      final path = ArrowGeometry.buildArrowheadPath(
-        tip: points.last,
-        direction: endDirection,
-        style: data.endArrowhead,
-        strokeWidth: strokeWidth,
-      );
-      canvas.drawPath(path, paint);
-    }
   }
 
   void _drawTextHoverUnderlines({

@@ -4,8 +4,23 @@ import 'dart:ui';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import 'arrow_data.dart';
 
 enum _PolylineAxis { horizontal, vertical }
+
+class _CubicSegment {
+  const _CubicSegment({
+    required this.start,
+    required this.control1,
+    required this.control2,
+    required this.end,
+  });
+
+  final Offset start;
+  final Offset control1;
+  final Offset control2;
+  final Offset end;
+}
 
 class ArrowGeometry {
   const ArrowGeometry._();
@@ -71,11 +86,10 @@ class ArrowGeometry {
 
     // If no insets, use original path
     if (startInset <= 0 && endInset <= 0) {
-      return switch (arrowType) {
-        ArrowType.curved => _buildCurvedPath(points),
-        ArrowType.polyline => _buildPolylinePath(points),
-        ArrowType.straight => _buildStraightPath(points),
-      };
+      return buildShaftPathFromResolvedPoints(
+        points: points,
+        arrowType: arrowType,
+      );
     }
 
     // Apply insets to shorten the shaft
@@ -90,10 +104,23 @@ class ArrowGeometry {
       return Path();
     }
 
+    return buildShaftPathFromResolvedPoints(
+      points: adjustedPoints,
+      arrowType: arrowType,
+    );
+  }
+
+  static Path buildShaftPathFromResolvedPoints({
+    required List<Offset> points,
+    required ArrowType arrowType,
+  }) {
+    if (points.length < 2) {
+      return Path();
+    }
     return switch (arrowType) {
-      ArrowType.curved => _buildCurvedPath(adjustedPoints),
-      ArrowType.polyline => _buildPolylinePath(adjustedPoints),
-      ArrowType.straight => _buildStraightPath(adjustedPoints),
+      ArrowType.curved => _buildCurvedPath(points),
+      ArrowType.polyline => _buildPolylinePath(points),
+      ArrowType.straight => _buildStraightPath(points),
     };
   }
 
@@ -105,12 +132,7 @@ class ArrowGeometry {
       return 0;
     }
     if (arrowType == ArrowType.curved && points.length > 2) {
-      final path = buildShaftPath(points: points, arrowType: arrowType);
-      var length = 0.0;
-      for (final metric in path.computeMetrics()) {
-        length += metric.length;
-      }
-      return length;
+      return _approximateCurvedLength(points);
     }
 
     final resolvedPoints = arrowType == ArrowType.polyline
@@ -134,19 +156,25 @@ class ArrowGeometry {
       return null;
     }
 
-    if (arrowType == ArrowType.curved || startInset > 0 || endInset > 0) {
-      final path = buildShaftPath(
-        points: points,
-        arrowType: arrowType,
-        startInset: startInset,
-        endInset: endInset,
-      );
-      final effectiveOffset = arrowType == ArrowType.curved
-          ? math.max(0, directionOffset - startInset)
-          : 0.0;
-      final direction = _resolvePathStartDirection(
-        path,
+    final hasInsets = startInset > 0 || endInset > 0;
+    final workingPoints = hasInsets
+        ? _applyInsets(
+            points: points,
+            arrowType: arrowType,
+            startInset: startInset,
+            endInset: endInset,
+          )
+        : points;
+    if (workingPoints.length < 2) {
+      return null;
+    }
+
+    if (arrowType == ArrowType.curved && workingPoints.length > 2) {
+      final effectiveOffset = math.max(0, directionOffset - startInset);
+      final direction = _resolveCurvedDirection(
+        workingPoints,
         offset: effectiveOffset.toDouble(),
+        fromStart: true,
       );
       if (direction != null) {
         return Offset(-direction.dx, -direction.dy);
@@ -154,8 +182,8 @@ class ArrowGeometry {
     }
 
     final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
-        : points;
+        ? expandPolylinePoints(workingPoints)
+        : workingPoints;
     if (resolvedPoints.length < 2) {
       return null;
     }
@@ -174,19 +202,25 @@ class ArrowGeometry {
       return null;
     }
 
-    if (arrowType == ArrowType.curved || startInset > 0 || endInset > 0) {
-      final path = buildShaftPath(
-        points: points,
-        arrowType: arrowType,
-        startInset: startInset,
-        endInset: endInset,
-      );
-      final effectiveOffset = arrowType == ArrowType.curved
-          ? math.max(0, directionOffset - endInset)
-          : 0.0;
-      final direction = _resolvePathEndDirection(
-        path,
+    final hasInsets = startInset > 0 || endInset > 0;
+    final workingPoints = hasInsets
+        ? _applyInsets(
+            points: points,
+            arrowType: arrowType,
+            startInset: startInset,
+            endInset: endInset,
+          )
+        : points;
+    if (workingPoints.length < 2) {
+      return null;
+    }
+
+    if (arrowType == ArrowType.curved && workingPoints.length > 2) {
+      final effectiveOffset = math.max(0, directionOffset - endInset);
+      final direction = _resolveCurvedDirection(
+        workingPoints,
         offset: effectiveOffset.toDouble(),
+        fromStart: false,
       );
       if (direction != null) {
         return direction;
@@ -194,8 +228,8 @@ class ArrowGeometry {
     }
 
     final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
-        : points;
+        ? expandPolylinePoints(workingPoints)
+        : workingPoints;
     if (resolvedPoints.length < 2) {
       return null;
     }
@@ -759,46 +793,212 @@ class ArrowGeometry {
     return Offset(value.dx / length, value.dy / length);
   }
 
-  static Offset? _resolvePathStartDirection(Path path, {double offset = 0}) {
-    final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
-    for (final metric in path.computeMetrics()) {
-      if (metric.length <= 0) {
-        continue;
-      }
-      final distance = safeOffset == 0
-          ? 0.0
-          : math.min(safeOffset, metric.length);
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent == null) {
-        continue;
-      }
-      return _normalize(tangent.vector);
+  static double _approximateCurvedLength(List<Offset> points) {
+    if (points.length < 2) {
+      return 0;
     }
+
+    var length = 0.0;
+    for (var i = 0; i < points.length - 1; i++) {
+      final segment = _buildCubicSegment(points, i);
+      length += _approximateCubicLength(segment);
+    }
+    return length;
+  }
+
+  static Offset? _resolveCurvedDirection(
+    List<Offset> points, {
+    required double offset,
+    required bool fromStart,
+  }) {
+    if (points.length < 2) {
+      return null;
+    }
+
+    final segmentCount = points.length - 1;
+    if (segmentCount == 1) {
+      return _normalize(points[1] - points[0]);
+    }
+
+    var remaining = offset.isFinite ? offset : 0.0;
+    if (remaining < 0) {
+      remaining = 0;
+    }
+
+    if (fromStart) {
+      for (var i = 0; i < segmentCount; i++) {
+        final segment = _buildCubicSegment(points, i);
+        final length = _approximateCubicLength(segment);
+        if (length <= 0) {
+          continue;
+        }
+        if (remaining <= length || i == segmentCount - 1) {
+          final t = length == 0
+              ? 0.0
+              : (remaining / length).clamp(0.0, 1.0);
+          return _normalize(_cubicTangent(segment, t));
+        }
+        remaining -= length;
+      }
+      return null;
+    }
+
+    for (var i = segmentCount - 1; i >= 0; i--) {
+      final segment = _buildCubicSegment(points, i);
+      final length = _approximateCubicLength(segment);
+      if (length <= 0) {
+        continue;
+      }
+      if (remaining <= length || i == 0) {
+        final t = length == 0
+            ? 1.0
+            : (1.0 - (remaining / length)).clamp(0.0, 1.0);
+        return _normalize(_cubicTangent(segment, t));
+      }
+      remaining -= length;
+    }
+
     return null;
   }
 
-  static Offset? _resolvePathEndDirection(Path path, {double offset = 0}) {
-    final safeOffset = offset.isFinite && offset > 0 ? offset : 0.0;
-    Offset? direction;
-    for (final metric in path.computeMetrics()) {
-      if (metric.length <= 0) {
-        continue;
-      }
-      final distance = safeOffset == 0
-          ? metric.length
-          : math.max(0, metric.length - safeOffset);
-      final tangent = metric.getTangentForOffset(distance.toDouble());
-      if (tangent == null) {
-        continue;
-      }
-      direction = _normalize(tangent.vector);
+  static _CubicSegment _buildCubicSegment(List<Offset> points, int index) {
+    final p0 = index == 0 ? points[index] : points[index - 1];
+    final p1 = points[index];
+    final p2 = points[index + 1];
+    final p3 = index + 2 < points.length
+        ? points[index + 2]
+        : points[index + 1];
+
+    const tension = 1.0;
+    final control1 = p1 + (p2 - p0) * (tension / 6);
+    final control2 = p2 - (p3 - p1) * (tension / 6);
+    return _CubicSegment(
+      start: p1,
+      control1: control1,
+      control2: control2,
+      end: p2,
+    );
+  }
+
+  static double _approximateCubicLength(_CubicSegment segment) {
+    const steps = 5;
+    var length = 0.0;
+    var previous = segment.start;
+    for (var i = 1; i <= steps; i++) {
+      final t = i / steps;
+      final point = _evaluateCubic(segment, t);
+      length += (point - previous).distance;
+      previous = point;
     }
-    return direction;
+    return length;
+  }
+
+  static Offset _evaluateCubic(_CubicSegment segment, double t) {
+    final mt = 1 - t;
+    final mt2 = mt * mt;
+    final t2 = t * t;
+    final a = mt2 * mt;
+    final b = 3 * mt2 * t;
+    final c = 3 * mt * t2;
+    final d = t2 * t;
+    return segment.start * a +
+        segment.control1 * b +
+        segment.control2 * c +
+        segment.end * d;
+  }
+
+  static Offset _cubicTangent(_CubicSegment segment, double t) {
+    final mt = 1 - t;
+    final a = (segment.control1 - segment.start) * (3 * mt * mt);
+    final b = (segment.control2 - segment.control1) * (6 * mt * t);
+    final c = (segment.end - segment.control2) * (3 * t * t);
+    return a + b + c;
+  }
+
+  static void _expandBoundsForCubic({
+    required _CubicSegment segment,
+    required void Function(double) minX,
+    required void Function(double) maxX,
+    required void Function(double) minY,
+    required void Function(double) maxY,
+  }) {
+    final tValues = <double>{0.0, 1.0}
+      ..addAll(
+        _cubicDerivativeRoots(
+          segment.start.dx,
+          segment.control1.dx,
+          segment.control2.dx,
+          segment.end.dx,
+        ),
+      )
+      ..addAll(
+        _cubicDerivativeRoots(
+          segment.start.dy,
+          segment.control1.dy,
+          segment.control2.dy,
+          segment.end.dy,
+        ),
+      );
+
+    for (final t in tValues) {
+      final point = _evaluateCubic(segment, t);
+      minX(point.dx);
+      maxX(point.dx);
+      minY(point.dy);
+      maxY(point.dy);
+    }
+  }
+
+  static List<double> _cubicDerivativeRoots(
+    double p0,
+    double p1,
+    double p2,
+    double p3,
+  ) {
+    const epsilon = 1e-9;
+    final a = -p0 + 3 * p1 - 3 * p2 + p3;
+    final b = 3 * p0 - 6 * p1 + 3 * p2;
+    final c = -3 * p0 + 3 * p1;
+
+    if (a.abs() < epsilon) {
+      if (b.abs() < epsilon) {
+        return const [];
+      }
+      final t = -c / (2 * b);
+      if (t > 0 && t < 1) {
+        return [t];
+      }
+      return const [];
+    }
+
+    final A = 3 * a;
+    final B = 2 * b;
+    final C = c;
+    final discriminant = B * B - 4 * A * C;
+    if (discriminant < 0) {
+      return const [];
+    }
+    final sqrtDisc = math.sqrt(discriminant);
+    final denom = 2 * A;
+    if (denom.abs() < epsilon) {
+      return const [];
+    }
+
+    final t1 = (-B + sqrtDisc) / denom;
+    final t2 = (-B - sqrtDisc) / denom;
+    final roots = <double>[];
+    if (t1 > 0 && t1 < 1) {
+      roots.add(t1);
+    }
+    if (t2 > 0 && t2 < 1) {
+      roots.add(t2);
+    }
+    return roots;
   }
 
   /// Calculates accurate bounding box for arrow paths, accounting for
   /// curve overshoot.
-  /// For curved arrows, samples the actual path to find true bounds.
+  /// For curved arrows, computes cubic bounds analytically.
   /// For straight/polyline arrows, uses control points.
   static DrawRect calculatePathBounds({
     required List<DrawPoint> worldPoints,
@@ -813,52 +1013,25 @@ class ArrowGeometry {
       return _boundsFromPoints(worldPoints);
     }
 
-    // For curved arrows, sample the actual path to find accurate bounds
+    // For curved arrows, compute cubic bezier bounds analytically.
     final offsetPoints = worldPoints
         .map((p) => Offset(p.x, p.y))
         .toList(growable: false);
-    final path = _buildCurvedPath(offsetPoints);
 
-    var minX = double.infinity;
-    var maxX = double.negativeInfinity;
-    var minY = double.infinity;
-    var maxY = double.negativeInfinity;
+    var minX = offsetPoints.first.dx;
+    var maxX = offsetPoints.first.dx;
+    var minY = offsetPoints.first.dy;
+    var maxY = offsetPoints.first.dy;
 
-    // Sample the path to find actual bounds
-    for (final metric in path.computeMetrics()) {
-      final length = metric.length;
-      if (length <= 0) {
-        continue;
-      }
-
-      // Sample at regular intervals (every 2 pixels or at least 10 samples)
-      final sampleCount = math.max(10, (length / 2).ceil());
-      final step = length / sampleCount;
-
-      for (var i = 0; i <= sampleCount; i++) {
-        final distance = math.min(i * step, length);
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          final pos = tangent.position;
-          if (pos.dx < minX) {
-            minX = pos.dx;
-          }
-          if (pos.dx > maxX) {
-            maxX = pos.dx;
-          }
-          if (pos.dy < minY) {
-            minY = pos.dy;
-          }
-          if (pos.dy > maxY) {
-            maxY = pos.dy;
-          }
-        }
-      }
-    }
-
-    // If sampling failed, fall back to control points
-    if (!minX.isFinite || !maxX.isFinite || !minY.isFinite || !maxY.isFinite) {
-      return _boundsFromPoints(worldPoints);
+    for (var i = 0; i < offsetPoints.length - 1; i++) {
+      final segment = _buildCubicSegment(offsetPoints, i);
+      _expandBoundsForCubic(
+        segment: segment,
+        minX: (value) => minX = math.min(minX, value),
+        maxX: (value) => maxX = math.max(maxX, value),
+        minY: (value) => minY = math.min(minY, value),
+        maxY: (value) => maxY = math.max(maxY, value),
+      );
     }
 
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
@@ -998,5 +1171,306 @@ class ArrowGeometry {
 
     // Inset is longer than the entire path
     return [points.first];
+  }
+}
+
+class ArrowGeometryDescriptor {
+  ArrowGeometryDescriptor({
+    required this.data,
+    required this.rect,
+  });
+
+  final ArrowData data;
+  final DrawRect rect;
+
+  List<Offset>? _localPoints;
+  List<Offset>? _worldPoints;
+  List<Offset>? _insetPoints;
+  Offset? _startDirection;
+  Offset? _endDirection;
+  double? _startInset;
+  double? _endInset;
+  double? _startDirectionOffset;
+  double? _endDirectionOffset;
+  double? _shaftLength;
+  DrawRect? _pathBounds;
+  _CurvedPathAnalysis? _curvedAnalysis;
+  _CurvedPathAnalysis? _insetCurvedAnalysis;
+
+  List<Offset> get localPoints =>
+      _localPoints ??= ArrowGeometry.resolveLocalPoints(
+        rect: rect,
+        normalizedPoints: data.points,
+      );
+
+  List<Offset> get worldPoints {
+    final cached = _worldPoints;
+    if (cached != null) {
+      return cached;
+    }
+    final local = localPoints;
+    final world = local
+        .map(
+          (point) => Offset(point.dx + rect.minX, point.dy + rect.minY),
+        )
+        .toList(growable: false);
+    _worldPoints = world;
+    return world;
+  }
+
+  double get startInset =>
+      _startInset ??= ArrowGeometry.calculateArrowheadInset(
+        style: data.startArrowhead,
+        strokeWidth: data.strokeWidth,
+      );
+
+  double get endInset =>
+      _endInset ??= ArrowGeometry.calculateArrowheadInset(
+        style: data.endArrowhead,
+        strokeWidth: data.strokeWidth,
+      );
+
+  double get startDirectionOffset =>
+      _startDirectionOffset ??=
+          ArrowGeometry.calculateArrowheadDirectionOffset(
+            style: data.startArrowhead,
+            strokeWidth: data.strokeWidth,
+          );
+
+  double get endDirectionOffset =>
+      _endDirectionOffset ??=
+          ArrowGeometry.calculateArrowheadDirectionOffset(
+            style: data.endArrowhead,
+            strokeWidth: data.strokeWidth,
+          );
+
+  List<Offset> get insetPoints {
+    final cached = _insetPoints;
+    if (cached != null) {
+      return cached;
+    }
+    if (localPoints.length < 2) {
+      _insetPoints = localPoints;
+      return localPoints;
+    }
+    final applied = (startInset <= 0 && endInset <= 0)
+        ? localPoints
+        : ArrowGeometry._applyInsets(
+            points: localPoints,
+            arrowType: data.arrowType,
+            startInset: startInset,
+            endInset: endInset,
+          );
+    _insetPoints = applied;
+    return applied;
+  }
+
+  Offset? get startDirection =>
+      _startDirection ??= _resolveDirection(fromStart: true);
+
+  Offset? get endDirection =>
+      _endDirection ??= _resolveDirection(fromStart: false);
+
+  double get shaftLength {
+    final cached = _shaftLength;
+    if (cached != null) {
+      return cached;
+    }
+    final points = localPoints;
+    if (points.length < 2) {
+      _shaftLength = 0;
+      return 0;
+    }
+    if (data.arrowType == ArrowType.curved && points.length > 2) {
+      final analysis = _resolveCurvedAnalysis(points, inset: false);
+      _shaftLength = analysis.totalLength;
+      return analysis.totalLength;
+    }
+    final resolvedPoints = data.arrowType == ArrowType.polyline
+        ? ArrowGeometry.expandPolylinePoints(points)
+        : points;
+    var length = 0.0;
+    for (var i = 1; i < resolvedPoints.length; i++) {
+      length += (resolvedPoints[i] - resolvedPoints[i - 1]).distance;
+    }
+    _shaftLength = length;
+    return length;
+  }
+
+  DrawRect get pathBounds {
+    final cached = _pathBounds;
+    if (cached != null) {
+      return cached;
+    }
+    final points = worldPoints;
+    if (points.isEmpty) {
+      _pathBounds = const DrawRect();
+      return _pathBounds!;
+    }
+
+    if (data.arrowType != ArrowType.curved || points.length < 3) {
+      final bounds = _boundsFromOffsets(points);
+      _pathBounds = bounds;
+      return bounds;
+    }
+
+    var minX = points.first.dx;
+    var maxX = points.first.dx;
+    var minY = points.first.dy;
+    var maxY = points.first.dy;
+
+    for (var i = 0; i < points.length - 1; i++) {
+      final segment = ArrowGeometry._buildCubicSegment(points, i);
+      ArrowGeometry._expandBoundsForCubic(
+        segment: segment,
+        minX: (value) => minX = math.min(minX, value),
+        maxX: (value) => maxX = math.max(maxX, value),
+        minY: (value) => minY = math.min(minY, value),
+        maxY: (value) => maxY = math.max(maxY, value),
+      );
+    }
+
+    final bounds = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    _pathBounds = bounds;
+    return bounds;
+  }
+
+  Offset? _resolveDirection({required bool fromStart}) {
+    final points = insetPoints;
+    if (points.length < 2) {
+      return null;
+    }
+
+    if (data.arrowType == ArrowType.curved && points.length > 2) {
+      final directionOffset = fromStart
+          ? (startDirectionOffset - startInset)
+          : (endDirectionOffset - endInset);
+      final effectiveOffset = math.max(0, directionOffset).toDouble();
+      final analysis = _resolveCurvedAnalysis(points, inset: true);
+      final direction = fromStart
+          ? analysis.directionFromStart(effectiveOffset)
+          : analysis.directionFromEnd(effectiveOffset);
+      if (direction == null) {
+        return null;
+      }
+      return fromStart ? Offset(-direction.dx, -direction.dy) : direction;
+    }
+
+    final resolvedPoints = data.arrowType == ArrowType.polyline
+        ? ArrowGeometry.expandPolylinePoints(points)
+        : points;
+    if (resolvedPoints.length < 2) {
+      return null;
+    }
+    final vector = fromStart
+        ? resolvedPoints.first - resolvedPoints[1]
+        : resolvedPoints.last - resolvedPoints[resolvedPoints.length - 2];
+    return ArrowGeometry._normalize(vector);
+  }
+
+  _CurvedPathAnalysis _resolveCurvedAnalysis(
+    List<Offset> points, {
+    required bool inset,
+  }) {
+    if (inset) {
+      return _insetCurvedAnalysis ??= _CurvedPathAnalysis(points);
+    }
+    return _curvedAnalysis ??= _CurvedPathAnalysis(points);
+  }
+
+  DrawRect _boundsFromOffsets(List<Offset> points) {
+    var minX = points.first.dx;
+    var maxX = points.first.dx;
+    var minY = points.first.dy;
+    var maxY = points.first.dy;
+
+    for (final point in points.skip(1)) {
+      if (point.dx < minX) {
+        minX = point.dx;
+      }
+      if (point.dx > maxX) {
+        maxX = point.dx;
+      }
+      if (point.dy < minY) {
+        minY = point.dy;
+      }
+      if (point.dy > maxY) {
+        maxY = point.dy;
+      }
+    }
+
+    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  }
+}
+
+class _CurvedPathAnalysis {
+  _CurvedPathAnalysis(this.points)
+    : segments = List<_CubicSegment>.generate(
+        points.length - 1,
+        (index) => ArrowGeometry._buildCubicSegment(points, index),
+      ),
+      lengths = List<double>.filled(points.length - 1, 0) {
+    var total = 0.0;
+    for (var i = 0; i < segments.length; i++) {
+      final length = ArrowGeometry._approximateCubicLength(segments[i]);
+      lengths[i] = length;
+      total += length;
+    }
+    totalLength = total;
+  }
+
+  final List<Offset> points;
+  final List<_CubicSegment> segments;
+  final List<double> lengths;
+  late final double totalLength;
+
+  Offset? directionFromStart(double offset) {
+    if (segments.isEmpty) {
+      return null;
+    }
+    var remaining = offset.isFinite ? offset : 0.0;
+    if (remaining < 0) {
+      remaining = 0;
+    }
+    for (var i = 0; i < segments.length; i++) {
+      final length = lengths[i];
+      if (length <= 0) {
+        continue;
+      }
+      if (remaining <= length || i == segments.length - 1) {
+        final t = length == 0
+            ? 0.0
+            : (remaining / length).clamp(0.0, 1.0);
+        final tangent = ArrowGeometry._cubicTangent(segments[i], t);
+        return ArrowGeometry._normalize(tangent);
+      }
+      remaining -= length;
+    }
+    return null;
+  }
+
+  Offset? directionFromEnd(double offset) {
+    if (segments.isEmpty) {
+      return null;
+    }
+    var remaining = offset.isFinite ? offset : 0.0;
+    if (remaining < 0) {
+      remaining = 0;
+    }
+    for (var i = segments.length - 1; i >= 0; i--) {
+      final length = lengths[i];
+      if (length <= 0) {
+        continue;
+      }
+      if (remaining <= length || i == 0) {
+        final t = length == 0
+            ? 1.0
+            : (1.0 - (remaining / length)).clamp(0.0, 1.0);
+        final tangent = ArrowGeometry._cubicTangent(segments[i], t);
+        return ArrowGeometry._normalize(tangent);
+      }
+      remaining -= length;
+    }
+    return null;
   }
 }
