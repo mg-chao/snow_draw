@@ -1438,11 +1438,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required SelectionConfig selectionConfig,
   }) =>
       hitResult.isHandleHit ||
-      draw_hit_test.hitTest.isInSelectionPaddedArea(
-        stateView: stateView,
-        position: position,
-        config: selectionConfig,
-      );
+      hitResult.isInSelectionPadding;
 
   bool _shouldDeferToSelectionBox({
     required DrawStateView stateView,

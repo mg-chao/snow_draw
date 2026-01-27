@@ -72,5 +72,3 @@ class EditSessionCancelledEvent extends EditEvent {
   String toString() =>
       'EditSessionCancelled(session: $sessionId, reason: $reason)';
 }
-
-

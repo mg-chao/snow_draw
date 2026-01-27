@@ -39,20 +39,30 @@ class DocumentState {
       _elementMap.length + _orderIndex.length + _spatialIndex.size;
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
-    final ids = _spatialIndex.searchPoint(point, tolerance);
-    return _elementsForIds(ids);
+    final entries = _spatialIndex.searchPointEntries(point, tolerance);
+    return _elementsForEntries(entries);
   }
 
   bool hasElementAtPoint(DrawPoint point, double tolerance) =>
-      _spatialIndex.searchPoint(point, tolerance).isNotEmpty;
+      _spatialIndex.searchPointEntries(point, tolerance).isNotEmpty;
 
   List<ElementState> getElementsInRect(DrawRect rect) {
-    final ids = _spatialIndex.searchRect(rect);
-    return _elementsForIds(ids);
+    final entries = _spatialIndex.searchRectEntries(rect);
+    return _elementsForEntries(entries);
   }
 
-  List<ElementState> _elementsForIds(Iterable<String> ids) =>
-      ids.map(getElementById).whereType<ElementState>().toList();
+  List<ElementState> _elementsForEntries(
+    Iterable<SpatialIndexEntry> entries,
+  ) {
+    final elements = <ElementState>[];
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        elements.add(element);
+      }
+    }
+    return elements;
+  }
 
   DocumentState copyWith({List<ElementState>? elements, int? elementsVersion}) {
     if (elements != null) {
