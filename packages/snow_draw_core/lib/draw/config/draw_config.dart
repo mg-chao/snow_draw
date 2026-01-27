@@ -20,10 +20,10 @@ abstract class ConfigDefaults {
 
   // ===== Colors =====
   /// Primary accent color (selection outline, etc.).
-  static const primaryColor = Color(0xFF1576FE);
+  static const primaryColor = Color(0xFF1677FF);
 
   /// Secondary accent color (box selection, etc.).
-  static const accentColor = Color(0xFF1576FE);
+  static const accentColor = Color(0xFF4096FF);
 
   /// Canvas background color.
   static const backgroundColor = Color(0xFFFFFFFF);
@@ -43,6 +43,11 @@ abstract class ConfigDefaults {
   /// Default element fill style.
   static const FillStyle defaultFillStyle = FillStyle.solid;
 
+  // ===== Arrow =====
+  static const ArrowType defaultArrowType = ArrowType.straight;
+  static const ArrowheadStyle defaultStartArrowhead = ArrowheadStyle.none;
+  static const ArrowheadStyle defaultEndArrowhead = ArrowheadStyle.standard;
+
   // ===== Text =====
   static const defaultTextFontSize = 21.0;
   static const String? defaultTextFontFamily = null;
@@ -61,11 +66,16 @@ abstract class ConfigDefaults {
   static const controlPointFillColor = Color(0xFFFFFFFF);
 
   // ===== Sizes =====
-  static const defaultStrokeWidth = 1.0;
+  static const defaultStrokeWidth = 2.0;
   static const controlPointSize = 8.0;
   static const controlPointRadius = 2.0;
 
+  /// Multiplier for arrow point editor control points
+  /// (makes them larger than standard control points)
+  static const arrowPointSizeMultiplier = 1.25;
+
   static const selectionPadding = 3.0;
+  static const selectionStrokeWidth = 1.0;
   static const rotateHandleOffset = 12.0;
 
   // ===== Interaction =====
@@ -97,6 +107,8 @@ abstract class ConfigDefaults {
   static const double objectSnapMarkerSize = 8;
   static const double objectSnapGapDashLength = 4;
   static const double objectSnapGapDashGap = 4;
+  static const arrowBindingEnabled = true;
+  static const double arrowBindingDistance = 10;
 
   // ===== Grid =====
   static const gridEnabled = false;
@@ -123,10 +135,12 @@ class DrawConfig {
     this.boxSelection = const BoxSelectionConfig(),
     this.elementStyle = const ElementStyleConfig(),
     ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? arrowStyle,
     ElementStyleConfig? textStyle,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
+       arrowStyle = arrowStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle;
   final SelectionConfig selection;
   final ElementConfig element;
@@ -134,6 +148,7 @@ class DrawConfig {
   final BoxSelectionConfig boxSelection;
   final ElementStyleConfig elementStyle;
   final ElementStyleConfig rectangleStyle;
+  final ElementStyleConfig arrowStyle;
   final ElementStyleConfig textStyle;
   final GridConfig grid;
   final SnapConfig snap;
@@ -147,6 +162,7 @@ class DrawConfig {
     BoxSelectionConfig? boxSelection,
     ElementStyleConfig? elementStyle,
     ElementStyleConfig? rectangleStyle,
+    ElementStyleConfig? arrowStyle,
     ElementStyleConfig? textStyle,
     GridConfig? grid,
     SnapConfig? snap,
@@ -160,6 +176,8 @@ class DrawConfig {
       elementStyle: nextElementStyle,
       rectangleStyle: rectangleStyle ??
           (elementStyle != null ? nextElementStyle : this.rectangleStyle),
+      arrowStyle: arrowStyle ??
+          (elementStyle != null ? nextElementStyle : this.arrowStyle),
       textStyle: textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
       grid: grid ?? this.grid,
@@ -177,6 +195,7 @@ class DrawConfig {
           other.boxSelection == boxSelection &&
           other.elementStyle == elementStyle &&
           other.rectangleStyle == rectangleStyle &&
+          other.arrowStyle == arrowStyle &&
           other.textStyle == textStyle &&
           other.grid == grid &&
           other.snap == snap;
@@ -190,6 +209,7 @@ class DrawConfig {
         boxSelection,
         elementStyle,
         rectangleStyle,
+        arrowStyle,
         textStyle,
         grid,
         snap,
@@ -204,6 +224,7 @@ class DrawConfig {
       'boxSelection: $boxSelection, '
       'elementStyle: $elementStyle, '
       'rectangleStyle: $rectangleStyle, '
+      'arrowStyle: $arrowStyle, '
       'textStyle: $textStyle, '
       'grid: $grid, '
       'snap: $snap'

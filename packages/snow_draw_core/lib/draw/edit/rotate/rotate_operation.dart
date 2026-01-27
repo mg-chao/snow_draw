@@ -1,4 +1,5 @@
 import '../../config/draw_config.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -76,7 +77,9 @@ class RotateOperation extends EditOperation {
       // Multi-select uses the persistent overlay rotation stored in
       // selection state (kept across edit operations until selection count
       // changes).
-      baseRotation = state.domain.selection.multiSelectOverlay?.rotation ?? 0.0;
+      baseRotation =
+          state.application.selectionOverlay.multiSelectOverlay?.rotation ??
+          0.0;
     } else {
       final selectedId = selectedIdsAtStart.isEmpty
           ? null
@@ -204,20 +207,20 @@ class RotateOperation extends EditOperation {
     );
 
     // Update multi-select overlay rotation while keeping bounds stable.
-    final selection = typedContext.isMultiSelect
+    final overlay = typedContext.isMultiSelect
         ? MultiSelectLifecycle.onRotateFinished(
-            state.domain.selection,
+            state.application.selectionOverlay,
             newRotation: result.multiSelectRotation!,
             bounds: typedContext.startBounds,
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: selection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: overlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);
@@ -277,6 +280,18 @@ class RotateOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     return EditComputedResult(

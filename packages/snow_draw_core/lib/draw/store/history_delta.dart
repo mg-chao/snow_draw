@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
 import '../models/interaction_state.dart';
+import '../models/selection_overlay_state.dart';
 import '../models/selection_state.dart';
 import 'history_change_set.dart';
 import 'snapshot.dart';
@@ -193,18 +194,15 @@ class HistoryDelta {
         document: state.domain.document.copyWith(elements: nextElements),
         selection: selection ?? state.domain.selection,
       ),
-      application: state.application.copyWith(interaction: const IdleState()),
+      application: state.application.copyWith(
+        interaction: const IdleState(),
+        selectionOverlay: SelectionOverlayState.empty,
+      ),
     );
   }
 }
 
 SelectionState _copySelection(SelectionState selection) => SelectionState(
   selectedIds: Set<String>.from(selection.selectedIds),
-  multiSelectOverlay: selection.multiSelectOverlay == null
-      ? null
-      : MultiSelectOverlayState(
-          bounds: selection.multiSelectOverlay!.bounds,
-          rotation: selection.multiSelectOverlay!.rotation,
-        ),
   selectionVersion: selection.selectionVersion,
 );

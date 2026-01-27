@@ -1,7 +1,6 @@
 import 'package:meta/meta.dart';
 
 import '../types/draw_rect.dart';
-import 'multi_select_lifecycle.dart';
 
 @immutable
 class MultiSelectOverlayState {
@@ -38,16 +37,19 @@ class MultiSelectOverlayState {
 class SelectionState {
   const SelectionState({
     this.selectedIds = const {},
+    @Deprecated(
+      'Selection overlays now live in ApplicationState. This field is ignored.',
+    )
     this.multiSelectOverlay,
     this.selectionVersion = 0,
   });
   final Set<String> selectedIds;
   final int selectionVersion;
 
-  /// Persistent overlay state for multi-select sessions.
-  ///
-  /// This keeps the multi-select bounds/rotation stable across edit operations
-  /// until the selected set changes.
+  /// Deprecated: overlay state is now stored in ApplicationState.
+  @Deprecated(
+    'Selection overlays now live in ApplicationState. This field is ignored.',
+  )
   final MultiSelectOverlayState? multiSelectOverlay;
 
   bool get hasSelection => selectedIds.isNotEmpty;
@@ -57,51 +59,39 @@ class SelectionState {
 
   SelectionState copyWith({
     Set<String>? selectedIds,
+    @Deprecated(
+      'Selection overlays now live in ApplicationState. This field is ignored.',
+    )
     MultiSelectOverlayState? multiSelectOverlay,
     bool resetMultiSelectOverlay = false,
     int? selectionVersion,
   }) => SelectionState(
     selectedIds: selectedIds ?? this.selectedIds,
-    multiSelectOverlay: resetMultiSelectOverlay
-        ? null
-        : (multiSelectOverlay ?? this.multiSelectOverlay),
     selectionVersion: selectionVersion ?? this.selectionVersion,
   );
 
   /// Sets single selection.
-  ///
-  /// Note: resets multi-select overlay when the selection changes.
   SelectionState withSelected(String elementId) =>
-      MultiSelectLifecycle.onSelectionChanged(this, {elementId});
+      _withSelectedIds({elementId});
 
   /// Sets multi-selection.
-  ///
-  /// Note: resets multi-select overlay when the selection changes.
-  SelectionState withSelectedIds(Set<String> ids) =>
-      MultiSelectLifecycle.onSelectionChanged(this, ids);
+  SelectionState withSelectedIds(Set<String> ids) => _withSelectedIds(ids);
 
   /// Adds an element to the selection.
-  ///
-  /// Note: resets multi-select overlay when the selection changes.
   SelectionState withAdded(String elementId) {
     if (selectedIds.contains(elementId)) {
       return this;
     }
-    return MultiSelectLifecycle.onSelectionChanged(this, {
-      ...selectedIds,
-      elementId,
-    });
+    return _withSelectedIds({...selectedIds, elementId});
   }
 
   /// Removes an element from the selection.
-  ///
-  /// Note: resets multi-select overlay when the selection changes.
   SelectionState withRemoved(String elementId) {
     if (!selectedIds.contains(elementId)) {
       return this;
     }
     final newIds = {...selectedIds}..remove(elementId);
-    return MultiSelectLifecycle.onSelectionChanged(this, newIds);
+    return _withSelectedIds(newIds);
   }
 
   /// Toggles an element's selection state.
@@ -115,7 +105,7 @@ class SelectionState {
     if (selectedIds.isEmpty) {
       return this;
     }
-    return MultiSelectLifecycle.onSelectionCleared(this);
+    return SelectionState(selectionVersion: selectionVersion + 1);
   }
 
   @override
@@ -123,13 +113,11 @@ class SelectionState {
       identical(this, other) ||
       other is SelectionState &&
           _setEquals(selectedIds, other.selectedIds) &&
-          other.multiSelectOverlay == multiSelectOverlay &&
           other.selectionVersion == selectionVersion;
 
   @override
   int get hashCode => Object.hash(
     Object.hashAllUnordered(selectedIds),
-    multiSelectOverlay,
     selectionVersion,
   );
 
@@ -149,6 +137,15 @@ class SelectionState {
   String toString() =>
       'SelectionState('
       'ids: ${selectedIds.length}, '
-      'overlay: ${multiSelectOverlay != null}, '
       'version: $selectionVersion)';
+
+  SelectionState _withSelectedIds(Set<String> ids) {
+    if (_setEquals(selectedIds, ids)) {
+      return this;
+    }
+    return SelectionState(
+      selectedIds: ids,
+      selectionVersion: selectionVersion + 1,
+    );
+  }
 }

@@ -2,22 +2,22 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../config/draw_config.dart';
-import '../../../core/draw_context.dart';
+import '../../../core/dependency_interfaces.dart';
+import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../elements/core/element_style_configurable_data.dart';
 import '../../../elements/core/element_type_id.dart';
+import '../../../elements/core/rect_creation_strategy.dart';
+import '../../../elements/types/arrow/arrow_data.dart';
 import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../services/grid_snap_service.dart';
-import '../../../services/object_snap_service.dart';
-import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
-import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
-import '../../../utils/state_calculator.dart';
+import '../../core/reducer_utils.dart';
 
 /// Reducer for element creation.
 ///
@@ -30,7 +30,11 @@ class CreateElementReducer {
   /// Try to handle element creation actions.
   ///
   /// Returns null if the action is not a creation operation.
-  DrawState? reduce(DrawState state, DrawAction action, DrawContext context) =>
+  DrawState? reduce(
+    DrawState state,
+    DrawAction action,
+    CreateElementReducerDeps context,
+  ) =>
       switch (action) {
         final CreateElement a => _startCreateElement(state, a, context),
         final UpdateCreatingElement a => _updateCreatingElement(
@@ -38,6 +42,7 @@ class CreateElementReducer {
           a,
           context,
         ),
+        final AddArrowPoint a => _addCreationPoint(state, a, context),
         FinishCreateElement _ => _finishCreateElement(state, context),
         CancelCreateElement _ => _cancelCreateElement(state),
         _ => null,
@@ -46,7 +51,7 @@ class CreateElementReducer {
   DrawState _startCreateElement(
     DrawState state,
     CreateElement action,
-    DrawContext context,
+    CreateElementReducerDeps context,
   ) {
     final config = context.config;
     final definition = context.elementRegistry.getDefinition(action.typeId);
@@ -54,6 +59,8 @@ class CreateElementReducer {
       throw StateError('Element type "${action.typeId}" is not registered');
     }
 
+    final strategy =
+        definition.creationStrategy ?? const RectCreationStrategy();
     final styleDefaults = _resolveStyleDefaults(config, action.typeId);
     var data = action.initialData ?? definition.createDefaultData();
     if (action.initialData == null && data is ElementStyleConfigurableData) {
@@ -71,9 +78,9 @@ class CreateElementReducer {
     final snapToGrid = snappingMode == SnappingMode.grid;
     final startPosition = snapToGrid
         ? gridSnapService.snapPoint(
-          point: action.position,
-          gridSize: gridConfig.size,
-        )
+            point: action.position,
+            gridSize: gridConfig.size,
+          )
         : action.position;
     final initialRect = DrawRect(
       minX: startPosition.x,
@@ -81,26 +88,33 @@ class CreateElementReducer {
       maxX: startPosition.x,
       maxY: startPosition.y,
     );
+
+    final startResult = strategy.start(
+      data: data,
+      startPosition: startPosition,
+    );
+
     final newElement = ElementState(
       id: elementId,
       rect: initialRect,
       rotation: 0,
       opacity: styleDefaults.opacity,
       zIndex: state.domain.document.elements.length,
-      data: data,
+      data: startResult.data,
     );
 
-    final nextDomain = state.domain.copyWith(
-      selection: state.domain.selection.cleared(),
+    final clearedState = applySelectionChange(state, const {});
+    final nextInteraction = CreatingState(
+      element: newElement,
+      startPosition: startPosition,
+      currentRect: startResult.rect,
+      snapGuides: startResult.snapGuides,
+      creationMode: startResult.creationMode,
     );
-    final nextApplication = state.application.copyWith(
-      interaction: CreatingState(
-        element: newElement,
-        startPosition: startPosition,
-        currentRect: initialRect,
-      ),
+    final nextApplication = clearedState.application.copyWith(
+      interaction: nextInteraction,
     );
-    return state.copyWith(domain: nextDomain, application: nextApplication);
+    return clearedState.copyWith(application: nextApplication);
   }
 
   ElementStyleConfig _resolveStyleDefaults(
@@ -109,6 +123,9 @@ class CreateElementReducer {
   ) {
     if (typeId == RectangleData.typeIdToken) {
       return config.rectangleStyle;
+    }
+    if (typeId == ArrowData.typeIdToken) {
+      return config.arrowStyle;
     }
     if (typeId == TextData.typeIdToken) {
       return config.textStyle;
@@ -119,143 +136,71 @@ class CreateElementReducer {
   DrawState _updateCreatingElement(
     DrawState state,
     UpdateCreatingElement action,
-    DrawContext context,
+    CreateElementReducerDeps context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return state;
     }
 
-    final gridConfig = context.config.grid;
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
     final snappingMode = resolveEffectiveSnappingModeForConfig(
       config: context.config,
       ctrlPressed: action.snapOverride,
     );
-    final snapToGrid = snappingMode == SnappingMode.grid;
-    final startPosition = snapToGrid
-        ? gridSnapService.snapPoint(
-          point: interaction.startPosition,
-          gridSize: gridConfig.size,
-        )
-        : interaction.startPosition;
-    final currentPosition = snapToGrid
-        ? gridSnapService.snapPoint(
-          point: action.currentPosition,
-          gridSize: gridConfig.size,
-        )
-        : action.currentPosition;
-    var newRect = StateCalculator.calculateCreateRect(
-      startPosition: startPosition,
-      currentPosition: currentPosition,
+    final updateResult = strategy.update(
+      state: state,
+      config: context.config,
+      creatingState: interaction,
+      currentPosition: action.currentPosition,
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
+      snappingMode: snappingMode,
     );
-
-    var snapGuides = const <SnapGuide>[];
-    final snapConfig = context.config.snap;
-    final shouldSnap =
-        snappingMode == SnappingMode.object &&
-        !action.createFromCenter &&
-        (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
-
-    if (shouldSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
-      final direction = _resolveCreateDirection(
-        interaction.startPosition,
-        action.currentPosition,
-      );
-      final anchorsX = _createAnchorsX(direction);
-      final anchorsY = _createAnchorsY(direction);
-      final referenceElements = _resolveReferenceElements(state);
-      final result = objectSnapService.snapRect(
-        targetRect: newRect,
-        referenceElements: referenceElements,
-        snapDistance: snapDistance,
-        targetAnchorsX: anchorsX,
-        targetAnchorsY: anchorsY,
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
-      );
-      if (result.hasSnap) {
-        final moveMinX = anchorsX.contains(SnapAxisAnchor.start);
-        final moveMaxX = anchorsX.contains(SnapAxisAnchor.end);
-        final moveMinY = anchorsY.contains(SnapAxisAnchor.start);
-        final moveMaxY = anchorsY.contains(SnapAxisAnchor.end);
-        newRect = DrawRect(
-          minX: newRect.minX + (moveMinX ? result.dx : 0),
-          minY: newRect.minY + (moveMinY ? result.dy : 0),
-          maxX: newRect.maxX + (moveMaxX ? result.dx : 0),
-          maxY: newRect.maxY + (moveMaxY ? result.dy : 0),
-        );
-      }
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
-      }
-    }
+    final updatedElement = interaction.element.copyWith(
+      data: updateResult.data,
+    );
+    final nextInteraction = interaction.copyWith(
+      element: updatedElement,
+      currentRect: updateResult.rect,
+      snapGuides: updateResult.snapGuides,
+      creationMode: updateResult.creationMode,
+    );
     return state.copyWith(
-      application: state.application.copyWith(
-        interaction: interaction.copyWith(
-          currentRect: newRect,
-          snapGuides: snapGuides,
-        ),
-      ),
+      application: state.application.copyWith(interaction: nextInteraction),
     );
   }
 
-  _CreateDirection _resolveCreateDirection(
-    DrawPoint start,
-    DrawPoint current,
+  DrawState _finishCreateElement(
+    DrawState state,
+    CreateElementReducerDeps context,
   ) {
-    final horizontal =
-        current.x >= start.x ? _CreateAxis.end : _CreateAxis.start;
-    final vertical =
-        current.y >= start.y ? _CreateAxis.end : _CreateAxis.start;
-    return _CreateDirection(horizontal: horizontal, vertical: vertical);
-  }
-
-  List<SnapAxisAnchor> _createAnchorsX(_CreateDirection direction) => [
-    if (direction.horizontal == _CreateAxis.start)
-      SnapAxisAnchor.start
-    else
-      SnapAxisAnchor.end,
-  ];
-
-  List<SnapAxisAnchor> _createAnchorsY(_CreateDirection direction) => [
-    if (direction.vertical == _CreateAxis.start)
-      SnapAxisAnchor.start
-    else
-      SnapAxisAnchor.end,
-  ];
-
-  List<ElementState> _resolveReferenceElements(DrawState state) =>
-      state.domain.document.elements
-          .where((element) => element.opacity > 0)
-          .toList();
-
-  DrawState _finishCreateElement(DrawState state, DrawContext context) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final updatedElement = interaction.element.copyWith(
-      rect: interaction.currentRect,
-      zIndex: state.domain.document.elements.length,
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
     );
-    final minSize = context.config.element.minCreateSize;
-
-    if (updatedElement.rect.width < minSize ||
-        updatedElement.rect.height < minSize ||
-        !updatedElement.isValidWith(context.config.element)) {
+    final finishResult = strategy.finish(
+      config: context.config,
+      creatingState: interaction,
+    );
+    if (!finishResult.shouldCommit) {
       return _cancelCreateElement(state);
     }
 
-    final newElements = [
-      ...state.domain.document.elements,
-      updatedElement,
-    ];
+    final updatedElement = interaction.element.copyWith(
+      rect: finishResult.rect,
+      data: finishResult.data,
+      zIndex: state.domain.document.elements.length,
+    );
+    final newElements = [...state.domain.document.elements, updatedElement];
 
     final nextState = state.copyWith(
       domain: state.domain.copyWith(
@@ -273,24 +218,60 @@ class CreateElementReducer {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final nextDomain = state.domain.copyWith(
-      selection: state.domain.selection.cleared(),
-    );
-    final nextApplication = state.application.copyWith(
+    final clearedState = applySelectionChange(state, const {});
+    final nextApplication = clearedState.application.copyWith(
       interaction: const IdleState(),
     );
-    return state.copyWith(domain: nextDomain, application: nextApplication);
+    return clearedState.copyWith(application: nextApplication);
   }
-}
 
-enum _CreateAxis { start, end }
+  DrawState _addCreationPoint(
+    DrawState state,
+    AddArrowPoint action,
+    CreateElementReducerDeps context,
+  ) {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState) {
+      return state;
+    }
 
-@immutable
-class _CreateDirection {
-  const _CreateDirection({
-    required this.horizontal,
-    required this.vertical,
-  });
-  final _CreateAxis horizontal;
-  final _CreateAxis vertical;
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: context.config,
+      ctrlPressed: action.snapOverride,
+    );
+    final updateResult = strategy.addPoint(
+      state: state,
+      config: context.config,
+      creatingState: interaction,
+      position: action.position,
+      snappingMode: snappingMode,
+    );
+    if (updateResult == null) {
+      return state;
+    }
+    final updatedElement = interaction.element.copyWith(
+      data: updateResult.data,
+    );
+    final nextInteraction = interaction.copyWith(
+      element: updatedElement,
+      currentRect: updateResult.rect,
+      snapGuides: updateResult.snapGuides,
+      creationMode: updateResult.creationMode,
+    );
+    return state.copyWith(
+      application: state.application.copyWith(interaction: nextInteraction),
+    );
+  }
+
+  CreationStrategy _resolveCreationStrategy(
+    CreateElementReducerDeps context,
+    ElementTypeId<ElementData> typeId,
+  ) {
+    final definition = context.elementRegistry.getDefinition(typeId);
+    return definition?.creationStrategy ?? const RectCreationStrategy();
+  }
 }

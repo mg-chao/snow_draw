@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../core/reducer_utils.dart';
@@ -7,7 +7,7 @@ import '../core/reducer_utils.dart';
 DrawState? selectionReducer(
   DrawState state,
   DrawAction action,
-  DrawContext context,
+  SelectionReducerDeps context,
 ) => switch (action) {
   final SelectElement a => _handleSelectElement(state, a, context),
   ClearSelection _ => _handleClearSelection(state, context),
@@ -18,7 +18,7 @@ DrawState? selectionReducer(
 DrawState _handleSelectElement(
   DrawState state,
   SelectElement action,
-  DrawContext context,
+  SelectionReducerDeps context,
 ) {
   if (state.domain.document.getElementById(action.elementId) == null) {
     context.log.store.warning('Selection failed: element not found', {
@@ -50,14 +50,10 @@ DrawState _handleSelectElement(
   return applySelectionChange(state, newSelectedIds);
 }
 
-DrawState _handleClearSelection(DrawState state, DrawContext _) =>
-    state.copyWith(
-      domain: state.domain.copyWith(
-        selection: state.domain.selection.cleared(),
-      ),
-    );
+DrawState _handleClearSelection(DrawState state, SelectionReducerDeps _) =>
+    applySelectionChange(state, const {});
 
-DrawState _handleSelectAll(DrawState state, DrawContext _) =>
+DrawState _handleSelectAll(DrawState state, SelectionReducerDeps _) =>
     applySelectionChange(
       state,
       state.domain.document.elements.map((e) => e.id).toSet(),

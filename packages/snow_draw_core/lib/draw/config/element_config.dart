@@ -88,6 +88,9 @@ class ElementStyleConfig {
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
     this.cornerRadius = ConfigDefaults.defaultCornerRadius,
+    this.arrowType = ConfigDefaults.defaultArrowType,
+    this.startArrowhead = ConfigDefaults.defaultStartArrowhead,
+    this.endArrowhead = ConfigDefaults.defaultEndArrowhead,
     this.fontSize = ConfigDefaults.defaultTextFontSize,
     this.fontFamily = ConfigDefaults.defaultTextFontFamily,
     this.textAlign = ConfigDefaults.defaultTextHorizontalAlign,
@@ -128,6 +131,15 @@ class ElementStyleConfig {
   /// Default corner radius for supported elements.
   final double cornerRadius;
 
+  /// Default arrow type for arrow elements.
+  final ArrowType arrowType;
+
+  /// Default start arrowhead style for arrow elements.
+  final ArrowheadStyle startArrowhead;
+
+  /// Default end arrowhead style for arrow elements.
+  final ArrowheadStyle endArrowhead;
+
   /// Default font size for text elements.
   final double fontSize;
 
@@ -155,6 +167,9 @@ class ElementStyleConfig {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
     double? fontSize,
     String? fontFamily,
     TextHorizontalAlign? textAlign,
@@ -170,6 +185,9 @@ class ElementStyleConfig {
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
     cornerRadius: cornerRadius ?? this.cornerRadius,
+    arrowType: arrowType ?? this.arrowType,
+    startArrowhead: startArrowhead ?? this.startArrowhead,
+    endArrowhead: endArrowhead ?? this.endArrowhead,
     fontSize: fontSize ?? this.fontSize,
     fontFamily:
         fontFamily == null
@@ -193,6 +211,9 @@ class ElementStyleConfig {
           other.strokeStyle == strokeStyle &&
           other.fillStyle == fillStyle &&
           other.cornerRadius == cornerRadius &&
+          other.arrowType == arrowType &&
+          other.startArrowhead == startArrowhead &&
+          other.endArrowhead == endArrowhead &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
           other.textAlign == textAlign &&
@@ -211,6 +232,9 @@ class ElementStyleConfig {
         strokeStyle,
         fillStyle,
         cornerRadius,
+        arrowType,
+        startArrowhead,
+        endArrowhead,
         fontSize,
         fontFamily,
         textAlign,
@@ -230,6 +254,9 @@ class ElementStyleConfig {
       'strokeStyle: $strokeStyle, '
       'fillStyle: $fillStyle, '
       'cornerRadius: $cornerRadius, '
+      'arrowType: $arrowType, '
+      'startArrowhead: $startArrowhead, '
+      'endArrowhead: $endArrowhead, '
       'fontSize: $fontSize, '
       'fontFamily: $fontFamily, '
       'textAlign: $textAlign, '

@@ -10,12 +10,13 @@ import '../elements/core/element_registry.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
+import 'dependency_interfaces.dart';
 
 /// Canvas context holding all injectable dependencies.
 ///
 /// This replaces global singletons and enables testability and multi-canvas
 /// isolation.
-class DrawContext {
+class DrawContext implements InteractionReducerDeps {
   DrawContext({
     required this.elementRegistry,
     required this.editOperations,
@@ -62,29 +63,37 @@ class DrawContext {
   );
 
   factory DrawContext.defaultContext() => DrawContext.withDefaults();
+  @override
   final ElementRegistry elementRegistry;
+  @override
   final EditOperationRegistry editOperations;
+  @override
   final IdGenerator idGenerator;
 
   /// Configuration manager (single source of truth).
   final ConfigManager configManager;
+  @override
   final EditIntentToOperationMapper editIntentMapper;
 
   /// Edit configuration provider.
+  @override
   final EditConfigProvider editConfigProvider;
 
   /// Logging service.
   ///
   /// Provides unified logging with modular logs and multiple outputs.
+  @override
   final LogService log;
 
   /// Event bus for UI-facing diagnostics and errors.
+  @override
   final EventBus? eventBus;
 
   /// Convenient access to edit configuration.
   EditConfig get editConfig => editConfigProvider.editConfig;
 
   /// Convenient access to the current configuration.
+  @override
   DrawConfig get config => configManager.current;
 
   /// Configuration change stream.

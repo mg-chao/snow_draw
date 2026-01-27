@@ -62,6 +62,16 @@ class PointerMoveInputEvent extends InputEvent {
   String toString() => 'PointerMoveInputEvent($position, $modifiers)';
 }
 
+class PointerHoverInputEvent extends InputEvent {
+  const PointerHoverInputEvent({
+    required super.position,
+    required super.modifiers,
+  });
+
+  @override
+  String toString() => 'PointerHoverInputEvent($position, $modifiers)';
+}
+
 class PointerUpInputEvent extends InputEvent {
   const PointerUpInputEvent({
     required super.position,

@@ -69,15 +69,16 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     // Calculate fill pattern parameters (matching CPU fallback logic)
     final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    const lineToSpacingRatio = 6.0;
+    const lineToSpacingRatio = 4.0;
     final fillLineSpacing =
         (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
 
     // Calculate stroke pattern parameters (matching CPU fallback logic)
-    final dashLength = (8 + data.strokeWidth * 1.5).clamp(6.0, 16.0);
-    final gapLength = (5 + data.strokeWidth * 1).clamp(4.0, 10.0);
-    final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
-    final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
+    // Dash and dot patterns are proportional to stroke width
+    final dashLength = data.strokeWidth * 3.0;
+    final gapLength = dashLength * 0.5;
+    final dotSpacing = data.strokeWidth * 2.0;
+    final dotRadius = data.strokeWidth * 0.5;
 
     // Scale-aware anti-aliasing width
     final aaWidth = 1.5 / (scaleFactor == 0 ? 1.0 : scaleFactor);
@@ -145,7 +146,7 @@ class RectangleRenderer extends ElementTypeRenderer {
       } else {
         final fillLineWidth =
             (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-        const lineToSpacingRatio = 6.0;
+        const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         const lineAngle = -math.pi / 4;
         const crossLineAngle = math.pi / 4;
@@ -198,8 +199,9 @@ class RectangleRenderer extends ElementTypeRenderer {
         canvas.drawRRect(rRect, strokePaint);
       } else {
         if (data.strokeStyle == StrokeStyle.dashed) {
-          final dashLength = (8 + data.strokeWidth * 1.5).clamp(6.0, 16.0);
-          final gapLength = (5 + data.strokeWidth * 1).clamp(4.0, 10.0);
+          // Dash pattern proportional to stroke width
+          final dashLength = data.strokeWidth * 2.0;
+          final gapLength = dashLength * 1.2;
           final key = _StrokePathKey(
             width: size.width,
             height: size.height,
@@ -216,14 +218,16 @@ class RectangleRenderer extends ElementTypeRenderer {
               gapLength,
             ),
           );
+          strokePaint.strokeCap = StrokeCap.round;
           canvas.drawPath(dashedPath, strokePaint);
         } else {
+          // Dot pattern proportional to stroke width
           final dotPaint = Paint()
             ..style = PaintingStyle.fill
             ..color = strokePaint.color
             ..isAntiAlias = true;
-          final dotSpacing = math.max(4, data.strokeWidth * 2.5).toDouble();
-          final dotRadius = math.max(1, data.strokeWidth / 2).toDouble();
+          final dotSpacing = data.strokeWidth * 2.0;
+          final dotRadius = data.strokeWidth * 0.5;
           final key = _StrokePathKey(
             width: size.width,
             height: size.height,

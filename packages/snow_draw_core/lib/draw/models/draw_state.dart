@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import 'application_state.dart';
 import 'domain_state.dart';
 import 'interaction_state.dart';
+import 'selection_overlay_state.dart';
 import 'view_state.dart';
 
 /// Aggregate root for draw state.
@@ -51,7 +52,10 @@ class DrawState {
   DrawState restoreFromSnapshot(DomainState snapshot) {
     // Restore domain state while keeping the current application state.
     // Also reset interaction to recompute selection overlays.
-    final newApplication = application.copyWith(interaction: const IdleState());
+    final newApplication = application.copyWith(
+      interaction: const IdleState(),
+      selectionOverlay: SelectionOverlayState.empty,
+    );
     return DrawState(domain: snapshot, application: newApplication);
   }
 

@@ -2,7 +2,8 @@ import 'dart:async';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
+import '../../edit/core/edit_cancel_reason.dart';
 import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
@@ -35,7 +36,7 @@ class ActionProcessorServices {
     required this.eventBus,
     required this.publishEditEvents,
   });
-  final DrawContext drawContext;
+  final InteractionReducerDeps drawContext;
   final StateManager stateManager;
   final HistoryManager historyManager;
   final ConfigManager configManager;
@@ -70,7 +71,8 @@ class ActionProcessor {
 
   bool get isDisposed => _isDisposed;
 
-  Future<void> dispatch(DrawAction action) => _enqueue(() => _process(action));
+  Future<void> dispatch(DrawAction action) =>
+      _enqueue(() => _processWithExplicitCancel(action));
 
   void dispose() {
     if (_isDisposed) {
@@ -113,48 +115,61 @@ class ActionProcessor {
     }
   }
 
+  Future<void> _processWithExplicitCancel(DrawAction action) async {
+    final cancelReason = _resolveEditCancelReason(action);
+    if (cancelReason != null) {
+      await _process(CancelEdit(reason: cancelReason));
+    }
+    await _process(action);
+  }
+
   Future<void> _process(DrawAction action) async {
     if (_handleConfigAction(action)) {
       return;
     }
 
-    final initialContext = DispatchContext.initial(
-      action: action,
-      state: _services.stateManager.current,
-      drawContext: _services.drawContext,
-      historyManager: _services.historyManager,
-      snapshotBuilder: _services.snapshotBuilder,
-      editSessionService: _services.editSessionService,
-      sessionIdGenerator: _services.sessionIdGenerator,
-      isBatching: _services.isBatching(),
-      includeSelectionInHistory: _services.includeSelectionInHistory,
-    );
-
-    DispatchContext finalContext;
+    _services.configManager.freeze();
     try {
-      finalContext = await _pipeline.execute(initialContext);
-    } on Object catch (error, stackTrace) {
-      finalContext = initialContext.withError(
-        error,
-        stackTrace,
-        source: 'Pipeline',
+      final initialContext = DispatchContext.initial(
+        action: action,
+        state: _services.stateManager.current,
+        drawContext: _services.drawContext,
+        historyManager: _services.historyManager,
+        snapshotBuilder: _services.snapshotBuilder,
+        editSessionService: _services.editSessionService,
+        sessionIdGenerator: _services.sessionIdGenerator,
+        isBatching: _services.isBatching(),
+        includeSelectionInHistory: _services.includeSelectionInHistory,
       );
-    }
 
-    if (finalContext.hasError) {
-      final error =
-          finalContext.error ?? StateError('Dispatch error without detail');
-      final stackTrace = finalContext.stackTrace ?? StackTrace.current;
-
-      _reportError(action, error, stackTrace, finalContext);
-
-      if (action.criticality == ActionCriticality.critical) {
-        Error.throwWithStackTrace(error, stackTrace);
+      DispatchContext finalContext;
+      try {
+        finalContext = await _pipeline.execute(initialContext);
+      } on Object catch (error, stackTrace) {
+        finalContext = initialContext.withError(
+          error,
+          stackTrace,
+          source: 'Pipeline',
+        );
       }
-      return;
-    }
 
-    _commit(initialContext: initialContext, finalContext: finalContext);
+      if (finalContext.hasError) {
+        final error =
+            finalContext.error ?? StateError('Dispatch error without detail');
+        final stackTrace = finalContext.stackTrace ?? StackTrace.current;
+
+        _reportError(action, error, stackTrace, finalContext);
+
+        if (action.criticality == ActionCriticality.critical) {
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        return;
+      }
+
+      _commit(initialContext: initialContext, finalContext: finalContext);
+    } finally {
+      _services.configManager.unfreeze();
+    }
   }
 
   bool _handleConfigAction(DrawAction action) {
@@ -171,6 +186,37 @@ class ActionProcessor {
       return true;
     }
     return false;
+  }
+
+  EditCancelReason? _resolveEditCancelReason(DrawAction action) {
+    final state = _services.stateManager.current;
+    if (!state.application.isEditing) {
+      return null;
+    }
+
+    if (action is CancelEdit || action is UpdateEdit || action is FinishEdit) {
+      return null;
+    }
+
+    if (action is StartEdit || action is EditIntentAction) {
+      return EditCancelReason.newEditStarted;
+    }
+
+    if (action is Undo) {
+      return _services.historyManager.canUndo
+          ? EditCancelReason.conflictingAction
+          : null;
+    }
+
+    if (action is Redo) {
+      return _services.historyManager.canRedo
+          ? EditCancelReason.conflictingAction
+          : null;
+    }
+
+    return action.conflictsWithEditing
+        ? EditCancelReason.conflictingAction
+        : null;
   }
 
   void _commit({
@@ -262,13 +308,27 @@ class ActionProcessor {
             operationId: nextInteraction.operationId,
           ),
         );
+        return;
       }
+
+      _services.eventBus.emit(
+        EditSessionCancelledEvent(
+          sessionId: prevInteraction.sessionId,
+          operationId: prevInteraction.operationId,
+          reason: EditCancelReason.newEditStarted,
+        ),
+      );
+      _services.eventBus.emit(
+        EditSessionStartedEvent(
+          sessionId: nextInteraction.sessionId,
+          operationId: nextInteraction.operationId,
+        ),
+      );
       return;
     }
 
     if (prevInteraction is EditingState && nextInteraction is! EditingState) {
-      final reason = _determineEndReason(action);
-      if (reason == _EditEndReason.finished) {
+      if (action is FinishEdit) {
         _services.eventBus.emit(
           EditSessionFinishedEvent(
             sessionId: prevInteraction.sessionId,
@@ -280,7 +340,7 @@ class ActionProcessor {
           EditSessionCancelledEvent(
             sessionId: prevInteraction.sessionId,
             operationId: prevInteraction.operationId,
-            reason: _mapToEventReason(reason),
+            reason: _resolveCancelReason(action),
           ),
         );
       }
@@ -344,29 +404,11 @@ class ActionProcessor {
     );
   }
 
-  _EditEndReason _determineEndReason(DrawAction action) => switch (action) {
-    FinishEdit _ => _EditEndReason.finished,
-    CancelEdit _ => _EditEndReason.userCancelled,
-    StartEdit _ => _EditEndReason.newEditStarted,
-    _ when action.conflictsWithEditing => _EditEndReason.conflictingAction,
-    _ => _EditEndReason.userCancelled,
+  EditCancelReason _resolveCancelReason(DrawAction action) => switch (action) {
+    CancelEdit(:final reason) => reason,
+    StartEdit _ => EditCancelReason.newEditStarted,
+    _ => EditCancelReason.userCancelled,
   };
-
-  EditCancelReason _mapToEventReason(_EditEndReason reason) => switch (reason) {
-    _EditEndReason.finished => throw StateError(
-      'Should not map finished to cancel reason',
-    ),
-    _EditEndReason.userCancelled => EditCancelReason.userCancelled,
-    _EditEndReason.newEditStarted => EditCancelReason.newEditStarted,
-    _EditEndReason.conflictingAction => EditCancelReason.conflictingAction,
-  };
-}
-
-enum _EditEndReason {
-  finished,
-  userCancelled,
-  newEditStarted,
-  conflictingAction,
 }
 
 class _DispatchTask {

@@ -8,6 +8,8 @@ class SnapConfig {
     this.distance = ConfigDefaults.objectSnapDistance,
     this.enablePointSnaps = ConfigDefaults.objectSnapPointEnabled,
     this.enableGapSnaps = ConfigDefaults.objectSnapGapEnabled,
+    this.enableArrowBinding = ConfigDefaults.arrowBindingEnabled,
+    this.arrowBindingDistance = ConfigDefaults.arrowBindingDistance,
     this.showGuides = ConfigDefaults.objectSnapShowGuides,
     this.showGapSize = ConfigDefaults.objectSnapShowGapSize,
     this.lineColor = ConfigDefaults.objectSnapLineColor,
@@ -16,6 +18,10 @@ class SnapConfig {
     this.gapDashLength = ConfigDefaults.objectSnapGapDashLength,
     this.gapDashGap = ConfigDefaults.objectSnapGapDashGap,
   }) : assert(distance >= 0, 'distance must be non-negative'),
+       assert(
+         arrowBindingDistance >= 0,
+         'arrowBindingDistance must be non-negative',
+       ),
        assert(lineWidth > 0, 'lineWidth must be positive'),
        assert(markerSize >= 0, 'markerSize must be non-negative'),
        assert(gapDashLength >= 0, 'gapDashLength must be non-negative'),
@@ -32,6 +38,12 @@ class SnapConfig {
 
   /// Enable gap snapping (equal spacing).
   final bool enableGapSnaps;
+
+  /// Enable arrow endpoint binding to element edges.
+  final bool enableArrowBinding;
+
+  /// Snap distance for arrow binding in screen pixels.
+  final double arrowBindingDistance;
 
   /// Whether to render snap guides.
   final bool showGuides;
@@ -59,6 +71,8 @@ class SnapConfig {
     double? distance,
     bool? enablePointSnaps,
     bool? enableGapSnaps,
+    bool? enableArrowBinding,
+    double? arrowBindingDistance,
     bool? showGuides,
     bool? showGapSize,
     Color? lineColor,
@@ -71,6 +85,8 @@ class SnapConfig {
     distance: distance ?? this.distance,
     enablePointSnaps: enablePointSnaps ?? this.enablePointSnaps,
     enableGapSnaps: enableGapSnaps ?? this.enableGapSnaps,
+    enableArrowBinding: enableArrowBinding ?? this.enableArrowBinding,
+    arrowBindingDistance: arrowBindingDistance ?? this.arrowBindingDistance,
     showGuides: showGuides ?? this.showGuides,
     showGapSize: showGapSize ?? this.showGapSize,
     lineColor: lineColor ?? this.lineColor,
@@ -88,6 +104,8 @@ class SnapConfig {
           other.distance == distance &&
           other.enablePointSnaps == enablePointSnaps &&
           other.enableGapSnaps == enableGapSnaps &&
+          other.enableArrowBinding == enableArrowBinding &&
+          other.arrowBindingDistance == arrowBindingDistance &&
           other.showGuides == showGuides &&
           other.showGapSize == showGapSize &&
           other.lineColor == lineColor &&
@@ -102,6 +120,8 @@ class SnapConfig {
     distance,
     enablePointSnaps,
     enableGapSnaps,
+    enableArrowBinding,
+    arrowBindingDistance,
     showGuides,
     showGapSize,
     lineColor,
@@ -118,6 +138,8 @@ class SnapConfig {
       'distance: $distance, '
       'enablePointSnaps: $enablePointSnaps, '
       'enableGapSnaps: $enableGapSnaps, '
+      'enableArrowBinding: $enableArrowBinding, '
+      'arrowBindingDistance: $arrowBindingDistance, '
       'showGuides: $showGuides, '
       'showGapSize: $showGapSize, '
       'lineColor: $lineColor, '

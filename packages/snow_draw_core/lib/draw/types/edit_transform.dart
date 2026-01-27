@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
+import '../elements/types/arrow/arrow_binding.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 
@@ -213,6 +214,90 @@ final class RotateTransform extends EditTransform {
 }
 
 @immutable
+final class ArrowPointTransform extends EditTransform {
+  static const _bindingUnset = Object();
+
+  const ArrowPointTransform({
+    required this.currentPosition,
+    required this.points,
+    this.startBinding,
+    this.endBinding,
+    this.activeIndex,
+    this.didInsert = false,
+    this.shouldDelete = false,
+    this.hasChanges = false,
+  });
+
+  final DrawPoint currentPosition;
+  final List<DrawPoint> points;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final int? activeIndex;
+  final bool didInsert;
+  final bool shouldDelete;
+  final bool hasChanges;
+
+  ArrowPointTransform copyWith({
+    DrawPoint? currentPosition,
+    List<DrawPoint>? points,
+    Object? startBinding = _bindingUnset,
+    Object? endBinding = _bindingUnset,
+    int? activeIndex,
+    bool? didInsert,
+    bool? shouldDelete,
+    bool? hasChanges,
+  }) => ArrowPointTransform(
+    currentPosition: currentPosition ?? this.currentPosition,
+    points: points ?? this.points,
+    startBinding: startBinding == _bindingUnset
+        ? this.startBinding
+        : startBinding as ArrowBinding?,
+    endBinding: endBinding == _bindingUnset
+        ? this.endBinding
+        : endBinding as ArrowBinding?,
+    activeIndex: activeIndex ?? this.activeIndex,
+    didInsert: didInsert ?? this.didInsert,
+    shouldDelete: shouldDelete ?? this.shouldDelete,
+    hasChanges: hasChanges ?? this.hasChanges,
+  );
+
+  @override
+  bool get isIdentity => !hasChanges;
+
+  @override
+  DrawPoint applyToPoint(DrawPoint point, {DrawPoint? pivot}) => point;
+
+  @override
+  DrawRect applyToRect(DrawRect rect, {DrawPoint? pivot}) => rect;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArrowPointTransform &&
+          other.currentPosition == currentPosition &&
+          _pointsEqual(other.points, points) &&
+          other.startBinding == startBinding &&
+          other.endBinding == endBinding &&
+          other.activeIndex == activeIndex &&
+          other.didInsert == didInsert &&
+          other.shouldDelete == shouldDelete &&
+          other.hasChanges == hasChanges;
+
+  @override
+  int get hashCode =>
+      Object.hash(
+        currentPosition,
+        Object.hashAll(points),
+        startBinding,
+        endBinding,
+        activeIndex,
+        didInsert,
+        shouldDelete,
+        hasChanges,
+      );
+}
+
+@immutable
 final class CompositeTransform extends EditTransform {
   const CompositeTransform(this.transforms);
   final List<EditTransform> transforms;
@@ -280,6 +365,21 @@ DrawRect _boundingBox(List<DrawPoint> points) {
 }
 
 bool _listEquals(List<EditTransform> a, List<EditTransform> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   if (identical(a, b)) {
     return true;
   }

@@ -1,6 +1,6 @@
 import '../models/element_state.dart';
 import '../models/selection_geometry.dart';
-import '../models/selection_state.dart';
+import '../models/selection_overlay_state.dart';
 import '../types/draw_rect.dart';
 import '../utils/selection_calculator.dart';
 
@@ -10,7 +10,7 @@ class SelectionGeometryResolver {
 
   static SelectionGeometry resolve({
     required List<ElementState> selectedElements,
-    required SelectionState selection,
+    required SelectionOverlayState selectionOverlay,
     DrawRect? selectionBounds,
     DrawRect? overlayBoundsOverride,
     double? overlayRotationOverride,
@@ -35,7 +35,7 @@ class SelectionGeometryResolver {
         SelectionCalculator.computeSelectionBoundsForElements(selectedElements);
     final bounds =
         overlayBoundsOverride ??
-        selection.multiSelectOverlay?.bounds ??
+        selectionOverlay.multiSelectOverlay?.bounds ??
         fallbackBounds;
     if (bounds == null) {
       return const SelectionGeometry(hasSelection: true, isMultiSelect: true);
@@ -43,7 +43,7 @@ class SelectionGeometryResolver {
 
     final rotation =
         overlayRotationOverride ??
-        selection.multiSelectOverlay?.rotation ??
+        selectionOverlay.multiSelectOverlay?.rotation ??
         0.0;
 
     return SelectionGeometry(

@@ -3,7 +3,7 @@ import 'dart:math';
 import '../core/coordinates/element_space.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
-import '../models/selection_state.dart';
+import '../models/selection_overlay_state.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 
@@ -57,7 +57,7 @@ class SelectionCalculator {
     final selected = getSelectedElements(state);
     return computeOverlayBoundsForSelection(
       selectedElements: selected,
-      selection: state.domain.selection,
+      selectionOverlay: state.application.selectionOverlay,
     );
   }
 
@@ -69,7 +69,7 @@ class SelectionCalculator {
     final selected = getSelectedElements(state);
     return computeOverlayRotationForSelection(
       selectedElements: selected,
-      selection: state.domain.selection,
+      selectionOverlay: state.application.selectionOverlay,
     );
   }
 
@@ -81,7 +81,7 @@ class SelectionCalculator {
     final selected = getSelectedElements(state);
     return computeOverlayCenterForSelection(
       selectedElements: selected,
-      selection: state.domain.selection,
+      selectionOverlay: state.application.selectionOverlay,
     );
   }
 
@@ -105,7 +105,7 @@ class SelectionCalculator {
 
   static DrawRect? computeOverlayBoundsForSelection({
     required List<ElementState> selectedElements,
-    required SelectionState selection,
+    required SelectionOverlayState selectionOverlay,
   }) {
     if (selectedElements.isEmpty) {
       return null;
@@ -114,13 +114,13 @@ class SelectionCalculator {
       return selectedElements.first.rect;
     }
 
-    return selection.multiSelectOverlay?.bounds ??
+    return selectionOverlay.multiSelectOverlay?.bounds ??
         computeSelectionBoundsForElements(selectedElements);
   }
 
   static double? computeOverlayRotationForSelection({
     required List<ElementState> selectedElements,
-    required SelectionState selection,
+    required SelectionOverlayState selectionOverlay,
   }) {
     if (selectedElements.isEmpty) {
       return null;
@@ -128,13 +128,13 @@ class SelectionCalculator {
 
     final rotation = selectedElements.length == 1
         ? selectedElements.first.rotation
-        : (selection.multiSelectOverlay?.rotation ?? 0.0);
+        : (selectionOverlay.multiSelectOverlay?.rotation ?? 0.0);
     return rotation == 0.0 ? null : rotation;
   }
 
   static DrawPoint? computeOverlayCenterForSelection({
     required List<ElementState> selectedElements,
-    required SelectionState selection,
+    required SelectionOverlayState selectionOverlay,
   }) {
     if (selectedElements.isEmpty) {
       return null;
@@ -145,7 +145,7 @@ class SelectionCalculator {
 
     return computeOverlayBoundsForSelection(
       selectedElements: selectedElements,
-      selection: selection,
+      selectionOverlay: selectionOverlay,
     )?.center;
   }
 

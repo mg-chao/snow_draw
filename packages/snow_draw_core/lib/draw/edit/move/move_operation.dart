@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
 import '../../core/geometry/move_geometry.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -208,19 +209,19 @@ class MoveOperation extends EditOperation {
     );
 
     // Update multi-select overlay state after committing a move.
-    final newSelection = typedContext.isMultiSelect
+    final newOverlay = typedContext.isMultiSelect
         ? MultiSelectLifecycle.onMoveFinished(
-            state.domain.selection,
+            state.application.selectionOverlay,
             newBounds: result.multiSelectBounds!,
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: newSelection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: newOverlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);
@@ -279,6 +280,18 @@ class MoveOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     final translatedBounds = context.startBounds.translate(

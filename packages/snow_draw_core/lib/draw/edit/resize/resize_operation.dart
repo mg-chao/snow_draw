@@ -1,6 +1,7 @@
 import '../../config/draw_config.dart';
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/geometry/resize_geometry.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -312,19 +313,19 @@ class ResizeOperation extends EditOperation {
     );
 
     // Update multi-select overlay state after committing a resize.
-    final newSelection = typedContext.isMultiSelect
+    final newOverlay = typedContext.isMultiSelect
         ? MultiSelectLifecycle.onResizeFinished(
-            state.domain.selection,
+            state.application.selectionOverlay,
             newBounds: result.multiSelectBounds!,
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: newSelection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: newOverlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);
@@ -400,6 +401,18 @@ class ResizeOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     return EditComputedResult(

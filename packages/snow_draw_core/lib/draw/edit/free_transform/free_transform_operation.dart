@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
@@ -150,22 +151,22 @@ class FreeTransformOperation extends EditOperation {
       replacementsById: result.updatedElements,
     );
 
-    final newSelection = typedContext.isMultiSelect
-        ? state.domain.selection.copyWith(
+    final newOverlay = typedContext.isMultiSelect
+        ? state.application.selectionOverlay.copyWith(
             multiSelectOverlay: MultiSelectOverlayState(
               bounds: result.multiSelectBounds ?? typedContext.startBounds,
               rotation:
                   result.multiSelectRotation ?? typedContext.selectionRotation,
             ),
           )
-        : state.domain.selection;
+        : state.application.selectionOverlay;
 
     final nextDomain = state.domain.copyWith(
       document: state.domain.document.copyWith(elements: newElements),
-      selection: newSelection,
     );
     final nextApplication = state.application.copyWith(
       interaction: const IdleState(),
+      selectionOverlay: newOverlay,
     );
 
     return state.copyWith(domain: nextDomain, application: nextApplication);
@@ -217,6 +218,18 @@ class FreeTransformOperation extends EditOperation {
         }
       }
       updatedById[entry.key] = updated;
+    }
+
+    final elementsById = {
+      ...state.domain.document.elementMap,
+      ...updatedById,
+    };
+    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
+      elementsById: elementsById,
+      changedElementIds: updatedById.keys.toSet(),
+    );
+    if (bindingUpdates.isNotEmpty) {
+      updatedById.addAll(bindingUpdates);
     }
 
     final newSelectionBounds = transform.applyToRect(

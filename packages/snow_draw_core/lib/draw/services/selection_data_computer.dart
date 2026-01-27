@@ -22,7 +22,7 @@ class SelectionDataComputer {
         SelectionCalculator.computeSelectionBoundsForElements(selectedElements);
     final geometry = SelectionGeometryResolver.resolve(
       selectedElements: selectedElements,
-      selection: state.domain.selection,
+      selectionOverlay: state.application.selectionOverlay,
       selectionBounds: selectionBounds,
     );
     return SelectionDerivedData(

@@ -1,14 +1,16 @@
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
-import '../../../core/draw_context.dart';
+import '../../../core/dependency_interfaces.dart';
+import '../../../edit/core/edit_config.dart';
 import '../../../edit/core/edit_event_factory.dart';
 import '../../../edit/core/edit_modifiers.dart';
-import '../../../edit/core/edit_param_injector.dart';
+import '../../../edit/core/edit_operation_params.dart';
 import '../../../edit/core/edit_result_unified.dart';
 import '../../../edit/core/edit_session_id_generator.dart';
 import '../../../edit/core/edit_session_service.dart';
 import '../../../models/draw_state.dart';
+import '../../../types/edit_operation_id.dart';
 import '../interaction_transition.dart';
 
 /// Reducer dedicated to edit operations.
@@ -22,12 +24,10 @@ class EditStateReducer {
     required this.editSessionService,
     required this.sessionIdGenerator,
     this.updateFailurePolicy = EditUpdateFailurePolicy.toIdle,
-    this.eventFactory = const EditEventFactory(),
   });
   final EditSessionService editSessionService;
   final EditSessionIdGenerator sessionIdGenerator;
   final EditUpdateFailurePolicy updateFailurePolicy;
-  final EditEventFactory eventFactory;
 
   /// Try to handle edit-related actions.
   ///
@@ -35,7 +35,7 @@ class EditStateReducer {
   InteractionTransition? reduce({
     required DrawState state,
     required DrawAction action,
-    required DrawContext context,
+    required EditReducerDeps context,
   }) => switch (action) {
     final StartEdit a => _reduceStartEdit(
       action: a,
@@ -56,7 +56,7 @@ class EditStateReducer {
     return outcome?.state ?? state;
   }
 
-  EditResult? cancelIfEditingOutcome(DrawState state) {
+  EditOutcome? cancelIfEditingOutcome(DrawState state) {
     if (!state.application.isEditing) {
       return null;
     }
@@ -66,7 +66,7 @@ class EditStateReducer {
   InteractionTransition _reduceStartEdit({
     required StartEdit action,
     required DrawState state,
-    required DrawContext context,
+    required EditReducerDeps context,
   }) {
     var currentState = state;
     final events = <EditSessionEvent>[];
@@ -76,23 +76,24 @@ class EditStateReducer {
       final cancel = cancelIfEditingOutcome(currentState);
       if (cancel != null) {
         currentState = cancel.state;
-        events.add(eventFactory.forCancelResult(cancel));
+        events.add(_eventForCancel(cancel));
       }
     }
 
-    // Use the current EditConfigProvider.
-    final injector = EditParamInjector.fromProvider(context.editConfigProvider);
+    final injectedParams = _injectParams(
+      action.params,
+      context.editConfigProvider.editConfig,
+    );
     final sessionId = sessionIdGenerator();
     final start = editSessionService.start(
       state: currentState,
       operationId: action.operationId,
       position: action.position,
-      params: action.params,
-      paramInjector: injector,
+      params: injectedParams,
       sessionId: sessionId,
     );
 
-    final startEvent = eventFactory.forStartResult(start, action.operationId);
+    final startEvent = _eventForStart(start, action.operationId);
     if (startEvent != null) {
       events.add(startEvent);
     }
@@ -111,7 +112,7 @@ class EditStateReducer {
       failurePolicy: updateFailurePolicy,
     );
 
-    final updateEvent = eventFactory.forUpdateResult(update);
+    final updateEvent = _eventForUpdate(update);
     return InteractionTransition(
       nextState: update.state,
       events: updateEvent == null ? const [] : [updateEvent],
@@ -120,7 +121,7 @@ class EditStateReducer {
 
   InteractionTransition _reduceFinishEdit({required DrawState state}) {
     final finish = editSessionService.finish(state: state);
-    final finishEvent = eventFactory.forFinishResult(finish);
+    final finishEvent = _eventForFinish(finish);
     return InteractionTransition(
       nextState: finish.state,
       events: finishEvent == null ? const [] : [finishEvent],
@@ -131,7 +132,73 @@ class EditStateReducer {
     final cancel = editSessionService.cancel(state: state);
     return InteractionTransition(
       nextState: cancel.state,
-      events: [eventFactory.forCancelResult(cancel)],
+      events: [_eventForCancel(cancel)],
     );
   }
+
+  EditSessionEvent? _eventForStart(
+    EditOutcome outcome,
+    EditOperationId fallbackOperationId,
+  ) {
+    final reason = outcome.failureReason;
+    if (reason == null) {
+      return null;
+    }
+    return EditStartFailed(
+      reason: reason,
+      operationId: outcome.operationId ?? fallbackOperationId,
+    );
+  }
+
+  EditSessionEvent? _eventForUpdate(EditOutcome outcome) {
+    final reason = outcome.failureReason;
+    if (reason == null) {
+      return null;
+    }
+    return EditUpdateFailed(
+      reason: reason,
+      operationId: outcome.operationId,
+    );
+  }
+
+  EditSessionEvent? _eventForFinish(EditOutcome outcome) {
+    final reason = outcome.failureReason;
+    if (reason == null) {
+      return null;
+    }
+    return EditFinishFailed(
+      reason: reason,
+      operationId: outcome.operationId,
+    );
+  }
+
+  EditSessionEvent _eventForCancel(EditOutcome outcome) {
+    final reason = outcome.failureReason;
+    if (reason == null) {
+      return EditCancelled(operationId: outcome.operationId);
+    }
+    return EditCancelFailed(
+      reason: reason,
+      operationId: outcome.operationId,
+    );
+  }
+
+  EditOperationParams _injectParams(
+    EditOperationParams params,
+    EditConfig config,
+  ) =>
+      switch (params) {
+        final RotateOperationParams p => RotateOperationParams(
+          startRotationAngle: p.startRotationAngle,
+          rotationSnapAngle: p.rotationSnapAngle ?? config.rotationSnapAngle,
+          initialSelectionBounds: p.initialSelectionBounds,
+        ),
+        final ResizeOperationParams p => ResizeOperationParams(
+          resizeMode: p.resizeMode,
+          handleOffset: p.handleOffset,
+          selectionPadding: p.selectionPadding ?? config.selectionPadding,
+          initialSelectionBounds: p.initialSelectionBounds,
+        ),
+        _ => params,
+      };
 }

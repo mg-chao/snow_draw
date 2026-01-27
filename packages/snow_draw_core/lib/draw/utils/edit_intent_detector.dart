@@ -2,6 +2,8 @@ import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/element_type_id.dart';
+import '../elements/types/arrow/arrow_data.dart';
+import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
 import '../models/element_state.dart';
@@ -20,6 +22,9 @@ class EditIntentDetector {
   const EditIntentDetector();
 
   /// Determines the intent from hit test results and modifiers.
+  ///
+  /// If [filterTypeId] is provided, only elements matching that type will
+  /// be considered.
   EditIntent? detectIntent({
     required DrawStateView stateView,
     required DrawPoint position,
@@ -27,12 +32,23 @@ class EditIntentDetector {
     required bool isAltPressed,
     required SelectionConfig config,
     required ElementRegistry registry,
+    ElementTypeId<ElementData>? filterTypeId,
   }) {
+    final arrowPointIntent = _detectArrowPointIntent(
+      stateView: stateView,
+      position: position,
+      config: config,
+    );
+    if (arrowPointIntent != null) {
+      return arrowPointIntent;
+    }
+
     final hitResult = hitTest.test(
       stateView: stateView,
       position: position,
       config: config,
       registry: registry,
+      filterTypeId: filterTypeId,
     );
 
     final state = stateView.state;
@@ -148,6 +164,46 @@ class EditIntentDetector {
       tolerance: tolerance,
     );
   }
+
+  EditIntent? _detectArrowPointIntent({
+    required DrawStateView stateView,
+    required DrawPoint position,
+    required SelectionConfig config,
+  }) {
+    final selectedIds = stateView.state.domain.selection.selectedIds;
+    if (selectedIds.length != 1) {
+      return null;
+    }
+    final element = stateView.state.domain.document.getElementById(
+      selectedIds.first,
+    );
+    if (element == null || element.data is! ArrowData) {
+      return null;
+    }
+
+    final hitRadius = config.interaction.handleTolerance;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize =
+        config.render.controlPointSize *
+        ConfigDefaults.arrowPointSizeMultiplier;
+    final loopThreshold = hitRadius * 1.5;
+    final handle = ArrowPointUtils.hitTest(
+      element: stateView.effectiveElement(element),
+      position: position,
+      hitRadius: hitRadius,
+      loopThreshold: loopThreshold,
+      handleSize: handleSize,
+    );
+    if (handle == null) {
+      return null;
+    }
+
+    return StartArrowPointIntent(
+      elementId: handle.elementId,
+      pointKind: handle.kind,
+      pointIndex: handle.index,
+    );
+  }
 }
 
 /// Shared edit intent detector instance.
@@ -202,6 +258,23 @@ final class StartRotateIntent extends EditIntent {
 
   @override
   String toString() => 'StartRotateIntent()';
+}
+
+final class StartArrowPointIntent extends EditIntent {
+  const StartArrowPointIntent({
+    required this.elementId,
+    required this.pointKind,
+    required this.pointIndex,
+  });
+
+  final String elementId;
+  final ArrowPointKind pointKind;
+  final int pointIndex;
+
+  @override
+  String toString() =>
+      'StartArrowPointIntent(id: $elementId, kind: $pointKind, '
+      'index: $pointIndex)';
 }
 
 final class BoxSelectIntent extends EditIntent {

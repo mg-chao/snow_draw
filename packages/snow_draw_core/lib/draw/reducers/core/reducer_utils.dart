@@ -42,21 +42,23 @@ DrawState applySelectionChange(DrawState state, Set<String> selectedIds) {
   );
   final geometry = SelectionGeometryResolver.resolve(
     selectedElements: selectedElements,
-    selection: state.domain.selection,
+    selectionOverlay: state.application.selectionOverlay,
     selectionBounds: selectionBounds,
     overlayBoundsOverride: selectedElements.length > 1 ? selectionBounds : null,
     overlayRotationOverride: 0,
   );
   final overlayBounds = geometry.isMultiSelect ? geometry.bounds : null;
 
-  final nextSelection = MultiSelectLifecycle.onSelectionChanged(
-    state.domain.selection,
+  final nextSelection = state.domain.selection.withSelectedIds(selectedIds);
+  final nextOverlay = MultiSelectLifecycle.onSelectionChanged(
+    state.application.selectionOverlay,
     selectedIds,
     newOverlayBounds: overlayBounds,
   );
 
   return state.copyWith(
     domain: state.domain.copyWith(selection: nextSelection),
+    application: state.application.copyWith(selectionOverlay: nextOverlay),
   );
 }
 

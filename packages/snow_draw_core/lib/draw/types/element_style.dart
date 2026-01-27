@@ -6,6 +6,19 @@ enum StrokeStyle { solid, dashed, dotted }
 
 enum FillStyle { solid, line, crossLine }
 
+enum ArrowType { straight, curved, polyline }
+
+enum ArrowheadStyle {
+  none,
+  standard,
+  triangle,
+  square,
+  circle,
+  diamond,
+  invertedTriangle,
+  verticalLine,
+}
+
 enum TextHorizontalAlign { left, center, right }
 
 enum TextVerticalAlign { top, center, bottom }
@@ -19,6 +32,9 @@ class ElementStyleUpdate {
     this.strokeStyle,
     this.fillStyle,
     this.cornerRadius,
+    this.arrowType,
+    this.startArrowhead,
+    this.endArrowhead,
     this.fontSize,
     this.fontFamily,
     this.textAlign,
@@ -33,6 +49,9 @@ class ElementStyleUpdate {
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
   final double? cornerRadius;
+  final ArrowType? arrowType;
+  final ArrowheadStyle? startArrowhead;
+  final ArrowheadStyle? endArrowhead;
   final double? fontSize;
   final String? fontFamily;
   final TextHorizontalAlign? textAlign;
@@ -47,6 +66,9 @@ class ElementStyleUpdate {
       strokeStyle == null &&
       fillStyle == null &&
       cornerRadius == null &&
+      arrowType == null &&
+      startArrowhead == null &&
+      endArrowhead == null &&
       fontSize == null &&
       fontFamily == null &&
       textAlign == null &&
@@ -61,6 +83,9 @@ class ElementStyleUpdate {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
     double? fontSize,
     String? fontFamily,
     TextHorizontalAlign? textAlign,
@@ -74,6 +99,9 @@ class ElementStyleUpdate {
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
     cornerRadius: cornerRadius ?? this.cornerRadius,
+    arrowType: arrowType ?? this.arrowType,
+    startArrowhead: startArrowhead ?? this.startArrowhead,
+    endArrowhead: endArrowhead ?? this.endArrowhead,
     fontSize: fontSize ?? this.fontSize,
     fontFamily: fontFamily ?? this.fontFamily,
     textAlign: textAlign ?? this.textAlign,

@@ -1,11 +1,26 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+
+import '../../draw/config/draw_config.dart';
+import '../../draw/core/coordinates/element_space.dart';
+import '../../draw/edit/arrow/arrow_point_operation.dart';
+import '../../draw/elements/types/arrow/arrow_binding.dart';
+import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_geometry.dart';
+import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
+import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/models/draw_state_view.dart';
+import '../../draw/models/element_state.dart';
+import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
+import '../../draw/types/edit_transform.dart';
+import '../../draw/types/element_style.dart';
 import '../../draw/types/snap_guides.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'render_keys.dart';
@@ -59,11 +74,7 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw snapping guides.
     final snapGuides = renderKey.snapGuides;
     if (snapGuides.isNotEmpty && renderKey.snapConfig.showGuides) {
-      _drawSnapGuides(
-        canvas: canvas,
-        guides: snapGuides,
-        scale: scale,
-      );
+      _drawSnapGuides(canvas: canvas, guides: snapGuides, scale: scale);
     }
 
     // Draw hover outline when selection is possible.
@@ -75,15 +86,31 @@ class DynamicCanvasPainter extends CustomPainter {
       );
       if (hoveredElement != null) {
         final effectiveElement = stateView.effectiveElement(hoveredElement);
-        elementRenderer.renderSelectionOutline(
-          canvas: canvas,
-          bounds: effectiveElement.rect,
-          scaleFactor: scale,
-          config: renderKey.hoverSelectionConfig,
-          rotation: effectiveElement.rotation,
-          rotationCenter: effectiveElement.center,
-          dashed: false,
-        );
+        // For arrow elements, render an arrow outline instead of a rectangle
+        if (effectiveElement.data is ArrowData) {
+          _drawArrowHoverOutline(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else if (effectiveElement.data is TextData) {
+          // For text elements, render underlines instead of a rectangle
+          _drawTextHoverUnderlines(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else {
+          elementRenderer.renderSelectionOutline(
+            canvas: canvas,
+            bounds: effectiveElement.rect,
+            scaleFactor: scale,
+            config: renderKey.hoverSelectionConfig,
+            rotation: effectiveElement.rotation,
+            rotationCenter: effectiveElement.center,
+            dashed: false,
+          );
+        }
       }
     }
 
@@ -111,27 +138,54 @@ class DynamicCanvasPainter extends CustomPainter {
           }
         }
 
-        elementRenderer
-          ..renderSelection(
-            canvas: canvas,
-            bounds: bounds,
-            scaleFactor: scale,
-            config: renderKey.selectionConfig,
-            rotation: effectiveSelection.rotation,
-            rotationCenter: rotationCenter,
-            dashed: selectedIds.length > 1,
-          )
-          // Draw rotation handle.
-          ..renderRotationHandle(
-            canvas: canvas,
-            bounds: bounds,
-            scaleFactor: scale,
-            config: renderKey.selectionConfig,
-            rotation: effectiveSelection.rotation,
-            rotationCenter: rotationCenter,
-          );
+        // Check if this is a single 2-point arrow selection.
+        // For 2-point arrows, skip selection box rendering since all operations
+        // can be performed through the point editor.
+        final isSingleTwoPointArrow =
+            selectedIds.length == 1 &&
+            stateView.selectedElements.isNotEmpty &&
+            stateView.selectedElements.first.data is ArrowData &&
+            (stateView.selectedElements.first.data as ArrowData)
+                    .points
+                    .length ==
+                2;
+
+        // Determine corner handle offset for single arrow selections.
+        final cornerHandleOffset =
+            selectedIds.length == 1 &&
+                stateView.selectedElements.isNotEmpty &&
+                stateView.selectedElements.first.data is ArrowData
+            ? 8.0
+            : 0.0;
+
+        // Skip selection box and rotation handle for 2-point arrows.
+        if (!isSingleTwoPointArrow) {
+          elementRenderer
+            ..renderSelection(
+              canvas: canvas,
+              bounds: bounds,
+              scaleFactor: scale,
+              config: renderKey.selectionConfig,
+              rotation: effectiveSelection.rotation,
+              rotationCenter: rotationCenter,
+              dashed: selectedIds.length > 1,
+              cornerHandleOffset: cornerHandleOffset,
+            )
+            // Draw rotation handle.
+            ..renderRotationHandle(
+              canvas: canvas,
+              bounds: bounds,
+              scaleFactor: scale,
+              config: renderKey.selectionConfig,
+              rotation: effectiveSelection.rotation,
+              rotationCenter: rotationCenter,
+            );
+        }
       }
     }
+
+    _drawArrowBindingHighlight(canvas: canvas, scale: scale);
+    _drawArrowPointOverlay(canvas: canvas, scale: scale);
 
     // Draw dashed border for a single selected text element.
     if (renderKey.selectedIds.length == 1) {
@@ -183,10 +237,10 @@ class DynamicCanvasPainter extends CustomPainter {
     );
 
     final visibleElements = document.getElementsInRect(viewportRect)
-    ..removeWhere((element) {
-      final orderIndex = document.getOrderIndex(element.id) ?? -1;
-      return orderIndex < dynamicLayerStartIndex;
-    });
+      ..removeWhere((element) {
+        final orderIndex = document.getOrderIndex(element.id) ?? -1;
+        return orderIndex < dynamicLayerStartIndex;
+      });
 
     final previewElements = renderKey.previewElementsById;
     if (previewElements.isNotEmpty) {
@@ -204,8 +258,10 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     visibleElements.sort((a, b) {
-      final indexA = document.getOrderIndex(a.id) ?? -1;
-      final indexB = document.getOrderIndex(b.id) ?? -1;
+      // Use element's zIndex for preview elements not in document,
+      // otherwise use document order index for consistency.
+      final indexA = document.getOrderIndex(a.id) ?? a.zIndex;
+      final indexB = document.getOrderIndex(b.id) ?? b.zIndex;
       return indexA.compareTo(indexB);
     });
 
@@ -241,6 +297,619 @@ class DynamicCanvasPainter extends CustomPainter {
         locale: renderKey.locale,
       );
     }
+  }
+
+  void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
+    if (renderKey.selectedIds.length != 1) {
+      return;
+    }
+    final selectedId = renderKey.selectedIds.first;
+    final element = stateView.state.domain.document.getElementById(selectedId);
+    if (element == null || element.data is! ArrowData) {
+      return;
+    }
+
+    final effectiveElement = stateView.effectiveElement(element);
+    final selectionConfig = renderKey.selectionConfig;
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final handleTolerance =
+        selectionConfig.interaction.handleTolerance / effectiveScale;
+    final loopThreshold = handleTolerance * 1.5;
+    final overlay = ArrowPointUtils.buildOverlay(
+      element: effectiveElement,
+      loopThreshold: loopThreshold,
+    );
+    if (overlay.turningPoints.isEmpty &&
+        overlay.addablePoints.isEmpty &&
+        overlay.loopPoints.isEmpty) {
+      return;
+    }
+
+    final baseHandleSize =
+        selectionConfig.render.controlPointSize / effectiveScale;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
+    final strokeWidth = selectionConfig.render.strokeWidth / effectiveScale;
+    final fillColor = selectionConfig.render.cornerFillColor;
+    final strokeColor = selectionConfig.render.strokeColor;
+    final highlightStroke = strokeColor.withValues(alpha: 0.95);
+
+    final hoveredHandle = renderKey.hoveredArrowHandle;
+    final activeHandle = renderKey.activeArrowHandle;
+    final shouldDelete = _shouldShowDeleteIndicator();
+    final deletePosition = activeHandle == null || !shouldDelete
+        ? null
+        : _resolveHandlePosition(overlay, activeHandle);
+
+    canvas.save();
+    if (effectiveElement.rotation != 0) {
+      canvas
+        ..translate(
+          effectiveElement.rect.centerX,
+          effectiveElement.rect.centerY,
+        )
+        ..rotate(effectiveElement.rotation)
+        ..translate(
+          -effectiveElement.rect.centerX,
+          -effectiveElement.rect.centerY,
+        );
+    }
+    canvas.translate(effectiveElement.rect.minX, effectiveElement.rect.minY);
+
+    final addableRadius = handleSize * 0.5;
+    final turnRadius = handleSize * 0.5;
+    final loopOuterRadius = handleSize * 1.0;
+    final loopInnerRadius = handleSize * 0.5;
+    final hoverOuterRadius = loopOuterRadius;
+
+    final addableStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.35)
+      ..isAntiAlias = true;
+    final addableFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.18)
+      ..isAntiAlias = true;
+    final addableStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.85)
+      ..isAntiAlias = true;
+    final addableFillPaintHighlighted = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.55)
+      ..isAntiAlias = true;
+    final turningFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = fillColor.withValues(alpha: 0.90)
+      ..isAntiAlias = true;
+    final turningStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor
+      ..isAntiAlias = true;
+    final turningStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = highlightStroke
+      ..isAntiAlias = true;
+    final hoverOuterFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.25)
+      ..isAntiAlias = true;
+
+    final arrowData = effectiveElement.data as ArrowData;
+    final isPolyline = arrowData.arrowType == ArrowType.polyline;
+    final lastSegmentIndex = overlay.addablePoints.isEmpty
+        ? -1
+        : overlay.addablePoints.length - 1;
+
+    for (final handle in overlay.addablePoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+      }
+      final isBendControl =
+          isPolyline && handle.index > 0 && handle.index < lastSegmentIndex;
+      final fillPaint = isBendControl
+          ? turningFillPaint
+          : isHighlighted
+          ? addableFillPaintHighlighted
+          : addableFillPaint;
+      final strokePaint = isBendControl
+          ? isHighlighted
+                ? turningStrokePaintHighlighted
+                : turningStrokePaint
+          : isHighlighted
+          ? addableStrokePaintHighlighted
+          : addableStrokePaint;
+      final radius = isBendControl ? turnRadius : addableRadius;
+      canvas
+        ..drawCircle(center, radius, fillPaint)
+        ..drawCircle(center, radius, strokePaint);
+    }
+
+    for (final handle in overlay.turningPoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+      }
+      final fillPaint = turningFillPaint;
+      final strokePaint = isHighlighted
+          ? turningStrokePaintHighlighted
+          : turningStrokePaint;
+      canvas
+        ..drawCircle(center, turnRadius, fillPaint)
+        ..drawCircle(center, turnRadius, strokePaint);
+    }
+
+    for (final handle in overlay.loopPoints) {
+      final center = _localOffset(effectiveElement.rect, handle.position);
+      final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      if (isHighlighted) {
+        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+      }
+      final radius = handle.kind == ArrowPointKind.loopEnd
+          ? loopOuterRadius
+          : loopInnerRadius;
+      final strokePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..color = isHighlighted ? highlightStroke : strokeColor
+        ..isAntiAlias = true;
+
+      // Inner loop point (loopStart) has filled style like bend points
+      if (handle.kind == ArrowPointKind.loopStart) {
+        canvas.drawCircle(center, radius, turningFillPaint);
+      }
+      canvas.drawCircle(center, radius, strokePaint);
+    }
+
+    if (deletePosition != null) {
+      final center = _localOffset(effectiveElement.rect, deletePosition);
+      final deletePaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth * 1.4
+        ..color = Colors.redAccent
+        ..isAntiAlias = true;
+      canvas.drawCircle(center, turnRadius * 1.35, deletePaint);
+    }
+
+    canvas.restore();
+  }
+
+  void _drawArrowBindingHighlight({
+    required Canvas canvas,
+    required double scale,
+  }) {
+    final highlight = _resolveArrowBindingHighlight();
+    if (highlight == null) {
+      return;
+    }
+    final element = stateView.state.domain.document.getElementById(
+      highlight.elementId,
+    );
+    if (element == null || element.data is! RectangleData) {
+      return;
+    }
+    final effectiveElement = stateView.effectiveElement(element);
+    final edgeLine = _resolveEdgeLine(effectiveElement, highlight.edge);
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final strokeColor = renderKey.selectionConfig.render.strokeColor;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth =
+          renderKey.selectionConfig.render.strokeWidth * 1.5 / effectiveScale
+      ..color = strokeColor.withValues(alpha: 0.9)
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    canvas.drawLine(
+      Offset(edgeLine.start.x, edgeLine.start.y),
+      Offset(edgeLine.end.x, edgeLine.end.y),
+      paint,
+    );
+  }
+
+  void _drawArrowHoverOutline({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! ArrowData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final localPoints = ArrowGeometry.resolveLocalPoints(
+      rect: rect,
+      normalizedPoints: data.points,
+    );
+    if (localPoints.length < 2) {
+      return;
+    }
+
+    // Use selection stroke width for shaft, but arrow's actual stroke width for
+    // arrowheads
+    final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
+    final arrowheadStrokeWidth = data.strokeWidth;
+
+    // Calculate insets to prevent shaft from penetrating closed arrowheads
+    final startInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.startArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+    final endInset = ArrowGeometry.calculateArrowheadInset(
+      style: data.endArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+    final startDirectionOffset =
+        ArrowGeometry.calculateArrowheadDirectionOffset(
+          style: data.startArrowhead,
+          strokeWidth: arrowheadStrokeWidth,
+        );
+    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
+      style: data.endArrowhead,
+      strokeWidth: arrowheadStrokeWidth,
+    );
+
+    final shaftPath = ArrowGeometry.buildShaftPath(
+      points: localPoints,
+      arrowType: data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+    );
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    // Use hover selection color with modified appearance
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = hoverStrokeWidth / scale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = hoverColor
+      ..isAntiAlias = true;
+
+    // Draw shaft (always solid for hover outline)
+    canvas.drawPath(shaftPath, strokePaint);
+
+    // Draw arrowheads (using arrow's actual stroke width for proper sizing)
+    _drawArrowHoverArrowheads(
+      canvas,
+      localPoints,
+      data,
+      strokePaint,
+      arrowheadStrokeWidth,
+      startInset: startInset,
+      endInset: endInset,
+      startDirectionOffset: startDirectionOffset,
+      endDirectionOffset: endDirectionOffset,
+    );
+
+    canvas.restore();
+  }
+
+  void _drawArrowHoverArrowheads(
+    Canvas canvas,
+    List<Offset> points,
+    ArrowData data,
+    Paint paint,
+    double strokeWidth, {
+    required double startInset,
+    required double endInset,
+    required double startDirectionOffset,
+    required double endDirectionOffset,
+  }) {
+    if (points.length < 2 || strokeWidth <= 0) {
+      return;
+    }
+
+    final startDirection = ArrowGeometry.resolveStartDirection(
+      points,
+      data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: startDirectionOffset,
+    );
+    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
+      final path = ArrowGeometry.buildArrowheadPath(
+        tip: points.first,
+        direction: startDirection,
+        style: data.startArrowhead,
+        strokeWidth: strokeWidth,
+      );
+      canvas.drawPath(path, paint);
+    }
+
+    final endDirection = ArrowGeometry.resolveEndDirection(
+      points,
+      data.arrowType,
+      startInset: startInset,
+      endInset: endInset,
+      directionOffset: endDirectionOffset,
+    );
+    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
+      final path = ArrowGeometry.buildArrowheadPath(
+        tip: points.last,
+        direction: endDirection,
+        style: data.endArrowhead,
+        strokeWidth: strokeWidth,
+      );
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void _drawTextHoverUnderlines({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! TextData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final rotation = element.rotation;
+
+    // Get text layout to access line information
+    final layout = layoutText(
+      data: data,
+      maxWidth: rect.width,
+      minWidth: rect.width,
+      locale: renderKey.locale,
+    );
+
+    // Get text boxes for each line
+    final text = data.text.isEmpty ? ' ' : data.text;
+    final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
+    final textBoxes = layout.painter.getBoxesForSelection(
+      selection,
+      boxHeightStyle: BoxHeightStyle.strut,
+    );
+
+    if (textBoxes.isEmpty) {
+      return;
+    }
+
+    // Calculate text offset based on vertical alignment
+    final textOffset = _resolveTextOffsetForUnderline(
+      containerSize: Size(rect.width, rect.height),
+      textSize: layout.size,
+      verticalAlign: data.verticalAlign,
+    );
+
+    canvas.save();
+    if (rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    // Use hover selection color for underlines
+    final underlineColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final underlinePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 / scale
+      ..color = underlineColor
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    // Draw underline for each line
+    for (final box in textBoxes) {
+      // Filter out boxes with width less than 0.5 (blank lines)
+      if (box.right - box.left < 0.5) {
+        continue;
+      }
+      final y = box.bottom + textOffset.dy;
+      final startX = box.left + textOffset.dx;
+      final endX = box.right + textOffset.dx;
+      canvas.drawLine(Offset(startX, y), Offset(endX, y), underlinePaint);
+    }
+
+    canvas.restore();
+  }
+
+  Offset _resolveTextOffsetForUnderline({
+    required Size containerSize,
+    required Size textSize,
+    required TextVerticalAlign verticalAlign,
+  }) {
+    var dy = 0.0;
+
+    switch (verticalAlign) {
+      case TextVerticalAlign.top:
+        dy = 0;
+      case TextVerticalAlign.center:
+        dy = (containerSize.height - textSize.height) / 2;
+      case TextVerticalAlign.bottom:
+        dy = containerSize.height - textSize.height;
+    }
+
+    if (dy.isNaN || dy.isInfinite || dy < 0) {
+      dy = 0;
+    }
+
+    return Offset(0, dy);
+  }
+
+  bool _shouldShowDeleteIndicator() {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState) {
+      return false;
+    }
+    final transform = interaction.currentTransform;
+    return transform is ArrowPointTransform && transform.shouldDelete;
+  }
+
+  DrawPoint? _resolveHandlePosition(
+    ArrowPointOverlay overlay,
+    ArrowPointHandle handle,
+  ) {
+    for (final candidate in overlay.turningPoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    for (final candidate in overlay.addablePoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    for (final candidate in overlay.loopPoints) {
+      if (candidate == handle) {
+        return candidate.position;
+      }
+    }
+    return null;
+  }
+
+  Offset _localOffset(DrawRect rect, DrawPoint point) =>
+      Offset(point.x - rect.minX, point.y - rect.minY);
+
+  _ArrowBindingHighlight? _resolveArrowBindingHighlight() {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is EditingState &&
+        interaction.context is ArrowPointEditContext) {
+      final handle = renderKey.activeArrowHandle;
+      if (handle == null) {
+        return null;
+      }
+      final element = stateView.state.domain.document.getElementById(
+        handle.elementId,
+      );
+      if (element == null || element.data is! ArrowData) {
+        return null;
+      }
+      final effectiveElement = stateView.effectiveElement(element);
+      final data = effectiveElement.data as ArrowData;
+      final points = _resolveArrowWorldPoints(
+        effectiveElement,
+        data,
+      );
+      final endpoint = _resolveEndpointForHandle(handle, points.length);
+      final binding = switch (endpoint) {
+        _ArrowEndpoint.start => data.startBinding,
+        _ArrowEndpoint.end => data.endBinding,
+        null => null,
+      };
+      return _highlightFromBinding(binding);
+    }
+    if (interaction is CreatingState) {
+      final element = interaction.element;
+      final data = element.data;
+      if (data is! ArrowData || !interaction.isPointCreation) {
+        return null;
+      }
+      return _highlightFromBinding(data.endBinding);
+    }
+    return null;
+  }
+
+  _ArrowBindingHighlight? _highlightFromBinding(ArrowBinding? binding) {
+    if (binding == null || binding.mode != ArrowBindingMode.orbit) {
+      return null;
+    }
+    final edge = _edgeForAnchor(binding.anchor);
+    if (edge == null) {
+      return null;
+    }
+    return _ArrowBindingHighlight(elementId: binding.elementId, edge: edge);
+  }
+
+  _BoundEdge? _edgeForAnchor(DrawPoint anchor) {
+    const tolerance = 0.002;
+    if ((anchor.y - 0).abs() <= tolerance) {
+      return _BoundEdge.top;
+    }
+    if ((anchor.y - 1).abs() <= tolerance) {
+      return _BoundEdge.bottom;
+    }
+    if ((anchor.x - 0).abs() <= tolerance) {
+      return _BoundEdge.left;
+    }
+    if ((anchor.x - 1).abs() <= tolerance) {
+      return _BoundEdge.right;
+    }
+    return null;
+  }
+
+  _ArrowEndpoint? _resolveEndpointForHandle(
+    ArrowPointHandle handle,
+    int pointCount,
+  ) {
+    if (pointCount < 2) {
+      return null;
+    }
+    return switch (handle.kind) {
+      ArrowPointKind.loopStart => _ArrowEndpoint.start,
+      ArrowPointKind.loopEnd => _ArrowEndpoint.end,
+      ArrowPointKind.turning => handle.index == 0
+          ? _ArrowEndpoint.start
+          : handle.index == pointCount - 1
+          ? _ArrowEndpoint.end
+          : null,
+      _ => null,
+    };
+  }
+
+  List<DrawPoint> _resolveArrowWorldPoints(
+    ElementState element,
+    ArrowData data,
+  ) {
+    final resolved = ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final effective = data.arrowType == ArrowType.polyline
+        ? ArrowGeometry.expandPolylinePoints(resolved)
+        : resolved;
+    return effective
+        .map((point) => DrawPoint(x: point.dx, y: point.dy))
+        .toList(growable: false);
+  }
+
+  _EdgeLine _resolveEdgeLine(ElementState element, _BoundEdge edge) {
+    final rect = element.rect;
+    DrawPoint start;
+    DrawPoint end;
+    switch (edge) {
+      case _BoundEdge.top:
+        start = DrawPoint(x: rect.minX, y: rect.minY);
+        end = DrawPoint(x: rect.maxX, y: rect.minY);
+      case _BoundEdge.right:
+        start = DrawPoint(x: rect.maxX, y: rect.minY);
+        end = DrawPoint(x: rect.maxX, y: rect.maxY);
+      case _BoundEdge.bottom:
+        start = DrawPoint(x: rect.maxX, y: rect.maxY);
+        end = DrawPoint(x: rect.minX, y: rect.maxY);
+      case _BoundEdge.left:
+        start = DrawPoint(x: rect.minX, y: rect.maxY);
+        end = DrawPoint(x: rect.minX, y: rect.minY);
+    }
+    if (element.rotation != 0) {
+      final space = ElementSpace(
+        rotation: element.rotation,
+        origin: rect.center,
+      );
+      start = space.toWorld(start);
+      end = space.toWorld(end);
+    }
+    return _EdgeLine(start: start, end: end);
   }
 
   /// Draw box-selection overlay.
@@ -309,11 +978,7 @@ class DynamicCanvasPainter extends CustomPainter {
           paint: paint,
         );
       } else {
-        canvas.drawLine(
-          Offset(start.x, start.y),
-          Offset(end.x, end.y),
-          paint,
-        );
+        canvas.drawLine(Offset(start.x, start.y), Offset(end.x, end.y), paint);
       }
 
       if (isGap && drawMarkers) {
@@ -607,4 +1272,25 @@ class DynamicCanvasPainter extends CustomPainter {
 
   @override
   int get hashCode => renderKey.hashCode;
+}
+
+enum _ArrowEndpoint { start, end }
+
+enum _BoundEdge { top, right, bottom, left }
+
+class _ArrowBindingHighlight {
+  const _ArrowBindingHighlight({
+    required this.elementId,
+    required this.edge,
+  });
+
+  final String elementId;
+  final _BoundEdge edge;
+}
+
+class _EdgeLine {
+  const _EdgeLine({required this.start, required this.end});
+
+  final DrawPoint start;
+  final DrawPoint end;
 }

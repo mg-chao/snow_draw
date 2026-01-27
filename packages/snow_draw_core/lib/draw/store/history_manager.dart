@@ -723,8 +723,6 @@ class _HistorySnapshotCodec {
   Map<String, dynamic> _selectionToJson(SelectionState selection) => {
     'selectedIds': selection.selectedIds.toList(),
     'selectionVersion': selection.selectionVersion,
-    if (selection.multiSelectOverlay != null)
-      'multiSelectOverlay': _overlayToJson(selection.multiSelectOverlay!),
   };
 
   SelectionState _selectionFromJson(Map<String, dynamic> json) =>
@@ -733,22 +731,6 @@ class _HistorySnapshotCodec {
             (json['selectedIds'] as List<dynamic>?)?.cast<String>().toSet() ??
             const {},
         selectionVersion: json['selectionVersion'] as int? ?? 0,
-        multiSelectOverlay: json['multiSelectOverlay'] == null
-            ? null
-            : _overlayFromJson(
-                json['multiSelectOverlay'] as Map<String, dynamic>,
-              ),
-      );
-
-  Map<String, dynamic> _overlayToJson(MultiSelectOverlayState overlay) => {
-    'bounds': _rectToJson(overlay.bounds),
-    'rotation': overlay.rotation,
-  };
-
-  MultiSelectOverlayState _overlayFromJson(Map<String, dynamic> json) =>
-      MultiSelectOverlayState(
-        bounds: _rectFromJson(json['bounds'] as Map<String, dynamic>),
-        rotation: (json['rotation'] as num?)?.toDouble() ?? 0.0,
       );
 
   Map<String, dynamic> _rectToJson(DrawRect rect) => {

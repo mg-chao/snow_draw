@@ -1,6 +1,3 @@
-import 'package:meta/meta.dart';
-
-import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../types/edit_operation_id.dart';
 
@@ -38,40 +35,14 @@ extension EditFailureReasonX on EditFailureReason {
   };
 }
 
-/// Unified edit session result (success or failure).
-@immutable
-class EditResult {
-  const EditResult._({
-    required this.state,
-    this.failureReason,
-    this.operationId,
-    this.historyMetadata,
-  });
+/// Edit session outcome tuple.
+typedef EditOutcome = ({
+  DrawState state,
+  EditFailureReason? failureReason,
+  EditOperationId? operationId,
+});
 
-  factory EditResult.success({
-    required DrawState state,
-    EditOperationId? operationId,
-    HistoryMetadata? historyMetadata,
-  }) => EditResult._(
-    state: state,
-    operationId: operationId,
-    historyMetadata: historyMetadata,
-  );
-
-  factory EditResult.failure({
-    required DrawState state,
-    required EditFailureReason reason,
-    EditOperationId? operationId,
-  }) => EditResult._(
-    state: state,
-    failureReason: reason,
-    operationId: operationId,
-  );
-  final DrawState state;
-  final EditFailureReason? failureReason;
-  final EditOperationId? operationId;
-  final HistoryMetadata? historyMetadata;
-
+extension EditOutcomeX on EditOutcome {
   bool get isSuccess => failureReason == null;
-  bool get isFailure => !isSuccess;
+  bool get isFailure => failureReason != null;
 }

@@ -6,8 +6,7 @@ import '../../../models/interaction_state.dart';
 
 /// Reducer for pending select/move states.
 ///
-/// Handles: SetPendingSelect, ClearPendingSelect, SetPendingMove,
-/// ClearPendingMove.
+/// Handles: SetDragPending, ClearDragPending
 @immutable
 class PendingStateReducer {
   const PendingStateReducer();
@@ -16,44 +15,24 @@ class PendingStateReducer {
   ///
   /// Returns null if the action is not a pending-state operation.
   DrawState? reduce(DrawState state, DrawAction action) => switch (action) {
-    final SetPendingSelect a => _setPendingSelect(state, a),
-    ClearPendingSelect _ => _clearPendingSelect(state),
-    final SetPendingMove a => _setPendingMove(state, a),
-    ClearPendingMove _ => _clearPendingMove(state),
+    final SetDragPending a => _setDragPending(state, a),
+    ClearDragPending _ => _clearDragPending(state),
     _ => null,
   };
 
-  DrawState _setPendingSelect(DrawState state, SetPendingSelect action) =>
+  DrawState _setDragPending(DrawState state, SetDragPending action) =>
       state.copyWith(
         application: state.application.copyWith(
-          interaction: PendingSelectState(
-            pendingSelect: PendingSelectInfo(
-              elementId: action.elementId,
-              addToSelection: action.addToSelection,
-              pointerDownPosition: action.pointerDownPosition,
-            ),
-          ),
-        ),
-      );
-
-  DrawState _clearPendingSelect(DrawState state) {
-    if (state.application.interaction is PendingSelectState) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-    return state;
-  }
-
-  DrawState _setPendingMove(DrawState state, SetPendingMove action) =>
-      state.copyWith(
-        application: state.application.copyWith(
-          interaction: PendingMoveState(
+          interaction: DragPendingState(
             pointerDownPosition: action.pointerDownPosition,
+            intent: action.intent,
           ),
         ),
       );
 
-  DrawState _clearPendingMove(DrawState state) {
-    if (state.application.interaction is PendingMoveState) {
+  DrawState _clearDragPending(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is DragPendingState) {
       return state.copyWith(application: state.application.toIdle());
     }
     return state;

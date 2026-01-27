@@ -113,23 +113,52 @@ float calcArcLength(vec2 p, vec2 halfSize, float radius) {
     }
 }
 
-// Dashed stroke pattern
+// Dashed stroke pattern with rounded caps
 // Returns 1.0 for dash, 0.0 for gap
-float dashedPattern(float arcLength, float dashLen, float gapLen) {
+// perpDist is the perpendicular distance from the stroke centerline
+float dashedPattern(float arcLength, float dashLen, float gapLen, float perpDist, float strokeWidth) {
     float period = dashLen + gapLen;
     float t = mod(arcLength, period);
-    // Smooth transitions at dash edges
-    float dashStart = smoothstep(0.0, 1.0, t);
-    float dashEnd = smoothstep(dashLen - 1.0, dashLen + 1.0, t);
-    return dashStart * (1.0 - dashEnd);
+
+    // If we're in the gap region, return 0
+    if (t > dashLen) {
+        return 0.0;
+    }
+
+    float halfStroke = strokeWidth * 0.5;
+
+    // Check if we're near the start cap (t < halfStroke)
+    if (t < halfStroke) {
+        float distToCapCenter = halfStroke - t;
+        float dist2D = sqrt(distToCapCenter * distToCapCenter + perpDist * perpDist);
+        return 1.0 - smoothstep(halfStroke - 0.5, halfStroke + 0.5, dist2D);
+    }
+
+    // Check if we're near the end cap (t > dashLen - halfStroke)
+    if (t > dashLen - halfStroke) {
+        float distToCapCenter = t - (dashLen - halfStroke);
+        float dist2D = sqrt(distToCapCenter * distToCapCenter + perpDist * perpDist);
+        return 1.0 - smoothstep(halfStroke - 0.5, halfStroke + 0.5, dist2D);
+    }
+
+    // We're in the rectangular body - return 1.0 (inside the dash)
+    return 1.0;
 }
 
-// Dotted stroke pattern
+// Dotted stroke pattern with circular dots
 // Returns 1.0 for dot, 0.0 for gap
-float dottedPattern(float arcLength, float dotSpacing, float dotRadius) {
-    float t = mod(arcLength, dotSpacing);
-    float distToCenter = abs(t - dotSpacing * 0.5);
-    return 1.0 - smoothstep(dotRadius - 1.0, dotRadius + 1.0, distToCenter);
+// perpDist is the perpendicular distance from the stroke centerline
+float dottedPattern(float arcLength, float dotSpacing, float dotRadius, float perpDist) {
+    // Find nearest dot center along arc
+    float dotIndex = floor(arcLength / dotSpacing + 0.5);
+    float dotCenter = dotIndex * dotSpacing;
+    float arcDist = arcLength - dotCenter;
+
+    // Calculate 2D distance from dot center (arc distance + perpendicular distance)
+    float dist2D = sqrt(arcDist * arcDist + perpDist * perpDist);
+
+    // Create circular dot with sharper edges (reduced AA width)
+    return 1.0 - smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist2D);
 }
 
 void main() {
@@ -202,12 +231,12 @@ void main() {
             if (strokeStyle == 1) {
                 // Dashed stroke
                 float arcLen = calcArcLength(localPos, halfSize, cornerRadius);
-                float dashMask = dashedPattern(arcLen, uDashLength, uGapLength);
+                float dashMask = dashedPattern(arcLen, uDashLength, uGapLength, abs(dist), uStrokeWidth);
                 strokeMask *= dashMask;
             } else if (strokeStyle == 2) {
                 // Dotted stroke
                 float arcLen = calcArcLength(localPos, halfSize, cornerRadius);
-                float dotMask = dottedPattern(arcLen, uDotSpacing, uDotRadius);
+                float dotMask = dottedPattern(arcLen, uDotSpacing, uDotRadius, dist);
                 strokeMask *= dotMask;
             }
             // else: solid stroke (strokeMask unchanged)

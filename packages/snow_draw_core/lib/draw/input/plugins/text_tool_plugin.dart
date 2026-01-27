@@ -131,6 +131,18 @@ class TextToolPlugin extends DrawInputPlugin {
 
     if (_isTextToolActive) {
       final hitId = _hitTextElementId(event.position);
+
+      // If there's a selection and we're clicking on a blank area (not hitting
+      // any text element), defer to SelectPlugin to clear the selection instead
+      // of creating a new text element.
+      if (hitId == null && state.domain.hasSelection) {
+        return unhandled(reason: 'Defer to selection clearing');
+      }
+
+      if (hitId != null && _hasMultipleSelectedTextElements()) {
+        return unhandled(reason: 'Multiple text selection blocks editing');
+      }
+
       await dispatch(StartTextEdit(elementId: hitId, position: event.position));
       return handled(message: 'Text edit started');
     }
@@ -190,6 +202,7 @@ class TextToolPlugin extends DrawInputPlugin {
       position: position,
       config: selectionConfig,
       registry: drawContext.elementRegistry,
+      filterTypeId: currentToolTypeId,
     );
 
     if (hitResult.isHandleHit) {
@@ -222,6 +235,7 @@ class TextToolPlugin extends DrawInputPlugin {
       position: position,
       config: selectionConfig,
       registry: drawContext.elementRegistry,
+      filterTypeId: currentToolTypeId,
     );
 
     final isSelectionHit =
@@ -244,6 +258,20 @@ class TextToolPlugin extends DrawInputPlugin {
       final element = state.domain.document.getElementById(id);
       if (element?.data is TextData) {
         return true;
+      }
+    }
+    return false;
+  }
+
+  bool _hasMultipleSelectedTextElements() {
+    var count = 0;
+    for (final id in state.domain.selection.selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is TextData) {
+        count += 1;
+        if (count > 1) {
+          return true;
+        }
       }
     }
     return false;
@@ -308,6 +336,9 @@ class TextToolPlugin extends DrawInputPlugin {
       return false;
     }
     if (!state.domain.hasSelection) {
+      return false;
+    }
+    if (_hasMultipleSelectedTextElements()) {
       return false;
     }
     final hitId = _hitTextElementId(

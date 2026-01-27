@@ -8,8 +8,11 @@ import 'package:flutter/services.dart' hide TextLayoutMetrics;
 import '../../draw/actions/actions.dart';
 import '../../draw/config/draw_config.dart';
 import '../../draw/core/coordinates/element_space.dart';
+import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
 import '../../draw/elements/core/element_type_id.dart';
+import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
@@ -26,6 +29,7 @@ import '../../draw/services/draw_state_view_builder.dart';
 import '../../draw/store/draw_store_interface.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
+import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import 'cursor_resolver.dart';
@@ -97,22 +101,23 @@ class PluginDrawCanvas extends StatefulWidget {
 
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
-  static const _scrollStrokeWidthStep = 1.0;
-  static const _scrollFontSizeStep = 1.0;
-  static const _minFontSize = 12.0;
-  static const _minStrokeWidth = 1.0;
+  static const _strokeWidthSteps = [2.0, 4.0, 7.0];
+  static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
 
   StreamSubscription<DrawEvent>? _eventSubscription;
   StreamSubscription<DrawConfig>? _configSubscription;
   final _focusNode = FocusNode();
-  final _textFocusNode = FocusNode();
+  late final FocusNode _textFocusNode;
   TextEditingController? _textController;
   String? _editingElementId;
   var _suppressTextControllerChange = false;
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
+  TextLayoutMetrics? _editingTextLayout;
+  TextSelection? _lastVerticalSelection;
+  double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
   final _cursorNotifier = ValueNotifier<MouseCursor>(_defaultCursor);
 
@@ -124,6 +129,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   MouseCursor _cursor = _defaultCursor;
   DrawPoint? _lastPointerPosition;
   String? _hoveredSelectionElementId;
+  ArrowPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
   int? _middlePanPointerId;
   Offset? _lastMiddlePanPosition;
@@ -247,6 +253,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   void initState() {
     super.initState();
+    _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
@@ -388,6 +395,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       boxSelectionBounds: _extractBoxSelectionBounds(stateView),
       selectedIds: stateView.selectedIds,
       hoveredElementId: _hoveredSelectionElementId,
+      hoveredArrowHandle: _hoveredArrowHandle,
+      activeArrowHandle: _resolveActiveArrowHandle(stateView),
       hoverSelectionConfig: _resolveHoverSelectionConfig(),
       snapGuides: stateView.snapGuides,
       documentVersion: stateView.state.domain.document.elementsVersion,
@@ -494,6 +503,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String, ElementState>{};
     }
 
+    // When creating a new text element, add it to the dynamic layer preview
+    // so its background is rendered on top of existing elements.
+    if (interaction is TextEditingState && interaction.isNew) {
+      final textElement = ElementState(
+        id: interaction.elementId,
+        rect: interaction.rect,
+        rotation: interaction.rotation,
+        opacity: interaction.opacity,
+        zIndex: view.state.domain.document.elements.length,
+        data: interaction.draftData,
+      );
+      return {interaction.elementId: textElement};
+    }
+
     final previewElements = view.previewElementsById;
     if (previewElements.isEmpty) {
       return previewElements;
@@ -511,6 +534,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) {
+    // When creating a new text element, render all existing elements in the
+    // static layer so the text element's background appears on top.
+    final interaction = view.state.application.interaction;
+    if (interaction is TextEditingState && interaction.isNew) {
+      return 0;
+    }
+
     final selectedIds = view.selectedIds;
     if (selectedIds.isEmpty) {
       return null;
@@ -718,7 +748,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _adjustFontSize(event);
       return;
     }
-    if (toolTypeId == RectangleData.typeIdToken || toolTypeId == null) {
+    if (toolTypeId == RectangleData.typeIdToken ||
+        toolTypeId == ArrowData.typeIdToken ||
+        toolTypeId == null) {
       _adjustStrokeWidth(event);
       return;
     }
@@ -741,14 +773,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final position = _recordPointerPosition(event.localPosition);
     _updateCursorForPosition(position);
     _updateHoverSelectionForPosition(position);
+    unawaited(
+      _pluginCoordinator.handleEvent(
+        PointerHoverInputEvent(
+          position: position,
+          modifiers: _currentModifiers,
+        ),
+      ),
+    );
   }
 
   void _handlePointerExit(PointerExitEvent event) {
     _isPointerInside = false;
     _lastPointerPosition = null;
-    if (_hoveredSelectionElementId != null) {
+    if (_hoveredSelectionElementId != null || _hoveredArrowHandle != null) {
       setState(() {
         _hoveredSelectionElementId = null;
+        _hoveredArrowHandle = null;
       });
     }
     final nextCursor = _resolveCursorForState(widget.store.state, null);
@@ -837,10 +878,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widget.store.dispatch(
         ZoomCamera(
           scale: scale,
-          center: DrawPoint(
-            x: localPosition.dx,
-            y: localPosition.dy,
-          ),
+          center: DrawPoint(x: localPosition.dx, y: localPosition.dy),
         ),
       ),
     );
@@ -851,29 +889,57 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (delta == null) {
       return;
     }
-    final step = delta > 0 ? -_scrollStrokeWidthStep : _scrollStrokeWidthStep;
     final state = widget.store.state;
     final config = widget.store.config;
+
+    // Determine base stroke width from selected elements or config
+    final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
+    final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
     final base =
-        _resolveAverageSelectedStrokeWidth(state) ??
-        config.rectangleStyle.strokeWidth;
-    var next = base + step;
-    if (next < _minStrokeWidth) {
-      next = _minStrokeWidth;
-    }
+        arrowAverage ?? rectangleAverage ?? config.arrowStyle.strokeWidth;
+
+    // Find next stepped value
+    final next = _findNextSteppedValue(
+      base,
+      _strokeWidthSteps,
+      delta > 0, // scrolling up decreases value
+    );
+
     if (_doubleEquals(next, base)) {
       return;
     }
 
-    final targetIds = _resolveRectangleSelectionIds(state);
-    if (targetIds.isNotEmpty) {
+    // Update selected arrows
+    final arrowIds = _resolveArrowSelectionIds(state);
+    if (arrowIds.isNotEmpty) {
       unawaited(
         widget.store.dispatch(
-          UpdateElementsStyle(elementIds: targetIds, strokeWidth: next),
+          UpdateElementsStyle(elementIds: arrowIds, strokeWidth: next),
         ),
       );
     }
 
+    // Update selected rectangles
+    final rectangleIds = _resolveRectangleSelectionIds(state);
+    if (rectangleIds.isNotEmpty) {
+      unawaited(
+        widget.store.dispatch(
+          UpdateElementsStyle(elementIds: rectangleIds, strokeWidth: next),
+        ),
+      );
+    }
+
+    // Update arrow style config if needed
+    if (!_doubleEquals(next, config.arrowStyle.strokeWidth)) {
+      final nextStyle = config.arrowStyle.copyWith(strokeWidth: next);
+      unawaited(
+        widget.store.dispatch(
+          UpdateConfig(config.copyWith(arrowStyle: nextStyle)),
+        ),
+      );
+    }
+
+    // Update rectangle style config if needed
     if (!_doubleEquals(next, config.rectangleStyle.strokeWidth)) {
       final nextStyle = config.rectangleStyle.copyWith(strokeWidth: next);
       unawaited(
@@ -889,17 +955,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (delta == null) {
       return;
     }
-    final step = delta > 0 ? -_scrollFontSizeStep : _scrollFontSizeStep;
     final state = widget.store.state;
     final config = widget.store.config;
     final base =
         _resolveEditingFontSize(state) ??
         _resolveAverageSelectedFontSize(state) ??
         config.textStyle.fontSize;
-    var next = base + step;
-    if (next < _minFontSize) {
-      next = _minFontSize;
-    }
+
+    // Find next stepped value
+    final next = _findNextSteppedValue(
+      base,
+      _fontSizeSteps,
+      delta > 0, // scrolling up decreases value
+    );
+
     if (_doubleEquals(next, base)) {
       return;
     }
@@ -931,6 +1000,43 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return null;
   }
 
+  /// Finds the next stepped value based on current value and scroll direction.
+  ///
+  /// [currentValue] - The current value
+  /// [steps] - List of stepped values (must be sorted in ascending order)
+  /// [decrease] - true to find previous step, false to find next step
+  ///
+  /// Returns the next stepped value, or the current value if at the edge.
+  double _findNextSteppedValue(
+    double currentValue,
+    List<double> steps,
+    bool decrease,
+  ) {
+    if (steps.isEmpty) {
+      return currentValue;
+    }
+
+    if (decrease) {
+      // Find the largest step that is less than current value
+      for (var i = steps.length - 1; i >= 0; i--) {
+        if (steps[i] < currentValue - 0.01) {
+          return steps[i];
+        }
+      }
+      // Already at or below minimum, return first step
+      return steps.first;
+    } else {
+      // Find the smallest step that is greater than current value
+      for (var i = 0; i < steps.length; i++) {
+        if (steps[i] > currentValue + 0.01) {
+          return steps[i];
+        }
+      }
+      // Already at or above maximum, return last step
+      return steps.last;
+    }
+  }
+
   double? _resolveAverageSelectedStrokeWidth(DrawState state) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
@@ -942,6 +1048,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final element = state.domain.document.getElementById(id);
       final data = element?.data;
       if (data is RectangleData) {
+        total += data.strokeWidth;
+        count += 1;
+      }
+    }
+    if (count == 0) {
+      return null;
+    }
+    return total / count;
+  }
+
+  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return null;
+    }
+    var count = 0;
+    var total = 0.0;
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      final data = element?.data;
+      if (data is ArrowData) {
         total += data.strokeWidth;
         count += 1;
       }
@@ -988,6 +1115,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return ids;
   }
 
+  List<String> _resolveArrowSelectionIds(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const [];
+    }
+    final ids = <String>[];
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is ArrowData) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
   List<String> _resolveTextSelectionIds(DrawState state) {
     final ids = <String>{};
     final selectedIds = state.domain.selection.selectedIds;
@@ -1017,11 +1159,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       state: widget.store.state,
       position: position,
     );
-    if (_hoveredSelectionElementId == nextHover) {
+    final nextArrowHandle = _resolveArrowPointHandleForPosition(
+      state: widget.store.state,
+      position: position,
+    );
+    if (_hoveredSelectionElementId == nextHover &&
+        _hoveredArrowHandle == nextArrowHandle) {
       return;
     }
     setState(() {
       _hoveredSelectionElementId = nextHover;
+      _hoveredArrowHandle = nextArrowHandle;
     });
   }
 
@@ -1042,13 +1190,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final rawHitResult = draw_hit_test.hitTest.test(
+    final hitResult = draw_hit_test.hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
       registry: widget.store.context.elementRegistry,
+      filterTypeId: widget.currentToolTypeId,
     );
-    final hitResult = _filterHitResultForTool(state, rawHitResult);
     if (hitResult.isHandleHit) {
       return null;
     }
@@ -1061,6 +1209,78 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     return elementId;
+  }
+
+  ArrowPointHandle? _resolveArrowPointHandleForPosition({
+    required DrawState state,
+    required DrawPoint position,
+  }) {
+    if (!_isPointerInside || _middlePanPointerId != null) {
+      return null;
+    }
+    final interaction = state.application.interaction;
+    if (interaction is EditingState ||
+        interaction is CreatingState ||
+        interaction is BoxSelectingState ||
+        interaction is TextEditingState) {
+      return null;
+    }
+
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.length != 1) {
+      return null;
+    }
+    final element = state.domain.document.getElementById(selectedIds.first);
+    if (element == null || element.data is! ArrowData) {
+      return null;
+    }
+
+    final stateView = _buildStateView(state);
+    final selectionConfig = _resolveSelectionConfigForInput(state);
+    final hitRadius = selectionConfig.interaction.handleTolerance;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize =
+        selectionConfig.render.controlPointSize *
+        ConfigDefaults.arrowPointSizeMultiplier;
+    final loopThreshold = hitRadius * 1.5;
+    return ArrowPointUtils.hitTest(
+      element: stateView.effectiveElement(element),
+      position: position,
+      hitRadius: hitRadius,
+      loopThreshold: loopThreshold,
+      handleSize: handleSize,
+    );
+  }
+
+  ArrowPointHandle? _resolveActiveArrowHandle(DrawStateView stateView) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState) {
+      return null;
+    }
+    if (interaction.context is! ArrowPointEditContext) {
+      return null;
+    }
+    final context = interaction.context as ArrowPointEditContext;
+    var kind = context.pointKind;
+    var index = context.pointIndex;
+    final transform = interaction.currentTransform;
+    if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
+      if (context.arrowType == ArrowType.polyline) {
+        final resolvedIndex = transform.activeIndex;
+        if (resolvedIndex != null) {
+          index = resolvedIndex;
+        }
+      } else if (transform.didInsert) {
+        kind = ArrowPointKind.turning;
+        index = context.pointIndex + 1;
+      }
+    }
+    return ArrowPointHandle(
+      elementId: context.elementId,
+      kind: kind,
+      index: index,
+      position: DrawPoint.zero,
+    );
   }
 
   SelectionConfig _resolveSelectionConfig(DrawState state) {
@@ -1085,7 +1305,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final interaction = selectionConfig.interaction;
+    final render = selectionConfig.render;
     return selectionConfig.copyWith(
+      render: render.copyWith(
+        strokeWidth: render.strokeWidth / effectiveScale,
+        cornerRadius: render.cornerRadius / effectiveScale,
+        controlPointSize: render.controlPointSize / effectiveScale,
+      ),
       padding: selectionConfig.padding / effectiveScale,
       rotateHandleOffset: selectionConfig.rotateHandleOffset / effectiveScale,
       interaction: interaction.copyWith(
@@ -1161,6 +1387,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     if (!state.domain.hasSelection) {
+      return false;
+    }
+
+    if (_hasMultipleSelectedTextElements(state)) {
       return false;
     }
 
@@ -1255,6 +1485,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return false;
   }
 
+  bool _hasMultipleSelectedTextElements(DrawState state) {
+    var count = 0;
+    for (final id in state.domain.selection.selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is TextData) {
+        count += 1;
+        if (count > 1) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   bool _isInsideSelectedTextElement(
     DrawStateView stateView,
     DrawPoint position,
@@ -1333,15 +1577,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _defaultCursor;
     }
 
+    final arrowHandle = _resolveArrowPointHandleForPosition(
+      state: state,
+      position: position,
+    );
+    if (arrowHandle != null) {
+      return _cursorResolver.grabCursor();
+    }
+
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final rawHitResult = draw_hit_test.hitTest.test(
+    final hitResult = draw_hit_test.hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
       registry: widget.store.context.elementRegistry,
+      filterTypeId: widget.currentToolTypeId,
     );
-    final hitResult = _filterHitResultForTool(state, rawHitResult);
     if (_shouldForceDefaultCursor(
       state: state,
       position: position,
@@ -1364,25 +1616,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _defaultCursor;
     }
     return _cursorResolver.resolveForHitTest(hitResult);
-  }
-
-  draw_hit_test.HitTestResult _filterHitResultForTool(
-    DrawState state,
-    draw_hit_test.HitTestResult hitResult,
-  ) {
-    final toolTypeId = widget.currentToolTypeId;
-    if (toolTypeId == null || hitResult.isHandleHit) {
-      return hitResult;
-    }
-    final elementId = hitResult.elementId;
-    if (elementId == null) {
-      return hitResult;
-    }
-    final element = state.domain.document.getElementById(elementId);
-    if (element?.typeId != toolTypeId) {
-      return draw_hit_test.HitTestResult.none;
-    }
-    return hitResult;
   }
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
@@ -1419,6 +1652,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final layoutWidth = rect.width;
     final height = rect.height;
     if (layoutWidth <= 0 || height <= 0) {
+      _editingTextLayout = null;
       return null;
     }
     // RenderEditable subtracts a caret margin from maxWidth when laying out.
@@ -1442,6 +1676,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widthBasis: TextWidthBasis.parent,
       locale: locale,
     );
+    _editingTextLayout = layout;
     final textHeight = layout.size.height;
     final verticalOffset = _resolveVerticalOffset(
       containerHeight: height,
@@ -1454,6 +1689,28 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       rect: rect,
       layout: layout,
       verticalOffset: verticalOffset,
+    );
+
+    Widget textField = TextField(
+      controller: _textController,
+      focusNode: _textFocusNode,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      maxLines: null,
+      style: inputTextStyle,
+      strutStyle: resolveTextStrutStyle(textStyle),
+      textAlign: _toFlutterAlign(data.horizontalAlign),
+      textDirection: TextDirection.ltr,
+      clipBehavior: Clip.none,
+      // Avoid InputDecorator so RenderEditable uses tight
+      // constraints, keeping vertical caret runs valid.
+      decoration: null,
+      cursorColor: textColor,
+      cursorWidth: textCursorWidth,
+    );
+    textField = Listener(
+      onPointerDown: (_) => _resetVerticalCaretRun(),
+      child: textField,
     );
 
     return Positioned(
@@ -1481,27 +1738,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                     ).copyWith(textScaler: textLayoutTextScaler),
                     child: DefaultTextHeightBehavior(
                       textHeightBehavior: textLayoutHeightBehavior,
-                      child: TextField(
-                        controller: _textController,
-                        focusNode: _textFocusNode,
-                        keyboardType: TextInputType.multiline,
-                        textInputAction: TextInputAction.newline,
-                        maxLines: null,
-                        style: inputTextStyle,
-                        strutStyle: resolveTextStrutStyle(textStyle),
-                        textAlign: _toFlutterAlign(data.horizontalAlign),
-                        textAlignVertical: TextAlignVertical.top,
-                        textDirection: TextDirection.ltr,
-                        clipBehavior: Clip.none,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          isCollapsed: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        cursorColor: textColor,
-                        cursorWidth: textCursorWidth,
-                      ),
+                      child: textField,
                     ),
                   ),
                 ),
@@ -1521,6 +1758,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ..addListener(_handleTextControllerChanged);
       _editingElementId = interaction.elementId;
       _initialSelectionApplied = false;
+      _resetVerticalCaretRun();
     } else if (!_suppressTextControllerChange &&
         controller.text != interaction.draftData.text) {
       _suppressTextControllerChange = true;
@@ -1541,6 +1779,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _editingElementId = null;
     _initialSelectionApplied = false;
+    _editingTextLayout = null;
+    _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
       _textFocusNode.unfocus();
     }
@@ -1578,7 +1818,161 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (nextText == interaction.draftData.text) {
       return;
     }
+    _resetVerticalCaretRun();
     unawaited(widget.store.dispatch(UpdateTextEdit(text: nextText)));
+  }
+
+  void _resetVerticalCaretRun() {
+    _lastVerticalSelection = null;
+    _verticalCaretX = null;
+  }
+
+  KeyEventResult _handleTextFocusKeyEvent(FocusNode _, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final logicalKey = event.logicalKey;
+    final isArrowUp = logicalKey == LogicalKeyboardKey.arrowUp;
+    final isArrowDown = logicalKey == LogicalKeyboardKey.arrowDown;
+    final isPageUp = logicalKey == LogicalKeyboardKey.pageUp;
+    final isPageDown = logicalKey == LogicalKeyboardKey.pageDown;
+    if (isArrowUp || isArrowDown || isPageUp || isPageDown) {
+      final interaction = widget.store.state.application.interaction;
+      if (interaction is! TextEditingState) {
+        return KeyEventResult.ignored;
+      }
+      if (interaction.draftData.horizontalAlign == TextHorizontalAlign.left) {
+        return KeyEventResult.ignored;
+      }
+      // Work around VerticalCaretMovementRun assertions for non-left alignment.
+      final keysPressed = HardwareKeyboard.instance.logicalKeysPressed;
+      final isShiftPressed =
+          keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          keysPressed.contains(LogicalKeyboardKey.shiftRight) ||
+          keysPressed.contains(LogicalKeyboardKey.shift);
+      final layout = _editingTextLayout;
+      _handleVerticalCaretMovement(
+        forward: isArrowDown || isPageDown,
+        collapseSelection: !isShiftPressed,
+        pageOffset: (isPageUp || isPageDown) && layout != null
+            ? layout.size.height
+            : null,
+      );
+      return KeyEventResult.handled;
+    }
+
+    _resetVerticalCaretRun();
+    return KeyEventResult.ignored;
+  }
+
+  void _handleVerticalCaretMovement({
+    required bool forward,
+    required bool collapseSelection,
+    double? pageOffset,
+  }) {
+    final controller = _textController;
+    final layout = _editingTextLayout;
+    if (controller == null || layout == null) {
+      return;
+    }
+    final selection = controller.selection;
+    if (!selection.isValid) {
+      return;
+    }
+
+    final lineMetrics = layout.painter.computeLineMetrics();
+    if (lineMetrics.isEmpty) {
+      return;
+    }
+
+    final textLength = controller.text.length;
+    final currentPosition = selection.extent;
+    final caretPrototype = Rect.fromLTWH(
+      0,
+      0,
+      textCursorWidth,
+      layout.lineHeight,
+    );
+
+    final caretOffset = layout.painter.getOffsetForCaret(
+      currentPosition,
+      caretPrototype,
+    );
+    if (_lastVerticalSelection == null ||
+        _lastVerticalSelection != selection ||
+        _verticalCaretX == null) {
+      _verticalCaretX = caretOffset.dx;
+    }
+
+    final currentLineIndex = _lineIndexForCaretOffset(
+      caretOffset.dy,
+      lineMetrics,
+    );
+    int targetLineIndex;
+    if (pageOffset != null) {
+      final currentBaseline = lineMetrics[currentLineIndex].baseline;
+      final targetBaseline =
+          currentBaseline + (forward ? pageOffset : -pageOffset);
+      targetLineIndex = _lineIndexForBaseline(
+        baseline: targetBaseline,
+        lineMetrics: lineMetrics,
+        forward: forward,
+      );
+    } else {
+      targetLineIndex = currentLineIndex + (forward ? 1 : -1);
+    }
+
+    TextPosition newExtent;
+    if (targetLineIndex < 0) {
+      newExtent = const TextPosition(offset: 0);
+    } else if (targetLineIndex >= lineMetrics.length) {
+      newExtent = TextPosition(offset: textLength);
+    } else {
+      final targetBaseline = lineMetrics[targetLineIndex].baseline;
+      final targetOffset = Offset(_verticalCaretX ?? 0, targetBaseline);
+      newExtent = layout.painter.getPositionForOffset(targetOffset);
+    }
+
+    final nextSelection = collapseSelection
+        ? TextSelection.collapsed(offset: newExtent.offset)
+        : selection.extendTo(newExtent);
+    controller.selection = nextSelection;
+    _lastVerticalSelection = nextSelection;
+  }
+
+  int _lineIndexForCaretOffset(
+    double caretDy,
+    List<LineMetrics> lineMetrics,
+  ) {
+    for (var i = 0; i < lineMetrics.length; i++) {
+      if (lineMetrics[i].baseline > caretDy) {
+        return i;
+      }
+    }
+    return lineMetrics.isEmpty ? 0 : lineMetrics.length - 1;
+  }
+
+  int _lineIndexForBaseline({
+    required double baseline,
+    required List<LineMetrics> lineMetrics,
+    required bool forward,
+  }) {
+    if (forward) {
+      for (var i = 0; i < lineMetrics.length; i++) {
+        if (lineMetrics[i].baseline >= baseline) {
+          return i;
+        }
+      }
+      return lineMetrics.length - 1;
+    }
+
+    for (var i = lineMetrics.length - 1; i >= 0; i--) {
+      if (lineMetrics[i].baseline <= baseline) {
+        return i;
+      }
+    }
+    return 0;
   }
 
   void _applyInitialSelection({
@@ -1670,13 +2064,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             state: widget.store.state,
             position: _lastPointerPosition!,
           );
+    final nextArrowHandle = _lastPointerPosition == null
+        ? null
+        : _resolveArrowPointHandleForPosition(
+            state: widget.store.state,
+            position: _lastPointerPosition!,
+          );
     if (!mounted) {
       _cursor = cursor;
       _hoveredSelectionElementId = nextHover;
+      _hoveredArrowHandle = nextArrowHandle;
       return;
     }
     _updateCursorIfChanged(cursor);
     _hoveredSelectionElementId = nextHover;
+    _hoveredArrowHandle = nextArrowHandle;
     setState(() {});
   }
 
@@ -1721,10 +2123,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       await widget.store.dispatch(const CancelEdit());
     } else if (interaction is BoxSelectingState) {
       await widget.store.dispatch(const CancelBoxSelect());
-    } else if (interaction is PendingSelectState) {
-      await widget.store.dispatch(const ClearPendingSelect());
-    } else if (interaction is PendingMoveState) {
-      await widget.store.dispatch(const ClearPendingMove());
+    } else if (interaction is DragPendingState) {
+      await widget.store.dispatch(const ClearDragPending());
     }
 
     await widget.store.dispatch(const ClearSelection());

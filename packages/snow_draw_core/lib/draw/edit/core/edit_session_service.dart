@@ -1,7 +1,6 @@
 import 'package:meta/meta.dart';
 
 import '../../config/draw_config.dart';
-import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/edit_session_id.dart';
 import '../../models/interaction_state.dart';
@@ -14,7 +13,6 @@ import 'edit_errors.dart';
 import 'edit_modifiers.dart';
 import 'edit_operation_base.dart';
 import 'edit_operation_params.dart';
-import 'edit_param_injector.dart';
 import 'edit_result_unified.dart';
 
 /// Edit action pipeline (route A): keep store-side session handling,
@@ -41,26 +39,25 @@ class EditSessionService {
   final ModuleLogger? _log;
 
   // Session API.
-  EditResult start({
+  EditOutcome start({
     required DrawState state,
     required EditOperationId operationId,
     required DrawPoint position,
     required EditOperationParams params,
     required EditSessionId sessionId,
-    EditParamInjector paramInjector = const EditParamInjector(),
   }) {
     if (!state.domain.selection.hasSelection) {
-      return EditResult.failure(
+      return (
         state: state,
-        reason: EditFailureReason.noSelection,
+        failureReason: EditFailureReason.noSelection,
         operationId: operationId,
       );
     }
 
     if (!_hasOperation(operationId)) {
-      return EditResult.failure(
+      return (
         state: state,
-        reason: EditFailureReason.unknownOperationId,
+        failureReason: EditFailureReason.unknownOperationId,
         operationId: operationId,
       );
     }
@@ -76,13 +73,12 @@ class EditSessionService {
         operationId: operationId,
         position: position,
         params: params,
-        paramInjector: paramInjector,
         sessionId: sessionId,
       ),
     );
   }
 
-  EditResult update({
+  EditOutcome update({
     required DrawState state,
     required DrawPoint currentPosition,
     EditModifiers modifiers = const EditModifiers(),
@@ -114,39 +110,27 @@ class EditSessionService {
     );
   }
 
-  EditResult finish({required DrawState state, bool recordHistory = true}) {
-    final result = EditErrorHandlerExtension.runWithErrorHandling(
-      state: state,
-      config: EditErrorHandlerConfig.toIdle,
-      operationName: 'finishEdit',
-      log: _log,
-      operation: () {
-        // Version validation now throws EditVersionConflictError
-        final interaction = state.application.interaction;
-        if (interaction is EditingState) {
-          _validateVersionOrThrow(
-            editingState: interaction,
-            currentState: state,
-          );
-        }
+  EditOutcome finish({required DrawState state}) =>
+      EditErrorHandlerExtension.runWithErrorHandling(
+        state: state,
+        config: EditErrorHandlerConfig.toIdle,
+        operationName: 'finishEdit',
+        log: _log,
+        operation: () {
+          // Version validation now throws EditVersionConflictError
+          final interaction = state.application.interaction;
+          if (interaction is EditingState) {
+            _validateVersionOrThrow(
+              editingState: interaction,
+              currentState: state,
+            );
+          }
 
-        return _performFinish(state: state);
-      },
-    );
+          return _performFinish(state: state);
+        },
+      );
 
-    if (result.isFailure) {
-      return result;
-    }
-
-    final metadata = recordHistory ? _createHistoryMetadata(state) : null;
-    return EditResult.success(
-      state: result.state,
-      operationId: result.operationId,
-      historyMetadata: metadata,
-    );
-  }
-
-  EditResult cancel({required DrawState state}) =>
+  EditOutcome cancel({required DrawState state}) =>
       EditErrorHandlerExtension.runWithErrorHandling(
         state: state,
         config: EditErrorHandlerConfig.toIdle,
@@ -161,27 +145,21 @@ class EditSessionService {
         EditUpdateFailurePolicy.keepState => EditErrorHandlerConfig.keepState,
       };
 
-  EditResult _performStart({
+  EditOutcome _performStart({
     required DrawState state,
     required EditOperationId operationId,
     required DrawPoint position,
     required EditOperationParams params,
-    required EditParamInjector paramInjector,
     required EditSessionId sessionId,
   }) {
     // Note: We don't pre-compute selection data here. Operations compute it
     // themselves in createContext() since they need more than just bounds
     // (rotation, center, etc.). This avoids redundant O(n) computation.
-    final injectedParams = paramInjector.inject(
-      params: params,
-      initialSelectionBounds: params.initialSelectionBounds,
-    );
-
     final session = _createSession(
       operationId: operationId,
       state: state,
       position: position,
-      params: injectedParams,
+      params: params,
       sessionId: sessionId,
     );
 
@@ -189,10 +167,14 @@ class EditSessionService {
       application: state.application.copyWith(interaction: session),
     );
 
-    return EditResult.success(state: newState, operationId: operationId);
+    return (
+      state: newState,
+      failureReason: null,
+      operationId: operationId,
+    );
   }
 
-  EditResult _performUpdate({
+  EditOutcome _performUpdate({
     required DrawState state,
     required DrawPoint currentPosition,
     required EditModifiers modifiers,
@@ -209,7 +191,7 @@ class EditSessionService {
     );
   }
 
-  EditResult _performUpdateWithSession({
+  EditOutcome _performUpdateWithSession({
     required DrawState state,
     required EditOperationBase operation,
     required EditingState editingState,
@@ -226,7 +208,7 @@ class EditSessionService {
       config: configProvider(),
     );
 
-    return EditResult.success(
+    return (
       state: state.copyWith(
         application: state.application.copyWith(
           interaction: editingState.withTransform(
@@ -235,52 +217,38 @@ class EditSessionService {
           ),
         ),
       ),
+      failureReason: null,
       operationId: editingState.operationId,
     );
   }
 
-  EditResult _performFinish({required DrawState state}) {
+  EditOutcome _performFinish({required DrawState state}) {
     // Session restoration now throws EditSessionRestoreError
     final restored = _restoreOrThrow(state);
 
-    return EditResult.success(
+    return (
       state: _finishSession(
         operation: restored.operation,
         state: state,
         editingState: restored.editingState,
       ),
+      failureReason: null,
       operationId: restored.editingState.operationId,
     );
   }
 
-  EditResult _performCancel({required DrawState state}) {
+  EditOutcome _performCancel({required DrawState state}) {
     // Session restoration now throws EditSessionRestoreError
     final restored = _restoreOrThrow(state);
 
-    return EditResult.success(
+    return (
       state: _cancelSession(
         operation: restored.operation,
         state: state,
         editingState: restored.editingState,
       ),
+      failureReason: null,
       operationId: restored.editingState.operationId,
-    );
-  }
-
-  HistoryMetadata? _createHistoryMetadata(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! EditingState) {
-      return null;
-    }
-
-    final operation = editOperations.getOperation(interaction.operationId);
-    if (operation == null || !operation.recordsHistory) {
-      return null;
-    }
-
-    return operation.createHistoryMetadata(
-      context: interaction.context,
-      transform: interaction.currentTransform,
     );
   }
 
@@ -324,7 +292,9 @@ class EditSessionService {
     );
   }
 
-  _SessionRestored _restoreOrThrow(DrawState state) {
+  ({EditOperationBase operation, EditingState editingState}) _restoreOrThrow(
+    DrawState state,
+  ) {
     final interaction = state.application.interaction;
     if (interaction is! EditingState) {
       _log?.error('Edit session restore failed', null, null, {
@@ -351,7 +321,7 @@ class EditSessionService {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
-    return _SessionRestored(operation: operation, editingState: interaction);
+    return (operation: operation, editingState: interaction);
   }
 
   DrawState _finishSession({
@@ -402,11 +372,4 @@ class EditSessionService {
       );
     }
   }
-}
-
-@immutable
-final class _SessionRestored {
-  const _SessionRestored({required this.operation, required this.editingState});
-  final EditOperationBase operation;
-  final EditingState editingState;
 }

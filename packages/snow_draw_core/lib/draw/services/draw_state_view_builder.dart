@@ -164,7 +164,7 @@ class DrawStateViewBuilder {
         );
     final geometry = SelectionGeometryResolver.resolve(
       selectedElements: selectedElements,
-      selection: selection,
+      selectionOverlay: state.application.selectionOverlay,
       selectionBounds: selectionBounds,
     );
 

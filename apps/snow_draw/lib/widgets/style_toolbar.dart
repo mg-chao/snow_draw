@@ -8,6 +8,8 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 
 import '../icons/svg_icons.dart';
 import '../l10n/app_localizations.dart';
+import '../property_descriptor.dart';
+import '../property_registry.dart';
 import '../style_toolbar_state.dart';
 import '../system_fonts.dart';
 import '../tool_controller.dart';
@@ -146,8 +148,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final state = widget.adapter.stateListenable.value;
       final showRectangleControls =
           tool == ToolType.rectangle || state.hasSelectedRectangles;
+      final showArrowControls =
+          tool == ToolType.arrow || state.hasSelectedArrows;
       final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
-      final showToolbar = showRectangleControls || showTextControls;
+      final showToolbar =
+          showRectangleControls || showArrowControls || showTextControls;
       if (showTextControls) {
         _requestSystemFonts();
       }
@@ -156,53 +161,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
           .toDouble();
       final resolvedWidth = widget.width;
       final hasSelection = state.hasSelection;
-      final hasSharedSelection =
-          state.hasSelectedRectangles && state.hasSelectedTexts;
-      final styleValues = state.styleValues;
-      final textStyleValues = state.textStyleValues;
-      final rectangleDefaults = state.rectangleStyle;
-      final textDefaults = state.textStyle;
-      final sharedDefaults = tool == ToolType.text
-          ? textDefaults
-          : rectangleDefaults;
-      final fillColorValue = styleValues.fillColor.value;
-      final showFillStyle = fillColorValue == null || fillColorValue.a > 0;
-      final textFillColorValue = textStyleValues.fillColor.value;
-      final showTextFillStyle =
-          textFillColorValue == null || textFillColorValue.a > 0;
-      final showTextStrokeColor =
-          textStyleValues.textStrokeWidth.isMixed ||
-          (textStyleValues.textStrokeWidth.value ??
-                  textDefaults.textStrokeWidth) >
-              0;
-      final sharedColorValues = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.color,
-              textStyleValues.color,
-              _colorEquals,
-            )
-          : null;
-      final sharedFillColorValues = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.fillColor,
-              textStyleValues.fillColor,
-              _colorEquals,
-            )
-          : null;
-      final sharedCornerRadius = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.cornerRadius,
-              textStyleValues.cornerRadius,
-              _doubleEquals,
-            )
-          : null;
-      final sharedOpacity = hasSharedSelection
-          ? _mergeMixedValues(
-              styleValues.opacity,
-              textStyleValues.opacity,
-              _doubleEquals,
-            )
-          : null;
 
       if (!showToolbar) {
         return const SizedBox.shrink();
@@ -231,426 +189,38 @@ class _StyleToolbarState extends State<StyleToolbar> {
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    // This is the new children array content to replace
+                    // lines 276-914
                     children: [
-                      if (hasSharedSelection) ...[
-                        _buildColorRow(
-                          label: widget.strings.color,
-                          colors: _defaultColorPalette,
-                          value: sharedColorValues!,
-                          customColor: sharedColorValues.valueOr(
-                            sharedDefaults.color,
-                          ),
-                          onSelect: (color) => _applyStyleUpdate(color: color),
-                          allowAlpha: true,
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildColorRow(
-                          label: widget.strings.fillColor,
-                          colors: const [
-                            Colors.transparent,
-                            Color(0xFFFFCCC7),
-                            Color(0xFFD9F7BE),
-                            Color(0xFFBAE0FF),
-                            Color(0xFFFFF1B8),
-                          ],
-                          value: sharedFillColorValues!,
-                          customColor: sharedFillColorValues.valueOr(
-                            sharedDefaults.fillColor,
-                          ),
-                          onSelect: (color) =>
-                              _applyStyleUpdate(fillColor: color),
-                          allowAlpha: true,
-                        ),
-                      ],
-                      if (showRectangleControls) ...[
-                        if (!hasSharedSelection) ...[
-                          _buildColorRow(
-                            label: widget.strings.color,
-                            colors: _defaultColorPalette,
-                            value: styleValues.color,
-                            customColor: styleValues.color.valueOr(
-                              rectangleDefaults.color,
-                            ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(color: color),
-                            allowAlpha: true,
-                          ),
-                          const SizedBox(height: _sectionSpacing),
-                          _buildColorRow(
-                            label: widget.strings.fillColor,
-                            colors: const [
-                              Colors.transparent,
-                              Color(0xFFFFCCC7),
-                              Color(0xFFD9F7BE),
-                              Color(0xFFBAE0FF),
-                              Color(0xFFFFF1B8),
-                            ],
-                            value: styleValues.fillColor,
-                            customColor: styleValues.fillColor.valueOr(
-                              rectangleDefaults.fillColor,
-                            ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(fillColor: color),
-                            allowAlpha: true,
-                          ),
-                        ],
-                        if (showFillStyle) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildStyleOptions(
-                            label: widget.strings.fillStyle,
-                            mixed: styleValues.fillStyle.isMixed,
-                            mixedLabel: widget.strings.mixed,
-                            options: [
-                              _StyleOption(
-                                value: FillStyle.line,
-                                label: widget.strings.lineFill,
-                                icon: const FillStyleLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.crossLine,
-                                label: widget.strings.crossLineFill,
-                                icon: const FillStyleCrossLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.solid,
-                                label: widget.strings.solidFill,
-                                icon: const FillStyleSolidIcon(),
-                              ),
-                            ],
-                            selected: styleValues.fillStyle.value,
-                            onSelect: (value) =>
-                                _applyStyleUpdate(fillStyle: value),
-                          ),
-                        ],
-                        const SizedBox(height: _sectionSpacing),
-                        _buildStyleOptions(
-                          label: widget.strings.strokeStyle,
-                          mixed: styleValues.strokeStyle.isMixed,
-                          mixedLabel: widget.strings.mixed,
-                          options: [
-                            _StyleOption(
-                              value: StrokeStyle.solid,
-                              label: widget.strings.solid,
-                              icon: const StrokeStyleSolidIcon(),
-                            ),
-                            _StyleOption(
-                              value: StrokeStyle.dashed,
-                              label: widget.strings.dashed,
-                              icon: const StrokeStyleDashedIcon(),
-                            ),
-                            _StyleOption(
-                              value: StrokeStyle.dotted,
-                              label: widget.strings.dotted,
-                              icon: const StrokeStyleDottedIcon(),
-                            ),
-                          ],
-                          selected: styleValues.strokeStyle.value,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(strokeStyle: value),
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildNumericOptions(
-                          label: widget.strings.strokeWidth,
-                          mixed: styleValues.strokeWidth.isMixed,
-                          mixedLabel: widget.strings.mixed,
-                          options: [
-                            _StyleOption(
-                              value: 1,
-                              label: widget.strings.thin,
-                              icon: const StrokeWidthSmallIcon(),
-                            ),
-                            _StyleOption(
-                              value: 3,
-                              label: widget.strings.medium,
-                              icon: const StrokeWidthMediumIcon(),
-                            ),
-                            _StyleOption(
-                              value: 8,
-                              label: widget.strings.thick,
-                              icon: const StrokeWidthLargeIcon(),
-                            ),
-                          ],
-                          selected: styleValues.strokeWidth.value,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(strokeWidth: value),
-                        ),
-                        if (!hasSharedSelection) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildSliderControl(
-                            label: widget.strings.cornerRadius,
-                            value: styleValues.cornerRadius,
-                            defaultValue: rectangleDefaults.cornerRadius,
-                            pendingValue: _pendingCornerRadius,
-                            min: 0,
-                            max: 83,
-                            onChanged: (value) {
-                              setState(() => _pendingCornerRadius = value);
-                              _scheduleStyleUpdate(
-                                () => _applyStyleUpdate(cornerRadius: value),
+                      // Build property controls using the property-centric
+                      // approach
+                      ...() {
+                        final propertyContext = _createPropertyContext(state);
+                        final applicableProperties = _getApplicableProperties(
+                          state,
+                        );
+                        final widgets = <Widget>[];
+
+                        for (var i = 0; i < applicableProperties.length; i++) {
+                          final property = applicableProperties[i];
+                          final widget = _buildPropertyWidget(
+                            property,
+                            propertyContext,
+                            state,
+                          );
+
+                          if (widget != null) {
+                            if (widgets.isNotEmpty) {
+                              widgets.add(
+                                const SizedBox(height: _sectionSpacing),
                               );
-                            },
-                            onChangeEnd: (value) async {
-                              _flushStyleUpdate();
-                              setState(() => _pendingCornerRadius = null);
-                              await _applyStyleUpdate(cornerRadius: value);
-                            },
-                          ),
-                          const SizedBox(height: _sectionSpacing),
-                          _buildOpacityControl(
-                            styleValues.opacity,
-                            rectangleDefaults.opacity,
-                            pendingValue: _pendingOpacity,
-                            onChanged: (value) {
-                              setState(() => _pendingOpacity = value);
-                              _scheduleStyleUpdate(
-                                () => _applyStyleUpdate(opacity: value),
-                              );
-                            },
-                            onChangeEnd: (value) async {
-                              _flushStyleUpdate();
-                              setState(() => _pendingOpacity = null);
-                              await _applyStyleUpdate(opacity: value);
-                            },
-                          ),
-                        ],
-                      ],
-                      if (showTextControls) ...[
-                        if (showRectangleControls)
-                          const SizedBox(height: _sectionSpacing),
-                        if (!hasSharedSelection) ...[
-                          _buildColorRow(
-                            label: widget.strings.color,
-                            colors: _defaultColorPalette,
-                            value: textStyleValues.color,
-                            customColor: textStyleValues.color.valueOr(
-                              textDefaults.color,
-                            ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(color: color),
-                            allowAlpha: true,
-                          ),
-                          const SizedBox(height: _sectionSpacing),
-                          _buildColorRow(
-                            label: widget.strings.fillColor,
-                            colors: const [
-                              Colors.transparent,
-                              Color(0xFFFFCCC7),
-                              Color(0xFFD9F7BE),
-                              Color(0xFFBAE0FF),
-                              Color(0xFFFFF1B8),
-                            ],
-                            value: textStyleValues.fillColor,
-                            customColor: textStyleValues.fillColor.valueOr(
-                              textDefaults.fillColor,
-                            ),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(fillColor: color),
-                            allowAlpha: true,
-                          ),
-                        ],
-                        if (!hasSharedSelection && showTextFillStyle) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildStyleOptions(
-                            label: widget.strings.fillStyle,
-                            mixed: textStyleValues.fillStyle.isMixed,
-                            mixedLabel: widget.strings.mixed,
-                            options: [
-                              _StyleOption(
-                                value: FillStyle.line,
-                                label: widget.strings.lineFill,
-                                icon: const FillStyleLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.crossLine,
-                                label: widget.strings.crossLineFill,
-                                icon: const FillStyleCrossLineIcon(),
-                              ),
-                              _StyleOption(
-                                value: FillStyle.solid,
-                                label: widget.strings.solidFill,
-                                icon: const FillStyleSolidIcon(),
-                              ),
-                            ],
-                            selected: textStyleValues.fillStyle.value,
-                            onSelect: (value) =>
-                                _applyStyleUpdate(fillStyle: value),
-                          ),
-                        ],
-                        if (!hasSharedSelection)
-                          const SizedBox(height: _sectionSpacing),
-                        _buildNumericOptions(
-                          label: widget.strings.fontSize,
-                          mixed: textStyleValues.fontSize.isMixed,
-                          mixedLabel: widget.strings.mixed,
-                          options: [
-                            _StyleOption(
-                              value: _fontSizeSmall,
-                              label: widget.strings.small,
-                              icon: const FontSizeSmallIcon(),
-                            ),
-                            _StyleOption(
-                              value: _fontSizeMedium,
-                              label: widget.strings.medium,
-                              icon: const FontSizeMediumIcon(),
-                            ),
-                            _StyleOption(
-                              value: _fontSizeLarge,
-                              label: widget.strings.large,
-                              icon: const FontSizeLargeIcon(),
-                            ),
-                            const _StyleOption(
-                              value: _fontSizeExtraLarge,
-                              label: 'Extra large',
-                              icon: FontSizeVeryLargeIcon(),
-                            ),
-                          ],
-                          selected: textStyleValues.fontSize.value,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(fontSize: value),
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildFontFamilyControl(
-                          value: textStyleValues.fontFamily,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(fontFamily: value),
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildTextAlignmentControl(
-                          horizontalAlign: textStyleValues.horizontalAlign,
-                          onHorizontalSelect: (value) =>
-                              _applyStyleUpdate(textAlign: value),
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildNumericOptions(
-                          label: widget.strings.textStrokeWidth,
-                          mixed: textStyleValues.textStrokeWidth.isMixed,
-                          mixedLabel: widget.strings.mixed,
-                          options: [
-                            const _StyleOption(
-                              value: 0,
-                              label: 'None',
-                              icon: Icon(Icons.not_interested, size: _iconSize),
-                            ),
-                            _StyleOption(
-                              value: 2,
-                              label: widget.strings.thin,
-                              icon: const StrokeWidthSmallIcon(),
-                            ),
-                            _StyleOption(
-                              value: 3,
-                              label: widget.strings.medium,
-                              icon: const StrokeWidthMediumIcon(),
-                            ),
-                            _StyleOption(
-                              value: 5,
-                              label: widget.strings.thick,
-                              icon: const StrokeWidthLargeIcon(),
-                            ),
-                          ],
-                          selected: textStyleValues.textStrokeWidth.value,
-                          onSelect: (value) =>
-                              _applyStyleUpdate(textStrokeWidth: value),
-                        ),
-                        if (showTextStrokeColor) ...[
-                          const SizedBox(height: _sectionSpacing),
-                          _buildColorRow(
-                            label: widget.strings.textStrokeColor,
-                            colors: const [
-                              Color(0xFFF8F4EC),
-                              Color(0xFF1CA7A8),
-                              Color(0xFFE45C9D),
-                              Color(0xFFF4A261),
-                              Color(0xFF1D3557),
-                            ],
-                            value: textStyleValues.textStrokeColor,
-                            customColor: textStyleValues.textStrokeColor
-                                .valueOr(textDefaults.textStrokeColor),
-                            onSelect: (color) =>
-                                _applyStyleUpdate(textStrokeColor: color),
-                            allowAlpha: true,
-                          ),
-                        ],
-                        if (!hasSharedSelection) ...[
-                          if (showTextFillStyle) ...[
-                            const SizedBox(height: _sectionSpacing),
-                            _buildSliderControl(
-                              label: widget.strings.cornerRadius,
-                              value: textStyleValues.cornerRadius,
-                              defaultValue: textDefaults.cornerRadius,
-                              pendingValue: _pendingCornerRadius,
-                              min: 0,
-                              max: 83,
-                              onChanged: (value) {
-                                setState(() => _pendingCornerRadius = value);
-                                _scheduleStyleUpdate(
-                                  () => _applyStyleUpdate(cornerRadius: value),
-                                );
-                              },
-                              onChangeEnd: (value) async {
-                                _flushStyleUpdate();
-                                setState(() => _pendingCornerRadius = null);
-                                await _applyStyleUpdate(cornerRadius: value);
-                              },
-                            ),
-                          ],
-                          const SizedBox(height: _sectionSpacing),
-                          _buildOpacityControl(
-                            textStyleValues.opacity,
-                            textDefaults.opacity,
-                            pendingValue: _pendingOpacity,
-                            onChanged: (value) {
-                              setState(() => _pendingOpacity = value);
-                              _scheduleStyleUpdate(
-                                () => _applyStyleUpdate(opacity: value),
-                              );
-                            },
-                            onChangeEnd: (value) async {
-                              _flushStyleUpdate();
-                              setState(() => _pendingOpacity = null);
-                              await _applyStyleUpdate(opacity: value);
-                            },
-                          ),
-                        ],
-                      ],
-                      if (hasSharedSelection) ...[
-                        const SizedBox(height: _sectionSpacing),
-                        _buildSliderControl(
-                          label: widget.strings.cornerRadius,
-                          value: sharedCornerRadius!,
-                          defaultValue: sharedDefaults.cornerRadius,
-                          pendingValue: _pendingCornerRadius,
-                          min: 0,
-                          max: 83,
-                          onChanged: (value) {
-                            setState(() => _pendingCornerRadius = value);
-                            _scheduleStyleUpdate(
-                              () => _applyStyleUpdate(cornerRadius: value),
-                            );
-                          },
-                          onChangeEnd: (value) async {
-                            _flushStyleUpdate();
-                            setState(() => _pendingCornerRadius = null);
-                            await _applyStyleUpdate(cornerRadius: value);
-                          },
-                        ),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildOpacityControl(
-                          sharedOpacity!,
-                          sharedDefaults.opacity,
-                          pendingValue: _pendingOpacity,
-                          onChanged: (value) {
-                            setState(() => _pendingOpacity = value);
-                            _scheduleStyleUpdate(
-                              () => _applyStyleUpdate(opacity: value),
-                            );
-                          },
-                          onChangeEnd: (value) async {
-                            _flushStyleUpdate();
-                            setState(() => _pendingOpacity = null);
-                            await _applyStyleUpdate(opacity: value);
-                          },
-                        ),
-                      ],
+                            }
+                            widgets.add(widget);
+                          }
+                        }
+
+                        return widgets;
+                      }(),
                       if (hasSelection) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildLayerControls(hasSelection),
@@ -936,6 +506,250 @@ class _StyleToolbarState extends State<StyleToolbar> {
     ],
   );
 
+  Widget _buildArrowheadControls({
+    required MixedValue<ArrowheadStyle> startArrowhead,
+    required MixedValue<ArrowheadStyle> endArrowhead,
+    required ArrowheadStyle startDefault,
+    required ArrowheadStyle endDefault,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildSectionHeader(widget.strings.arrowheads),
+      const SizedBox(height: _sectionGap),
+      Row(
+        children: [
+          _buildArrowheadButton(
+            label: widget.strings.startArrowhead,
+            value: startArrowhead,
+            defaultValue: startDefault,
+            isStart: true,
+            onSelect: (value) => _applyStyleUpdate(startArrowhead: value),
+          ),
+          const SizedBox(width: 12),
+          _buildArrowheadButton(
+            label: widget.strings.endArrowhead,
+            value: endArrowhead,
+            defaultValue: endDefault,
+            isStart: false,
+            onSelect: (value) => _applyStyleUpdate(endArrowhead: value),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _buildArrowheadButton({
+    required String label,
+    required MixedValue<ArrowheadStyle> value,
+    required ArrowheadStyle defaultValue,
+    required bool isStart,
+    required ValueChanged<ArrowheadStyle> onSelect,
+  }) {
+    final theme = Theme.of(context);
+    final isMixed = value.isMixed;
+    final selectedStyle = isMixed ? null : value.value ?? defaultValue;
+    final borderColor = theme.colorScheme.outlineVariant;
+
+    return Tooltip(
+      message: label,
+      child: Builder(
+        builder: (context) => InkWell(
+          onTap: () async {
+            final button = context.findRenderObject()! as RenderBox;
+            final overlay =
+                Navigator.of(context).overlay!.context.findRenderObject()!
+                    as RenderBox;
+            final position = RelativeRect.fromRect(
+              Rect.fromPoints(
+                button.localToGlobal(Offset.zero, ancestor: overlay),
+                button.localToGlobal(
+                  button.size.bottomRight(Offset.zero),
+                  ancestor: overlay,
+                ),
+              ),
+              Offset.zero & overlay.size,
+            );
+
+            final result = await showMenu<ArrowheadStyle>(
+              context: context,
+              position: position,
+              color: theme.colorScheme.surface,
+              items: [
+                PopupMenuItem<ArrowheadStyle>(
+                  enabled: false,
+                  padding: EdgeInsets.zero,
+                  child: _buildArrowheadPopoverContent(
+                    selectedStyle: selectedStyle,
+                    isStart: isStart,
+                    onSelect: (style) {
+                      Navigator.of(context).pop(style);
+                    },
+                  ),
+                ),
+              ],
+            );
+
+            if (result != null) {
+              onSelect(result);
+            }
+          },
+          customBorder: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(_toggleButtonRadius),
+          ),
+          child: CustomPaint(
+            painter: _DashedBorderPainter(
+              color: borderColor,
+              borderRadius: _toggleButtonRadius,
+            ),
+            child: Container(
+              width: _toggleButtonHeight,
+              height: _toggleButtonHeight,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_toggleButtonRadius),
+              ),
+              child: Center(
+                child: isMixed
+                    ? const Icon(Icons.more_horiz, size: _iconSize)
+                    : _buildArrowheadIcon(
+                        style: selectedStyle ?? defaultValue,
+                        isStart: isStart,
+                        size: _iconSize,
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArrowheadPopoverContent({
+    required ArrowheadStyle? selectedStyle,
+    required bool isStart,
+    required ValueChanged<ArrowheadStyle> onSelect,
+  }) {
+    final theme = Theme.of(context);
+    const styles = ArrowheadStyle.values;
+
+    // Create 2 rows with 4 items each
+    final rows = <List<ArrowheadStyle>>[];
+    for (var i = 0; i < styles.length; i += 4) {
+      rows.add(styles.sublist(i, math.min(i + 4, styles.length)));
+    }
+
+    return Material(
+      color: theme.colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < rows[rowIndex].length; i++) ...[
+                    Tooltip(
+                      message: _arrowheadLabel(rows[rowIndex][i]),
+                      child: InkWell(
+                        onTap: () => onSelect(rows[rowIndex][i]),
+                        borderRadius: BorderRadius.circular(
+                          _toggleButtonRadius,
+                        ),
+                        child: Container(
+                          width: _toggleButtonHeight,
+                          height: _toggleButtonHeight,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: selectedStyle == rows[rowIndex][i]
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outlineVariant,
+                              width: selectedStyle == rows[rowIndex][i] ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              _toggleButtonRadius,
+                            ),
+                            color: selectedStyle == rows[rowIndex][i]
+                                ? theme.colorScheme.primary.withValues(
+                                    alpha: 0.1,
+                                  )
+                                : null,
+                          ),
+                          child: Center(
+                            child: _buildArrowheadIcon(
+                              style: rows[rowIndex][i],
+                              isStart: isStart,
+                              size: _iconSize,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (i < rows[rowIndex].length - 1) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+              if (rowIndex < rows.length - 1) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArrowheadIcon({
+    required ArrowheadStyle style,
+    required bool isStart,
+    required double size,
+  }) {
+    Widget icon;
+    switch (style) {
+      case ArrowheadStyle.none:
+        icon = ArrowheadNoneIcon(size: size);
+      case ArrowheadStyle.standard:
+        icon = ArrowheadStandardIcon(size: size);
+      case ArrowheadStyle.triangle:
+        icon = ArrowheadTriangleIcon(size: size);
+      case ArrowheadStyle.square:
+        icon = ArrowheadSquareIcon(size: size);
+      case ArrowheadStyle.circle:
+        icon = ArrowheadCircleIcon(size: size);
+      case ArrowheadStyle.diamond:
+        icon = ArrowheadDiamondIcon(size: size);
+      case ArrowheadStyle.invertedTriangle:
+        icon = ArrowheadInvertedTriangleIcon(size: size);
+      case ArrowheadStyle.verticalLine:
+        icon = ArrowheadVerticalLineIcon(size: size);
+    }
+
+    // Flip horizontally for start arrowheads
+    if (isStart) {
+      return Transform.scale(scaleX: -1, child: icon);
+    }
+    return icon;
+  }
+
+  String _arrowheadLabel(ArrowheadStyle style) {
+    switch (style) {
+      case ArrowheadStyle.none:
+        return widget.strings.arrowheadNone;
+      case ArrowheadStyle.standard:
+        return widget.strings.arrowheadStandard;
+      case ArrowheadStyle.triangle:
+        return widget.strings.arrowheadTriangle;
+      case ArrowheadStyle.square:
+        return widget.strings.arrowheadSquare;
+      case ArrowheadStyle.circle:
+        return widget.strings.arrowheadCircle;
+      case ArrowheadStyle.diamond:
+        return widget.strings.arrowheadDiamond;
+      case ArrowheadStyle.invertedTriangle:
+        return widget.strings.arrowheadInvertedTriangle;
+      case ArrowheadStyle.verticalLine:
+        return widget.strings.arrowheadVerticalLine;
+    }
+  }
+
   Widget _buildAlignmentOptions<T>({
     required bool mixed,
     required List<_StyleOption<T>> options,
@@ -1009,47 +823,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
                 (option) => Tooltip(message: option.label, child: option.icon),
               )
               .toList(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOpacityControl(
-    MixedValue<double> opacity,
-    double defaultOpacity, {
-    double? pendingValue,
-    ValueChanged<double>? onChanged,
-    ValueChanged<double>? onChangeEnd,
-  }) {
-    final baseOpacity = opacity.valueOr(defaultOpacity);
-    final resolvedOpacity = pendingValue ?? baseOpacity;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(widget.strings.opacity),
-        const SizedBox(height: _sectionGap),
-        Row(
-          children: [
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: _sliderTrackHeight,
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: _sliderThumbRadius,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: _sliderOverlayRadius,
-                  ),
-                  trackShape: _NoPaddingTrackShape(),
-                ),
-                child: Slider(
-                  value: resolvedOpacity.clamp(0, 1),
-                  onChanged: onChanged,
-                  onChangeEnd: onChangeEnd,
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
@@ -1314,27 +1087,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
-  bool _colorEquals(Color a, Color b) => a == b;
-
-  MixedValue<T> _mergeMixedValues<T>(
-    MixedValue<T> first,
-    MixedValue<T> second,
-    bool Function(T, T) equals,
-  ) {
-    if (first.isMixed || second.isMixed) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    final firstValue = first.value;
-    final secondValue = second.value;
-    if (firstValue == null || secondValue == null) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    if (!equals(firstValue, secondValue)) {
-      return const MixedValue(value: null, isMixed: true);
-    }
-    return MixedValue(value: firstValue, isMixed: false);
-  }
-
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
 
   void _scheduleStyleUpdate(Future<void> Function() action) {
@@ -1394,6 +1146,441 @@ class _StyleToolbarState extends State<StyleToolbar> {
     }
   }
 
+  /// Create a StylePropertyContext from the current state
+  StylePropertyContext _createPropertyContext(StyleToolbarState state) {
+    final selectedTypes = <ElementType>{};
+    if (state.hasSelectedRectangles) {
+      selectedTypes.add(ElementType.rectangle);
+    }
+    if (state.hasSelectedArrows) {
+      selectedTypes.add(ElementType.arrow);
+    }
+    if (state.hasSelectedTexts) {
+      selectedTypes.add(ElementType.text);
+    }
+
+    // If no elements are selected, use the current tool to determine which
+    // properties to show (for styling the element to be created)
+    if (selectedTypes.isEmpty) {
+      final tool = widget.toolController.value;
+      switch (tool) {
+        case ToolType.rectangle:
+          selectedTypes.add(ElementType.rectangle);
+        case ToolType.arrow:
+          selectedTypes.add(ElementType.arrow);
+        case ToolType.text:
+          selectedTypes.add(ElementType.text);
+        case ToolType.selection:
+          break;
+      }
+    }
+
+    return StylePropertyContext(
+      rectangleStyleValues: state.styleValues,
+      arrowStyleValues: state.arrowStyleValues,
+      textStyleValues: state.textStyleValues,
+      rectangleDefaults: state.rectangleStyle,
+      arrowDefaults: state.arrowStyle,
+      textDefaults: state.textStyle,
+      selectedElementTypes: selectedTypes,
+      currentTool: widget.toolController.value,
+    );
+  }
+
+  /// Get the list of properties that should be shown for the current context
+  List<PropertyDescriptor<dynamic>> _getApplicableProperties(
+    StyleToolbarState state,
+  ) {
+    final context = _createPropertyContext(state);
+    final allProperties = PropertyRegistry.instance.getApplicableProperties(
+      context,
+    );
+
+    // Filter properties based on conditional visibility rules
+    return allProperties.where((property) {
+      // Hide fillStyle if fillColor is transparent
+      if (property.id == 'fillStyle') {
+        final fillColorProp = PropertyRegistry.instance.getProperty(
+          'fillColor',
+        );
+        if (fillColorProp != null) {
+          final fillColor =
+              fillColorProp.extractValue(context) as MixedValue<Color>;
+          final fillColorValue = fillColor.value;
+          // Show fillStyle only if color is mixed or has alpha > 0
+          if (!fillColor.isMixed &&
+              fillColorValue != null &&
+              fillColorValue.a == 0) {
+            return false;
+          }
+        }
+      }
+
+      // Hide textStrokeColor if textStrokeWidth is 0
+      if (property.id == 'textStrokeColor') {
+        final textStrokeWidthProp = PropertyRegistry.instance.getProperty(
+          'textStrokeWidth',
+        );
+        if (textStrokeWidthProp != null) {
+          final textStrokeWidth =
+              textStrokeWidthProp.extractValue(context) as MixedValue<double>;
+          final defaultWidth =
+              textStrokeWidthProp.getDefaultValue(context) as double;
+          // Show textStrokeColor only if width is mixed or > 0
+          if (!textStrokeWidth.isMixed &&
+              (textStrokeWidth.value ?? defaultWidth) <= 0) {
+            return false;
+          }
+        }
+      }
+
+      // Hide cornerRadius for text if fillColor is transparent
+      if (property.id == 'cornerRadius') {
+        // Only apply this rule if we have text elements selected
+        if (context.selectedElementTypes.contains(ElementType.text)) {
+          final fillColorProp = PropertyRegistry.instance.getProperty(
+            'fillColor',
+          );
+          if (fillColorProp != null) {
+            final fillColor =
+                fillColorProp.extractValue(context) as MixedValue<Color>;
+            final fillColorValue = fillColor.value;
+            // For text, show cornerRadius only if fillColor is mixed or has
+            // alpha > 0
+            if (!fillColor.isMixed &&
+                fillColorValue != null &&
+                fillColorValue.a == 0) {
+              return false;
+            }
+          }
+        }
+      }
+
+      return true;
+    }).toList();
+  }
+
+  /// Build the widget for a specific property
+  Widget? _buildPropertyWidget(
+    PropertyDescriptor<dynamic> property,
+    StylePropertyContext context,
+    StyleToolbarState state,
+  ) {
+    switch (property.id) {
+      case 'color':
+        final value = property.extractValue(context) as MixedValue<Color>;
+        final defaultValue = property.getDefaultValue(context) as Color;
+        return _buildColorRow(
+          label: widget.strings.color,
+          colors: _defaultColorPalette,
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(color: color),
+          allowAlpha: true,
+        );
+
+      case 'strokeWidth':
+        final value = property.extractValue(context) as MixedValue<double>;
+        return _buildNumericOptions(
+          label: widget.strings.strokeWidth,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: 2,
+              label: widget.strings.thin,
+              icon: const StrokeWidthSmallIcon(),
+            ),
+            _StyleOption(
+              value: 4,
+              label: widget.strings.medium,
+              icon: const StrokeWidthMediumIcon(),
+            ),
+            _StyleOption(
+              value: 7,
+              label: widget.strings.thick,
+              icon: const StrokeWidthLargeIcon(),
+            ),
+          ],
+          selected: value.value,
+          onSelect: (value) => _applyStyleUpdate(strokeWidth: value),
+        );
+
+      case 'strokeStyle':
+        final value = property.extractValue(context) as MixedValue<StrokeStyle>;
+        return _buildStyleOptions<StrokeStyle>(
+          label: widget.strings.strokeStyle,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: StrokeStyle.solid,
+              label: widget.strings.solid,
+              icon: const StrokeStyleSolidIcon(),
+            ),
+            _StyleOption(
+              value: StrokeStyle.dashed,
+              label: widget.strings.dashed,
+              icon: const StrokeStyleDashedIcon(),
+            ),
+            _StyleOption(
+              value: StrokeStyle.dotted,
+              label: widget.strings.dotted,
+              icon: const StrokeStyleDottedIcon(),
+            ),
+          ],
+          selected: value.isMixed ? null : value.value,
+          onSelect: (style) => _applyStyleUpdate(strokeStyle: style),
+        );
+
+      case 'fillColor':
+        final value = property.extractValue(context) as MixedValue<Color>;
+        final defaultValue = property.getDefaultValue(context) as Color;
+        return _buildColorRow(
+          label: widget.strings.fillColor,
+          colors: const [
+            Colors.transparent,
+            Color(0xFFFFCCC7),
+            Color(0xFFD9F7BE),
+            Color(0xFFBAE0FF),
+            Color(0xFFFFF1B8),
+          ],
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(fillColor: color),
+          allowAlpha: true,
+        );
+
+      case 'fillStyle':
+        final value = property.extractValue(context) as MixedValue<FillStyle>;
+        return _buildStyleOptions<FillStyle>(
+          label: widget.strings.fillStyle,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: FillStyle.line,
+              label: widget.strings.lineFill,
+              icon: const FillStyleLineIcon(),
+            ),
+            _StyleOption(
+              value: FillStyle.crossLine,
+              label: widget.strings.crossLineFill,
+              icon: const FillStyleCrossLineIcon(),
+            ),
+            _StyleOption(
+              value: FillStyle.solid,
+              label: widget.strings.solidFill,
+              icon: const FillStyleSolidIcon(),
+            ),
+          ],
+          selected: value.isMixed ? null : value.value,
+          onSelect: (style) => _applyStyleUpdate(fillStyle: style),
+        );
+
+      case 'cornerRadius':
+        final value = property.extractValue(context) as MixedValue<double>;
+        final defaultValue = property.getDefaultValue(context) as double;
+        return _buildSliderControl(
+          label: widget.strings.cornerRadius,
+          value: value,
+          defaultValue: defaultValue,
+          min: 0,
+          max: 64,
+          pendingValue: _pendingCornerRadius,
+          onChanged: (newValue) {
+            setState(() => _pendingCornerRadius = newValue);
+            _scheduleStyleUpdate(
+              () => _applyStyleUpdate(cornerRadius: newValue),
+            );
+          },
+          onChangeEnd: (newValue) async {
+            _flushStyleUpdate();
+            setState(() => _pendingCornerRadius = null);
+            await _applyStyleUpdate(cornerRadius: newValue);
+          },
+        );
+
+      case 'opacity':
+        final value = property.extractValue(context) as MixedValue<double>;
+        final defaultValue = property.getDefaultValue(context) as double;
+        return _buildSliderControl(
+          label: widget.strings.opacity,
+          value: value,
+          defaultValue: defaultValue,
+          min: 0,
+          max: 1,
+          pendingValue: _pendingOpacity,
+          onChanged: (newValue) {
+            setState(() => _pendingOpacity = newValue);
+            _scheduleStyleUpdate(() => _applyStyleUpdate(opacity: newValue));
+          },
+          onChangeEnd: (newValue) async {
+            _flushStyleUpdate();
+            setState(() => _pendingOpacity = null);
+            await _applyStyleUpdate(opacity: newValue);
+          },
+        );
+
+      case 'arrowType':
+        final value = property.extractValue(context) as MixedValue<ArrowType>;
+        return _buildStyleOptions<ArrowType>(
+          label: widget.strings.arrowType,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: ArrowType.straight,
+              label: widget.strings.arrowTypeStraight,
+              icon: const ArrowTypeStraightIcon(),
+            ),
+            _StyleOption(
+              value: ArrowType.curved,
+              label: widget.strings.arrowTypeCurved,
+              icon: const ArrowTypeCurvedIcon(),
+            ),
+            _StyleOption(
+              value: ArrowType.polyline,
+              label: widget.strings.arrowTypePolyline,
+              icon: const ArrowTypeElbowIcon(),
+            ),
+          ],
+          selected: value.value,
+          onSelect: (value) => _applyStyleUpdate(arrowType: value),
+        );
+
+      case 'startArrowhead':
+        // This case is handled together with endArrowhead
+        return null;
+
+      case 'endArrowhead':
+        // Render both start and end arrowhead controls together
+        final startProp = PropertyRegistry.instance.getProperty(
+          'startArrowhead',
+        );
+        final endProp = property;
+
+        if (startProp == null) {
+          return null;
+        }
+
+        final startValue =
+            startProp.extractValue(context) as MixedValue<ArrowheadStyle>;
+        final endValue =
+            endProp.extractValue(context) as MixedValue<ArrowheadStyle>;
+        final startDefault =
+            startProp.getDefaultValue(context) as ArrowheadStyle;
+        final endDefault = endProp.getDefaultValue(context) as ArrowheadStyle;
+
+        return _buildArrowheadControls(
+          startArrowhead: startValue,
+          endArrowhead: endValue,
+          startDefault: startDefault,
+          endDefault: endDefault,
+        );
+
+      case 'fontSize':
+        final value = property.extractValue(context) as MixedValue<double>;
+        return _buildStyleOptions<double>(
+          label: widget.strings.fontSize,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: _fontSizeSmall,
+              label: widget.strings.small,
+              icon: const FontSizeSmallIcon(),
+            ),
+            _StyleOption(
+              value: _fontSizeMedium,
+              label: widget.strings.medium,
+              icon: const FontSizeMediumIcon(),
+            ),
+            _StyleOption(
+              value: _fontSizeLarge,
+              label: widget.strings.large,
+              icon: const FontSizeLargeIcon(),
+            ),
+            const _StyleOption(
+              value: _fontSizeExtraLarge,
+              label: 'Extra large',
+              icon: FontSizeVeryLargeIcon(),
+            ),
+          ],
+          selected: value.isMixed ? null : value.value,
+          onSelect: (size) => _applyStyleUpdate(fontSize: size),
+        );
+
+      case 'fontFamily':
+        final value = property.extractValue(context) as MixedValue<String>;
+        return _buildFontFamilyControl(
+          value: value,
+          onSelect: (family) => _applyStyleUpdate(fontFamily: family),
+        );
+
+      case 'textAlign':
+        final value =
+            property.extractValue(context) as MixedValue<TextHorizontalAlign>;
+        return _buildTextAlignmentControl(
+          horizontalAlign: value,
+          onHorizontalSelect: (align) => _applyStyleUpdate(textAlign: align),
+        );
+
+      case 'textStrokeWidth':
+        final value = property.extractValue(context) as MixedValue<double>;
+        return _buildNumericOptions(
+          label: widget.strings.textStrokeWidth,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            const _StyleOption(
+              value: 0,
+              label: 'None',
+              icon: Icon(Icons.not_interested, size: _iconSize),
+            ),
+            _StyleOption(
+              value: 2,
+              label: widget.strings.thin,
+              icon: const StrokeWidthSmallIcon(),
+            ),
+            _StyleOption(
+              value: 3,
+              label: widget.strings.medium,
+              icon: const StrokeWidthMediumIcon(),
+            ),
+            _StyleOption(
+              value: 5,
+              label: widget.strings.thick,
+              icon: const StrokeWidthLargeIcon(),
+            ),
+          ],
+          selected: value.value,
+          onSelect: (value) => _applyStyleUpdate(textStrokeWidth: value),
+        );
+
+      case 'textStrokeColor':
+        final value = property.extractValue(context) as MixedValue<Color>;
+        final defaultValue = property.getDefaultValue(context) as Color;
+        return _buildColorRow(
+          label: widget.strings.textStrokeColor,
+          colors: const [
+            Color(0xFFF8F4EC),
+            Color(0xFF1CA7A8),
+            Color(0xFFE45C9D),
+            Color(0xFFF4A261),
+            Color(0xFF1D3557),
+          ],
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(textStrokeColor: color),
+          allowAlpha: true,
+        );
+
+      default:
+        return null;
+    }
+  }
+
   Future<void> _applyStyleUpdate({
     Color? color,
     Color? fillColor,
@@ -1401,6 +1588,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
     double? fontSize,
     String? fontFamily,
     TextHorizontalAlign? textAlign,
@@ -1415,6 +1605,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     strokeStyle: strokeStyle,
     fillStyle: fillStyle,
     cornerRadius: cornerRadius,
+    arrowType: arrowType,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
     fontSize: fontSize,
     fontFamily: fontFamily,
     textAlign: textAlign,
@@ -1461,4 +1654,68 @@ class _NoPaddingTrackShape extends RoundedRectSliderTrackShape {
     final trackWidth = parentBox.size.width;
     return Rect.fromLTWH(trackLeft, trackTop, trackWidth, trackHeight);
   }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.borderRadius});
+
+  final Color color;
+  final double borderRadius;
+  final strokeWidth = 1.0;
+  final dashWidth = 4.0;
+  final dashSpace = 4.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(
+            strokeWidth / 2,
+            strokeWidth / 2,
+            size.width - strokeWidth,
+            size.height - strokeWidth,
+          ),
+          Radius.circular(borderRadius),
+        ),
+      );
+
+    final dashPath = _createDashedPath(path);
+    canvas.drawPath(dashPath, paint);
+  }
+
+  Path _createDashedPath(Path source) {
+    final dashedPath = Path();
+    final metricsIterator = source.computeMetrics().iterator;
+
+    while (metricsIterator.moveNext()) {
+      final metric = metricsIterator.current;
+      var distance = 0.0;
+
+      while (distance < metric.length) {
+        final nextDistance = distance + dashWidth;
+        final extractPath = metric.extractPath(
+          distance,
+          nextDistance > metric.length ? metric.length : nextDistance,
+        );
+        dashedPath.addPath(extractPath, Offset.zero);
+        distance = nextDistance + dashSpace;
+      }
+    }
+
+    return dashedPath;
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.dashSpace != dashSpace;
 }

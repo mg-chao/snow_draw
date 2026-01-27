@@ -44,22 +44,10 @@ DrawRect clampTextRectToLayout({
     }
   }
 
-  if (rect.height < minHeight) {
-    if (keepCenter) {
-      final centerY = rect.centerY;
-      minY = centerY - minHeight / 2;
-      maxY = centerY + minHeight / 2;
-    } else if (anchor.y <= rect.minY) {
-      minY = rect.minY;
-      maxY = rect.minY + minHeight;
-    } else if (anchor.y >= rect.maxY) {
-      maxY = rect.maxY;
-      minY = rect.maxY - minHeight;
-    } else {
-      final ratio = _anchorRatio(anchor.y, startRect.minY, startRect.maxY);
-      minY = anchor.y - minHeight * ratio;
-      maxY = anchor.y + minHeight * (1 - ratio);
-    }
+  if (rect.height != minHeight) {
+    // Always keep the top edge fixed when height changes
+    minY = rect.minY;
+    maxY = rect.minY + minHeight;
   }
 
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);

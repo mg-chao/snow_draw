@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../edit/core/edit_cancel_reason.dart';
 import '../models/edit_session_id.dart';
 import '../types/edit_operation_id.dart';
 import 'event_bus.dart';
@@ -72,14 +73,4 @@ class EditSessionCancelledEvent extends EditEvent {
       'EditSessionCancelled(session: $sessionId, reason: $reason)';
 }
 
-/// Edit cancel reason.
-enum EditCancelReason {
-  /// User cancelled explicitly.
-  userCancelled,
 
-  /// Cancelled due to a conflicting action.
-  conflictingAction,
-
-  /// New edit operation started.
-  newEditStarted,
-}

@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import '../../actions/draw_actions.dart';
-import '../../core/draw_context.dart';
+import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_style_updatable_data.dart';
+import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_layout.dart';
 import '../../models/draw_state.dart';
@@ -15,7 +17,7 @@ import '../../types/element_style.dart';
 DrawState handleUpdateElementsStyle(
   DrawState state,
   UpdateElementsStyle action,
-  DrawContext _,
+  ElementReducerDeps _,
 ) {
   final ids = action.elementIds.toSet();
   if (ids.isEmpty) {
@@ -29,6 +31,9 @@ DrawState handleUpdateElementsStyle(
     strokeStyle: action.strokeStyle,
     fillStyle: action.fillStyle,
     cornerRadius: action.cornerRadius,
+    arrowType: action.arrowType,
+    startArrowhead: action.startArrowhead,
+    endArrowhead: action.endArrowhead,
     fontSize: action.fontSize,
     fontFamily: action.fontFamily,
     textAlign: action.textAlign,
@@ -70,6 +75,15 @@ DrawState handleUpdateElementsStyle(
           if (nextRect != next.rect) {
             next = next.copyWith(rect: nextRect);
           }
+        } else if (data is ArrowData &&
+            updatedData is ArrowData &&
+            _shouldRecalculateArrowRect(data, updatedData)) {
+          final result = _resolveArrowRectAndData(
+            currentRect: next.rect,
+            data: updatedData,
+            previousArrowType: data.arrowType,
+          );
+          next = next.copyWith(rect: result.rect, data: result.data);
         }
         domainChanged = true;
       }
@@ -192,3 +206,41 @@ DrawRect _resolveTextRect({
 
 bool _shouldRelayoutText(ElementStyleUpdate update) =>
     update.fontSize != null || update.fontFamily != null;
+
+bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
+    oldData.arrowType != newData.arrowType;
+
+({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
+  required DrawRect currentRect,
+  required ArrowData data,
+  required ArrowType previousArrowType,
+}) {
+  // Resolve world points from the current rect and normalized points
+  var worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: currentRect,
+    normalizedPoints: data.points,
+  ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
+  if (data.arrowType == ArrowType.polyline &&
+      previousArrowType != ArrowType.polyline) {
+    worldPoints = ArrowGeometry.ensurePolylineCreationPoints(
+      [worldPoints.first, worldPoints.last],
+    );
+  }
+
+  // Calculate new bounds based on arrow type
+  final newRect = ArrowGeometry.calculatePathBounds(
+    worldPoints: worldPoints,
+    arrowType: data.arrowType,
+  );
+
+  // Normalize points to the new rect
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: newRect,
+  );
+
+  // Update data with normalized points to maintain consistency
+  final updatedData = data.copyWith(points: normalizedPoints);
+
+  return (rect: newRect, data: updatedData);
+}

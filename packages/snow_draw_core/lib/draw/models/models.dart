@@ -8,5 +8,6 @@ export 'element_state.dart';
 export 'interaction_state.dart';
 export 'selection_derived_data.dart';
 export 'selection_geometry.dart';
+export 'selection_overlay_state.dart';
 export 'selection_state.dart';
 export 'view_state.dart';

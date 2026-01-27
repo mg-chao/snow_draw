@@ -12,6 +12,7 @@ import 'package:snow_draw_core/utils/id_generator.dart';
 
 import 'grid_toolbar_adapter.dart';
 import 'l10n/app_localizations.dart';
+import 'property_initialization.dart';
 import 'snap_toolbar_adapter.dart';
 import 'tool_controller.dart';
 import 'toolbar_adapter.dart';
@@ -23,6 +24,9 @@ import 'widgets/style_toolbar.dart';
 import 'widgets/zoom_controls.dart';
 
 void main() {
+  // Initialize the property registry
+  initializePropertyRegistry();
+
   final drawContext = createAppContext();
   runApp(MyApp(context: drawContext));
 }

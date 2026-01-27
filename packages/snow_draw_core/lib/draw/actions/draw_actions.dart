@@ -1,11 +1,13 @@
 import 'dart:ui' show Color;
 
+import '../edit/core/edit_cancel_reason.dart';
 import '../edit/core/edit_modifiers.dart';
 import '../edit/core/edit_operation_params.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_type_id.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
+import '../models/interaction_state.dart';
 import '../types/draw_point.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
@@ -128,6 +130,27 @@ class UpdateCreatingElement extends DrawAction {
       'snapOverride: $snapOverride)';
 }
 
+class AddArrowPoint extends DrawAction implements NonRecordable {
+  const AddArrowPoint({
+    required this.position,
+    this.snapOverride = false,
+  });
+
+  final DrawPoint position;
+  final bool snapOverride;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  String get nonRecordableReason =>
+      'AddArrowPoint is an intermediate create state.';
+
+  @override
+  String toString() =>
+      'AddArrowPoint(position: $position, snapOverride: $snapOverride)';
+}
+
 class FinishCreateElement extends DrawAction {
   const FinishCreateElement();
 
@@ -238,6 +261,9 @@ class UpdateElementsStyle extends DrawAction {
     this.strokeStyle,
     this.fillStyle,
     this.cornerRadius,
+    this.arrowType,
+    this.startArrowhead,
+    this.endArrowhead,
     this.fontSize,
     this.fontFamily,
     this.textAlign,
@@ -254,6 +280,9 @@ class UpdateElementsStyle extends DrawAction {
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
   final double? cornerRadius;
+  final ArrowType? arrowType;
+  final ArrowheadStyle? startArrowhead;
+  final ArrowheadStyle? endArrowhead;
   final double? fontSize;
   final String? fontFamily;
   final TextHorizontalAlign? textAlign;
@@ -426,11 +455,15 @@ class FinishEdit extends DrawAction implements Recordable {
 }
 
 class CancelEdit extends DrawAction implements NonRecordable {
-  const CancelEdit();
+  const CancelEdit({this.reason = EditCancelReason.userCancelled});
+  final EditCancelReason reason;
 
   @override
   String get nonRecordableReason =>
       'CancelEdit indicates the session was aborted.';
+
+  @override
+  String toString() => 'CancelEdit(reason: $reason)';
 }
 
 class EditIntentAction extends DrawAction {
@@ -447,44 +480,30 @@ class EditIntentAction extends DrawAction {
   String toString() => 'EditIntentAction(intent: $intent, position: $position)';
 }
 
-class SetPendingSelect extends DrawAction {
-  const SetPendingSelect({
-    required this.elementId,
-    required this.addToSelection,
+class SetDragPending extends DrawAction {
+  const SetDragPending({
     required this.pointerDownPosition,
+    required this.intent,
   });
-  final String elementId;
-  final bool addToSelection;
   final DrawPoint pointerDownPosition;
-
-  @override
-  bool get conflictsWithEditing => true;
-}
-
-class ClearPendingSelect extends DrawAction {
-  const ClearPendingSelect();
-
-  @override
-  bool get conflictsWithEditing => true;
-}
-
-class SetPendingMove extends DrawAction {
-  const SetPendingMove({required this.pointerDownPosition});
-  final DrawPoint pointerDownPosition;
+  final PendingIntent intent;
 
   @override
   bool get conflictsWithEditing => true;
 
   @override
   String toString() =>
-      'SetPendingMove(pointerDownPosition: $pointerDownPosition)';
+      'SetDragPending(position: $pointerDownPosition, intent: $intent)';
 }
 
-class ClearPendingMove extends DrawAction {
-  const ClearPendingMove();
+class ClearDragPending extends DrawAction {
+  const ClearDragPending();
 
   @override
   bool get conflictsWithEditing => true;
+
+  @override
+  String toString() => 'ClearDragPending()';
 }
 
 // ============================================================================

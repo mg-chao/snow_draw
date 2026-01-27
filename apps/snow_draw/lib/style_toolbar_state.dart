@@ -7,11 +7,11 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 ///
 /// When multiple elements are selected and they have different
 /// values for a property,
-/// [isMixed] is true and [value] is null. This allows the UI 
+/// [isMixed] is true and [value] is null. This allows the UI
 /// to display "Mixed" or
 /// a placeholder instead of showing an arbitrary value from one element.
 ///
-/// When [isMixed] is false, [value] contains the actual 
+/// When [isMixed] is false, [value] contains the actual
 /// property value (either from
 /// a single selected element or a common value shared by
 ///  all selected elements).
@@ -147,24 +147,75 @@ class TextStyleValues {
   );
 }
 
+/// Resolved style values for arrow elements, supporting multi-selection.
+@immutable
+class ArrowStyleValues {
+  const ArrowStyleValues({
+    required this.color,
+    required this.strokeWidth,
+    required this.strokeStyle,
+    required this.arrowType,
+    required this.startArrowhead,
+    required this.endArrowhead,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<double> strokeWidth;
+  final MixedValue<StrokeStyle> strokeStyle;
+  final MixedValue<ArrowType> arrowType;
+  final MixedValue<ArrowheadStyle> startArrowhead;
+  final MixedValue<ArrowheadStyle> endArrowhead;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArrowStyleValues &&
+          other.color == color &&
+          other.strokeWidth == strokeWidth &&
+          other.strokeStyle == strokeStyle &&
+          other.arrowType == arrowType &&
+          other.startArrowhead == startArrowhead &&
+          other.endArrowhead == endArrowhead &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    strokeWidth,
+    strokeStyle,
+    arrowType,
+    startArrowhead,
+    endArrowhead,
+    opacity,
+  );
+}
+
 @immutable
 class StyleToolbarState {
   const StyleToolbarState({
     required this.rectangleStyle,
+    required this.arrowStyle,
     required this.textStyle,
     required this.styleValues,
+    required this.arrowStyleValues,
     required this.textStyleValues,
     required this.hasSelection,
     required this.hasSelectedRectangles,
+    required this.hasSelectedArrows,
     required this.hasSelectedTexts,
   });
 
   final ElementStyleConfig rectangleStyle;
+  final ElementStyleConfig arrowStyle;
   final ElementStyleConfig textStyle;
   final RectangleStyleValues styleValues;
+  final ArrowStyleValues arrowStyleValues;
   final TextStyleValues textStyleValues;
   final bool hasSelection;
   final bool hasSelectedRectangles;
+  final bool hasSelectedArrows;
   final bool hasSelectedTexts;
 
   @override
@@ -172,21 +223,27 @@ class StyleToolbarState {
       identical(this, other) ||
       other is StyleToolbarState &&
           other.rectangleStyle == rectangleStyle &&
+          other.arrowStyle == arrowStyle &&
           other.textStyle == textStyle &&
           other.styleValues == styleValues &&
+          other.arrowStyleValues == arrowStyleValues &&
           other.textStyleValues == textStyleValues &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
+          other.hasSelectedArrows == hasSelectedArrows &&
           other.hasSelectedTexts == hasSelectedTexts;
 
   @override
   int get hashCode => Object.hash(
     rectangleStyle,
+    arrowStyle,
     textStyle,
     styleValues,
+    arrowStyleValues,
     textStyleValues,
     hasSelection,
     hasSelectedRectangles,
+    hasSelectedArrows,
     hasSelectedTexts,
   );
 }
