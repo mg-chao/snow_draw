@@ -227,6 +227,7 @@ class FreeTransformOperation extends EditOperation {
     final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
       elementsById: elementsById,
       changedElementIds: updatedById.keys.toSet(),
+      document: state.domain.document,
     );
     if (bindingUpdates.isNotEmpty) {
       updatedById.addAll(bindingUpdates);

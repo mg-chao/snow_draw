@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
+import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
@@ -16,13 +17,27 @@ final class ArrowBindingResolver {
   static Map<String, ElementState> resolveBoundArrows({
     required Map<String, ElementState> elementsById,
     required Set<String> changedElementIds,
+    DocumentState? document,
   }) {
     if (changedElementIds.isEmpty) {
       return const {};
     }
 
     final updates = <String, ElementState>{};
-    for (final element in elementsById.values) {
+    final arrowIds = _resolveBoundArrowIds(
+      changedElementIds: changedElementIds,
+      elementsById: elementsById,
+      document: document,
+    );
+    if (arrowIds.isEmpty) {
+      return const {};
+    }
+
+    for (final arrowId in arrowIds) {
+      final element = elementsById[arrowId];
+      if (element == null) {
+        continue;
+      }
       final data = element.data;
       if (data is! ArrowData) {
         continue;
@@ -57,6 +72,60 @@ final class ArrowBindingResolver {
 
     return updates;
   }
+}
+
+DocumentState? _cachedDocument;
+Map<String, Set<String>> _cachedBindingIndex = const {};
+
+Set<String> _resolveBoundArrowIds({
+  required Set<String> changedElementIds,
+  required Map<String, ElementState> elementsById,
+  DocumentState? document,
+}) {
+  final bindingIndex = _resolveBindingIndex(
+    elementsById: elementsById,
+    document: document,
+  );
+  final arrowIds = <String>{};
+  for (final id in changedElementIds) {
+    final bound = bindingIndex[id];
+    if (bound != null) {
+      arrowIds.addAll(bound);
+    }
+  }
+  return arrowIds;
+}
+
+Map<String, Set<String>> _resolveBindingIndex({
+  required Map<String, ElementState> elementsById,
+  DocumentState? document,
+}) {
+  if (document != null && identical(_cachedDocument, document)) {
+    return _cachedBindingIndex;
+  }
+
+  final elements = document?.elements ?? elementsById.values;
+  final index = <String, Set<String>>{};
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! ArrowData) {
+      continue;
+    }
+    final startBinding = data.startBinding;
+    if (startBinding != null) {
+      (index[startBinding.elementId] ??= <String>{}).add(element.id);
+    }
+    final endBinding = data.endBinding;
+    if (endBinding != null) {
+      (index[endBinding.elementId] ??= <String>{}).add(element.id);
+    }
+  }
+
+  if (document != null) {
+    _cachedDocument = document;
+    _cachedBindingIndex = index;
+  }
+  return index;
 }
 
 ElementState? _applyBindings({

@@ -1,6 +1,7 @@
 .dart_tool/
 .idea
 melos_snow_draw_workspace.iml
+build
 
 # Agents
 .claude

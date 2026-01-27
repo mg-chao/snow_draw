@@ -1,11 +1,10 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_renderer.dart';
 import 'arrow_data.dart';
-import 'arrow_geometry.dart';
+import 'arrow_visual_cache.dart';
 
 class ArrowRenderer extends ElementTypeRenderer {
   const ArrowRenderer();
@@ -31,49 +30,10 @@ class ArrowRenderer extends ElementTypeRenderer {
       return;
     }
 
-    final localPoints = ArrowGeometry.resolveLocalPoints(
-      rect: rect,
-      normalizedPoints: data.points,
-    );
-    if (localPoints.length < 2) {
+    final cached = arrowVisualCache.resolve(element: element, data: data);
+    if (cached.localPoints.length < 2) {
       return;
     }
-
-    // Calculate insets to prevent shaft from penetrating closed arrowheads
-    final startInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.startArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
-    final endInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.endArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
-    final startDirectionOffset =
-        ArrowGeometry.calculateArrowheadDirectionOffset(
-          style: data.startArrowhead,
-          strokeWidth: data.strokeWidth,
-        );
-    final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-      style: data.endArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
-
-    final shaftPath = ArrowGeometry.buildShaftPath(
-      points: localPoints,
-      arrowType: data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-    );
-
-    // Build arrowhead paths
-    final arrowheadPaths = _buildArrowheadPaths(
-      localPoints,
-      data,
-      startInset: startInset,
-      endInset: endInset,
-      startDirectionOffset: startDirectionOffset,
-      endDirectionOffset: endDirectionOffset,
-    );
 
     canvas.save();
     if (element.rotation != 0) {
@@ -92,150 +52,26 @@ class ArrowRenderer extends ElementTypeRenderer {
       ..color = data.color.withValues(alpha: strokeOpacity)
       ..isAntiAlias = true;
 
-    // Combine shaft and arrowheads into a single path to prevent transparency
-    // overlap
-    _drawCombinedArrow(
-      canvas,
-      shaftPath,
-      arrowheadPaths,
-      strokePaint,
-      data.strokeStyle,
-      data,
-    );
+    if (data.strokeStyle == StrokeStyle.dotted) {
+      final dottedPath = cached.dottedShaftPath;
+      if (dottedPath != null) {
+        final dotPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = strokePaint.color
+          ..isAntiAlias = true;
+        canvas.drawPath(dottedPath, dotPaint);
+      }
+
+      for (final arrowheadPath in cached.arrowheadPaths) {
+        canvas.drawPath(arrowheadPath, strokePaint);
+      }
+    } else {
+      final combinedPath = cached.combinedStrokePath;
+      if (combinedPath != null) {
+        canvas.drawPath(combinedPath, strokePaint);
+      }
+    }
 
     canvas.restore();
-  }
-
-  void _drawCombinedArrow(
-    Canvas canvas,
-    Path shaftPath,
-    List<Path> arrowheadPaths,
-    Paint strokePaint,
-    StrokeStyle strokeStyle,
-    ArrowData data,
-  ) {
-    // Combine all paths into one to prevent transparency overlap issues
-    final combinedPath = Path();
-
-    if (strokeStyle == StrokeStyle.solid) {
-      combinedPath.addPath(shaftPath, Offset.zero);
-      for (final arrowheadPath in arrowheadPaths) {
-        combinedPath.addPath(arrowheadPath, Offset.zero);
-      }
-      canvas.drawPath(combinedPath, strokePaint);
-      return;
-    }
-
-    if (strokeStyle == StrokeStyle.dashed) {
-      // Dash pattern proportional to stroke width
-      final dashLength = data.strokeWidth * 2.0;
-      final gapLength = dashLength * 1.2;
-      final dashedShaft = _buildDashedPath(shaftPath, dashLength, gapLength);
-      combinedPath.addPath(dashedShaft, Offset.zero);
-      for (final arrowheadPath in arrowheadPaths) {
-        combinedPath.addPath(arrowheadPath, Offset.zero);
-      }
-      canvas.drawPath(combinedPath, strokePaint);
-      return;
-    }
-
-    // Dotted style - dots are filled circles, so we need different paint
-    // Dot pattern proportional to stroke width
-    final dotSpacing = data.strokeWidth * 2.0;
-    final dotRadius = data.strokeWidth * 0.5;
-    final dottedShaft = _buildDottedPath(shaftPath, dotSpacing, dotRadius);
-    combinedPath.addPath(dottedShaft, Offset.zero);
-
-    final dotPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokePaint.color
-      ..isAntiAlias = true;
-    canvas.drawPath(combinedPath, dotPaint);
-
-    // Draw arrowheads with stroke paint for dotted style
-    for (final arrowheadPath in arrowheadPaths) {
-      canvas.drawPath(arrowheadPath, strokePaint);
-    }
-  }
-
-  List<Path> _buildArrowheadPaths(
-    List<Offset> points,
-    ArrowData data, {
-    required double startInset,
-    required double endInset,
-    required double startDirectionOffset,
-    required double endDirectionOffset,
-  }) {
-    final paths = <Path>[];
-
-    if (points.length < 2 || data.strokeWidth <= 0) {
-      return paths;
-    }
-
-    final startDirection = ArrowGeometry.resolveStartDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: startDirectionOffset,
-    );
-    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      final path = ArrowGeometry.buildArrowheadPath(
-        tip: points.first,
-        direction: startDirection,
-        style: data.startArrowhead,
-        strokeWidth: data.strokeWidth,
-      );
-      paths.add(path);
-    }
-
-    final endDirection = ArrowGeometry.resolveEndDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: endDirectionOffset,
-    );
-    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      final path = ArrowGeometry.buildArrowheadPath(
-        tip: points.last,
-        direction: endDirection,
-        style: data.endArrowhead,
-        strokeWidth: data.strokeWidth,
-      );
-      paths.add(path);
-    }
-
-    return paths;
-  }
-
-  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-    final dashed = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-        distance = next + gapLength;
-      }
-    }
-    return dashed;
-  }
-
-  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-    final dotted = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          dotted.addOval(
-            Rect.fromCircle(center: tangent.position, radius: dotRadius),
-          );
-        }
-        distance += dotSpacing;
-      }
-    }
-    return dotted;
   }
 }

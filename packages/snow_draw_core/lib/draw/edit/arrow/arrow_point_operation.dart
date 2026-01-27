@@ -163,15 +163,6 @@ class ArrowPointOperation extends EditOperation {
       typedContext.rotation,
       currentPosition,
     );
-    final element = state.domain.document.getElementById(
-      typedContext.elementId,
-    );
-    final data = element?.data is ArrowData
-        ? element!.data as ArrowData
-        : null;
-    final bindingTargets = element == null
-        ? const <ElementState>[]
-        : _resolveBindingTargets(state, element.id);
     final snapConfig = config.snap;
     final gridConfig = config.grid;
     final snappingMode = resolveEffectiveSnappingModeForConfig(
@@ -190,6 +181,12 @@ class ArrowPointOperation extends EditOperation {
       localPosition = snappedTarget - typedContext.dragOffset;
     }
 
+    final element = state.domain.document.getElementById(
+      typedContext.elementId,
+    );
+    final data = element?.data is ArrowData
+        ? element!.data as ArrowData
+        : null;
     final zoom = state.application.view.camera.zoom;
     final effectiveZoom = zoom == 0 ? 1.0 : zoom;
     final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
@@ -197,6 +194,20 @@ class ArrowPointOperation extends EditOperation {
         snapConfig.enableArrowBinding &&
         !modifiers.snapOverride &&
         snappingMode != SnappingMode.grid;
+    final bindingSearchPoint = _toWorldPosition(
+      typedContext.elementRect,
+      typedContext.rotation,
+      localPosition.translate(typedContext.dragOffset),
+    );
+    final bindingTargets =
+        element == null || bindingDistance <= 0
+            ? const <ElementState>[]
+            : _resolveBindingTargets(
+                state,
+                element.id,
+                bindingSearchPoint,
+                bindingDistance,
+              );
     final result = _compute(
       context: typedContext,
       currentPosition: localPosition,
@@ -662,15 +673,29 @@ List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
       .toList(growable: false);
 }
 
-List<ElementState> _resolveBindingTargets(DrawState state, String excludeId) =>
-    state.domain.document.elements
-        .where(
-          (element) =>
-              element.opacity > 0 &&
-              element.id != excludeId &&
-              element.data is RectangleData,
-        )
-        .toList();
+List<ElementState> _resolveBindingTargets(
+  DrawState state,
+  String excludeId,
+  DrawPoint position,
+  double distance,
+) {
+  final document = state.domain.document;
+  final entries = document.spatialIndex.searchPointEntries(position, distance);
+  final targets = <ElementState>[];
+  for (final entry in entries) {
+    final element = document.getElementById(entry.id);
+    if (element == null) {
+      continue;
+    }
+    if (element.opacity <= 0 ||
+        element.id == excludeId ||
+        element.data is! RectangleData) {
+      continue;
+    }
+    targets.add(element);
+  }
+  return targets;
+}
 
 DrawPoint _resolvePointPosition({
   required List<DrawPoint> points,
