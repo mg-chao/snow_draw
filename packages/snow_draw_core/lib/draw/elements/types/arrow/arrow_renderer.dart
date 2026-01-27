@@ -31,7 +31,7 @@ class ArrowRenderer extends ElementTypeRenderer {
     }
 
     final cached = arrowVisualCache.resolve(element: element, data: data);
-    if (cached.localPoints.length < 2) {
+    if (cached.geometry.localPoints.length < 2) {
       return;
     }
 

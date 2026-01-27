@@ -113,6 +113,7 @@ class ArrowPointOperation extends EditOperation {
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
       dragOffset: dragOffset,
+      bindingTargetCache: BindingTargetCache(),
     );
   }
 
@@ -199,14 +200,14 @@ class ArrowPointOperation extends EditOperation {
       typedContext.rotation,
       localPosition.translate(typedContext.dragOffset),
     );
-    final bindingTargets =
+  final bindingTargets =
         element == null || bindingDistance <= 0
             ? const <ElementState>[]
-            : _resolveBindingTargets(
-                state,
-                element.id,
-                bindingSearchPoint,
-                bindingDistance,
+            : _resolveBindingTargetsCached(
+                state: state,
+                context: typedContext,
+                position: bindingSearchPoint,
+                distance: bindingDistance,
               );
     final result = _compute(
       context: typedContext,
@@ -253,7 +254,7 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final points = List<DrawPoint>.from(typedTransform.points);
+    var points = List<DrawPoint>.from(typedTransform.points);
     if (typedTransform.shouldDelete &&
         typedTransform.activeIndex != null &&
         typedTransform.activeIndex! > 0 &&
@@ -273,6 +274,11 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
+    if (data.arrowType == ArrowType.polyline) {
+      points = List<DrawPoint>.from(
+        ArrowGeometry.normalizePolylinePoints(points),
+      );
+    }
 
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
@@ -389,7 +395,8 @@ final class ArrowPointEditContext extends EditContext {
     required this.pointKind,
     required this.pointIndex,
     required this.dragOffset,
-  });
+    required BindingTargetCache bindingTargetCache,
+  }) : _bindingTargetCache = bindingTargetCache;
 
   final String elementId;
   final DrawRect elementRect;
@@ -399,6 +406,7 @@ final class ArrowPointEditContext extends EditContext {
   final ArrowPointKind pointKind;
   final int pointIndex;
   final DrawPoint dragOffset;
+  final BindingTargetCache _bindingTargetCache;
 }
 
 @immutable
@@ -489,7 +497,6 @@ _ArrowPointComputation _compute({
         segmentIndex: context.pointIndex,
         target: target,
       );
-      updatedPoints = _normalizePolylinePoints(updatedPoints);
       activeIndex = _resolveNearestSegmentIndex(
         points: updatedPoints,
         target: target,
@@ -592,7 +599,6 @@ _ArrowPointComputation _compute({
         index: index,
         target: target,
       );
-      updatedPoints = _normalizePolylinePoints(updatedPoints);
       activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
     } else {
       updatedPoints = List<DrawPoint>.from(basePoints);
@@ -695,6 +701,81 @@ List<ElementState> _resolveBindingTargets(
     targets.add(element);
   }
   return targets;
+}
+
+List<ElementState> _resolveBindingTargetsCached({
+  required DrawState state,
+  required ArrowPointEditContext context,
+  required DrawPoint position,
+  required double distance,
+}) {
+  final cache = context._bindingTargetCache;
+  final elementsVersion = state.domain.document.elementsVersion;
+  final threshold = distance * 0.4;
+  if (cache.isValid(
+    position: position,
+    threshold: threshold,
+    distance: distance,
+    elementsVersion: elementsVersion,
+  )) {
+    return cache.targets;
+  }
+
+  final targets = _resolveBindingTargets(
+    state,
+    context.elementId,
+    position,
+    distance,
+  );
+  cache.update(
+    position: position,
+    distance: distance,
+    elementsVersion: elementsVersion,
+    targets: targets,
+  );
+  return targets;
+}
+
+class BindingTargetCache {
+  DrawPoint? _lastPosition;
+  double _lastDistance = 0;
+  var _elementsVersion = -1;
+  List<ElementState> _targets = const [];
+
+  List<ElementState> get targets => _targets;
+
+  bool isValid({
+    required DrawPoint position,
+    required double threshold,
+    required double distance,
+    required int elementsVersion,
+  }) {
+    if (_lastPosition == null) {
+      return false;
+    }
+    if (_elementsVersion != elementsVersion) {
+      return false;
+    }
+    if (_lastDistance != distance) {
+      return false;
+    }
+    if (threshold <= 0) {
+      return false;
+    }
+    return _lastPosition!.distanceSquared(position) <= threshold * threshold;
+  }
+
+  void update({
+    required DrawPoint position,
+    required double distance,
+    required int elementsVersion,
+    required List<ElementState> targets,
+  }) {
+    _lastPosition = position;
+    _lastDistance = distance;
+    _elementsVersion = elementsVersion;
+    _targets = targets;
+  }
 }
 
 DrawPoint _resolvePointPosition({
@@ -892,13 +973,6 @@ List<DrawPoint> _movePolylineEndpoint({
   return updated;
 }
 
-List<DrawPoint> _normalizePolylinePoints(List<DrawPoint> points) {
-  if (points.length < 2) {
-    return List<DrawPoint>.from(points);
-  }
-  return List<DrawPoint>.from(ArrowGeometry.normalizePolylinePoints(points));
-}
-
 DrawPoint _alignPolylineNeighbor({
   required DrawPoint anchor,
   required DrawPoint neighbor,
@@ -946,7 +1020,7 @@ List<DrawPoint> _mergePolylineLoopPoints({
     }
   }
 
-  return _normalizePolylinePoints(updated);
+  return updated;
 }
 
 bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>

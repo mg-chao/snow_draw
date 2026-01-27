@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 
@@ -11,33 +12,40 @@ class ArrowVisualCacheEntry {
     required this.data,
     required this.width,
     required this.height,
-    required this.localPoints,
+    required this.geometry,
     required this.shaftPath,
     required this.arrowheadPaths,
     required this.combinedStrokePath,
     required this.dottedShaftPath,
-  });
+    List<PathMetric>? pathMetrics,
+  }) : _pathMetrics = pathMetrics;
 
   final ArrowData data;
   final double width;
   final double height;
-  final List<Offset> localPoints;
+  final ArrowGeometryDescriptor geometry;
   final Path shaftPath;
   final List<Path> arrowheadPaths;
   final Path? combinedStrokePath;
   final Path? dottedShaftPath;
+  List<PathMetric>? _pathMetrics;
 
   bool matches(ArrowData data, double width, double height) =>
       identical(this.data, data) &&
       this.width == width &&
       this.height == height;
+
+  List<PathMetric> resolvePathMetrics() =>
+      _pathMetrics ??= shaftPath.computeMetrics().toList(growable: false);
 }
 
 class ArrowVisualCache {
-  ArrowVisualCache({int maxEntries = 1024}) : _maxEntries = maxEntries;
+  ArrowVisualCache({int maxEntries = 1024})
+    : _entries = LruCache<String, ArrowVisualCacheEntry>(
+        maxEntries: maxEntries,
+      );
 
-  final int _maxEntries;
-  final _entries = <String, ArrowVisualCacheEntry>{};
+  final LruCache<String, ArrowVisualCacheEntry> _entries;
 
   ArrowVisualCacheEntry resolve({
     required ElementState element,
@@ -46,43 +54,32 @@ class ArrowVisualCache {
     final id = element.id;
     final width = element.rect.width;
     final height = element.rect.height;
-    final existing = _entries[id];
+    final existing = _entries.get(id);
     if (existing != null && existing.matches(data, width, height)) {
-      _touch(id, existing);
       return existing;
     }
 
     final entry = _buildEntry(element: element, data: data);
-    _entries[id] = entry;
-    if (_entries.length > _maxEntries) {
-      _entries.remove(_entries.keys.first);
-    }
+    _entries.put(id, entry);
     return entry;
   }
 
   void clear() => _entries.clear();
-
-  void _touch(String id, ArrowVisualCacheEntry entry) {
-    _entries.remove(id);
-    _entries[id] = entry;
-  }
 
   ArrowVisualCacheEntry _buildEntry({
     required ElementState element,
     required ArrowData data,
   }) {
     final rect = element.rect;
-    final localPoints = ArrowGeometry.resolveLocalPoints(
-      rect: rect,
-      normalizedPoints: data.points,
-    );
+    final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
+    final localPoints = geometry.localPoints;
 
     if (localPoints.length < 2 || data.strokeWidth <= 0) {
       return ArrowVisualCacheEntry(
         data: data,
         width: rect.width,
         height: rect.height,
-        localPoints: localPoints,
+        geometry: geometry,
         shaftPath: Path(),
         arrowheadPaths: const [],
         combinedStrokePath: null,
@@ -90,43 +87,22 @@ class ArrowVisualCache {
       );
     }
 
-    final startInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.startArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
-    final endInset = ArrowGeometry.calculateArrowheadInset(
-      style: data.endArrowhead,
-      strokeWidth: data.strokeWidth,
-    );
-    final startDirectionOffset =
-        ArrowGeometry.calculateArrowheadDirectionOffset(
-          style: data.startArrowhead,
-          strokeWidth: data.strokeWidth,
-        );
-    final endDirectionOffset =
-        ArrowGeometry.calculateArrowheadDirectionOffset(
-          style: data.endArrowhead,
-          strokeWidth: data.strokeWidth,
-        );
+    final startInset = geometry.startInset;
+    final endInset = geometry.endInset;
 
-    final shaftPath = ArrowGeometry.buildShaftPath(
-      points: localPoints,
+    final shaftPoints = (startInset <= 0 && endInset <= 0)
+        ? localPoints
+        : geometry.insetPoints;
+    final shaftPath = ArrowGeometry.buildShaftPathFromResolvedPoints(
+      points: shaftPoints,
       arrowType: data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
     );
 
-    final arrowheadPaths = _buildArrowheadPaths(
-      localPoints,
-      data,
-      startInset: startInset,
-      endInset: endInset,
-      startDirectionOffset: startDirectionOffset,
-      endDirectionOffset: endDirectionOffset,
-    );
+    final arrowheadPaths = _buildArrowheadPaths(geometry);
 
     Path? combinedStrokePath;
     Path? dottedShaftPath;
+    List<PathMetric>? pathMetrics;
 
     switch (data.strokeStyle) {
       case StrokeStyle.solid:
@@ -134,19 +110,23 @@ class ArrowVisualCache {
       case StrokeStyle.dashed:
         final dashLength = data.strokeWidth * 2.0;
         final gapLength = dashLength * 1.2;
+        pathMetrics = shaftPath.computeMetrics().toList(growable: false);
         final dashedShaft = _buildDashedPath(
           shaftPath,
           dashLength,
           gapLength,
+          metrics: pathMetrics,
         );
         combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
       case StrokeStyle.dotted:
         final dotSpacing = data.strokeWidth * 2.0;
         final dotRadius = data.strokeWidth * 0.5;
+        pathMetrics = shaftPath.computeMetrics().toList(growable: false);
         dottedShaftPath = _buildDottedPath(
           shaftPath,
           dotSpacing,
           dotRadius,
+          metrics: pathMetrics,
         );
     }
 
@@ -154,34 +134,26 @@ class ArrowVisualCache {
       data: data,
       width: rect.width,
       height: rect.height,
-      localPoints: localPoints,
+      geometry: geometry,
       shaftPath: shaftPath,
       arrowheadPaths: arrowheadPaths,
       combinedStrokePath: combinedStrokePath,
       dottedShaftPath: dottedShaftPath,
+      pathMetrics: pathMetrics,
     );
   }
 
   List<Path> _buildArrowheadPaths(
-    List<Offset> points,
-    ArrowData data, {
-    required double startInset,
-    required double endInset,
-    required double startDirectionOffset,
-    required double endDirectionOffset,
-  }) {
+    ArrowGeometryDescriptor geometry,
+  ) {
     final paths = <Path>[];
+    final points = geometry.localPoints;
+    final data = geometry.data;
     if (points.length < 2 || data.strokeWidth <= 0) {
       return paths;
     }
 
-    final startDirection = ArrowGeometry.resolveStartDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: startDirectionOffset,
-    );
+    final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       paths.add(
         ArrowGeometry.buildArrowheadPath(
@@ -193,13 +165,7 @@ class ArrowVisualCache {
       );
     }
 
-    final endDirection = ArrowGeometry.resolveEndDirection(
-      points,
-      data.arrowType,
-      startInset: startInset,
-      endInset: endInset,
-      directionOffset: endDirectionOffset,
-    );
+    final endDirection = geometry.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
       paths.add(
         ArrowGeometry.buildArrowheadPath(
@@ -222,9 +188,16 @@ class ArrowVisualCache {
     return combined;
   }
 
-  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
+  Path _buildDashedPath(
+    Path basePath,
+    double dashLength,
+    double gapLength, {
+    List<PathMetric>? metrics,
+  }) {
     final dashed = Path();
-    for (final metric in basePath.computeMetrics()) {
+    final resolved = metrics ??
+        basePath.computeMetrics().toList(growable: false);
+    for (final metric in resolved) {
       var distance = 0.0;
       while (distance < metric.length) {
         final next = math.min(distance + dashLength, metric.length);
@@ -235,9 +208,16 @@ class ArrowVisualCache {
     return dashed;
   }
 
-  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
+  Path _buildDottedPath(
+    Path basePath,
+    double dotSpacing,
+    double dotRadius, {
+    List<PathMetric>? metrics,
+  }) {
     final dotted = Path();
-    for (final metric in basePath.computeMetrics()) {
+    final resolved = metrics ??
+        basePath.computeMetrics().toList(growable: false);
+    for (final metric in resolved) {
       var distance = 0.0;
       while (distance < metric.length) {
         final tangent = metric.getTangentForOffset(distance);

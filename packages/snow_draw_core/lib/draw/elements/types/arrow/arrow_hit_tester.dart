@@ -6,6 +6,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
@@ -14,8 +15,10 @@ class ArrowHitTester implements ElementHitTester {
   const ArrowHitTester();
 
   static const _cacheLimit = 512;
-  static const _hotCacheSize = 6;
-  static final _cache = <String, _ArrowHitTestCacheEntry>{};
+  static const _hotCacheSize = 16;
+  static final _cache = LruCache<String, _ArrowHitTestCacheEntry>(
+    maxEntries: _cacheLimit,
+  );
   static final _hotCache = List<_ArrowHitTestCacheEntry?>.filled(
     _hotCacheSize,
     null,
@@ -140,30 +143,21 @@ class ArrowHitTester implements ElementHitTester {
       }
     }
 
-    final cached = _cache[id];
+    final cached = _cache.get(id);
     if (cached != null && cached.matches(width, height, data)) {
       _touchHotCache(cached);
-      _touchCache(id, cached);
       return cached;
     }
 
     final next = _ArrowHitTestCacheEntry.build(element: element, data: data);
-    _cache[id] = next;
+    _cache.put(id, next);
     _touchHotCache(next);
-    if (_cache.length > _cacheLimit) {
-      _cache.remove(_cache.keys.first);
-    }
     return next;
   }
 
   void _touchHotCache(_ArrowHitTestCacheEntry entry) {
     _hotCache[_hotCacheCursor] = entry;
     _hotCacheCursor = (_hotCacheCursor + 1) % _hotCacheSize;
-  }
-
-  void _touchCache(String id, _ArrowHitTestCacheEntry entry) {
-    _cache.remove(id);
-    _cache[id] = entry;
   }
 
   @override
@@ -197,10 +191,8 @@ class _ArrowHitTestCacheEntry {
     required ArrowData data,
   }) {
     final rect = element.rect;
-    final points = ArrowGeometry.resolveLocalPoints(
-      rect: rect,
-      normalizedPoints: data.points,
-    );
+    final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
+    final points = geometry.localPoints;
     final hasCurvedShaft =
         data.arrowType == ArrowType.curved && points.length > 2;
     final shaftPoints = hasCurvedShaft
@@ -209,7 +201,7 @@ class _ArrowHitTestCacheEntry {
               ? ArrowGeometry.expandPolylinePoints(points)
               : points);
 
-    final arrowheadTargets = _buildArrowheadTargets(points, data);
+    final arrowheadTargets = _buildArrowheadTargets(geometry);
 
     return _ArrowHitTestCacheEntry(
       id: element.id,
@@ -261,24 +253,49 @@ _ArrowheadHitTarget _circleTarget({
     };
 
 class _CubicSegment {
-  const _CubicSegment({
-    required this.start,
-    required this.control1,
-    required this.control2,
-    required this.end,
-  });
+  _CubicSegment(this.start, this.control1, this.control2, this.end);
 
-  final Offset start;
-  final Offset control1;
-  final Offset control2;
-  final Offset end;
+  _CubicSegment.empty()
+    : start = Offset.zero,
+      control1 = Offset.zero,
+      control2 = Offset.zero,
+      end = Offset.zero;
+
+  Offset start;
+  Offset control1;
+  Offset control2;
+  Offset end;
+
+  void set(Offset start, Offset control1, Offset control2, Offset end) {
+    this
+      ..start = start
+      ..control1 = control1
+      ..control2 = control2
+      ..end = end;
+  }
 }
 
-class _CubicSplit {
-  const _CubicSplit({required this.left, required this.right});
+class _CubicSegmentPool {
+  _CubicSegmentPool(this.capacity)
+    : _segments = List<_CubicSegment>.generate(
+        capacity,
+        (_) => _CubicSegment.empty(),
+      );
 
-  final _CubicSegment left;
-  final _CubicSegment right;
+  final int capacity;
+  final List<_CubicSegment> _segments;
+  var _cursor = 0;
+
+  _CubicSegment acquire() {
+    if (_cursor < _segments.length) {
+      return _segments[_cursor++];
+    }
+    return _CubicSegment.empty();
+  }
+
+  void reset() {
+    _cursor = 0;
+  }
 }
 
 double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
@@ -302,11 +319,14 @@ bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
     position.y >= rect.minY - padding &&
     position.y <= rect.maxY + padding;
 
+final _segmentPool = _CubicSegmentPool(96);
+
 List<Offset> _flattenCurvedShaft(List<Offset> points, double step) {
   if (points.length < 2 || step <= 0) {
     return const <Offset>[];
   }
 
+  _segmentPool.reset();
   final tolerance = math.max(0.5, step * 0.35);
   final toleranceSq = tolerance * tolerance;
   const maxPoints = 120;
@@ -316,12 +336,13 @@ List<Offset> _flattenCurvedShaft(List<Offset> points, double step) {
     if (flattened.length >= maxPoints) {
       break;
     }
-    final segment = _buildCubicSegment(points, i);
+    final segment = _buildCubicSegment(points, i, _segmentPool);
     _flattenCubicSegment(
       segment,
       toleranceSq,
       flattened,
       maxPoints,
+      _segmentPool,
     );
   }
 
@@ -333,6 +354,7 @@ void _flattenCubicSegment(
   double toleranceSq,
   List<Offset> output,
   int maxPoints,
+  _CubicSegmentPool pool,
 ) {
   final stack = <_CubicSegment>[segment];
   while (stack.isNotEmpty && output.length < maxPoints) {
@@ -342,10 +364,12 @@ void _flattenCubicSegment(
       output.add(current.end);
       continue;
     }
-    final split = _splitCubicSegment(current);
+    final left = pool.acquire();
+    final right = pool.acquire();
+    _splitCubicSegment(current, left, right);
     stack
-      ..add(split.right)
-      ..add(split.left);
+      ..add(right)
+      ..add(left);
   }
 }
 
@@ -375,7 +399,11 @@ double _distanceSquaredToLine(Offset point, Offset a, Offset b) {
   return (cross * cross) / lenSq;
 }
 
-_CubicSplit _splitCubicSegment(_CubicSegment segment) {
+void _splitCubicSegment(
+  _CubicSegment segment,
+  _CubicSegment left,
+  _CubicSegment right,
+) {
   Offset mid(Offset a, Offset b) =>
       Offset((a.dx + b.dx) * 0.5, (a.dy + b.dy) * 0.5);
 
@@ -386,23 +414,15 @@ _CubicSplit _splitCubicSegment(_CubicSegment segment) {
   final p123 = mid(p12, p23);
   final p0123 = mid(p012, p123);
 
-  return _CubicSplit(
-    left: _CubicSegment(
-      start: segment.start,
-      control1: p01,
-      control2: p012,
-      end: p0123,
-    ),
-    right: _CubicSegment(
-      start: p0123,
-      control1: p123,
-      control2: p23,
-      end: segment.end,
-    ),
-  );
+  left.set(segment.start, p01, p012, p0123);
+  right.set(p0123, p123, p23, segment.end);
 }
 
-_CubicSegment _buildCubicSegment(List<Offset> points, int index) {
+_CubicSegment _buildCubicSegment(
+  List<Offset> points,
+  int index,
+  _CubicSegmentPool pool,
+) {
   final p0 = index == 0 ? points[index] : points[index - 1];
   final p1 = points[index];
   final p2 = points[index + 1];
@@ -411,47 +431,20 @@ _CubicSegment _buildCubicSegment(List<Offset> points, int index) {
   const tension = 1.0;
   final control1 = p1 + (p2 - p0) * (tension / 6);
   final control2 = p2 - (p3 - p1) * (tension / 6);
-  return _CubicSegment(
-    start: p1,
-    control1: control1,
-    control2: control2,
-    end: p2,
-  );
+  return pool.acquire()..set(p1, control1, control2, p2);
 }
 
 List<_ArrowheadHitTarget> _buildArrowheadTargets(
-  List<Offset> points,
-  ArrowData data,
+  ArrowGeometryDescriptor geometry,
 ) {
+  final points = geometry.localPoints;
+  final data = geometry.data;
   if (points.length < 2 || data.strokeWidth <= 0) {
     return const <_ArrowheadHitTarget>[];
   }
 
   final targets = <_ArrowheadHitTarget>[];
-  final startInset = ArrowGeometry.calculateArrowheadInset(
-    style: data.startArrowhead,
-    strokeWidth: data.strokeWidth,
-  );
-  final endInset = ArrowGeometry.calculateArrowheadInset(
-    style: data.endArrowhead,
-    strokeWidth: data.strokeWidth,
-  );
-  final startDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-    style: data.startArrowhead,
-    strokeWidth: data.strokeWidth,
-  );
-  final endDirectionOffset = ArrowGeometry.calculateArrowheadDirectionOffset(
-    style: data.endArrowhead,
-    strokeWidth: data.strokeWidth,
-  );
-
-  final startDirection = ArrowGeometry.resolveStartDirection(
-    points,
-    data.arrowType,
-    startInset: startInset,
-    endInset: endInset,
-    directionOffset: startDirectionOffset,
-  );
+  final startDirection = geometry.startDirection;
   if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
     final target = _arrowheadTargetForStyle(
       tip: points.first,
@@ -464,13 +457,7 @@ List<_ArrowheadHitTarget> _buildArrowheadTargets(
     }
   }
 
-  final endDirection = ArrowGeometry.resolveEndDirection(
-    points,
-    data.arrowType,
-    startInset: startInset,
-    endInset: endInset,
-    directionOffset: endDirectionOffset,
-  );
+  final endDirection = geometry.endDirection;
   if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
     final target = _arrowheadTargetForStyle(
       tip: points.last,
