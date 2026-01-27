@@ -4,7 +4,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../draw/config/draw_config.dart';
-import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
@@ -497,7 +496,6 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
     final effectiveElement = stateView.effectiveElement(element);
-    final edgeLine = _resolveEdgeLine(effectiveElement, highlight.edge);
     final effectiveScale = scale == 0 ? 1.0 : scale;
     final strokeColor = renderKey.selectionConfig.render.strokeColor;
     final paint = Paint()
@@ -505,13 +503,36 @@ class DynamicCanvasPainter extends CustomPainter {
       ..strokeWidth =
           renderKey.selectionConfig.render.strokeWidth * 1.5 / effectiveScale
       ..color = strokeColor.withValues(alpha: 0.9)
-      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
-    canvas.drawLine(
-      Offset(edgeLine.start.x, edgeLine.start.y),
-      Offset(edgeLine.end.x, edgeLine.end.y),
-      paint,
+    final rect = effectiveElement.rect;
+    final data = effectiveElement.data as RectangleData;
+    final highlightRect = Rect.fromLTWH(
+      rect.minX,
+      rect.minY,
+      rect.width,
+      rect.height,
     );
+
+    canvas.save();
+    if (effectiveElement.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(effectiveElement.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    if (data.cornerRadius > 0) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          highlightRect,
+          Radius.circular(data.cornerRadius),
+        ),
+        paint,
+      );
+    } else {
+      canvas.drawRect(highlightRect, paint);
+    }
+    canvas.restore();
   }
 
   void _drawArrowHoverOutline({
@@ -735,28 +756,7 @@ class DynamicCanvasPainter extends CustomPainter {
     if (binding == null || binding.mode != ArrowBindingMode.orbit) {
       return null;
     }
-    final edge = _edgeForAnchor(binding.anchor);
-    if (edge == null) {
-      return null;
-    }
-    return _ArrowBindingHighlight(elementId: binding.elementId, edge: edge);
-  }
-
-  _BoundEdge? _edgeForAnchor(DrawPoint anchor) {
-    const tolerance = 0.002;
-    if ((anchor.y - 0).abs() <= tolerance) {
-      return _BoundEdge.top;
-    }
-    if ((anchor.y - 1).abs() <= tolerance) {
-      return _BoundEdge.bottom;
-    }
-    if ((anchor.x - 0).abs() <= tolerance) {
-      return _BoundEdge.left;
-    }
-    if ((anchor.x - 1).abs() <= tolerance) {
-      return _BoundEdge.right;
-    }
-    return null;
+    return _ArrowBindingHighlight(elementId: binding.elementId);
   }
 
   _ArrowEndpoint? _resolveEndpointForHandle(
@@ -794,34 +794,6 @@ class DynamicCanvasPainter extends CustomPainter {
         .toList(growable: false);
   }
 
-  _EdgeLine _resolveEdgeLine(ElementState element, _BoundEdge edge) {
-    final rect = element.rect;
-    DrawPoint start;
-    DrawPoint end;
-    switch (edge) {
-      case _BoundEdge.top:
-        start = DrawPoint(x: rect.minX, y: rect.minY);
-        end = DrawPoint(x: rect.maxX, y: rect.minY);
-      case _BoundEdge.right:
-        start = DrawPoint(x: rect.maxX, y: rect.minY);
-        end = DrawPoint(x: rect.maxX, y: rect.maxY);
-      case _BoundEdge.bottom:
-        start = DrawPoint(x: rect.maxX, y: rect.maxY);
-        end = DrawPoint(x: rect.minX, y: rect.maxY);
-      case _BoundEdge.left:
-        start = DrawPoint(x: rect.minX, y: rect.maxY);
-        end = DrawPoint(x: rect.minX, y: rect.minY);
-    }
-    if (element.rotation != 0) {
-      final space = ElementSpace(
-        rotation: element.rotation,
-        origin: rect.center,
-      );
-      start = space.toWorld(start);
-      end = space.toWorld(end);
-    }
-    return _EdgeLine(start: start, end: end);
-  }
 
   /// Draw box-selection overlay.
   void _drawBoxSelection(Canvas canvas, DrawRect bounds, double scale) {
@@ -1187,21 +1159,10 @@ class DynamicCanvasPainter extends CustomPainter {
 
 enum _ArrowEndpoint { start, end }
 
-enum _BoundEdge { top, right, bottom, left }
-
 class _ArrowBindingHighlight {
   const _ArrowBindingHighlight({
     required this.elementId,
-    required this.edge,
   });
 
   final String elementId;
-  final _BoundEdge edge;
-}
-
-class _EdgeLine {
-  const _EdgeLine({required this.start, required this.end});
-
-  final DrawPoint start;
-  final DrawPoint end;
 }
