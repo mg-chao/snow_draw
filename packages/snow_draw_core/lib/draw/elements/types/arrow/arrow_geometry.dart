@@ -238,8 +238,24 @@ class ArrowGeometry {
     return _normalize(vector);
   }
 
-  static List<Offset> expandPolylinePoints(List<Offset> points) =>
-      List<Offset>.from(points);
+  static List<Offset> expandPolylinePoints(
+    List<Offset> points, {
+    bool includeVirtual = true,
+  }) {
+    if (!includeVirtual || points.length < 2) {
+      return List<Offset>.from(points);
+    }
+    if (points.length == 2) {
+      final created = _buildPolylineCreationPoints(
+        start: DrawPoint(x: points.first.dx, y: points.first.dy),
+        end: DrawPoint(x: points.last.dx, y: points.last.dy),
+      );
+      return created
+          .map((point) => Offset(point.x, point.y))
+          .toList(growable: false);
+    }
+    return _simplifyPolylinePoints(points);
+  }
 
   static bool isPolylineSegmentHorizontal(DrawPoint start, DrawPoint end) =>
       _resolvePolylineAxis(Offset(start.x, start.y), Offset(end.x, end.y)) ==
@@ -253,12 +269,13 @@ class ArrowGeometry {
     final offsets = points
         .map((point) => Offset(point.x, point.y))
         .toList(growable: false);
-    final normalized = _simplifyPolylinePoints(offsets);
-    if (normalized.length < 2) {
+    final deduped = _dedupePolylinePoints(offsets);
+    final simplified = _removeRedundantPolylinePoints(deduped);
+    if (simplified.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
     return List<DrawPoint>.unmodifiable(
-      normalized
+      simplified
           .map((point) => DrawPoint(x: point.dx, y: point.dy))
           .toList(growable: false),
     );
@@ -268,10 +285,7 @@ class ArrowGeometry {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
-    final created = points.length == 2
-        ? _buildPolylineCreationPoints(start: points.first, end: points.last)
-        : points;
-    return normalizePolylinePoints(created);
+    return normalizePolylinePoints(points);
   }
 
   static List<DrawPoint> _buildPolylineCreationPoints({
@@ -685,6 +699,21 @@ class ArrowGeometry {
       return routed;
     }
     return _removeRedundantPolylinePoints(routed);
+  }
+
+  static List<Offset> _dedupePolylinePoints(List<Offset> points) {
+    if (points.length < 2) {
+      return points;
+    }
+    final deduped = <Offset>[points.first];
+    for (var i = 1; i < points.length; i++) {
+      final point = points[i];
+      if (_isSamePoint(deduped.last, point)) {
+        continue;
+      }
+      deduped.add(point);
+    }
+    return deduped;
   }
 
   static List<Offset> _routeOrthogonalPolyline(List<Offset> points) {

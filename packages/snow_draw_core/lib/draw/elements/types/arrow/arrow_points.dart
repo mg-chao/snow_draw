@@ -316,7 +316,7 @@ class ArrowPointUtils {
       normalizedPoints: data.points,
     );
     final effective = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(resolved)
+        ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
         : resolved;
     return effective
         .map((point) => DrawPoint(x: point.dx, y: point.dy))

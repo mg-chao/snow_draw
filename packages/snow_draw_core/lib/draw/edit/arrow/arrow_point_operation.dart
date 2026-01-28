@@ -691,7 +691,7 @@ List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
     normalizedPoints: data.points,
   );
   final effective = data.arrowType == ArrowType.polyline
-      ? ArrowGeometry.expandPolylinePoints(resolved)
+      ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
       : resolved;
   return effective
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
@@ -938,6 +938,9 @@ List<DrawPoint> _offsetPolylineEndpointSegment({
   final movedEnd = isHorizontal
       ? DrawPoint(x: end.x, y: target.y)
       : DrawPoint(x: target.x, y: end.y);
+  if (points.length == 2 && segmentIndex == 0) {
+    return [start, movedStart, movedEnd, end];
+  }
   if (segmentIndex == 0) {
     return [start, movedStart, movedEnd, ...points.sublist(2)];
   }
