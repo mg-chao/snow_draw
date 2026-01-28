@@ -10,10 +10,32 @@ const double _edgeEpsilon = 1e-3;
 const double _axisEpsilon = 1e-3;
 const double _bindingGapBase = 6.0;
 const double _minApproachOffset = 12.0;
+const double _autoPointMatchEpsilon = 1e-6;
 
 enum _BindingEdge { top, right, bottom, left }
 
 enum _Axis { horizontal, vertical }
+
+final _polylineBindingAutoPoints = <String, Set<int>>{};
+
+void syncPolylineBindingAutoPoints({
+  required String elementId,
+  required List<DrawPoint> before,
+  required List<DrawPoint> after,
+}) {
+  if (elementId.isEmpty) {
+    return;
+  }
+  final autoPoints = _resolveInsertedPointIndices(before: before, after: after);
+  if (autoPoints.isEmpty) {
+    _polylineBindingAutoPoints.remove(elementId);
+    return;
+  }
+  _polylineBindingAutoPoints[elementId] = autoPoints;
+}
+
+Set<int> resolvePolylineBindingAutoPoints(String elementId) =>
+    _polylineBindingAutoPoints[elementId] ?? const <int>{};
 
 List<DrawPoint> adjustPolylinePointsForBinding({
   required List<DrawPoint> points,
@@ -53,6 +75,42 @@ List<DrawPoint> adjustPolylinePointsForBinding({
   return isStart
       ? adjusted.reversed.toList(growable: false)
       : adjusted;
+}
+
+Set<int> _resolveInsertedPointIndices({
+  required List<DrawPoint> before,
+  required List<DrawPoint> after,
+}) {
+  if (before.isEmpty || after.isEmpty) {
+    return const <int>{};
+  }
+  final used = List<bool>.filled(before.length, false);
+  final inserted = <int>{};
+  for (var i = 0; i < after.length; i++) {
+    final candidate = after[i];
+    var matched = false;
+    for (var j = 0; j < before.length; j++) {
+      if (used[j]) {
+        continue;
+      }
+      if (_pointsMatch(before[j], candidate)) {
+        used[j] = true;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      inserted.add(i);
+    }
+  }
+  return inserted;
+}
+
+bool _pointsMatch(DrawPoint a, DrawPoint b) {
+  final dx = a.x - b.x;
+  final dy = a.y - b.y;
+  return (dx * dx + dy * dy) <=
+      _autoPointMatchEpsilon * _autoPointMatchEpsilon;
 }
 
 _BindingEdge? _resolveBindingEdge(

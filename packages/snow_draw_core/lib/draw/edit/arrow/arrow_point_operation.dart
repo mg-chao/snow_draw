@@ -91,6 +91,8 @@ class ArrowPointOperation extends EditOperation {
     final addableBendControls =
         useVirtualPoints
             ? ArrowPointUtils.resolvePolylineBendControlSegments(
+                elementId: element.id,
+                data: data,
                 rawPoints: rawPoints,
                 segmentPoints: points,
               )
@@ -632,11 +634,17 @@ _ArrowPointComputation _compute({
         final targetElement =
             _findBindingTarget(bindingTargets, binding.elementId);
         if (targetElement != null) {
+          final basePoints = List<DrawPoint>.from(updatedPoints);
           updatedPoints = adjustPolylinePointsForBinding(
             points: updatedPoints,
             binding: binding,
             target: targetElement,
             isStart: index == 0,
+          );
+          syncPolylineBindingAutoPoints(
+            elementId: context.elementId,
+            before: basePoints,
+            after: updatedPoints,
           );
           activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
         }

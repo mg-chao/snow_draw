@@ -325,6 +325,7 @@ ElementState? _applyBindings({
       startBinding: data.startBinding,
       endBinding: data.endBinding,
       elementsById: elementsById,
+      elementId: element.id,
     );
   }
 
@@ -370,6 +371,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
   required Map<String, ElementState> elementsById,
+  required String elementId,
 }) {
   if (points.length < 2) {
     return points;
@@ -403,6 +405,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
         : DrawPoint(x: anchor.x, y: neighbor.y);
   }
 
+  final basePoints = List<DrawPoint>.from(updated);
   var adjusted = updated;
   if (startUpdated && startBinding != null) {
     final target = elementsById[startBinding.elementId];
@@ -426,6 +429,12 @@ List<DrawPoint> _adjustPolylineEndpoints({
       );
     }
   }
+
+  syncPolylineBindingAutoPoints(
+    elementId: elementId,
+    before: basePoints,
+    after: adjusted,
+  );
 
   return adjusted;
 }

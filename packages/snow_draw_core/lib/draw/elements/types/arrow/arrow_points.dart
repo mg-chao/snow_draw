@@ -8,6 +8,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_polyline_binding_adjuster.dart';
 
 enum ArrowPointKind { turning, addable, loopStart, loopEnd }
 
@@ -151,6 +152,8 @@ class ArrowPointUtils {
     final addableBendControls =
         isPolyline
             ? resolvePolylineBendControlSegments(
+                elementId: element.id,
+                data: data,
                 rawPoints: rawPoints,
                 segmentPoints: segmentPoints,
               )
@@ -359,6 +362,8 @@ class ArrowPointUtils {
   }
 
   static List<bool> resolvePolylineBendControlSegments({
+    required String elementId,
+    required ArrowData data,
     required List<DrawPoint> rawPoints,
     required List<DrawPoint> segmentPoints,
   }) {
@@ -370,17 +375,49 @@ class ArrowPointUtils {
     if (rawSegmentCount <= 0) {
       return List<bool>.filled(segmentCount, false);
     }
+    final autoPointIndices =
+        (data.startBinding == null && data.endBinding == null)
+            ? const <int>{}
+            : resolvePolylineBindingAutoPoints(elementId);
+    final userPointIndices = <int>[];
+    for (var i = 0; i < rawPoints.length; i++) {
+      if (i == 0 ||
+          i == rawPoints.length - 1 ||
+          !autoPointIndices.contains(i)) {
+        userPointIndices.add(i);
+      }
+    }
+    if (userPointIndices.length < 2) {
+      return List<bool>.filled(segmentCount, false);
+    }
+
+    final rawToUserSegment =
+        List<int>.filled(rawSegmentCount, 0, growable: false);
+    var userSegmentIndex = 0;
+    for (var rawIndex = 0; rawIndex < rawSegmentCount; rawIndex++) {
+      while (userSegmentIndex + 1 < userPointIndices.length &&
+          rawIndex >= userPointIndices[userSegmentIndex + 1]) {
+        userSegmentIndex++;
+      }
+      rawToUserSegment[rawIndex] = userSegmentIndex;
+    }
+
     final segmentMap = _resolvePolylineSegmentMap(
       rawPoints: rawPoints,
       segmentPoints: segmentPoints,
     );
-    final lastRawSegmentIndex = rawPoints.length - 2;
+    final lastUserSegmentIndex = userPointIndices.length - 2;
     return List<bool>.generate(segmentCount, (index) {
       if (index < 0 || index >= segmentMap.length) {
         return false;
       }
       final rawIndex = segmentMap[index];
-      return rawIndex > 0 && rawIndex < lastRawSegmentIndex;
+      if (rawIndex < 0 || rawIndex >= rawToUserSegment.length) {
+        return false;
+      }
+      final resolvedUserSegment = rawToUserSegment[rawIndex];
+      return resolvedUserSegment > 0 &&
+          resolvedUserSegment < lastUserSegmentIndex;
     });
   }
 

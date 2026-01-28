@@ -157,6 +157,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       allPoints = _adjustPolylineBindingsForCreate(
         state: state,
         points: allPoints,
+        elementId: creatingState.elementId,
         startBinding: startBindingResult.binding,
         endBinding: bindingResult.binding,
       );
@@ -295,6 +296,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       allPoints = _adjustPolylineBindingsForCreate(
         state: state,
         points: allPoints,
+        elementId: creatingState.elementId,
         startBinding: startBindingResult.binding,
         endBinding: bindingResult.binding,
       );
@@ -479,9 +481,11 @@ List<DrawPoint> _resolveFinalArrowPoints({
 List<DrawPoint> _adjustPolylineBindingsForCreate({
   required DrawState state,
   required List<DrawPoint> points,
+  required String elementId,
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
 }) {
+  final basePoints = List<DrawPoint>.from(points);
   var adjusted = List<DrawPoint>.from(points);
   if (startBinding != null) {
     final target = state.domain.document.getElementById(
@@ -509,6 +513,11 @@ List<DrawPoint> _adjustPolylineBindingsForCreate({
       );
     }
   }
+  syncPolylineBindingAutoPoints(
+    elementId: elementId,
+    before: basePoints,
+    after: adjusted,
+  );
   return adjusted;
 }
 
