@@ -9,6 +9,7 @@ import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
+import 'arrow_polyline_binding_adjuster.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -267,10 +268,13 @@ ElementState? _applyBindings({
 
   final rect = element.rect;
   final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-  final startReference = localPoints.length > 1
+  // Polylines handle perpendicular routing separately, so avoid reference-based
+  // snapping that can shift bindings to a different edge.
+  final useReferencePoint = data.arrowType != ArrowType.polyline;
+  final startReference = useReferencePoint && localPoints.length > 1
       ? space.toWorld(localPoints[1])
       : null;
-  final endReference = localPoints.length > 1
+  final endReference = useReferencePoint && localPoints.length > 1
       ? space.toWorld(localPoints[localPoints.length - 2])
       : null;
 
@@ -318,6 +322,9 @@ ElementState? _applyBindings({
       originalPoints: originalPoints,
       startUpdated: startUpdated,
       endUpdated: endUpdated,
+      startBinding: data.startBinding,
+      endBinding: data.endBinding,
+      elementsById: elementsById,
     );
   }
 
@@ -360,6 +367,9 @@ List<DrawPoint> _adjustPolylineEndpoints({
   required List<DrawPoint> originalPoints,
   required bool startUpdated,
   required bool endUpdated,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required Map<String, ElementState> elementsById,
 }) {
   if (points.length < 2) {
     return points;
@@ -393,5 +403,29 @@ List<DrawPoint> _adjustPolylineEndpoints({
         : DrawPoint(x: anchor.x, y: neighbor.y);
   }
 
-  return updated;
+  var adjusted = updated;
+  if (startUpdated && startBinding != null) {
+    final target = elementsById[startBinding.elementId];
+    if (target != null) {
+      adjusted = adjustPolylinePointsForBinding(
+        points: adjusted,
+        binding: startBinding,
+        target: target,
+        isStart: true,
+      );
+    }
+  }
+  if (endUpdated && endBinding != null) {
+    final target = elementsById[endBinding.elementId];
+    if (target != null) {
+      adjusted = adjustPolylinePointsForBinding(
+        points: adjusted,
+        binding: endBinding,
+        target: target,
+        isStart: false,
+      );
+    }
+  }
+
+  return adjusted;
 }

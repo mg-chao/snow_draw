@@ -8,6 +8,7 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
+import '../../elements/types/arrow/arrow_polyline_binding_adjuster.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
@@ -557,13 +558,15 @@ _ArrowPointComputation _compute({
     final isEndpoint = index == 0 || index == basePoints.length - 1;
     if (isEndpoint) {
       final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
-      final referencePoint = basePoints.length > 1
-          ? _toWorldPosition(
-              context.elementRect,
-              context.rotation,
-              basePoints[index == 0 ? 1 : basePoints.length - 2],
-            )
-          : null;
+      final referencePoint = isPolyline
+          ? null
+          : basePoints.length > 1
+              ? _toWorldPosition(
+                  context.elementRect,
+                  context.rotation,
+                  basePoints[index == 0 ? 1 : basePoints.length - 2],
+                )
+              : null;
       final candidate = ArrowBindingUtils.resolveBindingCandidate(
         worldPoint: _toWorldPosition(
           context.elementRect,
@@ -602,6 +605,20 @@ _ArrowPointComputation _compute({
         target: target,
       );
       activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
+      final binding = index == 0 ? nextStartBinding : nextEndBinding;
+      if (binding != null) {
+        final targetElement =
+            _findBindingTarget(bindingTargets, binding.elementId);
+        if (targetElement != null) {
+          updatedPoints = adjustPolylinePointsForBinding(
+            points: updatedPoints,
+            binding: binding,
+            target: targetElement,
+            isStart: index == 0,
+          );
+          activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
+        }
+      }
     } else {
       updatedPoints = List<DrawPoint>.from(basePoints);
       updatedPoints[index] = target;
@@ -703,6 +720,15 @@ List<ElementState> _resolveBindingTargets(
     targets.add(element);
   }
   return targets;
+}
+
+ElementState? _findBindingTarget(List<ElementState> targets, String targetId) {
+  for (final target in targets) {
+    if (target.id == targetId) {
+      return target;
+    }
+  }
+  return null;
 }
 
 List<ElementState> _resolveBindingTargetsCached({

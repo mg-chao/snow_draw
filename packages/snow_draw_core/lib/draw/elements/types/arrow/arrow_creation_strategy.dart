@@ -17,6 +17,7 @@ import '../arrow/arrow_binding.dart';
 import '../rectangle/rectangle_data.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_polyline_binding_adjuster.dart';
 
 /// Creation strategy for arrow elements (single- and multi-point).
 @immutable
@@ -83,6 +84,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       );
     }
 
+    final isPolyline = elementData.arrowType == ArrowType.polyline;
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
     var startPosition = snapToGrid
@@ -104,7 +106,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: startPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.startBinding,
-      referencePoint: adjustedCurrent,
+      referencePoint: isPolyline ? null : adjustedCurrent,
     );
     startPosition = startBindingResult.position;
 
@@ -137,12 +139,11 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: adjustedCurrent,
       snappingMode: snappingMode,
       preferredBinding: elementData.endBinding,
-      referencePoint: segmentStart,
+      referencePoint: isPolyline ? null : segmentStart,
     );
     adjustedCurrent = bindingResult.position;
 
-    final isPolyline = elementData.arrowType == ArrowType.polyline;
-    final allPoints = isPolyline
+    var allPoints = isPolyline
         ? _resolvePolylineCreatePoints(
             start:
                 fixedPoints.isNotEmpty ? fixedPoints.first : startPosition,
@@ -152,6 +153,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             fixedPoints: fixedPoints,
             currentPoint: adjustedCurrent,
           );
+    if (isPolyline) {
+      allPoints = _adjustPolylineBindingsForCreate(
+        state: state,
+        points: allPoints,
+        startBinding: startBindingResult.binding,
+        endBinding: bindingResult.binding,
+      );
+    }
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
@@ -195,6 +204,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       return null;
     }
 
+    final isPolyline = elementData.arrowType == ArrowType.polyline;
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
     var adjustedPosition = snapToGrid
@@ -216,7 +226,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: startPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.startBinding,
-      referencePoint: adjustedPosition,
+      referencePoint: isPolyline ? null : adjustedPosition,
     );
     startPosition = startBindingResult.position;
 
@@ -246,11 +256,9 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: adjustedPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.endBinding,
-      referencePoint: segmentStart,
+      referencePoint: isPolyline ? null : segmentStart,
     );
     adjustedPosition = bindingResult.position;
-
-    final isPolyline = elementData.arrowType == ArrowType.polyline;
 
     var updatedFixedPoints = fixedPoints;
     if (updatedFixedPoints.isEmpty ||
@@ -270,7 +278,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         updatedFixedPoints.last,
       ]);
     }
-    final allPoints = isPolyline
+    var allPoints = isPolyline
         ? _resolvePolylineCreatePoints(
             start: updatedFixedPoints.isNotEmpty
                 ? updatedFixedPoints.first
@@ -283,6 +291,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             fixedPoints: updatedFixedPoints,
             currentPoint: adjustedPosition,
           );
+    if (isPolyline) {
+      allPoints = _adjustPolylineBindingsForCreate(
+        state: state,
+        points: allPoints,
+        startBinding: startBindingResult.binding,
+        endBinding: bindingResult.binding,
+      );
+    }
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
@@ -326,15 +342,20 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final minSize = config.element.minCreateSize;
     final finishTolerance = config.selection.interaction.handleTolerance;
     final isPolyline = data.arrowType == ArrowType.polyline;
-    final rawPoints = creatingState.isPointCreation
-        ? _resolveFinalArrowPoints(
-            interaction: creatingState,
-            finishTolerance: finishTolerance,
-          )
-        : _resolveArrowWorldPoints(
+    final rawPoints = isPolyline
+        ? _resolveArrowWorldPoints(
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
-          );
+          )
+        : creatingState.isPointCreation
+            ? _resolveFinalArrowPoints(
+                interaction: creatingState,
+                finishTolerance: finishTolerance,
+              )
+            : _resolveArrowWorldPoints(
+                rect: creatingState.currentRect,
+                normalizedPoints: data.points,
+              );
     final finalPoints = isPolyline
         ? _resolvePolylineFinalPoints(rawPoints)
         : rawPoints;
@@ -420,9 +441,10 @@ List<DrawPoint> _resolvePolylineFinalPoints(List<DrawPoint> points) {
   if (points.length < 2) {
     return points;
   }
-  return ArrowGeometry.ensurePolylineCreationPoints(
-    [points.first, points.last],
-  );
+  if (points.length == 2) {
+    return ArrowGeometry.ensurePolylineCreationPoints(points);
+  }
+  return ArrowGeometry.normalizePolylinePoints(points);
 }
 
 List<DrawPoint> _resolveFinalArrowPoints({
@@ -452,6 +474,42 @@ List<DrawPoint> _resolveFinalArrowPoints({
   }
   points.add(currentPoint);
   return points;
+}
+
+List<DrawPoint> _adjustPolylineBindingsForCreate({
+  required DrawState state,
+  required List<DrawPoint> points,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
+  var adjusted = List<DrawPoint>.from(points);
+  if (startBinding != null) {
+    final target = state.domain.document.getElementById(
+      startBinding.elementId,
+    );
+    if (target != null) {
+      adjusted = adjustPolylinePointsForBinding(
+        points: adjusted,
+        binding: startBinding,
+        target: target,
+        isStart: true,
+      );
+    }
+  }
+  if (endBinding != null) {
+    final target = state.domain.document.getElementById(
+      endBinding.elementId,
+    );
+    if (target != null) {
+      adjusted = adjustPolylinePointsForBinding(
+        points: adjusted,
+        binding: endBinding,
+        target: target,
+        isStart: false,
+      );
+    }
+  }
+  return adjusted;
 }
 
 List<DrawPoint> _resolveArrowWorldPoints({
