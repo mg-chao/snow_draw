@@ -72,7 +72,14 @@ class ArrowPointOperation extends EditOperation {
       );
     }
     final data = element.data as ArrowData;
-    final points = _resolveWorldPoints(element, data);
+    final useVirtualPoints =
+        data.arrowType == ArrowType.polyline &&
+        typedParams.pointKind == ArrowPointKind.addable;
+    final points = _resolveWorldPoints(
+      element,
+      data,
+      includeVirtual: useVirtualPoints,
+    );
     if (points.length < 2) {
       throw const EditMissingDataError(
         dataName: 'arrow points',
@@ -685,13 +692,20 @@ _ArrowPointComputation _compute({
 }
 
 
-List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
+List<DrawPoint> _resolveWorldPoints(
+  ElementState element,
+  ArrowData data, {
+  bool includeVirtual = false,
+}) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );
   final effective = data.arrowType == ArrowType.polyline
-      ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
+      ? ArrowGeometry.expandPolylinePoints(
+          resolved,
+          includeVirtual: includeVirtual,
+        )
       : resolved;
   return effective
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
