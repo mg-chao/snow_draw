@@ -72,9 +72,14 @@ List<DrawPoint> adjustPolylinePointsForBinding({
     approachOffset: _resolveApproachOffset(target),
   );
 
-  return isStart
+  final resolved = isStart
       ? adjusted.reversed.toList(growable: false)
       : adjusted;
+  return _balanceVerticalEndpointSegments(
+    points: resolved,
+    rect: rect,
+    edge: edge,
+  );
 }
 
 Set<int> _resolveInsertedPointIndices({
@@ -182,6 +187,12 @@ List<DrawPoint> _adjustPolylineEnd({
   final neighbor = points[neighborIndex];
 
   final approach = _offsetForEdge(end, edge, approachOffset);
+  final detourYOverride = _resolveBalancedDetourY(
+    start: neighbor,
+    end: end,
+    rect: rect,
+    edge: edge,
+  );
   final preferredFirstAxis = _preferredAxisForEdge(edge);
   final path = _buildOrthogonalPath(
     start: neighbor,
@@ -190,6 +201,7 @@ List<DrawPoint> _adjustPolylineEnd({
     detourOffset: approachOffset,
     edge: edge,
     preferredFirstAxis: preferredFirstAxis,
+    detourYOverride: detourYOverride,
   );
 
   final updated = <DrawPoint>[
@@ -229,6 +241,7 @@ List<DrawPoint> _buildOrthogonalPath({
   required double detourOffset,
   required _BindingEdge edge,
   _Axis? preferredFirstAxis,
+  double? detourYOverride,
 }) {
   if (_isAxisAligned(start, end) &&
       !_segmentIntersectsRect(start, end, obstacle)) {
@@ -263,9 +276,12 @@ List<DrawPoint> _buildOrthogonalPath({
   }
 
   if (edge == _BindingEdge.top || edge == _BindingEdge.bottom) {
-    final detourY = _resolveDetourY(start, obstacle, detourOffset);
+    final detourY =
+        detourYOverride ?? _resolveDetourY(start, obstacle, detourOffset);
     // Favor the bound edge side when detouring to keep the approach perpendicular.
-    final outsideX = _resolveDetourX(end, obstacle, detourOffset);
+    final outsideX = detourYOverride == null
+        ? _resolveDetourX(end, obstacle, detourOffset)
+        : end.x;
     return [
       start,
       DrawPoint(x: start.x, y: detourY),
@@ -346,6 +362,99 @@ double _resolveDetourX(DrawPoint reference, DrawRect rect, double offset) =>
 
 double _resolveDetourY(DrawPoint start, DrawRect rect, double offset) =>
     start.y >= rect.centerY ? rect.maxY + offset : rect.minY - offset;
+
+List<DrawPoint> _balanceVerticalEndpointSegments({
+  required List<DrawPoint> points,
+  required DrawRect rect,
+  required _BindingEdge edge,
+}) {
+  if (edge != _BindingEdge.top && edge != _BindingEdge.bottom) {
+    return points;
+  }
+  if (points.length != 4) {
+    return points;
+  }
+
+  final start = points[0];
+  final mid1 = points[1];
+  final mid2 = points[2];
+  final end = points[3];
+
+  final startVertical = (start.x - mid1.x).abs() <= _axisEpsilon;
+  final middleHorizontal = (mid1.y - mid2.y).abs() <= _axisEpsilon;
+  final endVertical = (mid2.x - end.x).abs() <= _axisEpsilon;
+  if (!startVertical || !middleHorizontal || !endVertical) {
+    return points;
+  }
+
+  final endpointsOutside = switch (edge) {
+    _BindingEdge.top =>
+      start.y <= rect.minY - _axisEpsilon &&
+          end.y <= rect.minY - _axisEpsilon,
+    _BindingEdge.bottom =>
+      start.y >= rect.maxY + _axisEpsilon &&
+          end.y >= rect.maxY + _axisEpsilon,
+    _ => false,
+  };
+  if (!endpointsOutside) {
+    return points;
+  }
+
+  final midY = (start.y + end.y) / 2;
+  final midpointOutside = switch (edge) {
+    _BindingEdge.top => midY < rect.minY - _axisEpsilon,
+    _BindingEdge.bottom => midY > rect.maxY + _axisEpsilon,
+    _ => false,
+  };
+  if (!midpointOutside) {
+    return points;
+  }
+
+  if ((mid1.y - midY).abs() <= _axisEpsilon &&
+      (mid2.y - midY).abs() <= _axisEpsilon) {
+    return points;
+  }
+
+  return [
+    start,
+    DrawPoint(x: mid1.x, y: midY),
+    DrawPoint(x: mid2.x, y: midY),
+    end,
+  ];
+}
+
+double? _resolveBalancedDetourY({
+  required DrawPoint start,
+  required DrawPoint end,
+  required DrawRect rect,
+  required _BindingEdge edge,
+}) {
+  if (edge != _BindingEdge.top && edge != _BindingEdge.bottom) {
+    return null;
+  }
+  final startOutside = switch (edge) {
+    _BindingEdge.top => start.y <= rect.minY - _axisEpsilon,
+    _BindingEdge.bottom => start.y >= rect.maxY + _axisEpsilon,
+    _ => false,
+  };
+  final endOutside = switch (edge) {
+    _BindingEdge.top => end.y <= rect.minY - _axisEpsilon,
+    _BindingEdge.bottom => end.y >= rect.maxY + _axisEpsilon,
+    _ => false,
+  };
+  if (!startOutside || !endOutside) {
+    return null;
+  }
+
+  final midpoint = (start.y + end.y) / 2;
+  return switch (edge) {
+    _BindingEdge.top =>
+      midpoint < rect.minY - _axisEpsilon ? midpoint : null,
+    _BindingEdge.bottom =>
+      midpoint > rect.maxY + _axisEpsilon ? midpoint : null,
+    _ => null,
+  };
+}
 
 double _resolveApproachOffset(ElementState target) {
   final data = target.data;
