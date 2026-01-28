@@ -54,11 +54,13 @@ class ArrowPointOverlay {
     required this.turningPoints,
     required this.addablePoints,
     required this.loopPoints,
+    required this.addableBendControls,
   });
 
   final List<ArrowPointHandle> turningPoints;
   final List<ArrowPointHandle> addablePoints;
   final List<ArrowPointHandle> loopPoints;
+  final List<bool> addableBendControls;
 
   bool get hasLoop => loopPoints.isNotEmpty;
 }
@@ -76,6 +78,7 @@ class ArrowPointUtils {
         turningPoints: [],
         addablePoints: [],
         loopPoints: [],
+        addableBendControls: [],
       );
     }
 
@@ -85,6 +88,7 @@ class ArrowPointUtils {
         turningPoints: [],
         addablePoints: [],
         loopPoints: [],
+        addableBendControls: [],
       );
     }
 
@@ -144,6 +148,13 @@ class ArrowPointUtils {
         ),
       );
     }
+    final addableBendControls =
+        isPolyline
+            ? resolvePolylineBendControlSegments(
+                rawPoints: rawPoints,
+                segmentPoints: segmentPoints,
+              )
+            : List<bool>.filled(segmentPoints.length - 1, false);
 
     final loopPoints = <ArrowPointHandle>[];
     if (loopActive) {
@@ -170,6 +181,7 @@ class ArrowPointUtils {
       turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
       addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
       loopPoints: List<ArrowPointHandle>.unmodifiable(loopPoints),
+      addableBendControls: List<bool>.unmodifiable(addableBendControls),
     );
   }
 
@@ -344,6 +356,76 @@ class ArrowPointUtils {
     return expanded
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
+  }
+
+  static List<bool> resolvePolylineBendControlSegments({
+    required List<DrawPoint> rawPoints,
+    required List<DrawPoint> segmentPoints,
+  }) {
+    final segmentCount = segmentPoints.length - 1;
+    if (segmentCount <= 0) {
+      return const [];
+    }
+    final rawSegmentCount = rawPoints.length - 1;
+    if (rawSegmentCount <= 0) {
+      return List<bool>.filled(segmentCount, false);
+    }
+    final segmentMap = _resolvePolylineSegmentMap(
+      rawPoints: rawPoints,
+      segmentPoints: segmentPoints,
+    );
+    final lastRawSegmentIndex = rawPoints.length - 2;
+    return List<bool>.generate(segmentCount, (index) {
+      if (index < 0 || index >= segmentMap.length) {
+        return false;
+      }
+      final rawIndex = segmentMap[index];
+      return rawIndex > 0 && rawIndex < lastRawSegmentIndex;
+    });
+  }
+
+  static List<int> _resolvePolylineSegmentMap({
+    required List<DrawPoint> rawPoints,
+    required List<DrawPoint> segmentPoints,
+  }) {
+    final segmentCount = segmentPoints.length - 1;
+    final mapping = List<int>.filled(segmentCount, -1);
+    if (rawPoints.length < 2 || segmentCount <= 0) {
+      return mapping;
+    }
+    const epsilon = 1e-6;
+    bool matches(DrawPoint a, DrawPoint b) =>
+        (a.x - b.x).abs() <= epsilon && (a.y - b.y).abs() <= epsilon;
+
+    var expandedIndex = 0;
+    for (var rawIndex = 0; rawIndex < rawPoints.length - 1; rawIndex++) {
+      final start = rawPoints[rawIndex];
+      while (expandedIndex < segmentPoints.length &&
+          !matches(segmentPoints[expandedIndex], start)) {
+        expandedIndex++;
+      }
+      if (expandedIndex >= segmentPoints.length - 1) {
+        break;
+      }
+
+      final end = rawPoints[rawIndex + 1];
+      var endIndex = expandedIndex + 1;
+      while (endIndex < segmentPoints.length &&
+          !matches(segmentPoints[endIndex], end)) {
+        endIndex++;
+      }
+      if (endIndex >= segmentPoints.length) {
+        break;
+      }
+
+      for (var segmentIndex = expandedIndex;
+          segmentIndex < endIndex;
+          segmentIndex++) {
+        mapping[segmentIndex] = rawIndex;
+      }
+      expandedIndex = endIndex;
+    }
+    return mapping;
   }
 
   static DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {

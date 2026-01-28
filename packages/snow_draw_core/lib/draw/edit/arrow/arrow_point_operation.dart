@@ -72,6 +72,7 @@ class ArrowPointOperation extends EditOperation {
       );
     }
     final data = element.data as ArrowData;
+    final rawPoints = _resolveWorldPoints(element, data);
     final useVirtualPoints =
         data.arrowType == ArrowType.polyline &&
         typedParams.pointKind == ArrowPointKind.addable;
@@ -86,6 +87,19 @@ class ArrowPointOperation extends EditOperation {
         operationName: 'ArrowPointOperation.createContext',
       );
     }
+
+    final addableBendControls =
+        useVirtualPoints
+            ? ArrowPointUtils.resolvePolylineBendControlSegments(
+                rawPoints: rawPoints,
+                segmentPoints: points,
+              )
+            : const <bool>[];
+    final isBendControlSegment =
+        useVirtualPoints &&
+        typedParams.pointIndex >= 0 &&
+        typedParams.pointIndex < addableBendControls.length &&
+        addableBendControls[typedParams.pointIndex];
 
     final startBounds = requireSelectionBounds(
       selectionData: SelectionDataComputer.compute(state),
@@ -120,6 +134,7 @@ class ArrowPointOperation extends EditOperation {
       arrowType: data.arrowType,
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
+      isBendControlSegment: isBendControlSegment,
       dragOffset: dragOffset,
       bindingTargetCache: BindingTargetCache(),
     );
@@ -404,6 +419,7 @@ final class ArrowPointEditContext extends EditContext {
     required this.arrowType,
     required this.pointKind,
     required this.pointIndex,
+    required this.isBendControlSegment,
     required this.dragOffset,
     required BindingTargetCache bindingTargetCache,
   }) : _bindingTargetCache = bindingTargetCache;
@@ -415,6 +431,7 @@ final class ArrowPointEditContext extends EditContext {
   final ArrowType arrowType;
   final ArrowPointKind pointKind;
   final int pointIndex;
+  final bool isBendControlSegment;
   final DrawPoint dragOffset;
   final BindingTargetCache _bindingTargetCache;
 }
@@ -481,9 +498,7 @@ _ArrowPointComputation _compute({
       );
     }
     if (isPolyline) {
-      final isBendControl =
-          context.pointIndex > 0 &&
-          context.pointIndex < basePoints.length - 2;
+      final isBendControl = context.isBendControlSegment;
       if (!nextDidInsert && !isBendControl) {
         final distanceSq = currentPosition.distanceSquared(
           context.startPosition,

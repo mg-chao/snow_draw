@@ -401,9 +401,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final arrowData = effectiveElement.data as ArrowData;
     final isPolyline = arrowData.arrowType == ArrowType.polyline;
-    final lastSegmentIndex = overlay.addablePoints.isEmpty
-        ? -1
-        : overlay.addablePoints.length - 1;
+    final addableBendControls = overlay.addableBendControls;
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
@@ -412,7 +410,10 @@ class DynamicCanvasPainter extends CustomPainter {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
       final isBendControl =
-          isPolyline && handle.index > 0 && handle.index < lastSegmentIndex;
+          isPolyline &&
+          handle.index >= 0 &&
+          handle.index < addableBendControls.length &&
+          addableBendControls[handle.index];
       final fillPaint = isBendControl
           ? turningFillPaint
           : isHighlighted
