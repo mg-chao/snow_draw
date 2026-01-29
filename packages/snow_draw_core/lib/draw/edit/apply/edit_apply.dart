@@ -4,11 +4,14 @@ import 'package:meta/meta.dart';
 
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
+import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
+import '../../types/element_style.dart';
 import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
 import '../../types/resize_mode.dart';
@@ -187,6 +190,23 @@ class EditApply {
           resized = resized.copyWith(rect: clampedRect, data: data);
         }
       }
+      if (resized.data is ArrowData) {
+        var data = resized.data as ArrowData;
+        final fixedSegments = data.fixedSegments;
+        if (data.arrowType == ArrowType.elbow &&
+            fixedSegments != null &&
+            fixedSegments.isNotEmpty) {
+          final scaled = _scaleFixedSegments(
+            fixedSegments: fixedSegments,
+            oldRect: startElement.rect,
+            newRect: resized.rect,
+          );
+          if (scaled != null && !_fixedSegmentsEqual(fixedSegments, scaled)) {
+            data = data.copyWith(fixedSegments: scaled);
+            resized = resized.copyWith(data: data);
+          }
+        }
+      }
       result[id] = resized;
     }
 
@@ -343,4 +363,54 @@ ElementState _applyMultiRotatedResize({
   );
 
   return element.copyWith(rect: newRect);
+}
+
+List<ElbowFixedSegment>? _scaleFixedSegments({
+  required List<ElbowFixedSegment> fixedSegments,
+  required DrawRect oldRect,
+  required DrawRect newRect,
+}) {
+  if (fixedSegments.isEmpty) {
+    return null;
+  }
+  final scaled = fixedSegments
+      .map(
+        (segment) => segment.copyWith(
+          start: _scalePoint(segment.start, oldRect, newRect),
+          end: _scalePoint(segment.end, oldRect, newRect),
+        ),
+      )
+      .toList(growable: false);
+  return List<ElbowFixedSegment>.unmodifiable(scaled);
+}
+
+DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {
+  final oldWidth = oldRect.width;
+  final oldHeight = oldRect.height;
+  final newWidth = newRect.width;
+  final newHeight = newRect.height;
+  final nx = oldWidth == 0 ? 0.0 : (point.x - oldRect.minX) / oldWidth;
+  final ny = oldHeight == 0 ? 0.0 : (point.y - oldRect.minY) / oldHeight;
+  return DrawPoint(
+    x: newRect.minX + nx * newWidth,
+    y: newRect.minY + ny * newHeight,
+  );
+}
+
+bool _fixedSegmentsEqual(
+  List<ElbowFixedSegment> a,
+  List<ElbowFixedSegment> b,
+) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -12,6 +12,7 @@ import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
 import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -1270,12 +1271,61 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         index = context.pointIndex + 1;
       }
     }
+    var isFixed = false;
+    final element = stateView.state.domain.document.getElementById(
+      context.elementId,
+    );
+    final effectiveElement =
+        element == null ? null : stateView.effectiveElement(element);
+    final data = effectiveElement?.data;
+    if (data is ArrowData &&
+        data.arrowType == ArrowType.elbow &&
+        kind == ArrowPointKind.addable) {
+      final segmentIndex = index + 1;
+      isFixed = data.fixedSegments?.any((segment) => segment.index == segmentIndex) ??
+          false;
+    }
     return ArrowPointHandle(
       elementId: context.elementId,
       kind: kind,
       index: index,
       position: DrawPoint.zero,
+      isFixed: isFixed,
     );
+  }
+
+  MouseCursor? _resolveArrowHandleCursor({
+    required DrawState state,
+    required ArrowPointHandle handle,
+  }) {
+    if (handle.kind != ArrowPointKind.addable) {
+      return null;
+    }
+    final element = state.domain.document.getElementById(handle.elementId);
+    if (element == null || element.data is! ArrowData) {
+      return null;
+    }
+    final data = element.data as ArrowData;
+    if (data.arrowType != ArrowType.elbow) {
+      return null;
+    }
+    final points = ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final startIndex = handle.index;
+    final endIndex = startIndex + 1;
+    if (startIndex < 0 || endIndex >= points.length) {
+      return null;
+    }
+    final start = points[startIndex];
+    final end = points[endIndex];
+    final dx = (start.dx - end.dx).abs();
+    final dy = (start.dy - end.dy).abs();
+    final isHorizontal = dy <= dx;
+    return isHorizontal
+        ? SystemMouseCursors.resizeUp
+        : SystemMouseCursors.resizeLeft;
   }
 
   SelectionConfig _resolveSelectionConfig(DrawState state) {
@@ -1571,7 +1621,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
     );
     if (arrowHandle != null) {
-      return _cursorResolver.grabCursor();
+      return _resolveArrowHandleCursor(state: state, handle: arrowHandle) ??
+          _cursorResolver.grabCursor();
     }
 
     final stateView = _buildStateView(state);

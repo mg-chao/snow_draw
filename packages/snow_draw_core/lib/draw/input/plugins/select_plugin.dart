@@ -2,11 +2,14 @@ import '../../actions/draw_actions.dart';
 import '../../edit/core/edit_modifiers.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
+import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_points.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
 import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
+import '../../types/element_style.dart';
 import '../../utils/edit_intent_detector.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
@@ -26,9 +29,15 @@ class SelectPlugin extends DrawInputPlugin {
           PointerCancelInputEvent,
         },
       );
+  static const _doubleClickThreshold = Duration(milliseconds: 500);
+  static const double _doubleClickToleranceMultiplier = 2;
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
+
+  DateTime? _lastArrowHandleClickTime;
+  DrawPoint? _lastArrowHandleClickPosition;
+  ArrowPointHandle? _lastArrowHandleClickHandle;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -90,6 +99,39 @@ class SelectPlugin extends DrawInputPlugin {
     }
 
     final editModifiers = _toEditModifiers(modifiers);
+
+    if (intent is StartArrowPointIntent) {
+      final handle = _resolveArrowHandleForIntent(
+        stateView: stateView,
+        intent: intent,
+        position: position,
+      );
+      final now = DateTime.now();
+      if (handle != null && handle.isFixed && _isDoubleClick(handle, position, now)) {
+        _clearArrowHandleClickState();
+        final doubleClickIntent = StartArrowPointIntent(
+          elementId: intent.elementId,
+          pointKind: intent.pointKind,
+          pointIndex: intent.pointIndex,
+          isDoubleClick: true,
+        );
+        final handledIntent = await _executeIntent(
+          doubleClickIntent,
+          position,
+          editModifiers,
+        );
+        return handledIntent
+            ? handled(message: 'Arrow segment released')
+            : unhandled();
+      }
+      if (handle != null) {
+        _recordArrowHandleClick(handle, position, now);
+      } else {
+        _clearArrowHandleClickState();
+      }
+    } else {
+      _clearArrowHandleClickState();
+    }
 
     if (intent is SelectIntent && intent.deferSelectionForDrag) {
       await dispatch(
@@ -324,5 +366,70 @@ class SelectPlugin extends DrawInputPlugin {
     }
     final element = state.domain.document.getElementById(elementId);
     return element?.typeId == toolTypeId;
+  }
+
+  ArrowPointHandle? _resolveArrowHandleForIntent({
+    required DrawStateView stateView,
+    required StartArrowPointIntent intent,
+    required DrawPoint position,
+  }) {
+    final element = stateView.state.domain.document.getElementById(
+      intent.elementId,
+    );
+    if (element == null || element.data is! ArrowData) {
+      return null;
+    }
+    final data = element.data as ArrowData;
+    final isFixed =
+        data.arrowType == ArrowType.elbow &&
+        intent.pointKind == ArrowPointKind.addable &&
+        (data.fixedSegments?.any((segment) => segment.index == intent.pointIndex + 1) ??
+            false);
+    return ArrowPointHandle(
+      elementId: intent.elementId,
+      kind: intent.pointKind,
+      index: intent.pointIndex,
+      position: position,
+      isFixed: isFixed,
+    );
+  }
+
+  bool _isDoubleClick(
+    ArrowPointHandle handle,
+    DrawPoint position,
+    DateTime now,
+  ) {
+    final lastTime = _lastArrowHandleClickTime;
+    final lastPosition = _lastArrowHandleClickPosition;
+    final lastHandle = _lastArrowHandleClickHandle;
+    if (lastTime == null || lastPosition == null || lastHandle == null) {
+      return false;
+    }
+    if (now.difference(lastTime) > _doubleClickThreshold) {
+      return false;
+    }
+    if (lastHandle != handle) {
+      return false;
+    }
+    final tolerance =
+        selectionConfig.interaction.handleTolerance *
+        _doubleClickToleranceMultiplier;
+    return lastPosition.distanceSquared(position) <= tolerance * tolerance;
+  }
+
+  void _recordArrowHandleClick(
+    ArrowPointHandle handle,
+    DrawPoint position,
+    DateTime now,
+  ) {
+    _lastArrowHandleClickHandle = handle;
+    _lastArrowHandleClickPosition = position;
+    _lastArrowHandleClickTime = now;
+  }
+
+  void _clearArrowHandleClickState() {
+    _lastArrowHandleClickHandle = null;
+    _lastArrowHandleClickPosition = null;
+    _lastArrowHandleClickTime = null;
   }
 }

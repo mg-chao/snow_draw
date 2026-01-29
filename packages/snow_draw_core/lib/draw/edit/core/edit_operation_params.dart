@@ -75,10 +75,12 @@ class ArrowPointOperationParams extends EditOperationParams {
     required this.elementId,
     required this.pointKind,
     required this.pointIndex,
+    this.isDoubleClick = false,
     super.initialSelectionBounds,
   });
 
   final String elementId;
   final ArrowPointKind pointKind;
   final int pointIndex;
+  final bool isDoubleClick;
 }

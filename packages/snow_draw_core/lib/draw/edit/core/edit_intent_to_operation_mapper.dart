@@ -48,6 +48,7 @@ class EditIntentToOperationMapper {
               elementId: arrowIntent.elementId,
               pointKind: arrowIntent.pointKind,
               pointIndex: arrowIntent.pointIndex,
+              isDoubleClick: arrowIntent.isDoubleClick,
             );
           },
         ),

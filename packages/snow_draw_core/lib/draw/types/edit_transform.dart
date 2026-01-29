@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 
@@ -216,10 +217,12 @@ final class RotateTransform extends EditTransform {
 @immutable
 final class ArrowPointTransform extends EditTransform {
   static const _bindingUnset = Object();
+  static const _fixedSegmentsUnset = Object();
 
   const ArrowPointTransform({
     required this.currentPosition,
     required this.points,
+    this.fixedSegments,
     this.startBinding,
     this.endBinding,
     this.activeIndex,
@@ -230,6 +233,7 @@ final class ArrowPointTransform extends EditTransform {
 
   final DrawPoint currentPosition;
   final List<DrawPoint> points;
+  final List<ElbowFixedSegment>? fixedSegments;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
   final int? activeIndex;
@@ -240,6 +244,7 @@ final class ArrowPointTransform extends EditTransform {
   ArrowPointTransform copyWith({
     DrawPoint? currentPosition,
     List<DrawPoint>? points,
+    Object? fixedSegments = _fixedSegmentsUnset,
     Object? startBinding = _bindingUnset,
     Object? endBinding = _bindingUnset,
     int? activeIndex,
@@ -249,6 +254,9 @@ final class ArrowPointTransform extends EditTransform {
   }) => ArrowPointTransform(
     currentPosition: currentPosition ?? this.currentPosition,
     points: points ?? this.points,
+    fixedSegments: fixedSegments == _fixedSegmentsUnset
+        ? this.fixedSegments
+        : fixedSegments as List<ElbowFixedSegment>?,
     startBinding: startBinding == _bindingUnset
         ? this.startBinding
         : startBinding as ArrowBinding?,
@@ -276,6 +284,7 @@ final class ArrowPointTransform extends EditTransform {
       other is ArrowPointTransform &&
           other.currentPosition == currentPosition &&
           _pointsEqual(other.points, points) &&
+          _fixedSegmentsEqual(other.fixedSegments, fixedSegments) &&
           other.startBinding == startBinding &&
           other.endBinding == endBinding &&
           other.activeIndex == activeIndex &&
@@ -287,6 +296,7 @@ final class ArrowPointTransform extends EditTransform {
   int get hashCode => Object.hash(
     currentPosition,
     Object.hashAll(points),
+    fixedSegments == null ? null : Object.hashAll(fixedSegments!),
     startBinding,
     endBinding,
     activeIndex,
@@ -381,6 +391,27 @@ bool _listEquals(List<EditTransform> a, List<EditTransform> b) {
 bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   if (identical(a, b)) {
     return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _fixedSegmentsEqual(
+  List<ElbowFixedSegment>? a,
+  List<ElbowFixedSegment>? b,
+) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return a == null && b == null;
   }
   if (a.length != b.length) {
     return false;

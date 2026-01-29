@@ -10,12 +10,16 @@ import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
 import 'arrow_binding.dart';
+import 'elbow/elbow_fixed_segment.dart';
 
 @immutable
 final class ArrowData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
   static const _startBindingUnset = Object();
   static const _endBindingUnset = Object();
+  static const _fixedSegmentsUnset = Object();
+  static const _startIsSpecialUnset = Object();
+  static const _endIsSpecialUnset = Object();
 
   const ArrowData({
     this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
@@ -27,6 +31,9 @@ final class ArrowData extends ElementData
     this.endArrowhead = ConfigDefaults.defaultEndArrowhead,
     this.startBinding,
     this.endBinding,
+    this.fixedSegments,
+    this.startIsSpecial,
+    this.endIsSpecial,
   });
 
   factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
@@ -52,6 +59,9 @@ final class ArrowData extends ElementData
     ),
     startBinding: _decodeBinding(json['startBinding']),
     endBinding: _decodeBinding(json['endBinding']),
+    fixedSegments: _decodeFixedSegments(json['fixedSegments']),
+    startIsSpecial: json['startIsSpecial'] as bool?,
+    endIsSpecial: json['endIsSpecial'] as bool?,
   );
 
   static const typeIdToken = ElementTypeId<ArrowData>('arrow');
@@ -66,6 +76,9 @@ final class ArrowData extends ElementData
   final ArrowheadStyle endArrowhead;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final List<ElbowFixedSegment>? fixedSegments;
+  final bool? startIsSpecial;
+  final bool? endIsSpecial;
 
   @override
   ElementTypeId<ArrowData> get typeId => ArrowData.typeIdToken;
@@ -80,6 +93,9 @@ final class ArrowData extends ElementData
     ArrowheadStyle? endArrowhead,
     Object? startBinding = _startBindingUnset,
     Object? endBinding = _endBindingUnset,
+    Object? fixedSegments = _fixedSegmentsUnset,
+    Object? startIsSpecial = _startIsSpecialUnset,
+    Object? endIsSpecial = _endIsSpecialUnset,
   }) => ArrowData(
     points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
     color: color ?? this.color,
@@ -94,6 +110,15 @@ final class ArrowData extends ElementData
     endBinding: endBinding == _endBindingUnset
         ? this.endBinding
         : endBinding as ArrowBinding?,
+    fixedSegments: fixedSegments == _fixedSegmentsUnset
+        ? this.fixedSegments
+        : _coerceFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
+    startIsSpecial: startIsSpecial == _startIsSpecialUnset
+        ? this.startIsSpecial
+        : startIsSpecial as bool?,
+    endIsSpecial: endIsSpecial == _endIsSpecialUnset
+        ? this.endIsSpecial
+        : endIsSpecial as bool?,
   );
 
   @override
@@ -128,6 +153,9 @@ final class ArrowData extends ElementData
     'endArrowhead': endArrowhead.name,
     'startBinding': startBinding?.toJson(),
     'endBinding': endBinding?.toJson(),
+    'fixedSegments': fixedSegments?.map((segment) => segment.toJson()).toList(),
+    'startIsSpecial': startIsSpecial,
+    'endIsSpecial': endIsSpecial,
   };
 
   static List<DrawPoint> _decodePoints(Object? rawPoints) {
@@ -173,7 +201,10 @@ final class ArrowData extends ElementData
           other.startArrowhead == startArrowhead &&
           other.endArrowhead == endArrowhead &&
           other.startBinding == startBinding &&
-          other.endBinding == endBinding;
+          other.endBinding == endBinding &&
+          _fixedSegmentsEqual(other.fixedSegments, fixedSegments) &&
+          other.startIsSpecial == startIsSpecial &&
+          other.endIsSpecial == endIsSpecial;
 
   @override
   int get hashCode => Object.hash(
@@ -186,9 +217,33 @@ final class ArrowData extends ElementData
     endArrowhead,
     startBinding,
     endBinding,
+    fixedSegments == null ? null : Object.hashAll(fixedSegments!),
+    startIsSpecial,
+    endIsSpecial,
   );
 
   static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _fixedSegmentsEqual(
+    List<ElbowFixedSegment>? a,
+    List<ElbowFixedSegment>? b,
+  ) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a == null || b == null) {
+      return a == null && b == null;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -208,5 +263,40 @@ final class ArrowData extends ElementData
       return ArrowBinding.fromJson(raw.cast<String, dynamic>());
     }
     return null;
+  }
+
+  static List<ElbowFixedSegment>? _decodeFixedSegments(Object? raw) {
+    if (raw is! List) {
+      return null;
+    }
+    final segments = <ElbowFixedSegment>[];
+    for (final entry in raw) {
+      if (entry is Map<String, dynamic>) {
+        try {
+          segments.add(ElbowFixedSegment.fromJson(entry));
+        } on FormatException {
+          // Skip invalid segment entries.
+        }
+      } else if (entry is Map) {
+        try {
+          segments.add(ElbowFixedSegment.fromJson(entry.cast<String, dynamic>()));
+        } on FormatException {
+          // Skip invalid segment entries.
+        }
+      }
+    }
+    if (segments.isEmpty) {
+      return null;
+    }
+    return List<ElbowFixedSegment>.unmodifiable(segments);
+  }
+
+  static List<ElbowFixedSegment>? _coerceFixedSegments(
+    List<ElbowFixedSegment>? segments,
+  ) {
+    if (segments == null || segments.isEmpty) {
+      return null;
+    }
+    return List<ElbowFixedSegment>.unmodifiable(segments);
   }
 }

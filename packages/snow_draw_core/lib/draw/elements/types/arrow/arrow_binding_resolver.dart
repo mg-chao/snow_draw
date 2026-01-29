@@ -9,7 +9,7 @@ import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
-import 'elbow/elbow_router.dart';
+import 'elbow/elbow_editing.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -312,25 +312,38 @@ ElementState? _applyBindings({
   }
 
   if (data.arrowType == ArrowType.elbow) {
-    final routed = routeElbowArrowForElement(
+    final updated = computeElbowEdit(
       element: element,
       data: data,
       elementsById: elementsById,
-      startOverride: localPoints.first,
-      endOverride: localPoints.last,
+      localPointsOverride: localPoints,
+      fixedSegmentsOverride: data.fixedSegments,
+      startBindingOverride: data.startBinding,
+      endBindingOverride: data.endBinding,
     );
     final result = computeArrowRectAndPoints(
-      localPoints: routed.localPoints,
+      localPoints: updated.localPoints,
       oldRect: rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
       strokeWidth: data.strokeWidth,
     );
+    final transformedFixedSegments = transformFixedSegments(
+      segments: updated.fixedSegments,
+      oldRect: rect,
+      newRect: result.rect,
+      rotation: element.rotation,
+    );
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: result.localPoints,
       rect: result.rect,
     );
-    final updatedData = data.copyWith(points: normalized);
+    final updatedData = data.copyWith(
+      points: normalized,
+      fixedSegments: transformedFixedSegments,
+      startIsSpecial: updated.startIsSpecial,
+      endIsSpecial: updated.endIsSpecial,
+    );
     if (updatedData == data && result.rect == rect) {
       return null;
     }

@@ -169,6 +169,7 @@ class EditIntentDetector {
       elementId: handle.elementId,
       pointKind: handle.kind,
       pointIndex: handle.index,
+      isDoubleClick: false,
     );
   }
 }
@@ -232,16 +233,18 @@ final class StartArrowPointIntent extends EditIntent {
     required this.elementId,
     required this.pointKind,
     required this.pointIndex,
+    this.isDoubleClick = false,
   });
 
   final String elementId;
   final ArrowPointKind pointKind;
   final int pointIndex;
+  final bool isDoubleClick;
 
   @override
   String toString() =>
       'StartArrowPointIntent(id: $elementId, kind: $pointKind, '
-      'index: $pointIndex)';
+      'index: $pointIndex, doubleClick: $isDoubleClick)';
 }
 
 final class BoxSelectIntent extends EditIntent {

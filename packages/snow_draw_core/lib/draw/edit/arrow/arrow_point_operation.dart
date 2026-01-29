@@ -9,7 +9,8 @@ import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_points.dart';
-import '../../elements/types/arrow/elbow/elbow_router.dart';
+import '../../elements/types/arrow/elbow/elbow_editing.dart';
+import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
@@ -79,6 +80,12 @@ class ArrowPointOperation extends EditOperation {
         operationName: 'ArrowPointOperation.createContext',
       );
     }
+    final fixedSegments = data.fixedSegments ?? const [];
+    final shouldReleaseSegment =
+        typedParams.isDoubleClick &&
+        data.arrowType == ArrowType.elbow &&
+        typedParams.pointKind == ArrowPointKind.addable &&
+        fixedSegments.any((segment) => segment.index == typedParams.pointIndex + 1);
 
     final startBounds = requireSelectionBounds(
       selectionData: SelectionDataComputer.compute(state),
@@ -110,10 +117,12 @@ class ArrowPointOperation extends EditOperation {
       elementRect: element.rect,
       rotation: element.rotation,
       initialPoints: List<DrawPoint>.unmodifiable(points),
+      initialFixedSegments: List<ElbowFixedSegment>.unmodifiable(fixedSegments),
       arrowType: data.arrowType,
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
       dragOffset: dragOffset,
+      releaseFixedSegment: shouldReleaseSegment,
       bindingTargetCache: BindingTargetCache(),
     );
   }
@@ -132,11 +141,37 @@ class ArrowPointOperation extends EditOperation {
       typedContext.elementId,
     );
     final data = element?.data is ArrowData ? element!.data as ArrowData : null;
+    var points = typedContext.initialPoints;
+    var fixedSegments = data?.fixedSegments;
+    var hasChanges = false;
+    if (typedContext.releaseFixedSegment &&
+        element != null &&
+        data != null &&
+        data.arrowType == ArrowType.elbow) {
+      final segmentIndex = typedContext.pointIndex + 1;
+      final updatedFixed = (data.fixedSegments ?? const [])
+          .where((segment) => segment.index != segmentIndex)
+          .toList(growable: false);
+      final updated = computeElbowEdit(
+        element: element,
+        data: data,
+        elementsById: state.domain.document.elementMap,
+        localPointsOverride: points,
+        fixedSegmentsOverride: updatedFixed,
+        startBindingOverride: data.startBinding,
+        endBindingOverride: data.endBinding,
+      );
+      points = updated.localPoints;
+      fixedSegments = updated.fixedSegments;
+      hasChanges = true;
+    }
     return ArrowPointTransform(
       currentPosition: startPosition,
-      points: typedContext.initialPoints,
+      points: points,
+      fixedSegments: fixedSegments,
       startBinding: data?.startBinding,
       endBinding: data?.endBinding,
+      hasChanges: hasChanges,
     );
   }
 
@@ -157,6 +192,9 @@ class ArrowPointOperation extends EditOperation {
       transform,
       operationName: 'ArrowPointOperation.update',
     );
+    if (typedContext.releaseFixedSegment) {
+      return EditUpdateResult<EditTransform>(transform: typedTransform);
+    }
 
     var localPosition = _toLocalPosition(
       typedContext.elementRect,
@@ -223,6 +261,7 @@ class ArrowPointOperation extends EditOperation {
     final nextTransform = typedTransform.copyWith(
       currentPosition: localPosition,
       points: result.points,
+      fixedSegments: result.fixedSegments,
       activeIndex: result.activeIndex,
       didInsert: result.didInsert,
       shouldDelete: result.shouldDelete,
@@ -280,36 +319,62 @@ class ArrowPointOperation extends EditOperation {
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
     final result = data.arrowType == ArrowType.elbow
-        ? computeArrowRectAndPoints(
-            localPoints:
-                routeElbowArrowForElement(
-                  element: element,
-                  data: dataWithBindings,
-                  elementsById: state.domain.document.elementMap,
-                  startOverride: points.first,
-                  endOverride: points.last,
-                ).localPoints,
-            oldRect: typedContext.elementRect,
-            rotation: typedContext.rotation,
-            arrowType: data.arrowType,
-            strokeWidth: data.strokeWidth,
-          )
-        : computeArrowRectAndPoints(
+        ? () {
+            final fixedSegments =
+                typedTransform.fixedSegments ?? data.fixedSegments;
+            final updated = computeElbowEdit(
+              element: element,
+              data: dataWithBindings,
+              elementsById: state.domain.document.elementMap,
+              localPointsOverride: points,
+              fixedSegmentsOverride: fixedSegments,
+              startBindingOverride: typedTransform.startBinding,
+              endBindingOverride: typedTransform.endBinding,
+            );
+            final rectAndPoints = computeArrowRectAndPoints(
+              localPoints: updated.localPoints,
+              oldRect: typedContext.elementRect,
+              rotation: typedContext.rotation,
+              arrowType: data.arrowType,
+              strokeWidth: data.strokeWidth,
+            );
+            final transformedFixedSegments = transformFixedSegments(
+              segments: updated.fixedSegments,
+              oldRect: typedContext.elementRect,
+              newRect: rectAndPoints.rect,
+              rotation: typedContext.rotation,
+            );
+            return (
+              rectAndPoints,
+              transformedFixedSegments,
+              updated,
+            );
+          }()
+        : (computeArrowRectAndPoints(
             localPoints: points,
             oldRect: typedContext.elementRect,
             rotation: typedContext.rotation,
             arrowType: data.arrowType,
             strokeWidth: data.strokeWidth,
-          );
+          ), null, null);
 
+    final rectAndPoints = result.$1;
     final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: result.localPoints,
-      rect: result.rect,
+      worldPoints: rectAndPoints.localPoints,
+      rect: rectAndPoints.rect,
     );
 
-    final updatedData = dataWithBindings.copyWith(points: normalized);
+    final updatedData =
+        data.arrowType == ArrowType.elbow && result.$3 != null
+            ? dataWithBindings.copyWith(
+                points: normalized,
+                fixedSegments: result.$2,
+                startIsSpecial: result.$3!.startIsSpecial,
+                endIsSpecial: result.$3!.endIsSpecial,
+              )
+            : dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
-      rect: result.rect,
+      rect: rectAndPoints.rect,
       data: updatedData,
     );
     final updatedElements = EditApply.replaceElementsById(
@@ -360,36 +425,62 @@ class ArrowPointOperation extends EditOperation {
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
     final result = data.arrowType == ArrowType.elbow
-        ? computeArrowRectAndPoints(
-            localPoints:
-                routeElbowArrowForElement(
-                  element: element,
-                  data: dataWithBindings,
-                  elementsById: state.domain.document.elementMap,
-                  startOverride: typedTransform.points.first,
-                  endOverride: typedTransform.points.last,
-                ).localPoints,
-            oldRect: typedContext.elementRect,
-            rotation: typedContext.rotation,
-            arrowType: data.arrowType,
-            strokeWidth: data.strokeWidth,
-          )
-        : computeArrowRectAndPoints(
+        ? () {
+            final fixedSegments =
+                typedTransform.fixedSegments ?? data.fixedSegments;
+            final updated = computeElbowEdit(
+              element: element,
+              data: dataWithBindings,
+              elementsById: state.domain.document.elementMap,
+              localPointsOverride: typedTransform.points,
+              fixedSegmentsOverride: fixedSegments,
+              startBindingOverride: typedTransform.startBinding,
+              endBindingOverride: typedTransform.endBinding,
+            );
+            final rectAndPoints = computeArrowRectAndPoints(
+              localPoints: updated.localPoints,
+              oldRect: typedContext.elementRect,
+              rotation: typedContext.rotation,
+              arrowType: data.arrowType,
+              strokeWidth: data.strokeWidth,
+            );
+            final transformedFixedSegments = transformFixedSegments(
+              segments: updated.fixedSegments,
+              oldRect: typedContext.elementRect,
+              newRect: rectAndPoints.rect,
+              rotation: typedContext.rotation,
+            );
+            return (
+              rectAndPoints,
+              transformedFixedSegments,
+              updated,
+            );
+          }()
+        : (computeArrowRectAndPoints(
             localPoints: typedTransform.points,
             oldRect: typedContext.elementRect,
             rotation: typedContext.rotation,
             arrowType: data.arrowType,
             strokeWidth: data.strokeWidth,
-          );
+          ), null, null);
 
+    final rectAndPoints = result.$1;
     final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: result.localPoints,
-      rect: result.rect,
+      worldPoints: rectAndPoints.localPoints,
+      rect: rectAndPoints.rect,
     );
 
-    final updatedData = dataWithBindings.copyWith(points: normalized);
+    final updatedData =
+        data.arrowType == ArrowType.elbow && result.$3 != null
+            ? dataWithBindings.copyWith(
+                points: normalized,
+                fixedSegments: result.$2,
+                startIsSpecial: result.$3!.startIsSpecial,
+                endIsSpecial: result.$3!.endIsSpecial,
+              )
+            : dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
-      rect: result.rect,
+      rect: rectAndPoints.rect,
       data: updatedData,
     );
 
@@ -413,10 +504,12 @@ final class ArrowPointEditContext extends EditContext {
     required this.elementRect,
     required this.rotation,
     required this.initialPoints,
+    required this.initialFixedSegments,
     required this.arrowType,
     required this.pointKind,
     required this.pointIndex,
     required this.dragOffset,
+    required this.releaseFixedSegment,
     required BindingTargetCache bindingTargetCache,
   }) : _bindingTargetCache = bindingTargetCache;
 
@@ -424,10 +517,12 @@ final class ArrowPointEditContext extends EditContext {
   final DrawRect elementRect;
   final double rotation;
   final List<DrawPoint> initialPoints;
+  final List<ElbowFixedSegment> initialFixedSegments;
   final ArrowType arrowType;
   final ArrowPointKind pointKind;
   final int pointIndex;
   final DrawPoint dragOffset;
+  final bool releaseFixedSegment;
   final BindingTargetCache _bindingTargetCache;
 }
 
@@ -441,6 +536,7 @@ final class _ArrowPointComputation {
     required this.hasChanges,
     required this.startBinding,
     required this.endBinding,
+    required this.fixedSegments,
   });
 
   final List<DrawPoint> points;
@@ -450,6 +546,7 @@ final class _ArrowPointComputation {
   final bool hasChanges;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final List<ElbowFixedSegment>? fixedSegments;
 }
 
 _ArrowPointComputation _compute({
@@ -465,6 +562,7 @@ _ArrowPointComputation _compute({
   required bool allowNewBinding,
 }) {
   final basePoints = List<DrawPoint>.from(context.initialPoints);
+  final baseFixedSegments = context.initialFixedSegments;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
   final handleTolerance =
       config.selection.interaction.handleTolerance / effectiveZoom;
@@ -480,6 +578,101 @@ _ArrowPointComputation _compute({
   int? activeIndex;
 
   if (context.pointKind == ArrowPointKind.addable) {
+    if (context.arrowType == ArrowType.elbow) {
+      if (context.pointIndex < 0 ||
+          context.pointIndex >= basePoints.length - 1) {
+        return _ArrowPointComputation(
+          points: basePoints,
+          didInsert: false,
+          shouldDelete: false,
+          activeIndex: null,
+          hasChanges: false,
+          startBinding: nextStartBinding,
+          endBinding: nextEndBinding,
+          fixedSegments:
+              baseFixedSegments.isEmpty ? null : baseFixedSegments,
+        );
+      }
+      final segmentIndex = context.pointIndex + 1;
+      final start = basePoints[segmentIndex - 1];
+      final end = basePoints[segmentIndex];
+      final dx = (start.x - end.x).abs();
+      final dy = (start.y - end.y).abs();
+      final isHorizontal = dy <= dx;
+
+      final updatedPoints = List<DrawPoint>.from(basePoints);
+      final nextStart = isHorizontal
+          ? DrawPoint(x: start.x, y: target.y)
+          : DrawPoint(x: target.x, y: start.y);
+      final nextEnd = isHorizontal
+          ? DrawPoint(x: end.x, y: target.y)
+          : DrawPoint(x: target.x, y: end.y);
+      updatedPoints[segmentIndex - 1] = nextStart;
+      updatedPoints[segmentIndex] = nextEnd;
+
+      final nextFixedSegments = List<ElbowFixedSegment>.from(
+        baseFixedSegments,
+      );
+      final isBoundarySegment =
+          segmentIndex == 1 || segmentIndex == basePoints.length - 1;
+      final existingIndex = nextFixedSegments.indexWhere(
+        (segment) => segment.index == segmentIndex,
+      );
+      if (isBoundarySegment) {
+        if (existingIndex >= 0) {
+          nextFixedSegments.removeAt(existingIndex);
+        }
+      } else {
+        if (existingIndex >= 0) {
+          final updatedSegment = nextFixedSegments[existingIndex].copyWith(
+            start: nextStart,
+            end: nextEnd,
+          );
+          nextFixedSegments[existingIndex] = updatedSegment;
+        } else {
+          nextFixedSegments.add(
+            ElbowFixedSegment(
+              index: segmentIndex,
+              start: nextStart,
+              end: nextEnd,
+            ),
+          );
+        }
+        final previousIndex = nextFixedSegments.indexWhere(
+          (segment) => segment.index == segmentIndex - 1,
+        );
+        if (previousIndex >= 0) {
+          final previous = nextFixedSegments[previousIndex];
+          nextFixedSegments[previousIndex] = previous.copyWith(end: nextStart);
+        }
+        final nextIndex = nextFixedSegments.indexWhere(
+          (segment) => segment.index == segmentIndex + 1,
+        );
+        if (nextIndex >= 0) {
+          final next = nextFixedSegments[nextIndex];
+          nextFixedSegments[nextIndex] = next.copyWith(start: nextEnd);
+        }
+      }
+
+      final fixedSegmentsResult = nextFixedSegments.isEmpty
+          ? null
+          : List<ElbowFixedSegment>.unmodifiable(nextFixedSegments);
+      final pointsChanged = !_pointsEqual(basePoints, updatedPoints);
+      final segmentsChanged =
+          !_fixedSegmentsEqual(baseFixedSegments, fixedSegmentsResult);
+
+      return _ArrowPointComputation(
+        points: List<DrawPoint>.unmodifiable(updatedPoints),
+        didInsert: false,
+        shouldDelete: false,
+        activeIndex: context.pointIndex,
+        hasChanges: pointsChanged || segmentsChanged,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
+        fixedSegments: fixedSegmentsResult,
+      );
+    }
+
     if (context.pointIndex < 0 || context.pointIndex >= basePoints.length - 1) {
       return _ArrowPointComputation(
         points: basePoints,
@@ -489,6 +682,8 @@ _ArrowPointComputation _compute({
         hasChanges: false,
         startBinding: nextStartBinding,
         endBinding: nextEndBinding,
+        fixedSegments:
+            baseFixedSegments.isEmpty ? null : baseFixedSegments,
       );
     }
     if (!nextDidInsert) {
@@ -504,6 +699,8 @@ _ArrowPointComputation _compute({
           hasChanges: false,
           startBinding: nextStartBinding,
           endBinding: nextEndBinding,
+          fixedSegments:
+              baseFixedSegments.isEmpty ? null : baseFixedSegments,
         );
       }
     }
@@ -525,6 +722,8 @@ _ArrowPointComputation _compute({
         hasChanges: false,
         startBinding: nextStartBinding,
         endBinding: nextEndBinding,
+        fixedSegments:
+            baseFixedSegments.isEmpty ? null : baseFixedSegments,
       );
     }
     final isEndpoint = index == 0 || index == basePoints.length - 1;
@@ -614,6 +813,7 @@ _ArrowPointComputation _compute({
     hasChanges: hasChanges || bindingChanged,
     startBinding: nextStartBinding,
     endBinding: nextEndBinding,
+    fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,
   );
 }
 
@@ -799,6 +999,27 @@ DrawPoint _snapTargetToGrid({
 }
 
 bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _fixedSegmentsEqual(
+  List<ElbowFixedSegment>? a,
+  List<ElbowFixedSegment>? b,
+) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return a == null && b == null;
+  }
   if (a.length != b.length) {
     return false;
   }

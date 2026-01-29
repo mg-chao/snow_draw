@@ -215,9 +215,14 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
 }) {
   if (data.arrowType == ArrowType.elbow &&
       previousArrowType != ArrowType.elbow) {
+    final elbowData = data.copyWith(
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
+    );
     final routed = routeElbowArrowForElement(
       element: element,
-      data: data,
+      data: elbowData,
       elementsById: elementsById,
     );
     final result = computeArrowRectAndPoints(
@@ -231,14 +236,22 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
       worldPoints: result.localPoints,
       rect: result.rect,
     );
-    final updatedData = data.copyWith(points: normalized);
+    final updatedData = elbowData.copyWith(points: normalized);
     return (rect: result.rect, data: updatedData);
   }
+
+  final sanitizedData = data.arrowType == ArrowType.elbow
+      ? data
+      : data.copyWith(
+          fixedSegments: null,
+          startIsSpecial: null,
+          endIsSpecial: null,
+        );
 
   // Resolve world points from the current rect and normalized points
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
-    normalizedPoints: data.points,
+    normalizedPoints: sanitizedData.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
 
   // Calculate new bounds based on arrow type
@@ -254,7 +267,7 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
   );
 
   // Update data with normalized points to maintain consistency
-  final updatedData = data.copyWith(points: normalizedPoints);
+  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
 
   return (rect: newRect, data: updatedData);
 }

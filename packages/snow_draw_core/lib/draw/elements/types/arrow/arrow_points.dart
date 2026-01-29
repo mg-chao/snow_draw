@@ -18,6 +18,7 @@ class ArrowPointHandle {
     required this.kind,
     required this.index,
     required this.position,
+    this.isFixed = false,
   });
 
   /// Element id that owns this control point.
@@ -32,20 +33,25 @@ class ArrowPointHandle {
   /// World-space position in the element's un-rotated coordinate space.
   final DrawPoint position;
 
+  /// Whether the handle represents a fixed elbow segment.
+  final bool isFixed;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ArrowPointHandle &&
           other.elementId == elementId &&
           other.kind == kind &&
-          other.index == index;
+          other.index == index &&
+          other.isFixed == isFixed;
 
   @override
-  int get hashCode => Object.hash(elementId, kind, index);
+  int get hashCode => Object.hash(elementId, kind, index, isFixed);
 
   @override
   String toString() =>
-      'ArrowPointHandle(id: $elementId, kind: $kind, index: $index)';
+      'ArrowPointHandle(id: $elementId, kind: $kind, index: $index, '
+      'isFixed: $isFixed)';
 }
 
 @immutable
@@ -69,6 +75,7 @@ class ArrowPointUtils {
   static ArrowPointOverlay buildOverlay({
     required ElementState element,
     required double loopThreshold,
+    double? handleSize,
   }) {
     final data = element.data;
     if (data is! ArrowData) {
@@ -107,9 +114,27 @@ class ArrowPointUtils {
           ),
         );
       }
+      final addablePoints = <ArrowPointHandle>[];
+      final fixedSegments = data.fixedSegments ?? const [];
+      for (var i = 0; i < rawPoints.length - 1; i++) {
+        if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
+          continue;
+        }
+        final segmentIndex = i + 1;
+        final isFixed = fixedSegments.any((segment) => segment.index == segmentIndex);
+        addablePoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.addable,
+            index: i,
+            position: _midpoint(rawPoints[i], rawPoints[i + 1]),
+            isFixed: isFixed,
+          ),
+        );
+      }
       return ArrowPointOverlay(
         turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
-        addablePoints: const [],
+        addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
         loopPoints: const [],
       );
     }
@@ -227,7 +252,31 @@ class ArrowPointUtils {
           );
         }
       }
-      return nearest;
+      if (nearest != null) {
+        return nearest;
+      }
+
+      final fixedSegments = data.fixedSegments ?? const [];
+      final segmentHitRadius = hitRadius;
+      for (var i = 0; i < rawPoints.length - 1; i++) {
+        if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
+          continue;
+        }
+        final midpoint = _midpoint(rawPoints[i], rawPoints[i + 1]);
+        final distanceSq = localPosition.distanceSquared(midpoint);
+        if (distanceSq <= segmentHitRadius * segmentHitRadius) {
+          final segmentIndex = i + 1;
+          final isFixed = fixedSegments.any((segment) => segment.index == segmentIndex);
+          return ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.addable,
+            index: i,
+            position: midpoint,
+            isFixed: isFixed,
+          );
+        }
+      }
+      return null;
     }
 
     if (loopActive) {
@@ -376,4 +425,16 @@ class ArrowPointUtils {
 
   static DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>
       DrawPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2);
+
+  static bool _isSegmentTooShort(
+    DrawPoint start,
+    DrawPoint end,
+    double? handleSize,
+  ) {
+    if (handleSize == null || handleSize <= 0) {
+      return false;
+    }
+    final length = start.distance(end);
+    return length < handleSize * 0.5;
+  }
 }

@@ -315,20 +315,20 @@ class DynamicCanvasPainter extends CustomPainter {
     final handleTolerance =
         selectionConfig.interaction.handleTolerance / effectiveScale;
     final loopThreshold = handleTolerance * 1.5;
+    final baseHandleSize =
+        selectionConfig.render.controlPointSize / effectiveScale;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final overlay = ArrowPointUtils.buildOverlay(
       element: effectiveElement,
       loopThreshold: loopThreshold,
+      handleSize: handleSize,
     );
     if (overlay.turningPoints.isEmpty &&
         overlay.addablePoints.isEmpty &&
         overlay.loopPoints.isEmpty) {
       return;
     }
-
-    final baseHandleSize =
-        selectionConfig.render.controlPointSize / effectiveScale;
-    // Apply multiplier for arrow point handles to make them larger
-    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final strokeWidth = selectionConfig.render.strokeWidth / effectiveScale;
     final fillColor = selectionConfig.render.cornerFillColor;
     final strokeColor = selectionConfig.render.strokeColor;
@@ -394,6 +394,20 @@ class DynamicCanvasPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..color = highlightStroke
       ..isAntiAlias = true;
+    final fixedFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = strokeColor.withValues(alpha: 0.55)
+      ..isAntiAlias = true;
+    final fixedStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.9)
+      ..isAntiAlias = true;
+    final fixedStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = highlightStroke
+      ..isAntiAlias = true;
     final hoverOuterFillPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = strokeColor.withValues(alpha: 0.25)
@@ -402,15 +416,18 @@ class DynamicCanvasPainter extends CustomPainter {
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      final isFixed = handle.isFixed;
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      final fillPaint = isHighlighted
-          ? addableFillPaintHighlighted
-          : addableFillPaint;
-      final strokePaint = isHighlighted
-          ? addableStrokePaintHighlighted
-          : addableStrokePaint;
+      final fillPaint = isFixed
+          ? fixedFillPaint
+          : (isHighlighted ? addableFillPaintHighlighted : addableFillPaint);
+      final strokePaint = isFixed
+          ? (isHighlighted ? fixedStrokePaintHighlighted : fixedStrokePaint)
+          : (isHighlighted
+                ? addableStrokePaintHighlighted
+                : addableStrokePaint);
       final radius = addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
