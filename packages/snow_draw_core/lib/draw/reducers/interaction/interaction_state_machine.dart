@@ -120,7 +120,8 @@ class _ReducerEntry {
     DrawState state,
     DrawAction action,
     InteractionReducerDeps context,
-  ) reduce;
+  )
+  reduce;
 }
 
 const _pendingReducer = PendingStateReducer();
@@ -159,9 +160,7 @@ final _interactionReducers = <_ReducerEntry>[
     priority: InteractionReducerPriority.camera,
     reduce: cameraReducer,
   ),
-]..sort(
-    (a, b) => a.priority.order.compareTo(b.priority.order),
-  );
+]..sort((a, b) => a.priority.order.compareTo(b.priority.order));
 
 const interactionStateMachine = InteractionStateMachine();
 

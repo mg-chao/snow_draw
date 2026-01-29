@@ -13,10 +13,8 @@ import '../plugin_core.dart';
 
 /// Plugin that handles selection and intent detection.
 class SelectPlugin extends DrawInputPlugin {
-  SelectPlugin({
-    this.currentToolTypeId,
-    InputRoutingPolicy? routingPolicy,
-  }) : _routingPolicy = routingPolicy ?? InputRoutingPolicy.defaultPolicy,
+  SelectPlugin({this.currentToolTypeId, InputRoutingPolicy? routingPolicy})
+    : _routingPolicy = routingPolicy ?? InputRoutingPolicy.defaultPolicy,
       super(
         id: 'select',
         name: 'Select Plugin',

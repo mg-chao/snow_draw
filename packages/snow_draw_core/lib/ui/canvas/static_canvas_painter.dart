@@ -401,8 +401,8 @@ class StaticCanvasPainter extends CustomPainter {
     if (startSpacing <= minScreenSpacing) {
       return 0;
     }
-    final t = (spacingAtScale - minScreenSpacing) /
-        (startSpacing - minScreenSpacing);
+    final t =
+        (spacingAtScale - minScreenSpacing) / (startSpacing - minScreenSpacing);
     return _smoothStep(t.clamp(0.0, 1.0));
   }
 

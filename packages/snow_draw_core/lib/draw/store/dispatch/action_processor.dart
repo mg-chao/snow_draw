@@ -382,9 +382,7 @@ class ActionProcessor {
     if (previousState.application.interaction !=
         nextState.application.interaction) {
       _services.eventBus.emit(
-        InteractionChangedEvent(
-          interaction: nextState.application.interaction,
-        ),
+        InteractionChangedEvent(interaction: nextState.application.interaction),
       );
     }
 

@@ -284,17 +284,16 @@ final class ArrowPointTransform extends EditTransform {
           other.hasChanges == hasChanges;
 
   @override
-  int get hashCode =>
-      Object.hash(
-        currentPosition,
-        Object.hashAll(points),
-        startBinding,
-        endBinding,
-        activeIndex,
-        didInsert,
-        shouldDelete,
-        hasChanges,
-      );
+  int get hashCode => Object.hash(
+    currentPosition,
+    Object.hashAll(points),
+    startBinding,
+    endBinding,
+    activeIndex,
+    didInsert,
+    shouldDelete,
+    hasChanges,
+  );
 }
 
 @immutable

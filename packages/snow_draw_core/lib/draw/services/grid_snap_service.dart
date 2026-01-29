@@ -15,10 +15,7 @@ class GridSnapService {
     return (value / gridSize).round() * gridSize;
   }
 
-  DrawPoint snapPoint({
-    required DrawPoint point,
-    required double gridSize,
-  }) {
+  DrawPoint snapPoint({required DrawPoint point, required double gridSize}) {
     if (gridSize <= 0) {
       return point;
     }

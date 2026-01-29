@@ -115,10 +115,7 @@ class GridShaderManager {
 
     // Draw the shader as a full-screen rect
     final paint = Paint()..shader = shader;
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      paint,
-    );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
 
     return true;
   }

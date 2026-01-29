@@ -155,10 +155,7 @@ class EditStateReducer {
     if (reason == null) {
       return null;
     }
-    return EditUpdateFailed(
-      reason: reason,
-      operationId: outcome.operationId,
-    );
+    return EditUpdateFailed(reason: reason, operationId: outcome.operationId);
   }
 
   EditSessionEvent? _eventForFinish(EditOutcome outcome) {
@@ -166,10 +163,7 @@ class EditStateReducer {
     if (reason == null) {
       return null;
     }
-    return EditFinishFailed(
-      reason: reason,
-      operationId: outcome.operationId,
-    );
+    return EditFinishFailed(reason: reason, operationId: outcome.operationId);
   }
 
   EditSessionEvent _eventForCancel(EditOutcome outcome) {
@@ -177,28 +171,24 @@ class EditStateReducer {
     if (reason == null) {
       return EditCancelled(operationId: outcome.operationId);
     }
-    return EditCancelFailed(
-      reason: reason,
-      operationId: outcome.operationId,
-    );
+    return EditCancelFailed(reason: reason, operationId: outcome.operationId);
   }
 
   EditOperationParams _injectParams(
     EditOperationParams params,
     EditConfig config,
-  ) =>
-      switch (params) {
-        final RotateOperationParams p => RotateOperationParams(
-          startRotationAngle: p.startRotationAngle,
-          rotationSnapAngle: p.rotationSnapAngle ?? config.rotationSnapAngle,
-          initialSelectionBounds: p.initialSelectionBounds,
-        ),
-        final ResizeOperationParams p => ResizeOperationParams(
-          resizeMode: p.resizeMode,
-          handleOffset: p.handleOffset,
-          selectionPadding: p.selectionPadding ?? config.selectionPadding,
-          initialSelectionBounds: p.initialSelectionBounds,
-        ),
-        _ => params,
-      };
+  ) => switch (params) {
+    final RotateOperationParams p => RotateOperationParams(
+      startRotationAngle: p.startRotationAngle,
+      rotationSnapAngle: p.rotationSnapAngle ?? config.rotationSnapAngle,
+      initialSelectionBounds: p.initialSelectionBounds,
+    ),
+    final ResizeOperationParams p => ResizeOperationParams(
+      resizeMode: p.resizeMode,
+      handleOffset: p.handleOffset,
+      selectionPadding: p.selectionPadding ?? config.selectionPadding,
+      initialSelectionBounds: p.initialSelectionBounds,
+    ),
+    _ => params,
+  };
 }

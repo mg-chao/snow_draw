@@ -114,8 +114,7 @@ class MoveOperation extends EditOperation {
       config: config,
       ctrlPressed: modifiers.snapOverride,
     );
-    final shouldGridSnap =
-        hasMovement && snappingMode == SnappingMode.grid;
+    final shouldGridSnap = hasMovement && snappingMode == SnappingMode.grid;
     final shouldObjectSnap =
         hasMovement &&
         snappingMode == SnappingMode.object &&
@@ -282,10 +281,7 @@ class MoveOperation extends EditOperation {
       return null;
     }
 
-    final elementsById = {
-      ...state.domain.document.elementMap,
-      ...updatedById,
-    };
+    final elementsById = {...state.domain.document.elementMap, ...updatedById};
     final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
       elementsById: elementsById,
       changedElementIds: updatedById.keys.toSet(),
@@ -308,13 +304,11 @@ class MoveOperation extends EditOperation {
   List<ElementState> _resolveReferenceElements(
     DrawState state,
     Set<String> selectedIds,
-  ) =>
-      state.domain.document.elements
-          .where(
-            (element) =>
-                element.opacity > 0 && !selectedIds.contains(element.id),
-          )
-          .toList();
+  ) => state.domain.document.elements
+      .where(
+        (element) => element.opacity > 0 && !selectedIds.contains(element.id),
+      )
+      .toList();
 
   List<ElementState> _resolveTargetElements(
     DrawState state,

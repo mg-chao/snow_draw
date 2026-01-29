@@ -142,8 +142,7 @@ class EditApply {
         // During vertical resize, allow width scaling
         // if horizontal scale is ~1.0
         final allowWidthScale =
-            isVerticalResize &&
-            (scaleX - 1).abs() <= textHeightTolerance;
+            isVerticalResize && (scaleX - 1).abs() <= textHeightTolerance;
         // Preserve aspect ratio: scale width proportionally to height change
         if (allowWidthScale && heightDelta > textHeightTolerance) {
           final startHeight = startElement.rect.height;
@@ -253,8 +252,7 @@ ElementState _applyResize({
   required bool isSingleSelect,
   required bool hasRotation,
 }) {
-  if (isSingleSelect &&
-      (startBounds.width == 0 || startBounds.height == 0)) {
+  if (isSingleSelect && (startBounds.width == 0 || startBounds.height == 0)) {
     return element.copyWith(rect: newSelectionBounds);
   }
   if (hasRotation) {

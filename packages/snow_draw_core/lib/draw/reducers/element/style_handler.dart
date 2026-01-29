@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
@@ -99,8 +99,7 @@ DrawState handleUpdateElementsStyle(
   }
 
   final interaction = state.application.interaction;
-  if (interaction is TextEditingState &&
-      ids.contains(interaction.elementId)) {
+  if (interaction is TextEditingState && ids.contains(interaction.elementId)) {
     nextTextEdit = _applyTextEditingStyleUpdate(
       interaction,
       styleUpdate,
@@ -141,10 +140,7 @@ TextEditingState? _applyTextEditingStyleUpdate(
       nextData = updatedData;
       changed = true;
       nextRect = _resolveTextRect(
-        origin: DrawPoint(
-          x: interaction.rect.minX,
-          y: interaction.rect.minY,
-        ),
+        origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
         currentRect: interaction.rect,
         data: nextData,
         autoResize: nextData.autoResize,
@@ -179,9 +175,7 @@ DrawRect _resolveTextRect({
   required bool autoResize,
   bool allowShrinkHeight = false,
 }) {
-  final maxWidth = autoResize
-      ? double.infinity
-      : currentRect.width;
+  final maxWidth = autoResize ? double.infinity : currentRect.width;
   final layout = layoutText(data: data, maxWidth: maxWidth);
   final horizontalPadding = resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
@@ -216,16 +210,10 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
   required ArrowType previousArrowType,
 }) {
   // Resolve world points from the current rect and normalized points
-  var worldPoints = ArrowGeometry.resolveWorldPoints(
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: currentRect,
     normalizedPoints: data.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
-  if (data.arrowType == ArrowType.elbowLine &&
-      previousArrowType != ArrowType.elbowLine) {
-    worldPoints = ArrowGeometry.ensureElbowLineCreationPoints(
-      [worldPoints.first, worldPoints.last],
-    );
-  }
 
   // Calculate new bounds based on arrow type
   final newRect = ArrowGeometry.calculatePathBounds(
@@ -244,5 +232,3 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
 
   return (rect: newRect, data: updatedData);
 }
-
-

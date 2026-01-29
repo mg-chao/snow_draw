@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -6,7 +6,7 @@ enum StrokeStyle { solid, dashed, dotted }
 
 enum FillStyle { solid, line, crossLine }
 
-enum ArrowType { straight, curved, elbowLine }
+enum ArrowType { straight, curved }
 
 enum ArrowheadStyle {
   none,
@@ -110,4 +110,3 @@ class ElementStyleUpdate {
     textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
   );
 }
-

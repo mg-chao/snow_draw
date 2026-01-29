@@ -131,10 +131,7 @@ class UpdateCreatingElement extends DrawAction {
 }
 
 class AddArrowPoint extends DrawAction implements NonRecordable {
-  const AddArrowPoint({
-    required this.position,
-    this.snapOverride = false,
-  });
+  const AddArrowPoint({required this.position, this.snapOverride = false});
 
   final DrawPoint position;
   final bool snapOverride;
@@ -306,10 +303,7 @@ class UpdateElementsStyle extends DrawAction {
 }
 
 class StartTextEdit extends DrawAction implements NonRecordable {
-  const StartTextEdit({
-    required this.position,
-    this.elementId,
-  });
+  const StartTextEdit({required this.position, this.elementId});
 
   /// Element id to edit. If null, a new text element is created.
   final String? elementId;
@@ -379,8 +373,7 @@ class FinishTextEdit extends DrawAction implements Recordable {
   }
 
   @override
-  String toString() =>
-      'FinishTextEdit(elementId: $elementId, isNew: $isNew)';
+  String toString() => 'FinishTextEdit(elementId: $elementId, isNew: $isNew)';
 }
 
 class CancelTextEdit extends DrawAction implements NonRecordable {

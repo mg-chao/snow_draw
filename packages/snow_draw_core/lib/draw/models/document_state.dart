@@ -51,9 +51,7 @@ class DocumentState {
     return _elementsForEntries(entries);
   }
 
-  List<ElementState> _elementsForEntries(
-    Iterable<SpatialIndexEntry> entries,
-  ) {
+  List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
     final elements = <ElementState>[];
     for (final entry in entries) {
       final element = getElementById(entry.id);

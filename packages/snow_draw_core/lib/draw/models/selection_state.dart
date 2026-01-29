@@ -116,10 +116,8 @@ class SelectionState {
           other.selectionVersion == selectionVersion;
 
   @override
-  int get hashCode => Object.hash(
-    Object.hashAllUnordered(selectedIds),
-    selectionVersion,
-  );
+  int get hashCode =>
+      Object.hash(Object.hashAllUnordered(selectedIds), selectionVersion);
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
     if (a.length != b.length) {

@@ -35,9 +35,8 @@ SnappingMode resolveEffectiveSnappingMode({
 SnappingMode resolveEffectiveSnappingModeForConfig({
   required DrawConfig config,
   required bool ctrlPressed,
-}) =>
-    resolveEffectiveSnappingMode(
-      gridEnabled: config.grid.enabled,
-      objectEnabled: config.snap.enabled,
-      ctrlPressed: ctrlPressed,
-    );
+}) => resolveEffectiveSnappingMode(
+  gridEnabled: config.grid.enabled,
+  objectEnabled: config.snap.enabled,
+  ctrlPressed: ctrlPressed,
+);

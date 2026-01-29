@@ -197,9 +197,7 @@ class _ArrowHitTestCacheEntry {
         data.arrowType == ArrowType.curved && points.length > 2;
     final shaftPoints = hasCurvedShaft
         ? _flattenCurvedShaft(points, _sampleStep(data.strokeWidth))
-        : (data.arrowType == ArrowType.elbowLine
-              ? ArrowGeometry.expandElbowLinePoints(points)
-              : points);
+        : points;
 
     final arrowheadTargets = _buildArrowheadTargets(geometry);
 
@@ -242,15 +240,14 @@ _ArrowheadHitTarget _segmentsTarget(List<_ArrowheadSegment> segments) =>
 _ArrowheadHitTarget _circleTarget({
   required Offset center,
   required double radius,
-}) =>
-    (position, tolerance, radiusSq) {
-      final dx = position.dx - center.dx;
-      final dy = position.dy - center.dy;
-      final distanceSq = dx * dx + dy * dy;
-      final min = math.max(0, radius - tolerance);
-      final max = radius + tolerance;
-      return distanceSq >= min * min && distanceSq <= max * max;
-    };
+}) => (position, tolerance, radiusSq) {
+  final dx = position.dx - center.dx;
+  final dy = position.dy - center.dy;
+  final distanceSq = dx * dx + dy * dy;
+  final min = math.max(0, radius - tolerance);
+  final max = radius + tolerance;
+  return distanceSq >= min * min && distanceSq <= max * max;
+};
 
 class _CubicSegment {
   _CubicSegment(this.start, this.control1, this.control2, this.end);
@@ -534,16 +531,12 @@ _ArrowheadHitTarget? _arrowheadTargetForStyle({
       final mid = tip - dir * (length / 2);
       final left = mid + perp * (width / 2);
       final right = mid - perp * (width / 2);
-      return _segmentsTarget(
-        _closedSegments([tip, left, base, right]),
-      );
+      return _segmentsTarget(_closedSegments([tip, left, base, right]));
     case ArrowheadStyle.verticalLine:
       final half = width / 2;
       final left = tip + perp * half;
       final right = tip - perp * half;
-      return _segmentsTarget([
-        _ArrowheadSegment(start: left, end: right),
-      ]);
+      return _segmentsTarget([_ArrowheadSegment(start: left, end: right)]);
     case ArrowheadStyle.none:
       return null;
   }
@@ -568,5 +561,3 @@ Offset? _normalize(Offset value) {
   }
   return Offset(value.dx / length, value.dy / length);
 }
-
-

@@ -22,14 +22,13 @@ class TextEditReducer {
     DrawState state,
     DrawAction action,
     TextEditReducerDeps context,
-  ) =>
-      switch (action) {
-        final StartTextEdit a => _startTextEdit(state, a, context),
-        final UpdateTextEdit a => _updateTextEdit(state, a),
-        final FinishTextEdit a => _finishTextEdit(state, a, context),
-        CancelTextEdit _ => _cancelTextEdit(state),
-        _ => null,
-      };
+  ) => switch (action) {
+    final StartTextEdit a => _startTextEdit(state, a, context),
+    final UpdateTextEdit a => _updateTextEdit(state, a),
+    final FinishTextEdit a => _finishTextEdit(state, a, context),
+    CancelTextEdit _ => _cancelTextEdit(state),
+    _ => null,
+  };
 
   DrawState _startTextEdit(
     DrawState state,
@@ -61,8 +60,7 @@ class TextEditReducer {
       resolvedId = elementId;
     } else {
       final defaults = context.config.textStyle;
-      draftData =
-          const TextData().withElementStyle(defaults) as TextData;
+      draftData = const TextData().withElementStyle(defaults) as TextData;
       rect = _initialTextRect(action.position, draftData);
       opacity = defaults.opacity;
       rotation = 0;
@@ -194,10 +192,7 @@ class TextEditReducer {
   }
 
   DrawRect _initialTextRect(DrawPoint position, TextData data) {
-    final layout = layoutText(
-      data: data,
-      maxWidth: double.infinity,
-    );
+    final layout = layoutText(data: data, maxWidth: double.infinity);
     final horizontalPadding = resolveTextLayoutHorizontalPadding(
       layout.lineHeight,
     );
@@ -218,9 +213,7 @@ class TextEditReducer {
     required bool autoResize,
     bool allowShrinkHeight = false,
   }) {
-    final maxWidth = autoResize
-        ? double.infinity
-        : currentRect.width;
+    final maxWidth = autoResize ? double.infinity : currentRect.width;
     final layout = layoutText(data: data, maxWidth: maxWidth);
     final horizontalPadding = resolveTextLayoutHorizontalPadding(
       layout.lineHeight,

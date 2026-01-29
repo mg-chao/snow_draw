@@ -2,13 +2,11 @@
 import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
-import '../../elements/types/arrow/arrow_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
 import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
-import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
@@ -219,12 +217,6 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
-    if (_shouldAutoFinishElbowLine()) {
-      await dispatch(const FinishCreateElement());
-      _resetPointCreationState();
-      return handled(message: 'Create finished (elbow line)');
-    }
-
     _recordClick(event.position, now);
     return handled(message: 'Create point added');
   }
@@ -280,18 +272,6 @@ class CreatePlugin extends DrawInputPlugin {
     return interaction is CreatingState && interaction.isPointCreation;
   }
 
-  bool _shouldAutoFinishElbowLine() {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return false;
-    }
-    final data = interaction.elementData;
-    if (data is! ArrowData || data.arrowType != ArrowType.elbowLine) {
-      return false;
-    }
-    return interaction.fixedPoints.length >= 2;
-  }
-
   bool _isDoubleClick(DrawPoint position, DateTime now) {
     final lastTime = _lastClickTime;
     final lastPosition = _lastClickPosition;
@@ -339,5 +319,3 @@ class CreatePlugin extends DrawInputPlugin {
     return builder.build(state);
   }
 }
-
-

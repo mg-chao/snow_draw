@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -8,7 +8,6 @@ import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
-import 'arrow_elbow_line_binding_adjuster.dart';
 
 enum ArrowPointKind { turning, addable, loopStart, loopEnd }
 
@@ -55,13 +54,11 @@ class ArrowPointOverlay {
     required this.turningPoints,
     required this.addablePoints,
     required this.loopPoints,
-    required this.addableBendControls,
   });
 
   final List<ArrowPointHandle> turningPoints;
   final List<ArrowPointHandle> addablePoints;
   final List<ArrowPointHandle> loopPoints;
-  final List<bool> addableBendControls;
 
   bool get hasLoop => loopPoints.isNotEmpty;
 }
@@ -79,7 +76,6 @@ class ArrowPointUtils {
         turningPoints: [],
         addablePoints: [],
         loopPoints: [],
-        addableBendControls: [],
       );
     }
 
@@ -89,52 +85,28 @@ class ArrowPointUtils {
         turningPoints: [],
         addablePoints: [],
         loopPoints: [],
-        addableBendControls: [],
       );
     }
 
-    final segmentPoints = _resolveSegmentPoints(rawPoints, data);
+    final segmentPoints = _resolveSegmentPoints(rawPoints);
 
-    final isElbowLine = data.arrowType == ArrowType.elbowLine;
     final loopActive =
         rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
 
     final turningPoints = <ArrowPointHandle>[];
-    if (isElbowLine) {
-      if (!loopActive) {
-        turningPoints
-          ..add(
-            ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: 0,
-              position: rawPoints.first,
-            ),
-          )
-          ..add(
-            ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: rawPoints.length - 1,
-              position: rawPoints.last,
-            ),
-          );
+    for (var i = 0; i < rawPoints.length; i++) {
+      if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
+        continue;
       }
-    } else {
-      for (var i = 0; i < rawPoints.length; i++) {
-        if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
-          continue;
-        }
-        turningPoints.add(
-          ArrowPointHandle(
-            elementId: element.id,
-            kind: ArrowPointKind.turning,
-            index: i,
-            position: rawPoints[i],
-          ),
-        );
-      }
+      turningPoints.add(
+        ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: i,
+          position: rawPoints[i],
+        ),
+      );
     }
 
     final addablePoints = <ArrowPointHandle>[];
@@ -149,16 +121,6 @@ class ArrowPointUtils {
         ),
       );
     }
-    final addableBendControls =
-        isElbowLine
-            ? resolveElbowLineBendControlSegments(
-                elementId: element.id,
-                data: data,
-                rawPoints: rawPoints,
-                segmentPoints: segmentPoints,
-              )
-            : List<bool>.filled(segmentPoints.length - 1, false);
-
     final loopPoints = <ArrowPointHandle>[];
     if (loopActive) {
       loopPoints
@@ -184,7 +146,6 @@ class ArrowPointUtils {
       turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
       addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
       loopPoints: List<ArrowPointHandle>.unmodifiable(loopPoints),
-      addableBendControls: List<bool>.unmodifiable(addableBendControls),
     );
   }
 
@@ -204,7 +165,7 @@ class ArrowPointUtils {
       return null;
     }
 
-    final segmentPoints = _resolveSegmentPoints(rawPoints, data);
+    final segmentPoints = _resolveSegmentPoints(rawPoints);
 
     final localPosition = _toLocalPosition(element, position);
     final visualPointRadius = handleSize == null || handleSize <= 0
@@ -214,7 +175,6 @@ class ArrowPointUtils {
         ? 0.0
         : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
-    final isElbowLine = data.arrowType == ArrowType.elbowLine;
     final loopActive =
         rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
@@ -266,39 +226,20 @@ class ArrowPointUtils {
     if (visualPointRadius > turningHitRadius) {
       turningHitRadius = visualPointRadius;
     }
-    if (isElbowLine) {
-      if (!loopActive) {
-        final endpoints = <int>[0, rawPoints.length - 1];
-        for (final i in endpoints) {
-          final distanceSq = localPosition.distanceSquared(rawPoints[i]);
-          if (distanceSq <= turningHitRadius * turningHitRadius &&
-              distanceSq < nearestDistance) {
-            nearestDistance = distanceSq;
-            nearest = ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: i,
-              position: rawPoints[i],
-            );
-          }
-        }
+    for (var i = 0; i < rawPoints.length; i++) {
+      if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
+        continue;
       }
-    } else {
-      for (var i = 0; i < rawPoints.length; i++) {
-        if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
-          continue;
-        }
-        final distanceSq = localPosition.distanceSquared(rawPoints[i]);
-        if (distanceSq <= turningHitRadius * turningHitRadius &&
-            distanceSq < nearestDistance) {
-          nearestDistance = distanceSq;
-          nearest = ArrowPointHandle(
-            elementId: element.id,
-            kind: ArrowPointKind.turning,
-            index: i,
-            position: rawPoints[i],
-          );
-        }
+      final distanceSq = localPosition.distanceSquared(rawPoints[i]);
+      if (distanceSq <= turningHitRadius * turningHitRadius &&
+          distanceSq < nearestDistance) {
+        nearestDistance = distanceSq;
+        nearest = ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: i,
+          position: rawPoints[i],
+        );
       }
     }
     if (nearest != null) {
@@ -334,136 +275,13 @@ class ArrowPointUtils {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.elbowLine
-        ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
-        : resolved;
-    return effective
+    return resolved
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }
 
-  static List<DrawPoint> _resolveSegmentPoints(
-    List<DrawPoint> rawPoints,
-    ArrowData data,
-  ) {
-    if (data.arrowType != ArrowType.elbowLine) {
-      return rawPoints;
-    }
-    if (rawPoints.length < 2) {
-      return rawPoints;
-    }
-    final offsets = rawPoints
-        .map((point) => Offset(point.x, point.y))
-        .toList(growable: false);
-    final expanded = ArrowGeometry.expandElbowLinePoints(offsets);
-    return expanded
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
-  }
-
-  static List<bool> resolveElbowLineBendControlSegments({
-    required String elementId,
-    required ArrowData data,
-    required List<DrawPoint> rawPoints,
-    required List<DrawPoint> segmentPoints,
-  }) {
-    final segmentCount = segmentPoints.length - 1;
-    if (segmentCount <= 0) {
-      return const [];
-    }
-    final rawSegmentCount = rawPoints.length - 1;
-    if (rawSegmentCount <= 0) {
-      return List<bool>.filled(segmentCount, false);
-    }
-    final autoPointIndices =
-        (data.startBinding == null && data.endBinding == null)
-            ? const <int>{}
-            : resolveElbowLineBindingAutoPoints(elementId);
-    final userPointIndices = <int>[];
-    for (var i = 0; i < rawPoints.length; i++) {
-      if (i == 0 ||
-          i == rawPoints.length - 1 ||
-          !autoPointIndices.contains(i)) {
-        userPointIndices.add(i);
-      }
-    }
-    if (userPointIndices.length < 2) {
-      return List<bool>.filled(segmentCount, false);
-    }
-
-    final rawToUserSegment =
-        List<int>.filled(rawSegmentCount, 0, growable: false);
-    var userSegmentIndex = 0;
-    for (var rawIndex = 0; rawIndex < rawSegmentCount; rawIndex++) {
-      while (userSegmentIndex + 1 < userPointIndices.length &&
-          rawIndex >= userPointIndices[userSegmentIndex + 1]) {
-        userSegmentIndex++;
-      }
-      rawToUserSegment[rawIndex] = userSegmentIndex;
-    }
-
-    final segmentMap = _resolveElbowLineSegmentMap(
-      rawPoints: rawPoints,
-      segmentPoints: segmentPoints,
-    );
-    final lastUserSegmentIndex = userPointIndices.length - 2;
-    return List<bool>.generate(segmentCount, (index) {
-      if (index < 0 || index >= segmentMap.length) {
-        return false;
-      }
-      final rawIndex = segmentMap[index];
-      if (rawIndex < 0 || rawIndex >= rawToUserSegment.length) {
-        return false;
-      }
-      final resolvedUserSegment = rawToUserSegment[rawIndex];
-      return resolvedUserSegment > 0 &&
-          resolvedUserSegment < lastUserSegmentIndex;
-    });
-  }
-
-  static List<int> _resolveElbowLineSegmentMap({
-    required List<DrawPoint> rawPoints,
-    required List<DrawPoint> segmentPoints,
-  }) {
-    final segmentCount = segmentPoints.length - 1;
-    final mapping = List<int>.filled(segmentCount, -1);
-    if (rawPoints.length < 2 || segmentCount <= 0) {
-      return mapping;
-    }
-    const epsilon = 1e-6;
-    bool matches(DrawPoint a, DrawPoint b) =>
-        (a.x - b.x).abs() <= epsilon && (a.y - b.y).abs() <= epsilon;
-
-    var expandedIndex = 0;
-    for (var rawIndex = 0; rawIndex < rawPoints.length - 1; rawIndex++) {
-      final start = rawPoints[rawIndex];
-      while (expandedIndex < segmentPoints.length &&
-          !matches(segmentPoints[expandedIndex], start)) {
-        expandedIndex++;
-      }
-      if (expandedIndex >= segmentPoints.length - 1) {
-        break;
-      }
-
-      final end = rawPoints[rawIndex + 1];
-      var endIndex = expandedIndex + 1;
-      while (endIndex < segmentPoints.length &&
-          !matches(segmentPoints[endIndex], end)) {
-        endIndex++;
-      }
-      if (endIndex >= segmentPoints.length) {
-        break;
-      }
-
-      for (var segmentIndex = expandedIndex;
-          segmentIndex < endIndex;
-          segmentIndex++) {
-        mapping[segmentIndex] = rawIndex;
-      }
-      expandedIndex = endIndex;
-    }
-    return mapping;
-  }
+  static List<DrawPoint> _resolveSegmentPoints(List<DrawPoint> rawPoints) =>
+      rawPoints;
 
   static DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
     if (element.rotation == 0) {
@@ -476,7 +294,7 @@ class ArrowPointUtils {
 
   /// Calculates the midpoint for an addable point between two control points.
   /// For curved arrows, this uses the actual curve position at t=0.5.
-  /// For straight and elbow line arrows, this uses linear interpolation.
+  /// For straight arrows, this uses linear interpolation.
   static DrawPoint _calculateMidpoint(
     List<DrawPoint> points,
     int segmentIndex,
@@ -501,13 +319,10 @@ class ArrowPointUtils {
       }
     }
 
-    // For straight and elbow line arrows, use linear midpoint
+    // For straight arrows, use linear midpoint
     return _midpoint(points[segmentIndex], points[segmentIndex + 1]);
   }
 
   static DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>
       DrawPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2);
 }
-
-
-

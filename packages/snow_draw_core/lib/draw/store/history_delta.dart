@@ -36,10 +36,12 @@ class HistoryDelta {
     orderAfter: orderAfter == null
         ? null
         : List<String>.unmodifiable(orderAfter),
-    selectionBefore:
-        selectionBefore == null ? null : _copySelection(selectionBefore),
-    selectionAfter:
-        selectionAfter == null ? null : _copySelection(selectionAfter),
+    selectionBefore: selectionBefore == null
+        ? null
+        : _copySelection(selectionBefore),
+    selectionAfter: selectionAfter == null
+        ? null
+        : _copySelection(selectionAfter),
   );
 
   factory HistoryDelta.fromSnapshots(

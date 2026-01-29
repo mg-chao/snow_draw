@@ -8,7 +8,6 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
-import '../../elements/types/arrow/arrow_elbow_line_binding_adjuster.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
@@ -72,36 +71,13 @@ class ArrowPointOperation extends EditOperation {
       );
     }
     final data = element.data as ArrowData;
-    final rawPoints = _resolveWorldPoints(element, data);
-    final useVirtualPoints =
-        data.arrowType == ArrowType.elbowLine &&
-        typedParams.pointKind == ArrowPointKind.addable;
-    final points = _resolveWorldPoints(
-      element,
-      data,
-      includeVirtual: useVirtualPoints,
-    );
+    final points = _resolveWorldPoints(element, data);
     if (points.length < 2) {
       throw const EditMissingDataError(
         dataName: 'arrow points',
         operationName: 'ArrowPointOperation.createContext',
       );
     }
-
-    final addableBendControls =
-        useVirtualPoints
-            ? ArrowPointUtils.resolveElbowLineBendControlSegments(
-                elementId: element.id,
-                data: data,
-                rawPoints: rawPoints,
-                segmentPoints: points,
-              )
-            : const <bool>[];
-    final isBendControlSegment =
-        useVirtualPoints &&
-        typedParams.pointIndex >= 0 &&
-        typedParams.pointIndex < addableBendControls.length &&
-        addableBendControls[typedParams.pointIndex];
 
     final startBounds = requireSelectionBounds(
       selectionData: SelectionDataComputer.compute(state),
@@ -136,7 +112,6 @@ class ArrowPointOperation extends EditOperation {
       arrowType: data.arrowType,
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
-      isBendControlSegment: isBendControlSegment,
       dragOffset: dragOffset,
       bindingTargetCache: BindingTargetCache(),
     );
@@ -155,9 +130,7 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    final data = element?.data is ArrowData
-        ? element!.data as ArrowData
-        : null;
+    final data = element?.data is ArrowData ? element!.data as ArrowData : null;
     return ArrowPointTransform(
       currentPosition: startPosition,
       points: typedContext.initialPoints,
@@ -210,9 +183,7 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    final data = element?.data is ArrowData
-        ? element!.data as ArrowData
-        : null;
+    final data = element?.data is ArrowData ? element!.data as ArrowData : null;
     final zoom = state.application.view.camera.zoom;
     final effectiveZoom = zoom == 0 ? 1.0 : zoom;
     final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
@@ -227,15 +198,14 @@ class ArrowPointOperation extends EditOperation {
       typedContext.rotation,
       localPosition.translate(typedContext.dragOffset),
     );
-    final bindingTargets =
-        element == null || bindingDistance <= 0
-            ? const <ElementState>[]
-            : _resolveBindingTargetsCached(
-                state: state,
-                context: typedContext,
-                position: bindingSearchPoint,
-                distance: bindingSearchDistance,
-              );
+    final bindingTargets = element == null || bindingDistance <= 0
+        ? const <ElementState>[]
+        : _resolveBindingTargetsCached(
+            state: state,
+            context: typedContext,
+            position: bindingSearchPoint,
+            distance: bindingSearchDistance,
+          );
     final result = _compute(
       context: typedContext,
       currentPosition: localPosition,
@@ -281,7 +251,7 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    var points = List<DrawPoint>.from(typedTransform.points);
+    final points = List<DrawPoint>.from(typedTransform.points);
     if (typedTransform.shouldDelete &&
         typedTransform.activeIndex != null &&
         typedTransform.activeIndex! > 0 &&
@@ -301,12 +271,6 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
-    if (data.arrowType == ArrowType.elbowLine) {
-      points = List<DrawPoint>.from(
-        ArrowGeometry.normalizeElbowLinePoints(points),
-      );
-    }
-
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
@@ -421,7 +385,6 @@ final class ArrowPointEditContext extends EditContext {
     required this.arrowType,
     required this.pointKind,
     required this.pointIndex,
-    required this.isBendControlSegment,
     required this.dragOffset,
     required BindingTargetCache bindingTargetCache,
   }) : _bindingTargetCache = bindingTargetCache;
@@ -433,7 +396,6 @@ final class ArrowPointEditContext extends EditContext {
   final ArrowType arrowType;
   final ArrowPointKind pointKind;
   final int pointIndex;
-  final bool isBendControlSegment;
   final DrawPoint dragOffset;
   final BindingTargetCache _bindingTargetCache;
 }
@@ -478,7 +440,6 @@ _ArrowPointComputation _compute({
   final addThreshold = handleTolerance;
   final deleteThreshold = handleTolerance;
   final loopThreshold = handleTolerance * 1.5;
-  final isElbowLine = context.arrowType == ArrowType.elbowLine;
 
   var target = currentPosition.translate(context.dragOffset);
   var updatedPoints = basePoints;
@@ -499,58 +460,25 @@ _ArrowPointComputation _compute({
         endBinding: nextEndBinding,
       );
     }
-    if (isElbowLine) {
-      final isBendControl = context.isBendControlSegment;
-      if (!nextDidInsert && !isBendControl) {
-        final distanceSq = currentPosition.distanceSquared(
-          context.startPosition,
+    if (!nextDidInsert) {
+      final distanceSq = currentPosition.distanceSquared(context.startPosition);
+      if (distanceSq >= addThreshold * addThreshold) {
+        nextDidInsert = true;
+      } else {
+        return _ArrowPointComputation(
+          points: basePoints,
+          didInsert: false,
+          shouldDelete: false,
+          activeIndex: null,
+          hasChanges: false,
+          startBinding: nextStartBinding,
+          endBinding: nextEndBinding,
         );
-        if (distanceSq >= addThreshold * addThreshold) {
-          nextDidInsert = true;
-        } else {
-          return _ArrowPointComputation(
-            points: basePoints,
-            didInsert: false,
-            shouldDelete: false,
-            activeIndex: null,
-            hasChanges: false,
-            startBinding: nextStartBinding,
-            endBinding: nextEndBinding,
-          );
-        }
       }
-      updatedPoints = _moveElbowLineSegment(
-        points: basePoints,
-        segmentIndex: context.pointIndex,
-        target: target,
-      );
-      activeIndex = _resolveNearestSegmentIndex(
-        points: updatedPoints,
-        target: target,
-      );
-    } else {
-      if (!nextDidInsert) {
-        final distanceSq = currentPosition.distanceSquared(
-          context.startPosition,
-        );
-        if (distanceSq >= addThreshold * addThreshold) {
-          nextDidInsert = true;
-        } else {
-          return _ArrowPointComputation(
-            points: basePoints,
-            didInsert: false,
-            shouldDelete: false,
-            activeIndex: null,
-            hasChanges: false,
-            startBinding: nextStartBinding,
-            endBinding: nextEndBinding,
-          );
-        }
-      }
-      activeIndex = context.pointIndex + 1;
-      updatedPoints = List<DrawPoint>.from(basePoints)
-        ..insert(activeIndex, target);
     }
+    activeIndex = context.pointIndex + 1;
+    updatedPoints = List<DrawPoint>.from(basePoints)
+      ..insert(activeIndex, target);
   } else {
     final index = switch (context.pointKind) {
       ArrowPointKind.loopStart => 0,
@@ -568,29 +496,16 @@ _ArrowPointComputation _compute({
         endBinding: nextEndBinding,
       );
     }
-    if (isElbowLine && index != 0 && index != basePoints.length - 1) {
-      return _ArrowPointComputation(
-        points: basePoints,
-        didInsert: nextDidInsert,
-        shouldDelete: false,
-        activeIndex: null,
-        hasChanges: false,
-        startBinding: nextStartBinding,
-        endBinding: nextEndBinding,
-      );
-    }
     final isEndpoint = index == 0 || index == basePoints.length - 1;
     if (isEndpoint) {
       final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
-      final referencePoint = isElbowLine
-          ? null
-          : basePoints.length > 1
-              ? _toWorldPosition(
-                  context.elementRect,
-                  context.rotation,
-                  basePoints[index == 0 ? 1 : basePoints.length - 2],
-                )
-              : null;
+      final referencePoint = basePoints.length > 1
+          ? _toWorldPosition(
+              context.elementRect,
+              context.rotation,
+              basePoints[index == 0 ? 1 : basePoints.length - 2],
+            )
+          : null;
       final candidate = ArrowBindingUtils.resolveBindingCandidate(
         worldPoint: _toWorldPosition(
           context.elementRect,
@@ -622,80 +537,37 @@ _ArrowPointComputation _compute({
         }
       }
     }
-    if (isElbowLine) {
-      updatedPoints = _moveElbowLineEndpoint(
-        points: basePoints,
-        index: index,
-        target: target,
-      );
-      activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
-      final binding = index == 0 ? nextStartBinding : nextEndBinding;
-      if (binding != null) {
-        final targetElement =
-            _findBindingTarget(bindingTargets, binding.elementId);
-        if (targetElement != null) {
-          final basePoints = List<DrawPoint>.from(updatedPoints);
-          updatedPoints = adjustElbowLinePointsForBinding(
-            points: updatedPoints,
-            binding: binding,
-            target: targetElement,
-            isStart: index == 0,
-          );
-          syncElbowLineBindingAutoPoints(
-            elementId: context.elementId,
-            before: basePoints,
-            after: updatedPoints,
-          );
-          activeIndex = index == 0 ? 0 : updatedPoints.length - 1;
-        }
-      }
-    } else {
-      updatedPoints = List<DrawPoint>.from(basePoints);
-      updatedPoints[index] = target;
-      activeIndex = index;
-    }
+    updatedPoints = List<DrawPoint>.from(basePoints);
+    updatedPoints[index] = target;
+    activeIndex = index;
   }
 
   final resolvedActiveIndex = activeIndex;
   if (context.pointKind != ArrowPointKind.addable &&
-      resolvedActiveIndex != null &&
       (resolvedActiveIndex == 0 ||
           resolvedActiveIndex == updatedPoints.length - 1)) {
     final start = updatedPoints.first;
     final end = updatedPoints.last;
     if (start.distanceSquared(end) <= loopThreshold * loopThreshold) {
-      if (isElbowLine) {
-        updatedPoints = _mergeElbowLineLoopPoints(
-          points: updatedPoints,
-          activeIndex: resolvedActiveIndex,
-        );
-        activeIndex =
-            resolvedActiveIndex == 0 ? 0 : updatedPoints.length - 1;
+      if (resolvedActiveIndex == 0) {
+        updatedPoints[0] = end;
       } else {
-        if (resolvedActiveIndex == 0) {
-          updatedPoints[0] = end;
-        } else {
-          updatedPoints[updatedPoints.length - 1] = start;
-        }
+        updatedPoints[updatedPoints.length - 1] = start;
       }
     }
   }
 
   var shouldDelete = false;
-  if (!isElbowLine) {
-    final resolvedIndex = activeIndex;
-    if (resolvedIndex != null &&
-        resolvedIndex > 0 &&
-        resolvedIndex < updatedPoints.length - 1) {
-      final targetPoint = updatedPoints[resolvedIndex];
-      final prev = updatedPoints[resolvedIndex - 1];
-      final next = updatedPoints[resolvedIndex + 1];
-      if (targetPoint.distanceSquared(prev) <=
-              deleteThreshold * deleteThreshold ||
-          targetPoint.distanceSquared(next) <=
-              deleteThreshold * deleteThreshold) {
-        shouldDelete = true;
-      }
+  final resolvedIndex = activeIndex;
+  if (resolvedIndex > 0 && resolvedIndex < updatedPoints.length - 1) {
+    final targetPoint = updatedPoints[resolvedIndex];
+    final prev = updatedPoints[resolvedIndex - 1];
+    final next = updatedPoints[resolvedIndex + 1];
+    if (targetPoint.distanceSquared(prev) <=
+            deleteThreshold * deleteThreshold ||
+        targetPoint.distanceSquared(next) <=
+            deleteThreshold * deleteThreshold) {
+      shouldDelete = true;
     }
   }
 
@@ -714,23 +586,12 @@ _ArrowPointComputation _compute({
   );
 }
 
-
-List<DrawPoint> _resolveWorldPoints(
-  ElementState element,
-  ArrowData data, {
-  bool includeVirtual = false,
-}) {
+List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final effective = data.arrowType == ArrowType.elbowLine
-      ? ArrowGeometry.expandElbowLinePoints(
-          resolved,
-          includeVirtual: includeVirtual,
-        )
-      : resolved;
-  return effective
+  return resolved
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
 }
@@ -757,15 +618,6 @@ List<ElementState> _resolveBindingTargets(
     targets.add(element);
   }
   return targets;
-}
-
-ElementState? _findBindingTarget(List<ElementState> targets, String targetId) {
-  for (final target in targets) {
-    if (target.id == targetId) {
-      return target;
-    }
-  }
-  return null;
 }
 
 List<ElementState> _resolveBindingTargetsCached({
@@ -869,7 +721,7 @@ DrawPoint _resolvePointPosition({
       }
     }
 
-    // For straight and elbow line arrows, use linear midpoint
+    // For straight arrows, use linear midpoint
     final start = points[index];
     final end = points[index + 1];
     return DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);
@@ -926,173 +778,3 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   }
   return true;
 }
-
-List<DrawPoint> _moveElbowLineSegment({
-  required List<DrawPoint> points,
-  required int segmentIndex,
-  required DrawPoint target,
-}) {
-  if (segmentIndex < 0 || segmentIndex >= points.length - 1) {
-    return points;
-  }
-  if (segmentIndex == 0 || segmentIndex == points.length - 2) {
-    return _offsetElbowLineEndpointSegment(
-      points: points,
-      segmentIndex: segmentIndex,
-      target: target,
-    );
-  }
-  final start = points[segmentIndex];
-  final end = points[segmentIndex + 1];
-  final isHorizontal = _segmentIsHorizontal(start, end);
-  final updated = List<DrawPoint>.from(points);
-  if (isHorizontal) {
-    updated[segmentIndex] = DrawPoint(x: start.x, y: target.y);
-    updated[segmentIndex + 1] = DrawPoint(x: end.x, y: target.y);
-  } else {
-    updated[segmentIndex] = DrawPoint(x: target.x, y: start.y);
-    updated[segmentIndex + 1] = DrawPoint(x: target.x, y: end.y);
-  }
-  return updated;
-}
-
-List<DrawPoint> _offsetElbowLineEndpointSegment({
-  required List<DrawPoint> points,
-  required int segmentIndex,
-  required DrawPoint target,
-}) {
-  if (points.length < 2 ||
-      segmentIndex < 0 ||
-      segmentIndex >= points.length - 1) {
-    return points;
-  }
-  final start = points[segmentIndex];
-  final end = points[segmentIndex + 1];
-  final isHorizontal = _segmentIsHorizontal(start, end);
-  final movedStart = isHorizontal
-      ? DrawPoint(x: start.x, y: target.y)
-      : DrawPoint(x: target.x, y: start.y);
-  final movedEnd = isHorizontal
-      ? DrawPoint(x: end.x, y: target.y)
-      : DrawPoint(x: target.x, y: end.y);
-  if (points.length == 2 && segmentIndex == 0) {
-    return [start, movedStart, movedEnd, end];
-  }
-  if (segmentIndex == 0) {
-    return [start, movedStart, movedEnd, ...points.sublist(2)];
-  }
-  return [...points.sublist(0, points.length - 2), movedStart, movedEnd, end];
-}
-
-int? _resolveNearestSegmentIndex({
-  required List<DrawPoint> points,
-  required DrawPoint target,
-}) {
-  if (points.length < 2) {
-    return null;
-  }
-  var nearestIndex = 0;
-  var nearestDistance = double.infinity;
-  for (var i = 0; i < points.length - 1; i++) {
-    final mid = DrawPoint(
-      x: (points[i].x + points[i + 1].x) / 2,
-      y: (points[i].y + points[i + 1].y) / 2,
-    );
-    final distance = target.distanceSquared(mid);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIndex = i;
-    }
-  }
-  return nearestIndex;
-}
-
-List<DrawPoint> _moveElbowLineEndpoint({
-  required List<DrawPoint> points,
-  required int index,
-  required DrawPoint target,
-}) {
-  final updated = List<DrawPoint>.from(points);
-  if (index < 0 || index >= updated.length) {
-    return updated;
-  }
-  updated[index] = target;
-  if (updated.length < 3) {
-    return updated;
-  }
-  if (index == 0) {
-    final next = updated[1];
-    final wasHorizontal = _segmentIsHorizontal(points[0], points[1]);
-    updated[1] = DrawPoint(
-      x: wasHorizontal ? next.x : target.x,
-      y: wasHorizontal ? target.y : next.y,
-    );
-  } else if (index == updated.length - 1) {
-    final prev = updated[updated.length - 2];
-    final wasHorizontal = _segmentIsHorizontal(
-      points[points.length - 2],
-      points[points.length - 1],
-    );
-    updated[updated.length - 2] = DrawPoint(
-      x: wasHorizontal ? prev.x : target.x,
-      y: wasHorizontal ? target.y : prev.y,
-    );
-  }
-  return updated;
-}
-
-DrawPoint _alignElbowLineNeighbor({
-  required DrawPoint anchor,
-  required DrawPoint neighbor,
-  required bool wasHorizontal,
-}) =>
-    wasHorizontal
-        ? DrawPoint(x: neighbor.x, y: anchor.y)
-        : DrawPoint(x: anchor.x, y: neighbor.y);
-
-List<DrawPoint> _mergeElbowLineLoopPoints({
-  required List<DrawPoint> points,
-  required int activeIndex,
-}) {
-  if (points.length < 2) {
-    return List<DrawPoint>.from(points);
-  }
-
-  final updated = List<DrawPoint>.from(points);
-  final lastIndex = updated.length - 1;
-
-  if (activeIndex == 0) {
-    final end = updated[lastIndex];
-    updated[0] = end;
-    if (updated.length > 1) {
-      final wasHorizontal = _segmentIsHorizontal(points[0], points[1]);
-      updated[1] = _alignElbowLineNeighbor(
-        anchor: end,
-        neighbor: updated[1],
-        wasHorizontal: wasHorizontal,
-      );
-    }
-  } else if (activeIndex == lastIndex) {
-    final start = updated[0];
-    updated[lastIndex] = start;
-    if (updated.length > 1) {
-      final wasHorizontal = _segmentIsHorizontal(
-        points[lastIndex - 1],
-        points[lastIndex],
-      );
-      updated[lastIndex - 1] = _alignElbowLineNeighbor(
-        anchor: start,
-        neighbor: updated[lastIndex - 1],
-        wasHorizontal: wasHorizontal,
-      );
-    }
-  }
-
-  return updated;
-}
-
-bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
-    ArrowGeometry.isElbowLineSegmentHorizontal(start, end);
-
-
-

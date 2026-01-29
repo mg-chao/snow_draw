@@ -18,10 +18,7 @@ final class ArrowData extends ElementData
   static const _endBindingUnset = Object();
 
   const ArrowData({
-    this.points = const [
-      DrawPoint.zero,
-      DrawPoint(x: 1, y: 1),
-    ],
+    this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
     this.color = ConfigDefaults.defaultColor,
     this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
@@ -84,8 +81,7 @@ final class ArrowData extends ElementData
     Object? startBinding = _startBindingUnset,
     Object? endBinding = _endBindingUnset,
   }) => ArrowData(
-    points:
-        points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+    points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
     color: color ?? this.color,
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeStyle: strokeStyle ?? this.strokeStyle,
@@ -149,10 +145,7 @@ final class ArrowData extends ElementData
     }
 
     if (points.length < 2) {
-      return const [
-        DrawPoint.zero,
-        DrawPoint(x: 1, y: 1),
-      ];
+      return const [DrawPoint.zero, DrawPoint(x: 1, y: 1)];
     }
 
     return List<DrawPoint>.unmodifiable(points);
@@ -160,10 +153,6 @@ final class ArrowData extends ElementData
 
   static ArrowType _decodeArrowType(Object? raw) {
     if (raw is String) {
-      if (raw == 'polyline') {
-        // Legacy persisted value.
-        return ArrowType.elbowLine;
-      }
       return ArrowType.values.firstWhere(
         (style) => style.name == raw,
         orElse: () => ConfigDefaults.defaultArrowType,

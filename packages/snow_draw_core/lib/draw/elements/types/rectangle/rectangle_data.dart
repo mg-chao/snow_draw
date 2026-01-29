@@ -26,8 +26,7 @@ final class RectangleData extends ElementData
         (json['cornerRadius'] as num?)?.toDouble() ??
         ConfigDefaults.defaultCornerRadius,
     fillColor: Color(
-      (json['fillColor'] as int?) ??
-          ConfigDefaults.defaultFillColor.toARGB32(),
+      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     color: Color(
       (json['color'] as int?) ??
@@ -117,13 +116,12 @@ final class RectangleData extends ElementData
           other.fillStyle == fillStyle;
 
   @override
-  int get hashCode =>
-      Object.hash(
-        cornerRadius,
-        fillColor,
-        color,
-        strokeWidth,
-        strokeStyle,
-        fillStyle,
-      );
+  int get hashCode => Object.hash(
+    cornerRadius,
+    fillColor,
+    color,
+    strokeWidth,
+    strokeStyle,
+    fillStyle,
+  );
 }

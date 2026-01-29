@@ -73,7 +73,8 @@ class RectangleHitTester implements ElementHitTester {
     final outerMinY = rect.minY - strokeMargin;
     final outerMaxY = rect.maxY + strokeMargin;
 
-    final insideOuter = position.x >= outerMinX &&
+    final insideOuter =
+        position.x >= outerMinX &&
         position.x <= outerMaxX &&
         position.y >= outerMinY &&
         position.y <= outerMaxY;
@@ -91,7 +92,8 @@ class RectangleHitTester implements ElementHitTester {
       return true;
     }
 
-    final insideInner = position.x > innerMinX &&
+    final insideInner =
+        position.x > innerMinX &&
         position.x < innerMaxX &&
         position.y > innerMinY &&
         position.y < innerMaxY;

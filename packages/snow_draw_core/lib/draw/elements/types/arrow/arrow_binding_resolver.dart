@@ -4,12 +4,10 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
-import '../../../types/element_style.dart';
 import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
-import 'arrow_elbow_line_binding_adjuster.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -264,17 +262,13 @@ ElementState? _applyBindings({
   if (localPoints.length < 2) {
     return null;
   }
-  final originalPoints = List<DrawPoint>.from(localPoints);
 
   final rect = element.rect;
   final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-  // Elbow lines handle perpendicular routing separately, so avoid reference-based
-  // snapping that can shift bindings to a different edge.
-  final useReferencePoint = data.arrowType != ArrowType.elbowLine;
-  final startReference = useReferencePoint && localPoints.length > 1
+  final startReference = localPoints.length > 1
       ? space.toWorld(localPoints[1])
       : null;
-  final endReference = useReferencePoint && localPoints.length > 1
+  final endReference = localPoints.length > 1
       ? space.toWorld(localPoints[localPoints.length - 2])
       : null;
 
@@ -315,22 +309,8 @@ ElementState? _applyBindings({
     return null;
   }
 
-  var adjustedPoints = localPoints;
-  if (data.arrowType == ArrowType.elbowLine) {
-    adjustedPoints = _adjustElbowLineEndpoints(
-      points: localPoints,
-      originalPoints: originalPoints,
-      startUpdated: startUpdated,
-      endUpdated: endUpdated,
-      startBinding: data.startBinding,
-      endBinding: data.endBinding,
-      elementsById: elementsById,
-      elementId: element.id,
-    );
-  }
-
   final result = computeArrowRectAndPoints(
-    localPoints: adjustedPoints,
+    localPoints: localPoints,
     oldRect: rect,
     rotation: element.rotation,
     arrowType: data.arrowType,
@@ -355,89 +335,7 @@ List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final effective = data.arrowType == ArrowType.elbowLine
-      ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
-      : resolved;
-  return effective
+  return resolved
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
 }
-
-List<DrawPoint> _adjustElbowLineEndpoints({
-  required List<DrawPoint> points,
-  required List<DrawPoint> originalPoints,
-  required bool startUpdated,
-  required bool endUpdated,
-  required ArrowBinding? startBinding,
-  required ArrowBinding? endBinding,
-  required Map<String, ElementState> elementsById,
-  required String elementId,
-}) {
-  if (points.length < 2) {
-    return points;
-  }
-
-  final updated = List<DrawPoint>.from(points);
-
-  if (startUpdated && originalPoints.length >= 2) {
-    final wasHorizontal = ArrowGeometry.isElbowLineSegmentHorizontal(
-      originalPoints[0],
-      originalPoints[1],
-    );
-    final anchor = updated[0];
-    final neighbor = updated[1];
-    updated[1] = wasHorizontal
-        ? DrawPoint(x: neighbor.x, y: anchor.y)
-        : DrawPoint(x: anchor.x, y: neighbor.y);
-  }
-
-  if (endUpdated && originalPoints.length >= 2) {
-    final lastIndex = updated.length - 1;
-    final prevIndex = lastIndex - 1;
-    final wasHorizontal = ArrowGeometry.isElbowLineSegmentHorizontal(
-      originalPoints[prevIndex],
-      originalPoints[lastIndex],
-    );
-    final anchor = updated[lastIndex];
-    final neighbor = updated[prevIndex];
-    updated[prevIndex] = wasHorizontal
-        ? DrawPoint(x: neighbor.x, y: anchor.y)
-        : DrawPoint(x: anchor.x, y: neighbor.y);
-  }
-
-  final basePoints = List<DrawPoint>.from(updated);
-  var adjusted = updated;
-  if (startUpdated && startBinding != null) {
-    final target = elementsById[startBinding.elementId];
-    if (target != null) {
-      adjusted = adjustElbowLinePointsForBinding(
-        points: adjusted,
-        binding: startBinding,
-        target: target,
-        isStart: true,
-      );
-    }
-  }
-  if (endUpdated && endBinding != null) {
-    final target = elementsById[endBinding.elementId];
-    if (target != null) {
-      adjusted = adjustElbowLinePointsForBinding(
-        points: adjusted,
-        binding: endBinding,
-        target: target,
-        isStart: false,
-      );
-    }
-  }
-
-  syncElbowLineBindingAutoPoints(
-    elementId: elementId,
-    before: basePoints,
-    after: adjusted,
-  );
-
-  return adjusted;
-}
-
-
-

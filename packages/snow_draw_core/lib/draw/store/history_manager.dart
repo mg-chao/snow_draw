@@ -125,15 +125,15 @@ class HistoryManager {
     );
     _current.children.add(node);
     _current = node;
-      _log?.debug('History record', {
-        'nodeId': node.id,
-        'parentId': node.parent?.id,
-        'description': metadata?.description,
-        'changedElements':
-            delta.beforeElements.length + delta.afterElements.length,
-        'orderChanged': delta.orderBefore != null,
-        'selectionChanged': delta.selectionChanged,
-      });
+    _log?.debug('History record', {
+      'nodeId': node.id,
+      'parentId': node.parent?.id,
+      'description': metadata?.description,
+      'changedElements':
+          delta.beforeElements.length + delta.afterElements.length,
+      'orderChanged': delta.orderBefore != null,
+      'selectionChanged': delta.selectionChanged,
+    });
     _pruneIfNeeded();
     return true;
   }

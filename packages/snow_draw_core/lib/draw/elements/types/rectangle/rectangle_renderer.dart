@@ -70,8 +70,10 @@ class RectangleRenderer extends ElementTypeRenderer {
     // Calculate fill pattern parameters (matching CPU fallback logic)
     final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
     const lineToSpacingRatio = 4.0;
-    final fillLineSpacing =
-        (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
+    final fillLineSpacing = (fillLineWidth * lineToSpacingRatio).clamp(
+      3.0,
+      18.0,
+    );
 
     // Calculate stroke pattern parameters (matching CPU fallback logic)
     // Dash and dot patterns are proportional to stroke width
@@ -144,8 +146,10 @@ class RectangleRenderer extends ElementTypeRenderer {
           ..isAntiAlias = true;
         canvas.drawRRect(rRect, paint);
       } else {
-        final fillLineWidth =
-            (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
+        final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(
+          0.5,
+          3.0,
+        );
         const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         const lineAngle = -math.pi / 4;
@@ -262,8 +266,9 @@ class RectangleRenderer extends ElementTypeRenderer {
     // For rotated gradients, scale the shader rect to ensure seamless tiling.
     // The perpendicular spacing changes by cos(angle), so we compensate.
     final cosAngle = math.cos(angle).abs();
-    final adjustedSpacing =
-        cosAngle > 0.01 ? safeSpacing / cosAngle : safeSpacing;
+    final adjustedSpacing = cosAngle > 0.01
+        ? safeSpacing / cosAngle
+        : safeSpacing;
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -340,11 +345,11 @@ class _StrokePathKey {
     required this.strokeStyle,
     required double patternPrimary,
     required double patternSecondary,
-  })  : width = _quantize(width),
-        height = _quantize(height),
-        cornerRadius = _quantize(cornerRadius),
-        patternPrimary = _quantize(patternPrimary),
-        patternSecondary = _quantize(patternSecondary);
+  }) : width = _quantize(width),
+       height = _quantize(height),
+       cornerRadius = _quantize(cornerRadius),
+       patternPrimary = _quantize(patternPrimary),
+       patternSecondary = _quantize(patternSecondary);
 
   final double width;
   final double height;
@@ -371,13 +376,13 @@ class _StrokePathKey {
 
   @override
   int get hashCode => Object.hash(
-        width,
-        height,
-        cornerRadius,
-        strokeStyle,
-        patternPrimary,
-        patternSecondary,
-      );
+    width,
+    height,
+    cornerRadius,
+    strokeStyle,
+    patternPrimary,
+    patternSecondary,
+  );
 }
 
 @immutable
@@ -386,8 +391,8 @@ class _LineShaderKey {
     required double spacing,
     required double lineWidth,
     required this.angle,
-  })  : spacing = _quantize(spacing),
-        lineWidth = _quantize(lineWidth);
+  }) : spacing = _quantize(spacing),
+       lineWidth = _quantize(lineWidth);
 
   final double spacing;
   final double lineWidth;

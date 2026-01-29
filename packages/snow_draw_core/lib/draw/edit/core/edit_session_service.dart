@@ -167,11 +167,7 @@ class EditSessionService {
       application: state.application.copyWith(interaction: session),
     );
 
-    return (
-      state: newState,
-      failureReason: null,
-      operationId: operationId,
-    );
+    return (state: newState, failureReason: null, operationId: operationId);
   }
 
   EditOutcome _performUpdate({

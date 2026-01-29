@@ -1439,11 +1439,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
               label: widget.strings.arrowTypeCurved,
               icon: const ArrowTypeCurvedIcon(),
             ),
-            _StyleOption(
-              value: ArrowType.elbowLine,
-              label: widget.strings.arrowTypeElbowLine,
-              icon: const ArrowTypeElbowIcon(),
-            ),
           ],
           selected: value.value,
           onSelect: (value) => _applyStyleUpdate(arrowType: value),
@@ -1719,5 +1714,3 @@ class _DashedBorderPainter extends CustomPainter {
       oldDelegate.dashWidth != dashWidth ||
       oldDelegate.dashSpace != dashSpace;
 }
-
-

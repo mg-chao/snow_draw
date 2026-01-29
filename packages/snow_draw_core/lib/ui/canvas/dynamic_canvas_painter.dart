@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -399,34 +399,19 @@ class DynamicCanvasPainter extends CustomPainter {
       ..color = strokeColor.withValues(alpha: 0.25)
       ..isAntiAlias = true;
 
-    final arrowData = effectiveElement.data as ArrowData;
-    final isElbowLine = arrowData.arrowType == ArrowType.elbowLine;
-    final addableBendControls = overlay.addableBendControls;
-
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      final isBendControl =
-          isElbowLine &&
-          handle.index >= 0 &&
-          handle.index < addableBendControls.length &&
-          addableBendControls[handle.index];
-      final fillPaint = isBendControl
-          ? turningFillPaint
-          : isHighlighted
+      final fillPaint = isHighlighted
           ? addableFillPaintHighlighted
           : addableFillPaint;
-      final strokePaint = isBendControl
-          ? isHighlighted
-                ? turningStrokePaintHighlighted
-                : turningStrokePaint
-          : isHighlighted
+      final strokePaint = isHighlighted
           ? addableStrokePaintHighlighted
           : addableStrokePaint;
-      final radius = isBendControl ? turnRadius : addableRadius;
+      final radius = addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
         ..drawCircle(center, radius, strokePaint);
@@ -730,10 +715,7 @@ class DynamicCanvasPainter extends CustomPainter {
       }
       final effectiveElement = stateView.effectiveElement(element);
       final data = effectiveElement.data as ArrowData;
-      final points = _resolveArrowWorldPoints(
-        effectiveElement,
-        data,
-      );
+      final points = _resolveArrowWorldPoints(effectiveElement, data);
       final endpoint = _resolveEndpointForHandle(handle, points.length);
       final binding = switch (endpoint) {
         _ArrowEndpoint.start => data.startBinding,
@@ -770,11 +752,12 @@ class DynamicCanvasPainter extends CustomPainter {
     return switch (handle.kind) {
       ArrowPointKind.loopStart => _ArrowEndpoint.start,
       ArrowPointKind.loopEnd => _ArrowEndpoint.end,
-      ArrowPointKind.turning => handle.index == 0
-          ? _ArrowEndpoint.start
-          : handle.index == pointCount - 1
-          ? _ArrowEndpoint.end
-          : null,
+      ArrowPointKind.turning =>
+        handle.index == 0
+            ? _ArrowEndpoint.start
+            : handle.index == pointCount - 1
+            ? _ArrowEndpoint.end
+            : null,
       _ => null,
     };
   }
@@ -787,14 +770,10 @@ class DynamicCanvasPainter extends CustomPainter {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.elbowLine
-        ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
-        : resolved;
-    return effective
+    return resolved
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }
-
 
   /// Draw box-selection overlay.
   void _drawBoxSelection(Canvas canvas, DrawRect bounds, double scale) {
@@ -1161,11 +1140,7 @@ class DynamicCanvasPainter extends CustomPainter {
 enum _ArrowEndpoint { start, end }
 
 class _ArrowBindingHighlight {
-  const _ArrowBindingHighlight({
-    required this.elementId,
-  });
+  const _ArrowBindingHighlight({required this.elementId});
 
   final String elementId;
 }
-
-

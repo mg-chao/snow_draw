@@ -143,9 +143,7 @@ class ArrowVisualCache {
     );
   }
 
-  List<Path> _buildArrowheadPaths(
-    ArrowGeometryDescriptor geometry,
-  ) {
+  List<Path> _buildArrowheadPaths(ArrowGeometryDescriptor geometry) {
     final paths = <Path>[];
     final points = geometry.localPoints;
     final data = geometry.data;
@@ -195,8 +193,8 @@ class ArrowVisualCache {
     List<PathMetric>? metrics,
   }) {
     final dashed = Path();
-    final resolved = metrics ??
-        basePath.computeMetrics().toList(growable: false);
+    final resolved =
+        metrics ?? basePath.computeMetrics().toList(growable: false);
     for (final metric in resolved) {
       var distance = 0.0;
       while (distance < metric.length) {
@@ -215,8 +213,8 @@ class ArrowVisualCache {
     List<PathMetric>? metrics,
   }) {
     final dotted = Path();
-    final resolved = metrics ??
-        basePath.computeMetrics().toList(growable: false);
+    final resolved =
+        metrics ?? basePath.computeMetrics().toList(growable: false);
     for (final metric in resolved) {
       var distance = 0.0;
       while (distance < metric.length) {

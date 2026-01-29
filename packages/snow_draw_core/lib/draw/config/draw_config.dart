@@ -174,11 +174,14 @@ class DrawConfig {
       canvas: canvas ?? this.canvas,
       boxSelection: boxSelection ?? this.boxSelection,
       elementStyle: nextElementStyle,
-      rectangleStyle: rectangleStyle ??
+      rectangleStyle:
+          rectangleStyle ??
           (elementStyle != null ? nextElementStyle : this.rectangleStyle),
-      arrowStyle: arrowStyle ??
+      arrowStyle:
+          arrowStyle ??
           (elementStyle != null ? nextElementStyle : this.arrowStyle),
-      textStyle: textStyle ??
+      textStyle:
+          textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
       grid: grid ?? this.grid,
       snap: snap ?? this.snap,
@@ -201,19 +204,18 @@ class DrawConfig {
           other.snap == snap;
 
   @override
-  int get hashCode =>
-      Object.hash(
-        selection,
-        element,
-        canvas,
-        boxSelection,
-        elementStyle,
-        rectangleStyle,
-        arrowStyle,
-        textStyle,
-        grid,
-        snap,
-      );
+  int get hashCode => Object.hash(
+    selection,
+    element,
+    canvas,
+    boxSelection,
+    elementStyle,
+    rectangleStyle,
+    arrowStyle,
+    textStyle,
+    grid,
+    snap,
+  );
 
   @override
   String toString() =>

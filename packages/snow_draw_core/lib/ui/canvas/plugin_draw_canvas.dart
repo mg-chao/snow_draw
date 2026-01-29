@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -1265,12 +1265,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     var index = context.pointIndex;
     final transform = interaction.currentTransform;
     if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
-      if (context.arrowType == ArrowType.elbowLine) {
-        final resolvedIndex = transform.activeIndex;
-        if (resolvedIndex != null) {
-          index = resolvedIndex;
-        }
-      } else if (transform.didInsert) {
+      if (transform.didInsert) {
         kind = ArrowPointKind.turning;
         index = context.pointIndex + 1;
       }
@@ -1436,9 +1431,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawPoint position,
     required draw_hit_test.HitTestResult hitResult,
     required SelectionConfig selectionConfig,
-  }) =>
-      hitResult.isHandleHit ||
-      hitResult.isInSelectionPadding;
+  }) => hitResult.isHandleHit || hitResult.isInSelectionPadding;
 
   bool _shouldDeferToSelectionBox({
     required DrawStateView stateView,
@@ -1937,10 +1930,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastVerticalSelection = nextSelection;
   }
 
-  int _lineIndexForCaretOffset(
-    double caretDy,
-    List<LineMetrics> lineMetrics,
-  ) {
+  int _lineIndexForCaretOffset(double caretDy, List<LineMetrics> lineMetrics) {
     for (var i = 0; i < lineMetrics.length; i++) {
       if (lineMetrics[i].baseline > caretDy) {
         return i;
@@ -2126,5 +2116,3 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     await widget.store.dispatch(const ClearSelection());
   }
 }
-
-

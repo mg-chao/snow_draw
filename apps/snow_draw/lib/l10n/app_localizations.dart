@@ -28,7 +28,6 @@ class AppLocalizations {
   String get arrowType => 'Arrow Type';
   String get arrowTypeStraight => 'Straight';
   String get arrowTypeCurved => 'Curved';
-  String get arrowTypeElbowLine => 'Elbow Line';
   String get arrowheads => 'Arrowheads';
   String get startArrowhead => 'Start Arrowhead';
   String get endArrowhead => 'End Arrowhead';
@@ -99,4 +98,3 @@ class _AppLocalizationsDelegate
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
-

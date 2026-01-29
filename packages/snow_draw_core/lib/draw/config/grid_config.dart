@@ -22,10 +22,7 @@ class GridConfig {
        ),
        assert(lineWidth > 0, 'lineWidth must be positive'),
        assert(majorLineEvery > 0, 'majorLineEvery must be positive'),
-       assert(
-         minScreenSpacing > 0,
-         'minScreenSpacing must be positive',
-       ),
+       assert(minScreenSpacing > 0, 'minScreenSpacing must be positive'),
        assert(minRenderSpacing >= 0, 'minRenderSpacing must be non-negative'),
        assert(
          minRenderSpacing <= minScreenSpacing,

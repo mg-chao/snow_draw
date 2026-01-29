@@ -9,10 +9,7 @@ import '../../types/snap_guides.dart';
 /// `elements`. Only the edit session's [EditTransform] is updated.
 @immutable
 class EditUpdateResult<T extends EditTransform> {
-  const EditUpdateResult({
-    required this.transform,
-    this.snapGuides = const [],
-  });
+  const EditUpdateResult({required this.transform, this.snapGuides = const []});
   final T transform;
   final List<SnapGuide> snapGuides;
 }

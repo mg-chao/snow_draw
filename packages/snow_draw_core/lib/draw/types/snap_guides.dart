@@ -36,14 +36,8 @@ class SnapGuide {
           other.label == label;
 
   @override
-  int get hashCode => Object.hash(
-    kind,
-    axis,
-    start,
-    end,
-    Object.hashAll(markers),
-    label,
-  );
+  int get hashCode =>
+      Object.hash(kind, axis, start, end, Object.hashAll(markers), label);
 
   static bool _listEquals(List<DrawPoint> a, List<DrawPoint> b) {
     if (a.length != b.length) {
