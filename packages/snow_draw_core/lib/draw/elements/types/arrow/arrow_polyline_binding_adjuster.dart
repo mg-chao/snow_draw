@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -11,12 +12,49 @@ const double _axisEpsilon = 1e-3;
 const double _bindingGapBase = 6.0;
 const double _minApproachOffset = 12.0;
 const double _autoPointMatchEpsilon = 1e-6;
+const double _intersectionEpsilon = 1e-6;
 
 enum _BindingEdge { top, right, bottom, left }
 
 enum _Axis { horizontal, vertical }
 
 final _polylineBindingAutoPoints = <String, Set<int>>{};
+
+class _BindingObstacle {
+  const _BindingObstacle({
+    required this.rect,
+    required this.bounds,
+    required this.space,
+    required this.hasRotation,
+  });
+
+  factory _BindingObstacle.fromTarget(ElementState target) {
+    final rect = target.rect;
+    final rotation = target.rotation;
+    if (rotation == 0) {
+      return _BindingObstacle(
+        rect: rect,
+        bounds: rect,
+        space: null,
+        hasRotation: false,
+      );
+    }
+    return _BindingObstacle(
+      rect: rect,
+      bounds: _resolveRotatedBounds(rect, rotation),
+      space: ElementSpace(rotation: rotation, origin: rect.center),
+      hasRotation: true,
+    );
+  }
+
+  final DrawRect rect;
+  final DrawRect bounds;
+  final ElementSpace? space;
+  final bool hasRotation;
+
+  DrawPoint toLocal(DrawPoint point) =>
+      hasRotation ? space!.fromWorld(point) : point;
+}
 
 void syncPolylineBindingAutoPoints({
   required String elementId,
@@ -47,7 +85,8 @@ List<DrawPoint> adjustPolylinePointsForBinding({
     return points;
   }
 
-  final rect = target.rect;
+  final obstacle = _BindingObstacle.fromTarget(target);
+  final rect = obstacle.rect;
   if (rect.width == 0 || rect.height == 0) {
     return points;
   }
@@ -67,7 +106,7 @@ List<DrawPoint> adjustPolylinePointsForBinding({
 
   final adjusted = _adjustPolylineEnd(
     points: working,
-    rect: rect,
+    obstacle: obstacle,
     edge: edge,
     approachOffset: _resolveApproachOffset(target),
   );
@@ -77,7 +116,7 @@ List<DrawPoint> adjustPolylinePointsForBinding({
       : adjusted;
   return _balanceVerticalEndpointSegments(
     points: resolved,
-    rect: rect,
+    bounds: obstacle.bounds,
     edge: edge,
   );
 }
@@ -164,7 +203,7 @@ _BindingEdge? _resolveBindingEdge(
 
 List<DrawPoint> _adjustPolylineEnd({
   required List<DrawPoint> points,
-  required DrawRect rect,
+  required _BindingObstacle obstacle,
   required _BindingEdge edge,
   required double approachOffset,
 }) {
@@ -174,14 +213,15 @@ List<DrawPoint> _adjustPolylineEnd({
 
   final end = points.last;
   final immediateNeighbor = points[points.length - 2];
-  if (_segmentMatchesEdge(edge, immediateNeighbor, end)) {
+  if (_segmentMatchesEdge(edge, immediateNeighbor, end) &&
+      !_segmentPenetratesObstacle(immediateNeighbor, end, obstacle)) {
     return points;
   }
 
   // Skip points that are inside the bound rect to avoid extra detours.
   var neighborIndex = points.length - 2;
   while (neighborIndex > 0 &&
-      _isPointInsideRect(points[neighborIndex], rect)) {
+      _isPointInsideObstacle(points[neighborIndex], obstacle)) {
     neighborIndex--;
   }
   final neighbor = points[neighborIndex];
@@ -190,14 +230,14 @@ List<DrawPoint> _adjustPolylineEnd({
   final detourYOverride = _resolveBalancedDetourY(
     start: neighbor,
     end: end,
-    rect: rect,
+    bounds: obstacle.bounds,
     edge: edge,
   );
   final preferredFirstAxis = _preferredAxisForEdge(edge);
   final path = _buildOrthogonalPath(
     start: neighbor,
     end: approach,
-    obstacle: rect,
+    obstacle: obstacle,
     detourOffset: approachOffset,
     edge: edge,
     preferredFirstAxis: preferredFirstAxis,
@@ -237,7 +277,7 @@ DrawPoint _offsetForEdge(DrawPoint point, _BindingEdge edge, double offset) =>
 List<DrawPoint> _buildOrthogonalPath({
   required DrawPoint start,
   required DrawPoint end,
-  required DrawRect obstacle,
+  required _BindingObstacle obstacle,
   required double detourOffset,
   required _BindingEdge edge,
   _Axis? preferredFirstAxis,
@@ -277,10 +317,11 @@ List<DrawPoint> _buildOrthogonalPath({
 
   if (edge == _BindingEdge.top || edge == _BindingEdge.bottom) {
     final detourY =
-        detourYOverride ?? _resolveDetourY(start, obstacle, detourOffset);
+        detourYOverride ??
+        _resolveDetourY(start, obstacle.bounds, detourOffset);
     // Favor the bound edge side when detouring to keep the approach perpendicular.
     final outsideX = detourYOverride == null
-        ? _resolveDetourX(end, obstacle, detourOffset)
+        ? _resolveDetourX(end, obstacle.bounds, detourOffset)
         : end.x;
     return [
       start,
@@ -291,7 +332,7 @@ List<DrawPoint> _buildOrthogonalPath({
     ];
   }
 
-  final outsideY = _resolveDetourY(start, obstacle, detourOffset);
+  final outsideY = _resolveDetourY(start, obstacle.bounds, detourOffset);
   return [
     start,
     DrawPoint(x: start.x, y: outsideY),
@@ -308,16 +349,29 @@ _Axis _preferredAxisForEdge(_BindingEdge edge) =>
         ? _Axis.horizontal
         : _Axis.vertical;
 
-bool _pathIntersectsRect(List<DrawPoint> path, DrawRect rect) {
+bool _pathIntersectsRect(List<DrawPoint> path, _BindingObstacle obstacle) {
   for (var i = 0; i < path.length - 1; i++) {
-    if (_segmentIntersectsRect(path[i], path[i + 1], rect)) {
+    if (_segmentIntersectsRect(path[i], path[i + 1], obstacle)) {
       return true;
     }
   }
   return false;
 }
 
-bool _segmentIntersectsRect(DrawPoint a, DrawPoint b, DrawRect rect) {
+bool _segmentIntersectsRect(
+  DrawPoint a,
+  DrawPoint b,
+  _BindingObstacle obstacle,
+) {
+  if (!obstacle.hasRotation) {
+    return _axisAlignedSegmentIntersectsRect(a, b, obstacle.rect);
+  }
+  final localStart = obstacle.toLocal(a);
+  final localEnd = obstacle.toLocal(b);
+  return _segmentIntersectsAxisAlignedRect(localStart, localEnd, obstacle.rect);
+}
+
+bool _axisAlignedSegmentIntersectsRect(DrawPoint a, DrawPoint b, DrawRect rect) {
   if ((a.x - b.x).abs() <= _axisEpsilon) {
     final x = a.x;
     if (x < rect.minX - _axisEpsilon || x > rect.maxX + _axisEpsilon) {
@@ -343,7 +397,97 @@ bool _segmentIntersectsRect(DrawPoint a, DrawPoint b, DrawRect rect) {
   return true;
 }
 
-bool _isPointInsideRect(DrawPoint point, DrawRect rect) =>
+bool _segmentIntersectsAxisAlignedRect(
+  DrawPoint start,
+  DrawPoint end,
+  DrawRect rect,
+) =>
+    _clipSegmentToRect(start, end, rect) != null;
+
+bool _segmentPenetratesObstacle(
+  DrawPoint start,
+  DrawPoint end,
+  _BindingObstacle obstacle,
+) {
+  if (!obstacle.hasRotation) {
+    return _segmentPenetratesRect(start, end, obstacle.rect);
+  }
+  final localStart = obstacle.toLocal(start);
+  final localEnd = obstacle.toLocal(end);
+  return _segmentPenetratesRect(localStart, localEnd, obstacle.rect);
+}
+
+bool _segmentPenetratesRect(DrawPoint start, DrawPoint end, DrawRect rect) {
+  final clipped = _clipSegmentToRect(start, end, rect);
+  if (clipped == null) {
+    return false;
+  }
+  final midT = (clipped.start + clipped.end) / 2;
+  final mid = DrawPoint(
+    x: start.x + (end.x - start.x) * midT,
+    y: start.y + (end.y - start.y) * midT,
+  );
+  return _isStrictlyInsideRect(rect, mid);
+}
+
+_SegmentClip? _clipSegmentToRect(
+  DrawPoint start,
+  DrawPoint end,
+  DrawRect rect,
+) {
+  var t0 = 0.0;
+  var t1 = 1.0;
+  final dx = end.x - start.x;
+  final dy = end.y - start.y;
+
+  bool clip(double p, double q) {
+    if (p.abs() <= _intersectionEpsilon) {
+      return q >= -_intersectionEpsilon;
+    }
+    final r = q / p;
+    if (p < 0) {
+      if (r > t1 + _intersectionEpsilon) {
+        return false;
+      }
+      if (r > t0) {
+        t0 = r;
+      }
+    } else {
+      if (r < t0 - _intersectionEpsilon) {
+        return false;
+      }
+      if (r < t1) {
+        t1 = r;
+      }
+    }
+    return true;
+  }
+
+  if (!clip(-dx, start.x - rect.minX)) {
+    return null;
+  }
+  if (!clip(dx, rect.maxX - start.x)) {
+    return null;
+  }
+  if (!clip(-dy, start.y - rect.minY)) {
+    return null;
+  }
+  if (!clip(dy, rect.maxY - start.y)) {
+    return null;
+  }
+
+  if (t1 < t0) {
+    return null;
+  }
+  return _SegmentClip(start: t0, end: t1);
+}
+
+bool _isPointInsideObstacle(DrawPoint point, _BindingObstacle obstacle) {
+  final localPoint = obstacle.toLocal(point);
+  return _isStrictlyInsideRect(obstacle.rect, localPoint);
+}
+
+bool _isStrictlyInsideRect(DrawRect rect, DrawPoint point) =>
     point.x > rect.minX + _axisEpsilon &&
     point.x < rect.maxX - _axisEpsilon &&
     point.y > rect.minY + _axisEpsilon &&
@@ -357,15 +501,17 @@ double _pathLength(List<DrawPoint> path) {
   return length;
 }
 
-double _resolveDetourX(DrawPoint reference, DrawRect rect, double offset) =>
-    reference.x >= rect.centerX ? rect.maxX + offset : rect.minX - offset;
+double _resolveDetourX(DrawPoint reference, DrawRect bounds, double offset) =>
+    reference.x >= bounds.centerX
+        ? bounds.maxX + offset
+        : bounds.minX - offset;
 
-double _resolveDetourY(DrawPoint start, DrawRect rect, double offset) =>
-    start.y >= rect.centerY ? rect.maxY + offset : rect.minY - offset;
+double _resolveDetourY(DrawPoint start, DrawRect bounds, double offset) =>
+    start.y >= bounds.centerY ? bounds.maxY + offset : bounds.minY - offset;
 
 List<DrawPoint> _balanceVerticalEndpointSegments({
   required List<DrawPoint> points,
-  required DrawRect rect,
+  required DrawRect bounds,
   required _BindingEdge edge,
 }) {
   if (edge != _BindingEdge.top && edge != _BindingEdge.bottom) {
@@ -389,11 +535,11 @@ List<DrawPoint> _balanceVerticalEndpointSegments({
 
   final endpointsOutside = switch (edge) {
     _BindingEdge.top =>
-      start.y <= rect.minY - _axisEpsilon &&
-          end.y <= rect.minY - _axisEpsilon,
+      start.y <= bounds.minY - _axisEpsilon &&
+          end.y <= bounds.minY - _axisEpsilon,
     _BindingEdge.bottom =>
-      start.y >= rect.maxY + _axisEpsilon &&
-          end.y >= rect.maxY + _axisEpsilon,
+      start.y >= bounds.maxY + _axisEpsilon &&
+          end.y >= bounds.maxY + _axisEpsilon,
     _ => false,
   };
   if (!endpointsOutside) {
@@ -402,8 +548,8 @@ List<DrawPoint> _balanceVerticalEndpointSegments({
 
   final midY = (start.y + end.y) / 2;
   final midpointOutside = switch (edge) {
-    _BindingEdge.top => midY < rect.minY - _axisEpsilon,
-    _BindingEdge.bottom => midY > rect.maxY + _axisEpsilon,
+    _BindingEdge.top => midY < bounds.minY - _axisEpsilon,
+    _BindingEdge.bottom => midY > bounds.maxY + _axisEpsilon,
     _ => false,
   };
   if (!midpointOutside) {
@@ -426,20 +572,20 @@ List<DrawPoint> _balanceVerticalEndpointSegments({
 double? _resolveBalancedDetourY({
   required DrawPoint start,
   required DrawPoint end,
-  required DrawRect rect,
+  required DrawRect bounds,
   required _BindingEdge edge,
 }) {
   if (edge != _BindingEdge.top && edge != _BindingEdge.bottom) {
     return null;
   }
   final startOutside = switch (edge) {
-    _BindingEdge.top => start.y <= rect.minY - _axisEpsilon,
-    _BindingEdge.bottom => start.y >= rect.maxY + _axisEpsilon,
+    _BindingEdge.top => start.y <= bounds.minY - _axisEpsilon,
+    _BindingEdge.bottom => start.y >= bounds.maxY + _axisEpsilon,
     _ => false,
   };
   final endOutside = switch (edge) {
-    _BindingEdge.top => end.y <= rect.minY - _axisEpsilon,
-    _BindingEdge.bottom => end.y >= rect.maxY + _axisEpsilon,
+    _BindingEdge.top => end.y <= bounds.minY - _axisEpsilon,
+    _BindingEdge.bottom => end.y >= bounds.maxY + _axisEpsilon,
     _ => false,
   };
   if (!startOutside || !endOutside) {
@@ -449,9 +595,9 @@ double? _resolveBalancedDetourY({
   final midpoint = (start.y + end.y) / 2;
   return switch (edge) {
     _BindingEdge.top =>
-      midpoint < rect.minY - _axisEpsilon ? midpoint : null,
+      midpoint < bounds.minY - _axisEpsilon ? midpoint : null,
     _BindingEdge.bottom =>
-      midpoint > rect.maxY + _axisEpsilon ? midpoint : null,
+      midpoint > bounds.maxY + _axisEpsilon ? midpoint : null,
     _ => null,
   };
 }
@@ -514,4 +660,30 @@ List<DrawPoint> _simplifyPoints(List<DrawPoint> points) {
   }
   simplified.add(deduped.last);
   return simplified;
+}
+
+DrawRect _resolveRotatedBounds(DrawRect rect, double rotation) {
+  if (rotation == 0) {
+    return rect;
+  }
+  final cosTheta = math.cos(rotation).abs();
+  final sinTheta = math.sin(rotation).abs();
+  final halfWidth = rect.width / 2;
+  final halfHeight = rect.height / 2;
+  final halfBoundsWidth = halfWidth * cosTheta + halfHeight * sinTheta;
+  final halfBoundsHeight = halfWidth * sinTheta + halfHeight * cosTheta;
+  final center = rect.center;
+  return DrawRect(
+    minX: center.x - halfBoundsWidth,
+    minY: center.y - halfBoundsHeight,
+    maxX: center.x + halfBoundsWidth,
+    maxY: center.y + halfBoundsHeight,
+  );
+}
+
+class _SegmentClip {
+  const _SegmentClip({required this.start, required this.end});
+
+  final double start;
+  final double end;
 }
