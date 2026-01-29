@@ -260,20 +260,38 @@ ElbowRouteResult routeElbowArrow({
           ) ??
           end;
 
+  final vectorHeading = _vectorToHeading(
+    resolvedEnd.x - resolvedStart.x,
+    resolvedEnd.y - resolvedStart.y,
+  );
   final startHeading = startElement == null
-      ? _vectorToHeading(resolvedEnd.x - resolvedStart.x,
-          resolvedEnd.y - resolvedStart.y)
+      ? vectorHeading
       : _headingForPointOnBounds(
           SelectionCalculator.computeElementWorldAabb(startElement),
           resolvedStart,
         );
   final endHeading = endElement == null
-      ? _vectorToHeading(resolvedStart.x - resolvedEnd.x,
-          resolvedStart.y - resolvedEnd.y)
+      ? _vectorToHeading(
+          resolvedStart.x - resolvedEnd.x,
+          resolvedStart.y - resolvedEnd.y,
+        )
       : _headingForPointOnBounds(
           SelectionCalculator.computeElementWorldAabb(endElement),
           resolvedEnd,
         );
+
+  if (startElement == null && endElement == null) {
+    final simple = _fallbackPath(
+      start: resolvedStart,
+      end: resolvedEnd,
+      startHeading: startHeading,
+    );
+    return ElbowRouteResult(
+      points: simple,
+      startPoint: resolvedStart,
+      endPoint: resolvedEnd,
+    );
+  }
 
   final startBounds = _createBoundingBox(
     point: resolvedStart,
@@ -712,7 +730,8 @@ List<_GridNode> _astar({
         continue;
       }
 
-      if (next.addr == end.addr && neighborHeading == endHeading) {
+      if (next.addr == end.addr &&
+          neighborHeading == _flipHeading(endHeading)) {
         continue;
       }
 
@@ -725,12 +744,12 @@ List<_GridNode> _astar({
         final hScore =
             _manhattanDistance(next.pos, end.pos) +
             _estimatedBendPenalty(
-                  start: next.pos,
-                  end: end.pos,
-                  startHeading: neighborHeading,
-                  endHeading: _flipHeading(endHeading),
-                  bendPenalty: bendPenalty,
-                );
+              start: next.pos,
+              end: end.pos,
+              startHeading: neighborHeading,
+              endHeading: _flipHeading(endHeading),
+              bendPenalty: bendPenalty,
+            );
         next.parent = current;
         next.g = gScore;
         next.h = hScore;
