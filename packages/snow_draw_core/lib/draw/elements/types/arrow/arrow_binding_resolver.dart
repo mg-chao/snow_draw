@@ -1,4 +1,4 @@
-import 'package:meta/meta.dart';
+﻿import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/document_state.dart';
@@ -9,7 +9,7 @@ import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
-import 'arrow_polyline_binding_adjuster.dart';
+import 'arrow_elbow_line_binding_adjuster.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -268,9 +268,9 @@ ElementState? _applyBindings({
 
   final rect = element.rect;
   final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-  // Polylines handle perpendicular routing separately, so avoid reference-based
+  // Elbow lines handle perpendicular routing separately, so avoid reference-based
   // snapping that can shift bindings to a different edge.
-  final useReferencePoint = data.arrowType != ArrowType.polyline;
+  final useReferencePoint = data.arrowType != ArrowType.elbowLine;
   final startReference = useReferencePoint && localPoints.length > 1
       ? space.toWorld(localPoints[1])
       : null;
@@ -316,8 +316,8 @@ ElementState? _applyBindings({
   }
 
   var adjustedPoints = localPoints;
-  if (data.arrowType == ArrowType.polyline) {
-    adjustedPoints = _adjustPolylineEndpoints(
+  if (data.arrowType == ArrowType.elbowLine) {
+    adjustedPoints = _adjustElbowLineEndpoints(
       points: localPoints,
       originalPoints: originalPoints,
       startUpdated: startUpdated,
@@ -355,15 +355,15 @@ List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final effective = data.arrowType == ArrowType.polyline
-      ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
+  final effective = data.arrowType == ArrowType.elbowLine
+      ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
       : resolved;
   return effective
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
 }
 
-List<DrawPoint> _adjustPolylineEndpoints({
+List<DrawPoint> _adjustElbowLineEndpoints({
   required List<DrawPoint> points,
   required List<DrawPoint> originalPoints,
   required bool startUpdated,
@@ -380,7 +380,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
   final updated = List<DrawPoint>.from(points);
 
   if (startUpdated && originalPoints.length >= 2) {
-    final wasHorizontal = ArrowGeometry.isPolylineSegmentHorizontal(
+    final wasHorizontal = ArrowGeometry.isElbowLineSegmentHorizontal(
       originalPoints[0],
       originalPoints[1],
     );
@@ -394,7 +394,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
   if (endUpdated && originalPoints.length >= 2) {
     final lastIndex = updated.length - 1;
     final prevIndex = lastIndex - 1;
-    final wasHorizontal = ArrowGeometry.isPolylineSegmentHorizontal(
+    final wasHorizontal = ArrowGeometry.isElbowLineSegmentHorizontal(
       originalPoints[prevIndex],
       originalPoints[lastIndex],
     );
@@ -410,7 +410,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
   if (startUpdated && startBinding != null) {
     final target = elementsById[startBinding.elementId];
     if (target != null) {
-      adjusted = adjustPolylinePointsForBinding(
+      adjusted = adjustElbowLinePointsForBinding(
         points: adjusted,
         binding: startBinding,
         target: target,
@@ -421,7 +421,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
   if (endUpdated && endBinding != null) {
     final target = elementsById[endBinding.elementId];
     if (target != null) {
-      adjusted = adjustPolylinePointsForBinding(
+      adjusted = adjustElbowLinePointsForBinding(
         points: adjusted,
         binding: endBinding,
         target: target,
@@ -430,7 +430,7 @@ List<DrawPoint> _adjustPolylineEndpoints({
     }
   }
 
-  syncPolylineBindingAutoPoints(
+  syncElbowLineBindingAutoPoints(
     elementId: elementId,
     before: basePoints,
     after: adjusted,
@@ -438,3 +438,6 @@ List<DrawPoint> _adjustPolylineEndpoints({
 
   return adjusted;
 }
+
+
+

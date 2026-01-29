@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -400,7 +400,7 @@ class DynamicCanvasPainter extends CustomPainter {
       ..isAntiAlias = true;
 
     final arrowData = effectiveElement.data as ArrowData;
-    final isPolyline = arrowData.arrowType == ArrowType.polyline;
+    final isElbowLine = arrowData.arrowType == ArrowType.elbowLine;
     final addableBendControls = overlay.addableBendControls;
 
     for (final handle in overlay.addablePoints) {
@@ -410,7 +410,7 @@ class DynamicCanvasPainter extends CustomPainter {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
       final isBendControl =
-          isPolyline &&
+          isElbowLine &&
           handle.index >= 0 &&
           handle.index < addableBendControls.length &&
           addableBendControls[handle.index];
@@ -787,8 +787,8 @@ class DynamicCanvasPainter extends CustomPainter {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
+    final effective = data.arrowType == ArrowType.elbowLine
+        ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
         : resolved;
     return effective
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
@@ -1167,3 +1167,5 @@ class _ArrowBindingHighlight {
 
   final String elementId;
 }
+
+

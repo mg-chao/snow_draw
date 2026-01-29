@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../types/draw_point.dart';
@@ -6,7 +6,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 
-enum _PolylineAxis { horizontal, vertical }
+enum _ElbowLineAxis { horizontal, vertical }
 
 class _CubicSegment {
   const _CubicSegment({
@@ -29,7 +29,7 @@ class ArrowGeometry {
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
   ];
-  static const _polylineSnapTolerance = 1.0;
+  static const _elbowLineSnapTolerance = 1.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -119,7 +119,7 @@ class ArrowGeometry {
     }
     return switch (arrowType) {
       ArrowType.curved => _buildCurvedPath(points),
-      ArrowType.polyline => _buildPolylinePath(points),
+      ArrowType.elbowLine => _buildElbowLinePath(points),
       ArrowType.straight => _buildStraightPath(points),
     };
   }
@@ -135,8 +135,8 @@ class ArrowGeometry {
       return _approximateCurvedLength(points);
     }
 
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
+    final resolvedPoints = arrowType == ArrowType.elbowLine
+        ? expandElbowLinePoints(points)
         : points;
     var length = 0.0;
     for (var i = 1; i < resolvedPoints.length; i++) {
@@ -181,8 +181,8 @@ class ArrowGeometry {
       }
     }
 
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(workingPoints)
+    final resolvedPoints = arrowType == ArrowType.elbowLine
+        ? expandElbowLinePoints(workingPoints)
         : workingPoints;
     if (resolvedPoints.length < 2) {
       return null;
@@ -227,8 +227,8 @@ class ArrowGeometry {
       }
     }
 
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(workingPoints)
+    final resolvedPoints = arrowType == ArrowType.elbowLine
+        ? expandElbowLinePoints(workingPoints)
         : workingPoints;
     if (resolvedPoints.length < 2) {
       return null;
@@ -238,7 +238,7 @@ class ArrowGeometry {
     return _normalize(vector);
   }
 
-  static List<Offset> expandPolylinePoints(
+  static List<Offset> expandElbowLinePoints(
     List<Offset> points, {
     bool includeVirtual = true,
   }) {
@@ -246,7 +246,7 @@ class ArrowGeometry {
       return List<Offset>.from(points);
     }
     if (points.length == 2) {
-      final created = _buildPolylineCreationPoints(
+      final created = _buildElbowLineCreationPoints(
         start: DrawPoint(x: points.first.dx, y: points.first.dy),
         end: DrawPoint(x: points.last.dx, y: points.last.dy),
       );
@@ -254,14 +254,14 @@ class ArrowGeometry {
           .map((point) => Offset(point.x, point.y))
           .toList(growable: false);
     }
-    return _simplifyPolylinePoints(points);
+    return _simplifyElbowLinePoints(points);
   }
 
-  static bool isPolylineSegmentHorizontal(DrawPoint start, DrawPoint end) =>
-      _resolvePolylineAxis(Offset(start.x, start.y), Offset(end.x, end.y)) ==
-      _PolylineAxis.horizontal;
+  static bool isElbowLineSegmentHorizontal(DrawPoint start, DrawPoint end) =>
+      _resolveElbowLineAxis(Offset(start.x, start.y), Offset(end.x, end.y)) ==
+      _ElbowLineAxis.horizontal;
 
-  static List<DrawPoint> normalizePolylinePoints(List<DrawPoint> points) {
+  static List<DrawPoint> normalizeElbowLinePoints(List<DrawPoint> points) {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
@@ -269,8 +269,8 @@ class ArrowGeometry {
     final offsets = points
         .map((point) => Offset(point.x, point.y))
         .toList(growable: false);
-    final deduped = _dedupePolylinePoints(offsets);
-    final simplified = _removeRedundantPolylinePoints(deduped);
+    final deduped = _dedupeElbowLinePoints(offsets);
+    final simplified = _removeRedundantElbowLinePoints(deduped);
     if (simplified.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
@@ -281,14 +281,14 @@ class ArrowGeometry {
     );
   }
 
-  static List<DrawPoint> ensurePolylineCreationPoints(List<DrawPoint> points) {
+  static List<DrawPoint> ensureElbowLineCreationPoints(List<DrawPoint> points) {
     if (points.length < 2) {
       return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
     }
-    return normalizePolylinePoints(points);
+    return normalizeElbowLinePoints(points);
   }
 
-  static List<DrawPoint> _buildPolylineCreationPoints({
+  static List<DrawPoint> _buildElbowLineCreationPoints({
     required DrawPoint start,
     required DrawPoint end,
   }) {
@@ -298,8 +298,8 @@ class ArrowGeometry {
       return [start, end];
     }
 
-    final firstAxis = _dominantPolylineAxis(startOffset, endOffset);
-    return _buildElbowPolylinePoints(
+    final firstAxis = _dominantElbowLineAxis(startOffset, endOffset);
+    return _buildElbowLinePoints(
       start: start,
       end: end,
       firstAxis: firstAxis,
@@ -309,12 +309,12 @@ class ArrowGeometry {
   static bool _isAxisAligned(DrawPoint start, DrawPoint end) =>
       start.x == end.x || start.y == end.y;
 
-  static List<DrawPoint> _buildElbowPolylinePoints({
+  static List<DrawPoint> _buildElbowLinePoints({
     required DrawPoint start,
     required DrawPoint end,
-    required _PolylineAxis firstAxis,
+    required _ElbowLineAxis firstAxis,
   }) {
-    if (firstAxis == _PolylineAxis.horizontal) {
+    if (firstAxis == _ElbowLineAxis.horizontal) {
       final midX = (start.x + end.x) / 2;
       return [
         start,
@@ -409,8 +409,8 @@ class ArrowGeometry {
     return path;
   }
 
-  static Path _buildPolylinePath(List<Offset> points) =>
-      _buildStraightPath(expandPolylinePoints(points));
+  static Path _buildElbowLinePath(List<Offset> points) =>
+      _buildStraightPath(expandElbowLinePoints(points));
 
   static Path _buildCurvedPath(List<Offset> points) {
     if (points.length < 3) {
@@ -655,53 +655,53 @@ class ArrowGeometry {
     return value;
   }
 
-  static bool _nearZero(double value) => value.abs() <= _polylineSnapTolerance;
+  static bool _nearZero(double value) => value.abs() <= _elbowLineSnapTolerance;
 
   static bool _isSamePoint(Offset a, Offset b) =>
       _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
 
-  static _PolylineAxis _resolvePolylineAxis(Offset start, Offset end) =>
-      _alignedPolylineAxis(start, end) ?? _dominantPolylineAxis(start, end);
+  static _ElbowLineAxis _resolveElbowLineAxis(Offset start, Offset end) =>
+      _alignedElbowLineAxis(start, end) ?? _dominantElbowLineAxis(start, end);
 
-  static _PolylineAxis? _alignedPolylineAxis(Offset start, Offset end) {
+  static _ElbowLineAxis? _alignedElbowLineAxis(Offset start, Offset end) {
     final dx = end.dx - start.dx;
     final dy = end.dy - start.dy;
     if (_nearZero(dx) && _nearZero(dy)) {
       return null;
     }
     if (_nearZero(dx)) {
-      return _PolylineAxis.vertical;
+      return _ElbowLineAxis.vertical;
     }
     if (_nearZero(dy)) {
-      return _PolylineAxis.horizontal;
+      return _ElbowLineAxis.horizontal;
     }
     return null;
   }
 
-  static _PolylineAxis _dominantPolylineAxis(Offset start, Offset end) {
+  static _ElbowLineAxis _dominantElbowLineAxis(Offset start, Offset end) {
     final dx = (end.dx - start.dx).abs();
     final dy = (end.dy - start.dy).abs();
-    return dx >= dy ? _PolylineAxis.horizontal : _PolylineAxis.vertical;
+    return dx >= dy ? _ElbowLineAxis.horizontal : _ElbowLineAxis.vertical;
   }
 
-  static Offset _snapToAxis(Offset start, Offset end, _PolylineAxis axis) =>
-      axis == _PolylineAxis.horizontal
+  static Offset _snapToAxis(Offset start, Offset end, _ElbowLineAxis axis) =>
+      axis == _ElbowLineAxis.horizontal
       ? Offset(end.dx, start.dy)
       : Offset(start.dx, end.dy);
 
-  static List<Offset> _simplifyPolylinePoints(List<Offset> points) {
+  static List<Offset> _simplifyElbowLinePoints(List<Offset> points) {
     if (points.length < 2) {
       return points;
     }
 
-    final routed = _routeOrthogonalPolyline(points);
+    final routed = _routeOrthogonalElbowLine(points);
     if (routed.length < 2) {
       return routed;
     }
-    return _removeRedundantPolylinePoints(routed);
+    return _removeRedundantElbowLinePoints(routed);
   }
 
-  static List<Offset> _dedupePolylinePoints(List<Offset> points) {
+  static List<Offset> _dedupeElbowLinePoints(List<Offset> points) {
     if (points.length < 2) {
       return points;
     }
@@ -716,9 +716,9 @@ class ArrowGeometry {
     return deduped;
   }
 
-  static List<Offset> _routeOrthogonalPolyline(List<Offset> points) {
+  static List<Offset> _routeOrthogonalElbowLine(List<Offset> points) {
     final routed = <Offset>[points.first];
-    _PolylineAxis? previousAxis;
+    _ElbowLineAxis? previousAxis;
 
     void appendPoint(Offset point) {
       if (_isSamePoint(routed.last, point)) {
@@ -726,7 +726,7 @@ class ArrowGeometry {
       }
       routed.add(point);
       if (routed.length >= 2) {
-        previousAxis = _resolvePolylineAxis(
+        previousAxis = _resolveElbowLineAxis(
           routed[routed.length - 2],
           routed.last,
         );
@@ -741,7 +741,7 @@ class ArrowGeometry {
         continue;
       }
 
-      final alignedAxis = _alignedPolylineAxis(prev, current);
+      final alignedAxis = _alignedElbowLineAxis(prev, current);
       if (alignedAxis != null) {
         appendPoint(_snapToAxis(prev, current, alignedAxis));
         continue;
@@ -750,7 +750,7 @@ class ArrowGeometry {
       final next = i + 1 < points.length ? points[i + 1] : null;
       final nextAxis = next == null
           ? null
-          : _alignedPolylineAxis(current, next);
+          : _alignedElbowLineAxis(current, next);
       final routedPoints = _routeDiagonalSegment(
         prev: prev,
         current: current,
@@ -768,22 +768,22 @@ class ArrowGeometry {
   static List<Offset> _routeDiagonalSegment({
     required Offset prev,
     required Offset current,
-    required _PolylineAxis? previousAxis,
-    required _PolylineAxis? nextAxis,
+    required _ElbowLineAxis? previousAxis,
+    required _ElbowLineAxis? nextAxis,
   }) {
     if (previousAxis != null && nextAxis != null && previousAxis == nextAxis) {
       return [_snapToAxis(prev, current, previousAxis)];
     }
 
     final firstAxis =
-        previousAxis ?? nextAxis ?? _dominantPolylineAxis(prev, current);
-    final elbow = firstAxis == _PolylineAxis.horizontal
+        previousAxis ?? nextAxis ?? _dominantElbowLineAxis(prev, current);
+    final elbow = firstAxis == _ElbowLineAxis.horizontal
         ? Offset(current.dx, prev.dy)
         : Offset(prev.dx, current.dy);
     return [elbow, current];
   }
 
-  static List<Offset> _removeRedundantPolylinePoints(List<Offset> points) {
+  static List<Offset> _removeRedundantElbowLinePoints(List<Offset> points) {
     if (points.length < 3) {
       return points;
     }
@@ -798,8 +798,8 @@ class ArrowGeometry {
         continue;
       }
 
-      final prevAxis = _alignedPolylineAxis(prev, current);
-      final nextAxis = _alignedPolylineAxis(current, next);
+      final prevAxis = _alignedElbowLineAxis(prev, current);
+      final nextAxis = _alignedElbowLineAxis(current, next);
       if (prevAxis != null && nextAxis != null && prevAxis == nextAxis) {
         continue;
       }
@@ -1028,7 +1028,7 @@ class ArrowGeometry {
   /// Calculates accurate bounding box for arrow paths, accounting for
   /// curve overshoot.
   /// For curved arrows, computes cubic bounds analytically.
-  /// For straight/polyline arrows, uses control points.
+  /// For straight/elbow line arrows, uses control points.
   static DrawRect calculatePathBounds({
     required List<DrawPoint> worldPoints,
     required ArrowType arrowType,
@@ -1037,7 +1037,7 @@ class ArrowGeometry {
       return const DrawRect();
     }
 
-    // For straight and polyline arrows, control points define the bounds
+    // For straight and elbow line arrows, control points define the bounds
     if (arrowType != ArrowType.curved || worldPoints.length < 3) {
       return _boundsFromPoints(worldPoints);
     }
@@ -1117,9 +1117,9 @@ class ArrowGeometry {
       return points;
     }
 
-    // Expand polyline points first if needed
-    final workingPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
+    // Expand elbow line points first if needed
+    final workingPoints = arrowType == ArrowType.elbowLine
+        ? expandElbowLinePoints(points)
         : points;
 
     if (workingPoints.length < 2) {
@@ -1315,8 +1315,8 @@ class ArrowGeometryDescriptor {
       _shaftLength = analysis.totalLength;
       return analysis.totalLength;
     }
-    final resolvedPoints = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(points)
+    final resolvedPoints = data.arrowType == ArrowType.elbowLine
+        ? ArrowGeometry.expandElbowLinePoints(points)
         : points;
     var length = 0.0;
     for (var i = 1; i < resolvedPoints.length; i++) {
@@ -1385,8 +1385,8 @@ class ArrowGeometryDescriptor {
       return fromStart ? Offset(-direction.dx, -direction.dy) : direction;
     }
 
-    final resolvedPoints = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(points)
+    final resolvedPoints = data.arrowType == ArrowType.elbowLine
+        ? ArrowGeometry.expandElbowLinePoints(points)
         : points;
     if (resolvedPoints.length < 2) {
       return null;
@@ -1503,3 +1503,5 @@ class _CurvedPathAnalysis {
     return null;
   }
 }
+
+

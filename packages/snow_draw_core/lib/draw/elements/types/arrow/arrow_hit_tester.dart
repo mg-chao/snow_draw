@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../core/coordinates/element_space.dart';
@@ -197,8 +197,8 @@ class _ArrowHitTestCacheEntry {
         data.arrowType == ArrowType.curved && points.length > 2;
     final shaftPoints = hasCurvedShaft
         ? _flattenCurvedShaft(points, _sampleStep(data.strokeWidth))
-        : (data.arrowType == ArrowType.polyline
-              ? ArrowGeometry.expandPolylinePoints(points)
+        : (data.arrowType == ArrowType.elbowLine
+              ? ArrowGeometry.expandElbowLinePoints(points)
               : points);
 
     final arrowheadTargets = _buildArrowheadTargets(geometry);
@@ -568,3 +568,5 @@ Offset? _normalize(Offset value) {
   }
   return Offset(value.dx / length, value.dy / length);
 }
+
+

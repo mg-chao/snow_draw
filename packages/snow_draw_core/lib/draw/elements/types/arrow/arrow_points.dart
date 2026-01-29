@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -8,7 +8,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
-import 'arrow_polyline_binding_adjuster.dart';
+import 'arrow_elbow_line_binding_adjuster.dart';
 
 enum ArrowPointKind { turning, addable, loopStart, loopEnd }
 
@@ -95,13 +95,13 @@ class ArrowPointUtils {
 
     final segmentPoints = _resolveSegmentPoints(rawPoints, data);
 
-    final isPolyline = data.arrowType == ArrowType.polyline;
+    final isElbowLine = data.arrowType == ArrowType.elbowLine;
     final loopActive =
         rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
 
     final turningPoints = <ArrowPointHandle>[];
-    if (isPolyline) {
+    if (isElbowLine) {
       if (!loopActive) {
         turningPoints
           ..add(
@@ -150,8 +150,8 @@ class ArrowPointUtils {
       );
     }
     final addableBendControls =
-        isPolyline
-            ? resolvePolylineBendControlSegments(
+        isElbowLine
+            ? resolveElbowLineBendControlSegments(
                 elementId: element.id,
                 data: data,
                 rawPoints: rawPoints,
@@ -214,7 +214,7 @@ class ArrowPointUtils {
         ? 0.0
         : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
-    final isPolyline = data.arrowType == ArrowType.polyline;
+    final isElbowLine = data.arrowType == ArrowType.elbowLine;
     final loopActive =
         rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
@@ -266,7 +266,7 @@ class ArrowPointUtils {
     if (visualPointRadius > turningHitRadius) {
       turningHitRadius = visualPointRadius;
     }
-    if (isPolyline) {
+    if (isElbowLine) {
       if (!loopActive) {
         final endpoints = <int>[0, rawPoints.length - 1];
         for (final i in endpoints) {
@@ -334,8 +334,8 @@ class ArrowPointUtils {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(resolved, includeVirtual: false)
+    final effective = data.arrowType == ArrowType.elbowLine
+        ? ArrowGeometry.expandElbowLinePoints(resolved, includeVirtual: false)
         : resolved;
     return effective
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
@@ -346,7 +346,7 @@ class ArrowPointUtils {
     List<DrawPoint> rawPoints,
     ArrowData data,
   ) {
-    if (data.arrowType != ArrowType.polyline) {
+    if (data.arrowType != ArrowType.elbowLine) {
       return rawPoints;
     }
     if (rawPoints.length < 2) {
@@ -355,13 +355,13 @@ class ArrowPointUtils {
     final offsets = rawPoints
         .map((point) => Offset(point.x, point.y))
         .toList(growable: false);
-    final expanded = ArrowGeometry.expandPolylinePoints(offsets);
+    final expanded = ArrowGeometry.expandElbowLinePoints(offsets);
     return expanded
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }
 
-  static List<bool> resolvePolylineBendControlSegments({
+  static List<bool> resolveElbowLineBendControlSegments({
     required String elementId,
     required ArrowData data,
     required List<DrawPoint> rawPoints,
@@ -378,7 +378,7 @@ class ArrowPointUtils {
     final autoPointIndices =
         (data.startBinding == null && data.endBinding == null)
             ? const <int>{}
-            : resolvePolylineBindingAutoPoints(elementId);
+            : resolveElbowLineBindingAutoPoints(elementId);
     final userPointIndices = <int>[];
     for (var i = 0; i < rawPoints.length; i++) {
       if (i == 0 ||
@@ -402,7 +402,7 @@ class ArrowPointUtils {
       rawToUserSegment[rawIndex] = userSegmentIndex;
     }
 
-    final segmentMap = _resolvePolylineSegmentMap(
+    final segmentMap = _resolveElbowLineSegmentMap(
       rawPoints: rawPoints,
       segmentPoints: segmentPoints,
     );
@@ -421,7 +421,7 @@ class ArrowPointUtils {
     });
   }
 
-  static List<int> _resolvePolylineSegmentMap({
+  static List<int> _resolveElbowLineSegmentMap({
     required List<DrawPoint> rawPoints,
     required List<DrawPoint> segmentPoints,
   }) {
@@ -476,7 +476,7 @@ class ArrowPointUtils {
 
   /// Calculates the midpoint for an addable point between two control points.
   /// For curved arrows, this uses the actual curve position at t=0.5.
-  /// For straight and polyline arrows, this uses linear interpolation.
+  /// For straight and elbow line arrows, this uses linear interpolation.
   static DrawPoint _calculateMidpoint(
     List<DrawPoint> points,
     int segmentIndex,
@@ -501,10 +501,13 @@ class ArrowPointUtils {
       }
     }
 
-    // For straight and polyline arrows, use linear midpoint
+    // For straight and elbow line arrows, use linear midpoint
     return _midpoint(points[segmentIndex], points[segmentIndex + 1]);
   }
 
   static DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>
       DrawPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2);
 }
+
+
+

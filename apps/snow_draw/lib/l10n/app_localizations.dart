@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+﻿import 'package:flutter/widgets.dart';
 
 class AppLocalizations {
   AppLocalizations(this.locale);
@@ -28,7 +28,7 @@ class AppLocalizations {
   String get arrowType => 'Arrow Type';
   String get arrowTypeStraight => 'Straight';
   String get arrowTypeCurved => 'Curved';
-  String get arrowTypePolyline => 'Polyline';
+  String get arrowTypeElbowLine => 'Elbow Line';
   String get arrowheads => 'Arrowheads';
   String get startArrowhead => 'Start Arrowhead';
   String get endArrowhead => 'End Arrowhead';
@@ -99,3 +99,4 @@ class _AppLocalizationsDelegate
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
 }
+

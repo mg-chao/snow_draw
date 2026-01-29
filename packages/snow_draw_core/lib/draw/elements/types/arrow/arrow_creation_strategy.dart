@@ -1,4 +1,4 @@
-import 'package:meta/meta.dart';
+﻿import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
 import '../../../elements/core/creation_strategy.dart';
@@ -17,7 +17,7 @@ import '../arrow/arrow_binding.dart';
 import '../rectangle/rectangle_data.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
-import 'arrow_polyline_binding_adjuster.dart';
+import 'arrow_elbow_line_binding_adjuster.dart';
 
 /// Creation strategy for arrow elements (single- and multi-point).
 @immutable
@@ -84,7 +84,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       );
     }
 
-    final isPolyline = elementData.arrowType == ArrowType.polyline;
+    final isElbowLine = elementData.arrowType == ArrowType.elbowLine;
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
     var startPosition = snapToGrid
@@ -106,7 +106,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: startPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.startBinding,
-      referencePoint: isPolyline ? null : adjustedCurrent,
+      referencePoint: isElbowLine ? null : adjustedCurrent,
     );
     startPosition = startBindingResult.position;
 
@@ -139,12 +139,12 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: adjustedCurrent,
       snappingMode: snappingMode,
       preferredBinding: elementData.endBinding,
-      referencePoint: isPolyline ? null : segmentStart,
+      referencePoint: isElbowLine ? null : segmentStart,
     );
     adjustedCurrent = bindingResult.position;
 
-    var allPoints = isPolyline
-        ? _resolvePolylineCreatePoints(
+    var allPoints = isElbowLine
+        ? _resolveElbowLineCreatePoints(
             start:
                 fixedPoints.isNotEmpty ? fixedPoints.first : startPosition,
             end: adjustedCurrent,
@@ -153,8 +153,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             fixedPoints: fixedPoints,
             currentPoint: adjustedCurrent,
           );
-    if (isPolyline) {
-      allPoints = _adjustPolylineBindingsForCreate(
+    if (isElbowLine) {
+      allPoints = _adjustElbowLineBindingsForCreate(
         state: state,
         points: allPoints,
         elementId: creatingState.elementId,
@@ -205,7 +205,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       return null;
     }
 
-    final isPolyline = elementData.arrowType == ArrowType.polyline;
+    final isElbowLine = elementData.arrowType == ArrowType.elbowLine;
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
     var adjustedPosition = snapToGrid
@@ -227,7 +227,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: startPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.startBinding,
-      referencePoint: isPolyline ? null : adjustedPosition,
+      referencePoint: isElbowLine ? null : adjustedPosition,
     );
     startPosition = startBindingResult.position;
 
@@ -257,7 +257,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       position: adjustedPosition,
       snappingMode: snappingMode,
       preferredBinding: elementData.endBinding,
-      referencePoint: isPolyline ? null : segmentStart,
+      referencePoint: isElbowLine ? null : segmentStart,
     );
     adjustedPosition = bindingResult.position;
 
@@ -273,14 +273,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       fixedPoints: updatedFixedPoints,
       boundStart: startPosition,
     );
-    if (isPolyline && updatedFixedPoints.length > 1) {
+    if (isElbowLine && updatedFixedPoints.length > 1) {
       updatedFixedPoints = List<DrawPoint>.unmodifiable([
         updatedFixedPoints.first,
         updatedFixedPoints.last,
       ]);
     }
-    var allPoints = isPolyline
-        ? _resolvePolylineCreatePoints(
+    var allPoints = isElbowLine
+        ? _resolveElbowLineCreatePoints(
             start: updatedFixedPoints.isNotEmpty
                 ? updatedFixedPoints.first
                 : startPosition,
@@ -292,8 +292,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             fixedPoints: updatedFixedPoints,
             currentPoint: adjustedPosition,
           );
-    if (isPolyline) {
-      allPoints = _adjustPolylineBindingsForCreate(
+    if (isElbowLine) {
+      allPoints = _adjustElbowLineBindingsForCreate(
         state: state,
         points: allPoints,
         elementId: creatingState.elementId,
@@ -343,8 +343,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final minSize = config.element.minCreateSize;
     final finishTolerance = config.selection.interaction.handleTolerance;
-    final isPolyline = data.arrowType == ArrowType.polyline;
-    final rawPoints = isPolyline
+    final isElbowLine = data.arrowType == ArrowType.elbowLine;
+    final rawPoints = isElbowLine
         ? _resolveArrowWorldPoints(
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
@@ -358,8 +358,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
                 rect: creatingState.currentRect,
                 normalizedPoints: data.points,
               );
-    final finalPoints = isPolyline
-        ? _resolvePolylineFinalPoints(rawPoints)
+    final finalPoints = isElbowLine
+        ? _resolveElbowLineFinalPoints(rawPoints)
         : rawPoints;
     if (finalPoints.length < 2) {
       return CreationFinishResult(
@@ -418,7 +418,7 @@ DrawPoint _resolveArrowSegmentPosition({
   required DrawPoint currentPosition,
   required ArrowType arrowType,
 }) =>
-    // For all arrow types including polyline, allow free positioning.
+    // For all arrow types including elbow line, allow free positioning.
     currentPosition;
 
 List<DrawPoint> _appendCurrentPoint({
@@ -434,19 +434,19 @@ List<DrawPoint> _appendCurrentPoint({
   return [...fixedPoints, currentPoint];
 }
 
-List<DrawPoint> _resolvePolylineCreatePoints({
+List<DrawPoint> _resolveElbowLineCreatePoints({
   required DrawPoint start,
   required DrawPoint end,
-}) => ArrowGeometry.ensurePolylineCreationPoints([start, end]);
+}) => ArrowGeometry.ensureElbowLineCreationPoints([start, end]);
 
-List<DrawPoint> _resolvePolylineFinalPoints(List<DrawPoint> points) {
+List<DrawPoint> _resolveElbowLineFinalPoints(List<DrawPoint> points) {
   if (points.length < 2) {
     return points;
   }
   if (points.length == 2) {
-    return ArrowGeometry.ensurePolylineCreationPoints(points);
+    return ArrowGeometry.ensureElbowLineCreationPoints(points);
   }
-  return ArrowGeometry.normalizePolylinePoints(points);
+  return ArrowGeometry.normalizeElbowLinePoints(points);
 }
 
 List<DrawPoint> _resolveFinalArrowPoints({
@@ -478,7 +478,7 @@ List<DrawPoint> _resolveFinalArrowPoints({
   return points;
 }
 
-List<DrawPoint> _adjustPolylineBindingsForCreate({
+List<DrawPoint> _adjustElbowLineBindingsForCreate({
   required DrawState state,
   required List<DrawPoint> points,
   required String elementId,
@@ -492,7 +492,7 @@ List<DrawPoint> _adjustPolylineBindingsForCreate({
       startBinding.elementId,
     );
     if (target != null) {
-      adjusted = adjustPolylinePointsForBinding(
+      adjusted = adjustElbowLinePointsForBinding(
         points: adjusted,
         binding: startBinding,
         target: target,
@@ -505,7 +505,7 @@ List<DrawPoint> _adjustPolylineBindingsForCreate({
       endBinding.elementId,
     );
     if (target != null) {
-      adjusted = adjustPolylinePointsForBinding(
+      adjusted = adjustElbowLinePointsForBinding(
         points: adjusted,
         binding: endBinding,
         target: target,
@@ -513,7 +513,7 @@ List<DrawPoint> _adjustPolylineBindingsForCreate({
       );
     }
   }
-  syncPolylineBindingAutoPoints(
+  syncElbowLineBindingAutoPoints(
     elementId: elementId,
     before: basePoints,
     after: adjusted,
@@ -701,3 +701,6 @@ List<DrawPoint> _applyBoundStartToFixedPoints({
     ...fixedPoints.skip(1),
   ]);
 }
+
+
+

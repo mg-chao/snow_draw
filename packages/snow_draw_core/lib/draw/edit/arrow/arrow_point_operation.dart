@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -8,7 +8,7 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
-import '../../elements/types/arrow/arrow_polyline_binding_adjuster.dart';
+import '../../elements/types/arrow/arrow_elbow_line_binding_adjuster.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
@@ -74,7 +74,7 @@ class ArrowPointOperation extends EditOperation {
     final data = element.data as ArrowData;
     final rawPoints = _resolveWorldPoints(element, data);
     final useVirtualPoints =
-        data.arrowType == ArrowType.polyline &&
+        data.arrowType == ArrowType.elbowLine &&
         typedParams.pointKind == ArrowPointKind.addable;
     final points = _resolveWorldPoints(
       element,
@@ -90,7 +90,7 @@ class ArrowPointOperation extends EditOperation {
 
     final addableBendControls =
         useVirtualPoints
-            ? ArrowPointUtils.resolvePolylineBendControlSegments(
+            ? ArrowPointUtils.resolveElbowLineBendControlSegments(
                 elementId: element.id,
                 data: data,
                 rawPoints: rawPoints,
@@ -301,9 +301,9 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
-    if (data.arrowType == ArrowType.polyline) {
+    if (data.arrowType == ArrowType.elbowLine) {
       points = List<DrawPoint>.from(
-        ArrowGeometry.normalizePolylinePoints(points),
+        ArrowGeometry.normalizeElbowLinePoints(points),
       );
     }
 
@@ -478,7 +478,7 @@ _ArrowPointComputation _compute({
   final addThreshold = handleTolerance;
   final deleteThreshold = handleTolerance;
   final loopThreshold = handleTolerance * 1.5;
-  final isPolyline = context.arrowType == ArrowType.polyline;
+  final isElbowLine = context.arrowType == ArrowType.elbowLine;
 
   var target = currentPosition.translate(context.dragOffset);
   var updatedPoints = basePoints;
@@ -499,7 +499,7 @@ _ArrowPointComputation _compute({
         endBinding: nextEndBinding,
       );
     }
-    if (isPolyline) {
+    if (isElbowLine) {
       final isBendControl = context.isBendControlSegment;
       if (!nextDidInsert && !isBendControl) {
         final distanceSq = currentPosition.distanceSquared(
@@ -519,7 +519,7 @@ _ArrowPointComputation _compute({
           );
         }
       }
-      updatedPoints = _movePolylineSegment(
+      updatedPoints = _moveElbowLineSegment(
         points: basePoints,
         segmentIndex: context.pointIndex,
         target: target,
@@ -568,7 +568,7 @@ _ArrowPointComputation _compute({
         endBinding: nextEndBinding,
       );
     }
-    if (isPolyline && index != 0 && index != basePoints.length - 1) {
+    if (isElbowLine && index != 0 && index != basePoints.length - 1) {
       return _ArrowPointComputation(
         points: basePoints,
         didInsert: nextDidInsert,
@@ -582,7 +582,7 @@ _ArrowPointComputation _compute({
     final isEndpoint = index == 0 || index == basePoints.length - 1;
     if (isEndpoint) {
       final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
-      final referencePoint = isPolyline
+      final referencePoint = isElbowLine
           ? null
           : basePoints.length > 1
               ? _toWorldPosition(
@@ -622,8 +622,8 @@ _ArrowPointComputation _compute({
         }
       }
     }
-    if (isPolyline) {
-      updatedPoints = _movePolylineEndpoint(
+    if (isElbowLine) {
+      updatedPoints = _moveElbowLineEndpoint(
         points: basePoints,
         index: index,
         target: target,
@@ -635,13 +635,13 @@ _ArrowPointComputation _compute({
             _findBindingTarget(bindingTargets, binding.elementId);
         if (targetElement != null) {
           final basePoints = List<DrawPoint>.from(updatedPoints);
-          updatedPoints = adjustPolylinePointsForBinding(
+          updatedPoints = adjustElbowLinePointsForBinding(
             points: updatedPoints,
             binding: binding,
             target: targetElement,
             isStart: index == 0,
           );
-          syncPolylineBindingAutoPoints(
+          syncElbowLineBindingAutoPoints(
             elementId: context.elementId,
             before: basePoints,
             after: updatedPoints,
@@ -664,8 +664,8 @@ _ArrowPointComputation _compute({
     final start = updatedPoints.first;
     final end = updatedPoints.last;
     if (start.distanceSquared(end) <= loopThreshold * loopThreshold) {
-      if (isPolyline) {
-        updatedPoints = _mergePolylineLoopPoints(
+      if (isElbowLine) {
+        updatedPoints = _mergeElbowLineLoopPoints(
           points: updatedPoints,
           activeIndex: resolvedActiveIndex,
         );
@@ -682,7 +682,7 @@ _ArrowPointComputation _compute({
   }
 
   var shouldDelete = false;
-  if (!isPolyline) {
+  if (!isElbowLine) {
     final resolvedIndex = activeIndex;
     if (resolvedIndex != null &&
         resolvedIndex > 0 &&
@@ -724,8 +724,8 @@ List<DrawPoint> _resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final effective = data.arrowType == ArrowType.polyline
-      ? ArrowGeometry.expandPolylinePoints(
+  final effective = data.arrowType == ArrowType.elbowLine
+      ? ArrowGeometry.expandElbowLinePoints(
           resolved,
           includeVirtual: includeVirtual,
         )
@@ -869,7 +869,7 @@ DrawPoint _resolvePointPosition({
       }
     }
 
-    // For straight and polyline arrows, use linear midpoint
+    // For straight and elbow line arrows, use linear midpoint
     final start = points[index];
     final end = points[index + 1];
     return DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);
@@ -927,7 +927,7 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   return true;
 }
 
-List<DrawPoint> _movePolylineSegment({
+List<DrawPoint> _moveElbowLineSegment({
   required List<DrawPoint> points,
   required int segmentIndex,
   required DrawPoint target,
@@ -936,7 +936,7 @@ List<DrawPoint> _movePolylineSegment({
     return points;
   }
   if (segmentIndex == 0 || segmentIndex == points.length - 2) {
-    return _offsetPolylineEndpointSegment(
+    return _offsetElbowLineEndpointSegment(
       points: points,
       segmentIndex: segmentIndex,
       target: target,
@@ -956,7 +956,7 @@ List<DrawPoint> _movePolylineSegment({
   return updated;
 }
 
-List<DrawPoint> _offsetPolylineEndpointSegment({
+List<DrawPoint> _offsetElbowLineEndpointSegment({
   required List<DrawPoint> points,
   required int segmentIndex,
   required DrawPoint target,
@@ -1007,7 +1007,7 @@ int? _resolveNearestSegmentIndex({
   return nearestIndex;
 }
 
-List<DrawPoint> _movePolylineEndpoint({
+List<DrawPoint> _moveElbowLineEndpoint({
   required List<DrawPoint> points,
   required int index,
   required DrawPoint target,
@@ -1041,7 +1041,7 @@ List<DrawPoint> _movePolylineEndpoint({
   return updated;
 }
 
-DrawPoint _alignPolylineNeighbor({
+DrawPoint _alignElbowLineNeighbor({
   required DrawPoint anchor,
   required DrawPoint neighbor,
   required bool wasHorizontal,
@@ -1050,7 +1050,7 @@ DrawPoint _alignPolylineNeighbor({
         ? DrawPoint(x: neighbor.x, y: anchor.y)
         : DrawPoint(x: anchor.x, y: neighbor.y);
 
-List<DrawPoint> _mergePolylineLoopPoints({
+List<DrawPoint> _mergeElbowLineLoopPoints({
   required List<DrawPoint> points,
   required int activeIndex,
 }) {
@@ -1066,7 +1066,7 @@ List<DrawPoint> _mergePolylineLoopPoints({
     updated[0] = end;
     if (updated.length > 1) {
       final wasHorizontal = _segmentIsHorizontal(points[0], points[1]);
-      updated[1] = _alignPolylineNeighbor(
+      updated[1] = _alignElbowLineNeighbor(
         anchor: end,
         neighbor: updated[1],
         wasHorizontal: wasHorizontal,
@@ -1080,7 +1080,7 @@ List<DrawPoint> _mergePolylineLoopPoints({
         points[lastIndex - 1],
         points[lastIndex],
       );
-      updated[lastIndex - 1] = _alignPolylineNeighbor(
+      updated[lastIndex - 1] = _alignElbowLineNeighbor(
         anchor: start,
         neighbor: updated[lastIndex - 1],
         wasHorizontal: wasHorizontal,
@@ -1092,4 +1092,7 @@ List<DrawPoint> _mergePolylineLoopPoints({
 }
 
 bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
-    ArrowGeometry.isPolylineSegmentHorizontal(start, end);
+    ArrowGeometry.isElbowLineSegmentHorizontal(start, end);
+
+
+

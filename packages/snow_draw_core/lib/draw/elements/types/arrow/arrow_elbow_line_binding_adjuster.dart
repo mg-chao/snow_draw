@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
@@ -18,7 +18,7 @@ enum _BindingEdge { top, right, bottom, left }
 
 enum _Axis { horizontal, vertical }
 
-final _polylineBindingAutoPoints = <String, Set<int>>{};
+final _elbowLineBindingAutoPoints = <String, Set<int>>{};
 
 class _BindingObstacle {
   const _BindingObstacle({
@@ -56,7 +56,7 @@ class _BindingObstacle {
       hasRotation ? space!.fromWorld(point) : point;
 }
 
-void syncPolylineBindingAutoPoints({
+void syncElbowLineBindingAutoPoints({
   required String elementId,
   required List<DrawPoint> before,
   required List<DrawPoint> after,
@@ -66,16 +66,16 @@ void syncPolylineBindingAutoPoints({
   }
   final autoPoints = _resolveInsertedPointIndices(before: before, after: after);
   if (autoPoints.isEmpty) {
-    _polylineBindingAutoPoints.remove(elementId);
+    _elbowLineBindingAutoPoints.remove(elementId);
     return;
   }
-  _polylineBindingAutoPoints[elementId] = autoPoints;
+  _elbowLineBindingAutoPoints[elementId] = autoPoints;
 }
 
-Set<int> resolvePolylineBindingAutoPoints(String elementId) =>
-    _polylineBindingAutoPoints[elementId] ?? const <int>{};
+Set<int> resolveElbowLineBindingAutoPoints(String elementId) =>
+    _elbowLineBindingAutoPoints[elementId] ?? const <int>{};
 
-List<DrawPoint> adjustPolylinePointsForBinding({
+List<DrawPoint> adjustElbowLinePointsForBinding({
   required List<DrawPoint> points,
   required ArrowBinding binding,
   required ElementState target,
@@ -104,7 +104,7 @@ List<DrawPoint> adjustPolylinePointsForBinding({
     return points;
   }
 
-  final adjusted = _adjustPolylineEnd(
+  final adjusted = _adjustElbowLineEnd(
     points: working,
     obstacle: obstacle,
     edge: edge,
@@ -201,7 +201,7 @@ _BindingEdge? _resolveBindingEdge(
   return null;
 }
 
-List<DrawPoint> _adjustPolylineEnd({
+List<DrawPoint> _adjustElbowLineEnd({
   required List<DrawPoint> points,
   required _BindingObstacle obstacle,
   required _BindingEdge edge,
@@ -687,3 +687,4 @@ class _SegmentClip {
   final double start;
   final double end;
 }
+

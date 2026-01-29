@@ -44,10 +44,7 @@ final class ArrowData extends ElementData
       (style) => style.name == json['strokeStyle'],
       orElse: () => ConfigDefaults.defaultStrokeStyle,
     ),
-    arrowType: ArrowType.values.firstWhere(
-      (style) => style.name == json['arrowType'],
-      orElse: () => ConfigDefaults.defaultArrowType,
-    ),
+    arrowType: _decodeArrowType(json['arrowType']),
     startArrowhead: ArrowheadStyle.values.firstWhere(
       (style) => style.name == json['startArrowhead'],
       orElse: () => ConfigDefaults.defaultStartArrowhead,
@@ -159,6 +156,20 @@ final class ArrowData extends ElementData
     }
 
     return List<DrawPoint>.unmodifiable(points);
+  }
+
+  static ArrowType _decodeArrowType(Object? raw) {
+    if (raw is String) {
+      if (raw == 'polyline') {
+        // Legacy persisted value.
+        return ArrowType.elbowLine;
+      }
+      return ArrowType.values.firstWhere(
+        (style) => style.name == raw,
+        orElse: () => ConfigDefaults.defaultArrowType,
+      );
+    }
+    return ConfigDefaults.defaultArrowType;
   }
 
   @override

@@ -1,4 +1,4 @@
-import 'package:meta/meta.dart';
+﻿import 'package:meta/meta.dart';
 
 import '../elements/core/element_data.dart';
 import '../elements/types/text/text_data.dart';
@@ -192,7 +192,7 @@ class RectCreationMode extends CreationMode {
   String toString() => 'RectCreationMode()';
 }
 
-/// Point-based creation mode (for arrows and polylines).
+/// Point-based creation mode (for arrows and elbow lines).
 @immutable
 class PointCreationMode extends CreationMode {
   const PointCreationMode({this.fixedPoints = const [], this.currentPoint});
@@ -290,7 +290,7 @@ class CreatingState extends InteractionState {
     data: elementData,
   );
 
-  /// Fixed points for point-based creation (arrows/polylines).
+  /// Fixed points for point-based creation (arrows/elbow lines).
   List<DrawPoint> get fixedPoints => switch (creationMode) {
     PointCreationMode(:final fixedPoints) => fixedPoints,
     _ => const [],
@@ -302,7 +302,7 @@ class CreatingState extends InteractionState {
     _ => null,
   };
 
-  /// Whether this is a point-based creation (arrow/polyline).
+  /// Whether this is a point-based creation (arrow/elbow line).
   bool get isPointCreation => creationMode is PointCreationMode;
 
   CreatingState copyWith({
@@ -403,3 +403,4 @@ class TextEditingState extends InteractionState {
   @override
   String toString() => 'TextEditingState(elementId: $elementId, isNew: $isNew)';
 }
+

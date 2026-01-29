@@ -1,4 +1,4 @@
-import '../../actions/draw_actions.dart';
+﻿import '../../actions/draw_actions.dart';
 import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
@@ -219,10 +219,10 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
-    if (_shouldAutoFinishPolyline()) {
+    if (_shouldAutoFinishElbowLine()) {
       await dispatch(const FinishCreateElement());
       _resetPointCreationState();
-      return handled(message: 'Create finished (polyline)');
+      return handled(message: 'Create finished (elbow line)');
     }
 
     _recordClick(event.position, now);
@@ -280,13 +280,13 @@ class CreatePlugin extends DrawInputPlugin {
     return interaction is CreatingState && interaction.isPointCreation;
   }
 
-  bool _shouldAutoFinishPolyline() {
+  bool _shouldAutoFinishElbowLine() {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return false;
     }
     final data = interaction.elementData;
-    if (data is! ArrowData || data.arrowType != ArrowType.polyline) {
+    if (data is! ArrowData || data.arrowType != ArrowType.elbowLine) {
       return false;
     }
     return interaction.fixedPoints.length >= 2;
@@ -339,3 +339,5 @@ class CreatePlugin extends DrawInputPlugin {
     return builder.build(state);
   }
 }
+
+

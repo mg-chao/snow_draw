@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -1265,7 +1265,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     var index = context.pointIndex;
     final transform = interaction.currentTransform;
     if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
-      if (context.arrowType == ArrowType.polyline) {
+      if (context.arrowType == ArrowType.elbowLine) {
         final resolvedIndex = transform.activeIndex;
         if (resolvedIndex != null) {
           index = resolvedIndex;
@@ -2126,3 +2126,5 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     await widget.store.dispatch(const ClearSelection());
   }
 }
+
+

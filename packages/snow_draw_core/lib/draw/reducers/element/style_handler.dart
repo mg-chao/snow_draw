@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
@@ -220,9 +220,9 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
     rect: currentRect,
     normalizedPoints: data.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
-  if (data.arrowType == ArrowType.polyline &&
-      previousArrowType != ArrowType.polyline) {
-    worldPoints = ArrowGeometry.ensurePolylineCreationPoints(
+  if (data.arrowType == ArrowType.elbowLine &&
+      previousArrowType != ArrowType.elbowLine) {
+    worldPoints = ArrowGeometry.ensureElbowLineCreationPoints(
       [worldPoints.first, worldPoints.last],
     );
   }
@@ -244,3 +244,5 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
 
   return (rect: newRect, data: updatedData);
 }
+
+
