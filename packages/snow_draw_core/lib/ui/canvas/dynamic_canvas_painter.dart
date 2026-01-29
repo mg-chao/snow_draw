@@ -730,7 +730,14 @@ class DynamicCanvasPainter extends CustomPainter {
       if (data is! ArrowData || !interaction.isPointCreation) {
         return null;
       }
-      return _highlightFromBinding(data.endBinding);
+      final endHighlight = _highlightFromBinding(data.endBinding);
+      if (endHighlight != null) {
+        return endHighlight;
+      }
+      if (interaction.fixedPoints.length <= 1) {
+        return _highlightFromBinding(data.startBinding);
+      }
+      return null;
     }
     return null;
   }
