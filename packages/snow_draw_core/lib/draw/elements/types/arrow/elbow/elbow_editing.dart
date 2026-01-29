@@ -29,6 +29,17 @@ final class ElbowEditResult {
   final bool? endIsSpecial;
 }
 
+@immutable
+final class _FixedSegmentPathResult {
+  const _FixedSegmentPathResult({
+    required this.points,
+    required this.fixedSegments,
+  });
+
+  final List<DrawPoint> points;
+  final List<ElbowFixedSegment> fixedSegments;
+}
+
 ElbowEditResult computeElbowEdit({
   required ElementState element,
   required ArrowData data,
@@ -81,16 +92,14 @@ ElbowEditResult computeElbowEdit({
     startPoint: points.first,
     endPoint: points.last,
     fixedSegments: fixedSegments,
-    startBinding: startBinding,
-    endBinding: endBinding,
   );
   final simplified = _simplifyPath(
-    points: built,
-    fixedSegments: fixedSegments,
+    points: built.points,
+    fixedSegments: built.fixedSegments,
     startPoint: points.first,
     endPoint: points.last,
   );
-  final reindexed = _reindexFixedSegments(simplified, fixedSegments);
+  final reindexed = _reindexFixedSegments(simplified, built.fixedSegments);
   final resultSegments = reindexed.isEmpty
       ? null
       : List<ElbowFixedSegment>.unmodifiable(reindexed);
@@ -171,35 +180,58 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
   return result;
 }
 
-List<DrawPoint> _buildPathWithFixedSegments({
+_FixedSegmentPathResult _buildPathWithFixedSegments({
   required ElementState element,
   required ArrowData data,
   required Map<String, ElementState> elementsById,
   required DrawPoint startPoint,
   required DrawPoint endPoint,
   required List<ElbowFixedSegment> fixedSegments,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
 }) {
   final orderedSegments = [...fixedSegments]
     ..sort((a, b) => a.index.compareTo(b.index));
+  if (orderedSegments.isEmpty) {
+    return _FixedSegmentPathResult(
+      points: [startPoint, endPoint],
+      fixedSegments: const [],
+    );
+  }
+
+  final updatedSegments = List<ElbowFixedSegment>.from(orderedSegments);
+  final startSegment = updatedSegments.first;
+  final startJunction = _junctionForFixedSegment(
+    endpoint: startPoint,
+    segment: startSegment,
+  );
+  updatedSegments[0] = startSegment.copyWith(start: startJunction);
+
+  final lastIndex = updatedSegments.length - 1;
+  final endSegment = updatedSegments[lastIndex];
+  final endJunction = _junctionForFixedSegment(
+    endpoint: endPoint,
+    segment: endSegment,
+  );
+  updatedSegments[lastIndex] = endSegment.copyWith(end: endJunction);
+
   final points = <DrawPoint>[];
   var currentStart = startPoint;
 
-  for (var i = 0; i < orderedSegments.length; i++) {
-    final segment = orderedSegments[i];
-    final routed = _routeLocalPath(
-      element: element,
-      data: data,
-      elementsById: elementsById,
-      startLocal: currentStart,
-      endLocal: segment.start,
-      startBinding: i == 0 ? startBinding : null,
-      endBinding: null,
-      startArrowhead: i == 0 ? data.startArrowhead : ArrowheadStyle.none,
-      endArrowhead: ArrowheadStyle.none,
-    );
-    _appendPath(points, routed);
+  for (var i = 0; i < updatedSegments.length; i++) {
+    final segment = updatedSegments[i];
+    if (i == 0) {
+      _appendPath(points, [currentStart, segment.start]);
+    } else {
+      final routed = _routeLocalPath(
+        element: element,
+        data: data,
+        elementsById: elementsById,
+        startLocal: currentStart,
+        endLocal: segment.start,
+        startArrowhead: ArrowheadStyle.none,
+        endArrowhead: ArrowheadStyle.none,
+      );
+      _appendPath(points, routed);
+    }
 
     if (points.isEmpty || points.last != segment.start) {
       points.add(segment.start);
@@ -210,21 +242,12 @@ List<DrawPoint> _buildPathWithFixedSegments({
     currentStart = segment.end;
   }
 
-  final tail = _routeLocalPath(
-    element: element,
-    data: data,
-    elementsById: elementsById,
-    startLocal: currentStart,
-    endLocal: endPoint,
-    startBinding: orderedSegments.isEmpty ? startBinding : null,
-    endBinding: endBinding,
-    startArrowhead:
-        orderedSegments.isEmpty ? data.startArrowhead : ArrowheadStyle.none,
-    endArrowhead: data.endArrowhead,
-  );
-  _appendPath(points, tail);
+  _appendPath(points, [currentStart, endPoint]);
 
-  return points;
+  return _FixedSegmentPathResult(
+    points: points,
+    fixedSegments: updatedSegments,
+  );
 }
 
 List<DrawPoint> _routeLocalPath({
@@ -268,6 +291,17 @@ void _appendPath(List<DrawPoint> target, List<DrawPoint> path) {
   } else {
     target.addAll(path);
   }
+}
+
+DrawPoint _junctionForFixedSegment({
+  required DrawPoint endpoint,
+  required ElbowFixedSegment segment,
+}) {
+  final isHorizontal = _isHorizontal(segment.start, segment.end);
+  if (isHorizontal) {
+    return DrawPoint(x: endpoint.x, y: segment.start.y);
+  }
+  return DrawPoint(x: segment.start.x, y: endpoint.y);
 }
 
 List<DrawPoint> _simplifyPath({
