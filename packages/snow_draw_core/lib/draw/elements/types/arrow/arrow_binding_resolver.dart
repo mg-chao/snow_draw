@@ -4,10 +4,12 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
+import '../../../types/element_style.dart';
 import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
+import 'elbow/elbow_router.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -307,6 +309,32 @@ ElementState? _applyBindings({
 
   if (!startUpdated && !endUpdated) {
     return null;
+  }
+
+  if (data.arrowType == ArrowType.elbow) {
+    final routed = routeElbowArrowForElement(
+      element: element,
+      data: data,
+      elementsById: elementsById,
+      startOverride: localPoints.first,
+      endOverride: localPoints.last,
+    );
+    final result = computeArrowRectAndPoints(
+      localPoints: routed.localPoints,
+      oldRect: rect,
+      rotation: element.rotation,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    );
+    final updatedData = data.copyWith(points: normalized);
+    if (updatedData == data && result.rect == rect) {
+      return null;
+    }
+    return element.copyWith(rect: result.rect, data: updatedData);
   }
 
   final result = computeArrowRectAndPoints(

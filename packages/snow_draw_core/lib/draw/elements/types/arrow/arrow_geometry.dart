@@ -116,6 +116,7 @@ class ArrowGeometry {
     return switch (arrowType) {
       ArrowType.curved => _buildCurvedPath(points),
       ArrowType.straight => _buildStraightPath(points),
+      ArrowType.elbow => _buildStraightPath(points),
     };
   }
 

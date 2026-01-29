@@ -9,6 +9,7 @@ import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
@@ -271,27 +272,42 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
+    final dataWithBindings = data.copyWith(
+      startBinding: typedTransform.startBinding,
+      endBinding: typedTransform.endBinding,
+    );
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = computeArrowRectAndPoints(
-      localPoints: points,
-      oldRect: typedContext.elementRect,
-      rotation: typedContext.rotation,
-      arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
-    );
+    final result = data.arrowType == ArrowType.elbow
+        ? computeArrowRectAndPoints(
+            localPoints:
+                routeElbowArrowForElement(
+                  element: element,
+                  data: dataWithBindings,
+                  elementsById: state.domain.document.elementMap,
+                  startOverride: points.first,
+                  endOverride: points.last,
+                ).localPoints,
+            oldRect: typedContext.elementRect,
+            rotation: typedContext.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          )
+        : computeArrowRectAndPoints(
+            localPoints: points,
+            oldRect: typedContext.elementRect,
+            rotation: typedContext.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          );
 
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: result.localPoints,
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(
-      points: normalized,
-      startBinding: typedTransform.startBinding,
-      endBinding: typedTransform.endBinding,
-    );
+    final updatedData = dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,
@@ -335,28 +351,43 @@ class ArrowPointOperation extends EditOperation {
     }
 
     final data = element.data as ArrowData;
+    final dataWithBindings = data.copyWith(
+      startBinding: typedTransform.startBinding,
+      endBinding: typedTransform.endBinding,
+    );
 
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = computeArrowRectAndPoints(
-      localPoints: typedTransform.points,
-      oldRect: typedContext.elementRect,
-      rotation: typedContext.rotation,
-      arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
-    );
+    final result = data.arrowType == ArrowType.elbow
+        ? computeArrowRectAndPoints(
+            localPoints:
+                routeElbowArrowForElement(
+                  element: element,
+                  data: dataWithBindings,
+                  elementsById: state.domain.document.elementMap,
+                  startOverride: typedTransform.points.first,
+                  endOverride: typedTransform.points.last,
+                ).localPoints,
+            oldRect: typedContext.elementRect,
+            rotation: typedContext.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          )
+        : computeArrowRectAndPoints(
+            localPoints: typedTransform.points,
+            oldRect: typedContext.elementRect,
+            rotation: typedContext.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          );
 
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: result.localPoints,
       rect: result.rect,
     );
 
-    final updatedData = data.copyWith(
-      points: normalized,
-      startBinding: typedTransform.startBinding,
-      endBinding: typedTransform.endBinding,
-    );
+    final updatedData = dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: result.rect,
       data: updatedData,

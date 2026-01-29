@@ -88,6 +88,32 @@ class ArrowPointUtils {
       );
     }
 
+    if (data.arrowType == ArrowType.elbow) {
+      final turningPoints = <ArrowPointHandle>[
+        ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: 0,
+          position: rawPoints.first,
+        ),
+      ];
+      if (rawPoints.length > 1) {
+        turningPoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: rawPoints.length - 1,
+            position: rawPoints.last,
+          ),
+        );
+      }
+      return ArrowPointOverlay(
+        turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
+        addablePoints: const [],
+        loopPoints: const [],
+      );
+    }
+
     final segmentPoints = _resolveSegmentPoints(rawPoints);
 
     final loopActive =
@@ -178,6 +204,31 @@ class ArrowPointUtils {
     final loopActive =
         rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
+
+    if (data.arrowType == ArrowType.elbow) {
+      ArrowPointHandle? nearest;
+      var nearestDistance = double.infinity;
+      var turningHitRadius = hitRadius * 1.11;
+      if (visualPointRadius > turningHitRadius) {
+        turningHitRadius = visualPointRadius;
+      }
+      final localPoints = [rawPoints.first, rawPoints.last];
+      for (var i = 0; i < localPoints.length; i++) {
+        final index = i == 0 ? 0 : rawPoints.length - 1;
+        final distanceSq = localPosition.distanceSquared(localPoints[i]);
+        if (distanceSq <= turningHitRadius * turningHitRadius &&
+            distanceSq < nearestDistance) {
+          nearestDistance = distanceSq;
+          nearest = ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: index,
+            position: localPoints[i],
+          );
+        }
+      }
+      return nearest;
+    }
 
     if (loopActive) {
       // Use the midpoint between first and last as the loop center for hit

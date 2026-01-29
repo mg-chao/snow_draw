@@ -1439,6 +1439,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
               label: widget.strings.arrowTypeCurved,
               icon: const ArrowTypeCurvedIcon(),
             ),
+            _StyleOption(
+              value: ArrowType.elbow,
+              label: widget.strings.arrowTypeElbow,
+              icon: const ArrowTypeElbowIcon(),
+            ),
           ],
           selected: value.value,
           onSelect: (value) => _applyStyleUpdate(arrowType: value),

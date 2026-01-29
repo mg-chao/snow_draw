@@ -5,6 +5,8 @@ import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
+import '../../elements/types/arrow/arrow_layout.dart';
+import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_layout.dart';
 import '../../models/draw_state.dart';
@@ -79,9 +81,10 @@ DrawState handleUpdateElementsStyle(
             updatedData is ArrowData &&
             _shouldRecalculateArrowRect(data, updatedData)) {
           final result = _resolveArrowRectAndData(
-            currentRect: next.rect,
+            element: next,
             data: updatedData,
             previousArrowType: data.arrowType,
+            elementsById: state.domain.document.elementMap,
           );
           next = next.copyWith(rect: result.rect, data: result.data);
         }
@@ -205,13 +208,36 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
     oldData.arrowType != newData.arrowType;
 
 ({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
-  required DrawRect currentRect,
+  required ElementState element,
   required ArrowData data,
   required ArrowType previousArrowType,
+  required Map<String, ElementState> elementsById,
 }) {
+  if (data.arrowType == ArrowType.elbow &&
+      previousArrowType != ArrowType.elbow) {
+    final routed = routeElbowArrowForElement(
+      element: element,
+      data: data,
+      elementsById: elementsById,
+    );
+    final result = computeArrowRectAndPoints(
+      localPoints: routed.localPoints,
+      oldRect: element.rect,
+      rotation: element.rotation,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    );
+    final updatedData = data.copyWith(points: normalized);
+    return (rect: result.rect, data: updatedData);
+  }
+
   // Resolve world points from the current rect and normalized points
   final worldPoints = ArrowGeometry.resolveWorldPoints(
-    rect: currentRect,
+    rect: element.rect,
     normalizedPoints: data.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
 

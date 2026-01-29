@@ -17,6 +17,7 @@ import '../arrow/arrow_binding.dart';
 import '../rectangle/rectangle_data.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'elbow/elbow_router.dart';
 
 /// Creation strategy for arrow elements (single- and multi-point).
 @immutable
@@ -144,13 +145,25 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       fixedPoints: fixedPoints,
       currentPoint: adjustedCurrent,
     );
+    final routedPoints =
+        elementData.arrowType == ArrowType.elbow
+            ? routeElbowArrow(
+                start: startPosition,
+                end: adjustedCurrent,
+                startBinding: startBindingResult.binding,
+                endBinding: bindingResult.binding,
+                elementsById: state.domain.document.elementMap,
+                startArrowhead: elementData.startArrowhead,
+                endArrowhead: elementData.endArrowhead,
+              ).points
+            : allPoints;
     final arrowRect = _calculateArrowRect(
-      points: allPoints,
+      points: routedPoints,
       arrowType: elementData.arrowType,
       strokeWidth: elementData.strokeWidth,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
-      worldPoints: allPoints,
+      worldPoints: routedPoints,
       rect: arrowRect,
     );
     final updatedData = elementData.copyWith(
@@ -164,7 +177,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       rect: arrowRect,
       snapGuides: snapGuides,
       creationMode: PointCreationMode(
-        fixedPoints: fixedPoints,
+        fixedPoints:
+            elementData.arrowType == ArrowType.elbow
+                ? List<DrawPoint>.unmodifiable([startPosition])
+                : fixedPoints,
         currentPoint: adjustedCurrent,
       ),
     );
@@ -184,6 +200,9 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final elementData = creatingState.elementData;
     if (elementData is! ArrowData) {
+      return null;
+    }
+    if (elementData.arrowType == ArrowType.elbow) {
       return null;
     }
 
@@ -306,7 +325,13 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
           );
-    final finalPoints = rawPoints;
+    final finalPoints =
+        data.arrowType == ArrowType.elbow
+            ? _resolveArrowWorldPoints(
+                rect: creatingState.currentRect,
+                normalizedPoints: data.points,
+              )
+            : rawPoints;
     if (finalPoints.length < 2) {
       return CreationFinishResult(
         data: data,
