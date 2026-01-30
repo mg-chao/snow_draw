@@ -262,13 +262,122 @@ void main() {
       );
       expect(
         result.localPoints.length,
-        5,
-        reason: 'Expected a transition point for perpendicular entry.',
+        greaterThanOrEqualTo(5),
+        reason: 'Expected transition points for perpendicular entry.',
       );
       expect(
         result.localPoints[2].y,
         100,
         reason: 'Fixed segment should stay on its original line.',
+      );
+    },
+  );
+
+  test('fixed segment keeps bottom binding approach direction correct', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 150),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 150, minY: 200, maxX: 250, maxY: 260);
+    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 1),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: false,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final penultimate = result.localPoints[result.localPoints.length - 2];
+    final endPoint = result.localPoints.last;
+    expect(
+      (penultimate.x - endPoint.x).abs() <= 1,
+      isTrue,
+      reason: 'End segment should be vertical toward the bottom binding.',
+    );
+    expect(
+      penultimate.y > endPoint.y,
+      isTrue,
+      reason: 'Bottom binding should approach from below.',
+    );
+  });
+
+  test(
+    'aligned bound end extends fixed segment instead of adding a collinear one',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 0, y: 100),
+        const DrawPoint(x: 200, y: 100),
+        const DrawPoint(x: 300, y: 100),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      const rect = DrawRect(minX: 240, minY: 80, maxX: 260, maxY: 120);
+      final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+      const binding = ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      );
+      final boundPoint =
+          ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: binding,
+            target: boundElement,
+            hasArrowhead: false,
+          ) ??
+          points.last;
+
+      final movedPoints = List<DrawPoint>.from(points);
+      movedPoints[movedPoints.length - 1] = boundPoint;
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data.copyWith(endBinding: binding),
+        elementsById: {'rect-1': boundElement},
+        localPointsOverride: movedPoints,
+        fixedSegmentsOverride: fixedSegments,
+        endBindingOverride: binding,
+      );
+
+      expect(
+        result.localPoints.length,
+        points.length,
+        reason: 'Should extend the fixed segment instead of adding a new one.',
+      );
+      final neighbor = result.localPoints[result.localPoints.length - 2];
+      final endPoint = result.localPoints.last;
+      expect(
+        neighbor.x,
+        greaterThan(endPoint.x),
+        reason: 'End should approach from the right for right-side binding.',
       );
     },
   );

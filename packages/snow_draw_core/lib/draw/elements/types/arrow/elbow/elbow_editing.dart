@@ -14,6 +14,7 @@ import 'elbow_router.dart';
 
 const double _dedupThreshold = 1;
 const _headingEpsilon = 1e-6;
+const double _directionFixPadding = 12;
 
 @immutable
 final class ElbowEditResult {
@@ -596,7 +597,8 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   final aligned = desiredHorizontal
       ? (neighbor.y - start.y).abs() <= _dedupThreshold
       : (neighbor.x - start.x).abs() <= _dedupThreshold;
-  if (aligned) {
+  final directionOk = _directionMatches(start, neighbor, heading);
+  if (aligned && directionOk) {
     return _PerpendicularAdjustment(
       points: points,
       moved: false,
@@ -612,39 +614,55 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   final pinnedCoordinate = desiredHorizontal
       ? pinnedAxes.pinnedY.contains(1)
       : pinnedAxes.pinnedX.contains(1);
+  final directionPinned = desiredHorizontal
+      ? pinnedAxes.pinnedX.contains(1)
+      : pinnedAxes.pinnedY.contains(1);
+
+  if (aligned && !directionOk && !directionPinned) {
+    final updated = List<DrawPoint>.from(points);
+    updated[1] = _applyStartDirection(neighbor, start, heading);
+    return _PerpendicularAdjustment(
+      points: updated,
+      moved: true,
+      inserted: false,
+    );
+  }
 
   final nextHorizontal =
       points.length > 2 ? _isHorizontal(neighbor, points[2]) : desiredHorizontal;
   final conflict = nextHorizontal == desiredHorizontal || pinnedCoordinate;
+  final canShiftDirection = !directionPinned &&
+      (points.length <= 2 ||
+          (desiredHorizontal ? nextHorizontal : !nextHorizontal));
 
-  if (conflict) {
-    final transition = desiredHorizontal
-        ? DrawPoint(x: neighbor.x, y: start.y)
-        : DrawPoint(x: start.x, y: neighbor.y);
-    if (_manhattanDistance(transition, start) <= _dedupThreshold ||
-        _manhattanDistance(transition, neighbor) <= _dedupThreshold) {
-      return _PerpendicularAdjustment(
-        points: points,
-        moved: false,
-        inserted: false,
+  if (!conflict && (directionOk || canShiftDirection)) {
+    var updatedNeighbor = neighbor;
+    if (!aligned) {
+      updatedNeighbor = desiredHorizontal
+          ? updatedNeighbor.copyWith(y: start.y)
+          : updatedNeighbor.copyWith(x: start.x);
+    }
+    if (!directionOk && canShiftDirection) {
+      updatedNeighbor = _applyStartDirection(
+        updatedNeighbor,
+        start,
+        heading,
       );
     }
-    final updated = List<DrawPoint>.from(points)..insert(1, transition);
+    final updated = List<DrawPoint>.from(points);
+    updated[1] = updatedNeighbor;
     return _PerpendicularAdjustment(
       points: updated,
-      moved: false,
-      inserted: true,
+      moved: true,
+      inserted: false,
     );
   }
 
-  final updated = List<DrawPoint>.from(points);
-  updated[1] = desiredHorizontal
-      ? neighbor.copyWith(y: start.y)
-      : neighbor.copyWith(x: start.x);
-  return _PerpendicularAdjustment(
-    points: updated,
-    moved: true,
-    inserted: false,
+  return _insertStartDirectionStub(
+    points: points,
+    heading: heading,
+    neighbor: neighbor,
+    allowExtend: !directionPinned,
   );
 }
 
@@ -684,7 +702,9 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final aligned = desiredHorizontal
       ? (neighbor.y - endPoint.y).abs() <= _dedupThreshold
       : (neighbor.x - endPoint.x).abs() <= _dedupThreshold;
-  if (aligned) {
+  final requiredHeading = _flipHeading(heading);
+  final directionOk = _directionMatches(neighbor, endPoint, requiredHeading);
+  if (aligned && directionOk) {
     return _PerpendicularAdjustment(
       points: points,
       moved: false,
@@ -700,40 +720,60 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final pinnedCoordinate = desiredHorizontal
       ? pinnedAxes.pinnedY.contains(neighborIndex)
       : pinnedAxes.pinnedX.contains(neighborIndex);
+  final directionPinned = desiredHorizontal
+      ? pinnedAxes.pinnedX.contains(neighborIndex)
+      : pinnedAxes.pinnedY.contains(neighborIndex);
+
+  if (aligned && !directionOk && !directionPinned) {
+    final updated = List<DrawPoint>.from(points);
+    updated[neighborIndex] = _applyEndDirection(
+      neighbor,
+      endPoint,
+      requiredHeading,
+    );
+    return _PerpendicularAdjustment(
+      points: updated,
+      moved: true,
+      inserted: false,
+    );
+  }
+
   final prevHorizontal = points.length > 2
       ? _isHorizontal(points[neighborIndex - 1], neighbor)
       : desiredHorizontal;
   final conflict = prevHorizontal == desiredHorizontal || pinnedCoordinate;
+  final canShiftDirection = !directionPinned &&
+      (points.length <= 2 ||
+          (desiredHorizontal ? prevHorizontal : !prevHorizontal));
 
-  if (conflict) {
-    final transition = desiredHorizontal
-        ? DrawPoint(x: neighbor.x, y: endPoint.y)
-        : DrawPoint(x: endPoint.x, y: neighbor.y);
-    if (_manhattanDistance(transition, neighbor) <= _dedupThreshold ||
-        _manhattanDistance(transition, endPoint) <= _dedupThreshold) {
-      return _PerpendicularAdjustment(
-        points: points,
-        moved: false,
-        inserted: false,
+  if (!conflict && (directionOk || canShiftDirection)) {
+    var updatedNeighbor = neighbor;
+    if (!aligned) {
+      updatedNeighbor = desiredHorizontal
+          ? updatedNeighbor.copyWith(y: endPoint.y)
+          : updatedNeighbor.copyWith(x: endPoint.x);
+    }
+    if (!directionOk && canShiftDirection) {
+      updatedNeighbor = _applyEndDirection(
+        updatedNeighbor,
+        endPoint,
+        requiredHeading,
       );
     }
-    final updated = List<DrawPoint>.from(points)
-      ..insert(lastIndex, transition);
+    final updated = List<DrawPoint>.from(points);
+    updated[neighborIndex] = updatedNeighbor;
     return _PerpendicularAdjustment(
       points: updated,
-      moved: false,
-      inserted: true,
+      moved: true,
+      inserted: false,
     );
   }
 
-  final updated = List<DrawPoint>.from(points);
-  updated[neighborIndex] = desiredHorizontal
-      ? neighbor.copyWith(y: endPoint.y)
-      : neighbor.copyWith(x: endPoint.x);
-  return _PerpendicularAdjustment(
-    points: updated,
-    moved: true,
-    inserted: false,
+  return _insertEndDirectionStub(
+    points: points,
+    heading: heading,
+    neighbor: neighbor,
+    allowExtend: !directionPinned,
   );
 }
 
@@ -813,6 +853,190 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
   }
   return result;
 }
+
+bool _directionMatches(
+  DrawPoint from,
+  DrawPoint to,
+  ElbowHeading heading,
+) => switch (heading) {
+  ElbowHeading.right => to.x - from.x > _dedupThreshold,
+  ElbowHeading.left => from.x - to.x > _dedupThreshold,
+  ElbowHeading.down => to.y - from.y > _dedupThreshold,
+  ElbowHeading.up => from.y - to.y > _dedupThreshold,
+};
+
+DrawPoint _applyStartDirection(
+  DrawPoint neighbor,
+  DrawPoint start,
+  ElbowHeading heading,
+) => switch (heading) {
+  ElbowHeading.right => neighbor.x > start.x + _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(x: start.x + _directionFixPadding),
+  ElbowHeading.left => neighbor.x < start.x - _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(x: start.x - _directionFixPadding),
+  ElbowHeading.down => neighbor.y > start.y + _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(y: start.y + _directionFixPadding),
+  ElbowHeading.up => neighbor.y < start.y - _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(y: start.y - _directionFixPadding),
+};
+
+DrawPoint _applyEndDirection(
+  DrawPoint neighbor,
+  DrawPoint endPoint,
+  ElbowHeading requiredHeading,
+) => switch (requiredHeading) {
+  ElbowHeading.right => neighbor.x < endPoint.x - _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(x: endPoint.x - _directionFixPadding),
+  ElbowHeading.left => neighbor.x > endPoint.x + _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(x: endPoint.x + _directionFixPadding),
+  ElbowHeading.down => neighbor.y < endPoint.y - _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(y: endPoint.y - _directionFixPadding),
+  ElbowHeading.up => neighbor.y > endPoint.y + _directionFixPadding
+      ? neighbor
+      : neighbor.copyWith(y: endPoint.y + _directionFixPadding),
+};
+
+_PerpendicularAdjustment _insertStartDirectionStub({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required DrawPoint neighbor,
+  required bool allowExtend,
+}) {
+  if (points.length < 2) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final start = points.first;
+  final stub = _offsetPoint(start, heading, _directionFixPadding);
+  final connector = heading.isHorizontal
+      ? DrawPoint(x: stub.x, y: neighbor.y)
+      : DrawPoint(x: neighbor.x, y: stub.y);
+
+  final updated = List<DrawPoint>.from(points);
+  var insertIndex = 1;
+  var moved = false;
+  var inserted = false;
+
+  if (allowExtend && points.length > 2) {
+    final next = points[2];
+    final nextHorizontal = _isHorizontal(neighbor, next);
+    final connectorHorizontal =
+        (connector.y - neighbor.y).abs() <= _dedupThreshold;
+    final connectorVertical =
+        (connector.x - neighbor.x).abs() <= _dedupThreshold;
+    final collinear =
+        nextHorizontal ? connectorHorizontal : connectorVertical;
+    if (collinear) {
+      updated[1] = connector;
+      moved = true;
+    }
+  }
+
+  if (_manhattanDistance(stub, start) > _dedupThreshold) {
+    updated.insert(insertIndex, stub);
+    insertIndex++;
+    inserted = true;
+  }
+  if (!moved &&
+      _manhattanDistance(connector, neighbor) > _dedupThreshold &&
+      _manhattanDistance(connector, stub) > _dedupThreshold) {
+    updated.insert(insertIndex, connector);
+    inserted = true;
+  }
+
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: moved,
+    inserted: inserted,
+  );
+}
+
+_PerpendicularAdjustment _insertEndDirectionStub({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required DrawPoint neighbor,
+  required bool allowExtend,
+}) {
+  if (points.length < 2) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final endPoint = points.last;
+  final stub = _offsetPoint(endPoint, heading, _directionFixPadding);
+  final connector = heading.isHorizontal
+      ? DrawPoint(x: stub.x, y: neighbor.y)
+      : DrawPoint(x: neighbor.x, y: stub.y);
+
+  final updated = List<DrawPoint>.from(points);
+  final neighborIndex = updated.length - 2;
+  var insertIndex = updated.length - 1;
+  var moved = false;
+  var inserted = false;
+
+  if (allowExtend && points.length > 2) {
+    final prev = points[points.length - 3];
+    final prevHorizontal = _isHorizontal(prev, neighbor);
+    final connectorHorizontal =
+        (connector.y - neighbor.y).abs() <= _dedupThreshold;
+    final connectorVertical =
+        (connector.x - neighbor.x).abs() <= _dedupThreshold;
+    final collinear =
+        prevHorizontal ? connectorHorizontal : connectorVertical;
+    if (collinear) {
+      updated[neighborIndex] = connector;
+      moved = true;
+    }
+  }
+
+  if (!moved &&
+      _manhattanDistance(connector, neighbor) > _dedupThreshold &&
+      _manhattanDistance(connector, stub) > _dedupThreshold) {
+    updated.insert(insertIndex, connector);
+    insertIndex++;
+    inserted = true;
+  }
+  if (_manhattanDistance(stub, endPoint) > _dedupThreshold) {
+    updated.insert(insertIndex, stub);
+    inserted = true;
+  }
+
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: moved,
+    inserted: inserted,
+  );
+}
+
+DrawPoint _offsetPoint(
+  DrawPoint point,
+  ElbowHeading heading,
+  double distance,
+) => DrawPoint(
+  x: point.x + heading.dx * distance,
+  y: point.y + heading.dy * distance,
+);
+
+ElbowHeading _flipHeading(ElbowHeading heading) => switch (heading) {
+  ElbowHeading.right => ElbowHeading.left,
+  ElbowHeading.left => ElbowHeading.right,
+  ElbowHeading.up => ElbowHeading.down,
+  ElbowHeading.down => ElbowHeading.up,
+};
 
 _FixedSegmentPathResult _handleFixedSegmentRelease({
   required ElementState element,

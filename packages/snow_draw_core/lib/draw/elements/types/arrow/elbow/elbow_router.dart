@@ -18,7 +18,7 @@ const double _minArrowLength = 8;
 const double _maxPosition = 1000000;
 const double _donglePointPadding = 2;
 const double _elbowNoArrowheadGapMultiplier = 2;
-const double _elementSidePadding = 1;
+const double _elementSidePadding = 8;
 const _headingEpsilon = 1e-6;
 const _intersectionEpsilon = 1e-6;
 
@@ -567,6 +567,8 @@ ElbowRouteResult routeElbowArrow({
     anchor: endInfo.anchor,
     fallback: reverseVectorHeading,
   );
+  final startConstrained = startInfo.isBound;
+  final endConstrained = endInfo.isBound;
 
   if (!startInfo.isBound && !endInfo.isBound) {
     final simple = _fallbackPath(
@@ -676,6 +678,8 @@ ElbowRouteResult routeElbowArrow({
     obstacles: obstacles,
     startHeading: startHeading,
     endHeading: endHeading,
+    startConstrained: startConstrained,
+    endConstrained: endConstrained,
   );
   if (direct != null) {
     return ElbowRouteResult(
@@ -703,6 +707,8 @@ ElbowRouteResult routeElbowArrow({
           end: endNode,
           startHeading: startHeading,
           endHeading: endHeading,
+          startConstrained: startConstrained,
+          endConstrained: endConstrained,
           obstacles: obstacles,
         )
       : null;
@@ -825,6 +831,8 @@ List<DrawPoint>? _directPathIfClear({
   required List<DrawRect> obstacles,
   required ElbowHeading startHeading,
   required ElbowHeading endHeading,
+  required bool startConstrained,
+  required bool endConstrained,
 }) {
   final alignedX = (start.x - end.x).abs() <= _dedupThreshold;
   final alignedY = (start.y - end.y).abs() <= _dedupThreshold;
@@ -835,6 +843,14 @@ List<DrawPoint>? _directPathIfClear({
     return null;
   }
   if (alignedX && (startHeading.isHorizontal || endHeading.isHorizontal)) {
+    return null;
+  }
+
+  final segmentHeading = _segmentHeading(start, end);
+  if (startConstrained && segmentHeading != startHeading) {
+    return null;
+  }
+  if (endConstrained && segmentHeading != _flipHeading(endHeading)) {
     return null;
   }
 
@@ -1120,6 +1136,8 @@ List<_GridNode> _astar({
   required _GridNode end,
   required ElbowHeading startHeading,
   required ElbowHeading endHeading,
+  required bool startConstrained,
+  required bool endConstrained,
   required List<DrawRect> obstacles,
 }) {
   final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
@@ -1169,12 +1187,24 @@ List<_GridNode> _astar({
         continue;
       }
 
-      if (current.addr == start.addr && neighborHeading == startHeadingFlip) {
-        continue;
+      if (current.addr == start.addr) {
+        if (startConstrained) {
+          if (neighborHeading != startHeading) {
+            continue;
+          }
+        } else if (neighborHeading == startHeadingFlip) {
+          continue;
+        }
       }
 
-      if (next.addr == end.addr && neighborHeading == endHeadingFlip) {
-        continue;
+      if (next.addr == end.addr) {
+        if (endConstrained) {
+          if (neighborHeading != endHeadingFlip) {
+            continue;
+          }
+        } else if (neighborHeading == endHeadingFlip) {
+          continue;
+        }
       }
 
       final directionChanged = neighborHeading != previousHeading;
@@ -1235,6 +1265,9 @@ double _estimatedBendPenalty({
 
 ElbowHeading _headingBetween(DrawPoint from, DrawPoint to) =>
     _vectorToHeading(from.x - to.x, from.y - to.y);
+
+ElbowHeading _segmentHeading(DrawPoint from, DrawPoint to) =>
+    _vectorToHeading(to.x - from.x, to.y - from.y);
 
 bool _segmentIntersectsAnyBounds(
   DrawPoint start,

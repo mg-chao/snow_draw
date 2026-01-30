@@ -58,6 +58,129 @@ void main() {
       reason: 'Bottom binding should approach from below.',
     );
   });
+
+  test('elbow routing approaches a top binding from above', () {
+    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
+    final element = _rectangleElement(id: 'rect-1', rect: rect);
+    final start = DrawPoint(x: rect.centerX, y: rect.maxY + 60);
+
+    final result = routeElbowArrow(
+      start: start,
+      end: DrawPoint(x: rect.centerX, y: rect.minY - 200),
+      endBinding: const ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 0.5, y: 0),
+      ),
+      elementsById: {'rect-1': element},
+      endArrowhead: ArrowheadStyle.triangle,
+    );
+
+    expect(
+      _pathIntersectsBounds(result.points, rect),
+      isFalse,
+      reason: 'Route should not pass through the bound rectangle.',
+    );
+    expect(
+      _pathIsOrthogonal(result.points),
+      isTrue,
+      reason: 'Elbow paths should remain orthogonal.',
+    );
+
+    final penultimate = result.points[result.points.length - 2];
+    final endPoint = result.points.last;
+    expect(
+      (penultimate.x - endPoint.x).abs() <= _intersectionEpsilon,
+      isTrue,
+      reason: 'Top binding should approach vertically.',
+    );
+    expect(
+      penultimate.y < endPoint.y,
+      isTrue,
+      reason: 'Top binding should approach from above.',
+    );
+  });
+
+  test('elbow routing approaches a left binding from left side', () {
+    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
+    final element = _rectangleElement(id: 'rect-1', rect: rect);
+    final start = DrawPoint(x: rect.maxX + 200, y: rect.centerY);
+
+    final result = routeElbowArrow(
+      start: start,
+      end: DrawPoint(x: rect.minX - 200, y: rect.centerY),
+      endBinding: const ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 0, y: 0.5),
+      ),
+      elementsById: {'rect-1': element},
+      endArrowhead: ArrowheadStyle.triangle,
+    );
+
+    expect(
+      _pathIntersectsBounds(result.points, rect),
+      isFalse,
+      reason: 'Route should not pass through the bound rectangle.',
+    );
+    expect(
+      _pathIsOrthogonal(result.points),
+      isTrue,
+      reason: 'Elbow paths should remain orthogonal.',
+    );
+
+    final penultimate = result.points[result.points.length - 2];
+    final endPoint = result.points.last;
+    expect(
+      (penultimate.y - endPoint.y).abs() <= _intersectionEpsilon,
+      isTrue,
+      reason: 'Left binding should approach horizontally.',
+    );
+    expect(
+      penultimate.x < endPoint.x,
+      isTrue,
+      reason: 'Left binding should approach from the left.',
+    );
+  });
+
+  test('elbow routing approaches a right binding from right side', () {
+    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
+    final element = _rectangleElement(id: 'rect-1', rect: rect);
+    final start = DrawPoint(x: rect.minX - 200, y: rect.centerY);
+
+    final result = routeElbowArrow(
+      start: start,
+      end: DrawPoint(x: rect.maxX + 200, y: rect.centerY),
+      endBinding: const ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      ),
+      elementsById: {'rect-1': element},
+      endArrowhead: ArrowheadStyle.triangle,
+    );
+
+    expect(
+      _pathIntersectsBounds(result.points, rect),
+      isFalse,
+      reason: 'Route should not pass through the bound rectangle.',
+    );
+    expect(
+      _pathIsOrthogonal(result.points),
+      isTrue,
+      reason: 'Elbow paths should remain orthogonal.',
+    );
+
+    final penultimate = result.points[result.points.length - 2];
+    final endPoint = result.points.last;
+    expect(
+      (penultimate.y - endPoint.y).abs() <= _intersectionEpsilon,
+      isTrue,
+      reason: 'Right binding should approach horizontally.',
+    );
+    expect(
+      penultimate.x > endPoint.x,
+      isTrue,
+      reason: 'Right binding should approach from the right.',
+    );
+  });
 }
 
 ElementState _rectangleElement({
