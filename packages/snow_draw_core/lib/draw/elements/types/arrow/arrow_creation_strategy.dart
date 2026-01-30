@@ -104,6 +104,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: startPosition,
       snappingMode: snappingMode,
+      arrowType: elementData.arrowType,
+      arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedCurrent,
     );
@@ -136,6 +138,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: adjustedCurrent,
       snappingMode: snappingMode,
+      arrowType: elementData.arrowType,
+      arrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       referencePoint: segmentStart,
     );
@@ -223,6 +227,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: startPosition,
       snappingMode: snappingMode,
+      arrowType: elementData.arrowType,
+      arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedPosition,
     );
@@ -253,6 +259,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: adjustedPosition,
       snappingMode: snappingMode,
+      arrowType: elementData.arrowType,
+      arrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       referencePoint: segmentStart,
     );
@@ -495,6 +503,8 @@ _BindingSnapResult _snapBindingPoint({
   required DrawConfig config,
   required DrawPoint position,
   required SnappingMode snappingMode,
+  required ArrowType arrowType,
+  required ArrowheadStyle arrowheadStyle,
   ArrowBinding? preferredBinding,
   DrawPoint? referencePoint,
 }) {
@@ -524,13 +534,21 @@ _BindingSnapResult _snapBindingPoint({
     return _BindingSnapResult(position: position);
   }
 
-  final candidate = ArrowBindingUtils.resolveBindingCandidate(
-    worldPoint: position,
-    targets: targets,
-    snapDistance: bindingDistance,
-    preferredBinding: preferredBinding,
-    referencePoint: referencePoint,
-  );
+  final candidate = arrowType == ArrowType.elbow
+      ? ArrowBindingUtils.resolveElbowBindingCandidate(
+          worldPoint: position,
+          targets: targets,
+          snapDistance: bindingDistance,
+          preferredBinding: preferredBinding,
+          hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
+        )
+      : ArrowBindingUtils.resolveBindingCandidate(
+          worldPoint: position,
+          targets: targets,
+          snapDistance: bindingDistance,
+          preferredBinding: preferredBinding,
+          referencePoint: referencePoint,
+        );
   if (candidate == null) {
     return _BindingSnapResult(position: position);
   }

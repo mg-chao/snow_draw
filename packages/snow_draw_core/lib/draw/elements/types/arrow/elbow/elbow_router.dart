@@ -19,6 +19,8 @@ const double _maxPosition = 1000000;
 const double _donglePointPadding = 2;
 const double _arrowheadPadding = 12;
 const double _basePointPadding = 4;
+const double _headingEpsilon = 1e-6;
+const double _intersectionEpsilon = 1e-6;
 
 @immutable
 final class ElbowRouteResult {
@@ -79,31 +81,43 @@ ElbowHeading _vectorToHeading(double dx, double dy) {
 }
 
 ElbowHeading _headingForPointOnBounds(DrawRect bounds, DrawPoint point) {
-  final left = (point.x - bounds.minX).abs();
-  final right = (bounds.maxX - point.x).abs();
-  final top = (point.y - bounds.minY).abs();
-  final bottom = (bounds.maxY - point.y).abs();
-  final minEdge = math.min(math.min(left, right), math.min(top, bottom));
-  if (minEdge == left) {
-    return ElbowHeading.left;
-  }
-  if (minEdge == right) {
-    return ElbowHeading.right;
-  }
-  if (minEdge == top) {
+  final center = bounds.center;
+  const scale = 2.0;
+  final topLeft = _scalePointFromOrigin(
+    DrawPoint(x: bounds.minX, y: bounds.minY),
+    center,
+    scale,
+  );
+  final topRight = _scalePointFromOrigin(
+    DrawPoint(x: bounds.maxX, y: bounds.minY),
+    center,
+    scale,
+  );
+  final bottomLeft = _scalePointFromOrigin(
+    DrawPoint(x: bounds.minX, y: bounds.maxY),
+    center,
+    scale,
+  );
+  final bottomRight = _scalePointFromOrigin(
+    DrawPoint(x: bounds.maxX, y: bounds.maxY),
+    center,
+    scale,
+  );
+
+  if (_triangleContainsPoint(topLeft, topRight, center, point)) {
     return ElbowHeading.up;
   }
-  return ElbowHeading.down;
+  if (_triangleContainsPoint(topRight, bottomRight, center, point)) {
+    return ElbowHeading.right;
+  }
+  if (_triangleContainsPoint(bottomRight, bottomLeft, center, point)) {
+    return ElbowHeading.down;
+  }
+  return ElbowHeading.left;
 }
 
 double _manhattanDistance(DrawPoint a, DrawPoint b) =>
     (a.x - b.x).abs() + (a.y - b.y).abs();
-
-bool _pointInBounds(DrawPoint point, DrawRect bounds) =>
-    point.x >= bounds.minX &&
-    point.x <= bounds.maxX &&
-    point.y >= bounds.minY &&
-    point.y <= bounds.maxY;
 
 DrawRect _inflateBounds(DrawRect rect, double padding) => DrawRect(
   minX: rect.minX - padding,
@@ -136,6 +150,111 @@ DrawRect _unionBounds(List<DrawRect> bounds) {
     maxY = math.max(maxY, rect.maxY);
   }
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+bool _boundsOverlap(DrawRect a, DrawRect b) =>
+    a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
+
+({DrawRect start, DrawRect end}) _splitOverlappingObstacles({
+  required DrawRect startBounds,
+  required DrawRect endBounds,
+  required DrawRect startObstacle,
+  required DrawRect endObstacle,
+  DrawPoint? startPivot,
+  DrawPoint? endPivot,
+}) {
+  if (!_boundsOverlap(startObstacle, endObstacle)) {
+    return (start: startObstacle, end: endObstacle);
+  }
+
+  final startCenter = startPivot ?? startBounds.center;
+  final endCenter = endPivot ?? endBounds.center;
+  final dx = (startCenter.x - endCenter.x).abs();
+  final dy = (startCenter.y - endCenter.y).abs();
+  final overlapMinX = math.max(startObstacle.minX, endObstacle.minX);
+  final overlapMaxX = math.min(startObstacle.maxX, endObstacle.maxX);
+  final overlapMinY = math.max(startObstacle.minY, endObstacle.minY);
+  final overlapMaxY = math.min(startObstacle.maxY, endObstacle.maxY);
+
+  if (dx >= dy) {
+    final splitX = (startCenter.x + endCenter.x) / 2;
+    if (startCenter.x <= endCenter.x) {
+      var minSplit = startBounds.maxX;
+      var maxSplit = endBounds.minX;
+      if (maxSplit < minSplit) {
+        minSplit = overlapMinX;
+        maxSplit = overlapMaxX;
+      }
+      if (maxSplit - minSplit <= _intersectionEpsilon) {
+        return (start: startObstacle, end: endObstacle);
+      }
+      final clamped = splitX.clamp(minSplit, maxSplit).toDouble();
+      final nextStart = startObstacle.copyWith(
+        maxX: math.min(startObstacle.maxX, clamped),
+      );
+      final nextEnd = endObstacle.copyWith(
+        minX: math.max(endObstacle.minX, clamped),
+      );
+      return (start: nextStart, end: nextEnd);
+    } else {
+      var minSplit = endBounds.maxX;
+      var maxSplit = startBounds.minX;
+      if (maxSplit < minSplit) {
+        minSplit = overlapMinX;
+        maxSplit = overlapMaxX;
+      }
+      if (maxSplit - minSplit <= _intersectionEpsilon) {
+        return (start: startObstacle, end: endObstacle);
+      }
+      final clamped = splitX.clamp(minSplit, maxSplit).toDouble();
+      final nextStart = startObstacle.copyWith(
+        minX: math.max(startObstacle.minX, clamped),
+      );
+      final nextEnd = endObstacle.copyWith(
+        maxX: math.min(endObstacle.maxX, clamped),
+      );
+      return (start: nextStart, end: nextEnd);
+    }
+  }
+
+  final splitY = (startCenter.y + endCenter.y) / 2;
+  if (startCenter.y <= endCenter.y) {
+    var minSplit = startBounds.maxY;
+    var maxSplit = endBounds.minY;
+    if (maxSplit < minSplit) {
+      minSplit = overlapMinY;
+      maxSplit = overlapMaxY;
+    }
+    if (maxSplit - minSplit <= _intersectionEpsilon) {
+      return (start: startObstacle, end: endObstacle);
+    }
+    final clamped = splitY.clamp(minSplit, maxSplit).toDouble();
+    final nextStart = startObstacle.copyWith(
+      maxY: math.min(startObstacle.maxY, clamped),
+    );
+    final nextEnd = endObstacle.copyWith(
+      minY: math.max(endObstacle.minY, clamped),
+    );
+    return (start: nextStart, end: nextEnd);
+  }
+
+  var minSplit = endBounds.maxY;
+  var maxSplit = startBounds.minY;
+  if (maxSplit < minSplit) {
+    minSplit = overlapMinY;
+    maxSplit = overlapMaxY;
+  }
+  if (maxSplit - minSplit <= _intersectionEpsilon) {
+    return (start: startObstacle, end: endObstacle);
+  }
+  final clamped = splitY.clamp(minSplit, maxSplit).toDouble();
+  final nextStart = startObstacle.copyWith(
+    minY: math.max(startObstacle.minY, clamped),
+  );
+  final nextEnd = endObstacle.copyWith(
+    maxY: math.min(endObstacle.maxY, clamped),
+  );
+  return (start: nextStart, end: nextEnd);
 }
 
 DrawRect _createBoundingBox({
@@ -245,20 +364,33 @@ ElbowRouteResult routeElbowArrow({
 
   final resolvedStart = startElement == null || startBinding == null
       ? start
-      : ArrowBindingUtils.resolveBoundPoint(
+      : ArrowBindingUtils.resolveElbowBoundPoint(
             binding: startBinding,
             target: startElement,
-            referencePoint: end,
+            hasArrowhead: startArrowhead != ArrowheadStyle.none,
           ) ??
           start;
   final resolvedEnd = endElement == null || endBinding == null
       ? end
-      : ArrowBindingUtils.resolveBoundPoint(
+      : ArrowBindingUtils.resolveElbowBoundPoint(
             binding: endBinding,
             target: endElement,
-            referencePoint: start,
+            hasArrowhead: endArrowhead != ArrowheadStyle.none,
           ) ??
           end;
+
+  final startAnchor = startElement == null || startBinding == null
+      ? null
+      : ArrowBindingUtils.resolveElbowAnchorPoint(
+          binding: startBinding,
+          target: startElement,
+        );
+  final endAnchor = endElement == null || endBinding == null
+      ? null
+      : ArrowBindingUtils.resolveElbowAnchorPoint(
+          binding: endBinding,
+          target: endElement,
+        );
 
   final vectorHeading = _vectorToHeading(
     resolvedEnd.x - resolvedStart.x,
@@ -268,7 +400,7 @@ ElbowRouteResult routeElbowArrow({
       ? vectorHeading
       : _headingForPointOnBounds(
           SelectionCalculator.computeElementWorldAabb(startElement),
-          resolvedStart,
+          startAnchor ?? resolvedStart,
         );
   final endHeading = endElement == null
       ? _vectorToHeading(
@@ -277,7 +409,7 @@ ElbowRouteResult routeElbowArrow({
         )
       : _headingForPointOnBounds(
           SelectionCalculator.computeElementWorldAabb(endElement),
-          resolvedEnd,
+          endAnchor ?? resolvedEnd,
         );
 
   if (startElement == null && endElement == null) {
@@ -305,8 +437,20 @@ ElbowRouteResult routeElbowArrow({
     heading: endHeading,
     hasArrowhead: endArrowhead != ArrowheadStyle.none,
   );
-  final startObstacle = _clampBounds(_inflateBounds(startBounds, _basePadding));
-  final endObstacle = _clampBounds(_inflateBounds(endBounds, _basePadding));
+  var startObstacle = _clampBounds(_inflateBounds(startBounds, _basePadding));
+  var endObstacle = _clampBounds(_inflateBounds(endBounds, _basePadding));
+  if (_boundsOverlap(startObstacle, endObstacle)) {
+    final split = _splitOverlappingObstacles(
+      startBounds: startBounds,
+      endBounds: endBounds,
+      startObstacle: startObstacle,
+      endObstacle: endObstacle,
+      startPivot: startAnchor ?? resolvedStart,
+      endPivot: endAnchor ?? resolvedEnd,
+    );
+    startObstacle = _clampBounds(split.start);
+    endObstacle = _clampBounds(split.end);
+  }
   final commonBounds = _clampBounds(_inflateBounds(
     _unionBounds([startObstacle, endObstacle]),
     _basePadding,
@@ -374,7 +518,9 @@ ElbowRouteResult routeElbowArrow({
           endDongle: endDongle,
         );
 
-  final cleaned = _getCornerPoints(_removeShortSegments(routed));
+  final orthogonalized =
+      _ensureOrthogonalPath(points: routed, startHeading: startHeading);
+  final cleaned = _getCornerPoints(_removeShortSegments(orthogonalized));
   final clamped = cleaned.map(_clampPoint).toList(growable: false);
 
   return ElbowRouteResult(
@@ -382,6 +528,51 @@ ElbowRouteResult routeElbowArrow({
     startPoint: resolvedStart,
     endPoint: resolvedEnd,
   );
+}
+
+DrawPoint _scalePointFromOrigin(
+  DrawPoint point,
+  DrawPoint origin,
+  double scale,
+) => DrawPoint(
+  x: origin.x + (point.x - origin.x) * scale,
+  y: origin.y + (point.y - origin.y) * scale,
+);
+
+DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) => DrawPoint(
+  x: to.x - from.x,
+  y: to.y - from.y,
+);
+
+double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
+
+bool _triangleContainsPoint(
+  DrawPoint a,
+  DrawPoint b,
+  DrawPoint c,
+  DrawPoint point,
+) {
+  final v0 = _vectorFromPoints(c, a);
+  final v1 = _vectorFromPoints(b, a);
+  final v2 = _vectorFromPoints(point, a);
+
+  final dot00 = _dotProduct(v0, v0);
+  final dot01 = _dotProduct(v0, v1);
+  final dot02 = _dotProduct(v0, v2);
+  final dot11 = _dotProduct(v1, v1);
+  final dot12 = _dotProduct(v1, v2);
+
+  final denom = dot00 * dot11 - dot01 * dot01;
+  if (denom.abs() <= _headingEpsilon) {
+    return false;
+  }
+  final invDenom = 1 / denom;
+  final u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+  final v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+  return u >= -_headingEpsilon &&
+      v >= -_headingEpsilon &&
+      u + v <= 1 + _headingEpsilon;
 }
 
 ElbowRoutedPoints routeElbowArrowForElement({
@@ -441,13 +632,62 @@ List<DrawPoint>? _directPathIfClear({
     return null;
   }
 
-  final mid = DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);
   for (final obstacle in obstacles) {
-    if (_pointInBounds(mid, obstacle)) {
+    if (_segmentIntersectsBounds(start, end, obstacle)) {
       return null;
     }
   }
   return [start, end];
+}
+
+bool _segmentIntersectsBounds(
+  DrawPoint start,
+  DrawPoint end,
+  DrawRect bounds,
+) {
+  final innerMinX = bounds.minX + _intersectionEpsilon;
+  final innerMaxX = bounds.maxX - _intersectionEpsilon;
+  final innerMinY = bounds.minY + _intersectionEpsilon;
+  final innerMaxY = bounds.maxY - _intersectionEpsilon;
+  if (innerMinX >= innerMaxX || innerMinY >= innerMaxY) {
+    return false;
+  }
+
+  final dx = (start.x - end.x).abs();
+  final dy = (start.y - end.y).abs();
+  if (dx <= _dedupThreshold) {
+    final x = (start.x + end.x) / 2;
+    if (x < innerMinX || x > innerMaxX) {
+      return false;
+    }
+    final segMinY = math.min(start.y, end.y);
+    final segMaxY = math.max(start.y, end.y);
+    final overlapStart = math.max(segMinY, innerMinY);
+    final overlapEnd = math.min(segMaxY, innerMaxY);
+    return overlapEnd - overlapStart > _intersectionEpsilon;
+  }
+  if (dy <= _dedupThreshold) {
+    final y = (start.y + end.y) / 2;
+    if (y < innerMinY || y > innerMaxY) {
+      return false;
+    }
+    final segMinX = math.min(start.x, end.x);
+    final segMaxX = math.max(start.x, end.x);
+    final overlapStart = math.max(segMinX, innerMinX);
+    final overlapEnd = math.min(segMaxX, innerMaxX);
+    return overlapEnd - overlapStart > _intersectionEpsilon;
+  }
+  final segMinX = math.min(start.x, end.x);
+  final segMaxX = math.max(start.x, end.x);
+  final segMinY = math.min(start.y, end.y);
+  final segMaxY = math.max(start.y, end.y);
+  if (segMaxX < innerMinX ||
+      segMinX > innerMaxX ||
+      segMaxY < innerMinY ||
+      segMinY > innerMaxY) {
+    return false;
+  }
+  return true;
 }
 
 List<DrawPoint> _fallbackPath({
@@ -531,13 +771,10 @@ List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
     return points;
   }
 
-  bool isHorizontal(DrawPoint a, DrawPoint b) =>
-      (a.y - b.y).abs() <= (a.x - b.x).abs();
-
-  var previousIsHorizontal = isHorizontal(points[0], points[1]);
+  var previousIsHorizontal = _isHorizontal(points[0], points[1]);
   final result = <DrawPoint>[points.first];
   for (var i = 1; i < points.length - 1; i++) {
-    final nextIsHorizontal = isHorizontal(points[i], points[i + 1]);
+    final nextIsHorizontal = _isHorizontal(points[i], points[i + 1]);
     if (previousIsHorizontal != nextIsHorizontal) {
       result.add(points[i]);
     }
@@ -708,11 +945,7 @@ List<_GridNode> _astar({
         continue;
       }
 
-      final mid = DrawPoint(
-        x: (current.pos.x + next.pos.x) / 2,
-        y: (current.pos.y + next.pos.y) / 2,
-      );
-      if (_intersectsObstacle(mid, obstacles)) {
+      if (_segmentIntersectsAnyBounds(current.pos, next.pos, obstacles)) {
         continue;
       }
 
@@ -790,14 +1023,57 @@ double _estimatedBendPenalty({
 ElbowHeading _headingBetween(DrawPoint from, DrawPoint to) =>
     _vectorToHeading(from.x - to.x, from.y - to.y);
 
-bool _intersectsObstacle(DrawPoint mid, List<DrawRect> obstacles) {
+bool _segmentIntersectsAnyBounds(
+  DrawPoint start,
+  DrawPoint end,
+  List<DrawRect> obstacles,
+) {
   for (final obstacle in obstacles) {
-    if (_pointInBounds(mid, obstacle)) {
+    if (_segmentIntersectsBounds(start, end, obstacle)) {
       return true;
     }
   }
   return false;
 }
+
+List<DrawPoint> _ensureOrthogonalPath({
+  required List<DrawPoint> points,
+  required ElbowHeading startHeading,
+}) {
+  if (points.length < 2) {
+    return points;
+  }
+  final result = <DrawPoint>[points.first];
+  for (var i = 1; i < points.length; i++) {
+    final previous = result.last;
+    final next = points[i];
+    final dx = (next.x - previous.x).abs();
+    final dy = (next.y - previous.y).abs();
+    if (dx <= _dedupThreshold || dy <= _dedupThreshold) {
+      if (next != previous) {
+        result.add(next);
+      }
+      continue;
+    }
+
+    final preferHorizontal = result.length > 1
+        ? _isHorizontal(result[result.length - 2], previous)
+        : startHeading.isHorizontal;
+    final mid = preferHorizontal
+        ? DrawPoint(x: next.x, y: previous.y)
+        : DrawPoint(x: previous.x, y: next.y);
+    if (mid != previous) {
+      result.add(mid);
+    }
+    if (next != mid) {
+      result.add(next);
+    }
+  }
+  return result;
+}
+
+bool _isHorizontal(DrawPoint a, DrawPoint b) =>
+    (a.y - b.y).abs() <= (a.x - b.x).abs();
 
 List<_GridNode> _reconstructPath(_GridNode current, _GridNode start) {
   final path = <_GridNode>[];

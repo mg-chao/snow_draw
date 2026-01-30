@@ -253,6 +253,8 @@ class ArrowPointOperation extends EditOperation {
       zoom: zoom,
       startBinding: typedTransform.startBinding ?? data?.startBinding,
       endBinding: typedTransform.endBinding ?? data?.endBinding,
+      startArrowhead: data?.startArrowhead ?? ArrowheadStyle.none,
+      endArrowhead: data?.endArrowhead ?? ArrowheadStyle.none,
       bindingTargets: bindingTargets,
       bindingDistance: bindingDistance,
       allowNewBinding: allowNewBinding,
@@ -557,6 +559,8 @@ _ArrowPointComputation _compute({
   required double zoom,
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
   required List<ElementState> bindingTargets,
   required double bindingDistance,
   required bool allowNewBinding,
@@ -736,18 +740,31 @@ _ArrowPointComputation _compute({
               basePoints[index == 0 ? 1 : basePoints.length - 2],
             )
           : null;
-      final candidate = ArrowBindingUtils.resolveBindingCandidate(
-        worldPoint: _toWorldPosition(
-          context.elementRect,
-          context.rotation,
-          target,
-        ),
-        targets: bindingTargets,
-        snapDistance: bindingDistance,
-        preferredBinding: existingBinding,
-        allowNewBinding: allowNewBinding,
-        referencePoint: referencePoint,
+      final worldTarget = _toWorldPosition(
+        context.elementRect,
+        context.rotation,
+        target,
       );
+      final hasArrowhead = index == 0
+          ? startArrowhead != ArrowheadStyle.none
+          : endArrowhead != ArrowheadStyle.none;
+      final candidate = context.arrowType == ArrowType.elbow
+          ? ArrowBindingUtils.resolveElbowBindingCandidate(
+              worldPoint: worldTarget,
+              targets: bindingTargets,
+              snapDistance: bindingDistance,
+              preferredBinding: existingBinding,
+              allowNewBinding: allowNewBinding,
+              hasArrowhead: hasArrowhead,
+            )
+          : ArrowBindingUtils.resolveBindingCandidate(
+              worldPoint: worldTarget,
+              targets: bindingTargets,
+              snapDistance: bindingDistance,
+              preferredBinding: existingBinding,
+              allowNewBinding: allowNewBinding,
+              referencePoint: referencePoint,
+            );
       if (candidate != null) {
         target = _toLocalPosition(
           context.elementRect,

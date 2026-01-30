@@ -6,6 +6,7 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../../utils/selection_calculator.dart';
 import '../rectangle/rectangle_data.dart';
 
 enum ArrowBindingMode { inside, orbit }
@@ -145,6 +146,59 @@ class ArrowBindingUtils {
     return best;
   }
 
+  static ArrowBindingResult? resolveElbowBindingCandidate({
+    required DrawPoint worldPoint,
+    required Iterable<ElementState> targets,
+    required double snapDistance,
+    required bool hasArrowhead,
+    ArrowBinding? preferredBinding,
+    bool allowNewBinding = true,
+  }) {
+    if (snapDistance <= 0) {
+      return null;
+    }
+    if (!allowNewBinding && preferredBinding == null) {
+      return null;
+    }
+
+    ArrowBindingResult? best;
+    var bestScore = double.infinity;
+
+    for (final target in targets) {
+      if (target.opacity <= 0) {
+        continue;
+      }
+      if (!allowNewBinding &&
+          preferredBinding != null &&
+          target.id != preferredBinding.elementId) {
+        continue;
+      }
+
+      final result = _resolveElbowBindingOnTarget(
+        target: target,
+        worldPoint: worldPoint,
+        snapDistance: snapDistance,
+        hasArrowhead: hasArrowhead,
+      );
+      if (result == null) {
+        continue;
+      }
+
+      var score = result.distance;
+      if (preferredBinding != null && preferredBinding.elementId == target.id) {
+        score = math.max(0, score - snapDistance * 0.25);
+      }
+
+      if (score < bestScore ||
+          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+        best = result;
+        bestScore = score;
+      }
+    }
+
+    return best;
+  }
+
   static DrawPoint? resolveBoundPoint({
     required ArrowBinding binding,
     required ElementState target,
@@ -174,6 +228,51 @@ class ArrowBindingUtils {
       gap: gap,
     );
     return space.toWorld(snapPoint);
+  }
+
+  static DrawPoint? resolveElbowBoundPoint({
+    required ArrowBinding binding,
+    required ElementState target,
+    required bool hasArrowhead,
+  }) {
+    final rect = target.rect;
+    if (rect.width == 0 || rect.height == 0) {
+      return null;
+    }
+
+    final localAnchor = DrawPoint(
+      x: rect.minX + rect.width * binding.anchor.x,
+      y: rect.minY + rect.height * binding.anchor.y,
+    );
+    final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localAnchor);
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    final worldAnchor = space.toWorld(anchorPoint);
+    final heading = _resolveElbowHeadingVector(
+      bounds: SelectionCalculator.computeElementWorldAabb(target),
+      point: worldAnchor,
+    );
+    final gap = _resolveElbowBindingGap(target, hasArrowhead);
+    return DrawPoint(
+      x: worldAnchor.x + heading.x * gap,
+      y: worldAnchor.y + heading.y * gap,
+    );
+  }
+
+  static DrawPoint? resolveElbowAnchorPoint({
+    required ArrowBinding binding,
+    required ElementState target,
+  }) {
+    final rect = target.rect;
+    if (rect.width == 0 || rect.height == 0) {
+      return null;
+    }
+    final localAnchor = DrawPoint(
+      x: rect.minX + rect.width * binding.anchor.x,
+      y: rect.minY + rect.height * binding.anchor.y,
+    );
+    final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localAnchor);
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    return space.toWorld(anchorPoint);
   }
 
   static ArrowBinding? bindingFromLocalPoint({
@@ -258,6 +357,7 @@ final class _BindingHit {
 
 const _bindingGapBase = 6.0;
 const _bindingHitToleranceFactor = 0.4;
+const _bindingArrowheadGapMultiplier = 6.0;
 const _intersectionEpsilon = 1e-6;
 const _insideEpsilon = 1e-6;
 
@@ -318,6 +418,14 @@ double _resolveBindingGap(ElementState target) {
   final data = target.data;
   final strokeWidth = data is RectangleData ? data.strokeWidth : 0.0;
   return _bindingGapBase + strokeWidth / 2;
+}
+
+double _resolveElbowBindingGap(ElementState target, bool hasArrowhead) {
+  final baseGap = _resolveBindingGap(target);
+  if (!hasArrowhead) {
+    return baseGap;
+  }
+  return baseGap * _bindingArrowheadGapMultiplier;
 }
 
 DrawRect _inflateRect(DrawRect rect, double delta) => DrawRect(
@@ -402,6 +510,56 @@ _BindingHit? _resolveBindingHit({
   );
 }
 
+ArrowBindingResult? _resolveElbowBindingOnTarget({
+  required ElementState target,
+  required DrawPoint worldPoint,
+  required double snapDistance,
+  required bool hasArrowhead,
+}) {
+  final rect = target.rect;
+  if (rect.width == 0 || rect.height == 0) {
+    return null;
+  }
+
+  final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+  final localPoint = space.fromWorld(worldPoint);
+  final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localPoint);
+
+  final distance = _isStrictlyInsideRect(rect, localPoint)
+      ? 0.0
+      : localPoint.distance(anchorPoint);
+  if (distance > snapDistance * (1 + _bindingHitToleranceFactor)) {
+    return null;
+  }
+
+  final binding = ArrowBindingUtils.bindingFromLocalPoint(
+    target: target,
+    localPoint: anchorPoint,
+    mode: ArrowBindingMode.orbit,
+  );
+  if (binding == null) {
+    return null;
+  }
+
+  final worldAnchor = space.toWorld(anchorPoint);
+  final heading = _resolveElbowHeadingVector(
+    bounds: SelectionCalculator.computeElementWorldAabb(target),
+    point: worldAnchor,
+  );
+  final gap = _resolveElbowBindingGap(target, hasArrowhead);
+  final snapPoint = DrawPoint(
+    x: worldAnchor.x + heading.x * gap,
+    y: worldAnchor.y + heading.y * gap,
+  );
+
+  return ArrowBindingResult(
+    binding: binding,
+    snapPoint: snapPoint,
+    distance: distance,
+    zIndex: target.zIndex,
+  );
+}
+
 DrawPoint _clampPointToRect(DrawRect rect, DrawPoint point) => DrawPoint(
   x: _clamp(point.x, rect.minX, rect.maxX),
   y: _clamp(point.y, rect.minY, rect.maxY),
@@ -425,6 +583,59 @@ DrawPoint _resolveOrbitAnchorPoint({
     }
   }
   return _nearestPointOnRectBoundary(rect, localPoint);
+}
+
+DrawPoint _resolveElbowAnchorPoint({
+  required DrawRect rect,
+  required DrawPoint point,
+}) {
+  final center = rect.center;
+  final intersection = _intersectRectAlongLine(
+    rect: rect,
+    reference: center,
+    target: point,
+    preferRay: true,
+  );
+  return intersection ?? _nearestPointOnRectBoundary(rect, point);
+}
+
+DrawPoint _resolveElbowHeadingVector({
+  required DrawRect bounds,
+  required DrawPoint point,
+}) {
+  final center = bounds.center;
+  const scale = 2.0;
+  final topLeft = _scalePointFromOrigin(
+    DrawPoint(x: bounds.minX, y: bounds.minY),
+    center,
+    scale,
+  );
+  final topRight = _scalePointFromOrigin(
+    DrawPoint(x: bounds.maxX, y: bounds.minY),
+    center,
+    scale,
+  );
+  final bottomLeft = _scalePointFromOrigin(
+    DrawPoint(x: bounds.minX, y: bounds.maxY),
+    center,
+    scale,
+  );
+  final bottomRight = _scalePointFromOrigin(
+    DrawPoint(x: bounds.maxX, y: bounds.maxY),
+    center,
+    scale,
+  );
+
+  if (_triangleContainsPoint(topLeft, topRight, center, point)) {
+    return const DrawPoint(x: 0, y: -1);
+  }
+  if (_triangleContainsPoint(topRight, bottomRight, center, point)) {
+    return const DrawPoint(x: 1, y: 0);
+  }
+  if (_triangleContainsPoint(bottomRight, bottomLeft, center, point)) {
+    return const DrawPoint(x: 0, y: 1);
+  }
+  return const DrawPoint(x: -1, y: 0);
 }
 
 DrawPoint _resolveOrbitSnapPoint({
@@ -580,3 +791,48 @@ double _clamp(double value, double min, double max) =>
     math.min(math.max(value, min), max);
 
 double _clamp01(double value) => _clamp(value, 0, 1);
+
+DrawPoint _scalePointFromOrigin(
+  DrawPoint point,
+  DrawPoint origin,
+  double scale,
+) => DrawPoint(
+  x: origin.x + (point.x - origin.x) * scale,
+  y: origin.y + (point.y - origin.y) * scale,
+);
+
+DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) => DrawPoint(
+  x: to.x - from.x,
+  y: to.y - from.y,
+);
+
+double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
+
+bool _triangleContainsPoint(
+  DrawPoint a,
+  DrawPoint b,
+  DrawPoint c,
+  DrawPoint point,
+) {
+  final v0 = _vectorFromPoints(c, a);
+  final v1 = _vectorFromPoints(b, a);
+  final v2 = _vectorFromPoints(point, a);
+
+  final dot00 = _dotProduct(v0, v0);
+  final dot01 = _dotProduct(v0, v1);
+  final dot02 = _dotProduct(v0, v2);
+  final dot11 = _dotProduct(v1, v1);
+  final dot12 = _dotProduct(v1, v2);
+
+  final denom = dot00 * dot11 - dot01 * dot01;
+  if (denom.abs() <= _intersectionEpsilon) {
+    return false;
+  }
+  final invDenom = 1 / denom;
+  final u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+  final v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+  return u >= -_intersectionEpsilon &&
+      v >= -_intersectionEpsilon &&
+      u + v <= 1 + _intersectionEpsilon;
+}
