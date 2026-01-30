@@ -280,7 +280,7 @@ DrawRect _elementBoundsForElbow({
   required bool hasArrowhead,
 }) {
   if (element == null) {
-    return _pointBounds(point, _donglePointPadding);
+    return _pointBounds(point, 0);
   }
 
   final base = SelectionCalculator.computeElementWorldAabb(element);
@@ -546,10 +546,16 @@ ElbowRouteResult routeElbowArrow({
       _boundsOverlap(startElementBounds, endElementBounds);
 
   final startBaseBounds = boundsOverlap
-      ? _pointBounds(resolvedStart, _donglePointPadding)
+      ? _pointBounds(
+          resolvedStart,
+          startElement == null ? 0 : _donglePointPadding,
+        )
       : startElementBounds;
   final endBaseBounds = boundsOverlap
-      ? _pointBounds(resolvedEnd, _donglePointPadding)
+      ? _pointBounds(
+          resolvedEnd,
+          endElement == null ? 0 : _donglePointPadding,
+        )
       : endElementBounds;
 
   final startPadding = boundsOverlap
@@ -580,6 +586,12 @@ ElbowRouteResult routeElbowArrow({
 
   var startObstacle = _clampBounds(dynamicAabbs.start);
   var endObstacle = _clampBounds(dynamicAabbs.end);
+  if (startElement == null) {
+    startObstacle = _clampBounds(startBaseBounds);
+  }
+  if (endElement == null) {
+    endObstacle = _clampBounds(endBaseBounds);
+  }
   if (_boundsOverlap(startObstacle, endObstacle)) {
     final split = _splitOverlappingObstacles(
       startBounds: startBaseBounds,
