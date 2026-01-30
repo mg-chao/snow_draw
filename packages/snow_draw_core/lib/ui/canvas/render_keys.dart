@@ -145,6 +145,7 @@ class DynamicCanvasRenderKey {
     required this.boxSelectionBounds,
     required this.selectedIds,
     required this.hoveredElementId,
+    required this.hoveredBindingElementId,
     required this.hoveredArrowHandle,
     required this.activeArrowHandle,
     required this.hoverSelectionConfig,
@@ -175,6 +176,7 @@ class DynamicCanvasRenderKey {
 
   /// Hovered element ID for selection preview outline.
   final String? hoveredElementId;
+  final String? hoveredBindingElementId;
   final ArrowPointHandle? hoveredArrowHandle;
   final ArrowPointHandle? activeArrowHandle;
 
@@ -223,6 +225,7 @@ class DynamicCanvasRenderKey {
           other.boxSelectionBounds == boxSelectionBounds &&
           _setEquals(other.selectedIds, selectedIds) &&
           other.hoveredElementId == hoveredElementId &&
+          other.hoveredBindingElementId == hoveredBindingElementId &&
           other.hoveredArrowHandle == hoveredArrowHandle &&
           other.activeArrowHandle == activeArrowHandle &&
           other.hoverSelectionConfig == hoverSelectionConfig &&
@@ -245,6 +248,7 @@ class DynamicCanvasRenderKey {
     boxSelectionBounds,
     Object.hashAllUnordered(selectedIds),
     hoveredElementId,
+    hoveredBindingElementId,
     hoveredArrowHandle,
     activeArrowHandle,
     hoverSelectionConfig,
