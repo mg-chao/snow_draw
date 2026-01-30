@@ -1,7 +1,9 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
@@ -208,6 +210,68 @@ void main() {
     expect(segments.first.start, points[1]);
     expect(segments.first.end, points[2]);
   });
+
+  test(
+    'fixed middle segment inserts a transition to keep bound endpoint '
+    'perpendicular',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 0, y: 100),
+        const DrawPoint(x: 200, y: 100),
+        const DrawPoint(x: 200, y: 50),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      const rect = DrawRect(minX: 300, minY: 200, maxX: 360, maxY: 260);
+      final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+      const binding = ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      );
+      final boundPoint =
+          ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: binding,
+            target: boundElement,
+            hasArrowhead: false,
+          ) ??
+          points.last;
+
+      final movedPoints = List<DrawPoint>.from(points);
+      movedPoints[movedPoints.length - 1] = boundPoint;
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data.copyWith(endBinding: binding),
+        elementsById: {'rect-1': boundElement},
+        localPointsOverride: movedPoints,
+        fixedSegmentsOverride: fixedSegments,
+        endBindingOverride: binding,
+      );
+
+      final penultimate = result.localPoints[result.localPoints.length - 2];
+      final endPoint = result.localPoints.last;
+      expect(
+        (penultimate.y - endPoint.y).abs() <= 1,
+        isTrue,
+        reason: 'End segment should be horizontal toward the bound element.',
+      );
+      expect(
+        result.localPoints.length,
+        5,
+        reason: 'Expected a transition point for perpendicular entry.',
+      );
+      expect(
+        result.localPoints[2].y,
+        100,
+        reason: 'Fixed segment should stay on its original line.',
+      );
+    },
+  );
 }
 
 ElementState _arrowElement(
@@ -261,3 +325,16 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
   }
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
+
+ElementState _rectangleElement({
+  required String id,
+  required DrawRect rect,
+  double strokeWidth = 2,
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: RectangleData(strokeWidth: strokeWidth),
+);
