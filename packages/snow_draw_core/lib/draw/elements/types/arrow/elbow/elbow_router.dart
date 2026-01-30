@@ -17,8 +17,8 @@ const double _dedupThreshold = 1;
 const double _minArrowLength = 8;
 const double _maxPosition = 1000000;
 const double _donglePointPadding = 2;
-const double _arrowheadPadding = 12;
-const double _basePointPadding = 4;
+const double _elbowNoArrowheadGapMultiplier = 2;
+const double _elementSidePadding = 1;
 const double _headingEpsilon = 1e-6;
 const double _intersectionEpsilon = 1e-6;
 
@@ -257,31 +257,131 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
   return (start: nextStart, end: nextEnd);
 }
 
-DrawRect _createBoundingBox({
+DrawRect _pointBounds(DrawPoint point, double padding) => DrawRect(
+  minX: point.x - padding,
+  minY: point.y - padding,
+  maxX: point.x + padding,
+  maxY: point.y + padding,
+);
+
+double _headPadding(bool hasArrowhead) {
+  final multiplier = hasArrowhead
+      ? ArrowBindingUtils.elbowArrowheadGapMultiplier
+      : _elbowNoArrowheadGapMultiplier;
+  final padding =
+      _basePadding - (ArrowBindingUtils.elbowBindingGapBase * multiplier);
+  return math.max(0, padding);
+}
+
+DrawRect _elementBoundsForElbow({
   required DrawPoint point,
   required ElementState? element,
   required ElbowHeading heading,
   required bool hasArrowhead,
 }) {
   if (element == null) {
-    return DrawRect(
-      minX: point.x - _donglePointPadding,
-      minY: point.y - _donglePointPadding,
-      maxX: point.x + _donglePointPadding,
-      maxY: point.y + _donglePointPadding,
-    );
+    return _pointBounds(point, _donglePointPadding);
   }
 
   final base = SelectionCalculator.computeElementWorldAabb(element);
-  final headOffset = hasArrowhead ? _arrowheadPadding : _basePointPadding;
-  final sideOffset = _donglePointPadding;
-  final padding = _paddingFromHeading(heading, headOffset, sideOffset);
+  final multiplier = hasArrowhead
+      ? ArrowBindingUtils.elbowArrowheadGapMultiplier
+      : _elbowNoArrowheadGapMultiplier;
+  final headOffset = ArrowBindingUtils.elbowBindingGapBase * multiplier;
+  final padding = _paddingFromHeading(heading, headOffset, _elementSidePadding);
   return DrawRect(
     minX: base.minX - padding.left,
     minY: base.minY - padding.top,
     maxX: base.maxX + padding.right,
     maxY: base.maxY + padding.bottom,
   );
+}
+
+DrawRect _dynamicAabbFor({
+  required DrawRect self,
+  required DrawRect other,
+  required DrawRect common,
+  required _BoundsPadding padding,
+  DrawRect? selfElementBounds,
+  DrawRect? otherElementBounds,
+}) {
+  final selfElement = selfElementBounds ?? self;
+  final otherElement = otherElementBounds ?? other;
+
+  final minX = self.minX > other.maxX
+      ? (self.minY > other.maxY || self.maxY < other.minY)
+          ? math.min(
+              (selfElement.minX + otherElement.maxX) / 2,
+              self.minX - padding.left,
+            )
+          : (selfElement.minX + otherElement.maxX) / 2
+      : self.minX > other.minX
+          ? self.minX - padding.left
+          : common.minX - padding.left;
+
+  final minY = self.minY > other.maxY
+      ? (self.minX > other.maxX || self.maxX < other.minX)
+          ? math.min(
+              (selfElement.minY + otherElement.maxY) / 2,
+              self.minY - padding.top,
+            )
+          : (selfElement.minY + otherElement.maxY) / 2
+      : self.minY > other.minY
+          ? self.minY - padding.top
+          : common.minY - padding.top;
+
+  final maxX = self.maxX < other.minX
+      ? (self.minY > other.maxY || self.maxY < other.minY)
+          ? math.max(
+              (selfElement.maxX + otherElement.minX) / 2,
+              self.maxX + padding.right,
+            )
+          : (selfElement.maxX + otherElement.minX) / 2
+      : self.maxX < other.maxX
+          ? self.maxX + padding.right
+          : common.maxX + padding.right;
+
+  final maxY = self.maxY < other.minY
+      ? (self.minX > other.maxX || self.maxX < other.minX)
+          ? math.max(
+              (selfElement.maxY + otherElement.minY) / 2,
+              self.maxY + padding.bottom,
+            )
+          : (selfElement.maxY + otherElement.minY) / 2
+      : self.maxY < other.maxY
+          ? self.maxY + padding.bottom
+          : common.maxY + padding.bottom;
+
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+({DrawRect start, DrawRect end}) _generateDynamicAabbs({
+  required DrawRect start,
+  required DrawRect end,
+  required _BoundsPadding startPadding,
+  required _BoundsPadding endPadding,
+  DrawRect? startElementBounds,
+  DrawRect? endElementBounds,
+}) {
+  final common = _unionBounds([start, end]);
+  final startAabb = _dynamicAabbFor(
+    self: start,
+    other: end,
+    common: common,
+    padding: startPadding,
+    selfElementBounds: startElementBounds,
+    otherElementBounds: endElementBounds,
+  );
+  final endAabb = _dynamicAabbFor(
+    self: end,
+    other: start,
+    common: common,
+    padding: endPadding,
+    selfElementBounds: endElementBounds,
+    otherElementBounds: startElementBounds,
+  );
+
+  return (start: startAabb, end: endAabb);
 }
 
 _BoundsPadding _paddingFromHeading(
@@ -425,24 +525,65 @@ ElbowRouteResult routeElbowArrow({
     );
   }
 
-  final startBounds = _createBoundingBox(
+  final hasStartArrowhead = startArrowhead != ArrowheadStyle.none;
+  final hasEndArrowhead = endArrowhead != ArrowheadStyle.none;
+  final startElementBounds = _elementBoundsForElbow(
     point: resolvedStart,
     element: startElement,
     heading: startHeading,
-    hasArrowhead: startArrowhead != ArrowheadStyle.none,
+    hasArrowhead: hasStartArrowhead,
   );
-  final endBounds = _createBoundingBox(
+  final endElementBounds = _elementBoundsForElbow(
     point: resolvedEnd,
     element: endElement,
     heading: endHeading,
-    hasArrowhead: endArrowhead != ArrowheadStyle.none,
+    hasArrowhead: hasEndArrowhead,
   );
-  var startObstacle = _clampBounds(_inflateBounds(startBounds, _basePadding));
-  var endObstacle = _clampBounds(_inflateBounds(endBounds, _basePadding));
+
+  final boundsOverlap =
+      startElement != null &&
+      endElement != null &&
+      _boundsOverlap(startElementBounds, endElementBounds);
+
+  final startBaseBounds = boundsOverlap
+      ? _pointBounds(resolvedStart, _donglePointPadding)
+      : startElementBounds;
+  final endBaseBounds = boundsOverlap
+      ? _pointBounds(resolvedEnd, _donglePointPadding)
+      : endElementBounds;
+
+  final startPadding = boundsOverlap
+      ? _paddingFromHeading(startHeading, _basePadding, 0)
+      : _paddingFromHeading(
+          startHeading,
+          _headPadding(hasStartArrowhead),
+          _basePadding,
+        );
+  final endPadding = boundsOverlap
+      ? _paddingFromHeading(endHeading, _basePadding, 0)
+      : _paddingFromHeading(
+          endHeading,
+          _headPadding(hasEndArrowhead),
+          _basePadding,
+        );
+
+  final dynamicAabbs = _generateDynamicAabbs(
+    start: startBaseBounds,
+    end: endBaseBounds,
+    startPadding: startPadding,
+    endPadding: endPadding,
+    startElementBounds:
+        boundsOverlap || startElement == null ? null : startElementBounds,
+    endElementBounds:
+        boundsOverlap || endElement == null ? null : endElementBounds,
+  );
+
+  var startObstacle = _clampBounds(dynamicAabbs.start);
+  var endObstacle = _clampBounds(dynamicAabbs.end);
   if (_boundsOverlap(startObstacle, endObstacle)) {
     final split = _splitOverlappingObstacles(
-      startBounds: startBounds,
-      endBounds: endBounds,
+      startBounds: startBaseBounds,
+      endBounds: endBaseBounds,
       startObstacle: startObstacle,
       endObstacle: endObstacle,
       startPivot: startAnchor ?? resolvedStart,

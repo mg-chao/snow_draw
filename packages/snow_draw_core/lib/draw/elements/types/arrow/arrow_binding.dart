@@ -90,6 +90,10 @@ final class ArrowBindingResult {
 class ArrowBindingUtils {
   const ArrowBindingUtils._();
 
+  static const double elbowBindingGapBase = _elbowBindingGapBase;
+  static const double elbowArrowheadGapMultiplier =
+      _bindingArrowheadGapMultiplier;
+
   static double resolveBindingSearchDistance(double snapDistance) =>
       snapDistance * (1 + _bindingHitToleranceFactor);
 
@@ -251,7 +255,7 @@ class ArrowBindingUtils {
       bounds: SelectionCalculator.computeElementWorldAabb(target),
       point: worldAnchor,
     );
-    final gap = _resolveElbowBindingGap(target, hasArrowhead);
+    final gap = _resolveElbowBindingGap(hasArrowhead);
     return DrawPoint(
       x: worldAnchor.x + heading.x * gap,
       y: worldAnchor.y + heading.y * gap,
@@ -356,6 +360,7 @@ final class _BindingHit {
 }
 
 const _bindingGapBase = 6.0;
+const _elbowBindingGapBase = 5.0;
 const _bindingHitToleranceFactor = 0.4;
 const _bindingArrowheadGapMultiplier = 6.0;
 const _intersectionEpsilon = 1e-6;
@@ -420,8 +425,8 @@ double _resolveBindingGap(ElementState target) {
   return _bindingGapBase + strokeWidth / 2;
 }
 
-double _resolveElbowBindingGap(ElementState target, bool hasArrowhead) {
-  final baseGap = _resolveBindingGap(target);
+double _resolveElbowBindingGap(bool hasArrowhead) {
+  final baseGap = _elbowBindingGapBase;
   if (!hasArrowhead) {
     return baseGap;
   }
@@ -546,7 +551,7 @@ ArrowBindingResult? _resolveElbowBindingOnTarget({
     bounds: SelectionCalculator.computeElementWorldAabb(target),
     point: worldAnchor,
   );
-  final gap = _resolveElbowBindingGap(target, hasArrowhead);
+  final gap = _resolveElbowBindingGap(hasArrowhead);
   final snapPoint = DrawPoint(
     x: worldAnchor.x + heading.x * gap,
     y: worldAnchor.y + heading.y * gap,
