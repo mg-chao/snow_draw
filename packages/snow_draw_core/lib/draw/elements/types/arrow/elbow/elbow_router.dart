@@ -116,6 +116,80 @@ ElbowHeading _headingForPointOnBounds(DrawRect bounds, DrawPoint point) {
   return ElbowHeading.left;
 }
 
+@immutable
+final class _EndpointInfo {
+  const _EndpointInfo({
+    required this.point,
+    required this.element,
+    required this.elementBounds,
+    required this.anchor,
+  });
+
+  final DrawPoint point;
+  final ElementState? element;
+  final DrawRect? elementBounds;
+  final DrawPoint? anchor;
+
+  bool get isBound => element != null;
+  DrawPoint get anchorOrPoint => anchor ?? point;
+}
+
+_EndpointInfo _resolveEndpointInfo({
+  required DrawPoint point,
+  required ArrowBinding? binding,
+  required Map<String, ElementState> elementsById,
+  required bool hasArrowhead,
+}) {
+  if (binding == null) {
+    return _EndpointInfo(
+      point: point,
+      element: null,
+      elementBounds: null,
+      anchor: null,
+    );
+  }
+  final element = elementsById[binding.elementId];
+  if (element == null) {
+    return _EndpointInfo(
+      point: point,
+      element: null,
+      elementBounds: null,
+      anchor: null,
+    );
+  }
+
+  final resolved =
+      ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: binding,
+        target: element,
+        hasArrowhead: hasArrowhead,
+      ) ??
+      point;
+  final anchor = ArrowBindingUtils.resolveElbowAnchorPoint(
+    binding: binding,
+    target: element,
+  );
+  final bounds = SelectionCalculator.computeElementWorldAabb(element);
+  return _EndpointInfo(
+    point: resolved,
+    element: element,
+    elementBounds: bounds,
+    anchor: anchor,
+  );
+}
+
+ElbowHeading _resolveEndpointHeading({
+  required DrawRect? elementBounds,
+  required DrawPoint point,
+  required DrawPoint? anchor,
+  required ElbowHeading fallback,
+}) {
+  if (elementBounds == null) {
+    return fallback;
+  }
+  return _headingForPointOnBounds(elementBounds, anchor ?? point);
+}
+
 double _manhattanDistance(DrawPoint a, DrawPoint b) =>
     (a.x - b.x).abs() + (a.y - b.y).abs();
 
@@ -275,25 +349,24 @@ double _headPadding(bool hasArrowhead) {
 
 DrawRect _elementBoundsForElbow({
   required DrawPoint point,
-  required ElementState? element,
+  required DrawRect? elementBounds,
   required ElbowHeading heading,
   required bool hasArrowhead,
 }) {
-  if (element == null) {
+  if (elementBounds == null) {
     return _pointBounds(point, 0);
   }
 
-  final base = SelectionCalculator.computeElementWorldAabb(element);
   final multiplier = hasArrowhead
       ? ArrowBindingUtils.elbowArrowheadGapMultiplier
       : _elbowNoArrowheadGapMultiplier;
   final headOffset = ArrowBindingUtils.elbowBindingGapBase * multiplier;
   final padding = _paddingFromHeading(heading, headOffset, _elementSidePadding);
   return DrawRect(
-    minX: base.minX - padding.left,
-    minY: base.minY - padding.top,
-    maxX: base.maxX + padding.right,
-    maxY: base.maxY + padding.bottom,
+    minX: elementBounds.minX - padding.left,
+    minY: elementBounds.minY - padding.top,
+    maxX: elementBounds.maxX + padding.right,
+    maxY: elementBounds.maxY + padding.bottom,
   );
 }
 
@@ -456,102 +529,82 @@ ElbowRouteResult routeElbowArrow({
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
-  final startElement = startBinding == null
-      ? null
-      : elementsById[startBinding.elementId];
-  final endElement = endBinding == null
-      ? null
-      : elementsById[endBinding.elementId];
+  final hasStartArrowhead = startArrowhead != ArrowheadStyle.none;
+  final hasEndArrowhead = endArrowhead != ArrowheadStyle.none;
+  final startInfo = _resolveEndpointInfo(
+    point: start,
+    binding: startBinding,
+    elementsById: elementsById,
+    hasArrowhead: hasStartArrowhead,
+  );
+  final endInfo = _resolveEndpointInfo(
+    point: end,
+    binding: endBinding,
+    elementsById: elementsById,
+    hasArrowhead: hasEndArrowhead,
+  );
 
-  final resolvedStart = startElement == null || startBinding == null
-      ? start
-      : ArrowBindingUtils.resolveElbowBoundPoint(
-              binding: startBinding,
-              target: startElement,
-              hasArrowhead: startArrowhead != ArrowheadStyle.none,
-            ) ??
-            start;
-  final resolvedEnd = endElement == null || endBinding == null
-      ? end
-      : ArrowBindingUtils.resolveElbowBoundPoint(
-              binding: endBinding,
-              target: endElement,
-              hasArrowhead: endArrowhead != ArrowheadStyle.none,
-            ) ??
-            end;
-
-  final startAnchor = startElement == null || startBinding == null
-      ? null
-      : ArrowBindingUtils.resolveElbowAnchorPoint(
-          binding: startBinding,
-          target: startElement,
-        );
-  final endAnchor = endElement == null || endBinding == null
-      ? null
-      : ArrowBindingUtils.resolveElbowAnchorPoint(
-          binding: endBinding,
-          target: endElement,
-        );
+  final startPoint = startInfo.point;
+  final endPoint = endInfo.point;
 
   final vectorHeading = _vectorToHeading(
-    resolvedEnd.x - resolvedStart.x,
-    resolvedEnd.y - resolvedStart.y,
+    endPoint.x - startPoint.x,
+    endPoint.y - startPoint.y,
   );
-  final startHeading = startElement == null
-      ? vectorHeading
-      : _headingForPointOnBounds(
-          SelectionCalculator.computeElementWorldAabb(startElement),
-          startAnchor ?? resolvedStart,
-        );
-  final endHeading = endElement == null
-      ? _vectorToHeading(
-          resolvedStart.x - resolvedEnd.x,
-          resolvedStart.y - resolvedEnd.y,
-        )
-      : _headingForPointOnBounds(
-          SelectionCalculator.computeElementWorldAabb(endElement),
-          endAnchor ?? resolvedEnd,
-        );
+  final reverseVectorHeading = _vectorToHeading(
+    startPoint.x - endPoint.x,
+    startPoint.y - endPoint.y,
+  );
+  final startHeading = _resolveEndpointHeading(
+    elementBounds: startInfo.elementBounds,
+    point: startPoint,
+    anchor: startInfo.anchor,
+    fallback: vectorHeading,
+  );
+  final endHeading = _resolveEndpointHeading(
+    elementBounds: endInfo.elementBounds,
+    point: endPoint,
+    anchor: endInfo.anchor,
+    fallback: reverseVectorHeading,
+  );
 
-  if (startElement == null && endElement == null) {
+  if (!startInfo.isBound && !endInfo.isBound) {
     final simple = _fallbackPath(
-      start: resolvedStart,
-      end: resolvedEnd,
+      start: startPoint,
+      end: endPoint,
       startHeading: startHeading,
     );
     return ElbowRouteResult(
       points: simple,
-      startPoint: resolvedStart,
-      endPoint: resolvedEnd,
+      startPoint: startPoint,
+      endPoint: endPoint,
     );
   }
 
-  final hasStartArrowhead = startArrowhead != ArrowheadStyle.none;
-  final hasEndArrowhead = endArrowhead != ArrowheadStyle.none;
-  final startElementBounds = _elementBoundsForElbow(
-    point: resolvedStart,
-    element: startElement,
+  final startElbowBounds = _elementBoundsForElbow(
+    point: startPoint,
+    elementBounds: startInfo.elementBounds,
     heading: startHeading,
     hasArrowhead: hasStartArrowhead,
   );
-  final endElementBounds = _elementBoundsForElbow(
-    point: resolvedEnd,
-    element: endElement,
+  final endElbowBounds = _elementBoundsForElbow(
+    point: endPoint,
+    elementBounds: endInfo.elementBounds,
     heading: endHeading,
     hasArrowhead: hasEndArrowhead,
   );
 
   final boundsOverlap =
-      startElement != null &&
-      endElement != null &&
-      _boundsOverlap(startElementBounds, endElementBounds);
+      startInfo.isBound &&
+      endInfo.isBound &&
+      _boundsOverlap(startElbowBounds, endElbowBounds);
 
   final startBaseBounds = boundsOverlap
-      ? _pointBounds(resolvedStart, _donglePointPadding)
-      : startElementBounds;
+      ? _pointBounds(startPoint, _donglePointPadding)
+      : startElbowBounds;
   final endBaseBounds = boundsOverlap
-      ? _pointBounds(resolvedEnd, _donglePointPadding)
-      : endElementBounds;
+      ? _pointBounds(endPoint, _donglePointPadding)
+      : endElbowBounds;
 
   final startPadding = boundsOverlap
       ? _paddingFromHeading(startHeading, _basePadding, 0)
@@ -573,20 +626,20 @@ ElbowRouteResult routeElbowArrow({
     end: endBaseBounds,
     startPadding: startPadding,
     endPadding: endPadding,
-    startElementBounds: boundsOverlap || startElement == null
+    startElementBounds: boundsOverlap || !startInfo.isBound
         ? null
-        : startElementBounds,
-    endElementBounds: boundsOverlap || endElement == null
+        : startElbowBounds,
+    endElementBounds: boundsOverlap || !endInfo.isBound
         ? null
-        : endElementBounds,
+        : endElbowBounds,
   );
 
   var startObstacle = _clampBounds(dynamicAabbs.start);
   var endObstacle = _clampBounds(dynamicAabbs.end);
-  if (startElement == null) {
+  if (!startInfo.isBound) {
     startObstacle = _clampBounds(startBaseBounds);
   }
-  if (endElement == null) {
+  if (!endInfo.isBound) {
     endObstacle = _clampBounds(endBaseBounds);
   }
   if (_boundsOverlap(startObstacle, endObstacle)) {
@@ -595,8 +648,8 @@ ElbowRouteResult routeElbowArrow({
       endBounds: endBaseBounds,
       startObstacle: startObstacle,
       endObstacle: endObstacle,
-      startPivot: startAnchor ?? resolvedStart,
-      endPivot: endAnchor ?? resolvedEnd,
+      startPivot: startInfo.anchorOrPoint,
+      endPivot: endInfo.anchorOrPoint,
     );
     startObstacle = _clampBounds(split.start);
     endObstacle = _clampBounds(split.end);
@@ -608,31 +661,32 @@ ElbowRouteResult routeElbowArrow({
   final startDongle = _donglePosition(
     bounds: startObstacle,
     heading: startHeading,
-    point: resolvedStart,
+    point: startPoint,
   );
   final endDongle = _donglePosition(
     bounds: endObstacle,
     heading: endHeading,
-    point: resolvedEnd,
+    point: endPoint,
   );
 
+  final obstacles = <DrawRect>[startObstacle, endObstacle];
   final direct = _directPathIfClear(
-    start: resolvedStart,
-    end: resolvedEnd,
-    obstacles: [startObstacle, endObstacle],
+    start: startPoint,
+    end: endPoint,
+    obstacles: obstacles,
     startHeading: startHeading,
     endHeading: endHeading,
   );
   if (direct != null) {
     return ElbowRouteResult(
       points: direct,
-      startPoint: resolvedStart,
-      endPoint: resolvedEnd,
+      startPoint: startPoint,
+      endPoint: endPoint,
     );
   }
 
   final grid = _buildGrid(
-    obstacles: [startObstacle, endObstacle],
+    obstacles: obstacles,
     start: startDongle,
     startHeading: startHeading,
     end: endDongle,
@@ -649,20 +703,20 @@ ElbowRouteResult routeElbowArrow({
           end: endNode,
           startHeading: startHeading,
           endHeading: endHeading,
-          obstacles: [startObstacle, endObstacle],
+          obstacles: obstacles,
         )
       : null;
 
   final routed = path == null
       ? _fallbackPath(
-          start: resolvedStart,
-          end: resolvedEnd,
+          start: startPoint,
+          end: endPoint,
           startHeading: startHeading,
         )
       : _postProcessPath(
           path: path,
-          startPoint: resolvedStart,
-          endPoint: resolvedEnd,
+          startPoint: startPoint,
+          endPoint: endPoint,
           startDongle: startDongle,
           endDongle: endDongle,
         );
@@ -676,8 +730,8 @@ ElbowRouteResult routeElbowArrow({
 
   return ElbowRouteResult(
     points: clamped,
-    startPoint: resolvedStart,
-    endPoint: resolvedEnd,
+    startPoint: startPoint,
+    endPoint: endPoint,
   );
 }
 
@@ -784,10 +838,8 @@ List<DrawPoint>? _directPathIfClear({
     return null;
   }
 
-  for (final obstacle in obstacles) {
-    if (_segmentIntersectsBounds(start, end, obstacle)) {
-      return null;
-    }
+  if (_segmentIntersectsAnyBounds(start, end, obstacles)) {
+    return null;
   }
   return [start, end];
 }
@@ -884,12 +936,15 @@ List<DrawPoint> _postProcessPath({
   required DrawPoint startDongle,
   required DrawPoint endDongle,
 }) {
-  final points = path.map((node) => node.pos).toList();
-  if (points.isEmpty) {
+  if (path.isEmpty) {
     return [startPoint, endPoint];
   }
-  if (startDongle != startPoint && points.first != startPoint) {
-    points.insert(0, startPoint);
+  final points = <DrawPoint>[];
+  if (startDongle != startPoint && path.first.pos != startPoint) {
+    points.add(startPoint);
+  }
+  for (final node in path) {
+    points.add(node.pos);
   }
   if (endDongle != endPoint && points.last != endPoint) {
     points.add(endPoint);
@@ -1070,6 +1125,10 @@ List<_GridNode> _astar({
   final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
 
   final bendPenalty = _manhattanDistance(start.pos, end.pos);
+  final bendPenaltySquared = bendPenalty * bendPenalty;
+  final bendPenaltyCubed = bendPenaltySquared * bendPenalty;
+  final startHeadingFlip = _flipHeading(startHeading);
+  final endHeadingFlip = _flipHeading(endHeading);
 
   while (openSet.isNotEmpty) {
     final current = openSet.pop();
@@ -1085,13 +1144,17 @@ List<_GridNode> _astar({
 
     current.closed = true;
 
-    final neighbors = _neighborsForNode(grid, current);
-    for (final entry in neighbors) {
-      final neighbor = entry.node;
-      if (neighbor == null) {
+    final previousHeading = current.parent == null
+        ? startHeading
+        : _headingBetween(current.pos, current.parent!.pos);
+    final col = current.addr.col;
+    final row = current.addr.row;
+
+    for (final offset in _neighborOffsets) {
+      final next = grid.nodeAt(col + offset.dx, row + offset.dy);
+      if (next == null) {
         continue;
       }
-      final next = neighbor;
       if (next.closed) {
         continue;
       }
@@ -1100,29 +1163,24 @@ List<_GridNode> _astar({
         continue;
       }
 
-      final neighborHeading = entry.heading;
-      final previousHeading = current.parent == null
-          ? startHeading
-          : _headingBetween(current.pos, current.parent!.pos);
+      final neighborHeading = offset.heading;
 
       if (neighborHeading == _flipHeading(previousHeading)) {
         continue;
       }
 
-      if (current.addr == start.addr &&
-          neighborHeading == _flipHeading(startHeading)) {
+      if (current.addr == start.addr && neighborHeading == startHeadingFlip) {
         continue;
       }
 
-      if (next.addr == end.addr &&
-          neighborHeading == _flipHeading(endHeading)) {
+      if (next.addr == end.addr && neighborHeading == endHeadingFlip) {
         continue;
       }
 
       final directionChanged = neighborHeading != previousHeading;
       final moveCost = _manhattanDistance(current.pos, next.pos);
       final bendCost = directionChanged
-          ? math.pow(bendPenalty, 3).toDouble()
+          ? bendPenaltyCubed
           : 0;
       final gScore = current.g + moveCost + bendCost;
 
@@ -1133,8 +1191,8 @@ List<_GridNode> _astar({
               start: next.pos,
               end: end.pos,
               startHeading: neighborHeading,
-              endHeading: _flipHeading(endHeading),
-              bendPenalty: bendPenalty,
+              endHeading: endHeadingFlip,
+              bendPenaltySquared: bendPenaltySquared,
             );
         next
           ..parent = current
@@ -1159,7 +1217,7 @@ double _estimatedBendPenalty({
   required DrawPoint end,
   required ElbowHeading startHeading,
   required ElbowHeading endHeading,
-  required double bendPenalty,
+  required double bendPenaltySquared,
 }) {
   if (startHeading.isHorizontal == endHeading.isHorizontal) {
     if (startHeading.isHorizontal &&
@@ -1170,9 +1228,9 @@ double _estimatedBendPenalty({
         (start.x - end.x).abs() <= _dedupThreshold) {
       return 0;
     }
-    return math.pow(bendPenalty, 2).toDouble();
+    return bendPenaltySquared;
   }
-  return math.pow(bendPenalty, 2).toDouble();
+  return bendPenaltySquared;
 }
 
 ElbowHeading _headingBetween(DrawPoint from, DrawPoint to) =>
@@ -1234,7 +1292,7 @@ List<_GridNode> _reconstructPath(_GridNode current, _GridNode start) {
   final path = <_GridNode>[];
   var node = current;
   while (true) {
-    path.insert(0, node);
+    path.add(node);
     final parent = node.parent;
     if (parent == null) {
       break;
@@ -1244,32 +1302,36 @@ List<_GridNode> _reconstructPath(_GridNode current, _GridNode start) {
   if (path.isEmpty) {
     return [start];
   }
+  var left = 0;
+  var right = path.length - 1;
+  while (left < right) {
+    final temp = path[left];
+    path[left] = path[right];
+    path[right] = temp;
+    left++;
+    right--;
+  }
   if (path.first.addr != start.addr) {
     path.insert(0, start);
   }
   return path;
 }
 
-class _NeighborEntry {
-  const _NeighborEntry({required this.node, required this.heading});
+@immutable
+class _NeighborOffset {
+  const _NeighborOffset(this.dx, this.dy, this.heading);
 
-  final _GridNode? node;
+  final int dx;
+  final int dy;
   final ElbowHeading heading;
 }
 
-List<_NeighborEntry> _neighborsForNode(_Grid grid, _GridNode node) {
-  final col = node.addr.col;
-  final row = node.addr.row;
-  return [
-    _NeighborEntry(node: grid.nodeAt(col, row - 1), heading: ElbowHeading.up),
-    _NeighborEntry(
-      node: grid.nodeAt(col + 1, row),
-      heading: ElbowHeading.right,
-    ),
-    _NeighborEntry(node: grid.nodeAt(col, row + 1), heading: ElbowHeading.down),
-    _NeighborEntry(node: grid.nodeAt(col - 1, row), heading: ElbowHeading.left),
-  ];
-}
+const List<_NeighborOffset> _neighborOffsets = [
+  _NeighborOffset(0, -1, ElbowHeading.up),
+  _NeighborOffset(1, 0, ElbowHeading.right),
+  _NeighborOffset(0, 1, ElbowHeading.down),
+  _NeighborOffset(-1, 0, ElbowHeading.left),
+];
 
 class _BinaryHeap<T> {
   _BinaryHeap(double Function(T) score)
