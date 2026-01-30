@@ -169,7 +169,6 @@ class EditIntentDetector {
       elementId: handle.elementId,
       pointKind: handle.kind,
       pointIndex: handle.index,
-      isDoubleClick: false,
     );
   }
 }

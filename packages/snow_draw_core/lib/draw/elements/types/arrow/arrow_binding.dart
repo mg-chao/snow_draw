@@ -248,7 +248,10 @@ class ArrowBindingUtils {
       x: rect.minX + rect.width * binding.anchor.x,
       y: rect.minY + rect.height * binding.anchor.y,
     );
-    final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localAnchor);
+    final anchorPoint = _resolveElbowAnchorPoint(
+      rect: rect,
+      point: localAnchor,
+    );
     final space = ElementSpace(rotation: target.rotation, origin: rect.center);
     final worldAnchor = space.toWorld(anchorPoint);
     final heading = _resolveElbowHeadingVector(
@@ -274,7 +277,10 @@ class ArrowBindingUtils {
       x: rect.minX + rect.width * binding.anchor.x,
       y: rect.minY + rect.height * binding.anchor.y,
     );
-    final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localAnchor);
+    final anchorPoint = _resolveElbowAnchorPoint(
+      rect: rect,
+      point: localAnchor,
+    );
     final space = ElementSpace(rotation: target.rotation, origin: rect.center);
     return space.toWorld(anchorPoint);
   }
@@ -362,7 +368,8 @@ final class _BindingHit {
 const _bindingGapBase = 6.0;
 const _elbowBindingGapBase = 5.0;
 const _bindingHitToleranceFactor = 0.4;
-const _bindingArrowheadGapMultiplier = 6.0;
+const double _bindingArrowheadGapMultiplier =
+    _bindingGapBase / _elbowBindingGapBase;
 const _intersectionEpsilon = 1e-6;
 const _insideEpsilon = 1e-6;
 
@@ -426,7 +433,7 @@ double _resolveBindingGap(ElementState target) {
 }
 
 double _resolveElbowBindingGap(bool hasArrowhead) {
-  final baseGap = _elbowBindingGapBase;
+  const baseGap = _elbowBindingGapBase;
   if (!hasArrowhead) {
     return baseGap;
   }
@@ -540,7 +547,6 @@ ArrowBindingResult? _resolveElbowBindingOnTarget({
   final binding = ArrowBindingUtils.bindingFromLocalPoint(
     target: target,
     localPoint: anchorPoint,
-    mode: ArrowBindingMode.orbit,
   );
   if (binding == null) {
     return null;
@@ -806,10 +812,8 @@ DrawPoint _scalePointFromOrigin(
   y: origin.y + (point.y - origin.y) * scale,
 );
 
-DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) => DrawPoint(
-  x: to.x - from.x,
-  y: to.y - from.y,
-);
+DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) =>
+    DrawPoint(x: to.x - from.x, y: to.y - from.y);
 
 double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
 

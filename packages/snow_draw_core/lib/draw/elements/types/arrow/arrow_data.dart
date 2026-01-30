@@ -279,7 +279,9 @@ final class ArrowData extends ElementData
         }
       } else if (entry is Map) {
         try {
-          segments.add(ElbowFixedSegment.fromJson(entry.cast<String, dynamic>()));
+          segments.add(
+            ElbowFixedSegment.fromJson(entry.cast<String, dynamic>()),
+          );
         } on FormatException {
           // Skip invalid segment entries.
         }

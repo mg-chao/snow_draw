@@ -1275,14 +1275,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final element = stateView.state.domain.document.getElementById(
       context.elementId,
     );
-    final effectiveElement =
-        element == null ? null : stateView.effectiveElement(element);
+    final effectiveElement = element == null
+        ? null
+        : stateView.effectiveElement(element);
     final data = effectiveElement?.data;
     if (data is ArrowData &&
         data.arrowType == ArrowType.elbow &&
         kind == ArrowPointKind.addable) {
       final segmentIndex = index + 1;
-      isFixed = data.fixedSegments?.any((segment) => segment.index == segmentIndex) ??
+      isFixed =
+          data.fixedSegments?.any((segment) => segment.index == segmentIndex) ??
           false;
     }
     return ArrowPointHandle(

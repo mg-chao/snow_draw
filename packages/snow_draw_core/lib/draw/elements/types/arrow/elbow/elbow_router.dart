@@ -2,25 +2,25 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
-import '../../../../utils/selection_calculator.dart';
+import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
 import '../../../../types/element_style.dart';
-import '../../../../core/coordinates/element_space.dart';
+import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
 
-const double _basePadding = 40;
+const double _basePadding = 42;
 const double _dedupThreshold = 1;
 const double _minArrowLength = 8;
 const double _maxPosition = 1000000;
 const double _donglePointPadding = 2;
 const double _elbowNoArrowheadGapMultiplier = 2;
 const double _elementSidePadding = 1;
-const double _headingEpsilon = 1e-6;
-const double _intersectionEpsilon = 1e-6;
+const _headingEpsilon = 1e-6;
+const _intersectionEpsilon = 1e-6;
 
 @immutable
 final class ElbowRouteResult {
@@ -188,7 +188,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
       if (maxSplit - minSplit <= _intersectionEpsilon) {
         return (start: startObstacle, end: endObstacle);
       }
-      final clamped = splitX.clamp(minSplit, maxSplit).toDouble();
+      final clamped = splitX.clamp(minSplit, maxSplit);
       final nextStart = startObstacle.copyWith(
         maxX: math.min(startObstacle.maxX, clamped),
       );
@@ -206,7 +206,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
       if (maxSplit - minSplit <= _intersectionEpsilon) {
         return (start: startObstacle, end: endObstacle);
       }
-      final clamped = splitX.clamp(minSplit, maxSplit).toDouble();
+      final clamped = splitX.clamp(minSplit, maxSplit);
       final nextStart = startObstacle.copyWith(
         minX: math.max(startObstacle.minX, clamped),
       );
@@ -228,7 +228,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
     if (maxSplit - minSplit <= _intersectionEpsilon) {
       return (start: startObstacle, end: endObstacle);
     }
-    final clamped = splitY.clamp(minSplit, maxSplit).toDouble();
+    final clamped = splitY.clamp(minSplit, maxSplit);
     final nextStart = startObstacle.copyWith(
       maxY: math.min(startObstacle.maxY, clamped),
     );
@@ -247,7 +247,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
   if (maxSplit - minSplit <= _intersectionEpsilon) {
     return (start: startObstacle, end: endObstacle);
   }
-  final clamped = splitY.clamp(minSplit, maxSplit).toDouble();
+  final clamped = splitY.clamp(minSplit, maxSplit);
   final nextStart = startObstacle.copyWith(
     minY: math.max(startObstacle.minY, clamped),
   );
@@ -310,47 +310,47 @@ DrawRect _dynamicAabbFor({
 
   final minX = self.minX > other.maxX
       ? (self.minY > other.maxY || self.maxY < other.minY)
-          ? math.min(
-              (selfElement.minX + otherElement.maxX) / 2,
-              self.minX - padding.left,
-            )
-          : (selfElement.minX + otherElement.maxX) / 2
+            ? math.min(
+                (selfElement.minX + otherElement.maxX) / 2,
+                self.minX - padding.left,
+              )
+            : (selfElement.minX + otherElement.maxX) / 2
       : self.minX > other.minX
-          ? self.minX - padding.left
-          : common.minX - padding.left;
+      ? self.minX - padding.left
+      : common.minX - padding.left;
 
   final minY = self.minY > other.maxY
       ? (self.minX > other.maxX || self.maxX < other.minX)
-          ? math.min(
-              (selfElement.minY + otherElement.maxY) / 2,
-              self.minY - padding.top,
-            )
-          : (selfElement.minY + otherElement.maxY) / 2
+            ? math.min(
+                (selfElement.minY + otherElement.maxY) / 2,
+                self.minY - padding.top,
+              )
+            : (selfElement.minY + otherElement.maxY) / 2
       : self.minY > other.minY
-          ? self.minY - padding.top
-          : common.minY - padding.top;
+      ? self.minY - padding.top
+      : common.minY - padding.top;
 
   final maxX = self.maxX < other.minX
       ? (self.minY > other.maxY || self.maxY < other.minY)
-          ? math.max(
-              (selfElement.maxX + otherElement.minX) / 2,
-              self.maxX + padding.right,
-            )
-          : (selfElement.maxX + otherElement.minX) / 2
+            ? math.max(
+                (selfElement.maxX + otherElement.minX) / 2,
+                self.maxX + padding.right,
+              )
+            : (selfElement.maxX + otherElement.minX) / 2
       : self.maxX < other.maxX
-          ? self.maxX + padding.right
-          : common.maxX + padding.right;
+      ? self.maxX + padding.right
+      : common.maxX + padding.right;
 
   final maxY = self.maxY < other.minY
       ? (self.minX > other.maxX || self.maxX < other.minX)
-          ? math.max(
-              (selfElement.maxY + otherElement.minY) / 2,
-              self.maxY + padding.bottom,
-            )
-          : (selfElement.maxY + otherElement.minY) / 2
+            ? math.max(
+                (selfElement.maxY + otherElement.minY) / 2,
+                self.maxY + padding.bottom,
+              )
+            : (selfElement.maxY + otherElement.minY) / 2
       : self.maxY < other.maxY
-          ? self.maxY + padding.bottom
-          : common.maxY + padding.bottom;
+      ? self.maxY + padding.bottom
+      : common.maxY + padding.bottom;
 
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
@@ -450,34 +450,35 @@ DrawPoint _donglePosition({
 ElbowRouteResult routeElbowArrow({
   required DrawPoint start,
   required DrawPoint end,
+  required Map<String, ElementState> elementsById,
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
-  required Map<String, ElementState> elementsById,
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
   final startElement = startBinding == null
       ? null
       : elementsById[startBinding.elementId];
-  final endElement =
-      endBinding == null ? null : elementsById[endBinding.elementId];
+  final endElement = endBinding == null
+      ? null
+      : elementsById[endBinding.elementId];
 
   final resolvedStart = startElement == null || startBinding == null
       ? start
       : ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: startBinding,
-            target: startElement,
-            hasArrowhead: startArrowhead != ArrowheadStyle.none,
-          ) ??
-          start;
+              binding: startBinding,
+              target: startElement,
+              hasArrowhead: startArrowhead != ArrowheadStyle.none,
+            ) ??
+            start;
   final resolvedEnd = endElement == null || endBinding == null
       ? end
       : ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: endBinding,
-            target: endElement,
-            hasArrowhead: endArrowhead != ArrowheadStyle.none,
-          ) ??
-          end;
+              binding: endBinding,
+              target: endElement,
+              hasArrowhead: endArrowhead != ArrowheadStyle.none,
+            ) ??
+            end;
 
   final startAnchor = startElement == null || startBinding == null
       ? null
@@ -546,16 +547,10 @@ ElbowRouteResult routeElbowArrow({
       _boundsOverlap(startElementBounds, endElementBounds);
 
   final startBaseBounds = boundsOverlap
-      ? _pointBounds(
-          resolvedStart,
-          startElement == null ? 0 : _donglePointPadding,
-        )
+      ? _pointBounds(resolvedStart, _donglePointPadding)
       : startElementBounds;
   final endBaseBounds = boundsOverlap
-      ? _pointBounds(
-          resolvedEnd,
-          endElement == null ? 0 : _donglePointPadding,
-        )
+      ? _pointBounds(resolvedEnd, _donglePointPadding)
       : endElementBounds;
 
   final startPadding = boundsOverlap
@@ -578,10 +573,12 @@ ElbowRouteResult routeElbowArrow({
     end: endBaseBounds,
     startPadding: startPadding,
     endPadding: endPadding,
-    startElementBounds:
-        boundsOverlap || startElement == null ? null : startElementBounds,
-    endElementBounds:
-        boundsOverlap || endElement == null ? null : endElementBounds,
+    startElementBounds: boundsOverlap || startElement == null
+        ? null
+        : startElementBounds,
+    endElementBounds: boundsOverlap || endElement == null
+        ? null
+        : endElementBounds,
   );
 
   var startObstacle = _clampBounds(dynamicAabbs.start);
@@ -604,10 +601,9 @@ ElbowRouteResult routeElbowArrow({
     startObstacle = _clampBounds(split.start);
     endObstacle = _clampBounds(split.end);
   }
-  final commonBounds = _clampBounds(_inflateBounds(
-    _unionBounds([startObstacle, endObstacle]),
-    _basePadding,
-  ));
+  final commonBounds = _clampBounds(
+    _inflateBounds(_unionBounds([startObstacle, endObstacle]), _basePadding),
+  );
 
   final startDongle = _donglePosition(
     bounds: startObstacle,
@@ -671,8 +667,10 @@ ElbowRouteResult routeElbowArrow({
           endDongle: endDongle,
         );
 
-  final orthogonalized =
-      _ensureOrthogonalPath(points: routed, startHeading: startHeading);
+  final orthogonalized = _ensureOrthogonalPath(
+    points: routed,
+    startHeading: startHeading,
+  );
   final cleaned = _getCornerPoints(_removeShortSegments(orthogonalized));
   final clamped = cleaned.map(_clampPoint).toList(growable: false);
 
@@ -692,10 +690,8 @@ DrawPoint _scalePointFromOrigin(
   y: origin.y + (point.y - origin.y) * scale,
 );
 
-DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) => DrawPoint(
-  x: to.x - from.x,
-  y: to.y - from.y,
-);
+DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) =>
+    DrawPoint(x: to.x - from.x, y: to.y - from.y);
 
 double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
 
@@ -742,7 +738,10 @@ ElbowRoutedPoints routeElbowArrowForElement({
   final localStart = startOverride ?? basePoints.first;
   final localEnd = endOverride ?? basePoints.last;
 
-  final space = ElementSpace(rotation: element.rotation, origin: element.rect.center);
+  final space = ElementSpace(
+    rotation: element.rotation,
+    origin: element.rect.center,
+  );
   final worldStart = space.toWorld(localStart);
   final worldEnd = space.toWorld(localEnd);
 
@@ -757,7 +756,7 @@ ElbowRoutedPoints routeElbowArrowForElement({
   );
 
   final localPoints = routed.points
-      .map((point) => space.fromWorld(point))
+      .map(space.fromWorld)
       .toList(growable: false);
 
   return ElbowRoutedPoints(
@@ -793,11 +792,7 @@ List<DrawPoint>? _directPathIfClear({
   return [start, end];
 }
 
-bool _segmentIntersectsBounds(
-  DrawPoint start,
-  DrawPoint end,
-  DrawRect bounds,
-) {
+bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
   final innerMinX = bounds.minX + _intersectionEpsilon;
   final innerMaxX = bounds.maxX - _intersectionEpsilon;
   final innerMinY = bounds.minY + _intersectionEpsilon;
@@ -978,8 +973,8 @@ class _GridNode {
   double f = 0;
   double g = 0;
   double h = 0;
-  bool closed = false;
-  bool visited = false;
+  var closed = false;
+  var visited = false;
   _GridNode? parent;
 }
 
@@ -1003,10 +998,12 @@ _Grid _buildGrid({
   final ys = <double>{};
 
   for (final obstacle in obstacles) {
-    xs.add(obstacle.minX);
-    xs.add(obstacle.maxX);
-    ys.add(obstacle.minY);
-    ys.add(obstacle.maxY);
+    xs
+      ..add(obstacle.minX)
+      ..add(obstacle.maxX);
+    ys
+      ..add(obstacle.minY)
+      ..add(obstacle.maxY);
   }
 
   xs.add(start.x);
@@ -1014,10 +1011,12 @@ _Grid _buildGrid({
   xs.add(end.x);
   ys.add(end.y);
 
-  xs.add(bounds.minX);
-  xs.add(bounds.maxX);
-  ys.add(bounds.minY);
-  ys.add(bounds.maxY);
+  xs
+    ..add(bounds.minX)
+    ..add(bounds.maxX);
+  ys
+    ..add(bounds.minY)
+    ..add(bounds.maxY);
 
   if (startHeading.isHorizontal) {
     ys.add(start.y);
@@ -1068,8 +1067,7 @@ List<_GridNode> _astar({
   required ElbowHeading endHeading,
   required List<DrawRect> obstacles,
 }) {
-  final openSet = _BinaryHeap<_GridNode>((node) => node.f);
-  openSet.push(start);
+  final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
 
   final bendPenalty = _manhattanDistance(start.pos, end.pos);
 
@@ -1123,7 +1121,9 @@ List<_GridNode> _astar({
 
       final directionChanged = neighborHeading != previousHeading;
       final moveCost = _manhattanDistance(current.pos, next.pos);
-      final bendCost = directionChanged ? math.pow(bendPenalty, 3).toDouble() : 0;
+      final bendCost = directionChanged
+          ? math.pow(bendPenalty, 3).toDouble()
+          : 0;
       final gScore = current.g + moveCost + bendCost;
 
       if (!next.visited || gScore < next.g) {
@@ -1136,10 +1136,11 @@ List<_GridNode> _astar({
               endHeading: _flipHeading(endHeading),
               bendPenalty: bendPenalty,
             );
-        next.parent = current;
-        next.g = gScore;
-        next.h = hScore;
-        next.f = gScore + hScore;
+        next
+          ..parent = current
+          ..g = gScore
+          ..h = hScore
+          ..f = gScore + hScore;
         if (!next.visited) {
           next.visited = true;
           openSet.push(next);
@@ -1161,7 +1162,8 @@ double _estimatedBendPenalty({
   required double bendPenalty,
 }) {
   if (startHeading.isHorizontal == endHeading.isHorizontal) {
-    if (startHeading.isHorizontal && (start.y - end.y).abs() <= _dedupThreshold) {
+    if (startHeading.isHorizontal &&
+        (start.y - end.y).abs() <= _dedupThreshold) {
       return 0;
     }
     if (!startHeading.isHorizontal &&
@@ -1259,29 +1261,21 @@ List<_NeighborEntry> _neighborsForNode(_Grid grid, _GridNode node) {
   final col = node.addr.col;
   final row = node.addr.row;
   return [
-    _NeighborEntry(
-      node: grid.nodeAt(col, row - 1),
-      heading: ElbowHeading.up,
-    ),
+    _NeighborEntry(node: grid.nodeAt(col, row - 1), heading: ElbowHeading.up),
     _NeighborEntry(
       node: grid.nodeAt(col + 1, row),
       heading: ElbowHeading.right,
     ),
-    _NeighborEntry(
-      node: grid.nodeAt(col, row + 1),
-      heading: ElbowHeading.down,
-    ),
-    _NeighborEntry(
-      node: grid.nodeAt(col - 1, row),
-      heading: ElbowHeading.left,
-    ),
+    _NeighborEntry(node: grid.nodeAt(col, row + 1), heading: ElbowHeading.down),
+    _NeighborEntry(node: grid.nodeAt(col - 1, row), heading: ElbowHeading.left),
   ];
 }
 
 class _BinaryHeap<T> {
-  _BinaryHeap(this.score);
+  _BinaryHeap(double Function(T) score)
+    : _score = ((value) => score(value as T));
 
-  final double Function(T) score;
+  final double Function(Object?) _score;
   final List<T> _content = [];
 
   bool get isNotEmpty => _content.isNotEmpty;
@@ -1315,11 +1309,11 @@ class _BinaryHeap<T> {
 
   void _sinkDown(int n) {
     final element = _content[n];
-    final elementScore = score(element);
+    final elementScore = _score(element);
     while (n > 0) {
       final parentN = ((n + 1) >> 1) - 1;
       final parent = _content[parentN];
-      if (elementScore < score(parent)) {
+      if (elementScore < _score(parent)) {
         _content[parentN] = element;
         _content[n] = parent;
         n = parentN;
@@ -1332,7 +1326,7 @@ class _BinaryHeap<T> {
   void _bubbleUp(int n) {
     final length = _content.length;
     final element = _content[n];
-    final elemScore = score(element);
+    final elemScore = _score(element);
 
     while (true) {
       final child2N = (n + 1) << 1;
@@ -1342,7 +1336,7 @@ class _BinaryHeap<T> {
 
       if (child1N < length) {
         final child1 = _content[child1N];
-        child1Score = score(child1);
+        child1Score = _score(child1);
         if (child1Score < elemScore) {
           swap = child1N;
         }
@@ -1350,7 +1344,7 @@ class _BinaryHeap<T> {
 
       if (child2N < length) {
         final child2 = _content[child2N];
-        final child2Score = score(child2);
+        final child2Score = _score(child2);
         if (child2Score < (swap == null ? elemScore : child1Score)) {
           swap = child2N;
         }

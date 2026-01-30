@@ -11,9 +11,9 @@ import '../../elements/types/text/text_data.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
-import '../../types/element_style.dart';
 import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
+import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
 
 /// Single-source-of-truth geometry application for editing.
@@ -397,10 +397,7 @@ DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {
   );
 }
 
-bool _fixedSegmentsEqual(
-  List<ElbowFixedSegment> a,
-  List<ElbowFixedSegment> b,
-) {
+bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
   if (identical(a, b)) {
     return true;
   }

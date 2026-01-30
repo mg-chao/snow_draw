@@ -69,10 +69,7 @@ ElbowEditResult computeElbowEdit({
   if (fixedSegments.isEmpty) {
     final routed = routeElbowArrowForElement(
       element: element,
-      data: data.copyWith(
-        startBinding: startBinding,
-        endBinding: endBinding,
-      ),
+      data: data.copyWith(startBinding: startBinding, endBinding: endBinding),
       elementsById: elementsById,
       startOverride: points.first,
       endOverride: points.last,
@@ -261,7 +258,10 @@ List<DrawPoint> _routeLocalPath({
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
 }) {
-  final space = ElementSpace(rotation: element.rotation, origin: element.rect.center);
+  final space = ElementSpace(
+    rotation: element.rotation,
+    origin: element.rect.center,
+  );
   final worldStart = space.toWorld(startLocal);
   final worldEnd = space.toWorld(endLocal);
   final routed = routeElbowArrow(
@@ -273,9 +273,7 @@ List<DrawPoint> _routeLocalPath({
     startArrowhead: startArrowhead,
     endArrowhead: endArrowhead,
   );
-  return routed.points
-      .map(space.fromWorld)
-      .toList(growable: false);
+  return routed.points.map(space.fromWorld).toList(growable: false);
 }
 
 void _appendPath(List<DrawPoint> target, List<DrawPoint> path) {
@@ -375,22 +373,12 @@ List<ElbowFixedSegment> _reindexFixedSegments(
     if (length < _minFixedSegmentLength) {
       continue;
     }
-    result.add(
-      segment.copyWith(
-        index: index,
-        start: start,
-        end: end,
-      ),
-    );
+    result.add(segment.copyWith(index: index, start: start, end: end));
   }
   return result;
 }
 
-int? _findSegmentIndex(
-  List<DrawPoint> points,
-  DrawPoint start,
-  DrawPoint end,
-) {
+int? _findSegmentIndex(List<DrawPoint> points, DrawPoint start, DrawPoint end) {
   for (var i = 1; i < points.length; i++) {
     if (points[i - 1] == start && points[i] == end) {
       return i;

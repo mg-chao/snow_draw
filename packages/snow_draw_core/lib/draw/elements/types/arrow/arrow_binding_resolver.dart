@@ -1,4 +1,4 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/document_state.dart';
@@ -283,16 +283,16 @@ ElementState? _applyBindings({
     final bound = target == null
         ? null
         : isElbow
-            ? ArrowBindingUtils.resolveElbowBoundPoint(
-                binding: data.startBinding!,
-                target: target,
-                hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-              )
-            : ArrowBindingUtils.resolveBoundPoint(
-                binding: data.startBinding!,
-                target: target,
-                referencePoint: startReference,
-              );
+        ? ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: data.startBinding!,
+            target: target,
+            hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+          )
+        : ArrowBindingUtils.resolveBoundPoint(
+            binding: data.startBinding!,
+            target: target,
+            referencePoint: startReference,
+          );
     if (bound != null) {
       localPoints[0] = space.fromWorld(bound);
       startUpdated = true;
@@ -305,16 +305,16 @@ ElementState? _applyBindings({
     final bound = target == null
         ? null
         : isElbow
-            ? ArrowBindingUtils.resolveElbowBoundPoint(
-                binding: data.endBinding!,
-                target: target,
-                hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-              )
-            : ArrowBindingUtils.resolveBoundPoint(
-                binding: data.endBinding!,
-                target: target,
-                referencePoint: endReference,
-              );
+        ? ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: data.endBinding!,
+            target: target,
+            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+          )
+        : ArrowBindingUtils.resolveBoundPoint(
+            binding: data.endBinding!,
+            target: target,
+            referencePoint: endReference,
+          );
     if (bound != null) {
       localPoints[localPoints.length - 1] = space.fromWorld(bound);
       endUpdated = true;

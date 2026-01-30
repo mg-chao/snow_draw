@@ -10,11 +10,11 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 const double _dedupThreshold = 1;
-const double _intersectionEpsilon = 1e-6;
+const _intersectionEpsilon = 1e-6;
 
 void main() {
   test('elbow routing avoids a bound rectangle when start aligns above', () {
-    final rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
+    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
     final element = _rectangleElement(id: 'rect-1', rect: rect);
     final start = DrawPoint(x: rect.centerX, y: rect.minY - 40);
 
@@ -64,16 +64,14 @@ ElementState _rectangleElement({
   required String id,
   required DrawRect rect,
   double strokeWidth = 2,
-}) {
-  return ElementState(
-    id: id,
-    rect: rect,
-    rotation: 0,
-    opacity: 1,
-    zIndex: 0,
-    data: RectangleData(strokeWidth: strokeWidth),
-  );
-}
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: RectangleData(strokeWidth: strokeWidth),
+);
 
 bool _pathIsOrthogonal(List<DrawPoint> points) {
   for (var i = 0; i < points.length - 1; i++) {
@@ -95,11 +93,7 @@ bool _pathIntersectsBounds(List<DrawPoint> points, DrawRect bounds) {
   return false;
 }
 
-bool _segmentIntersectsBounds(
-  DrawPoint start,
-  DrawPoint end,
-  DrawRect bounds,
-) {
+bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
   if (dx <= _dedupThreshold) {

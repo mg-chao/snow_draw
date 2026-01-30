@@ -24,15 +24,12 @@ final class ElbowFixedSegment {
   final DrawPoint start;
   final DrawPoint end;
 
-  ElbowFixedSegment copyWith({
-    int? index,
-    DrawPoint? start,
-    DrawPoint? end,
-  }) => ElbowFixedSegment(
-    index: index ?? this.index,
-    start: start ?? this.start,
-    end: end ?? this.end,
-  );
+  ElbowFixedSegment copyWith({int? index, DrawPoint? start, DrawPoint? end}) =>
+      ElbowFixedSegment(
+        index: index ?? this.index,
+        start: start ?? this.start,
+        end: end ?? this.end,
+      );
 
   Map<String, dynamic> toJson() => {
     'index': index,

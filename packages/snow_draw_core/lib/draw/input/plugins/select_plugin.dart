@@ -107,7 +107,9 @@ class SelectPlugin extends DrawInputPlugin {
         position: position,
       );
       final now = DateTime.now();
-      if (handle != null && handle.isFixed && _isDoubleClick(handle, position, now)) {
+      if (handle != null &&
+          handle.isFixed &&
+          _isDoubleClick(handle, position, now)) {
         _clearArrowHandleClickState();
         final doubleClickIntent = StartArrowPointIntent(
           elementId: intent.elementId,
@@ -383,7 +385,9 @@ class SelectPlugin extends DrawInputPlugin {
     final isFixed =
         data.arrowType == ArrowType.elbow &&
         intent.pointKind == ArrowPointKind.addable &&
-        (data.fixedSegments?.any((segment) => segment.index == intent.pointIndex + 1) ??
+        (data.fixedSegments?.any(
+              (segment) => segment.index == intent.pointIndex + 1,
+            ) ??
             false);
     return ArrowPointHandle(
       elementId: intent.elementId,

@@ -121,7 +121,9 @@ class ArrowPointUtils {
           continue;
         }
         final segmentIndex = i + 1;
-        final isFixed = fixedSegments.any((segment) => segment.index == segmentIndex);
+        final isFixed = fixedSegments.any(
+          (segment) => segment.index == segmentIndex,
+        );
         addablePoints.add(
           ArrowPointHandle(
             elementId: element.id,
@@ -266,7 +268,9 @@ class ArrowPointUtils {
         final distanceSq = localPosition.distanceSquared(midpoint);
         if (distanceSq <= segmentHitRadius * segmentHitRadius) {
           final segmentIndex = i + 1;
-          final isFixed = fixedSegments.any((segment) => segment.index == segmentIndex);
+          final isFixed = fixedSegments.any(
+            (segment) => segment.index == segmentIndex,
+          );
           return ArrowPointHandle(
             elementId: element.id,
             kind: ArrowPointKind.addable,
