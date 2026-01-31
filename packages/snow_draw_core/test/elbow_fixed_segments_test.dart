@@ -614,6 +614,162 @@ void main() {
     );
   });
 
+  test('unbound end respects adjacent fixed segment direction when near axis',
+      () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] =
+        const DrawPoint(x: 240, y: 100.5);
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+
+    final neighbor = result.localPoints[result.localPoints.length - 2];
+    final endPoint = result.localPoints.last;
+    expect(
+      neighbor.x,
+      endPoint.x,
+      reason: 'End segment should be vertical off the horizontal fixed axis.',
+    );
+  });
+
+  test(
+    'unbound start respects adjacent fixed segment direction when near axis',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 0, y: 100),
+        const DrawPoint(x: 200, y: 100),
+        const DrawPoint(x: 200, y: 200),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      final movedPoints = List<DrawPoint>.from(points);
+      movedPoints[0] = const DrawPoint(x: -40, y: 100.5);
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data,
+        elementsById: const {},
+        localPointsOverride: movedPoints,
+        fixedSegmentsOverride: fixedSegments,
+      );
+
+      final fixed = result.fixedSegments!.first;
+      expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+
+      final start = result.localPoints.first;
+      final neighbor = result.localPoints[1];
+      expect(
+        neighbor.x,
+        start.x,
+        reason: 'Start segment should be vertical off the horizontal axis.',
+      );
+    },
+  );
+
+  test(
+    'unbound end respects vertical fixed segment direction when near axis',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 100, y: 0),
+        const DrawPoint(x: 100, y: 200),
+        const DrawPoint(x: 200, y: 200),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      final movedPoints = List<DrawPoint>.from(points);
+      movedPoints[movedPoints.length - 1] =
+          const DrawPoint(x: 100.5, y: 260);
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data,
+        elementsById: const {},
+        localPointsOverride: movedPoints,
+        fixedSegmentsOverride: fixedSegments,
+      );
+
+      final fixed = result.fixedSegments!.first;
+      expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+
+      final neighbor = result.localPoints[result.localPoints.length - 2];
+      final endPoint = result.localPoints.last;
+      expect(
+        neighbor.y,
+        endPoint.y,
+        reason: 'End segment should be horizontal off the vertical axis.',
+      );
+    },
+  );
+
+  test(
+    'unbound start respects vertical fixed segment direction when near axis',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 100, y: 0),
+        const DrawPoint(x: 100, y: 200),
+        const DrawPoint(x: 200, y: 200),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      final movedPoints = List<DrawPoint>.from(points);
+      movedPoints[0] = const DrawPoint(x: 100.5, y: -40);
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data,
+        elementsById: const {},
+        localPointsOverride: movedPoints,
+        fixedSegmentsOverride: fixedSegments,
+      );
+
+      final fixed = result.fixedSegments!.first;
+      expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+
+      final start = result.localPoints.first;
+      final neighbor = result.localPoints[1];
+      expect(
+        neighbor.y,
+        start.y,
+        reason: 'Start segment should be horizontal off the vertical axis.',
+      );
+    },
+  );
+
   test('collinear unbound end keeps fixed segment direction', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

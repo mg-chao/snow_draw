@@ -387,6 +387,18 @@ int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
   return bestIndex;
 }
 
+bool? _fixedSegmentIsHorizontal(
+  List<ElbowFixedSegment> fixedSegments,
+  int index,
+) {
+  for (final segment in fixedSegments) {
+    if (segment.index == index) {
+      return _isHorizontal(segment.start, segment.end);
+    }
+  }
+  return null;
+}
+
 bool _hasDiagonalSegments(List<DrawPoint> points) {
   if (points.length < 2) {
     return false;
@@ -624,12 +636,22 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   if (updated.length > 1 && !hasStartBinding) {
     final start = updated.first;
     final neighbor = updated[1];
-    final dx = (neighbor.x - start.x).abs();
-    final dy = (neighbor.y - start.y).abs();
-    if (dx <= dy) {
-      updated[1] = neighbor.copyWith(x: start.x);
+    final adjacentFixed = _fixedSegmentIsHorizontal(
+      workingFixedSegments,
+      2,
+    );
+    if (adjacentFixed != null) {
+      updated[1] = adjacentFixed
+          ? neighbor.copyWith(x: start.x)
+          : neighbor.copyWith(y: start.y);
     } else {
-      updated[1] = neighbor.copyWith(y: start.y);
+      final dx = (neighbor.x - start.x).abs();
+      final dy = (neighbor.y - start.y).abs();
+      if (dx <= dy) {
+        updated[1] = neighbor.copyWith(x: start.x);
+      } else {
+        updated[1] = neighbor.copyWith(y: start.y);
+      }
     }
   }
 
@@ -637,12 +659,22 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     final lastIndex = updated.length - 1;
     var neighbor = updated[lastIndex - 1];
     final endPoint = updated[lastIndex];
-    final dx = (neighbor.x - endPoint.x).abs();
-    final dy = (neighbor.y - endPoint.y).abs();
-    if (dx <= dy) {
-      updated[lastIndex - 1] = neighbor.copyWith(x: endPoint.x);
+    final adjacentFixed = _fixedSegmentIsHorizontal(
+      workingFixedSegments,
+      lastIndex - 1,
+    );
+    if (adjacentFixed != null) {
+      updated[lastIndex - 1] = adjacentFixed
+          ? neighbor.copyWith(x: endPoint.x)
+          : neighbor.copyWith(y: endPoint.y);
     } else {
-      updated[lastIndex - 1] = neighbor.copyWith(y: endPoint.y);
+      final dx = (neighbor.x - endPoint.x).abs();
+      final dy = (neighbor.y - endPoint.y).abs();
+      if (dx <= dy) {
+        updated[lastIndex - 1] = neighbor.copyWith(x: endPoint.x);
+      } else {
+        updated[lastIndex - 1] = neighbor.copyWith(y: endPoint.y);
+      }
     }
   }
 
