@@ -17,6 +17,7 @@ import 'elbow_router.dart';
 const double _dedupThreshold = 1;
 const _headingEpsilon = 1e-6;
 const double _directionFixPadding = 12;
+const double _pointMatchEpsilon = 1e-4;
 
 @immutable
 final class ElbowEditResult {
@@ -355,8 +356,48 @@ int? _findSegmentIndex(List<DrawPoint> points, DrawPoint start, DrawPoint end) {
       return i;
     }
   }
-  return null;
+  for (var i = 1; i < points.length; i++) {
+    if (_pointsNear(points[i - 1], start) && _pointsNear(points[i], end)) {
+      return i;
+    }
+  }
+  final fixedHorizontal = _isHorizontal(start, end);
+  final axisValue = fixedHorizontal ? start.y : start.x;
+  final targetMid = fixedHorizontal
+      ? (start.x + end.x) / 2
+      : (start.y + end.y) / 2;
+  int? bestIndex;
+  var bestScore = double.infinity;
+  for (var i = 1; i < points.length; i++) {
+    final a = points[i - 1];
+    final b = points[i];
+    if (_isHorizontal(a, b) != fixedHorizontal) {
+      continue;
+    }
+    if (fixedHorizontal) {
+      if ((a.y - axisValue).abs() > _dedupThreshold ||
+          (b.y - axisValue).abs() > _dedupThreshold) {
+        continue;
+      }
+    } else {
+      if ((a.x - axisValue).abs() > _dedupThreshold ||
+          (b.x - axisValue).abs() > _dedupThreshold) {
+        continue;
+      }
+    }
+    final mid = fixedHorizontal ? (a.x + b.x) / 2 : (a.y + b.y) / 2;
+    final score = (mid - targetMid).abs();
+    if (score < bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
 }
+
+bool _pointsNear(DrawPoint a, DrawPoint b) =>
+    (a.x - b.x).abs() <= _pointMatchEpsilon &&
+    (a.y - b.y).abs() <= _pointMatchEpsilon;
 
 bool _isHorizontal(DrawPoint a, DrawPoint b) =>
     (a.y - b.y).abs() <= (a.x - b.x).abs();

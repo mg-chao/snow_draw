@@ -271,6 +271,12 @@ void main() {
         100,
         reason: 'Fixed segment should stay on its original line.',
       );
+      final segments = result.fixedSegments;
+      expect(segments, isNotNull);
+      expect(segments!.length, 1);
+      final fixed = segments.first;
+      expect(fixed.start, result.localPoints[fixed.index - 1]);
+      expect(fixed.end, result.localPoints[fixed.index]);
     },
   );
 
