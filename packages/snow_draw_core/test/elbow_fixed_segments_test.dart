@@ -89,6 +89,86 @@ void main() {
     expect(fixed.end, result.localPoints[2]);
   });
 
+  test('fixed segment keeps its horizontal axis when points drift', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final movedPoints = <DrawPoint>[
+      points[0],
+      const DrawPoint(x: 0, y: 150),
+      const DrawPoint(x: 200, y: 150),
+      points[3],
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    expect(
+      (result.localPoints[1].y - 100).abs() <= 1,
+      isTrue,
+      reason: 'Fixed segment should stay on its original horizontal axis.',
+    );
+    expect(
+      (result.localPoints[2].y - 100).abs() <= 1,
+      isTrue,
+      reason: 'Fixed segment should stay on its original horizontal axis.',
+    );
+  });
+
+  test('fixed segment keeps its vertical axis when points drift', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 200),
+      const DrawPoint(x: 200, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final movedPoints = <DrawPoint>[
+      points[0],
+      const DrawPoint(x: 150, y: 0),
+      const DrawPoint(x: 150, y: 200),
+      points[3],
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    expect(
+      (result.localPoints[1].x - 100).abs() <= 1,
+      isTrue,
+      reason: 'Fixed segment should stay on its original vertical axis.',
+    );
+    expect(
+      (result.localPoints[2].x - 100).abs() <= 1,
+      isTrue,
+      reason: 'Fixed segment should stay on its original vertical axis.',
+    );
+  });
+
   test('creating a fixed segment keeps the path unchanged', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

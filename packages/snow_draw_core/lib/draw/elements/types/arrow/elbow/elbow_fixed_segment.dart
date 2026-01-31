@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../../../../types/draw_point.dart';
 
-/// A fixed (pinned) segment of an elbow path whose direction is preserved.
+/// A fixed (pinned) segment of an elbow path whose direction and axis are preserved.
 ///
 /// [index] points to the segment's start point in the path list.
 @immutable

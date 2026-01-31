@@ -510,8 +510,18 @@ bool _fixedSegmentsEqual(
     if (a[i].index != b[i].index) {
       return false;
     }
-    if (_isHorizontal(a[i].start, a[i].end) !=
-        _isHorizontal(b[i].start, b[i].end)) {
+    final aHorizontal = _isHorizontal(a[i].start, a[i].end);
+    final bHorizontal = _isHorizontal(b[i].start, b[i].end);
+    if (aHorizontal != bHorizontal) {
+      return false;
+    }
+    final aAxis = aHorizontal
+        ? (a[i].start.y + a[i].end.y) / 2
+        : (a[i].start.x + a[i].end.x) / 2;
+    final bAxis = bHorizontal
+        ? (b[i].start.y + b[i].end.y) / 2
+        : (b[i].start.x + b[i].end.x) / 2;
+    if ((aAxis - bAxis).abs() > _dedupThreshold) {
       return false;
     }
   }
@@ -534,18 +544,21 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
     final start = updated[index - 1];
     final end = updated[index];
     final isHorizontal = _isHorizontal(segment.start, segment.end);
+    final axis = isHorizontal
+        ? (segment.start.y + segment.end.y) / 2
+        : (segment.start.x + segment.end.x) / 2;
     if (isHorizontal) {
-      if ((start.y - end.y).abs() <= _dedupThreshold) {
+      if ((start.y - axis).abs() <= _dedupThreshold &&
+          (end.y - axis).abs() <= _dedupThreshold) {
         continue;
       }
-      final axis = (start.y + end.y) / 2;
       updated[index - 1] = start.copyWith(y: axis);
       updated[index] = end.copyWith(y: axis);
     } else {
-      if ((start.x - end.x).abs() <= _dedupThreshold) {
+      if ((start.x - axis).abs() <= _dedupThreshold &&
+          (end.x - axis).abs() <= _dedupThreshold) {
         continue;
       }
-      final axis = (start.x + end.x) / 2;
       updated[index - 1] = start.copyWith(x: axis);
       updated[index] = end.copyWith(x: axis);
     }
@@ -1225,11 +1238,20 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
       continue;
     }
     usedIndices.add(index);
+    final axis = isHorizontal
+        ? (segment.start.y + segment.end.y) / 2
+        : (segment.start.x + segment.end.x) / 2;
+    final start = isHorizontal
+        ? updated[index - 1].copyWith(y: axis)
+        : updated[index - 1].copyWith(x: axis);
+    final end = isHorizontal
+        ? updated[index].copyWith(y: axis)
+        : updated[index].copyWith(x: axis);
     mappedSegments.add(
       ElbowFixedSegment(
         index: index,
-        start: updated[index - 1],
-        end: updated[index],
+        start: start,
+        end: end,
       ),
     );
   }

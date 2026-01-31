@@ -1043,8 +1043,18 @@ bool _fixedSegmentsEqual(
     if (a[i].index != b[i].index) {
       return false;
     }
-    if (_isHorizontal(a[i].start, a[i].end) !=
-        _isHorizontal(b[i].start, b[i].end)) {
+    final aHorizontal = _isHorizontal(a[i].start, a[i].end);
+    final bHorizontal = _isHorizontal(b[i].start, b[i].end);
+    if (aHorizontal != bHorizontal) {
+      return false;
+    }
+    final aAxis = aHorizontal
+        ? (a[i].start.y + a[i].end.y) / 2
+        : (a[i].start.x + a[i].end.x) / 2;
+    final bAxis = bHorizontal
+        ? (b[i].start.y + b[i].end.y) / 2
+        : (b[i].start.x + b[i].end.x) / 2;
+    if ((aAxis - bAxis).abs() > 1) {
       return false;
     }
   }
