@@ -492,6 +492,21 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   return true;
 }
 
+bool _pointsEqualExceptEndpoints(List<DrawPoint> a, List<DrawPoint> b) {
+  if (a.length != b.length) {
+    return false;
+  }
+  if (a.length <= 2) {
+    return true;
+  }
+  for (var i = 1; i < a.length - 1; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool _fixedSegmentsEqual(
   List<ElbowFixedSegment> a,
   List<ElbowFixedSegment> b,
@@ -544,7 +559,13 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     );
   }
 
-  var updated = List<DrawPoint>.from(basePoints);
+  final referencePoints = _pointsEqualExceptEndpoints(
+        basePoints,
+        incomingPoints,
+      )
+      ? basePoints
+      : incomingPoints;
+  var updated = List<DrawPoint>.from(referencePoints);
   var workingFixedSegments = fixedSegments;
   var appliedBaseline = false;
   updated[0] = incomingPoints.first;
@@ -679,10 +700,10 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
         ? (endPoint.x - neighbor.x).abs() <= _dedupThreshold
         : false;
     if (endAlignedWithFixed &&
-        basePoints.length >= 2 &&
+        referencePoints.length >= 2 &&
         (fixedHorizontal || fixedVertical)) {
-      final baseEnd = basePoints.last;
-      final baseNeighbor = basePoints[basePoints.length - 2];
+      final baseEnd = referencePoints.last;
+      final baseNeighbor = referencePoints[referencePoints.length - 2];
       final baseAligned = fixedHorizontal
           ? (baseEnd.y - baseNeighbor.y).abs() <= _dedupThreshold
           : (baseEnd.x - baseNeighbor.x).abs() <= _dedupThreshold;
@@ -715,7 +736,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     }
     if (!adjustedEnd &&
         updated.length >= 4 &&
-        basePoints.length == updated.length) {
+        referencePoints.length == updated.length) {
       final fixedIndices = {
         for (final segment in workingFixedSegments) segment.index,
       };
@@ -736,8 +757,8 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
         if (aligned &&
             fixedIsHorizontal == endHorizontal &&
             midHorizontal != endHorizontal) {
-          final baseEnd = basePoints.last;
-          final baseNeighbor = basePoints[basePoints.length - 2];
+          final baseEnd = referencePoints.last;
+          final baseNeighbor = referencePoints[referencePoints.length - 2];
           final desiredLength = endHorizontal
               ? (baseEnd.x - baseNeighbor.x).abs()
               : (baseEnd.y - baseNeighbor.y).abs();

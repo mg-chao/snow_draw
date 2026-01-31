@@ -575,6 +575,15 @@ void main() {
       fixedSegmentsOverride: fixedSegments,
       endBindingOverride: binding,
     );
+    expect(boundResult.fixedSegments, isNotNull);
+    final boundFixed = boundResult.fixedSegments!.first;
+    expect(boundFixed.index, greaterThan(1));
+    expect(
+      boundFixed.index + 1,
+      lessThan(boundResult.localPoints.length),
+    );
+    final boundBefore = boundResult.localPoints[boundFixed.index - 2];
+    final boundAfter = boundResult.localPoints[boundFixed.index + 1];
 
     final unboundResult = computeElbowEdit(
       element: element,
@@ -583,6 +592,27 @@ void main() {
       localPointsOverride: boundResult.localPoints,
       fixedSegmentsOverride: boundResult.fixedSegments,
       endBindingOverride: null,
+    );
+    expect(unboundResult.fixedSegments, isNotNull);
+    final unboundFixed = unboundResult.fixedSegments!.first;
+    expect(unboundFixed.start, boundFixed.start);
+    expect(unboundFixed.end, boundFixed.end);
+    expect(unboundFixed.index, greaterThan(1));
+    expect(
+      unboundFixed.index + 1,
+      lessThan(unboundResult.localPoints.length),
+    );
+    expect(
+      unboundResult.localPoints[unboundFixed.index - 2],
+      boundBefore,
+      reason:
+          'Segment before the fixed one should stay consistent after unbinding.',
+    );
+    expect(
+      unboundResult.localPoints[unboundFixed.index + 1],
+      boundAfter,
+      reason:
+          'Segment after the fixed one should stay consistent after unbinding.',
     );
 
     expect(
