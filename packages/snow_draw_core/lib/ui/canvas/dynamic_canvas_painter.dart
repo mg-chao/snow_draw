@@ -396,7 +396,7 @@ class DynamicCanvasPainter extends CustomPainter {
       ..isAntiAlias = true;
     final fixedFillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.55)
+      ..color = fillColor.withValues(alpha: 0.90)
       ..isAntiAlias = true;
     final fixedStrokePaint = Paint()
       ..style = PaintingStyle.stroke
