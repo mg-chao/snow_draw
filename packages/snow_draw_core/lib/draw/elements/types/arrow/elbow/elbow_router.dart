@@ -205,7 +205,18 @@ final class _ResolvedEndpoint {
   DrawPoint get anchorOrPoint => info.anchorOrPoint;
 }
 
-({_ResolvedEndpoint start, _ResolvedEndpoint end}) _resolveRouteEndpoints({
+@immutable
+final class _ResolvedEndpoints {
+  const _ResolvedEndpoints({
+    required this.start,
+    required this.end,
+  });
+
+  final _ResolvedEndpoint start;
+  final _ResolvedEndpoint end;
+}
+
+_ResolvedEndpoints _resolveRouteEndpoints({
   required DrawPoint start,
   required DrawPoint end,
   required Map<String, ElementState> elementsById,
@@ -253,7 +264,7 @@ final class _ResolvedEndpoint {
   final startHeading = _resolveHeadingFor(startInfo, vectorHeading);
   final endHeading = _resolveHeadingFor(endInfo, reverseVectorHeading);
 
-  return (
+  return _ResolvedEndpoints(
     start: _ResolvedEndpoint(
       info: startInfo,
       heading: startHeading,
@@ -897,46 +908,54 @@ List<DrawPoint> _finalizeRoutedPath({
   return cleaned.map(_clampPoint).toList(growable: false);
 }
 
-List<DrawPoint> _routeElbowPoints({
-  required _ResolvedEndpoint start,
-  required _ResolvedEndpoint end,
-}) {
-  final startPoint = start.point;
-  final endPoint = end.point;
+final class _ElbowRoutePlanner {
+  const _ElbowRoutePlanner({
+    required this.start,
+    required this.end,
+  });
 
-  if (!start.isBound && !end.isBound) {
-    return _fallbackPath(
-      start: startPoint,
-      end: endPoint,
-      startHeading: start.heading,
+  final _ResolvedEndpoint start;
+  final _ResolvedEndpoint end;
+
+  List<DrawPoint> route() {
+    if (_usesFallbackPath) {
+      return _fallbackPath(
+        start: start.point,
+        end: end.point,
+        startHeading: start.heading,
+      );
+    }
+
+    final layout = _buildObstacleLayout(start: start, end: end);
+    final direct = _tryDirectRoute(layout);
+    if (direct != null) {
+      return direct;
+    }
+
+    final routed = _routeViaGrid(
+      start: start,
+      end: end,
+      startDongle: layout.startDongle,
+      endDongle: layout.endDongle,
+      commonBounds: layout.commonBounds,
+      obstacles: layout.obstacles,
     );
+
+    return _finalizeRoutedPath(points: routed, startHeading: start.heading);
   }
 
-  final layout = _buildObstacleLayout(start: start, end: end);
+  bool get _usesFallbackPath => !start.isBound && !end.isBound;
 
-  final direct = _directPathIfClear(
-    start: startPoint,
-    end: endPoint,
-    obstacles: layout.obstacles,
-    startHeading: start.heading,
-    endHeading: end.heading,
-    startConstrained: start.isBound,
-    endConstrained: end.isBound,
-  );
-  if (direct != null) {
-    return direct;
-  }
-
-  final routed = _routeViaGrid(
-    start: start,
-    end: end,
-    startDongle: layout.startDongle,
-    endDongle: layout.endDongle,
-    commonBounds: layout.commonBounds,
-    obstacles: layout.obstacles,
-  );
-
-  return _finalizeRoutedPath(points: routed, startHeading: start.heading);
+  List<DrawPoint>? _tryDirectRoute(_ObstacleLayout layout) =>
+      _directPathIfClear(
+        start: start.point,
+        end: end.point,
+        obstacles: layout.obstacles,
+        startHeading: start.heading,
+        endHeading: end.heading,
+        startConstrained: start.isBound,
+        endConstrained: end.isBound,
+      );
 }
 
 ElbowRouteResult _buildRouteResult({
@@ -972,10 +991,10 @@ ElbowRouteResult routeElbowArrow({
   final startPoint = startEndpoint.point;
   final endPoint = endEndpoint.point;
 
-  final routed = _routeElbowPoints(
+  final routed = _ElbowRoutePlanner(
     start: startEndpoint,
     end: endEndpoint,
-  );
+  ).route();
 
   return _buildRouteResult(
     startPoint: startPoint,
