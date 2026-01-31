@@ -3,6 +3,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
@@ -381,6 +382,77 @@ void main() {
       );
     },
   );
+
+  test('fixed segment keeps bound endpoint spacing consistent', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 50),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 300, minY: 200, maxX: 360, maxY: 260);
+    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final baseline = routeElbowArrow(
+      start: movedPoints.first,
+      end: boundPoint,
+      startBinding: null,
+      endBinding: binding,
+      elementsById: {'rect-1': boundElement},
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+    ).points;
+
+    expect(
+      baseline.length,
+      greaterThanOrEqualTo(3),
+      reason: 'Expected a routed path with at least one turn.',
+    );
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final baselinePadding = _manhattanDistance(
+      baseline[baseline.length - 2],
+      baseline.last,
+    );
+    final actualPadding = _manhattanDistance(
+      result.localPoints[result.localPoints.length - 2],
+      result.localPoints.last,
+    );
+
+    expect(
+      (actualPadding - baselinePadding).abs() <= 1,
+      isTrue,
+      reason: 'End spacing should match the non-fixed routed path.',
+    );
+  });
 }
 
 ElementState _arrowElement(
@@ -434,6 +506,9 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
   }
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
+
+double _manhattanDistance(DrawPoint a, DrawPoint b) =>
+    (a.x - b.x).abs() + (a.y - b.y).abs();
 
 ElementState _rectangleElement({
   required String id,

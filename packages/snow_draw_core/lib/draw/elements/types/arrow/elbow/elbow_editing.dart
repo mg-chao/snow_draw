@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 import '../../../../core/coordinates/element_space.dart';
@@ -146,6 +148,8 @@ ElbowEditResult computeElbowEdit({
       fixedSegments: fixedSegments,
       startBinding: startBinding,
       endBinding: endBinding,
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
     );
     final resultSegments = updated.fixedSegments.isEmpty
         ? null
@@ -414,6 +418,8 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   required List<ElbowFixedSegment> fixedSegments,
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
 }) {
   if (basePoints.length < 2) {
     return _FixedSegmentPathResult(
@@ -481,6 +487,8 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     fixedSegments: synced,
     startBinding: startBinding,
     endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
   );
 }
 
@@ -491,6 +499,8 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   required List<ElbowFixedSegment> fixedSegments,
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
 }) {
   if (points.length < 2) {
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
@@ -506,6 +516,15 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   var worldPoints = points.map(space.toWorld).toList(growable: true);
   var updatedFixedSegments = fixedSegments;
   var localPoints = points;
+  final baselinePadding = _resolveBaselineEndpointPadding(
+    element: element,
+    elementsById: elementsById,
+    points: points,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+  );
 
   if (startBinding != null) {
     final adjustment = _adjustPerpendicularStart(
@@ -514,6 +533,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       elementsById: elementsById,
       fixedSegments: updatedFixedSegments,
       space: space,
+      directionPadding: baselinePadding.start,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -531,6 +551,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       elementsById: elementsById,
       fixedSegments: updatedFixedSegments,
       space: space,
+      directionPadding: baselinePadding.end,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -563,12 +584,77 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
 }
 
+({double? start, double? end}) _resolveBaselineEndpointPadding({
+  required ElementState element,
+  required Map<String, ElementState> elementsById,
+  required List<DrawPoint> points,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+}) {
+  if (points.length < 2 || (startBinding == null && endBinding == null)) {
+    return (start: null, end: null);
+  }
+
+  final space = ElementSpace(
+    rotation: element.rotation,
+    origin: element.rect.center,
+  );
+  final worldStart = space.toWorld(points.first);
+  final worldEnd = space.toWorld(points.last);
+  final routed = routeElbowArrow(
+    start: worldStart,
+    end: worldEnd,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    elementsById: elementsById,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+  );
+  final routedPoints = routed.points;
+  if (routedPoints.length < 3) {
+    return (start: null, end: null);
+  }
+
+  final startPadding = startBinding == null
+      ? null
+      : _segmentPadding(routedPoints.first, routedPoints[1]);
+  final endPadding = endBinding == null
+      ? null
+      : _segmentPadding(
+          routedPoints[routedPoints.length - 2],
+          routedPoints.last,
+        );
+  return (start: startPadding, end: endPadding);
+}
+
+double? _segmentPadding(DrawPoint from, DrawPoint to) {
+  final length = _manhattanDistance(from, to);
+  if (!length.isFinite || length <= _dedupThreshold) {
+    return null;
+  }
+  return length;
+}
+
+double _resolveDirectionPadding(double? desired) {
+  final resolved = desired;
+  if (resolved == null || !resolved.isFinite) {
+    return _directionFixPadding;
+  }
+  if (resolved <= _dedupThreshold) {
+    return _directionFixPadding;
+  }
+  return math.max(_directionFixPadding, resolved);
+}
+
 _PerpendicularAdjustment _adjustPerpendicularStart({
   required List<DrawPoint> points,
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
   required List<ElbowFixedSegment> fixedSegments,
   required ElementSpace space,
+  required double? directionPadding,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -592,6 +678,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   }
 
   final desiredHorizontal = heading.isHorizontal;
+  final resolvedPadding = _resolveDirectionPadding(directionPadding);
   final start = points.first;
   final neighbor = points[1];
   final aligned = desiredHorizontal
@@ -620,7 +707,12 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
 
   if (aligned && !directionOk && !directionPinned) {
     final updated = List<DrawPoint>.from(points);
-    updated[1] = _applyStartDirection(neighbor, start, heading);
+    updated[1] = _applyStartDirection(
+      neighbor,
+      start,
+      heading,
+      resolvedPadding,
+    );
     return _PerpendicularAdjustment(
       points: updated,
       moved: true,
@@ -647,6 +739,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
         updatedNeighbor,
         start,
         heading,
+        resolvedPadding,
       );
     }
     final updated = List<DrawPoint>.from(points);
@@ -663,6 +756,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     heading: heading,
     neighbor: neighbor,
     allowExtend: !directionPinned,
+    padding: resolvedPadding,
   );
 }
 
@@ -672,6 +766,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   required Map<String, ElementState> elementsById,
   required List<ElbowFixedSegment> fixedSegments,
   required ElementSpace space,
+  required double? directionPadding,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -695,6 +790,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   }
 
   final desiredHorizontal = heading.isHorizontal;
+  final resolvedPadding = _resolveDirectionPadding(directionPadding);
   final lastIndex = points.length - 1;
   final neighborIndex = lastIndex - 1;
   final neighbor = points[neighborIndex];
@@ -730,6 +826,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
       neighbor,
       endPoint,
       requiredHeading,
+      resolvedPadding,
     );
     return _PerpendicularAdjustment(
       points: updated,
@@ -758,6 +855,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
         updatedNeighbor,
         endPoint,
         requiredHeading,
+        resolvedPadding,
       );
     }
     final updated = List<DrawPoint>.from(points);
@@ -774,6 +872,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
     heading: heading,
     neighbor: neighbor,
     allowExtend: !directionPinned,
+    padding: resolvedPadding,
   );
 }
 
@@ -869,38 +968,40 @@ DrawPoint _applyStartDirection(
   DrawPoint neighbor,
   DrawPoint start,
   ElbowHeading heading,
+  double padding,
 ) => switch (heading) {
-  ElbowHeading.right => neighbor.x > start.x + _directionFixPadding
+  ElbowHeading.right => neighbor.x > start.x + padding
       ? neighbor
-      : neighbor.copyWith(x: start.x + _directionFixPadding),
-  ElbowHeading.left => neighbor.x < start.x - _directionFixPadding
+      : neighbor.copyWith(x: start.x + padding),
+  ElbowHeading.left => neighbor.x < start.x - padding
       ? neighbor
-      : neighbor.copyWith(x: start.x - _directionFixPadding),
-  ElbowHeading.down => neighbor.y > start.y + _directionFixPadding
+      : neighbor.copyWith(x: start.x - padding),
+  ElbowHeading.down => neighbor.y > start.y + padding
       ? neighbor
-      : neighbor.copyWith(y: start.y + _directionFixPadding),
-  ElbowHeading.up => neighbor.y < start.y - _directionFixPadding
+      : neighbor.copyWith(y: start.y + padding),
+  ElbowHeading.up => neighbor.y < start.y - padding
       ? neighbor
-      : neighbor.copyWith(y: start.y - _directionFixPadding),
+      : neighbor.copyWith(y: start.y - padding),
 };
 
 DrawPoint _applyEndDirection(
   DrawPoint neighbor,
   DrawPoint endPoint,
   ElbowHeading requiredHeading,
+  double padding,
 ) => switch (requiredHeading) {
-  ElbowHeading.right => neighbor.x < endPoint.x - _directionFixPadding
+  ElbowHeading.right => neighbor.x < endPoint.x - padding
       ? neighbor
-      : neighbor.copyWith(x: endPoint.x - _directionFixPadding),
-  ElbowHeading.left => neighbor.x > endPoint.x + _directionFixPadding
+      : neighbor.copyWith(x: endPoint.x - padding),
+  ElbowHeading.left => neighbor.x > endPoint.x + padding
       ? neighbor
-      : neighbor.copyWith(x: endPoint.x + _directionFixPadding),
-  ElbowHeading.down => neighbor.y < endPoint.y - _directionFixPadding
+      : neighbor.copyWith(x: endPoint.x + padding),
+  ElbowHeading.down => neighbor.y < endPoint.y - padding
       ? neighbor
-      : neighbor.copyWith(y: endPoint.y - _directionFixPadding),
-  ElbowHeading.up => neighbor.y > endPoint.y + _directionFixPadding
+      : neighbor.copyWith(y: endPoint.y - padding),
+  ElbowHeading.up => neighbor.y > endPoint.y + padding
       ? neighbor
-      : neighbor.copyWith(y: endPoint.y + _directionFixPadding),
+      : neighbor.copyWith(y: endPoint.y + padding),
 };
 
 _PerpendicularAdjustment _insertStartDirectionStub({
@@ -908,6 +1009,7 @@ _PerpendicularAdjustment _insertStartDirectionStub({
   required ElbowHeading heading,
   required DrawPoint neighbor,
   required bool allowExtend,
+  required double padding,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -918,7 +1020,7 @@ _PerpendicularAdjustment _insertStartDirectionStub({
   }
 
   final start = points.first;
-  final stub = _offsetPoint(start, heading, _directionFixPadding);
+  final stub = _offsetPoint(start, heading, padding);
   final connector = heading.isHorizontal
       ? DrawPoint(x: stub.x, y: neighbor.y)
       : DrawPoint(x: neighbor.x, y: stub.y);
@@ -967,6 +1069,7 @@ _PerpendicularAdjustment _insertEndDirectionStub({
   required ElbowHeading heading,
   required DrawPoint neighbor,
   required bool allowExtend,
+  required double padding,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -977,7 +1080,7 @@ _PerpendicularAdjustment _insertEndDirectionStub({
   }
 
   final endPoint = points.last;
-  final stub = _offsetPoint(endPoint, heading, _directionFixPadding);
+  final stub = _offsetPoint(endPoint, heading, padding);
   final connector = heading.isHorizontal
       ? DrawPoint(x: stub.x, y: neighbor.y)
       : DrawPoint(x: neighbor.x, y: stub.y);
