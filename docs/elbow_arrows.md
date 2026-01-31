@@ -9,7 +9,7 @@ step-by-step notes that match the code flow.
 - **Heading**: the cardinal direction the endpoint or segment is moving toward.
 - **Binding**: an endpoint attached to an element; the route must avoid its bounds
   and respect arrowhead spacing.
-- **Fixed segment**: a pinned segment that must remain in place during edits.
+- **Fixed segment**: a pinned segment whose direction is preserved during edits.
 
 ## Routing Pipeline (world space)
 
@@ -61,7 +61,7 @@ Entry point: `computeElbowEdit` in `elbow_editing.dart`.
      affected part of the route is recomputed.
 
 6) Apply fixed segments
-   - The path is updated to honor fixed segments and to keep them orthogonal.
+   - The path is updated to honor fixed segment directions and keep them orthogonal.
 
 7) Simplify + reindex
    - Redundant points are removed while preserving pinned points.

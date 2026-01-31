@@ -403,6 +403,9 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   return true;
 }
 
+bool _isHorizontal(DrawPoint a, DrawPoint b) =>
+    (a.y - b.y).abs() <= (a.x - b.x).abs();
+
 bool _fixedSegmentsEqual(
   List<ElbowFixedSegment>? a,
   List<ElbowFixedSegment>? b,
@@ -417,7 +420,11 @@ bool _fixedSegmentsEqual(
     return false;
   }
   for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
+    if (a[i].index != b[i].index) {
+      return false;
+    }
+    if (_isHorizontal(a[i].start, a[i].end) !=
+        _isHorizontal(b[i].start, b[i].end)) {
       return false;
     }
   }

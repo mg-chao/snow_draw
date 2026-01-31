@@ -17,7 +17,6 @@ import 'elbow_router.dart';
 
 const double _dedupThreshold = 1;
 const double _directionFixPadding = 12;
-const double _pointMatchEpsilon = 1e-4;
 
 /// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
@@ -128,11 +127,13 @@ ElbowEditResult computeElbowEdit({
       startBinding: startBinding,
       endBinding: endBinding,
     );
+    final enforcedPoints =
+        _applyFixedSegmentsToPoints(updated.points, updated.fixedSegments);
     final pinned = _collectPinnedPoints(
-      points: updated.points,
+      points: enforcedPoints,
       fixedSegments: updated.fixedSegments,
     );
-    final simplified = _simplifyPath(updated.points, pinned: pinned);
+    final simplified = _simplifyPath(enforcedPoints, pinned: pinned);
     final reindexed = _reindexFixedSegments(simplified, updated.fixedSegments);
     final resultSegments = reindexed.isEmpty
         ? null
@@ -174,6 +175,7 @@ ElbowEditResult computeElbowEdit({
   if (!pointsChanged && fixedSegmentsChanged) {
     workingPoints = _applyFixedSegmentsToPoints(basePoints, fixedSegments);
   }
+  workingPoints = _applyFixedSegmentsToPoints(workingPoints, fixedSegments);
 
   // Step 7: simplify and reindex segments to keep the path stable.
   final pinned = _collectPinnedPoints(
@@ -343,7 +345,7 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   final maxIndex = points.length - 1;
   final result = <ElbowFixedSegment>[];
   for (final segment in fixedSegments) {
-    final index = _findSegmentIndex(points, segment.start, segment.end);
+    final index = _findSegmentIndex(points, segment);
     if (index == null || index <= 1 || index >= maxIndex) {
       continue;
     }
@@ -358,54 +360,32 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   return result;
 }
 
-int? _findSegmentIndex(List<DrawPoint> points, DrawPoint start, DrawPoint end) {
-  for (var i = 1; i < points.length; i++) {
-    if (points[i - 1] == start && points[i] == end) {
-      return i;
+int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
+  final preferredIndex = segment.index;
+  final fixedHorizontal = _isHorizontal(segment.start, segment.end);
+  final maxIndex = points.length - 1;
+  const minIndex = 2;
+  if (preferredIndex >= minIndex && preferredIndex < maxIndex) {
+    final preferredHorizontal =
+        _isHorizontal(points[preferredIndex - 1], points[preferredIndex]);
+    if (preferredHorizontal == fixedHorizontal) {
+      return preferredIndex;
     }
   }
-  for (var i = 1; i < points.length; i++) {
-    if (_pointsNear(points[i - 1], start) && _pointsNear(points[i], end)) {
-      return i;
-    }
-  }
-  final fixedHorizontal = _isHorizontal(start, end);
-  final axisValue = fixedHorizontal ? start.y : start.x;
-  final targetMid = fixedHorizontal
-      ? (start.x + end.x) / 2
-      : (start.y + end.y) / 2;
   int? bestIndex;
-  var bestScore = double.infinity;
-  for (var i = 1; i < points.length; i++) {
-    final a = points[i - 1];
-    final b = points[i];
-    if (_isHorizontal(a, b) != fixedHorizontal) {
+  var bestIndexDelta = double.infinity;
+  for (var i = minIndex; i < maxIndex; i++) {
+    if (_isHorizontal(points[i - 1], points[i]) != fixedHorizontal) {
       continue;
     }
-    if (fixedHorizontal) {
-      if ((a.y - axisValue).abs() > _dedupThreshold ||
-          (b.y - axisValue).abs() > _dedupThreshold) {
-        continue;
-      }
-    } else {
-      if ((a.x - axisValue).abs() > _dedupThreshold ||
-          (b.x - axisValue).abs() > _dedupThreshold) {
-        continue;
-      }
-    }
-    final mid = fixedHorizontal ? (a.x + b.x) / 2 : (a.y + b.y) / 2;
-    final score = (mid - targetMid).abs();
-    if (score < bestScore) {
-      bestScore = score;
+    final indexDelta = (i - preferredIndex).abs().toDouble();
+    if (indexDelta < bestIndexDelta) {
+      bestIndexDelta = indexDelta;
       bestIndex = i;
     }
   }
   return bestIndex;
 }
-
-bool _pointsNear(DrawPoint a, DrawPoint b) =>
-    (a.x - b.x).abs() <= _pointMatchEpsilon &&
-    (a.y - b.y).abs() <= _pointMatchEpsilon;
 
 bool _hasDiagonalSegments(List<DrawPoint> points) {
   if (points.length < 2) {
@@ -515,7 +495,11 @@ bool _fixedSegmentsEqual(
     return false;
   }
   for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
+    if (a[i].index != b[i].index) {
+      return false;
+    }
+    if (_isHorizontal(a[i].start, a[i].end) !=
+        _isHorizontal(b[i].start, b[i].end)) {
       return false;
     }
   }
@@ -535,8 +519,24 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
     if (index <= 0 || index >= updated.length) {
       continue;
     }
-    updated[index - 1] = segment.start;
-    updated[index] = segment.end;
+    final start = updated[index - 1];
+    final end = updated[index];
+    final isHorizontal = _isHorizontal(segment.start, segment.end);
+    if (isHorizontal) {
+      if ((start.y - end.y).abs() <= _dedupThreshold) {
+        continue;
+      }
+      final axis = (start.y + end.y) / 2;
+      updated[index - 1] = start.copyWith(y: axis);
+      updated[index] = end.copyWith(y: axis);
+    } else {
+      if ((start.x - end.x).abs() <= _dedupThreshold) {
+        continue;
+      }
+      final axis = (start.x + end.x) / 2;
+      updated[index - 1] = start.copyWith(x: axis);
+      updated[index] = end.copyWith(x: axis);
+    }
   }
   return List<DrawPoint>.unmodifiable(updated);
 }
@@ -567,7 +567,6 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
       : incomingPoints;
   var updated = List<DrawPoint>.from(referencePoints);
   var workingFixedSegments = fixedSegments;
-  var appliedBaseline = false;
   updated[0] = incomingPoints.first;
   updated[updated.length - 1] = incomingPoints.last;
 
@@ -589,26 +588,12 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     if (mapped.fixedSegments.length == workingFixedSegments.length) {
       updated = List<DrawPoint>.from(mapped.points);
       workingFixedSegments = mapped.fixedSegments;
-      appliedBaseline = true;
     }
   }
 
-  if (!appliedBaseline) {
-    for (final segment in workingFixedSegments) {
-      final index = segment.index;
-      if (index <= 0 || index >= updated.length) {
-        continue;
-      }
-      final isHorizontal = _isHorizontal(segment.start, segment.end);
-      if (isHorizontal) {
-        updated[index - 1] = updated[index - 1].copyWith(y: segment.start.y);
-        updated[index] = updated[index].copyWith(y: segment.start.y);
-      } else {
-        updated[index - 1] = updated[index - 1].copyWith(x: segment.start.x);
-        updated[index] = updated[index].copyWith(x: segment.start.x);
-      }
-    }
-  }
+  updated = List<DrawPoint>.from(
+    _applyFixedSegmentsToPoints(updated, workingFixedSegments),
+  );
 
   if (startBinding == null &&
       endBinding == null &&
@@ -635,16 +620,6 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
       startBinding != null && elementsById.containsKey(startBinding.elementId);
   final hasEndBinding =
       endBinding != null && elementsById.containsKey(endBinding.elementId);
-  final space = ElementSpace(
-    rotation: element.rotation,
-    origin: element.rect.center,
-  );
-  var pinnedAxes = _resolvePinnedAxes(
-    fixedSegments: workingFixedSegments,
-    space: space,
-    pointCount: updated.length,
-  );
-  var insertedExtra = false;
 
   if (updated.length > 1 && !hasStartBinding) {
     final start = updated.first;
@@ -652,182 +627,28 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     final dx = (neighbor.x - start.x).abs();
     final dy = (neighbor.y - start.y).abs();
     if (dx <= dy) {
-      if (pinnedAxes.pinnedX.contains(1)) {
-        final stub = DrawPoint(x: start.x, y: neighbor.y);
-        if (_manhattanDistance(start, stub) > _dedupThreshold &&
-            _manhattanDistance(stub, neighbor) > _dedupThreshold) {
-          updated.insert(1, stub);
-          insertedExtra = true;
-        } else {
-          updated[0] = start.copyWith(x: neighbor.x);
-        }
-      } else {
-        updated[1] = neighbor.copyWith(x: start.x);
-      }
+      updated[1] = neighbor.copyWith(x: start.x);
     } else {
-      if (pinnedAxes.pinnedY.contains(1)) {
-        final stub = DrawPoint(x: neighbor.x, y: start.y);
-        if (_manhattanDistance(start, stub) > _dedupThreshold &&
-            _manhattanDistance(stub, neighbor) > _dedupThreshold) {
-          updated.insert(1, stub);
-          insertedExtra = true;
-        } else {
-          updated[0] = start.copyWith(y: neighbor.y);
-        }
-      } else {
-        updated[1] = neighbor.copyWith(y: start.y);
-      }
+      updated[1] = neighbor.copyWith(y: start.y);
     }
   }
 
   if (updated.length > 1 && !hasEndBinding) {
-    if (insertedExtra) {
-      pinnedAxes = _resolvePinnedAxes(
-        fixedSegments: workingFixedSegments,
-        space: space,
-        pointCount: updated.length,
-      );
-    }
     final lastIndex = updated.length - 1;
-    var endPoint = updated[lastIndex];
     var neighbor = updated[lastIndex - 1];
-    var adjustedEnd = false;
-    final fixedHorizontal = pinnedAxes.pinnedY.contains(lastIndex - 1);
-    final fixedVertical = pinnedAxes.pinnedX.contains(lastIndex - 1);
-    final endAlignedWithFixed = fixedHorizontal
-        ? (endPoint.y - neighbor.y).abs() <= _dedupThreshold
-        : fixedVertical
-        ? (endPoint.x - neighbor.x).abs() <= _dedupThreshold
-        : false;
-    if (endAlignedWithFixed &&
-        referencePoints.length >= 2 &&
-        (fixedHorizontal || fixedVertical)) {
-      final baseEnd = referencePoints.last;
-      final baseNeighbor = referencePoints[referencePoints.length - 2];
-      final baseAligned = fixedHorizontal
-          ? (baseEnd.y - baseNeighbor.y).abs() <= _dedupThreshold
-          : (baseEnd.x - baseNeighbor.x).abs() <= _dedupThreshold;
-      if (baseAligned) {
-        final desiredLength = fixedHorizontal
-            ? (baseEnd.x - baseNeighbor.x).abs()
-            : (baseEnd.y - baseNeighbor.y).abs();
-        if (desiredLength > _dedupThreshold) {
-          final sign = fixedHorizontal
-              ? ((baseEnd.x - baseNeighbor.x).abs() > _dedupThreshold
-                  ? (baseEnd.x >= baseNeighbor.x ? 1 : -1)
-                  : (endPoint.x >= neighbor.x ? 1 : -1))
-              : ((baseEnd.y - baseNeighbor.y).abs() > _dedupThreshold
-                  ? (baseEnd.y >= baseNeighbor.y ? 1 : -1)
-                  : (endPoint.y >= neighbor.y ? 1 : -1));
-          if (fixedHorizontal) {
-            updated[lastIndex] = endPoint.copyWith(y: neighbor.y);
-            final targetX = updated[lastIndex].x - sign * desiredLength;
-            updated[lastIndex - 1] = neighbor.copyWith(x: targetX);
-          } else {
-            updated[lastIndex] = endPoint.copyWith(x: neighbor.x);
-            final targetY = updated[lastIndex].y - sign * desiredLength;
-            updated[lastIndex - 1] = neighbor.copyWith(y: targetY);
-          }
-          endPoint = updated[lastIndex];
-          neighbor = updated[lastIndex - 1];
-          adjustedEnd = true;
-        }
-      }
-    }
-    if (!adjustedEnd &&
-        updated.length >= 4 &&
-        referencePoints.length == updated.length) {
-      final fixedIndices = {
-        for (final segment in workingFixedSegments) segment.index,
-      };
-      final fixedIndex = lastIndex - 2;
-      if (fixedIndices.contains(fixedIndex) &&
-          !fixedIndices.contains(lastIndex - 1)) {
-        final fixedSegment = workingFixedSegments.firstWhere(
-          (segment) => segment.index == fixedIndex,
-        );
-        final endHorizontal = _isHorizontal(neighbor, endPoint);
-        final fixedIsHorizontal =
-            _isHorizontal(fixedSegment.start, fixedSegment.end);
-        final midStart = updated[lastIndex - 2];
-        final midHorizontal = _isHorizontal(midStart, neighbor);
-        final aligned = endHorizontal
-            ? (endPoint.y - neighbor.y).abs() <= _dedupThreshold
-            : (endPoint.x - neighbor.x).abs() <= _dedupThreshold;
-        if (aligned &&
-            fixedIsHorizontal == endHorizontal &&
-            midHorizontal != endHorizontal) {
-          final baseEnd = referencePoints.last;
-          final baseNeighbor = referencePoints[referencePoints.length - 2];
-          final desiredLength = endHorizontal
-              ? (baseEnd.x - baseNeighbor.x).abs()
-              : (baseEnd.y - baseNeighbor.y).abs();
-          if (desiredLength > _dedupThreshold) {
-            final sign = endHorizontal
-                ? ((baseEnd.x - baseNeighbor.x).abs() > _dedupThreshold
-                    ? (baseEnd.x >= baseNeighbor.x ? 1 : -1)
-                    : (endPoint.x >= neighbor.x ? 1 : -1))
-                : ((baseEnd.y - baseNeighbor.y).abs() > _dedupThreshold
-                    ? (baseEnd.y >= baseNeighbor.y ? 1 : -1)
-                    : (endPoint.y >= neighbor.y ? 1 : -1));
-            final target = endHorizontal
-                ? endPoint.x - sign * desiredLength
-                : endPoint.y - sign * desiredLength;
-            final delta = endHorizontal
-                ? target - neighbor.x
-                : target - neighbor.y;
-            if (delta.abs() > _dedupThreshold) {
-              if (endHorizontal) {
-                updated[lastIndex - 2] =
-                    midStart.copyWith(x: midStart.x + delta);
-                updated[lastIndex - 1] = neighbor.copyWith(x: target);
-              } else {
-                updated[lastIndex - 2] =
-                    midStart.copyWith(y: midStart.y + delta);
-                updated[lastIndex - 1] = neighbor.copyWith(y: target);
-              }
-              endPoint = updated[lastIndex];
-              neighbor = updated[lastIndex - 1];
-              adjustedEnd = true;
-            }
-          }
-        }
-      }
-    }
+    final endPoint = updated[lastIndex];
     final dx = (neighbor.x - endPoint.x).abs();
     final dy = (neighbor.y - endPoint.y).abs();
-    if (!adjustedEnd && dx <= dy) {
-      if (pinnedAxes.pinnedX.contains(lastIndex - 1)) {
-        final stub = DrawPoint(x: endPoint.x, y: neighbor.y);
-        if (_manhattanDistance(neighbor, stub) > _dedupThreshold &&
-            _manhattanDistance(stub, endPoint) > _dedupThreshold) {
-          updated.insert(lastIndex, stub);
-          insertedExtra = true;
-        } else {
-          updated[lastIndex] = endPoint.copyWith(x: neighbor.x);
-        }
-      } else {
-        updated[lastIndex - 1] = neighbor.copyWith(x: endPoint.x);
-      }
-    } else if (!adjustedEnd) {
-      if (pinnedAxes.pinnedY.contains(lastIndex - 1)) {
-        final stub = DrawPoint(x: neighbor.x, y: endPoint.y);
-        if (_manhattanDistance(neighbor, stub) > _dedupThreshold &&
-            _manhattanDistance(stub, endPoint) > _dedupThreshold) {
-          updated.insert(lastIndex, stub);
-          insertedExtra = true;
-        } else {
-          updated[lastIndex] = endPoint.copyWith(y: neighbor.y);
-        }
-      } else {
-        updated[lastIndex - 1] = neighbor.copyWith(y: endPoint.y);
-      }
+    if (dx <= dy) {
+      updated[lastIndex - 1] = neighbor.copyWith(x: endPoint.x);
+    } else {
+      updated[lastIndex - 1] = neighbor.copyWith(y: endPoint.y);
     }
   }
 
-  if (insertedExtra) {
-    workingFixedSegments = _reindexFixedSegments(updated, workingFixedSegments);
-  }
+  updated = List<DrawPoint>.from(
+    _applyFixedSegmentsToPoints(updated, workingFixedSegments),
+  );
 
   if (startBinding == null && endBinding == null) {
     final merged = _mergeFixedSegmentWithEndCollinear(
@@ -895,8 +716,6 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       points: worldPoints,
       binding: startBinding,
       elementsById: elementsById,
-      fixedSegments: updatedFixedSegments,
-      space: space,
       directionPadding: baselinePadding.start,
     );
     worldPoints = adjustment.points;
@@ -913,8 +732,6 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       points: worldPoints,
       binding: endBinding,
       elementsById: elementsById,
-      fixedSegments: updatedFixedSegments,
-      space: space,
       directionPadding: baselinePadding.end,
     );
     worldPoints = adjustment.points;
@@ -1016,7 +833,6 @@ _PerpendicularAdjustment? _alignStartSegmentLength({
   required List<DrawPoint> points,
   required ElbowHeading heading,
   required double? desiredLength,
-  required ({Set<int> pinnedX, Set<int> pinnedY}) pinnedAxes,
 }) {
   if (points.length < 2 ||
       desiredLength == null ||
@@ -1025,12 +841,6 @@ _PerpendicularAdjustment? _alignStartSegmentLength({
     return null;
   }
   final desiredHorizontal = heading.isHorizontal;
-  final directionPinned = desiredHorizontal
-      ? pinnedAxes.pinnedX.contains(1)
-      : pinnedAxes.pinnedY.contains(1);
-  if (directionPinned) {
-    return null;
-  }
   if (points.length > 2) {
     final nextHorizontal = _isHorizontal(points[1], points[2]);
     if (nextHorizontal != desiredHorizontal) {
@@ -1061,7 +871,6 @@ _PerpendicularAdjustment? _alignEndSegmentLength({
   required List<DrawPoint> points,
   required ElbowHeading heading,
   required double? desiredLength,
-  required ({Set<int> pinnedX, Set<int> pinnedY}) pinnedAxes,
 }) {
   if (points.length < 2 ||
       desiredLength == null ||
@@ -1071,12 +880,6 @@ _PerpendicularAdjustment? _alignEndSegmentLength({
   }
   final desiredHorizontal = heading.isHorizontal;
   final neighborIndex = points.length - 2;
-  final directionPinned = desiredHorizontal
-      ? pinnedAxes.pinnedX.contains(neighborIndex)
-      : pinnedAxes.pinnedY.contains(neighborIndex);
-  if (directionPinned) {
-    return null;
-  }
   if (points.length > 2) {
     final prev = points[neighborIndex - 1];
     final prevHorizontal = _isHorizontal(prev, points[neighborIndex]);
@@ -1108,8 +911,6 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   required List<DrawPoint> points,
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
-  required List<ElbowFixedSegment> fixedSegments,
-  required ElementSpace space,
   required double? directionPadding,
 }) {
   if (points.length < 2) {
@@ -1141,23 +942,11 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
       ? (neighbor.y - start.y).abs() <= _dedupThreshold
       : (neighbor.x - start.x).abs() <= _dedupThreshold;
   final directionOk = _directionMatches(start, neighbor, heading);
-  final pinnedAxes = _resolvePinnedAxes(
-    fixedSegments: fixedSegments,
-    space: space,
-    pointCount: points.length,
-  );
-  final pinnedCoordinate = desiredHorizontal
-      ? pinnedAxes.pinnedY.contains(1)
-      : pinnedAxes.pinnedX.contains(1);
-  final directionPinned = desiredHorizontal
-      ? pinnedAxes.pinnedX.contains(1)
-      : pinnedAxes.pinnedY.contains(1);
   if (aligned && directionOk) {
     final adjusted = _alignStartSegmentLength(
       points: points,
       heading: heading,
       desiredLength: directionPadding,
-      pinnedAxes: pinnedAxes,
     );
     if (adjusted != null) {
       return adjusted;
@@ -1169,7 +958,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     );
   }
 
-  if (aligned && !directionOk && !directionPinned) {
+  if (aligned && !directionOk) {
     final updated = List<DrawPoint>.from(points);
     updated[1] = _applyStartDirection(
       neighbor,
@@ -1186,10 +975,9 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
 
   final nextHorizontal =
       points.length > 2 ? _isHorizontal(neighbor, points[2]) : desiredHorizontal;
-  final conflict = nextHorizontal == desiredHorizontal || pinnedCoordinate;
-  final canShiftDirection = !directionPinned &&
-      (points.length <= 2 ||
-          (desiredHorizontal ? nextHorizontal : !nextHorizontal));
+  final conflict = nextHorizontal == desiredHorizontal;
+  final canShiftDirection =
+      points.length <= 2 || (desiredHorizontal ? nextHorizontal : !nextHorizontal);
 
   if (!conflict && (directionOk || canShiftDirection)) {
     var updatedNeighbor = neighbor;
@@ -1219,7 +1007,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     points: points,
     heading: heading,
     neighbor: neighbor,
-    allowExtend: !directionPinned,
+    allowExtend: true,
     padding: resolvedPadding,
   );
 }
@@ -1228,8 +1016,6 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   required List<DrawPoint> points,
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
-  required List<ElbowFixedSegment> fixedSegments,
-  required ElementSpace space,
   required double? directionPadding,
 }) {
   if (points.length < 2) {
@@ -1264,23 +1050,11 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
       : (neighbor.x - endPoint.x).abs() <= _dedupThreshold;
   final requiredHeading = heading.opposite;
   final directionOk = _directionMatches(neighbor, endPoint, requiredHeading);
-  final pinnedAxes = _resolvePinnedAxes(
-    fixedSegments: fixedSegments,
-    space: space,
-    pointCount: points.length,
-  );
-  final pinnedCoordinate = desiredHorizontal
-      ? pinnedAxes.pinnedY.contains(neighborIndex)
-      : pinnedAxes.pinnedX.contains(neighborIndex);
-  final directionPinned = desiredHorizontal
-      ? pinnedAxes.pinnedX.contains(neighborIndex)
-      : pinnedAxes.pinnedY.contains(neighborIndex);
   if (aligned && directionOk) {
     final adjusted = _alignEndSegmentLength(
       points: points,
       heading: heading,
       desiredLength: directionPadding,
-      pinnedAxes: pinnedAxes,
     );
     if (adjusted != null) {
       return adjusted;
@@ -1292,7 +1066,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
     );
   }
 
-  if (aligned && !directionOk && !directionPinned) {
+  if (aligned && !directionOk) {
     final updated = List<DrawPoint>.from(points);
     updated[neighborIndex] = _applyEndDirection(
       neighbor,
@@ -1310,10 +1084,9 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final prevHorizontal = points.length > 2
       ? _isHorizontal(points[neighborIndex - 1], neighbor)
       : desiredHorizontal;
-  final conflict = prevHorizontal == desiredHorizontal || pinnedCoordinate;
-  final canShiftDirection = !directionPinned &&
-      (points.length <= 2 ||
-          (desiredHorizontal ? prevHorizontal : !prevHorizontal));
+  final conflict = prevHorizontal == desiredHorizontal;
+  final canShiftDirection =
+      points.length <= 2 || (desiredHorizontal ? prevHorizontal : !prevHorizontal);
 
   if (!conflict && (directionOk || canShiftDirection)) {
     var updatedNeighbor = neighbor;
@@ -1343,7 +1116,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
     points: points,
     heading: heading,
     neighbor: neighbor,
-    allowExtend: !directionPinned,
+    allowExtend: true,
     padding: resolvedPadding,
   );
 }
@@ -1365,64 +1138,28 @@ ElbowHeading? _resolveBoundHeading({
   return ElbowGeometry.headingForPointOnBounds(bounds, anchor ?? point);
 }
 
-({Set<int> pinnedX, Set<int> pinnedY}) _resolvePinnedAxes({
-  required List<ElbowFixedSegment> fixedSegments,
-  required ElementSpace space,
-  required int pointCount,
-}) {
-  final pinnedX = <int>{};
-  final pinnedY = <int>{};
-  for (final segment in fixedSegments) {
-    final startIndex = segment.index - 1;
-    final endIndex = segment.index;
-    if (startIndex < 0 ||
-        endIndex < 0 ||
-        startIndex >= pointCount ||
-        endIndex >= pointCount) {
-      continue;
-    }
-    final worldStart = space.toWorld(segment.start);
-    final worldEnd = space.toWorld(segment.end);
-    final isHorizontal = _isHorizontal(worldStart, worldEnd);
-    if (isHorizontal) {
-      pinnedY
-        ..add(startIndex)
-        ..add(endIndex);
-    } else {
-      pinnedX
-        ..add(startIndex)
-        ..add(endIndex);
-    }
-  }
-  return (pinnedX: pinnedX, pinnedY: pinnedY);
-}
-
 int? _resolveBaselineSegmentIndex({
   required List<DrawPoint> baseline,
   required bool isHorizontal,
-  required double axisValue,
   required int preferredIndex,
   Set<int> usedIndices = const {},
 }) {
   if (baseline.length < 2) {
     return null;
   }
+  final maxIndex = baseline.length - 1;
+  const minIndex = 2;
   int? bestIndex;
-  var bestAxisDelta = double.infinity;
   var bestIndexDelta = double.infinity;
-  for (var i = 1; i < baseline.length; i++) {
+  for (var i = minIndex; i < maxIndex; i++) {
     if (usedIndices.contains(i)) {
       continue;
     }
     if (_isHorizontal(baseline[i - 1], baseline[i]) != isHorizontal) {
       continue;
     }
-    final axisCoord = isHorizontal ? baseline[i].y : baseline[i].x;
-    final axisDelta = (axisCoord - axisValue).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
-    if (axisDelta < bestAxisDelta ||
-        (axisDelta == bestAxisDelta && indexDelta < bestIndexDelta)) {
-      bestAxisDelta = axisDelta;
+    if (indexDelta < bestIndexDelta) {
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
@@ -1444,11 +1181,9 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
 
   for (final segment in fixedSegments) {
     final isHorizontal = _isHorizontal(segment.start, segment.end);
-    final axisValue = isHorizontal ? segment.start.y : segment.start.x;
     final index = _resolveBaselineSegmentIndex(
       baseline: updated,
       isHorizontal: isHorizontal,
-      axisValue: axisValue,
       preferredIndex: segment.index,
       usedIndices: usedIndices,
     );
@@ -1458,13 +1193,6 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
       continue;
     }
     usedIndices.add(index);
-    if (isHorizontal) {
-      updated[index - 1] = updated[index - 1].copyWith(y: axisValue);
-      updated[index] = updated[index].copyWith(y: axisValue);
-    } else {
-      updated[index - 1] = updated[index - 1].copyWith(x: axisValue);
-      updated[index] = updated[index].copyWith(x: axisValue);
-    }
     mappedSegments.add(
       ElbowFixedSegment(
         index: index,
@@ -1788,11 +1516,19 @@ Set<DrawPoint> _collectPinnedPoints({
   if (points.isEmpty) {
     return const <DrawPoint>{};
   }
-  return {
+  final pinned = <DrawPoint>{
     points.first,
     points.last,
-    for (final segment in fixedSegments) segment.start,
-    for (final segment in fixedSegments) segment.end,
   };
+  for (final segment in fixedSegments) {
+    final index = segment.index;
+    if (index <= 0 || index >= points.length) {
+      continue;
+    }
+    pinned
+      ..add(points[index - 1])
+      ..add(points[index]);
+  }
+  return pinned;
 }
 

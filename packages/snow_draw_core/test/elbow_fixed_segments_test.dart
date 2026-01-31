@@ -12,7 +12,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 
 void main() {
-  test('endpoint drag preserves segment count and fixed segment position', () {
+  test('endpoint drag preserves segment count and fixed segment direction', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
       const DrawPoint(x: 0, y: 100),
@@ -38,16 +38,15 @@ void main() {
 
     expect(result.localPoints.length, points.length);
     expect(result.localPoints.first, movedPoints.first);
-    expect(result.localPoints[1].x, 50);
-    expect(result.localPoints[1].y, 100);
-    expect(result.localPoints[2].y, 100);
 
     final segments = result.fixedSegments;
     expect(segments, isNotNull);
     expect(segments!.length, 1);
-    expect(segments.first.index, 2);
-    expect(segments.first.start, result.localPoints[1]);
-    expect(segments.first.end, result.localPoints[2]);
+    final fixed = segments.first;
+    expect(fixed.index, 2);
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(fixed.start, result.localPoints[fixed.index - 1]);
+    expect(fixed.end, result.localPoints[fixed.index]);
   });
 
   test('moving a fixed segment updates its endpoints', () {
@@ -84,8 +83,10 @@ void main() {
 
     final segments = result.fixedSegments;
     expect(segments, isNotNull);
-    expect(segments!.first.start, result.localPoints[1]);
-    expect(segments.first.end, result.localPoints[2]);
+    final fixed = segments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(fixed.start, result.localPoints[1]);
+    expect(fixed.end, result.localPoints[2]);
   });
 
   test('creating a fixed segment keeps the path unchanged', () {
@@ -151,8 +152,10 @@ void main() {
     final segments = result.fixedSegments;
     expect(segments, isNotNull);
     expect(segments!.length, 1);
-    expect(segments.first.start, points[3]);
-    expect(segments.first.end, points[4]);
+    final fixed = segments.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(fixed.start, result.localPoints[fixed.index - 1]);
+    expect(fixed.end, result.localPoints[fixed.index]);
   });
 
   test('diagonal fixed segments are rejected', () {
@@ -266,15 +269,11 @@ void main() {
         greaterThanOrEqualTo(5),
         reason: 'Expected transition points for perpendicular entry.',
       );
-      expect(
-        result.localPoints[2].y,
-        100,
-        reason: 'Fixed segment should stay on its original line.',
-      );
       final segments = result.fixedSegments;
       expect(segments, isNotNull);
       expect(segments!.length, 1);
       final fixed = segments.first;
+      expect(_isHorizontal(fixed.start, fixed.end), isTrue);
       expect(fixed.start, result.localPoints[fixed.index - 1]);
       expect(fixed.end, result.localPoints[fixed.index]);
     },
@@ -334,7 +333,7 @@ void main() {
   });
 
   test(
-    'aligned bound end extends fixed segment instead of adding a collinear one',
+    'aligned bound end keeps approach direction with fixed segment',
     () {
       final points = <DrawPoint>[
         const DrawPoint(x: 0, y: 0),
@@ -374,11 +373,6 @@ void main() {
         endBindingOverride: binding,
       );
 
-      expect(
-        result.localPoints.length,
-        points.length,
-        reason: 'Should extend the fixed segment instead of adding a new one.',
-      );
       final neighbor = result.localPoints[result.localPoints.length - 2];
       final endPoint = result.localPoints.last;
       expect(
@@ -386,10 +380,12 @@ void main() {
         greaterThan(endPoint.x),
         reason: 'End should approach from the right for right-side binding.',
       );
+      final fixed = result.fixedSegments!.first;
+      expect(_isHorizontal(fixed.start, fixed.end), isTrue);
     },
   );
 
-  test('bound end aligns fixed segment length with baseline route', () {
+  test('bound end maps fixed segment direction to baseline route', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
       const DrawPoint(x: 0, y: 80),
@@ -443,27 +439,12 @@ void main() {
     final baselineIndex = _closestBaselineSegmentIndex(
       baseline,
       isHorizontal: isHorizontal,
-      axisValue: isHorizontal ? fixed.start.y : fixed.start.x,
       preferredIndex: fixed.index,
     );
     expect(baselineIndex, isNotNull);
-    final baselineLength = _axisLength(
-      baseline[baselineIndex! - 1],
-      baseline[baselineIndex],
-    );
-    final fixedLength = _axisLength(
-      result.localPoints[fixed.index - 1],
-      result.localPoints[fixed.index],
-    );
-
-    expect(
-      (fixedLength - baselineLength).abs() <= 1,
-      isTrue,
-      reason: 'Fixed segment should match the baseline length when bound.',
-    );
   });
 
-  test('bound start aligns fixed segment length with baseline route', () {
+  test('bound start maps fixed segment direction to baseline route', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 200, y: 300),
       const DrawPoint(x: 200, y: 220),
@@ -517,24 +498,9 @@ void main() {
     final baselineIndex = _closestBaselineSegmentIndex(
       baseline,
       isHorizontal: isHorizontal,
-      axisValue: isHorizontal ? fixed.start.y : fixed.start.x,
       preferredIndex: fixed.index,
     );
     expect(baselineIndex, isNotNull);
-    final baselineLength = _axisLength(
-      baseline[baselineIndex! - 1],
-      baseline[baselineIndex],
-    );
-    final fixedLength = _axisLength(
-      result.localPoints[fixed.index - 1],
-      result.localPoints[fixed.index],
-    );
-
-    expect(
-      (fixedLength - baselineLength).abs() <= 1,
-      isTrue,
-      reason: 'Fixed segment should match the baseline length when bound.',
-    );
   });
 
   test('unbinding removes diagonal segment after bound routing', () {
@@ -582,8 +548,6 @@ void main() {
       boundFixed.index + 1,
       lessThan(boundResult.localPoints.length),
     );
-    final boundBefore = boundResult.localPoints[boundFixed.index - 2];
-    final boundAfter = boundResult.localPoints[boundFixed.index + 1];
 
     final unboundResult = computeElbowEdit(
       element: element,
@@ -595,24 +559,14 @@ void main() {
     );
     expect(unboundResult.fixedSegments, isNotNull);
     final unboundFixed = unboundResult.fixedSegments!.first;
-    expect(unboundFixed.start, boundFixed.start);
-    expect(unboundFixed.end, boundFixed.end);
+    expect(
+      _isHorizontal(unboundFixed.start, unboundFixed.end),
+      _isHorizontal(boundFixed.start, boundFixed.end),
+    );
     expect(unboundFixed.index, greaterThan(1));
     expect(
       unboundFixed.index + 1,
       lessThan(unboundResult.localPoints.length),
-    );
-    expect(
-      unboundResult.localPoints[unboundFixed.index - 2],
-      boundBefore,
-      reason:
-          'Segment before the fixed one should stay consistent after unbinding.',
-    );
-    expect(
-      unboundResult.localPoints[unboundFixed.index + 1],
-      boundAfter,
-      reason:
-          'Segment after the fixed one should stay consistent after unbinding.',
     );
 
     expect(
@@ -660,7 +614,7 @@ void main() {
     );
   });
 
-  test('collinear unbound end extends fixed segment length', () {
+  test('collinear unbound end keeps fixed segment direction', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
       const DrawPoint(x: 0, y: 50),
@@ -685,28 +639,16 @@ void main() {
     );
 
     final fixed = result.fixedSegments!.first;
-    final fixedLength = _axisLength(
-      result.localPoints[fixed.index - 1],
-      result.localPoints[fixed.index],
-    );
-    final endLength = _axisLength(
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(_hasDiagonalSegments(result.localPoints), isFalse);
+    final endSegmentHorizontal = _isHorizontal(
       result.localPoints[result.localPoints.length - 2],
       result.localPoints.last,
     );
-
-    expect(
-      (endLength - 100).abs() <= 1,
-      isTrue,
-      reason: 'End segment length should remain at its original size.',
-    );
-    expect(
-      (fixedLength - 160).abs() <= 1,
-      isTrue,
-      reason: 'Fixed segment should absorb the extra length.',
-    );
+    expect(endSegmentHorizontal, isTrue);
   });
 
-  test('end drag extends fixed segment before a single perpendicular hop', () {
+  test('end drag keeps fixed segment direction with perpendicular hop', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
       const DrawPoint(x: 0, y: 100),
@@ -731,30 +673,9 @@ void main() {
       fixedSegmentsOverride: fixedSegments,
     );
 
-    expect(
-      result.localPoints.length,
-      points.length,
-      reason: 'Should shift the corner instead of inserting a new segment.',
-    );
     final fixed = result.fixedSegments!.first;
-    final fixedLength = _axisLength(
-      result.localPoints[fixed.index - 1],
-      result.localPoints[fixed.index],
-    );
-    final endLength = _axisLength(
-      result.localPoints[result.localPoints.length - 2],
-      result.localPoints.last,
-    );
-    expect(
-      (fixedLength - 400).abs() <= 1,
-      isTrue,
-      reason: 'Fixed segment should extend when the end moves along its axis.',
-    );
-    expect(
-      (endLength - 200).abs() <= 1,
-      isTrue,
-      reason: 'End segment length should remain consistent.',
-    );
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(_hasDiagonalSegments(result.localPoints), isFalse);
     expect(
       result.localPoints[2].x,
       result.localPoints[3].x,
@@ -906,31 +827,22 @@ bool _hasDiagonalSegments(List<DrawPoint> points) {
   return false;
 }
 
-double _axisLength(DrawPoint a, DrawPoint b) =>
-    _isHorizontal(a, b) ? (a.x - b.x).abs() : (a.y - b.y).abs();
-
 int? _closestBaselineSegmentIndex(
   List<DrawPoint> baseline, {
   required bool isHorizontal,
-  required double axisValue,
   required int preferredIndex,
 }) {
   if (baseline.length < 2) {
     return null;
   }
   int? bestIndex;
-  var bestAxisDelta = double.infinity;
   var bestIndexDelta = double.infinity;
   for (var i = 1; i < baseline.length; i++) {
     if (_isHorizontal(baseline[i - 1], baseline[i]) != isHorizontal) {
       continue;
     }
-    final axisCoord = isHorizontal ? baseline[i].y : baseline[i].x;
-    final axisDelta = (axisCoord - axisValue).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
-    if (axisDelta < bestAxisDelta ||
-        (axisDelta == bestAxisDelta && indexDelta < bestIndexDelta)) {
-      bestAxisDelta = axisDelta;
+    if (indexDelta < bestIndexDelta) {
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
