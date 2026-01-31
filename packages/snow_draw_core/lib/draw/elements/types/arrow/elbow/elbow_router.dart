@@ -11,6 +11,10 @@ import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
+import 'elbow_geometry.dart';
+import 'elbow_heading.dart';
+
+export 'elbow_heading.dart';
 
 const double _basePadding = 42;
 const double _dedupThreshold = 1;
@@ -19,9 +23,15 @@ const double _maxPosition = 1000000;
 const double _donglePointPadding = 2;
 const double _elbowNoArrowheadGapMultiplier = 2;
 const double _elementSidePadding = 8;
-const _headingEpsilon = 1e-6;
 const _intersectionEpsilon = 1e-6;
 
+/// Elbow routing overview:
+/// 1) Resolve bindings into concrete endpoints + headings.
+/// 2) Build padded obstacle bounds around bound elements.
+/// 3) Attempt a direct orthogonal route when aligned.
+/// 4) Route via a sparse grid (A*) when detours are needed.
+/// 5) Post-process to keep only orthogonal corner points.
+/// Routing result in world space (with resolved endpoints).
 @immutable
 final class ElbowRouteResult {
   const ElbowRouteResult({
@@ -35,6 +45,7 @@ final class ElbowRouteResult {
   final DrawPoint endPoint;
 }
 
+/// Local + world points for an element-routed elbow arrow.
 @immutable
 final class ElbowRoutedPoints {
   const ElbowRoutedPoints({
@@ -46,31 +57,6 @@ final class ElbowRoutedPoints {
   final List<DrawPoint> worldPoints;
 }
 
-enum ElbowHeading { right, down, left, up }
-
-extension ElbowHeadingX on ElbowHeading {
-  int get dx => switch (this) {
-    ElbowHeading.right => 1,
-    ElbowHeading.left => -1,
-    _ => 0,
-  };
-  int get dy => switch (this) {
-    ElbowHeading.down => 1,
-    ElbowHeading.up => -1,
-    _ => 0,
-  };
-
-  bool get isHorizontal =>
-      this == ElbowHeading.right || this == ElbowHeading.left;
-}
-
-ElbowHeading _flipHeading(ElbowHeading heading) => switch (heading) {
-  ElbowHeading.right => ElbowHeading.left,
-  ElbowHeading.left => ElbowHeading.right,
-  ElbowHeading.up => ElbowHeading.down,
-  ElbowHeading.down => ElbowHeading.up,
-};
-
 ElbowHeading _vectorToHeading(double dx, double dy) {
   final absX = dx.abs();
   final absY = dy.abs();
@@ -78,42 +64,6 @@ ElbowHeading _vectorToHeading(double dx, double dy) {
     return dx >= 0 ? ElbowHeading.right : ElbowHeading.left;
   }
   return dy >= 0 ? ElbowHeading.down : ElbowHeading.up;
-}
-
-ElbowHeading _headingForPointOnBounds(DrawRect bounds, DrawPoint point) {
-  final center = bounds.center;
-  const scale = 2.0;
-  final topLeft = _scalePointFromOrigin(
-    DrawPoint(x: bounds.minX, y: bounds.minY),
-    center,
-    scale,
-  );
-  final topRight = _scalePointFromOrigin(
-    DrawPoint(x: bounds.maxX, y: bounds.minY),
-    center,
-    scale,
-  );
-  final bottomLeft = _scalePointFromOrigin(
-    DrawPoint(x: bounds.minX, y: bounds.maxY),
-    center,
-    scale,
-  );
-  final bottomRight = _scalePointFromOrigin(
-    DrawPoint(x: bounds.maxX, y: bounds.maxY),
-    center,
-    scale,
-  );
-
-  if (_triangleContainsPoint(topLeft, topRight, center, point)) {
-    return ElbowHeading.up;
-  }
-  if (_triangleContainsPoint(topRight, bottomRight, center, point)) {
-    return ElbowHeading.right;
-  }
-  if (_triangleContainsPoint(bottomRight, bottomLeft, center, point)) {
-    return ElbowHeading.down;
-  }
-  return ElbowHeading.left;
 }
 
 @immutable
@@ -184,7 +134,7 @@ ElbowHeading _resolveEndpointHeading({
   if (elementBounds == null) {
     return fallback;
   }
-  return _headingForPointOnBounds(elementBounds, anchor ?? point);
+  return ElbowGeometry.headingForPointOnBounds(elementBounds, anchor ?? point);
 }
 
 @immutable
@@ -225,6 +175,7 @@ _ResolvedEndpoints _resolveRouteEndpoints({
   required ArrowheadStyle startArrowhead,
   required ArrowheadStyle endArrowhead,
 }) {
+  // Step 1: resolve bindings, arrowhead gaps, and endpoint headings.
   ElbowHeading _resolveHeadingFor(
     _EndpointInfo info,
     ElbowHeading fallback,
@@ -791,6 +742,7 @@ _ObstacleLayout _buildObstacleLayout({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
 }) {
+  // Step 2: build padded obstacle bounds and dongle points for routing.
   final elbowBounds = _elbowBoundsForLayout(start: start, end: end);
   final baseBounds = _baseBoundsForLayout(
     boundsOverlap: elbowBounds.boundsOverlap,
@@ -863,6 +815,7 @@ List<DrawPoint> _routeViaGrid({
   required DrawRect commonBounds,
   required List<DrawRect> obstacles,
 }) {
+  // Step 4: route through a sparse grid using A* with bend penalties.
   final grid = _buildGrid(
     obstacles: obstacles,
     start: startDongle,
@@ -900,6 +853,7 @@ List<DrawPoint> _finalizeRoutedPath({
   required List<DrawPoint> points,
   required ElbowHeading startHeading,
 }) {
+  // Step 5: enforce orthogonality, remove tiny segments, and clamp.
   final orthogonalized = _ensureOrthogonalPath(
     points: points,
     startHeading: startHeading,
@@ -918,6 +872,7 @@ final class _ElbowRoutePlanner {
   final _ResolvedEndpoint end;
 
   List<DrawPoint> route() {
+    // Step 0: if nothing is bound, prefer the simple fallback path.
     if (_usesFallbackPath) {
       return _fallbackPath(
         start: start.point,
@@ -926,12 +881,14 @@ final class _ElbowRoutePlanner {
       );
     }
 
+    // Step 2: derive obstacles and try the shortest possible route first.
     final layout = _buildObstacleLayout(start: start, end: end);
     final direct = _tryDirectRoute(layout);
     if (direct != null) {
       return direct;
     }
 
+    // Step 3/4: route around obstacles via the grid, then clean up.
     final routed = _routeViaGrid(
       start: start,
       end: end,
@@ -968,6 +925,10 @@ ElbowRouteResult _buildRouteResult({
   endPoint: endPoint,
 );
 
+/// Routes an elbow arrow in world space.
+///
+/// The returned points are orthogonal, avoid bound element obstacles, and
+/// respect arrowhead spacing for bound endpoints.
 ElbowRouteResult routeElbowArrow({
   required DrawPoint start,
   required DrawPoint end,
@@ -977,6 +938,7 @@ ElbowRouteResult routeElbowArrow({
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
+  // Step 1: resolve bindings/headings into concrete endpoints.
   final endpoints = _resolveRouteEndpoints(
     start: start,
     end: end,
@@ -991,6 +953,7 @@ ElbowRouteResult routeElbowArrow({
   final startPoint = startEndpoint.point;
   final endPoint = endEndpoint.point;
 
+  // Steps 2-5: plan + route + post-process the elbow path.
   final routed = _ElbowRoutePlanner(
     start: startEndpoint,
     end: endEndpoint,
@@ -1003,49 +966,7 @@ ElbowRouteResult routeElbowArrow({
   );
 }
 
-DrawPoint _scalePointFromOrigin(
-  DrawPoint point,
-  DrawPoint origin,
-  double scale,
-) => DrawPoint(
-  x: origin.x + (point.x - origin.x) * scale,
-  y: origin.y + (point.y - origin.y) * scale,
-);
-
-DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) =>
-    DrawPoint(x: to.x - from.x, y: to.y - from.y);
-
-double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
-
-bool _triangleContainsPoint(
-  DrawPoint a,
-  DrawPoint b,
-  DrawPoint c,
-  DrawPoint point,
-) {
-  final v0 = _vectorFromPoints(c, a);
-  final v1 = _vectorFromPoints(b, a);
-  final v2 = _vectorFromPoints(point, a);
-
-  final dot00 = _dotProduct(v0, v0);
-  final dot01 = _dotProduct(v0, v1);
-  final dot02 = _dotProduct(v0, v2);
-  final dot11 = _dotProduct(v1, v1);
-  final dot12 = _dotProduct(v1, v2);
-
-  final denom = dot00 * dot11 - dot01 * dot01;
-  if (denom.abs() <= _headingEpsilon) {
-    return false;
-  }
-  final invDenom = 1 / denom;
-  final u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-  final v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-  return u >= -_headingEpsilon &&
-      v >= -_headingEpsilon &&
-      u + v <= 1 + _headingEpsilon;
-}
-
+/// Routes an elbow arrow for an element and returns both local + world points.
 ElbowRoutedPoints routeElbowArrowForElement({
   required ElementState element,
   required ArrowData data,
@@ -1122,7 +1043,7 @@ bool _segmentRespectsEndpointConstraints({
   if (startConstrained && segmentHeading != startHeading) {
     return false;
   }
-  if (endConstrained && segmentHeading != _flipHeading(endHeading)) {
+  if (endConstrained && segmentHeading != endHeading.opposite) {
     return false;
   }
   return true;
@@ -1426,6 +1347,7 @@ _Grid _buildGrid({
   required ElbowHeading endHeading,
   required DrawRect bounds,
 }) {
+  // Build a sparse grid from obstacle edges + endpoints for A* routing.
   final xs = <double>{};
   final ys = <double>{};
 
@@ -1503,7 +1425,7 @@ bool _canTraverseNeighbor({
     return false;
   }
 
-  if (neighborHeading == _flipHeading(previousHeading)) {
+  if (neighborHeading == previousHeading.opposite) {
     return false;
   }
 
@@ -1555,11 +1477,12 @@ List<_GridNode> _astar({
   required bool endConstrained,
   required List<DrawRect> obstacles,
 }) {
+  // A* with bend penalties to discourage unnecessary elbows.
   final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
 
   final bendPenalty = _BendPenalty(_manhattanDistance(start.pos, end.pos));
-  final startHeadingFlip = _flipHeading(startHeading);
-  final endHeadingFlip = _flipHeading(endHeading);
+  final startHeadingFlip = startHeading.opposite;
+  final endHeadingFlip = endHeading.opposite;
 
   while (openSet.isNotEmpty) {
     final current = openSet.pop();
@@ -1731,6 +1654,7 @@ List<DrawPoint> _ensureOrthogonalPath({
   required List<DrawPoint> points,
   required ElbowHeading startHeading,
 }) {
+  // Insert a midpoint when a diagonal would appear between consecutive points.
   if (points.length < 2) {
     return points;
   }

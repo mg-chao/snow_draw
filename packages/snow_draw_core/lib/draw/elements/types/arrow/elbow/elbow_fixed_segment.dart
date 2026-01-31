@@ -2,6 +2,9 @@ import 'package:meta/meta.dart';
 
 import '../../../../types/draw_point.dart';
 
+/// A fixed (pinned) segment of an elbow path.
+///
+/// [index] points to the segment's start point in the path list.
 @immutable
 final class ElbowFixedSegment {
   const ElbowFixedSegment({
