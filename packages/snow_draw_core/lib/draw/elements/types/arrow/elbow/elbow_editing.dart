@@ -58,74 +58,153 @@ final class _PerpendicularAdjustment {
   final bool inserted;
 }
 
-ElbowEditResult computeElbowEdit({
-  required ElementState element,
-  required ArrowData data,
-  required Map<String, ElementState> elementsById,
-  List<DrawPoint>? localPointsOverride,
-  List<ElbowFixedSegment>? fixedSegmentsOverride,
-  ArrowBinding? startBindingOverride,
-  ArrowBinding? endBindingOverride,
-}) {
-  // Step 1: resolve the base local points from the element and incoming edits.
-  final basePoints = _resolveLocalPoints(element, data);
-  final incomingPoints = localPointsOverride ?? basePoints;
-  if (incomingPoints.length < 2) {
-    return ElbowEditResult(
-      localPoints: incomingPoints,
-      fixedSegments: null,
-      startIsSpecial: data.startIsSpecial,
-      endIsSpecial: data.endIsSpecial,
-    );
+@immutable
+final class _ElbowEditInputs {
+  const _ElbowEditInputs({
+    required this.element,
+    required this.data,
+    required this.elementsById,
+    required this.basePoints,
+    required this.incomingPoints,
+    required this.previousFixedSegments,
+    required this.fixedSegments,
+    required this.startBinding,
+    required this.endBinding,
+    required this.pointsChanged,
+    required this.fixedSegmentsChanged,
+    required this.releaseRequested,
+  });
+
+  final ElementState element;
+  final ArrowData data;
+  final Map<String, ElementState> elementsById;
+  final List<DrawPoint> basePoints;
+  final List<DrawPoint> incomingPoints;
+  final List<ElbowFixedSegment> previousFixedSegments;
+  final List<ElbowFixedSegment> fixedSegments;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final bool pointsChanged;
+  final bool fixedSegmentsChanged;
+  final bool releaseRequested;
+
+  bool get hasEnoughPoints => incomingPoints.length >= 2;
+}
+
+final class _ElbowEditPipeline {
+  _ElbowEditPipeline({
+    required this.element,
+    required this.data,
+    required this.elementsById,
+    this.localPointsOverride,
+    this.fixedSegmentsOverride,
+    this.startBindingOverride,
+    this.endBindingOverride,
+  });
+
+  final ElementState element;
+  final ArrowData data;
+  final Map<String, ElementState> elementsById;
+  final List<DrawPoint>? localPointsOverride;
+  final List<ElbowFixedSegment>? fixedSegmentsOverride;
+  final ArrowBinding? startBindingOverride;
+  final ArrowBinding? endBindingOverride;
+
+  ElbowEditResult run() {
+    final inputs = _resolveInputs();
+    if (!inputs.hasEnoughPoints) {
+      return _buildResult(
+        data: inputs.data,
+        points: inputs.incomingPoints,
+        fixedSegments: null,
+      );
+    }
+
+    if (inputs.fixedSegments.isEmpty) {
+      return _routeWithoutFixedSegments(inputs);
+    }
+
+    if (inputs.releaseRequested) {
+      return _handleFixedSegmentReleaseFlow(inputs);
+    }
+
+    if (inputs.pointsChanged && !inputs.fixedSegmentsChanged) {
+      return _handleEndpointDragFlow(inputs);
+    }
+
+    return _applyFixedSegmentsFlow(inputs);
   }
 
-  // Step 2: sanitize fixed segments and resolve binding overrides.
-  final previousFixedSegments = _sanitizeFixedSegments(
-    data.fixedSegments,
-    basePoints.length,
-  );
-  final fixedSegments = _sanitizeFixedSegments(
-    fixedSegmentsOverride ?? data.fixedSegments,
-    incomingPoints.length,
-  );
-  final startBinding = startBindingOverride ?? data.startBinding;
-  final endBinding = endBindingOverride ?? data.endBinding;
+  _ElbowEditInputs _resolveInputs() {
+    // Step 1: resolve the base local points from the element and incoming edits.
+    final basePoints = _resolveLocalPoints(element, data);
+    final incomingPoints = localPointsOverride ?? basePoints;
 
-  // Step 3: no fixed segments means a fresh route is required.
-  if (fixedSegments.isEmpty) {
-    final routed = routeElbowArrowForElement(
-      element: element,
-      data: data.copyWith(startBinding: startBinding, endBinding: endBinding),
-      elementsById: elementsById,
-      startOverride: incomingPoints.first,
-      endOverride: incomingPoints.last,
+    // Step 2: sanitize fixed segments and resolve binding overrides.
+    final previousFixedSegments = _sanitizeFixedSegments(
+      data.fixedSegments,
+      basePoints.length,
     );
-    return ElbowEditResult(
-      localPoints: routed.localPoints,
-      fixedSegments: null,
-      startIsSpecial: data.startIsSpecial,
-      endIsSpecial: data.endIsSpecial,
+    final fixedSegments = _sanitizeFixedSegments(
+      fixedSegmentsOverride ?? data.fixedSegments,
+      incomingPoints.length,
     );
-  }
+    final startBinding = startBindingOverride ?? data.startBinding;
+    final endBinding = endBindingOverride ?? data.endBinding;
 
-  final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
-  final fixedSegmentsChanged =
-      !_fixedSegmentsEqual(previousFixedSegments, fixedSegments);
-  final releaseRequested =
-      fixedSegmentsOverride != null &&
-      fixedSegments.length < previousFixedSegments.length;
+    final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
+    final fixedSegmentsChanged =
+        !_fixedSegmentsEqual(previousFixedSegments, fixedSegments);
+    final releaseRequested =
+        fixedSegmentsOverride != null &&
+        fixedSegments.length < previousFixedSegments.length;
 
-  // Step 4: fixed segment release (e.g. user unpins a segment).
-  if (releaseRequested) {
-    final updated = _handleFixedSegmentRelease(
+    return _ElbowEditInputs(
       element: element,
       data: data,
       elementsById: elementsById,
-      currentPoints: incomingPoints,
-      previousFixed: previousFixedSegments,
-      remainingFixed: fixedSegments,
+      basePoints: basePoints,
+      incomingPoints: incomingPoints,
+      previousFixedSegments: previousFixedSegments,
+      fixedSegments: fixedSegments,
       startBinding: startBinding,
       endBinding: endBinding,
+      pointsChanged: pointsChanged,
+      fixedSegmentsChanged: fixedSegmentsChanged,
+      releaseRequested: releaseRequested,
+    );
+  }
+
+  ElbowEditResult _routeWithoutFixedSegments(_ElbowEditInputs inputs) {
+    // Step 3: no fixed segments means a fresh route is required.
+    final routed = routeElbowArrowForElement(
+      element: inputs.element,
+      data: inputs.data.copyWith(
+        startBinding: inputs.startBinding,
+        endBinding: inputs.endBinding,
+      ),
+      elementsById: inputs.elementsById,
+      startOverride: inputs.incomingPoints.first,
+      endOverride: inputs.incomingPoints.last,
+    );
+    return _buildResult(
+      data: inputs.data,
+      points: routed.localPoints,
+      fixedSegments: null,
+    );
+  }
+
+  ElbowEditResult _handleFixedSegmentReleaseFlow(_ElbowEditInputs inputs) {
+    // Step 4: fixed segment release (e.g. user unpins a segment).
+    final updated = _handleFixedSegmentRelease(
+      element: inputs.element,
+      data: inputs.data,
+      elementsById: inputs.elementsById,
+      currentPoints: inputs.incomingPoints,
+      previousFixed: inputs.previousFixedSegments,
+      remainingFixed: inputs.fixedSegments,
+      startBinding: inputs.startBinding,
+      endBinding: inputs.endBinding,
     );
     final enforcedPoints =
         _applyFixedSegmentsToPoints(updated.points, updated.fixedSegments);
@@ -138,62 +217,99 @@ ElbowEditResult computeElbowEdit({
     final resultSegments = reindexed.isEmpty
         ? null
         : List<ElbowFixedSegment>.unmodifiable(reindexed);
-    return ElbowEditResult(
-      localPoints: simplified,
+    return _buildResult(
+      data: inputs.data,
+      points: simplified,
       fixedSegments: resultSegments,
-      startIsSpecial: data.startIsSpecial,
-      endIsSpecial: data.endIsSpecial,
     );
   }
 
-  // Step 5: endpoint drag while fixed segments stay pinned.
-  if (pointsChanged && !fixedSegmentsChanged) {
+  ElbowEditResult _handleEndpointDragFlow(_ElbowEditInputs inputs) {
+    // Step 5: endpoint drag while fixed segments stay pinned.
     final updated = _applyEndpointDragWithFixedSegments(
-      element: element,
-      elementsById: elementsById,
-      basePoints: basePoints,
-      incomingPoints: incomingPoints,
-      fixedSegments: fixedSegments,
-      startBinding: startBinding,
-      endBinding: endBinding,
-      startArrowhead: data.startArrowhead,
-      endArrowhead: data.endArrowhead,
+      element: inputs.element,
+      elementsById: inputs.elementsById,
+      basePoints: inputs.basePoints,
+      incomingPoints: inputs.incomingPoints,
+      fixedSegments: inputs.fixedSegments,
+      startBinding: inputs.startBinding,
+      endBinding: inputs.endBinding,
+      startArrowhead: inputs.data.startArrowhead,
+      endArrowhead: inputs.data.endArrowhead,
     );
     final resultSegments = updated.fixedSegments.isEmpty
         ? null
         : List<ElbowFixedSegment>.unmodifiable(updated.fixedSegments);
-    return ElbowEditResult(
-      localPoints: List<DrawPoint>.unmodifiable(updated.points),
+    return _buildResult(
+      data: inputs.data,
+      points: List<DrawPoint>.unmodifiable(updated.points),
       fixedSegments: resultSegments,
-      startIsSpecial: data.startIsSpecial,
-      endIsSpecial: data.endIsSpecial,
     );
   }
 
-  // Step 6: apply fixed segments to updated points if needed.
-  var workingPoints = incomingPoints;
-  if (!pointsChanged && fixedSegmentsChanged) {
-    workingPoints = _applyFixedSegmentsToPoints(basePoints, fixedSegments);
+  ElbowEditResult _applyFixedSegmentsFlow(_ElbowEditInputs inputs) {
+    // Step 6: apply fixed segments to updated points if needed.
+    var workingPoints = inputs.incomingPoints;
+    if (!inputs.pointsChanged && inputs.fixedSegmentsChanged) {
+      workingPoints = _applyFixedSegmentsToPoints(
+        inputs.basePoints,
+        inputs.fixedSegments,
+      );
+    }
+    workingPoints = _applyFixedSegmentsToPoints(
+      workingPoints,
+      inputs.fixedSegments,
+    );
+
+    // Step 7: simplify and reindex segments to keep the path stable.
+    final pinned = _collectPinnedPoints(
+      points: workingPoints,
+      fixedSegments: inputs.fixedSegments,
+    );
+    final simplified = _simplifyPath(workingPoints, pinned: pinned);
+    final reindexed = _reindexFixedSegments(simplified, inputs.fixedSegments);
+    final resultSegments = reindexed.isEmpty
+        ? null
+        : List<ElbowFixedSegment>.unmodifiable(reindexed);
+
+    return _buildResult(
+      data: inputs.data,
+      points: simplified,
+      fixedSegments: resultSegments,
+    );
   }
-  workingPoints = _applyFixedSegmentsToPoints(workingPoints, fixedSegments);
+}
 
-  // Step 7: simplify and reindex segments to keep the path stable.
-  final pinned = _collectPinnedPoints(
-    points: workingPoints,
-    fixedSegments: fixedSegments,
-  );
-  final simplified = _simplifyPath(workingPoints, pinned: pinned);
-  final reindexed = _reindexFixedSegments(simplified, fixedSegments);
-  final resultSegments = reindexed.isEmpty
-      ? null
-      : List<ElbowFixedSegment>.unmodifiable(reindexed);
+ElbowEditResult _buildResult({
+  required ArrowData data,
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment>? fixedSegments,
+}) => ElbowEditResult(
+  localPoints: points,
+  fixedSegments: fixedSegments,
+  startIsSpecial: data.startIsSpecial,
+  endIsSpecial: data.endIsSpecial,
+);
 
-  return ElbowEditResult(
-    localPoints: simplified,
-    fixedSegments: resultSegments,
-    startIsSpecial: data.startIsSpecial,
-    endIsSpecial: data.endIsSpecial,
-  );
+ElbowEditResult computeElbowEdit({
+  required ElementState element,
+  required ArrowData data,
+  required Map<String, ElementState> elementsById,
+  List<DrawPoint>? localPointsOverride,
+  List<ElbowFixedSegment>? fixedSegmentsOverride,
+  ArrowBinding? startBindingOverride,
+  ArrowBinding? endBindingOverride,
+}) {
+  // Route the edit through a step-based pipeline for clarity.
+  return _ElbowEditPipeline(
+    element: element,
+    data: data,
+    elementsById: elementsById,
+    localPointsOverride: localPointsOverride,
+    fixedSegmentsOverride: fixedSegmentsOverride,
+    startBindingOverride: startBindingOverride,
+    endBindingOverride: endBindingOverride,
+  ).run();
 }
 
 /// Transforms fixed segments when the owning element is resized/rotated.
@@ -566,6 +682,91 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
   return List<DrawPoint>.unmodifiable(updated);
 }
 
+List<DrawPoint> _referencePointsForEndpointDrag({
+  required List<DrawPoint> basePoints,
+  required List<DrawPoint> incomingPoints,
+}) =>
+    _pointsEqualExceptEndpoints(basePoints, incomingPoints)
+        ? basePoints
+        : incomingPoints;
+
+_FixedSegmentPathResult _maybeAdoptBaselineRoute({
+  required List<DrawPoint> currentPoints,
+  required List<ElbowFixedSegment> fixedSegments,
+  required List<DrawPoint> baseline,
+}) {
+  final mapped = _applyFixedSegmentsToBaselineRoute(
+    baseline: baseline,
+    fixedSegments: fixedSegments,
+  );
+  if (mapped.fixedSegments.length == fixedSegments.length) {
+    return _FixedSegmentPathResult(
+      points: List<DrawPoint>.from(mapped.points),
+      fixedSegments: mapped.fixedSegments,
+    );
+  }
+  return _FixedSegmentPathResult(
+    points: currentPoints,
+    fixedSegments: fixedSegments,
+  );
+}
+
+List<DrawPoint> _snapUnboundStartNeighbor({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length <= 1) {
+    return points;
+  }
+  final updated = List<DrawPoint>.from(points);
+  final start = updated.first;
+  final neighbor = updated[1];
+  final adjacentFixed = _fixedSegmentIsHorizontal(fixedSegments, 2);
+  if (adjacentFixed != null) {
+    updated[1] = adjacentFixed
+        ? neighbor.copyWith(x: start.x)
+        : neighbor.copyWith(y: start.y);
+    return updated;
+  }
+  final dx = (neighbor.x - start.x).abs();
+  final dy = (neighbor.y - start.y).abs();
+  updated[1] = dx <= dy
+      ? neighbor.copyWith(x: start.x)
+      : neighbor.copyWith(y: start.y);
+  return updated;
+}
+
+List<DrawPoint> _snapUnboundEndNeighbor({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length <= 1) {
+    return points;
+  }
+  final updated = List<DrawPoint>.from(points);
+  final lastIndex = updated.length - 1;
+  final neighbor = updated[lastIndex - 1];
+  final endPoint = updated[lastIndex];
+  final adjacentFixed = _fixedSegmentIsHorizontal(fixedSegments, lastIndex - 1);
+  if (adjacentFixed != null) {
+    updated[lastIndex - 1] = adjacentFixed
+        ? neighbor.copyWith(x: endPoint.x)
+        : neighbor.copyWith(y: endPoint.y);
+    return updated;
+  }
+  final dx = (neighbor.x - endPoint.x).abs();
+  final dy = (neighbor.y - endPoint.y).abs();
+  updated[lastIndex - 1] = dx <= dy
+      ? neighbor.copyWith(x: endPoint.x)
+      : neighbor.copyWith(y: endPoint.y);
+  return updated;
+}
+
+bool _hasBindingTarget(
+  ArrowBinding? binding,
+  Map<String, ElementState> elementsById,
+) => binding != null && elementsById.containsKey(binding.elementId);
+
 _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   required ElementState element,
   required Map<String, ElementState> elementsById,
@@ -584,17 +785,17 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     );
   }
 
-  final referencePoints = _pointsEqualExceptEndpoints(
-        basePoints,
-        incomingPoints,
-      )
-      ? basePoints
-      : incomingPoints;
+  // Step A: select a stable reference path and apply endpoint overrides.
+  final referencePoints = _referencePointsForEndpointDrag(
+    basePoints: basePoints,
+    incomingPoints: incomingPoints,
+  );
   var updated = List<DrawPoint>.from(referencePoints);
   var workingFixedSegments = fixedSegments;
   updated[0] = incomingPoints.first;
   updated[updated.length - 1] = incomingPoints.last;
 
+  // Step B: if any bindings exist, prefer a baseline route that respects them.
   if (startBinding != null || endBinding != null) {
     final baseline = _routeLocalPath(
       element: element,
@@ -606,20 +807,21 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
       startBinding: startBinding,
       endBinding: endBinding,
     );
-    final mapped = _applyFixedSegmentsToBaselineRoute(
-      baseline: baseline,
+    final adopted = _maybeAdoptBaselineRoute(
+      currentPoints: updated,
       fixedSegments: workingFixedSegments,
+      baseline: baseline,
     );
-    if (mapped.fixedSegments.length == workingFixedSegments.length) {
-      updated = List<DrawPoint>.from(mapped.points);
-      workingFixedSegments = mapped.fixedSegments;
-    }
+    updated = List<DrawPoint>.from(adopted.points);
+    workingFixedSegments = adopted.fixedSegments;
   }
 
+  // Step C: enforce fixed segment axes after endpoint changes.
   updated = List<DrawPoint>.from(
     _applyFixedSegmentsToPoints(updated, workingFixedSegments),
   );
 
+  // Step D: for unbound arrows, re-route if a diagonal drift appears.
   if (startBinding == null &&
       endBinding == null &&
       _hasDiagonalSegments(updated)) {
@@ -631,70 +833,38 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
       startArrowhead: startArrowhead,
       endArrowhead: endArrowhead,
     );
-    final mapped = _applyFixedSegmentsToBaselineRoute(
+    final adopted = _maybeAdoptBaselineRoute(
+      currentPoints: updated,
+      fixedSegments: workingFixedSegments,
       baseline: baseline,
+    );
+    updated = List<DrawPoint>.from(adopted.points);
+    workingFixedSegments = adopted.fixedSegments;
+  }
+
+  final hasStartBinding = _hasBindingTarget(startBinding, elementsById);
+  final hasEndBinding = _hasBindingTarget(endBinding, elementsById);
+
+  // Step E: snap neighbors to maintain orthogonality for unbound endpoints.
+  if (!hasStartBinding) {
+    updated = _snapUnboundStartNeighbor(
+      points: updated,
       fixedSegments: workingFixedSegments,
     );
-    if (mapped.fixedSegments.length == workingFixedSegments.length) {
-      updated = List<DrawPoint>.from(mapped.points);
-      workingFixedSegments = mapped.fixedSegments;
-    }
   }
-
-  final hasStartBinding =
-      startBinding != null && elementsById.containsKey(startBinding.elementId);
-  final hasEndBinding =
-      endBinding != null && elementsById.containsKey(endBinding.elementId);
-
-  if (updated.length > 1 && !hasStartBinding) {
-    final start = updated.first;
-    final neighbor = updated[1];
-    final adjacentFixed = _fixedSegmentIsHorizontal(
-      workingFixedSegments,
-      2,
+  if (!hasEndBinding) {
+    updated = _snapUnboundEndNeighbor(
+      points: updated,
+      fixedSegments: workingFixedSegments,
     );
-    if (adjacentFixed != null) {
-      updated[1] = adjacentFixed
-          ? neighbor.copyWith(x: start.x)
-          : neighbor.copyWith(y: start.y);
-    } else {
-      final dx = (neighbor.x - start.x).abs();
-      final dy = (neighbor.y - start.y).abs();
-      if (dx <= dy) {
-        updated[1] = neighbor.copyWith(x: start.x);
-      } else {
-        updated[1] = neighbor.copyWith(y: start.y);
-      }
-    }
   }
 
-  if (updated.length > 1 && !hasEndBinding) {
-    final lastIndex = updated.length - 1;
-    var neighbor = updated[lastIndex - 1];
-    final endPoint = updated[lastIndex];
-    final adjacentFixed = _fixedSegmentIsHorizontal(
-      workingFixedSegments,
-      lastIndex - 1,
-    );
-    if (adjacentFixed != null) {
-      updated[lastIndex - 1] = adjacentFixed
-          ? neighbor.copyWith(x: endPoint.x)
-          : neighbor.copyWith(y: endPoint.y);
-    } else {
-      final dx = (neighbor.x - endPoint.x).abs();
-      final dy = (neighbor.y - endPoint.y).abs();
-      if (dx <= dy) {
-        updated[lastIndex - 1] = neighbor.copyWith(x: endPoint.x);
-      } else {
-        updated[lastIndex - 1] = neighbor.copyWith(y: endPoint.y);
-      }
-    }
-  }
-
+  // Step F: re-apply fixed segments after neighbor snapping.
   updated = List<DrawPoint>.from(
     _applyFixedSegmentsToPoints(updated, workingFixedSegments),
   );
 
+  // Step G: merge collinear tail segments for unbound paths.
   if (startBinding == null && endBinding == null) {
     final merged = _mergeFixedSegmentWithEndCollinear(
       points: updated,
@@ -710,6 +880,8 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   if (startBinding == null && endBinding == null) {
     return _FixedSegmentPathResult(points: updated, fixedSegments: synced);
   }
+
+  // Step H: enforce perpendicularity for bound endpoints in world space.
   return _ensurePerpendicularBindings(
     element: element,
     elementsById: elementsById,

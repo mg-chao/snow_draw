@@ -57,6 +57,50 @@ final class ElbowRoutedPoints {
   final List<DrawPoint> worldPoints;
 }
 
+@immutable
+final class _ElbowRouteInputs {
+  const _ElbowRouteInputs({
+    required this.start,
+    required this.end,
+    required this.elementsById,
+    required this.startBinding,
+    required this.endBinding,
+    required this.startArrowhead,
+    required this.endArrowhead,
+  });
+
+  final DrawPoint start;
+  final DrawPoint end;
+  final Map<String, ElementState> elementsById;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final ArrowheadStyle startArrowhead;
+  final ArrowheadStyle endArrowhead;
+}
+
+final class _ElbowRoutePipeline {
+  const _ElbowRoutePipeline(this.inputs);
+
+  final _ElbowRouteInputs inputs;
+
+  ElbowRouteResult run() {
+    // Step 1: resolve bindings/headings into concrete endpoints.
+    final endpoints = _resolveRouteEndpoints(inputs);
+
+    // Steps 2-5: plan + route + post-process the elbow path.
+    final routed = _ElbowRouteEngine(
+      start: endpoints.start,
+      end: endpoints.end,
+    ).route();
+
+    return _buildRouteResult(
+      startPoint: endpoints.start.point,
+      endPoint: endpoints.end.point,
+      points: routed,
+    );
+  }
+}
+
 ElbowHeading _vectorToHeading(double dx, double dy) {
   final absX = dx.abs();
   final absY = dy.abs();
@@ -66,6 +110,7 @@ ElbowHeading _vectorToHeading(double dx, double dy) {
   return dy >= 0 ? ElbowHeading.down : ElbowHeading.up;
 }
 
+// Endpoint resolution: bindings + anchors + headings.
 @immutable
 final class _EndpointInfo {
   const _EndpointInfo({
@@ -166,15 +211,7 @@ final class _ResolvedEndpoints {
   final _ResolvedEndpoint end;
 }
 
-_ResolvedEndpoints _resolveRouteEndpoints({
-  required DrawPoint start,
-  required DrawPoint end,
-  required Map<String, ElementState> elementsById,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
-  required ArrowheadStyle startArrowhead,
-  required ArrowheadStyle endArrowhead,
-}) {
+_ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteInputs inputs) {
   // Step 1: resolve bindings, arrowhead gaps, and endpoint headings.
   ElbowHeading _resolveHeadingFor(
     _EndpointInfo info,
@@ -186,18 +223,18 @@ _ResolvedEndpoints _resolveRouteEndpoints({
     fallback: fallback,
   );
 
-  final hasStartArrowhead = startArrowhead != ArrowheadStyle.none;
-  final hasEndArrowhead = endArrowhead != ArrowheadStyle.none;
+  final hasStartArrowhead = inputs.startArrowhead != ArrowheadStyle.none;
+  final hasEndArrowhead = inputs.endArrowhead != ArrowheadStyle.none;
   final startInfo = _resolveEndpointInfo(
-    point: start,
-    binding: startBinding,
-    elementsById: elementsById,
+    point: inputs.start,
+    binding: inputs.startBinding,
+    elementsById: inputs.elementsById,
     hasArrowhead: hasStartArrowhead,
   );
   final endInfo = _resolveEndpointInfo(
-    point: end,
-    binding: endBinding,
-    elementsById: elementsById,
+    point: inputs.end,
+    binding: inputs.endBinding,
+    elementsById: inputs.elementsById,
     hasArrowhead: hasEndArrowhead,
   );
 
@@ -229,6 +266,7 @@ _ResolvedEndpoints _resolveRouteEndpoints({
   );
 }
 
+// Obstacle layout: padded bounds + dongle points + common routing bounds.
 double _manhattanDistance(DrawPoint a, DrawPoint b) =>
     (a.x - b.x).abs() + (a.y - b.y).abs();
 
@@ -354,6 +392,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
   DrawPoint? startPivot,
   DrawPoint? endPivot,
 }) {
+  // Split the overlap so the grid can route between bound obstacles.
   if (!_boundsOverlap(startObstacle, endObstacle)) {
     return (start: startObstacle, end: endObstacle);
   }
@@ -456,6 +495,7 @@ DrawRect _dynamicAabbFor({
   DrawRect? selfElementBounds,
   DrawRect? otherElementBounds,
 }) {
+  // Expand each obstacle by a heading-aware padding and a separation split.
   final selfElement = selfElementBounds ?? self;
   final otherElement = otherElementBounds ?? other;
   final separatedX = self.minX > other.maxX || self.maxX < other.minX;
@@ -625,6 +665,83 @@ final class _ObstacleLayout {
   final List<DrawRect> obstacles;
 }
 
+@immutable
+final class _ObstacleLayoutBuilder {
+  const _ObstacleLayoutBuilder({
+    required this.start,
+    required this.end,
+  });
+
+  final _ResolvedEndpoint start;
+  final _ResolvedEndpoint end;
+
+  _ObstacleLayout build() {
+    // Step 2: build padded obstacle bounds and dongle points for routing.
+    final elbowBounds = _elbowBoundsForLayout(start: start, end: end);
+    final baseBounds = _baseBoundsForLayout(
+      boundsOverlap: elbowBounds.boundsOverlap,
+      startPoint: start.point,
+      endPoint: end.point,
+      startElbowBounds: elbowBounds.startElbowBounds,
+      endElbowBounds: elbowBounds.endElbowBounds,
+    );
+    final padding = _layoutPaddingFor(
+      boundsOverlap: elbowBounds.boundsOverlap,
+      start: start,
+      end: end,
+    );
+
+    final dynamicAabbs = _generateDynamicAabbs(
+      start: baseBounds.start,
+      end: baseBounds.end,
+      startPadding: padding.start,
+      endPadding: padding.end,
+      startElementBounds: _aabbElementBounds(
+        boundsOverlap: elbowBounds.boundsOverlap,
+        isBound: start.isBound,
+        elbowBounds: elbowBounds.startElbowBounds,
+      ),
+      endElementBounds: _aabbElementBounds(
+        boundsOverlap: elbowBounds.boundsOverlap,
+        isBound: end.isBound,
+        elbowBounds: elbowBounds.endElbowBounds,
+      ),
+    );
+
+    final obstacleBounds = _resolveObstacleBounds(
+      start: start,
+      end: end,
+      startBaseBounds: baseBounds.start,
+      endBaseBounds: baseBounds.end,
+      startDynamic: dynamicAabbs.start,
+      endDynamic: dynamicAabbs.end,
+    );
+
+    final commonBounds = _commonBoundsForObstacles(
+      startObstacle: obstacleBounds.start,
+      endObstacle: obstacleBounds.end,
+    );
+
+    final startDongle = _donglePosition(
+      bounds: obstacleBounds.start,
+      heading: start.heading,
+      point: start.point,
+    );
+    final endDongle = _donglePosition(
+      bounds: obstacleBounds.end,
+      heading: end.heading,
+      point: end.point,
+    );
+
+    return _ObstacleLayout(
+      commonBounds: commonBounds,
+      startDongle: startDongle,
+      endDongle: endDongle,
+      obstacles: <DrawRect>[obstacleBounds.start, obstacleBounds.end],
+    );
+  }
+}
+
 ({
   DrawRect startElbowBounds,
   DrawRect endElbowBounds,
@@ -741,97 +858,30 @@ DrawRect _commonBoundsForObstacles({
 _ObstacleLayout _buildObstacleLayout({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
-}) {
-  // Step 2: build padded obstacle bounds and dongle points for routing.
-  final elbowBounds = _elbowBoundsForLayout(start: start, end: end);
-  final baseBounds = _baseBoundsForLayout(
-    boundsOverlap: elbowBounds.boundsOverlap,
-    startPoint: start.point,
-    endPoint: end.point,
-    startElbowBounds: elbowBounds.startElbowBounds,
-    endElbowBounds: elbowBounds.endElbowBounds,
-  );
-  final padding = _layoutPaddingFor(
-    boundsOverlap: elbowBounds.boundsOverlap,
-    start: start,
-    end: end,
-  );
-
-  final dynamicAabbs = _generateDynamicAabbs(
-    start: baseBounds.start,
-    end: baseBounds.end,
-    startPadding: padding.start,
-    endPadding: padding.end,
-    startElementBounds: _aabbElementBounds(
-      boundsOverlap: elbowBounds.boundsOverlap,
-      isBound: start.isBound,
-      elbowBounds: elbowBounds.startElbowBounds,
-    ),
-    endElementBounds: _aabbElementBounds(
-      boundsOverlap: elbowBounds.boundsOverlap,
-      isBound: end.isBound,
-      elbowBounds: elbowBounds.endElbowBounds,
-    ),
-  );
-
-  final obstacleBounds = _resolveObstacleBounds(
-    start: start,
-    end: end,
-    startBaseBounds: baseBounds.start,
-    endBaseBounds: baseBounds.end,
-    startDynamic: dynamicAabbs.start,
-    endDynamic: dynamicAabbs.end,
-  );
-
-  final commonBounds = _commonBoundsForObstacles(
-    startObstacle: obstacleBounds.start,
-    endObstacle: obstacleBounds.end,
-  );
-
-  final startDongle = _donglePosition(
-    bounds: obstacleBounds.start,
-    heading: start.heading,
-    point: start.point,
-  );
-  final endDongle = _donglePosition(
-    bounds: obstacleBounds.end,
-    heading: end.heading,
-    point: end.point,
-  );
-
-  return _ObstacleLayout(
-    commonBounds: commonBounds,
-    startDongle: startDongle,
-    endDongle: endDongle,
-    obstacles: <DrawRect>[obstacleBounds.start, obstacleBounds.end],
-  );
-}
+}) => _ObstacleLayoutBuilder(start: start, end: end).build();
 
 List<DrawPoint> _routeViaGrid({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
-  required DrawPoint startDongle,
-  required DrawPoint endDongle,
-  required DrawRect commonBounds,
-  required List<DrawRect> obstacles,
+  required _ObstacleLayout layout,
 }) {
   // Step 4: route through a sparse grid using A* with bend penalties.
   final grid = _buildGrid(
-    obstacles: obstacles,
-    start: startDongle,
+    obstacles: layout.obstacles,
+    start: layout.startDongle,
     startHeading: start.heading,
-    end: endDongle,
+    end: layout.endDongle,
     endHeading: end.heading,
-    bounds: commonBounds,
+    bounds: layout.commonBounds,
   );
 
   final path = _tryRouteGridPath(
     grid: grid,
     start: start,
     end: end,
-    startDongle: startDongle,
-    endDongle: endDongle,
-    obstacles: obstacles,
+    startDongle: layout.startDongle,
+    endDongle: layout.endDongle,
+    obstacles: layout.obstacles,
   );
 
   return path == null
@@ -844,8 +894,8 @@ List<DrawPoint> _routeViaGrid({
           path: path,
           startPoint: start.point,
           endPoint: end.point,
-          startDongle: startDongle,
-          endDongle: endDongle,
+          startDongle: layout.startDongle,
+          endDongle: layout.endDongle,
         );
 }
 
@@ -862,8 +912,9 @@ List<DrawPoint> _finalizeRoutedPath({
   return cleaned.map(_clampPoint).toList(growable: false);
 }
 
-final class _ElbowRoutePlanner {
-  const _ElbowRoutePlanner({
+/// Executes the routing steps after endpoints are resolved.
+final class _ElbowRouteEngine {
+  const _ElbowRouteEngine({
     required this.start,
     required this.end,
   });
@@ -892,10 +943,7 @@ final class _ElbowRoutePlanner {
     final routed = _routeViaGrid(
       start: start,
       end: end,
-      startDongle: layout.startDongle,
-      endDongle: layout.endDongle,
-      commonBounds: layout.commonBounds,
-      obstacles: layout.obstacles,
+      layout: layout,
     );
 
     return _finalizeRoutedPath(points: routed, startHeading: start.heading);
@@ -938,32 +986,18 @@ ElbowRouteResult routeElbowArrow({
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
-  // Step 1: resolve bindings/headings into concrete endpoints.
-  final endpoints = _resolveRouteEndpoints(
-    start: start,
-    end: end,
-    elementsById: elementsById,
-    startBinding: startBinding,
-    endBinding: endBinding,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
-  );
-  final startEndpoint = endpoints.start;
-  final endEndpoint = endpoints.end;
-  final startPoint = startEndpoint.point;
-  final endPoint = endEndpoint.point;
-
-  // Steps 2-5: plan + route + post-process the elbow path.
-  final routed = _ElbowRoutePlanner(
-    start: startEndpoint,
-    end: endEndpoint,
-  ).route();
-
-  return _buildRouteResult(
-    startPoint: startPoint,
-    endPoint: endPoint,
-    points: routed,
-  );
+  // Route through the explicit step-based pipeline for readability.
+  return _ElbowRoutePipeline(
+    _ElbowRouteInputs(
+      start: start,
+      end: end,
+      elementsById: elementsById,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+    ),
+  ).run();
 }
 
 /// Routes an elbow arrow for an element and returns both local + world points.
@@ -1267,6 +1301,7 @@ List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
   return result;
 }
 
+// Grid routing: sparse axis-aligned nodes + A* with bend penalties.
 @immutable
 class _Grid {
   const _Grid({
