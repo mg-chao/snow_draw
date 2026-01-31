@@ -1400,6 +1400,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (transform.didInsert) {
         kind = ArrowPointKind.turning;
         index = context.pointIndex + 1;
+      } else if (transform.activeIndex != null) {
+        index = transform.activeIndex!;
       }
     }
     var isFixed = false;
