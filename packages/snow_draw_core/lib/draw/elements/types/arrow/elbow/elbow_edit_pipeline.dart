@@ -53,6 +53,11 @@ final class _ElbowEditContext {
     required this.fixedSegments,
     required this.startBinding,
     required this.endBinding,
+    required this.previousStartBinding,
+    required this.previousEndBinding,
+    required this.bindingChanged,
+    required this.startBindingRemoved,
+    required this.endBindingRemoved,
     required this.pointsChanged,
     required this.fixedSegmentsChanged,
     required this.releaseRequested,
@@ -67,6 +72,11 @@ final class _ElbowEditContext {
   final List<ElbowFixedSegment> fixedSegments;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final ArrowBinding? previousStartBinding;
+  final ArrowBinding? previousEndBinding;
+  final bool bindingChanged;
+  final bool startBindingRemoved;
+  final bool endBindingRemoved;
   final bool pointsChanged;
   final bool fixedSegmentsChanged;
   final bool releaseRequested;
@@ -81,7 +91,7 @@ final class _ElbowEditContext {
     if (releaseRequested) {
       return _ElbowEditMode.releaseFixedSegments;
     }
-    if (pointsChanged && !fixedSegmentsChanged) {
+    if (bindingChanged || (pointsChanged && !fixedSegmentsChanged)) {
       return _ElbowEditMode.dragEndpoints;
     }
     return _ElbowEditMode.applyFixedSegments;
@@ -146,6 +156,17 @@ final class _ElbowEditPipeline {
     );
     final startBinding = startBindingOverride ?? data.startBinding;
     final endBinding = endBindingOverride ?? data.endBinding;
+    final previousData =
+        element.data is ArrowData ? element.data as ArrowData : data;
+    final previousStartBinding = previousData.startBinding;
+    final previousEndBinding = previousData.endBinding;
+    final bindingChanged =
+        previousStartBinding != startBinding ||
+        previousEndBinding != endBinding;
+    final startBindingRemoved =
+        previousStartBinding != null && startBinding == null;
+    final endBindingRemoved =
+        previousEndBinding != null && endBinding == null;
 
     final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
     final fixedSegmentsChanged = !_fixedSegmentsEqual(
@@ -166,6 +187,11 @@ final class _ElbowEditPipeline {
       fixedSegments: fixedSegments,
       startBinding: startBinding,
       endBinding: endBinding,
+      previousStartBinding: previousStartBinding,
+      previousEndBinding: previousEndBinding,
+      bindingChanged: bindingChanged,
+      startBindingRemoved: startBindingRemoved,
+      endBindingRemoved: endBindingRemoved,
       pointsChanged: pointsChanged,
       fixedSegmentsChanged: fixedSegmentsChanged,
       releaseRequested: releaseRequested,
@@ -236,6 +262,8 @@ final class _ElbowEditPipeline {
         fixedSegments: context.fixedSegments,
         startBinding: context.startBinding,
         endBinding: context.endBinding,
+        startBindingRemoved: context.startBindingRemoved,
+        endBindingRemoved: context.endBindingRemoved,
         startArrowhead: context.data.startArrowhead,
         endArrowhead: context.data.endArrowhead,
       ),

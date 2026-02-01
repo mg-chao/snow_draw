@@ -740,6 +740,154 @@ void main() {
     );
   });
 
+  test('unbinding removes binding-generated tail segment', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 80),
+      const DrawPoint(x: 20, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: -10, minY: 140, maxX: 50, maxY: 200);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final boundResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+    expect(boundResult.localPoints.length, greaterThan(points.length));
+    expect(elbowPathIsOrthogonal(boundResult.localPoints), isTrue);
+
+    final boundArrow = _arrowElement(
+      boundResult.localPoints,
+      fixedSegments: boundResult.fixedSegments,
+    );
+    final boundData = (boundArrow.data as ArrowData).copyWith(
+      endBinding: binding,
+    );
+    final boundArrowElement = boundArrow.copyWith(data: boundData);
+
+    final unboundResult = computeElbowEdit(
+      element: boundArrowElement,
+      data: boundData.copyWith(endBinding: null),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: boundResult.localPoints,
+      fixedSegmentsOverride: boundResult.fixedSegments,
+      endBindingOverride: null,
+    );
+
+    expect(unboundResult.localPoints.length, equals(points.length));
+    final lastIndex = unboundResult.localPoints.length - 1;
+    final prev = unboundResult.localPoints[lastIndex - 1];
+    final endPoint = unboundResult.localPoints[lastIndex];
+    expect(
+      (prev.y - endPoint.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Unbound end should finish horizontally.',
+    );
+  });
+
+  test('unbinding collapses collinear tail after binding removal', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 80),
+      const DrawPoint(x: 20, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: -10, minY: 140, maxX: 50, maxY: 200);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final boundResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+    expect(boundResult.localPoints.length, greaterThan(points.length));
+
+    final boundArrow = _arrowElement(
+      boundResult.localPoints,
+      fixedSegments: boundResult.fixedSegments,
+    );
+    final boundData = (boundArrow.data as ArrowData).copyWith(
+      endBinding: binding,
+    );
+    final boundArrowElement = boundArrow.copyWith(data: boundData);
+
+    final unboundPoints = List<DrawPoint>.from(boundResult.localPoints);
+    final neighborIndex = unboundPoints.length - 2;
+    final neighbor = unboundPoints[neighborIndex];
+    final endPoint = unboundPoints.last;
+    unboundPoints[unboundPoints.length - 1] = DrawPoint(
+      x: endPoint.x - 40,
+      y: neighbor.y,
+    );
+
+    final unboundResult = computeElbowEdit(
+      element: boundArrowElement,
+      data: boundData.copyWith(endBinding: null),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: unboundPoints,
+      fixedSegmentsOverride: boundResult.fixedSegments,
+      endBindingOverride: null,
+    );
+
+    expect(
+      unboundResult.localPoints.length,
+      lessThan(boundResult.localPoints.length),
+    );
+    expect(
+      elbowPathHasOnlyCorners(unboundResult.localPoints),
+      isTrue,
+      reason: 'Unbound tail should not keep duplicate collinear segments.',
+    );
+  });
+
   test('unbound endpoint snaps near-collinear segment to orthogonal', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

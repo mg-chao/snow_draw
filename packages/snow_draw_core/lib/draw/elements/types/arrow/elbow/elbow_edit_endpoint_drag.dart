@@ -13,6 +13,8 @@ final class _EndpointDragContext {
     required this.fixedSegments,
     required this.startBinding,
     required this.endBinding,
+    required this.startBindingRemoved,
+    required this.endBindingRemoved,
     required this.startArrowhead,
     required this.endArrowhead,
   });
@@ -24,6 +26,8 @@ final class _EndpointDragContext {
   final List<ElbowFixedSegment> fixedSegments;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final bool startBindingRemoved;
+  final bool endBindingRemoved;
   final ArrowheadStyle startArrowhead;
   final ArrowheadStyle endArrowhead;
 
@@ -215,6 +219,214 @@ _EndpointDragState _mergeTailIfUnbound({
   );
 }
 
+_FixedSegmentPathResult _collapseBindingRemovedEndStub({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 4 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final lastIndex = points.length - 1;
+  final midIndex = lastIndex - 1;
+  final prevIndex = lastIndex - 2;
+  final prevSegmentIndex = prevIndex;
+  final midSegmentIndex = midIndex;
+  final lastSegmentIndex = lastIndex;
+
+  final prevFixed = _fixedSegmentIsHorizontal(
+    fixedSegments,
+    prevSegmentIndex,
+  );
+  if (prevFixed == null) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  if (_fixedSegmentIsHorizontal(fixedSegments, midSegmentIndex) != null ||
+      _fixedSegmentIsHorizontal(fixedSegments, lastSegmentIndex) != null) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final prevHorizontal = ElbowGeometry.isHorizontal(
+    points[prevIndex - 1],
+    points[prevIndex],
+  );
+  final midHorizontal = ElbowGeometry.isHorizontal(
+    points[prevIndex],
+    points[midIndex],
+  );
+  final lastHorizontal = ElbowGeometry.isHorizontal(
+    points[midIndex],
+    points[lastIndex],
+  );
+  if (prevFixed != prevHorizontal) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  if (prevHorizontal != midHorizontal && midHorizontal == lastHorizontal) {
+    final updated = List<DrawPoint>.from(points)..removeAt(midIndex);
+    final reindexed = _reindexFixedSegments(updated, fixedSegments);
+    if (reindexed.length != fixedSegments.length) {
+      return _FixedSegmentPathResult(
+        points: points,
+        fixedSegments: fixedSegments,
+      );
+    }
+    return _FixedSegmentPathResult(
+      points: List<DrawPoint>.unmodifiable(updated),
+      fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+    );
+  }
+
+  if (prevHorizontal != lastHorizontal || prevHorizontal == midHorizontal) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  final anchor = updated[prevIndex];
+  final endPoint = updated[lastIndex];
+  final moved = prevHorizontal
+      ? anchor.copyWith(x: endPoint.x)
+      : anchor.copyWith(y: endPoint.y);
+  if (moved == anchor) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  if (ElbowGeometry.manhattanDistance(moved, endPoint) <=
+      ElbowConstants.dedupThreshold) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  updated[prevIndex] = moved;
+  updated.removeAt(midIndex);
+
+  final reindexed = _reindexFixedSegments(updated, fixedSegments);
+  if (reindexed.length != fixedSegments.length) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(updated),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+  );
+}
+
+_FixedSegmentPathResult _collapseBindingRemovedStartStub({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 4 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  const startIndex = 0;
+  const midIndex = 1;
+  const nextIndex = 2;
+  const outerSegmentIndex = 3;
+  const firstSegmentIndex = 1;
+  const middleSegmentIndex = 2;
+
+  final outerFixed = _fixedSegmentIsHorizontal(
+    fixedSegments,
+    outerSegmentIndex,
+  );
+  if (outerFixed == null) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  if (_fixedSegmentIsHorizontal(fixedSegments, firstSegmentIndex) != null ||
+      _fixedSegmentIsHorizontal(fixedSegments, middleSegmentIndex) != null) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final firstHorizontal = ElbowGeometry.isHorizontal(
+    points[startIndex],
+    points[midIndex],
+  );
+  final middleHorizontal = ElbowGeometry.isHorizontal(
+    points[midIndex],
+    points[nextIndex],
+  );
+  final outerHorizontal = ElbowGeometry.isHorizontal(
+    points[nextIndex],
+    points[nextIndex + 1],
+  );
+  if (outerFixed != outerHorizontal) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  if (firstHorizontal == middleHorizontal &&
+      firstHorizontal != outerHorizontal) {
+    final updated = List<DrawPoint>.from(points)..removeAt(midIndex);
+    final reindexed = _reindexFixedSegments(updated, fixedSegments);
+    if (reindexed.length != fixedSegments.length) {
+      return _FixedSegmentPathResult(
+        points: points,
+        fixedSegments: fixedSegments,
+      );
+    }
+    return _FixedSegmentPathResult(
+      points: List<DrawPoint>.unmodifiable(updated),
+      fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+    );
+  }
+
+  if (firstHorizontal != outerHorizontal ||
+      firstHorizontal == middleHorizontal) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  final startPoint = updated[startIndex];
+  final anchor = updated[nextIndex];
+  final moved = outerHorizontal
+      ? anchor.copyWith(x: startPoint.x)
+      : anchor.copyWith(y: startPoint.y);
+  if (moved == anchor) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  if (ElbowGeometry.manhattanDistance(startPoint, moved) <=
+      ElbowConstants.dedupThreshold) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  updated[nextIndex] = moved;
+  updated.removeAt(midIndex);
+
+  final reindexed = _reindexFixedSegments(updated, fixedSegments);
+  if (reindexed.length != fixedSegments.length) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(updated),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+  );
+}
+
+_EndpointDragState _collapseBindingRemovedStubs({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  var points = state.points;
+  var fixedSegments = state.fixedSegments;
+
+  if (context.endBindingRemoved) {
+    final collapsed = _collapseBindingRemovedEndStub(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
+    points = collapsed.points;
+    fixedSegments = collapsed.fixedSegments;
+  }
+
+  if (context.startBindingRemoved) {
+    final collapsed = _collapseBindingRemovedStartStub(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
+    points = collapsed.points;
+    fixedSegments = collapsed.fixedSegments;
+  }
+
+  return state.copyWith(points: points, fixedSegments: fixedSegments);
+}
+
 List<DrawPoint> _snapUnboundStartNeighbor({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
@@ -296,15 +508,19 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   // Step G: merge collinear tail segments for fully unbound paths.
   state = _mergeTailIfUnbound(context: context, state: state);
 
-  final synced = _syncFixedSegmentsToPoints(
+  var synced = _syncFixedSegmentsToPoints(
     state.points,
     state.fixedSegments,
   );
+  state = state.copyWith(fixedSegments: synced);
+  // Step H: drop binding stubs when a binding was removed.
+  state = _collapseBindingRemovedStubs(context: context, state: state);
+  synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
 
-  // Step H: enforce perpendicularity for bound endpoints in world space.
+  // Step I: enforce perpendicularity for bound endpoints in world space.
   return _ensurePerpendicularBindings(
     element: context.element,
     elementsById: context.elementsById,
