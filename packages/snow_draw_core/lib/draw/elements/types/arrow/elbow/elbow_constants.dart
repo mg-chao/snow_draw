@@ -23,8 +23,8 @@ final class ElbowConstants {
   /// Base padding applied around obstacle bounds.
   static const double basePadding = 42;
 
-  /// Padding used for degenerate obstacle overlaps (creates a small dongle box).
-  static const double donglePointPadding = 2;
+  /// Padding used for degenerate obstacle overlaps (creates a small exit box).
+  static const double exitPointPadding = 2;
 
   /// Gap multiplier when no arrowhead is present at a bound endpoint.
   static const double elbowNoArrowheadGapMultiplier = 2;

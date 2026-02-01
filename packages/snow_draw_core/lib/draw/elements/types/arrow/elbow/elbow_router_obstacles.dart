@@ -3,8 +3,8 @@ part of 'elbow_router.dart';
 /// Obstacle layout utilities for elbow routing.
 ///
 /// These helpers inflate bound element bounds with heading-aware padding,
-/// split overlaps to keep the grid searchable, and compute dongle points
-/// where the route exits each obstacle.
+/// split overlaps to keep the grid searchable, and compute exit points
+/// where the route leaves each obstacle.
 
 // Shared layout helpers.
 DrawRect _inflateBounds(DrawRect rect, double padding) => DrawRect(
@@ -378,7 +378,7 @@ class _BoundsPadding {
   final double left;
 }
 
-DrawPoint _donglePosition({
+DrawPoint _exitPosition({
   required DrawRect bounds,
   required ElbowHeading heading,
   required DrawPoint point,
@@ -396,23 +396,23 @@ DrawPoint _donglePosition({
 }
 
 @immutable
-final class _ObstacleLayout {
-  const _ObstacleLayout({
+final class _ElbowObstacleLayout {
+  const _ElbowObstacleLayout({
     required this.commonBounds,
-    required this.startDongle,
-    required this.endDongle,
+    required this.startExit,
+    required this.endExit,
     required this.obstacles,
   });
 
   final DrawRect commonBounds;
-  final DrawPoint startDongle;
-  final DrawPoint endDongle;
+  final DrawPoint startExit;
+  final DrawPoint endExit;
   final List<DrawRect> obstacles;
 }
 
 @immutable
-final class _ObstacleLayoutBuilder {
-  const _ObstacleLayoutBuilder({
+final class _ElbowObstaclePlanner {
+  const _ElbowObstaclePlanner({
     required this.start,
     required this.end,
   });
@@ -420,8 +420,8 @@ final class _ObstacleLayoutBuilder {
   final _ResolvedEndpoint start;
   final _ResolvedEndpoint end;
 
-  _ObstacleLayout build() {
-    // Step 2: build padded obstacle bounds and dongle points for routing.
+  _ElbowObstacleLayout build() {
+    // Step 2: build padded obstacle bounds and exit points for routing.
     final elbowBounds = _elbowBoundsForLayout(start: start, end: end);
     final baseBounds = _baseBoundsForLayout(
       boundsOverlap: elbowBounds.boundsOverlap,
@@ -467,21 +467,21 @@ final class _ObstacleLayoutBuilder {
       endObstacle: obstacleBounds.end,
     );
 
-    final startDongle = _donglePosition(
+    final startExit = _exitPosition(
       bounds: obstacleBounds.start,
       heading: start.heading,
       point: start.point,
     );
-    final endDongle = _donglePosition(
+    final endExit = _exitPosition(
       bounds: obstacleBounds.end,
       heading: end.heading,
       point: end.point,
     );
 
-    return _ObstacleLayout(
+    return _ElbowObstacleLayout(
       commonBounds: commonBounds,
-      startDongle: startDongle,
-      endDongle: endDongle,
+      startExit: startExit,
+      endExit: endExit,
       obstacles: <DrawRect>[obstacleBounds.start, obstacleBounds.end],
     );
   }
@@ -527,10 +527,10 @@ final class _ObstacleLayoutBuilder {
   required DrawRect endElbowBounds,
 }) {
   final startBaseBounds = boundsOverlap
-      ? _pointBounds(startPoint, ElbowConstants.donglePointPadding)
+      ? _pointBounds(startPoint, ElbowConstants.exitPointPadding)
       : startElbowBounds;
   final endBaseBounds = boundsOverlap
-      ? _pointBounds(endPoint, ElbowConstants.donglePointPadding)
+      ? _pointBounds(endPoint, ElbowConstants.exitPointPadding)
       : endElbowBounds;
   return (start: startBaseBounds, end: endBaseBounds);
 }
@@ -600,7 +600,7 @@ DrawRect _commonBoundsForObstacles({
       ),
     );
 
-_ObstacleLayout _buildObstacleLayout({
+_ElbowObstacleLayout _planObstacleLayout({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
-}) => _ObstacleLayoutBuilder(start: start, end: end).build();
+}) => _ElbowObstaclePlanner(start: start, end: end).build();

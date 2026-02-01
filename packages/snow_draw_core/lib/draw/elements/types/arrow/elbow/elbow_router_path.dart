@@ -214,20 +214,20 @@ List<DrawPoint> _postProcessPath({
   required List<_GridNode> path,
   required DrawPoint startPoint,
   required DrawPoint endPoint,
-  required DrawPoint startDongle,
-  required DrawPoint endDongle,
+  required DrawPoint startExit,
+  required DrawPoint endExit,
 }) {
   if (path.isEmpty) {
     return [startPoint, endPoint];
   }
   final points = <DrawPoint>[];
-  if (startDongle != startPoint && path.first.pos != startPoint) {
+  if (startExit != startPoint && path.first.pos != startPoint) {
     points.add(startPoint);
   }
   for (final node in path) {
     points.add(node.pos);
   }
-  if (endDongle != endPoint && points.last != endPoint) {
+  if (endExit != endPoint && points.last != endPoint) {
     points.add(endPoint);
   }
   return points;

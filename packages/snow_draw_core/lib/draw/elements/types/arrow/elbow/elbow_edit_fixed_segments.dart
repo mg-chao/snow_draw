@@ -5,6 +5,24 @@ part of 'elbow_editing.dart';
 /// These helpers sanitize, map, and reindex pinned segments to keep their
 /// axis stable while the rest of the path updates.
 
+bool _isInteriorSegmentIndex(int index, int pointCount) =>
+    index > 1 && index < pointCount - 1;
+
+bool _isSegmentIndexInRange(int index, int pointCount) =>
+    index >= 1 && index < pointCount;
+
+bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
+    ElbowGeometry.isHorizontal(start, end);
+
+double _segmentAxisValue(
+  DrawPoint start,
+  DrawPoint end, {
+  required bool isHorizontal,
+}) =>
+    isHorizontal
+        ? (start.y + end.y) / 2
+        : (start.x + end.x) / 2;
+
 List<ElbowFixedSegment> _sanitizeFixedSegments(
   List<ElbowFixedSegment>? segments,
   int pointCount,
@@ -12,13 +30,9 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
   if (segments == null || segments.isEmpty || pointCount < 2) {
     return const [];
   }
-  final maxIndex = pointCount - 1;
   final result = <ElbowFixedSegment>[];
   for (final segment in segments) {
-    if (segment.index <= 1 || segment.index >= maxIndex) {
-      continue;
-    }
-    if (segment.index < 1 || segment.index >= pointCount) {
+    if (!_isInteriorSegmentIndex(segment.index, pointCount)) {
       continue;
     }
     final dx = (segment.start.x - segment.end.x).abs();
@@ -50,11 +64,10 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   if (fixedSegments.isEmpty || points.length < 2) {
     return const [];
   }
-  final maxIndex = points.length - 1;
   final result = <ElbowFixedSegment>[];
   for (final segment in fixedSegments) {
     final index = _findSegmentIndex(points, segment);
-    if (index == null || index <= 1 || index >= maxIndex) {
+    if (index == null || !_isInteriorSegmentIndex(index, points.length)) {
       continue;
     }
     final start = points[index - 1];

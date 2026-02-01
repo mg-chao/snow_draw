@@ -323,12 +323,12 @@ List<_GridNode>? _tryRouteGridPath({
   required _Grid grid,
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
-  required DrawPoint startDongle,
-  required DrawPoint endDongle,
+  required DrawPoint startExit,
+  required DrawPoint endExit,
   required List<DrawRect> obstacles,
 }) {
-  final startNode = grid.nodeForPoint(startDongle);
-  final endNode = grid.nodeForPoint(endDongle);
+  final startNode = grid.nodeForPoint(startExit);
+  final endNode = grid.nodeForPoint(endExit);
   if (startNode == null || endNode == null) {
     return null;
   }
