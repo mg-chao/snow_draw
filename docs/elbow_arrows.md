@@ -29,6 +29,25 @@ Editing entry point:
 - `computeElbowEdit`: accepts the current arrow element + edits, returns updated
   local points and fixed segment updates.
 
+## Code Layout (post-refactor)
+
+Routing files:
+
+- `elbow_router.dart`: public API + routing pipeline orchestration.
+- `elbow_router_endpoints.dart`: binding resolution + endpoint headings.
+- `elbow_router_obstacles.dart`: obstacle padding, overlap splitting, dongles.
+- `elbow_router_path.dart`: direct route checks + fallback + post-processing.
+- `elbow_router_grid.dart`: sparse grid + A* routing with bend penalties.
+
+Editing files:
+
+- `elbow_editing.dart`: public API + edit pipeline orchestration.
+- `elbow_edit_geometry.dart`: orthogonal geometry + simplification helpers.
+- `elbow_edit_fixed_segments.dart`: fixed segment mapping + reindexing.
+- `elbow_edit_routing.dart`: release routing + local route helpers.
+- `elbow_edit_endpoint_drag.dart`: endpoint-drag flow with fixed segments.
+- `elbow_edit_perpendicular.dart`: perpendicular bound approach enforcement.
+
 ## Implementation Map (refactor guide)
 
 Routing components:
@@ -160,13 +179,14 @@ Routing coverage:
 - `elbow_router_behavior_test.dart`: fallback routing, short arrows, heading
   mismatch, overlapping obstacles, and obstacle avoidance.
 - `elbow_router_grid_test.dart`: grid routing around obstacles and heading
-  constraints. (new)
+  constraints.
+- `elbow_router_element_route_test.dart`: local/world routing consistency.
 
 Editing coverage:
 
 - `elbow_fixed_segments_test.dart`: fixed-segment editing flows.
 - `elbow_edit_pipeline_test.dart`: release and endpoint-drag scenarios with
-  fixed segments, plus binding perpendicular adjustments (start + end). (new)
+  fixed segments, binding perpendicular adjustments, and new axis/drag cases.
 - `elbow_transform_fixed_segments_test.dart`: verifies fixed segments transform
   with element changes. (new)
 

@@ -176,6 +176,123 @@ void main() {
       reason: 'Right binding should approach from the right.',
     );
   });
+
+  test('changing a fixed segment axis re-applies points', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final overrideSegments = <ElbowFixedSegment>[
+      const ElbowFixedSegment(
+        index: 3,
+        start: DrawPoint(x: 100, y: 140),
+        end: DrawPoint(x: 200, y: 140),
+      ),
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: overrideSegments,
+    );
+
+    expect(result.fixedSegments, isNotNull);
+    expect(result.fixedSegments!.length, 1);
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    final axis = (fixed.start.y + fixed.end.y) / 2;
+    expect((axis - 140).abs() <= _dedupThreshold, isTrue);
+  });
+
+  test('endpoint drag snaps an unbound start neighbor orthogonally', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 80),
+      const DrawPoint(x: 200, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+    final movedPoints = <DrawPoint>[
+      const DrawPoint(x: 30, y: 30),
+      points[1],
+      points[2],
+      points[3],
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    final start = result.localPoints.first;
+    final neighbor = result.localPoints[1];
+    expect((neighbor.y - start.y).abs() <= _dedupThreshold, isTrue);
+  });
+
+  test('binding edits enforce a perpendicular start during endpoint drag', () {
+    const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
+    final target = _rectangleElement(id: 'target', rect: targetRect);
+
+    final points = <DrawPoint>[
+      const DrawPoint(x: 150, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 180),
+      const DrawPoint(x: 260, y: 180),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(
+      points,
+      fixedSegments: fixedSegments,
+      startBinding: const ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.5, y: 0),
+      ),
+      startArrowhead: ArrowheadStyle.triangle,
+    );
+    final data = element.data as ArrowData;
+
+    final dragged = <DrawPoint>[
+      points.first,
+      points[1],
+      points[2],
+      const DrawPoint(x: 260, y: 200),
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: {'target': target},
+      localPointsOverride: dragged,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    final startPoint = result.localPoints.first;
+    final nextPoint = result.localPoints[1];
+    expect((startPoint.x - nextPoint.x).abs() <= _intersectionEpsilon, isTrue);
+    expect(nextPoint.y < startPoint.y, isTrue);
+  });
 }
 
 ElementState _arrowElement(
