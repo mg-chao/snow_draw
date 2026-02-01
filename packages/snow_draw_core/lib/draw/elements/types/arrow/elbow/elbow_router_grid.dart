@@ -193,7 +193,7 @@ double _heuristicScore({
   required ElbowHeading endHeading,
   required double bendPenaltySquared,
 }) =>
-    _manhattanDistance(from, to) +
+    ElbowGeometry.manhattanDistance(from, to) +
     _estimatedBendPenalty(
       start: from,
       end: to,
@@ -215,7 +215,9 @@ List<_GridNode> _astar({
   // A* with bend penalties to discourage unnecessary elbows.
   final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
 
-  final bendPenalty = _BendPenalty(_manhattanDistance(start.pos, end.pos));
+  final bendPenalty = _BendPenalty(
+    ElbowGeometry.manhattanDistance(start.pos, end.pos),
+  );
   final startHeadingFlip = startHeading.opposite;
   final endHeadingFlip = endHeading.opposite;
 
@@ -269,7 +271,7 @@ List<_GridNode> _astar({
       }
 
       final directionChanged = neighborHeading != previousHeading;
-      final moveCost = _manhattanDistance(current.pos, next.pos);
+      final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
       final bendCost = directionChanged ? bendPenalty.cubed : 0;
       final gScore = current.g + moveCost + bendCost;
 
@@ -312,8 +314,8 @@ double _estimatedBendPenalty({
   }
 
   final alignedOnAxis = startHeading.isHorizontal
-      ? (start.y - end.y).abs() <= _dedupThreshold
-      : (start.x - end.x).abs() <= _dedupThreshold;
+      ? (start.y - end.y).abs() <= ElbowConstants.dedupThreshold
+      : (start.x - end.x).abs() <= ElbowConstants.dedupThreshold;
   return alignedOnAxis ? 0 : bendPenaltySquared;
 }
 

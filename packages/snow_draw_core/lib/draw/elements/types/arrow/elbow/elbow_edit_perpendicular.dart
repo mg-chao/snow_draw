@@ -139,8 +139,8 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
 }
 
 double? _segmentPadding(DrawPoint from, DrawPoint to) {
-  final length = _manhattanDistance(from, to);
-  if (!length.isFinite || length <= _dedupThreshold) {
+  final length = ElbowGeometry.manhattanDistance(from, to);
+  if (!length.isFinite || length <= ElbowConstants.dedupThreshold) {
     return null;
   }
   return length;
@@ -149,12 +149,12 @@ double? _segmentPadding(DrawPoint from, DrawPoint to) {
 double _resolveDirectionPadding(double? desired) {
   final resolved = desired;
   if (resolved == null || !resolved.isFinite) {
-    return _directionFixPadding;
+    return ElbowConstants.directionFixPadding;
   }
-  if (resolved <= _dedupThreshold) {
-    return _directionFixPadding;
+  if (resolved <= ElbowConstants.dedupThreshold) {
+    return ElbowConstants.directionFixPadding;
   }
-  return math.max(_directionFixPadding, resolved);
+  return math.max(ElbowConstants.directionFixPadding, resolved);
 }
 
 _PerpendicularAdjustment? _alignStartSegmentLength({
@@ -165,12 +165,12 @@ _PerpendicularAdjustment? _alignStartSegmentLength({
   if (points.length < 2 ||
       desiredLength == null ||
       !desiredLength.isFinite ||
-      desiredLength <= _dedupThreshold) {
+      desiredLength <= ElbowConstants.dedupThreshold) {
     return null;
   }
   final desiredHorizontal = heading.isHorizontal;
   if (points.length > 2) {
-    final nextHorizontal = _isHorizontal(points[1], points[2]);
+    final nextHorizontal = ElbowGeometry.isHorizontal(points[1], points[2]);
     if (nextHorizontal != desiredHorizontal) {
       return null;
     }
@@ -181,7 +181,7 @@ _PerpendicularAdjustment? _alignStartSegmentLength({
   final delta = desiredHorizontal
       ? (neighbor.x - target.x).abs()
       : (neighbor.y - target.y).abs();
-  if (delta <= _dedupThreshold) {
+  if (delta <= ElbowConstants.dedupThreshold) {
     return null;
   }
   final updated = List<DrawPoint>.from(points);
@@ -203,14 +203,17 @@ _PerpendicularAdjustment? _alignEndSegmentLength({
   if (points.length < 2 ||
       desiredLength == null ||
       !desiredLength.isFinite ||
-      desiredLength <= _dedupThreshold) {
+      desiredLength <= ElbowConstants.dedupThreshold) {
     return null;
   }
   final desiredHorizontal = heading.isHorizontal;
   final neighborIndex = points.length - 2;
   if (points.length > 2) {
     final prev = points[neighborIndex - 1];
-    final prevHorizontal = _isHorizontal(prev, points[neighborIndex]);
+    final prevHorizontal = ElbowGeometry.isHorizontal(
+      prev,
+      points[neighborIndex],
+    );
     if (prevHorizontal != desiredHorizontal) {
       return null;
     }
@@ -221,7 +224,7 @@ _PerpendicularAdjustment? _alignEndSegmentLength({
   final delta = desiredHorizontal
       ? (neighbor.x - target.x).abs()
       : (neighbor.y - target.y).abs();
-  if (delta <= _dedupThreshold) {
+  if (delta <= ElbowConstants.dedupThreshold) {
     return null;
   }
   final updated = List<DrawPoint>.from(points);
@@ -267,8 +270,8 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   final start = points.first;
   final neighbor = points[1];
   final aligned = desiredHorizontal
-      ? (neighbor.y - start.y).abs() <= _dedupThreshold
-      : (neighbor.x - start.x).abs() <= _dedupThreshold;
+      ? (neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold
+      : (neighbor.x - start.x).abs() <= ElbowConstants.dedupThreshold;
   final directionOk = _directionMatches(start, neighbor, heading);
   if (aligned && directionOk) {
     final adjusted = _alignStartSegmentLength(
@@ -301,8 +304,9 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     );
   }
 
-  final nextHorizontal =
-      points.length > 2 ? _isHorizontal(neighbor, points[2]) : desiredHorizontal;
+  final nextHorizontal = points.length > 2
+      ? ElbowGeometry.isHorizontal(neighbor, points[2])
+      : desiredHorizontal;
   final conflict = nextHorizontal == desiredHorizontal;
   final canShiftDirection =
       points.length <= 2 || (desiredHorizontal ? nextHorizontal : !nextHorizontal);
@@ -374,8 +378,8 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final neighbor = points[neighborIndex];
   final endPoint = points[lastIndex];
   final aligned = desiredHorizontal
-      ? (neighbor.y - endPoint.y).abs() <= _dedupThreshold
-      : (neighbor.x - endPoint.x).abs() <= _dedupThreshold;
+      ? (neighbor.y - endPoint.y).abs() <= ElbowConstants.dedupThreshold
+      : (neighbor.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold;
   final requiredHeading = heading.opposite;
   final directionOk = _directionMatches(neighbor, endPoint, requiredHeading);
   if (aligned && directionOk) {
@@ -410,7 +414,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   }
 
   final prevHorizontal = points.length > 2
-      ? _isHorizontal(points[neighborIndex - 1], neighbor)
+      ? ElbowGeometry.isHorizontal(points[neighborIndex - 1], neighbor)
       : desiredHorizontal;
   final conflict = prevHorizontal == desiredHorizontal;
   final canShiftDirection =
@@ -471,10 +475,10 @@ bool _directionMatches(
   DrawPoint to,
   ElbowHeading heading,
 ) => switch (heading) {
-  ElbowHeading.right => to.x - from.x > _dedupThreshold,
-  ElbowHeading.left => from.x - to.x > _dedupThreshold,
-  ElbowHeading.down => to.y - from.y > _dedupThreshold,
-  ElbowHeading.up => from.y - to.y > _dedupThreshold,
+  ElbowHeading.right => to.x - from.x > ElbowConstants.dedupThreshold,
+  ElbowHeading.left => from.x - to.x > ElbowConstants.dedupThreshold,
+  ElbowHeading.down => to.y - from.y > ElbowConstants.dedupThreshold,
+  ElbowHeading.up => from.y - to.y > ElbowConstants.dedupThreshold,
 };
 
 DrawPoint _applyStartDirection(
@@ -545,11 +549,11 @@ _PerpendicularAdjustment _insertStartDirectionStub({
 
   if (allowExtend && points.length > 2) {
     final next = points[2];
-    final nextHorizontal = _isHorizontal(neighbor, next);
+    final nextHorizontal = ElbowGeometry.isHorizontal(neighbor, next);
     final connectorHorizontal =
-        (connector.y - neighbor.y).abs() <= _dedupThreshold;
+        (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
-        (connector.x - neighbor.x).abs() <= _dedupThreshold;
+        (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
     final collinear =
         nextHorizontal ? connectorHorizontal : connectorVertical;
     if (collinear) {
@@ -558,14 +562,17 @@ _PerpendicularAdjustment _insertStartDirectionStub({
     }
   }
 
-  if (_manhattanDistance(stub, start) > _dedupThreshold) {
+  if (ElbowGeometry.manhattanDistance(stub, start) >
+      ElbowConstants.dedupThreshold) {
     updated.insert(insertIndex, stub);
     insertIndex++;
     inserted = true;
   }
   if (!moved &&
-      _manhattanDistance(connector, neighbor) > _dedupThreshold &&
-      _manhattanDistance(connector, stub) > _dedupThreshold) {
+      ElbowGeometry.manhattanDistance(connector, neighbor) >
+          ElbowConstants.dedupThreshold &&
+      ElbowGeometry.manhattanDistance(connector, stub) >
+          ElbowConstants.dedupThreshold) {
     updated.insert(insertIndex, connector);
     inserted = true;
   }
@@ -606,11 +613,11 @@ _PerpendicularAdjustment _insertEndDirectionStub({
 
   if (allowExtend && points.length > 2) {
     final prev = points[points.length - 3];
-    final prevHorizontal = _isHorizontal(prev, neighbor);
+    final prevHorizontal = ElbowGeometry.isHorizontal(prev, neighbor);
     final connectorHorizontal =
-        (connector.y - neighbor.y).abs() <= _dedupThreshold;
+        (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
-        (connector.x - neighbor.x).abs() <= _dedupThreshold;
+        (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
     final collinear =
         prevHorizontal ? connectorHorizontal : connectorVertical;
     if (collinear) {
@@ -620,13 +627,16 @@ _PerpendicularAdjustment _insertEndDirectionStub({
   }
 
   if (!moved &&
-      _manhattanDistance(connector, neighbor) > _dedupThreshold &&
-      _manhattanDistance(connector, stub) > _dedupThreshold) {
+      ElbowGeometry.manhattanDistance(connector, neighbor) >
+          ElbowConstants.dedupThreshold &&
+      ElbowGeometry.manhattanDistance(connector, stub) >
+          ElbowConstants.dedupThreshold) {
     updated.insert(insertIndex, connector);
     insertIndex++;
     inserted = true;
   }
-  if (_manhattanDistance(stub, endPoint) > _dedupThreshold) {
+  if (ElbowGeometry.manhattanDistance(stub, endPoint) >
+      ElbowConstants.dedupThreshold) {
     updated.insert(insertIndex, stub);
     inserted = true;
   }

@@ -29,8 +29,8 @@ List<DrawPoint> _simplifyPath(
     }
     final prev = withoutCollinear.last;
     final next = points[i + 1];
-    final isHorizontalPrev = _isHorizontal(prev, point);
-    final isHorizontalNext = _isHorizontal(point, next);
+    final isHorizontalPrev = ElbowGeometry.isHorizontal(prev, point);
+    final isHorizontalNext = ElbowGeometry.isHorizontal(point, next);
     if (isHorizontalPrev == isHorizontalNext) {
       continue;
     }
@@ -44,8 +44,8 @@ List<DrawPoint> _simplifyPath(
     if (point == cleaned.last) {
       continue;
     }
-    final length = _manhattanDistance(cleaned.last, point);
-    if (length <= _dedupThreshold && !pinned.contains(point)) {
+    final length = ElbowGeometry.manhattanDistance(cleaned.last, point);
+    if (length <= ElbowConstants.dedupThreshold && !pinned.contains(point)) {
       continue;
     }
     cleaned.add(point);
@@ -61,7 +61,8 @@ bool _hasDiagonalSegments(List<DrawPoint> points) {
   for (var i = 1; i < points.length; i++) {
     final dx = (points[i].x - points[i - 1].x).abs();
     final dy = (points[i].y - points[i - 1].y).abs();
-    if (dx > _dedupThreshold && dy > _dedupThreshold) {
+    if (dx > ElbowConstants.dedupThreshold &&
+        dy > ElbowConstants.dedupThreshold) {
       return true;
     }
   }
@@ -69,24 +70,18 @@ bool _hasDiagonalSegments(List<DrawPoint> points) {
 }
 
 bool _segmentsCollinear(DrawPoint a, DrawPoint b, DrawPoint c) {
-  final horizontal = _isHorizontal(a, b);
-  final nextHorizontal = _isHorizontal(b, c);
+  final horizontal = ElbowGeometry.isHorizontal(a, b);
+  final nextHorizontal = ElbowGeometry.isHorizontal(b, c);
   if (horizontal != nextHorizontal) {
     return false;
   }
   if (horizontal) {
-    return (a.y - b.y).abs() <= _dedupThreshold &&
-        (b.y - c.y).abs() <= _dedupThreshold;
+    return (a.y - b.y).abs() <= ElbowConstants.dedupThreshold &&
+        (b.y - c.y).abs() <= ElbowConstants.dedupThreshold;
   }
-  return (a.x - b.x).abs() <= _dedupThreshold &&
-      (b.x - c.x).abs() <= _dedupThreshold;
+  return (a.x - b.x).abs() <= ElbowConstants.dedupThreshold &&
+      (b.x - c.x).abs() <= ElbowConstants.dedupThreshold;
 }
-
-bool _isHorizontal(DrawPoint a, DrawPoint b) =>
-    (a.y - b.y).abs() <= (a.x - b.x).abs();
-
-double _manhattanDistance(DrawPoint a, DrawPoint b) =>
-    (a.x - b.x).abs() + (a.y - b.y).abs();
 
 bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   if (a.length != b.length) {

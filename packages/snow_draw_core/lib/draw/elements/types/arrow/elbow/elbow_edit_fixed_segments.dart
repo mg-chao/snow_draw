@@ -23,11 +23,15 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
     }
     final dx = (segment.start.x - segment.end.x).abs();
     final dy = (segment.start.y - segment.end.y).abs();
-    if (dx > _dedupThreshold && dy > _dedupThreshold) {
+    if (dx > ElbowConstants.dedupThreshold &&
+        dy > ElbowConstants.dedupThreshold) {
       continue;
     }
-    final length = _manhattanDistance(segment.start, segment.end);
-    if (length <= _dedupThreshold) {
+    final length = ElbowGeometry.manhattanDistance(
+      segment.start,
+      segment.end,
+    );
+    if (length <= ElbowConstants.dedupThreshold) {
       continue;
     }
     if (result.any((entry) => entry.index == segment.index)) {
@@ -55,8 +59,8 @@ List<ElbowFixedSegment> _reindexFixedSegments(
     }
     final start = points[index - 1];
     final end = points[index];
-    final length = _manhattanDistance(start, end);
-    if (length <= _dedupThreshold) {
+    final length = ElbowGeometry.manhattanDistance(start, end);
+    if (length <= ElbowConstants.dedupThreshold) {
       continue;
     }
     result.add(segment.copyWith(index: index, start: start, end: end));
@@ -66,12 +70,17 @@ List<ElbowFixedSegment> _reindexFixedSegments(
 
 int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
   final preferredIndex = segment.index;
-  final fixedHorizontal = _isHorizontal(segment.start, segment.end);
+  final fixedHorizontal = ElbowGeometry.isHorizontal(
+    segment.start,
+    segment.end,
+  );
   final maxIndex = points.length - 1;
   const minIndex = 2;
   if (preferredIndex >= minIndex && preferredIndex < maxIndex) {
-    final preferredHorizontal =
-        _isHorizontal(points[preferredIndex - 1], points[preferredIndex]);
+    final preferredHorizontal = ElbowGeometry.isHorizontal(
+      points[preferredIndex - 1],
+      points[preferredIndex],
+    );
     if (preferredHorizontal == fixedHorizontal) {
       return preferredIndex;
     }
@@ -79,7 +88,8 @@ int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
   int? bestIndex;
   var bestIndexDelta = double.infinity;
   for (var i = minIndex; i < maxIndex; i++) {
-    if (_isHorizontal(points[i - 1], points[i]) != fixedHorizontal) {
+    if (ElbowGeometry.isHorizontal(points[i - 1], points[i]) !=
+        fixedHorizontal) {
       continue;
     }
     final indexDelta = (i - preferredIndex).abs().toDouble();
@@ -97,7 +107,7 @@ bool? _fixedSegmentIsHorizontal(
 ) {
   for (final segment in fixedSegments) {
     if (segment.index == index) {
-      return _isHorizontal(segment.start, segment.end);
+      return ElbowGeometry.isHorizontal(segment.start, segment.end);
     }
   }
   return null;
@@ -114,8 +124,8 @@ bool _fixedSegmentsEqual(
     if (a[i].index != b[i].index) {
       return false;
     }
-    final aHorizontal = _isHorizontal(a[i].start, a[i].end);
-    final bHorizontal = _isHorizontal(b[i].start, b[i].end);
+    final aHorizontal = ElbowGeometry.isHorizontal(a[i].start, a[i].end);
+    final bHorizontal = ElbowGeometry.isHorizontal(b[i].start, b[i].end);
     if (aHorizontal != bHorizontal) {
       return false;
     }
@@ -125,7 +135,7 @@ bool _fixedSegmentsEqual(
     final bAxis = bHorizontal
         ? (b[i].start.y + b[i].end.y) / 2
         : (b[i].start.x + b[i].end.x) / 2;
-    if ((aAxis - bAxis).abs() > _dedupThreshold) {
+    if ((aAxis - bAxis).abs() > ElbowConstants.dedupThreshold) {
       return false;
     }
   }
@@ -147,20 +157,23 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
     }
     final start = updated[index - 1];
     final end = updated[index];
-    final isHorizontal = _isHorizontal(segment.start, segment.end);
+    final isHorizontal = ElbowGeometry.isHorizontal(
+      segment.start,
+      segment.end,
+    );
     final axis = isHorizontal
         ? (segment.start.y + segment.end.y) / 2
         : (segment.start.x + segment.end.x) / 2;
     if (isHorizontal) {
-      if ((start.y - axis).abs() <= _dedupThreshold &&
-          (end.y - axis).abs() <= _dedupThreshold) {
+      if ((start.y - axis).abs() <= ElbowConstants.dedupThreshold &&
+          (end.y - axis).abs() <= ElbowConstants.dedupThreshold) {
         continue;
       }
       updated[index - 1] = start.copyWith(y: axis);
       updated[index] = end.copyWith(y: axis);
     } else {
-      if ((start.x - axis).abs() <= _dedupThreshold &&
-          (end.x - axis).abs() <= _dedupThreshold) {
+      if ((start.x - axis).abs() <= ElbowConstants.dedupThreshold &&
+          (end.x - axis).abs() <= ElbowConstants.dedupThreshold) {
         continue;
       }
       updated[index - 1] = start.copyWith(x: axis);
@@ -187,7 +200,8 @@ int? _resolveBaselineSegmentIndex({
     if (usedIndices.contains(i)) {
       continue;
     }
-    if (_isHorizontal(baseline[i - 1], baseline[i]) != isHorizontal) {
+    if (ElbowGeometry.isHorizontal(baseline[i - 1], baseline[i]) !=
+        isHorizontal) {
       continue;
     }
     final indexDelta = (i - preferredIndex).abs().toDouble();
@@ -212,7 +226,10 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
   final mappedSegments = <ElbowFixedSegment>[];
 
   for (final segment in fixedSegments) {
-    final isHorizontal = _isHorizontal(segment.start, segment.end);
+    final isHorizontal = ElbowGeometry.isHorizontal(
+      segment.start,
+      segment.end,
+    );
     final index = _resolveBaselineSegmentIndex(
       baseline: updated,
       isHorizontal: isHorizontal,
@@ -266,8 +283,8 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
     }
     final start = points[index - 1];
     final end = points[index];
-    final length = _manhattanDistance(start, end);
-    if (length <= _dedupThreshold) {
+    final length = ElbowGeometry.manhattanDistance(start, end);
+    if (length <= ElbowConstants.dedupThreshold) {
       continue;
     }
     result.add(segment.copyWith(index: index, start: start, end: end));
@@ -437,4 +454,58 @@ Set<DrawPoint> _collectPinnedPoints({
       ..add(points[index]);
   }
   return pinned;
+}
+
+/// Simplifies a path while preserving fixed segment anchors.
+_FixedSegmentPathResult _simplifyFixedSegmentPath({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  final pinned = _collectPinnedPoints(
+    points: points,
+    fixedSegments: fixedSegments,
+  );
+  final simplified = _simplifyPath(points, pinned: pinned);
+  final reindexed = _reindexFixedSegments(simplified, fixedSegments);
+  return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
+}
+
+/// Normalizes a path after fixed-segment release by merging collinear neighbors.
+_FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  // 1) Re-apply fixed axes before any simplification.
+  final enforcedPoints = _applyFixedSegmentsToPoints(points, fixedSegments);
+  // 2) Simplify while keeping fixed endpoints pinned.
+  final prePinned = _collectPinnedPoints(
+    points: enforcedPoints,
+    fixedSegments: fixedSegments,
+  );
+  final preSimplified = _simplifyPath(enforcedPoints, pinned: prePinned);
+  // 3) Reindex fixed segments when every segment still maps cleanly.
+  final alignedFixed = _reindexFixedSegments(preSimplified, fixedSegments);
+  final mergeFixedSegments = alignedFixed.length == fixedSegments.length
+      ? alignedFixed
+      : fixedSegments;
+  // 4) Merge any collinear neighbors introduced by the release.
+  final merged = _mergeFixedSegmentsWithCollinearNeighbors(
+    points: preSimplified,
+    fixedSegments: mergeFixedSegments,
+  );
+  // 5) Simplify again and reindex to finalize the stable path.
+  final pinned = _collectPinnedPoints(
+    points: merged.points,
+    fixedSegments: merged.fixedSegments,
+  );
+  final simplified = _simplifyPath(merged.points, pinned: pinned);
+  final reindexed = _reindexFixedSegments(simplified, merged.fixedSegments);
+  return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }

@@ -6,10 +6,7 @@ part of 'elbow_router.dart';
 /// split overlaps to keep the grid searchable, and compute dongle points
 /// where the route exits each obstacle.
 
-// Shared geometry helpers.
-double _manhattanDistance(DrawPoint a, DrawPoint b) =>
-    (a.x - b.x).abs() + (a.y - b.y).abs();
-
+// Shared layout helpers.
 DrawRect _inflateBounds(DrawRect rect, double padding) => DrawRect(
   minX: rect.minX - padding,
   minY: rect.minY - padding,
@@ -18,15 +15,15 @@ DrawRect _inflateBounds(DrawRect rect, double padding) => DrawRect(
 );
 
 DrawRect _clampBounds(DrawRect rect) => DrawRect(
-  minX: rect.minX.clamp(-_maxPosition, _maxPosition),
-  minY: rect.minY.clamp(-_maxPosition, _maxPosition),
-  maxX: rect.maxX.clamp(-_maxPosition, _maxPosition),
-  maxY: rect.maxY.clamp(-_maxPosition, _maxPosition),
+  minX: rect.minX.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
+  minY: rect.minY.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
+  maxX: rect.maxX.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
+  maxY: rect.maxY.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
 );
 
 DrawPoint _clampPoint(DrawPoint point) => DrawPoint(
-  x: point.x.clamp(-_maxPosition, _maxPosition),
-  y: point.y.clamp(-_maxPosition, _maxPosition),
+  x: point.x.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
+  y: point.y.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
 );
 
 DrawRect _unionBounds(List<DrawRect> bounds) {
@@ -62,7 +59,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
     minSplit = overlapMinX;
     maxSplit = overlapMaxX;
   }
-  if (maxSplit - minSplit <= _intersectionEpsilon) {
+  if (maxSplit - minSplit <= ElbowConstants.intersectionEpsilon) {
     return (start: startObstacle, end: endObstacle);
   }
   final clamped = splitX.clamp(minSplit, maxSplit);
@@ -101,7 +98,7 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
     minSplit = overlapMinY;
     maxSplit = overlapMaxY;
   }
-  if (maxSplit - minSplit <= _intersectionEpsilon) {
+  if (maxSplit - minSplit <= ElbowConstants.intersectionEpsilon) {
     return (start: startObstacle, end: endObstacle);
   }
   final clamped = splitY.clamp(minSplit, maxSplit);
@@ -182,14 +179,14 @@ DrawRect _pointBounds(DrawPoint point, double padding) => DrawRect(
 
 double _arrowheadGapMultiplier(bool hasArrowhead) => hasArrowhead
     ? ArrowBindingUtils.elbowArrowheadGapMultiplier
-    : _elbowNoArrowheadGapMultiplier;
+    : ElbowConstants.elbowNoArrowheadGapMultiplier;
 
 double _arrowheadGap(bool hasArrowhead) =>
     ArrowBindingUtils.elbowBindingGapBase *
     _arrowheadGapMultiplier(hasArrowhead);
 
 double _headPadding(bool hasArrowhead) {
-  final padding = _basePadding - _arrowheadGap(hasArrowhead);
+  final padding = ElbowConstants.basePadding - _arrowheadGap(hasArrowhead);
   return math.max(0, padding);
 }
 
@@ -204,7 +201,11 @@ DrawRect _elementBoundsForElbow({
   }
 
   final headOffset = _arrowheadGap(hasArrowhead);
-  final padding = _paddingFromHeading(heading, headOffset, _elementSidePadding);
+  final padding = _paddingFromHeading(
+    heading,
+    headOffset,
+    ElbowConstants.elementSidePadding,
+  );
   return DrawRect(
     minX: elementBounds.minX - padding.left,
     minY: elementBounds.minY - padding.top,
@@ -214,12 +215,16 @@ DrawRect _elementBoundsForElbow({
 }
 
 _BoundsPadding _overlapPadding(ElbowHeading heading) =>
-    _paddingFromHeading(heading, _basePadding, 0);
+    _paddingFromHeading(heading, ElbowConstants.basePadding, 0);
 
 _BoundsPadding _routingPadding({
   required ElbowHeading heading,
   required bool hasArrowhead,
-}) => _paddingFromHeading(heading, _headPadding(hasArrowhead), _basePadding);
+}) => _paddingFromHeading(
+  heading,
+  _headPadding(hasArrowhead),
+  ElbowConstants.basePadding,
+);
 
 DrawRect? _aabbElementBounds({
   required bool boundsOverlap,
@@ -522,10 +527,10 @@ final class _ObstacleLayoutBuilder {
   required DrawRect endElbowBounds,
 }) {
   final startBaseBounds = boundsOverlap
-      ? _pointBounds(startPoint, _donglePointPadding)
+      ? _pointBounds(startPoint, ElbowConstants.donglePointPadding)
       : startElbowBounds;
   final endBaseBounds = boundsOverlap
-      ? _pointBounds(endPoint, _donglePointPadding)
+      ? _pointBounds(endPoint, ElbowConstants.donglePointPadding)
       : endElbowBounds;
   return (start: startBaseBounds, end: endBaseBounds);
 }
@@ -591,7 +596,7 @@ DrawRect _commonBoundsForObstacles({
     _clampBounds(
       _inflateBounds(
         _unionBounds([startObstacle, endObstacle]),
-        _basePadding,
+        ElbowConstants.basePadding,
       ),
     );
 

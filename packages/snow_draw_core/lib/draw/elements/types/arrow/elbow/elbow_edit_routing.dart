@@ -35,8 +35,8 @@ List<DrawPoint> _directElbowPath(
   DrawPoint end, {
   required bool preferHorizontal,
 }) {
-  if ((start.x - end.x).abs() <= _dedupThreshold ||
-      (start.y - end.y).abs() <= _dedupThreshold) {
+  if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold ||
+      (start.y - end.y).abs() <= ElbowConstants.dedupThreshold) {
     return [start, end];
   }
   final mid = preferHorizontal
@@ -56,10 +56,10 @@ bool? _preferredHorizontalForRelease({
     return null;
   }
   if (previous != null) {
-    return _isHorizontal(previous.start, previous.end);
+    return ElbowGeometry.isHorizontal(previous.start, previous.end);
   }
   if (next != null) {
-    return !_isHorizontal(next.start, next.end);
+    return !ElbowGeometry.isHorizontal(next.start, next.end);
   }
   return null;
 }

@@ -11,6 +11,7 @@ import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
+import 'elbow_constants.dart';
 import 'elbow_geometry.dart';
 import 'elbow_fixed_segment.dart';
 import 'elbow_router.dart';
@@ -20,9 +21,6 @@ part 'elbow_edit_fixed_segments.dart';
 part 'elbow_edit_routing.dart';
 part 'elbow_edit_endpoint_drag.dart';
 part 'elbow_edit_perpendicular.dart';
-
-const double _dedupThreshold = 1;
-const double _directionFixPadding = 12;
 
 /// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
@@ -216,43 +214,19 @@ final class _ElbowEditPipeline {
       baseline: updated.points,
       fixedSegments: updated.fixedSegments,
     );
-    final useMapped =
-        mapped.fixedSegments.length == updated.fixedSegments.length;
-    final routedPoints = useMapped ? mapped.points : updated.points;
-    final workingFixedSegments =
-        useMapped ? mapped.fixedSegments : updated.fixedSegments;
-    final enforcedPoints = _applyFixedSegmentsToPoints(
-      routedPoints,
-      workingFixedSegments,
+    final reconciled = mapped.fixedSegments.length == updated.fixedSegments.length
+        ? mapped
+        : updated;
+    final normalized = _normalizeFixedSegmentReleasePath(
+      points: reconciled.points,
+      fixedSegments: reconciled.fixedSegments,
     );
-    final prePinned = _collectPinnedPoints(
-      points: enforcedPoints,
-      fixedSegments: workingFixedSegments,
-    );
-    final preSimplified = _simplifyPath(enforcedPoints, pinned: prePinned);
-    final alignedFixed = _reindexFixedSegments(
-      preSimplified,
-      workingFixedSegments,
-    );
-    final mergeFixedSegments = alignedFixed.length == workingFixedSegments.length
-        ? alignedFixed
-        : workingFixedSegments;
-    final merged = _mergeFixedSegmentsWithCollinearNeighbors(
-      points: preSimplified,
-      fixedSegments: mergeFixedSegments,
-    );
-    final pinned = _collectPinnedPoints(
-      points: merged.points,
-      fixedSegments: merged.fixedSegments,
-    );
-    final simplified = _simplifyPath(merged.points, pinned: pinned);
-    final reindexed = _reindexFixedSegments(simplified, merged.fixedSegments);
-    final resultSegments = reindexed.isEmpty
+    final resultSegments = normalized.fixedSegments.isEmpty
         ? null
-        : List<ElbowFixedSegment>.unmodifiable(reindexed);
+        : List<ElbowFixedSegment>.unmodifiable(normalized.fixedSegments);
     return _buildResult(
       data: inputs.data,
-      points: simplified,
+      points: normalized.points,
       fixedSegments: resultSegments,
     );
   }
@@ -260,15 +234,17 @@ final class _ElbowEditPipeline {
   ElbowEditResult _handleEndpointDragFlow(_ElbowEditInputs inputs) {
     // Step 5: endpoint drag while fixed segments stay pinned.
     final updated = _applyEndpointDragWithFixedSegments(
-      element: inputs.element,
-      elementsById: inputs.elementsById,
-      basePoints: inputs.basePoints,
-      incomingPoints: inputs.incomingPoints,
-      fixedSegments: inputs.fixedSegments,
-      startBinding: inputs.startBinding,
-      endBinding: inputs.endBinding,
-      startArrowhead: inputs.data.startArrowhead,
-      endArrowhead: inputs.data.endArrowhead,
+      context: _EndpointDragContext(
+        element: inputs.element,
+        elementsById: inputs.elementsById,
+        basePoints: inputs.basePoints,
+        incomingPoints: inputs.incomingPoints,
+        fixedSegments: inputs.fixedSegments,
+        startBinding: inputs.startBinding,
+        endBinding: inputs.endBinding,
+        startArrowhead: inputs.data.startArrowhead,
+        endArrowhead: inputs.data.endArrowhead,
+      ),
     );
     final resultSegments = updated.fixedSegments.isEmpty
         ? null
@@ -295,19 +271,17 @@ final class _ElbowEditPipeline {
     );
 
     // Step 7: simplify and reindex segments to keep the path stable.
-    final pinned = _collectPinnedPoints(
+    final simplified = _simplifyFixedSegmentPath(
       points: workingPoints,
       fixedSegments: inputs.fixedSegments,
     );
-    final simplified = _simplifyPath(workingPoints, pinned: pinned);
-    final reindexed = _reindexFixedSegments(simplified, inputs.fixedSegments);
-    final resultSegments = reindexed.isEmpty
+    final resultSegments = simplified.fixedSegments.isEmpty
         ? null
-        : List<ElbowFixedSegment>.unmodifiable(reindexed);
+        : List<ElbowFixedSegment>.unmodifiable(simplified.fixedSegments);
 
     return _buildResult(
       data: inputs.data,
-      points: simplified,
+      points: simplified.points,
       fixedSegments: resultSegments,
     );
   }

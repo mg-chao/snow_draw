@@ -11,6 +11,7 @@ import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
+import 'elbow_constants.dart';
 import 'elbow_geometry.dart';
 import 'elbow_heading.dart';
 
@@ -20,15 +21,6 @@ part 'elbow_router_endpoints.dart';
 part 'elbow_router_obstacles.dart';
 part 'elbow_router_path.dart';
 part 'elbow_router_grid.dart';
-
-const double _basePadding = 42;
-const double _dedupThreshold = 1;
-const double _minArrowLength = 8;
-const double _maxPosition = 1000000;
-const double _donglePointPadding = 2;
-const double _elbowNoArrowheadGapMultiplier = 2;
-const double _elementSidePadding = 8;
-const _intersectionEpsilon = 1e-6;
 
 /// Elbow routing overview:
 /// 1) Resolve bindings into concrete endpoints + headings.

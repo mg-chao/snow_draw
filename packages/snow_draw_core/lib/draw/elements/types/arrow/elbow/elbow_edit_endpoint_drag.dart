@@ -2,6 +2,40 @@ part of 'elbow_editing.dart';
 
 /// Endpoint-drag flow for elbow editing with fixed segments.
 
+/// Aggregates endpoint-drag inputs and derived flags.
+@immutable
+final class _EndpointDragContext {
+  const _EndpointDragContext({
+    required this.element,
+    required this.elementsById,
+    required this.basePoints,
+    required this.incomingPoints,
+    required this.fixedSegments,
+    required this.startBinding,
+    required this.endBinding,
+    required this.startArrowhead,
+    required this.endArrowhead,
+  });
+
+  final ElementState element;
+  final Map<String, ElementState> elementsById;
+  final List<DrawPoint> basePoints;
+  final List<DrawPoint> incomingPoints;
+  final List<ElbowFixedSegment> fixedSegments;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final ArrowheadStyle startArrowhead;
+  final ArrowheadStyle endArrowhead;
+
+  bool get hasBindings => startBinding != null || endBinding != null;
+
+  bool get hasBoundStart => _hasBindingTarget(startBinding, elementsById);
+
+  bool get hasBoundEnd => _hasBindingTarget(endBinding, elementsById);
+
+  bool get isFullyUnbound => startBinding == null && endBinding == null;
+}
+
 List<DrawPoint> _referencePointsForEndpointDrag({
   required List<DrawPoint> basePoints,
   required List<DrawPoint> incomingPoints,
@@ -88,44 +122,36 @@ bool _hasBindingTarget(
 ) => binding != null && elementsById.containsKey(binding.elementId);
 
 _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
-  required ElementState element,
-  required Map<String, ElementState> elementsById,
-  required List<DrawPoint> basePoints,
-  required List<DrawPoint> incomingPoints,
-  required List<ElbowFixedSegment> fixedSegments,
-  required ArrowBinding? startBinding,
-  required ArrowBinding? endBinding,
-  required ArrowheadStyle startArrowhead,
-  required ArrowheadStyle endArrowhead,
+  required _EndpointDragContext context,
 }) {
-  if (basePoints.length < 2) {
+  if (context.basePoints.length < 2) {
     return _FixedSegmentPathResult(
-      points: incomingPoints,
-      fixedSegments: fixedSegments,
+      points: context.incomingPoints,
+      fixedSegments: context.fixedSegments,
     );
   }
 
   // Step A: select a stable reference path and apply endpoint overrides.
   final referencePoints = _referencePointsForEndpointDrag(
-    basePoints: basePoints,
-    incomingPoints: incomingPoints,
+    basePoints: context.basePoints,
+    incomingPoints: context.incomingPoints,
   );
   var updated = List<DrawPoint>.from(referencePoints);
-  var workingFixedSegments = fixedSegments;
-  updated[0] = incomingPoints.first;
-  updated[updated.length - 1] = incomingPoints.last;
+  var workingFixedSegments = context.fixedSegments;
+  updated[0] = context.incomingPoints.first;
+  updated[updated.length - 1] = context.incomingPoints.last;
 
   // Step B: if any bindings exist, prefer a baseline route that respects them.
-  if (startBinding != null || endBinding != null) {
+  if (context.hasBindings) {
     final baseline = _routeLocalPath(
-      element: element,
-      elementsById: elementsById,
+      element: context.element,
+      elementsById: context.elementsById,
       startLocal: updated.first,
       endLocal: updated.last,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
-      startBinding: startBinding,
-      endBinding: endBinding,
+      startArrowhead: context.startArrowhead,
+      endArrowhead: context.endArrowhead,
+      startBinding: context.startBinding,
+      endBinding: context.endBinding,
     );
     final adopted = _maybeAdoptBaselineRoute(
       currentPoints: updated,
@@ -142,16 +168,14 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   );
 
   // Step D: for unbound arrows, re-route if a diagonal drift appears.
-  if (startBinding == null &&
-      endBinding == null &&
-      _hasDiagonalSegments(updated)) {
+  if (context.isFullyUnbound && _hasDiagonalSegments(updated)) {
     final baseline = _routeLocalPath(
-      element: element,
-      elementsById: elementsById,
+      element: context.element,
+      elementsById: context.elementsById,
       startLocal: updated.first,
       endLocal: updated.last,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
+      startArrowhead: context.startArrowhead,
+      endArrowhead: context.endArrowhead,
     );
     final adopted = _maybeAdoptBaselineRoute(
       currentPoints: updated,
@@ -162,17 +186,14 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     workingFixedSegments = adopted.fixedSegments;
   }
 
-  final hasStartBinding = _hasBindingTarget(startBinding, elementsById);
-  final hasEndBinding = _hasBindingTarget(endBinding, elementsById);
-
   // Step E: snap neighbors to maintain orthogonality for unbound endpoints.
-  if (!hasStartBinding) {
+  if (!context.hasBoundStart) {
     updated = _snapUnboundStartNeighbor(
       points: updated,
       fixedSegments: workingFixedSegments,
     );
   }
-  if (!hasEndBinding) {
+  if (!context.hasBoundEnd) {
     updated = _snapUnboundEndNeighbor(
       points: updated,
       fixedSegments: workingFixedSegments,
@@ -185,7 +206,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   );
 
   // Step G: merge collinear tail segments for unbound paths.
-  if (startBinding == null && endBinding == null) {
+  if (context.isFullyUnbound) {
     final merged = _mergeFixedSegmentWithEndCollinear(
       points: updated,
       fixedSegments: workingFixedSegments,
@@ -197,19 +218,19 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   }
 
   final synced = _syncFixedSegmentsToPoints(updated, workingFixedSegments);
-  if (startBinding == null && endBinding == null) {
+  if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: updated, fixedSegments: synced);
   }
 
   // Step H: enforce perpendicularity for bound endpoints in world space.
   return _ensurePerpendicularBindings(
-    element: element,
-    elementsById: elementsById,
+    element: context.element,
+    elementsById: context.elementsById,
     points: updated,
     fixedSegments: synced,
-    startBinding: startBinding,
-    endBinding: endBinding,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
+    startBinding: context.startBinding,
+    endBinding: context.endBinding,
+    startArrowhead: context.startArrowhead,
+    endArrowhead: context.endArrowhead,
   );
 }

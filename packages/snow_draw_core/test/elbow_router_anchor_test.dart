@@ -1,16 +1,14 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
-
-const double _dedupThreshold = 1;
-const _intersectionEpsilon = 1e-6;
 
 void main() {
   test('elbow routing avoids a bound rectangle when start aligns above', () {
@@ -48,7 +46,7 @@ void main() {
     final penultimate = result.points[result.points.length - 2];
     final endPoint = result.points.last;
     expect(
-      (penultimate.x - endPoint.x).abs() <= _intersectionEpsilon,
+      (penultimate.x - endPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Bottom binding should approach vertically.',
     );
@@ -89,7 +87,7 @@ void main() {
     final penultimate = result.points[result.points.length - 2];
     final endPoint = result.points.last;
     expect(
-      (penultimate.x - endPoint.x).abs() <= _intersectionEpsilon,
+      (penultimate.x - endPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Top binding should approach vertically.',
     );
@@ -130,7 +128,7 @@ void main() {
     final penultimate = result.points[result.points.length - 2];
     final endPoint = result.points.last;
     expect(
-      (penultimate.y - endPoint.y).abs() <= _intersectionEpsilon,
+      (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Left binding should approach horizontally.',
     );
@@ -171,7 +169,7 @@ void main() {
     final penultimate = result.points[result.points.length - 2];
     final endPoint = result.points.last;
     expect(
-      (penultimate.y - endPoint.y).abs() <= _intersectionEpsilon,
+      (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Right binding should approach horizontally.',
     );
@@ -200,7 +198,7 @@ bool _pathIsOrthogonal(List<DrawPoint> points) {
   for (var i = 0; i < points.length - 1; i++) {
     final dx = (points[i].x - points[i + 1].x).abs();
     final dy = (points[i].y - points[i + 1].y).abs();
-    if (dx > _intersectionEpsilon && dy > _intersectionEpsilon) {
+    if (dx > ElbowConstants.intersectionEpsilon && dy > ElbowConstants.intersectionEpsilon) {
       return false;
     }
   }
@@ -219,39 +217,39 @@ bool _pathIntersectsBounds(List<DrawPoint> points, DrawRect bounds) {
 bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
-  if (dx <= _dedupThreshold) {
+  if (dx <= ElbowConstants.dedupThreshold) {
     final x = (start.x + end.x) / 2;
-    if (x < bounds.minX - _dedupThreshold ||
-        x > bounds.maxX + _dedupThreshold) {
+    if (x < bounds.minX - ElbowConstants.dedupThreshold ||
+        x > bounds.maxX + ElbowConstants.dedupThreshold) {
       return false;
     }
     final minY = math.min(start.y, end.y);
     final maxY = math.max(start.y, end.y);
     final overlapStart = math.max(minY, bounds.minY);
     final overlapEnd = math.min(maxY, bounds.maxY);
-    return overlapEnd - overlapStart > _intersectionEpsilon;
+    return overlapEnd - overlapStart > ElbowConstants.intersectionEpsilon;
   }
-  if (dy <= _dedupThreshold) {
+  if (dy <= ElbowConstants.dedupThreshold) {
     final y = (start.y + end.y) / 2;
-    if (y < bounds.minY - _dedupThreshold ||
-        y > bounds.maxY + _dedupThreshold) {
+    if (y < bounds.minY - ElbowConstants.dedupThreshold ||
+        y > bounds.maxY + ElbowConstants.dedupThreshold) {
       return false;
     }
     final minX = math.min(start.x, end.x);
     final maxX = math.max(start.x, end.x);
     final overlapStart = math.max(minX, bounds.minX);
     final overlapEnd = math.min(maxX, bounds.maxX);
-    return overlapEnd - overlapStart > _intersectionEpsilon;
+    return overlapEnd - overlapStart > ElbowConstants.intersectionEpsilon;
   }
 
   final minX = math.min(start.x, end.x);
   final maxX = math.max(start.x, end.x);
   final minY = math.min(start.y, end.y);
   final maxY = math.max(start.y, end.y);
-  if (maxX < bounds.minX - _dedupThreshold ||
-      minX > bounds.maxX + _dedupThreshold ||
-      maxY < bounds.minY - _dedupThreshold ||
-      minY > bounds.maxY + _dedupThreshold) {
+  if (maxX < bounds.minX - ElbowConstants.dedupThreshold ||
+      minX > bounds.maxX + ElbowConstants.dedupThreshold ||
+      maxY < bounds.minY - ElbowConstants.dedupThreshold ||
+      minY > bounds.maxY + ElbowConstants.dedupThreshold) {
     return false;
   }
   return true;

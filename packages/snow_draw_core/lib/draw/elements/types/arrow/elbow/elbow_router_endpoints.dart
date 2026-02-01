@@ -4,14 +4,6 @@ part of 'elbow_router.dart';
 ///
 /// This step resolves bindings into concrete world-space points, anchors,
 /// and headings so the rest of the router can treat each endpoint uniformly.
-ElbowHeading _vectorToHeading(double dx, double dy) {
-  final absX = dx.abs();
-  final absY = dy.abs();
-  if (absX >= absY) {
-    return dx >= 0 ? ElbowHeading.right : ElbowHeading.left;
-  }
-  return dy >= 0 ? ElbowHeading.down : ElbowHeading.up;
-}
 
 // Endpoint resolution: bindings + anchors + headings.
 @immutable
@@ -144,11 +136,11 @@ _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteInputs inputs) {
   final startPoint = startInfo.point;
   final endPoint = endInfo.point;
 
-  final vectorHeading = _vectorToHeading(
+  final vectorHeading = ElbowGeometry.headingForVector(
     endPoint.x - startPoint.x,
     endPoint.y - startPoint.y,
   );
-  final reverseVectorHeading = _vectorToHeading(
+  final reverseVectorHeading = ElbowGeometry.headingForVector(
     startPoint.x - endPoint.x,
     startPoint.y - endPoint.y,
   );

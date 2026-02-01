@@ -9,8 +9,8 @@ part of 'elbow_router.dart';
   DrawPoint start,
   DrawPoint end,
 ) => (
-  alignedX: (start.x - end.x).abs() <= _dedupThreshold,
-  alignedY: (start.y - end.y).abs() <= _dedupThreshold,
+  alignedX: (start.x - end.x).abs() <= ElbowConstants.dedupThreshold,
+  alignedY: (start.y - end.y).abs() <= ElbowConstants.dedupThreshold,
 );
 
 bool _headingsCompatibleWithAlignment({
@@ -86,17 +86,20 @@ List<DrawPoint>? _directPathIfClear({
 }
 
 bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
-  final innerBounds = _shrinkBounds(bounds, _intersectionEpsilon);
+  final innerBounds = _shrinkBounds(
+    bounds,
+    ElbowConstants.intersectionEpsilon,
+  );
   if (!_hasArea(innerBounds)) {
     return false;
   }
 
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
-  if (dx <= _dedupThreshold) {
+  if (dx <= ElbowConstants.dedupThreshold) {
     return _verticalSegmentIntersectsBounds(start, end, innerBounds);
   }
-  if (dy <= _dedupThreshold) {
+  if (dy <= ElbowConstants.dedupThreshold) {
     return _horizontalSegmentIntersectsBounds(start, end, innerBounds);
   }
   return _diagonalSegmentIntersectsBounds(start, end, innerBounds);
@@ -131,7 +134,7 @@ bool _verticalSegmentIntersectsBounds(
   final segMinY = math.min(start.y, end.y);
   final segMaxY = math.max(start.y, end.y);
   return _overlapLength(segMinY, segMaxY, bounds.minY, bounds.maxY) >
-      _intersectionEpsilon;
+      ElbowConstants.intersectionEpsilon;
 }
 
 bool _horizontalSegmentIntersectsBounds(
@@ -146,7 +149,7 @@ bool _horizontalSegmentIntersectsBounds(
   final segMinX = math.min(start.x, end.x);
   final segMaxX = math.max(start.x, end.x);
   return _overlapLength(segMinX, segMaxX, bounds.minX, bounds.maxX) >
-      _intersectionEpsilon;
+      ElbowConstants.intersectionEpsilon;
 }
 
 bool _diagonalSegmentIntersectsBounds(
@@ -172,7 +175,8 @@ List<DrawPoint> _fallbackPath({
   required DrawPoint end,
   required ElbowHeading startHeading,
 }) {
-  if (_manhattanDistance(start, end) < _minArrowLength) {
+  if (ElbowGeometry.manhattanDistance(start, end) <
+      ElbowConstants.minArrowLength) {
     final midY = (start.y + end.y) / 2;
     return [
       start,
@@ -182,8 +186,8 @@ List<DrawPoint> _fallbackPath({
     ];
   }
 
-  if ((start.x - end.x).abs() <= _dedupThreshold ||
-      (start.y - end.y).abs() <= _dedupThreshold) {
+  if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold ||
+      (start.y - end.y).abs() <= ElbowConstants.dedupThreshold) {
     return [start, end];
   }
 
@@ -239,7 +243,8 @@ List<DrawPoint> _removeShortSegments(List<DrawPoint> points) {
       filtered.add(points[i]);
       continue;
     }
-    if (_manhattanDistance(points[i - 1], points[i]) > _dedupThreshold) {
+    if (ElbowGeometry.manhattanDistance(points[i - 1], points[i]) >
+        ElbowConstants.dedupThreshold) {
       filtered.add(points[i]);
     }
   }
@@ -251,10 +256,13 @@ List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
     return points;
   }
 
-  var previousIsHorizontal = _isHorizontal(points[0], points[1]);
+  var previousIsHorizontal = ElbowGeometry.isHorizontal(points[0], points[1]);
   final result = <DrawPoint>[points.first];
   for (var i = 1; i < points.length - 1; i++) {
-    final nextIsHorizontal = _isHorizontal(points[i], points[i + 1]);
+    final nextIsHorizontal = ElbowGeometry.isHorizontal(
+      points[i],
+      points[i + 1],
+    );
     if (previousIsHorizontal != nextIsHorizontal) {
       result.add(points[i]);
     }
@@ -278,10 +286,10 @@ List<DrawPoint> _finalizeRoutedPath({
 }
 
 ElbowHeading _headingBetween(DrawPoint from, DrawPoint to) =>
-    _vectorToHeading(from.x - to.x, from.y - to.y);
+    ElbowGeometry.headingForVector(from.x - to.x, from.y - to.y);
 
 ElbowHeading _segmentHeading(DrawPoint from, DrawPoint to) =>
-    _vectorToHeading(to.x - from.x, to.y - from.y);
+    ElbowGeometry.headingForSegment(from, to);
 
 bool _segmentIntersectsAnyBounds(
   DrawPoint start,
@@ -310,7 +318,8 @@ List<DrawPoint> _ensureOrthogonalPath({
     final next = points[i];
     final dx = (next.x - previous.x).abs();
     final dy = (next.y - previous.y).abs();
-    if (dx <= _dedupThreshold || dy <= _dedupThreshold) {
+    if (dx <= ElbowConstants.dedupThreshold ||
+        dy <= ElbowConstants.dedupThreshold) {
       if (next != previous) {
         result.add(next);
       }
@@ -318,7 +327,7 @@ List<DrawPoint> _ensureOrthogonalPath({
     }
 
     final preferHorizontal = result.length > 1
-        ? _isHorizontal(result[result.length - 2], previous)
+        ? ElbowGeometry.isHorizontal(result[result.length - 2], previous)
         : startHeading.isHorizontal;
     final mid = preferHorizontal
         ? DrawPoint(x: next.x, y: previous.y)
@@ -332,6 +341,3 @@ List<DrawPoint> _ensureOrthogonalPath({
   }
   return result;
 }
-
-bool _isHorizontal(DrawPoint a, DrawPoint b) =>
-    (a.y - b.y).abs() <= (a.x - b.x).abs();

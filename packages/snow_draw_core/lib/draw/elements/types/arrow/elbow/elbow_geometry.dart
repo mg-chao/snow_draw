@@ -11,6 +11,30 @@ final class ElbowGeometry {
 
   static const double _headingEpsilon = 1e-6;
 
+  /// Returns the dominant cardinal heading for a vector.
+  ///
+  /// The dominant axis wins; ties favor horizontal headings.
+  static ElbowHeading headingForVector(double dx, double dy) {
+    final absX = dx.abs();
+    final absY = dy.abs();
+    if (absX >= absY) {
+      return dx >= 0 ? ElbowHeading.right : ElbowHeading.left;
+    }
+    return dy >= 0 ? ElbowHeading.down : ElbowHeading.up;
+  }
+
+  /// Returns the heading for a segment from [from] to [to].
+  static ElbowHeading headingForSegment(DrawPoint from, DrawPoint to) =>
+      headingForVector(to.x - from.x, to.y - from.y);
+
+  /// Manhattan distance between two points.
+  static double manhattanDistance(DrawPoint a, DrawPoint b) =>
+      (a.x - b.x).abs() + (a.y - b.y).abs();
+
+  /// Returns true when the segment is closer to horizontal than vertical.
+  static bool isHorizontal(DrawPoint a, DrawPoint b) =>
+      (a.y - b.y).abs() <= (a.x - b.x).abs();
+
   /// Determines which side of the bounds a point belongs to, using
   /// a scaled-triangle quadrant test around the center.
   static ElbowHeading headingForPointOnBounds(

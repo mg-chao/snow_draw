@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -11,9 +12,6 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
-
-const double _dedupThreshold = 1;
-const _intersectionEpsilon = 1e-6;
 
 void main() {
   test('fixed segment release preserves remaining axis', () {
@@ -53,7 +51,10 @@ void main() {
 
     final axisBefore = _segmentAxis(before);
     final axisAfter = _segmentAxis(after);
-    expect((axisAfter - axisBefore).abs() <= _dedupThreshold, isTrue);
+    expect(
+      (axisAfter - axisBefore).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+    );
   });
 
   test('endpoint drag keeps fixed segment axis', () {
@@ -90,7 +91,7 @@ void main() {
     final fixed = result.fixedSegments!.first;
     expect(_isHorizontal(fixed.start, fixed.end), isFalse);
     final axis = (fixed.start.x + fixed.end.x) / 2;
-    expect((axis - 100).abs() <= _dedupThreshold, isTrue);
+    expect((axis - 100).abs() <= ElbowConstants.dedupThreshold, isTrue);
   });
 
   test('binding edits keep a perpendicular start segment', () {
@@ -124,7 +125,8 @@ void main() {
     final startPoint = result.localPoints.first;
     final nextPoint = result.localPoints[1];
     expect(
-      (startPoint.x - nextPoint.x).abs() <= _intersectionEpsilon,
+      (startPoint.x - nextPoint.x).abs() <=
+          ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Top binding should depart vertically.',
     );
@@ -166,7 +168,8 @@ void main() {
     final penultimate = result.localPoints[result.localPoints.length - 2];
     final endPoint = result.localPoints.last;
     expect(
-      (penultimate.y - endPoint.y).abs() <= _intersectionEpsilon,
+      (penultimate.y - endPoint.y).abs() <=
+          ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Right binding should approach horizontally.',
     );
@@ -213,7 +216,7 @@ void main() {
     final fixed = result.fixedSegments!.first;
     expect(_isHorizontal(fixed.start, fixed.end), isTrue);
     final axis = (fixed.start.y + fixed.end.y) / 2;
-    expect((axis - 140).abs() <= _dedupThreshold, isTrue);
+    expect((axis - 140).abs() <= ElbowConstants.dedupThreshold, isTrue);
   });
 
   test('endpoint drag snaps an unbound start neighbor orthogonally', () {
@@ -246,7 +249,7 @@ void main() {
     expect(_pathIsOrthogonal(result.localPoints), isTrue);
     final start = result.localPoints.first;
     final neighbor = result.localPoints[1];
-    expect((neighbor.y - start.y).abs() <= _dedupThreshold, isTrue);
+    expect((neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold, isTrue);
   });
 
   test('binding edits enforce a perpendicular start during endpoint drag', () {
@@ -290,8 +293,70 @@ void main() {
 
     final startPoint = result.localPoints.first;
     final nextPoint = result.localPoints[1];
-    expect((startPoint.x - nextPoint.x).abs() <= _intersectionEpsilon, isTrue);
+    expect(
+      (startPoint.x - nextPoint.x).abs() <=
+          ElbowConstants.intersectionEpsilon,
+      isTrue,
+    );
     expect(nextPoint.y < startPoint.y, isTrue);
+  });
+
+  test('fixed segment release preserves prefix outside released region', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 40),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 80, y: 80),
+      const DrawPoint(x: 160, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[0]],
+    );
+    expect(result.localPoints.length, greaterThanOrEqualTo(2));
+    expect(result.localPoints.first, points.first);
+    expect(result.localPoints[1], points[1]);
+    expect(result.fixedSegments, isNotNull);
+    expect(result.fixedSegments!.length, 1);
+    expect(result.localPoints.contains(points[2]), isTrue);
+  });
+
+  test('fixed segment release keeps endpoints and orthogonality with only next fixed', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 80, y: 0),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 160, y: 40),
+      const DrawPoint(x: 160, y: 100),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+    );
+    expect(result.localPoints.length, greaterThanOrEqualTo(2));
+    expect(result.localPoints.first, points.first);
+    expect(result.localPoints.last, points.last);
+    expect(_pathIsOrthogonal(result.localPoints), isTrue);
   });
 }
 
@@ -364,7 +429,8 @@ bool _pathIsOrthogonal(List<DrawPoint> points) {
   for (var i = 0; i < points.length - 1; i++) {
     final dx = (points[i].x - points[i + 1].x).abs();
     final dy = (points[i].y - points[i + 1].y).abs();
-    if (dx > _intersectionEpsilon && dy > _intersectionEpsilon) {
+    if (dx > ElbowConstants.intersectionEpsilon &&
+        dy > ElbowConstants.intersectionEpsilon) {
       return false;
     }
   }

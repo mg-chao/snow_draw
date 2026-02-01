@@ -29,6 +29,17 @@ Editing entry point:
 - `computeElbowEdit`: accepts the current arrow element + edits, returns updated
   local points and fixed segment updates.
 
+## Shared Constants and Tolerances
+
+The router and editor intentionally share numeric tolerances via
+`elbow_constants.dart` so their decisions stay consistent.
+
+- `dedupThreshold`: coordinate threshold for treating points as aligned.
+- `intersectionEpsilon`: small inset for obstacle intersection checks.
+- `basePadding`: default obstacle padding around bound elements.
+- `minArrowLength`: below this, a stable midpoint elbow is preferred.
+- `directionFixPadding`: minimum extension for bound endpoint corrections.
+
 ## Code Layout (post-refactor)
 
 Routing files:
@@ -48,6 +59,11 @@ Editing files:
 - `elbow_edit_endpoint_drag.dart`: endpoint-drag flow with fixed segments.
 - `elbow_edit_perpendicular.dart`: perpendicular bound approach enforcement.
 
+Shared utilities:
+
+- `elbow_constants.dart`: shared tolerances + padding values for routing/editing.
+- `elbow_geometry.dart`: shared heading + distance + horizontal helpers.
+
 ## Implementation Map (refactor guide)
 
 Routing components:
@@ -63,9 +79,12 @@ Editing components:
 
 - `_ElbowEditPipeline`: orchestrates the edit steps.
 - `_applyEndpointDragWithFixedSegments`: endpoint-drag flow with fixed segments.
+- `_EndpointDragContext`: bundles endpoint-drag inputs + derived flags.
 - `_ensurePerpendicularBindings`: enforces perpendicular bound approaches.
 - `_applyFixedSegmentsToPoints` / `_reindexFixedSegments` / `_syncFixedSegmentsToPoints`:
   fixed segment enforcement and stability.
+- `_simplifyFixedSegmentPath` / `_normalizeFixedSegmentReleasePath`:
+  fixed segment simplification + release normalization.
 
 ## Routing Pipeline (world space)
 
@@ -130,6 +149,7 @@ Entry: `computeElbowEdit` -> `_ElbowEditPipeline`.
 - Invalid indices are removed.
 - Non-orthogonal or tiny segments are dropped.
 - Duplicates are removed and indices are sorted.
+  - This uses shared tolerances from `elbow_constants.dart` for consistency.
 
 ### Step 3: No fixed segments
 
@@ -189,6 +209,10 @@ Editing coverage:
   fixed segments, binding perpendicular adjustments, and new axis/drag cases.
 - `elbow_transform_fixed_segments_test.dart`: verifies fixed segments transform
   with element changes. (new)
+
+Shared coverage:
+
+- `elbow_geometry_test.dart`: shared geometry utilities + heading selection.
 
 Binding coverage:
 
