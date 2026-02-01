@@ -810,6 +810,93 @@ void main() {
     );
   });
 
+  test('unbinding collapses collinear segment after a fixed axis', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 200, y: 0),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 180),
+      const DrawPoint(x: 400, y: 180),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final boundData = (element.data as ArrowData).copyWith(
+      endBinding: binding,
+    );
+    final boundElement = element.copyWith(data: boundData);
+
+    final unboundResult = computeElbowEdit(
+      element: boundElement,
+      data: boundData.copyWith(endBinding: null),
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: null,
+    );
+
+    expect(unboundResult.localPoints.length, equals(4));
+    expect(
+      elbowPathHasOnlyCorners(unboundResult.localPoints),
+      isTrue,
+      reason: 'Unbinding should not keep a collinear tail after a fixed segment.',
+    );
+    expect(unboundResult.fixedSegments, isNotNull);
+    final fixed = unboundResult.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+    expect(fixed.start, unboundResult.localPoints[fixed.index - 1]);
+    expect(fixed.end, unboundResult.localPoints[fixed.index]);
+  });
+
+  test('unbinding collapses collinear segment before a fixed axis', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 120, y: 100),
+      const DrawPoint(x: 220, y: 100),
+      const DrawPoint(x: 220, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0, y: 0.5),
+    );
+    final boundData = (element.data as ArrowData).copyWith(
+      startBinding: binding,
+    );
+    final boundElement = element.copyWith(data: boundData);
+
+    final unboundResult = computeElbowEdit(
+      element: boundElement,
+      data: boundData.copyWith(startBinding: null),
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: fixedSegments,
+      startBindingOverride: null,
+    );
+
+    expect(unboundResult.localPoints.length, equals(4));
+    expect(
+      elbowPathHasOnlyCorners(unboundResult.localPoints),
+      isTrue,
+      reason:
+          'Unbinding should not keep a collinear prefix before a fixed segment.',
+    );
+    expect(unboundResult.fixedSegments, isNotNull);
+    final fixed = unboundResult.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect(fixed.start, unboundResult.localPoints[fixed.index - 1]);
+    expect(fixed.end, unboundResult.localPoints[fixed.index]);
+  });
+
   test('unbinding collapses collinear tail after binding removal', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

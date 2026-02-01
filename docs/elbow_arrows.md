@@ -120,6 +120,7 @@ Shared
 5) Endpoint drag with fixed segments
    - Apply endpoint overrides to a stable reference path.
    - Adopt a bound-aware baseline route when bindings exist.
+   - Re-route the span freed by binding removal.
    - Enforce fixed segment axes, reroute diagonals if unbound.
    - Snap neighbors to preserve orthogonality.
    - Enforce perpendicular segments at bound endpoints.

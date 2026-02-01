@@ -141,6 +141,80 @@ _EndpointDragState _adoptBaselineRouteIfNeeded({
   );
 }
 
+_EndpointDragState _rerouteReleasedBindingSpan({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  if (!context.startBindingRemoved && !context.endBindingRemoved) {
+    return state;
+  }
+  if (state.points.length < 2) {
+    return state;
+  }
+
+  var points = state.points;
+  var fixedSegments = state.fixedSegments;
+
+  if (context.startBindingRemoved) {
+    final firstFixed = fixedSegments.isEmpty ? null : fixedSegments.first;
+    final endIndex =
+        firstFixed != null ? firstFixed.index - 1 : points.length - 1;
+    if (endIndex > 0 && endIndex < points.length) {
+      final startPoint = points.first;
+      final endPoint = points[endIndex];
+      final routed = _routeReleasedRegion(
+        element: context.element,
+        elementsById: context.elementsById,
+        startLocal: startPoint,
+        endLocal: endPoint,
+        startArrowhead: context.startArrowhead,
+        endArrowhead: endIndex == points.length - 1
+            ? context.endArrowhead
+            : ArrowheadStyle.none,
+        previousFixed: null,
+        nextFixed: firstFixed,
+        startBinding: null,
+        endBinding: endIndex == points.length - 1 ? context.endBinding : null,
+      );
+      final suffix = endIndex + 1 < points.length
+          ? points.sublist(endIndex + 1)
+          : const <DrawPoint>[];
+      points = List<DrawPoint>.unmodifiable([...routed, ...suffix]);
+      fixedSegments = _reindexFixedSegments(points, fixedSegments);
+    }
+  }
+
+  if (context.endBindingRemoved) {
+    final lastFixed = fixedSegments.isEmpty ? null : fixedSegments.last;
+    final startIndex = lastFixed?.index ?? 0;
+    if (startIndex >= 0 && startIndex < points.length - 1) {
+      final startPoint = points[startIndex];
+      final endPoint = points.last;
+      final routed = _routeReleasedRegion(
+        element: context.element,
+        elementsById: context.elementsById,
+        startLocal: startPoint,
+        endLocal: endPoint,
+        startArrowhead: startIndex == 0
+            ? context.startArrowhead
+            : ArrowheadStyle.none,
+        endArrowhead: context.endArrowhead,
+        previousFixed: lastFixed,
+        nextFixed: null,
+        startBinding: startIndex == 0 ? context.startBinding : null,
+        endBinding: null,
+      );
+      final prefix = startIndex > 0
+          ? points.sublist(0, startIndex)
+          : const <DrawPoint>[];
+      points = List<DrawPoint>.unmodifiable([...prefix, ...routed]);
+      fixedSegments = _reindexFixedSegments(points, fixedSegments);
+    }
+  }
+
+  return state.copyWith(points: points, fixedSegments: fixedSegments);
+}
+
 /// Step C/F: enforce fixed segment axes after any endpoint movement.
 _EndpointDragState _applyFixedSegmentAxes(_EndpointDragState state) {
   final updated = _applyFixedSegmentsToPoints(
@@ -262,6 +336,21 @@ _FixedSegmentPathResult _collapseBindingRemovedEndStub({
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
   }
 
+  if (prevHorizontal == midHorizontal && prevHorizontal != lastHorizontal) {
+    final updated = List<DrawPoint>.from(points)..removeAt(prevIndex);
+    final reindexed = _reindexFixedSegments(updated, fixedSegments);
+    if (reindexed.length != fixedSegments.length) {
+      return _FixedSegmentPathResult(
+        points: points,
+        fixedSegments: fixedSegments,
+      );
+    }
+    return _FixedSegmentPathResult(
+      points: List<DrawPoint>.unmodifiable(updated),
+      fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+    );
+  }
+
   if (prevHorizontal != midHorizontal && midHorizontal == lastHorizontal) {
     final updated = List<DrawPoint>.from(points)..removeAt(midIndex);
     final reindexed = _reindexFixedSegments(updated, fixedSegments);
@@ -349,6 +438,22 @@ _FixedSegmentPathResult _collapseBindingRemovedStartStub({
   );
   if (outerFixed != outerHorizontal) {
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  if (middleHorizontal == outerHorizontal &&
+      firstHorizontal != middleHorizontal) {
+    final updated = List<DrawPoint>.from(points)..removeAt(nextIndex);
+    final reindexed = _reindexFixedSegments(updated, fixedSegments);
+    if (reindexed.length != fixedSegments.length) {
+      return _FixedSegmentPathResult(
+        points: points,
+        fixedSegments: fixedSegments,
+      );
+    }
+    return _FixedSegmentPathResult(
+      points: List<DrawPoint>.unmodifiable(updated),
+      fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+    );
   }
 
   if (firstHorizontal == middleHorizontal &&
@@ -497,15 +602,17 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   var state = _buildEndpointDragState(context);
   // Step B: adopt a bound-aware baseline route when possible.
   state = _adoptBaselineRouteIfNeeded(context: context, state: state);
-  // Step C: enforce fixed segment axes after endpoint changes.
+  // Step C: reroute spans freed by binding removal.
+  state = _rerouteReleasedBindingSpan(context: context, state: state);
+  // Step D: enforce fixed segment axes after endpoint changes.
   state = _applyFixedSegmentAxes(state);
-  // Step D: for unbound arrows, re-route if a diagonal drift appears.
+  // Step E: for unbound arrows, re-route if a diagonal drift appears.
   state = _rerouteForDiagonalDrift(context: context, state: state);
-  // Step E: snap neighbors to maintain orthogonality for unbound endpoints.
+  // Step F: snap neighbors to maintain orthogonality for unbound endpoints.
   state = _snapUnboundNeighbors(context: context, state: state);
-  // Step F: re-apply fixed segments after neighbor snapping.
+  // Step G: re-apply fixed segments after neighbor snapping.
   state = _applyFixedSegmentAxes(state);
-  // Step G: merge collinear tail segments for fully unbound paths.
+  // Step H: merge collinear tail segments for fully unbound paths.
   state = _mergeTailIfUnbound(context: context, state: state);
 
   var synced = _syncFixedSegmentsToPoints(
@@ -513,14 +620,14 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     state.fixedSegments,
   );
   state = state.copyWith(fixedSegments: synced);
-  // Step H: drop binding stubs when a binding was removed.
+  // Step I: drop binding stubs when a binding was removed.
   state = _collapseBindingRemovedStubs(context: context, state: state);
   synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
 
-  // Step I: enforce perpendicularity for bound endpoints in world space.
+  // Step J: enforce perpendicularity for bound endpoints in world space.
   return _ensurePerpendicularBindings(
     element: context.element,
     elementsById: context.elementsById,

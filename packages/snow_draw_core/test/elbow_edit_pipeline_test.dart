@@ -195,6 +195,108 @@ void main() {
     );
   });
 
+  test('binding removal reroutes a freed end span', () {
+    const targetRect = DrawRect(minX: 0, minY: 100, maxX: 40, maxY: 140);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+
+    final boundPoints = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 60),
+      const DrawPoint(x: 180, y: 60),
+      const DrawPoint(x: 180, y: 120),
+      const DrawPoint(x: 40, y: 120),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: boundPoints[1], end: boundPoints[2]),
+    ];
+    final element = _arrowElement(
+      boundPoints,
+      fixedSegments: fixedSegments,
+      endBinding: const ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      ),
+      endArrowhead: ArrowheadStyle.triangle,
+    );
+    final data = element.data as ArrowData;
+
+    final unboundPoints = List<DrawPoint>.from(boundPoints);
+    unboundPoints[unboundPoints.length - 1] = const DrawPoint(x: 20, y: 120);
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: null),
+      elementsById: {'target': target},
+      localPointsOverride: unboundPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: null,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    expect(
+      result.localPoints,
+      equals(const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 100, y: 0),
+        DrawPoint(x: 100, y: 60),
+        DrawPoint(x: 100, y: 120),
+        DrawPoint(x: 20, y: 120),
+      ]),
+    );
+  });
+
+  test('binding removal reroutes a freed start span', () {
+    const targetRect = DrawRect(minX: 40, minY: 100, maxX: 80, maxY: 140);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+
+    final boundPoints = <DrawPoint>[
+      const DrawPoint(x: 40, y: 120),
+      const DrawPoint(x: 180, y: 120),
+      const DrawPoint(x: 180, y: 60),
+      const DrawPoint(x: 100, y: 60),
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 180, y: 0),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 4, start: boundPoints[3], end: boundPoints[4]),
+    ];
+    final element = _arrowElement(
+      boundPoints,
+      fixedSegments: fixedSegments,
+      startBinding: const ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0, y: 0.5),
+      ),
+      startArrowhead: ArrowheadStyle.triangle,
+    );
+    final data = element.data as ArrowData;
+
+    final unboundPoints = List<DrawPoint>.from(boundPoints);
+    unboundPoints[0] = const DrawPoint(x: 20, y: 120);
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(startBinding: null),
+      elementsById: {'target': target},
+      localPointsOverride: unboundPoints,
+      fixedSegmentsOverride: fixedSegments,
+      startBindingOverride: null,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    expect(
+      result.localPoints,
+      equals(const <DrawPoint>[
+        DrawPoint(x: 20, y: 120),
+        DrawPoint(x: 100, y: 120),
+        DrawPoint(x: 100, y: 60),
+        DrawPoint(x: 100, y: 0),
+        DrawPoint(x: 180, y: 0),
+      ]),
+    );
+  });
+
   test('changing a fixed segment axis re-applies points', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
