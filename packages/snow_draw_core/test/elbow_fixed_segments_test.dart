@@ -1238,6 +1238,70 @@ void main() {
     );
   });
 
+  test('binding top edge avoids vertical backtrack near a fixed segment', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 60),
+      const DrawPoint(x: 20, y: 60),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: -10, minY: 160, maxX: 50, maxY: 220);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+
+    final lastIndex = result.localPoints.length - 1;
+    final prev = result.localPoints[lastIndex - 1];
+    final prevPrev = result.localPoints[lastIndex - 2];
+    final dx1 = (prev.x - prevPrev.x).abs();
+    final dx2 = (result.localPoints[lastIndex].x - prev.x).abs();
+    final dy1 = prev.y - prevPrev.y;
+    final dy2 = result.localPoints[lastIndex].y - prev.y;
+    final verticalBacktrack =
+        dx1 <= ElbowConstants.dedupThreshold &&
+        dx2 <= ElbowConstants.dedupThreshold &&
+        dy1 * dy2 < 0;
+    expect(
+      verticalBacktrack,
+      isFalse,
+      reason: 'End binding should not insert overlapping vertical segments.',
+    );
+    expect(
+      dy2 > 0,
+      isTrue,
+      reason: 'Top binding should approach downward into the endpoint.',
+    );
+  });
+
   test('bound end avoids extra collinear segment next to fixed axis', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 100, y: 0),

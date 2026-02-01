@@ -286,16 +286,20 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   final directionOk = _directionMatches(start, neighbor, heading);
 
   if (preserveNeighbor) {
-    final length = desiredHorizontal
-        ? (neighbor.x - start.x).abs()
-        : (neighbor.y - start.y).abs();
-    final lengthOk =
-        length >= resolvedPadding - ElbowConstants.dedupThreshold;
-    if (aligned && directionOk && lengthOk) {
+    if (aligned && directionOk) {
+      // Preserve the existing aligned segment to avoid introducing a
+      // backtracking spike when padding cannot be extended safely.
       return _PerpendicularAdjustment(
         points: points,
         moved: false,
         inserted: false,
+      );
+    }
+    if (!aligned && directionOk) {
+      return _insertStartCorner(
+        points: points,
+        heading: heading,
+        neighbor: neighbor,
       );
     }
     return _insertStartDirectionStub(
@@ -419,16 +423,20 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final directionOk = _directionMatches(neighbor, endPoint, requiredHeading);
 
   if (preserveNeighbor) {
-    final length = desiredHorizontal
-        ? (neighbor.x - endPoint.x).abs()
-        : (neighbor.y - endPoint.y).abs();
-    final lengthOk =
-        length >= resolvedPadding - ElbowConstants.dedupThreshold;
-    if (aligned && directionOk && lengthOk) {
+    if (aligned && directionOk) {
+      // Preserve the existing aligned segment to avoid introducing a
+      // backtracking spike when padding cannot be extended safely.
       return _PerpendicularAdjustment(
         points: points,
         moved: false,
         inserted: false,
+      );
+    }
+    if (!aligned && directionOk) {
+      return _insertEndCorner(
+        points: points,
+        heading: heading,
+        neighbor: neighbor,
       );
     }
     return _insertEndDirectionStub(
@@ -703,6 +711,82 @@ _PerpendicularAdjustment _insertEndDirectionStub({
     points: updated,
     moved: moved,
     inserted: inserted,
+  );
+}
+
+_PerpendicularAdjustment _insertStartCorner({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required DrawPoint neighbor,
+}) {
+  if (points.length < 2) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final start = points.first;
+  final corner = heading.isHorizontal
+      ? DrawPoint(x: neighbor.x, y: start.y)
+      : DrawPoint(x: start.x, y: neighbor.y);
+
+  if (ElbowGeometry.manhattanDistance(corner, start) <=
+          ElbowConstants.dedupThreshold ||
+      ElbowGeometry.manhattanDistance(corner, neighbor) <=
+          ElbowConstants.dedupThreshold) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  updated.insert(1, corner);
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: false,
+    inserted: true,
+  );
+}
+
+_PerpendicularAdjustment _insertEndCorner({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required DrawPoint neighbor,
+}) {
+  if (points.length < 2) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final endPoint = points.last;
+  final corner = heading.isHorizontal
+      ? DrawPoint(x: neighbor.x, y: endPoint.y)
+      : DrawPoint(x: endPoint.x, y: neighbor.y);
+
+  if (ElbowGeometry.manhattanDistance(corner, neighbor) <=
+          ElbowConstants.dedupThreshold ||
+      ElbowGeometry.manhattanDistance(corner, endPoint) <=
+          ElbowConstants.dedupThreshold) {
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  updated.insert(updated.length - 1, corner);
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: false,
+    inserted: true,
   );
 }
 
