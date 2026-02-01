@@ -87,26 +87,50 @@ int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
     segment.start,
     segment.end,
   );
+  final fixedAxis = _segmentAxisValue(
+    segment.start,
+    segment.end,
+    isHorizontal: fixedHorizontal,
+  );
+  final fixedMid = fixedHorizontal
+      ? (segment.start.x + segment.end.x) / 2
+      : (segment.start.y + segment.end.y) / 2;
   final maxIndex = points.length - 1;
   const minIndex = 2;
-  if (preferredIndex >= minIndex && preferredIndex < maxIndex) {
-    final preferredHorizontal = ElbowGeometry.isHorizontal(
-      points[preferredIndex - 1],
-      points[preferredIndex],
-    );
-    if (preferredHorizontal == fixedHorizontal) {
-      return preferredIndex;
-    }
-  }
   int? bestIndex;
+  var bestAxisDelta = double.infinity;
+  var bestMidDelta = double.infinity;
   var bestIndexDelta = double.infinity;
   for (var i = minIndex; i < maxIndex; i++) {
     if (ElbowGeometry.isHorizontal(points[i - 1], points[i]) !=
         fixedHorizontal) {
       continue;
     }
+    final candidateAxis = _segmentAxisValue(
+      points[i - 1],
+      points[i],
+      isHorizontal: fixedHorizontal,
+    );
+    final axisDelta = (candidateAxis - fixedAxis).abs();
+    final candidateMid = fixedHorizontal
+        ? (points[i - 1].x + points[i].x) / 2
+        : (points[i - 1].y + points[i].y) / 2;
+    final midDelta = (candidateMid - fixedMid).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
-    if (indexDelta < bestIndexDelta) {
+    final axisCloser =
+        axisDelta < bestAxisDelta - ElbowConstants.dedupThreshold;
+    final axisTie =
+        (axisDelta - bestAxisDelta).abs() <= ElbowConstants.dedupThreshold;
+    final midCloser =
+        midDelta < bestMidDelta - ElbowConstants.dedupThreshold;
+    final midTie =
+        (midDelta - bestMidDelta).abs() <= ElbowConstants.dedupThreshold;
+    if (axisCloser ||
+        (axisTie &&
+            (midCloser ||
+                (midTie && indexDelta < bestIndexDelta)))) {
+      bestAxisDelta = axisDelta;
+      bestMidDelta = midDelta;
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
@@ -200,6 +224,9 @@ int? _resolveBaselineSegmentIndex({
   required List<DrawPoint> baseline,
   required bool isHorizontal,
   required int preferredIndex,
+  required double axis,
+  required double mid,
+  double axisTolerance = ElbowConstants.dedupThreshold,
   Set<int> usedIndices = const {},
 }) {
   if (baseline.length < 2) {
@@ -208,6 +235,8 @@ int? _resolveBaselineSegmentIndex({
   final maxIndex = baseline.length - 1;
   const minIndex = 2;
   int? bestIndex;
+  var bestAxisDelta = double.infinity;
+  var bestMidDelta = double.infinity;
   var bestIndexDelta = double.infinity;
   for (var i = minIndex; i < maxIndex; i++) {
     if (usedIndices.contains(i)) {
@@ -217,8 +246,34 @@ int? _resolveBaselineSegmentIndex({
         isHorizontal) {
       continue;
     }
+    final candidateAxis = _segmentAxisValue(
+      baseline[i - 1],
+      baseline[i],
+      isHorizontal: isHorizontal,
+    );
+    final axisDelta = (candidateAxis - axis).abs();
+    if (axisDelta > axisTolerance) {
+      continue;
+    }
+    final candidateMid = isHorizontal
+        ? (baseline[i - 1].x + baseline[i].x) / 2
+        : (baseline[i - 1].y + baseline[i].y) / 2;
+    final midDelta = (candidateMid - mid).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
-    if (indexDelta < bestIndexDelta) {
+    final axisCloser =
+        axisDelta < bestAxisDelta - ElbowConstants.dedupThreshold;
+    final axisTie =
+        (axisDelta - bestAxisDelta).abs() <= ElbowConstants.dedupThreshold;
+    final midCloser =
+        midDelta < bestMidDelta - ElbowConstants.dedupThreshold;
+    final midTie =
+        (midDelta - bestMidDelta).abs() <= ElbowConstants.dedupThreshold;
+    if (axisCloser ||
+        (axisTie &&
+            (midCloser ||
+                (midTie && indexDelta < bestIndexDelta)))) {
+      bestAxisDelta = axisDelta;
+      bestMidDelta = midDelta;
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
@@ -243,19 +298,26 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
       segment.start,
       segment.end,
     );
+    final axis = _segmentAxisValue(
+      segment.start,
+      segment.end,
+      isHorizontal: isHorizontal,
+    );
+    final mid = isHorizontal
+        ? (segment.start.x + segment.end.x) / 2
+        : (segment.start.y + segment.end.y) / 2;
     final index = _resolveBaselineSegmentIndex(
       baseline: updated,
       isHorizontal: isHorizontal,
       preferredIndex: segment.index,
+      axis: axis,
+      mid: mid,
       usedIndices: usedIndices,
     );
     if (index == null || index <= 1 || index >= updated.length - 1) {
       continue;
     }
     usedIndices.add(index);
-    final axis = isHorizontal
-        ? (segment.start.y + segment.end.y) / 2
-        : (segment.start.x + segment.end.x) / 2;
     final start = isHorizontal
         ? updated[index - 1].copyWith(y: axis)
         : updated[index - 1].copyWith(x: axis);
@@ -352,8 +414,12 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
   }
 
-  var updatedPoints = List<DrawPoint>.from(points);
-  var updatedSegments = List<ElbowFixedSegment>.from(fixedSegments);
+  final collapsed = _collapseFixedSegmentBacktracks(
+    points: points,
+    fixedSegments: fixedSegments,
+  );
+  var updatedPoints = List<DrawPoint>.from(collapsed.points);
+  var updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
   var merged = true;
 
   while (merged) {
@@ -437,6 +503,86 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
           }
         }
       }
+    }
+  }
+
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(updatedPoints),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(updatedSegments),
+  );
+}
+
+bool _pointsClose(DrawPoint a, DrawPoint b) =>
+    (a.x - b.x).abs() <= ElbowConstants.dedupThreshold &&
+    (a.y - b.y).abs() <= ElbowConstants.dedupThreshold;
+
+bool _pointsAligned(DrawPoint a, DrawPoint b) =>
+    (a.x - b.x).abs() <= ElbowConstants.dedupThreshold ||
+    (a.y - b.y).abs() <= ElbowConstants.dedupThreshold;
+
+_FixedSegmentPathResult _collapseFixedSegmentBacktracks({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 4 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  var updatedPoints = List<DrawPoint>.from(points);
+  var updatedSegments = List<ElbowFixedSegment>.from(fixedSegments);
+  var changed = true;
+
+  while (changed) {
+    changed = false;
+    for (final segment in updatedSegments) {
+      final index = segment.index;
+      if (index <= 0 || index + 2 >= updatedPoints.length) {
+        continue;
+      }
+      final prev = updatedPoints[index - 1];
+      final curr = updatedPoints[index];
+      final next = updatedPoints[index + 1];
+      if (!_segmentsCollinear(prev, curr, next)) {
+        continue;
+      }
+      final fixedHorizontal = ElbowGeometry.isHorizontal(prev, curr);
+      final fixedDelta =
+          fixedHorizontal ? (curr.x - prev.x) : (curr.y - prev.y);
+      final nextDelta =
+          fixedHorizontal ? (next.x - curr.x) : (next.y - curr.y);
+      if (fixedDelta.abs() <= ElbowConstants.dedupThreshold ||
+          nextDelta.abs() <= ElbowConstants.dedupThreshold) {
+        continue;
+      }
+      if (fixedDelta * nextDelta >= 0) {
+        continue;
+      }
+      final after = updatedPoints[index + 2];
+
+      final candidatePoints = List<DrawPoint>.from(updatedPoints)
+        ..removeAt(index + 1);
+
+      if (!_pointsAligned(curr, after)) {
+        final corner = fixedHorizontal
+            ? DrawPoint(x: curr.x, y: after.y)
+            : DrawPoint(x: after.x, y: curr.y);
+        if (!_pointsClose(corner, curr) && !_pointsClose(corner, after)) {
+          candidatePoints.insert(index + 1, corner);
+        }
+      }
+
+      final reindexed = _reindexFixedSegments(
+        candidatePoints,
+        updatedSegments,
+      );
+      if (reindexed.length != updatedSegments.length) {
+        continue;
+      }
+
+      updatedPoints = candidatePoints;
+      updatedSegments = reindexed;
+      changed = true;
+      break;
     }
   }
 

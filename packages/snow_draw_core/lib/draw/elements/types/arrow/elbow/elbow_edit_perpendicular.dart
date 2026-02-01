@@ -40,11 +40,14 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   );
 
   if (startBinding != null) {
+    final preserveNeighbor =
+        _fixedSegmentIsHorizontal(updatedFixedSegments, 2) != null;
     final adjustment = _adjustPerpendicularStart(
       points: worldPoints,
       binding: startBinding,
       elementsById: elementsById,
       directionPadding: baselinePadding.start,
+      preserveNeighbor: preserveNeighbor,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -56,11 +59,15 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   }
 
   if (endBinding != null) {
+    final endNeighborIndex = math.max(2, localPoints.length - 2);
+    final preserveNeighbor =
+        _fixedSegmentIsHorizontal(updatedFixedSegments, endNeighborIndex) != null;
     final adjustment = _adjustPerpendicularEnd(
       points: worldPoints,
       binding: endBinding,
       elementsById: elementsById,
       directionPadding: baselinePadding.end,
+      preserveNeighbor: preserveNeighbor,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -72,7 +79,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   }
 
   if (!identical(localPoints, points)) {
-    return _FixedSegmentPathResult(
+    return _mergeFixedSegmentsWithCollinearNeighbors(
       points: localPoints,
       fixedSegments: updatedFixedSegments,
     );
@@ -84,13 +91,16 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       localPoints,
       updatedFixedSegments,
     );
-    return _FixedSegmentPathResult(
+    return _mergeFixedSegmentsWithCollinearNeighbors(
       points: localPoints,
       fixedSegments: updatedFixedSegments,
     );
   }
 
-  return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  return _mergeFixedSegmentsWithCollinearNeighbors(
+    points: points,
+    fixedSegments: fixedSegments,
+  );
 }
 
 ({double? start, double? end}) _resolveBaselineEndpointPadding({
@@ -243,6 +253,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
+  bool preserveNeighbor = false,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -273,6 +284,29 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
       ? (neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold
       : (neighbor.x - start.x).abs() <= ElbowConstants.dedupThreshold;
   final directionOk = _directionMatches(start, neighbor, heading);
+
+  if (preserveNeighbor) {
+    final length = desiredHorizontal
+        ? (neighbor.x - start.x).abs()
+        : (neighbor.y - start.y).abs();
+    final lengthOk =
+        length >= resolvedPadding - ElbowConstants.dedupThreshold;
+    if (aligned && directionOk && lengthOk) {
+      return _PerpendicularAdjustment(
+        points: points,
+        moved: false,
+        inserted: false,
+      );
+    }
+    return _insertStartDirectionStub(
+      points: points,
+      heading: heading,
+      neighbor: neighbor,
+      allowExtend: false,
+      padding: resolvedPadding,
+    );
+  }
+
   if (aligned && directionOk) {
     final adjusted = _alignStartSegmentLength(
       points: points,
@@ -349,6 +383,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
+  bool preserveNeighbor = false,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -382,6 +417,29 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
       : (neighbor.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold;
   final requiredHeading = heading.opposite;
   final directionOk = _directionMatches(neighbor, endPoint, requiredHeading);
+
+  if (preserveNeighbor) {
+    final length = desiredHorizontal
+        ? (neighbor.x - endPoint.x).abs()
+        : (neighbor.y - endPoint.y).abs();
+    final lengthOk =
+        length >= resolvedPadding - ElbowConstants.dedupThreshold;
+    if (aligned && directionOk && lengthOk) {
+      return _PerpendicularAdjustment(
+        points: points,
+        moved: false,
+        inserted: false,
+      );
+    }
+    return _insertEndDirectionStub(
+      points: points,
+      heading: heading,
+      neighbor: neighbor,
+      allowExtend: false,
+      padding: resolvedPadding,
+    );
+  }
+
   if (aligned && directionOk) {
     final adjusted = _alignEndSegmentLength(
       points: points,
