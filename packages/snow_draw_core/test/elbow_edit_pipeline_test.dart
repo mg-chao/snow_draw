@@ -12,6 +12,25 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
+  test('computeElbowEdit reroutes diagonal input when no fixed segments', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 80),
+    ];
+    final element = _arrowElement(points);
+    final data = element.data as ArrowData;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+    );
+
+    expect(result.localPoints.length, greaterThan(2));
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+  });
+
   test('fixed segment release preserves remaining axis', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
@@ -123,8 +142,7 @@ void main() {
     final startPoint = result.localPoints.first;
     final nextPoint = result.localPoints[1];
     expect(
-      (startPoint.x - nextPoint.x).abs() <=
-          ElbowConstants.intersectionEpsilon,
+      (startPoint.x - nextPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Top binding should depart vertically.',
     );
@@ -166,8 +184,7 @@ void main() {
     final penultimate = result.localPoints[result.localPoints.length - 2];
     final endPoint = result.localPoints.last;
     expect(
-      (penultimate.y - endPoint.y).abs() <=
-          ElbowConstants.intersectionEpsilon,
+      (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
       reason: 'Right binding should approach horizontally.',
     );
@@ -247,7 +264,10 @@ void main() {
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     final start = result.localPoints.first;
     final neighbor = result.localPoints[1];
-    expect((neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold, isTrue);
+    expect(
+      (neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+    );
   });
 
   test('binding edits enforce a perpendicular start during endpoint drag', () {
@@ -292,8 +312,7 @@ void main() {
     final startPoint = result.localPoints.first;
     final nextPoint = result.localPoints[1];
     expect(
-      (startPoint.x - nextPoint.x).abs() <=
-          ElbowConstants.intersectionEpsilon,
+      (startPoint.x - nextPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
       isTrue,
     );
     expect(nextPoint.y < startPoint.y, isTrue);
@@ -329,13 +348,44 @@ void main() {
     expect(result.localPoints.contains(points[2]), isTrue);
   });
 
-  test('fixed segment release keeps endpoints and orthogonality with only next fixed', () {
+  test(
+    'fixed segment release keeps endpoints and orthogonality with only next fixed',
+    () {
+      final points = <DrawPoint>[
+        const DrawPoint(x: 0, y: 0),
+        const DrawPoint(x: 80, y: 0),
+        const DrawPoint(x: 80, y: 40),
+        const DrawPoint(x: 160, y: 40),
+        const DrawPoint(x: 160, y: 100),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+        ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      final result = computeElbowEdit(
+        element: element,
+        data: data,
+        elementsById: const {},
+        localPointsOverride: points,
+        fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+      );
+      expect(result.localPoints.length, greaterThanOrEqualTo(2));
+      expect(result.localPoints.first, points.first);
+      expect(result.localPoints.last, points.last);
+      expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    },
+  );
+
+  test('fixed segment release clears fixed segments when none remain', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),
-      const DrawPoint(x: 80, y: 0),
-      const DrawPoint(x: 80, y: 40),
-      const DrawPoint(x: 160, y: 40),
-      const DrawPoint(x: 160, y: 100),
+      const DrawPoint(x: 60, y: 0),
+      const DrawPoint(x: 60, y: 60),
+      const DrawPoint(x: 120, y: 60),
+      const DrawPoint(x: 120, y: 120),
     ];
     final fixedSegments = <ElbowFixedSegment>[
       ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
@@ -349,9 +399,10 @@ void main() {
       data: data,
       elementsById: const {},
       localPointsOverride: points,
-      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+      fixedSegmentsOverride: const <ElbowFixedSegment>[],
     );
-    expect(result.localPoints.length, greaterThanOrEqualTo(2));
+
+    expect(result.fixedSegments, isNull);
     expect(result.localPoints.first, points.first);
     expect(result.localPoints.last, points.last);
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
@@ -389,7 +440,6 @@ ElementState _arrowElement(
     data: data,
   );
 }
-
 
 bool _isHorizontal(DrawPoint a, DrawPoint b) =>
     (a.y - b.y).abs() <= (a.x - b.x).abs();

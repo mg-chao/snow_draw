@@ -35,6 +35,7 @@ void main() {
 
     expect(result.points.length, greaterThan(2));
     expect(elbowPathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathHasOnlyCorners(result.points), isTrue);
     expect(elbowPathIntersectsBounds(result.points, rectA), isFalse);
     expect(elbowPathIntersectsBounds(result.points, rectB), isFalse);
   });

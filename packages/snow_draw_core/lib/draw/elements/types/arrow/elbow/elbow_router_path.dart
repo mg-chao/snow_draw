@@ -5,29 +5,41 @@ part of 'elbow_router.dart';
 /// Contains the direct-route checks, fallback routing, intersection tests,
 /// and post-processing that guarantees orthogonal, stable point lists.
 
-({bool alignedX, bool alignedY}) _axisAlignment(
-  DrawPoint start,
-  DrawPoint end,
-) => (
-  alignedX: (start.x - end.x).abs() <= ElbowConstants.dedupThreshold,
-  alignedY: (start.y - end.y).abs() <= ElbowConstants.dedupThreshold,
-);
+/// Axis alignment between two points using elbow tolerances.
+@immutable
+final class _AxisAlignment {
+  const _AxisAlignment({required this.alignedX, required this.alignedY});
 
+  final bool alignedX;
+  final bool alignedY;
+
+  bool get isAligned => alignedX || alignedY;
+}
+
+_AxisAlignment _resolveAxisAlignment(DrawPoint start, DrawPoint end) =>
+    _AxisAlignment(
+      alignedX: (start.x - end.x).abs() <= ElbowConstants.dedupThreshold,
+      alignedY: (start.y - end.y).abs() <= ElbowConstants.dedupThreshold,
+    );
+
+/// Checks whether endpoint headings allow a direct aligned segment.
 bool _headingsCompatibleWithAlignment({
-  required bool alignedX,
-  required bool alignedY,
+  required _AxisAlignment alignment,
   required ElbowHeading startHeading,
   required ElbowHeading endHeading,
 }) {
-  if (alignedY && (!startHeading.isHorizontal || !endHeading.isHorizontal)) {
+  if (alignment.alignedY &&
+      (!startHeading.isHorizontal || !endHeading.isHorizontal)) {
     return false;
   }
-  if (alignedX && (startHeading.isHorizontal || endHeading.isHorizontal)) {
+  if (alignment.alignedX &&
+      (startHeading.isHorizontal || endHeading.isHorizontal)) {
     return false;
   }
   return true;
 }
 
+/// Ensures a direct segment does not violate bound endpoint headings.
 bool _segmentRespectsEndpointConstraints({
   required DrawPoint start,
   required DrawPoint end,
@@ -46,6 +58,7 @@ bool _segmentRespectsEndpointConstraints({
   return true;
 }
 
+/// Returns a direct 2-point route when alignment + constraints allow it.
 List<DrawPoint>? _directPathIfClear({
   required DrawPoint start,
   required DrawPoint end,
@@ -55,13 +68,12 @@ List<DrawPoint>? _directPathIfClear({
   required bool startConstrained,
   required bool endConstrained,
 }) {
-  final alignment = _axisAlignment(start, end);
-  if (!alignment.alignedX && !alignment.alignedY) {
+  final alignment = _resolveAxisAlignment(start, end);
+  if (!alignment.isAligned) {
     return null;
   }
   if (!_headingsCompatibleWithAlignment(
-    alignedX: alignment.alignedX,
-    alignedY: alignment.alignedY,
+    alignment: alignment,
     startHeading: startHeading,
     endHeading: endHeading,
   )) {
@@ -211,7 +223,7 @@ List<DrawPoint> _fallbackPath({
 }
 
 List<DrawPoint> _postProcessPath({
-  required List<_GridNode> path,
+  required List<_ElbowGridNode> path,
   required DrawPoint startPoint,
   required DrawPoint endPoint,
   required DrawPoint startExit,
@@ -272,6 +284,7 @@ List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
   return result;
 }
 
+/// Final cleanup for routed paths: orthogonalize, prune, and clamp.
 List<DrawPoint> _finalizeRoutedPath({
   required List<DrawPoint> points,
   required ElbowHeading startHeading,

@@ -410,9 +410,24 @@ final class _ElbowObstacleLayout {
   final List<DrawRect> obstacles;
 }
 
+/// Start/end obstacle bounds with a precomputed overlap flag.
 @immutable
-final class _ElbowObstaclePlanner {
-  const _ElbowObstaclePlanner({
+final class _ElbowEndpointBounds {
+  const _ElbowEndpointBounds({
+    required this.start,
+    required this.end,
+    required this.overlaps,
+  });
+
+  final DrawRect start;
+  final DrawRect end;
+  final bool overlaps;
+}
+
+/// Builds the obstacle layout for a single routed elbow path.
+@immutable
+final class _ElbowObstacleLayoutBuilder {
+  const _ElbowObstacleLayoutBuilder({
     required this.start,
     required this.end,
   });
@@ -420,39 +435,44 @@ final class _ElbowObstaclePlanner {
   final _ResolvedEndpoint start;
   final _ResolvedEndpoint end;
 
-  _ElbowObstacleLayout build() {
+  _ElbowObstacleLayout resolve() {
     // Step 2: build padded obstacle bounds and exit points for routing.
-    final elbowBounds = _elbowBoundsForLayout(start: start, end: end);
-    final baseBounds = _baseBoundsForLayout(
-      boundsOverlap: elbowBounds.boundsOverlap,
+    // 2a) Resolve heading-aware bounds for each bound endpoint.
+    final endpointBounds = _resolveEndpointBounds(start: start, end: end);
+    // 2b) Prefer point-sized bounds when endpoints overlap.
+    final baseBounds = _resolveBaseBounds(
+      boundsOverlap: endpointBounds.overlaps,
       startPoint: start.point,
       endPoint: end.point,
-      startElbowBounds: elbowBounds.startElbowBounds,
-      endElbowBounds: elbowBounds.endElbowBounds,
+      startElbowBounds: endpointBounds.start,
+      endElbowBounds: endpointBounds.end,
     );
-    final padding = _layoutPaddingFor(
-      boundsOverlap: elbowBounds.boundsOverlap,
+    // 2c) Pick padding based on heading/arrowhead configuration.
+    final padding = _resolveLayoutPadding(
+      boundsOverlap: endpointBounds.overlaps,
       start: start,
       end: end,
     );
 
+    // 2d) Expand the bounds to build the grid routing envelope.
     final dynamicAabbs = _generateDynamicAabbs(
       start: baseBounds.start,
       end: baseBounds.end,
       startPadding: padding.start,
       endPadding: padding.end,
       startElementBounds: _aabbElementBounds(
-        boundsOverlap: elbowBounds.boundsOverlap,
+        boundsOverlap: endpointBounds.overlaps,
         isBound: start.isBound,
-        elbowBounds: elbowBounds.startElbowBounds,
+        elbowBounds: endpointBounds.start,
       ),
       endElementBounds: _aabbElementBounds(
-        boundsOverlap: elbowBounds.boundsOverlap,
+        boundsOverlap: endpointBounds.overlaps,
         isBound: end.isBound,
-        elbowBounds: elbowBounds.endElbowBounds,
+        elbowBounds: endpointBounds.end,
       ),
     );
 
+    // 2e) Split overlapping obstacles to keep a passage open.
     final obstacleBounds = _resolveObstacleBounds(
       start: start,
       end: end,
@@ -462,7 +482,8 @@ final class _ElbowObstaclePlanner {
       endDynamic: dynamicAabbs.end,
     );
 
-    final commonBounds = _commonBoundsForObstacles(
+    // 2f) Derive shared bounds and exit points for the grid router.
+    final commonBounds = _resolveCommonBounds(
       startObstacle: obstacleBounds.start,
       endObstacle: obstacleBounds.end,
     );
@@ -487,11 +508,7 @@ final class _ElbowObstaclePlanner {
   }
 }
 
-({
-  DrawRect startElbowBounds,
-  DrawRect endElbowBounds,
-  bool boundsOverlap,
-}) _elbowBoundsForLayout({
+_ElbowEndpointBounds _resolveEndpointBounds({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
 }) {
@@ -512,14 +529,14 @@ final class _ElbowObstaclePlanner {
       end.isBound &&
       _boundsOverlap(startElbowBounds, endElbowBounds);
 
-  return (
-    startElbowBounds: startElbowBounds,
-    endElbowBounds: endElbowBounds,
-    boundsOverlap: boundsOverlap,
+  return _ElbowEndpointBounds(
+    start: startElbowBounds,
+    end: endElbowBounds,
+    overlaps: boundsOverlap,
   );
 }
 
-({DrawRect start, DrawRect end}) _baseBoundsForLayout({
+({DrawRect start, DrawRect end}) _resolveBaseBounds({
   required bool boundsOverlap,
   required DrawPoint startPoint,
   required DrawPoint endPoint,
@@ -535,7 +552,7 @@ final class _ElbowObstaclePlanner {
   return (start: startBaseBounds, end: endBaseBounds);
 }
 
-({_BoundsPadding start, _BoundsPadding end}) _layoutPaddingFor({
+({_BoundsPadding start, _BoundsPadding end}) _resolveLayoutPadding({
   required bool boundsOverlap,
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
@@ -589,7 +606,7 @@ final class _ElbowObstaclePlanner {
   return (start: startObstacle, end: endObstacle);
 }
 
-DrawRect _commonBoundsForObstacles({
+DrawRect _resolveCommonBounds({
   required DrawRect startObstacle,
   required DrawRect endObstacle,
 }) =>
@@ -603,4 +620,4 @@ DrawRect _commonBoundsForObstacles({
 _ElbowObstacleLayout _planObstacleLayout({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
-}) => _ElbowObstaclePlanner(start: start, end: end).build();
+}) => _ElbowObstacleLayoutBuilder(start: start, end: end).resolve();

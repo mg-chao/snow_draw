@@ -97,39 +97,34 @@ final class _ResolvedEndpoint {
 
 @immutable
 final class _ResolvedEndpoints {
-  const _ResolvedEndpoints({
-    required this.start,
-    required this.end,
-  });
+  const _ResolvedEndpoints({required this.start, required this.end});
 
   final _ResolvedEndpoint start;
   final _ResolvedEndpoint end;
 }
 
-_ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteInputs inputs) {
+_ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
   // Step 1: resolve bindings, arrowhead gaps, and endpoint headings.
-  ElbowHeading _resolveHeadingFor(
-    _EndpointInfo info,
-    ElbowHeading fallback,
-  ) => _resolveEndpointHeading(
-    elementBounds: info.elementBounds,
-    point: info.point,
-    anchor: info.anchor,
-    fallback: fallback,
-  );
+  ElbowHeading _resolveHeadingFor(_EndpointInfo info, ElbowHeading fallback) =>
+      _resolveEndpointHeading(
+        elementBounds: info.elementBounds,
+        point: info.point,
+        anchor: info.anchor,
+        fallback: fallback,
+      );
 
-  final hasStartArrowhead = inputs.startArrowhead != ArrowheadStyle.none;
-  final hasEndArrowhead = inputs.endArrowhead != ArrowheadStyle.none;
+  final hasStartArrowhead = request.startArrowhead != ArrowheadStyle.none;
+  final hasEndArrowhead = request.endArrowhead != ArrowheadStyle.none;
   final startInfo = _resolveEndpointInfo(
-    point: inputs.start,
-    binding: inputs.startBinding,
-    elementsById: inputs.elementsById,
+    point: request.start,
+    binding: request.startBinding,
+    elementsById: request.elementsById,
     hasArrowhead: hasStartArrowhead,
   );
   final endInfo = _resolveEndpointInfo(
-    point: inputs.end,
-    binding: inputs.endBinding,
-    elementsById: inputs.elementsById,
+    point: request.end,
+    binding: request.endBinding,
+    elementsById: request.elementsById,
     hasArrowhead: hasEndArrowhead,
   );
 

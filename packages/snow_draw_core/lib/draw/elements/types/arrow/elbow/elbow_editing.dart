@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
@@ -23,6 +23,8 @@ part 'elbow_edit_endpoint_drag.dart';
 part 'elbow_edit_perpendicular.dart';
 part 'elbow_edit_pipeline.dart';
 
+/// Elbow arrow editing entry points.
+/// See docs/elbow_arrows.md for the step-by-step edit pipeline.
 /// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
 final class ElbowEditResult {

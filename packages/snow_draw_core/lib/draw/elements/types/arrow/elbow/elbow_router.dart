@@ -23,7 +23,10 @@ part 'elbow_router_path.dart';
 part 'elbow_router_grid.dart';
 part 'elbow_router_pipeline.dart';
 
-/// Elbow routing overview:
+/// Elbow arrow routing entry points.
+/// See docs/elbow_arrows.md for the full step-by-step pipeline.
+///
+/// Routing overview:
 /// 1) Resolve bindings into concrete endpoints + headings.
 /// 2) Build padded obstacle bounds around bound elements.
 /// 3) Attempt a direct orthogonal route when aligned.
@@ -70,7 +73,7 @@ ElbowRouteResult routeElbowArrow({
 }) {
   // Route through the explicit step-based pipeline for readability.
   return _ElbowRoutePipeline(
-    _ElbowRouteInputs(
+    _ElbowRouteRequest(
       start: start,
       end: end,
       elementsById: elementsById,

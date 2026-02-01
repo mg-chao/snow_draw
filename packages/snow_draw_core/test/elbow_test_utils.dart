@@ -80,6 +80,27 @@ bool elbowPathIntersectsBounds(
   return false;
 }
 
+/// Returns true when each interior point represents a direction change.
+bool elbowPathHasOnlyCorners(
+  List<DrawPoint> points, {
+  double epsilon = ElbowConstants.dedupThreshold,
+}) {
+  if (points.length <= 2) {
+    return true;
+  }
+  for (var i = 1; i < points.length - 1; i++) {
+    final prev = points[i - 1];
+    final current = points[i];
+    final next = points[i + 1];
+    final prevHorizontal = (prev.y - current.y).abs() <= epsilon;
+    final nextHorizontal = (current.y - next.y).abs() <= epsilon;
+    if (prevHorizontal == nextHorizontal) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool elbowSegmentIntersectsBounds(
   DrawPoint start,
   DrawPoint end,

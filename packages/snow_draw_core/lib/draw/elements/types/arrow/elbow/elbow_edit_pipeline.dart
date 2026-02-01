@@ -1,4 +1,4 @@
-﻿part of 'elbow_editing.dart';
+part of 'elbow_editing.dart';
 
 /// Internal state containers shared by the elbow edit pipeline and helpers.
 @immutable
@@ -10,6 +10,21 @@ final class _FixedSegmentPathResult {
 
   final List<DrawPoint> points;
   final List<ElbowFixedSegment> fixedSegments;
+}
+
+/// Edit mode selection for the elbow edit pipeline.
+enum _ElbowEditMode {
+  /// Re-route a fresh elbow when no fixed segments exist.
+  routeFresh,
+
+  /// Re-route only the released span when fixed segments were removed.
+  releaseFixedSegments,
+
+  /// Preserve fixed segments while endpoints move.
+  dragEndpoints,
+
+  /// Apply fixed segment axes and simplify.
+  applyFixedSegments,
 }
 
 @immutable
@@ -25,9 +40,10 @@ final class _PerpendicularAdjustment {
   final bool inserted;
 }
 
+/// Resolved inputs and flags that drive edit mode selection.
 @immutable
-final class _ElbowEditInputs {
-  const _ElbowEditInputs({
+final class _ElbowEditContext {
+  const _ElbowEditContext({
     required this.element,
     required this.data,
     required this.elementsById,
@@ -56,6 +72,20 @@ final class _ElbowEditInputs {
   final bool releaseRequested;
 
   bool get hasEnoughPoints => incomingPoints.length >= 2;
+
+  /// Decides which edit pipeline branch to execute.
+  _ElbowEditMode resolveMode() {
+    if (fixedSegments.isEmpty) {
+      return _ElbowEditMode.routeFresh;
+    }
+    if (releaseRequested) {
+      return _ElbowEditMode.releaseFixedSegments;
+    }
+    if (pointsChanged && !fixedSegmentsChanged) {
+      return _ElbowEditMode.dragEndpoints;
+    }
+    return _ElbowEditMode.applyFixedSegments;
+  }
 }
 
 /// Step-by-step edit orchestration used by [computeElbowEdit].
@@ -79,31 +109,28 @@ final class _ElbowEditPipeline {
   final ArrowBinding? endBindingOverride;
 
   ElbowEditResult run() {
-    final inputs = _resolveInputs();
-    if (!inputs.hasEnoughPoints) {
+    final context = _buildContext();
+    if (!context.hasEnoughPoints) {
       return _buildResult(
-        data: inputs.data,
-        points: inputs.incomingPoints,
+        data: context.data,
+        points: context.incomingPoints,
         fixedSegments: null,
       );
     }
 
-    if (inputs.fixedSegments.isEmpty) {
-      return _routeWithoutFixedSegments(inputs);
+    switch (context.resolveMode()) {
+      case _ElbowEditMode.routeFresh:
+        return _routeWithoutFixedSegments(context);
+      case _ElbowEditMode.releaseFixedSegments:
+        return _handleFixedSegmentReleaseFlow(context);
+      case _ElbowEditMode.dragEndpoints:
+        return _handleEndpointDragFlow(context);
+      case _ElbowEditMode.applyFixedSegments:
+        return _applyFixedSegmentsFlow(context);
     }
-
-    if (inputs.releaseRequested) {
-      return _handleFixedSegmentReleaseFlow(inputs);
-    }
-
-    if (inputs.pointsChanged && !inputs.fixedSegmentsChanged) {
-      return _handleEndpointDragFlow(inputs);
-    }
-
-    return _applyFixedSegmentsFlow(inputs);
   }
 
-  _ElbowEditInputs _resolveInputs() {
+  _ElbowEditContext _buildContext() {
     // Step 1: resolve the base local points from the element and incoming edits.
     final basePoints = _resolveLocalPoints(element, data);
     final incomingPoints = localPointsOverride ?? basePoints;
@@ -121,13 +148,15 @@ final class _ElbowEditPipeline {
     final endBinding = endBindingOverride ?? data.endBinding;
 
     final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
-    final fixedSegmentsChanged =
-        !_fixedSegmentsEqual(previousFixedSegments, fixedSegments);
+    final fixedSegmentsChanged = !_fixedSegmentsEqual(
+      previousFixedSegments,
+      fixedSegments,
+    );
     final releaseRequested =
         fixedSegmentsOverride != null &&
         fixedSegments.length < previousFixedSegments.length;
 
-    return _ElbowEditInputs(
+    return _ElbowEditContext(
       element: element,
       data: data,
       elementsById: elementsById,
@@ -143,42 +172,43 @@ final class _ElbowEditPipeline {
     );
   }
 
-  ElbowEditResult _routeWithoutFixedSegments(_ElbowEditInputs inputs) {
+  ElbowEditResult _routeWithoutFixedSegments(_ElbowEditContext context) {
     // Step 3: no fixed segments means a fresh route is required.
     final routed = routeElbowArrowForElement(
-      element: inputs.element,
-      data: inputs.data.copyWith(
-        startBinding: inputs.startBinding,
-        endBinding: inputs.endBinding,
+      element: context.element,
+      data: context.data.copyWith(
+        startBinding: context.startBinding,
+        endBinding: context.endBinding,
       ),
-      elementsById: inputs.elementsById,
-      startOverride: inputs.incomingPoints.first,
-      endOverride: inputs.incomingPoints.last,
+      elementsById: context.elementsById,
+      startOverride: context.incomingPoints.first,
+      endOverride: context.incomingPoints.last,
     );
     return _buildResult(
-      data: inputs.data,
+      data: context.data,
       points: routed.localPoints,
       fixedSegments: null,
     );
   }
 
-  ElbowEditResult _handleFixedSegmentReleaseFlow(_ElbowEditInputs inputs) {
+  ElbowEditResult _handleFixedSegmentReleaseFlow(_ElbowEditContext context) {
     // Step 4: fixed segment release (e.g. user unpins a segment).
     final updated = _handleFixedSegmentRelease(
-      element: inputs.element,
-      data: inputs.data,
-      elementsById: inputs.elementsById,
-      currentPoints: inputs.incomingPoints,
-      previousFixed: inputs.previousFixedSegments,
-      remainingFixed: inputs.fixedSegments,
-      startBinding: inputs.startBinding,
-      endBinding: inputs.endBinding,
+      element: context.element,
+      data: context.data,
+      elementsById: context.elementsById,
+      currentPoints: context.incomingPoints,
+      previousFixed: context.previousFixedSegments,
+      remainingFixed: context.fixedSegments,
+      startBinding: context.startBinding,
+      endBinding: context.endBinding,
     );
     final mapped = _applyFixedSegmentsToBaselineRoute(
       baseline: updated.points,
       fixedSegments: updated.fixedSegments,
     );
-    final reconciled = mapped.fixedSegments.length == updated.fixedSegments.length
+    final reconciled =
+        mapped.fixedSegments.length == updated.fixedSegments.length
         ? mapped
         : updated;
     final normalized = _normalizeFixedSegmentReleasePath(
@@ -189,62 +219,62 @@ final class _ElbowEditPipeline {
         ? null
         : List<ElbowFixedSegment>.unmodifiable(normalized.fixedSegments);
     return _buildResult(
-      data: inputs.data,
+      data: context.data,
       points: normalized.points,
       fixedSegments: resultSegments,
     );
   }
 
-  ElbowEditResult _handleEndpointDragFlow(_ElbowEditInputs inputs) {
+  ElbowEditResult _handleEndpointDragFlow(_ElbowEditContext context) {
     // Step 5: endpoint drag while fixed segments stay pinned.
     final updated = _applyEndpointDragWithFixedSegments(
       context: _EndpointDragContext(
-        element: inputs.element,
-        elementsById: inputs.elementsById,
-        basePoints: inputs.basePoints,
-        incomingPoints: inputs.incomingPoints,
-        fixedSegments: inputs.fixedSegments,
-        startBinding: inputs.startBinding,
-        endBinding: inputs.endBinding,
-        startArrowhead: inputs.data.startArrowhead,
-        endArrowhead: inputs.data.endArrowhead,
+        element: context.element,
+        elementsById: context.elementsById,
+        basePoints: context.basePoints,
+        incomingPoints: context.incomingPoints,
+        fixedSegments: context.fixedSegments,
+        startBinding: context.startBinding,
+        endBinding: context.endBinding,
+        startArrowhead: context.data.startArrowhead,
+        endArrowhead: context.data.endArrowhead,
       ),
     );
     final resultSegments = updated.fixedSegments.isEmpty
         ? null
         : List<ElbowFixedSegment>.unmodifiable(updated.fixedSegments);
     return _buildResult(
-      data: inputs.data,
+      data: context.data,
       points: List<DrawPoint>.unmodifiable(updated.points),
       fixedSegments: resultSegments,
     );
   }
 
-  ElbowEditResult _applyFixedSegmentsFlow(_ElbowEditInputs inputs) {
+  ElbowEditResult _applyFixedSegmentsFlow(_ElbowEditContext context) {
     // Step 6: apply fixed segments to updated points if needed.
-    var workingPoints = inputs.incomingPoints;
-    if (!inputs.pointsChanged && inputs.fixedSegmentsChanged) {
+    var workingPoints = context.incomingPoints;
+    if (!context.pointsChanged && context.fixedSegmentsChanged) {
       workingPoints = _applyFixedSegmentsToPoints(
-        inputs.basePoints,
-        inputs.fixedSegments,
+        context.basePoints,
+        context.fixedSegments,
       );
     }
     workingPoints = _applyFixedSegmentsToPoints(
       workingPoints,
-      inputs.fixedSegments,
+      context.fixedSegments,
     );
 
     // Step 7: simplify and reindex segments to keep the path stable.
     final simplified = _simplifyFixedSegmentPath(
       points: workingPoints,
-      fixedSegments: inputs.fixedSegments,
+      fixedSegments: context.fixedSegments,
     );
     final resultSegments = simplified.fixedSegments.isEmpty
         ? null
         : List<ElbowFixedSegment>.unmodifiable(simplified.fixedSegments);
 
     return _buildResult(
-      data: inputs.data,
+      data: context.data,
       points: simplified.points,
       fixedSegments: resultSegments,
     );

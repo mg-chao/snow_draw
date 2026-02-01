@@ -3,8 +3,8 @@ part of 'elbow_router.dart';
 /// Sparse grid routing (A* with bend penalties) for elbow paths.
 
 @immutable
-class _Grid {
-  const _Grid({
+final class _ElbowGrid {
+  const _ElbowGrid({
     required this.rows,
     required this.cols,
     required this.nodes,
@@ -14,18 +14,18 @@ class _Grid {
 
   final int rows;
   final int cols;
-  final List<_GridNode> nodes;
+  final List<_ElbowGridNode> nodes;
   final Map<double, int> xIndex;
   final Map<double, int> yIndex;
 
-  _GridNode? nodeAt(int col, int row) {
+  _ElbowGridNode? nodeAt(int col, int row) {
     if (col < 0 || row < 0 || col >= cols || row >= rows) {
       return null;
     }
     return nodes[row * cols + col];
   }
 
-  _GridNode? nodeForPoint(DrawPoint point) {
+  _ElbowGridNode? nodeForPoint(DrawPoint point) {
     final col = xIndex[point.x];
     final row = yIndex[point.y];
     if (col == null || row == null) {
@@ -35,22 +35,22 @@ class _Grid {
   }
 }
 
-class _GridNode {
-  _GridNode({required this.pos, required this.addr});
+final class _ElbowGridNode {
+  _ElbowGridNode({required this.pos, required this.addr});
 
   final DrawPoint pos;
-  final _GridAddress addr;
+  final _ElbowGridAddress addr;
   double f = 0;
   double g = 0;
   double h = 0;
   var closed = false;
   var visited = false;
-  _GridNode? parent;
+  _ElbowGridNode? parent;
 }
 
 @immutable
-class _GridAddress {
-  const _GridAddress({required this.col, required this.row});
+final class _ElbowGridAddress {
+  const _ElbowGridAddress({required this.col, required this.row});
 
   final int col;
   final int row;
@@ -74,7 +74,7 @@ Map<double, int> _buildAxisIndex(List<double> sortedAxis) => <double, int>{
   for (var i = 0; i < sortedAxis.length; i++) sortedAxis[i]: i,
 };
 
-_Grid _buildGrid({
+_ElbowGrid _buildGrid({
   required List<DrawRect> obstacles,
   required DrawPoint start,
   required ElbowHeading startHeading,
@@ -111,19 +111,19 @@ _Grid _buildGrid({
   final xIndex = _buildAxisIndex(sortedX);
   final yIndex = _buildAxisIndex(sortedY);
 
-  final nodes = <_GridNode>[];
+  final nodes = <_ElbowGridNode>[];
   for (var row = 0; row < sortedY.length; row++) {
     for (var col = 0; col < sortedX.length; col++) {
       nodes.add(
-        _GridNode(
+        _ElbowGridNode(
           pos: DrawPoint(x: sortedX[col], y: sortedY[row]),
-          addr: _GridAddress(col: col, row: row),
+          addr: _ElbowGridAddress(col: col, row: row),
         ),
       );
     }
   }
 
-  return _Grid(
+  return _ElbowGrid(
     rows: sortedY.length,
     cols: sortedX.length,
     nodes: nodes,
@@ -133,7 +133,7 @@ _Grid _buildGrid({
 }
 
 @immutable
-class _BendPenalty {
+final class _BendPenalty {
   const _BendPenalty(double base)
     : squared = base * base,
       cubed = base * base * base;
@@ -142,163 +142,171 @@ class _BendPenalty {
   final double cubed;
 }
 
-bool _canTraverseNeighbor({
-  required _GridNode current,
-  required _GridNode next,
-  required bool isStartNode,
-  required _GridAddress endAddress,
-  required ElbowHeading previousHeading,
-  required ElbowHeading neighborHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-  required ElbowHeading startHeading,
-  required ElbowHeading startHeadingFlip,
-  required ElbowHeading endHeadingFlip,
-  required List<DrawRect> obstacles,
-}) {
-  if (_segmentIntersectsAnyBounds(current.pos, next.pos, obstacles)) {
-    return false;
-  }
+/// A* router that walks the sparse elbow grid with bend penalties.
+@immutable
+final class _ElbowGridRouter {
+  const _ElbowGridRouter({
+    required this.grid,
+    required this.start,
+    required this.end,
+    required this.startHeading,
+    required this.endHeading,
+    required this.startConstrained,
+    required this.endConstrained,
+    required this.obstacles,
+  });
 
-  if (neighborHeading == previousHeading.opposite) {
-    return false;
-  }
+  final _ElbowGrid grid;
+  final _ElbowGridNode start;
+  final _ElbowGridNode end;
+  final ElbowHeading startHeading;
+  final ElbowHeading endHeading;
+  final bool startConstrained;
+  final bool endConstrained;
+  final List<DrawRect> obstacles;
 
-  if (isStartNode &&
-      !_allowsHeadingFromStart(
-        constrained: startConstrained,
-        neighborHeading: neighborHeading,
-        startHeading: startHeading,
-        startHeadingFlip: startHeadingFlip,
-      )) {
-    return false;
-  }
+  List<_ElbowGridNode> findPath() {
+    // A* with bend penalties to discourage unnecessary elbows.
+    final openSet = _BinaryHeap<_ElbowGridNode>((node) => node.f)
+      ..push(start);
 
-  if (next.addr == endAddress &&
-      !_allowsHeadingIntoEnd(
-        constrained: endConstrained,
-        neighborHeading: neighborHeading,
-        endHeadingFlip: endHeadingFlip,
-      )) {
-    return false;
-  }
-
-  return true;
-}
-
-double _heuristicScore({
-  required DrawPoint from,
-  required DrawPoint to,
-  required ElbowHeading fromHeading,
-  required ElbowHeading endHeading,
-  required double bendPenaltySquared,
-}) =>
-    ElbowGeometry.manhattanDistance(from, to) +
-    _estimatedBendPenalty(
-      start: from,
-      end: to,
-      startHeading: fromHeading,
-      endHeading: endHeading,
-      bendPenaltySquared: bendPenaltySquared,
+    final bendPenalty = _BendPenalty(
+      ElbowGeometry.manhattanDistance(start.pos, end.pos),
     );
+    final startHeadingFlip = startHeading.opposite;
+    final endHeadingFlip = endHeading.opposite;
 
-List<_GridNode> _astar({
-  required _Grid grid,
-  required _GridNode start,
-  required _GridNode end,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-  required List<DrawRect> obstacles,
-}) {
-  // A* with bend penalties to discourage unnecessary elbows.
-  final openSet = _BinaryHeap<_GridNode>((node) => node.f)..push(start);
-
-  final bendPenalty = _BendPenalty(
-    ElbowGeometry.manhattanDistance(start.pos, end.pos),
-  );
-  final startHeadingFlip = startHeading.opposite;
-  final endHeadingFlip = endHeading.opposite;
-
-  while (openSet.isNotEmpty) {
-    final current = openSet.pop();
-    if (current == null) {
-      break;
-    }
-    if (current.closed) {
-      continue;
-    }
-    if (current.addr == end.addr) {
-      return _reconstructPath(current, start);
-    }
-
-    current.closed = true;
-
-    final previousHeading = current.parent == null
-        ? startHeading
-        : _headingBetween(current.pos, current.parent!.pos);
-    final isStartNode = current.addr == start.addr;
-    final col = current.addr.col;
-    final row = current.addr.row;
-
-    for (final offset in _neighborOffsets) {
-      final next = grid.nodeAt(col + offset.dx, row + offset.dy);
-      if (next == null) {
+    while (openSet.isNotEmpty) {
+      final current = openSet.pop();
+      if (current == null) {
+        break;
+      }
+      if (current.closed) {
         continue;
       }
-      if (next.closed) {
-        continue;
+      if (current.addr == end.addr) {
+        return _reconstructPath(current, start);
       }
 
-      final neighborHeading = offset.heading;
+      current.closed = true;
 
-      if (!_canTraverseNeighbor(
-        current: current,
-        next: next,
-        isStartNode: isStartNode,
-        endAddress: end.addr,
-        previousHeading: previousHeading,
-        neighborHeading: neighborHeading,
-        startConstrained: startConstrained,
-        endConstrained: endConstrained,
-        startHeading: startHeading,
-        startHeadingFlip: startHeadingFlip,
-        endHeadingFlip: endHeadingFlip,
-        obstacles: obstacles,
-      )) {
-        continue;
-      }
+      final previousHeading = current.parent == null
+          ? startHeading
+          : _headingBetween(current.pos, current.parent!.pos);
+      final isStartNode = current.addr == start.addr;
+      final col = current.addr.col;
+      final row = current.addr.row;
 
-      final directionChanged = neighborHeading != previousHeading;
-      final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
-      final bendCost = directionChanged ? bendPenalty.cubed : 0;
-      final gScore = current.g + moveCost + bendCost;
+      for (final offset in _neighborOffsets) {
+        final next = grid.nodeAt(col + offset.dx, row + offset.dy);
+        if (next == null || next.closed) {
+          continue;
+        }
 
-      if (!next.visited || gScore < next.g) {
-        final hScore = _heuristicScore(
-          from: next.pos,
-          to: end.pos,
-          fromHeading: neighborHeading,
-          endHeading: endHeadingFlip,
-          bendPenaltySquared: bendPenalty.squared,
+        final neighborHeading = offset.heading;
+
+        if (!_canTraverseNeighbor(
+          current: current,
+          next: next,
+          isStartNode: isStartNode,
+          endAddress: end.addr,
+          previousHeading: previousHeading,
+          neighborHeading: neighborHeading,
+          startHeadingFlip: startHeadingFlip,
+          endHeadingFlip: endHeadingFlip,
+        )) {
+          continue;
+        }
+
+        final directionChanged = neighborHeading != previousHeading;
+        final moveCost = ElbowGeometry.manhattanDistance(
+          current.pos,
+          next.pos,
         );
-        next
-          ..parent = current
-          ..g = gScore
-          ..h = hScore
-          ..f = gScore + hScore;
-        if (!next.visited) {
-          next.visited = true;
-          openSet.push(next);
-        } else {
-          openSet.rescore(next);
+        final bendCost = directionChanged ? bendPenalty.cubed : 0;
+        final gScore = current.g + moveCost + bendCost;
+
+        if (!next.visited || gScore < next.g) {
+          final hScore = _heuristicScore(
+            from: next.pos,
+            to: end.pos,
+            fromHeading: neighborHeading,
+            endHeading: endHeadingFlip,
+            bendPenaltySquared: bendPenalty.squared,
+          );
+          next
+            ..parent = current
+            ..g = gScore
+            ..h = hScore
+            ..f = gScore + hScore;
+          if (!next.visited) {
+            next.visited = true;
+            openSet.push(next);
+          } else {
+            openSet.rescore(next);
+          }
         }
       }
     }
+
+    return const <_ElbowGridNode>[];
   }
 
-  return const <_GridNode>[];
+  bool _canTraverseNeighbor({
+    required _ElbowGridNode current,
+    required _ElbowGridNode next,
+    required bool isStartNode,
+    required _ElbowGridAddress endAddress,
+    required ElbowHeading previousHeading,
+    required ElbowHeading neighborHeading,
+    required ElbowHeading startHeadingFlip,
+    required ElbowHeading endHeadingFlip,
+  }) {
+    if (_segmentIntersectsAnyBounds(current.pos, next.pos, obstacles)) {
+      return false;
+    }
+
+    if (neighborHeading == previousHeading.opposite) {
+      return false;
+    }
+
+    if (isStartNode &&
+        !_allowsHeadingFromStart(
+          constrained: startConstrained,
+          neighborHeading: neighborHeading,
+          startHeading: startHeading,
+          startHeadingFlip: startHeadingFlip,
+        )) {
+      return false;
+    }
+
+    if (next.addr == endAddress &&
+        !_allowsHeadingIntoEnd(
+          constrained: endConstrained,
+          neighborHeading: neighborHeading,
+          endHeadingFlip: endHeadingFlip,
+        )) {
+      return false;
+    }
+
+    return true;
+  }
+
+  double _heuristicScore({
+    required DrawPoint from,
+    required DrawPoint to,
+    required ElbowHeading fromHeading,
+    required ElbowHeading endHeading,
+    required double bendPenaltySquared,
+  }) =>
+      ElbowGeometry.manhattanDistance(from, to) +
+      _estimatedBendPenalty(
+        start: from,
+        end: to,
+        startHeading: fromHeading,
+        endHeading: endHeading,
+        bendPenaltySquared: bendPenaltySquared,
+      );
 }
 
 double _estimatedBendPenalty({
@@ -319,8 +327,8 @@ double _estimatedBendPenalty({
   return alignedOnAxis ? 0 : bendPenaltySquared;
 }
 
-List<_GridNode>? _tryRouteGridPath({
-  required _Grid grid,
+List<_ElbowGridNode>? _tryRouteGridPath({
+  required _ElbowGrid grid,
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
   required DrawPoint startExit,
@@ -333,7 +341,7 @@ List<_GridNode>? _tryRouteGridPath({
     return null;
   }
 
-  return _astar(
+  return _ElbowGridRouter(
     grid: grid,
     start: startNode,
     end: endNode,
@@ -342,7 +350,7 @@ List<_GridNode>? _tryRouteGridPath({
     startConstrained: start.isBound,
     endConstrained: end.isBound,
     obstacles: obstacles,
-  );
+  ).findPath();
 }
 
 bool _allowsHeadingFromStart({
@@ -368,8 +376,11 @@ bool _allowsHeadingIntoEnd({
   return neighborHeading != endHeadingFlip;
 }
 
-List<_GridNode> _reconstructPath(_GridNode current, _GridNode start) {
-  final reversed = <_GridNode>[];
+List<_ElbowGridNode> _reconstructPath(
+  _ElbowGridNode current,
+  _ElbowGridNode start,
+) {
+  final reversed = <_ElbowGridNode>[];
   var node = current;
   while (true) {
     reversed.add(node);
@@ -390,19 +401,19 @@ List<_GridNode> _reconstructPath(_GridNode current, _GridNode start) {
 }
 
 @immutable
-class _NeighborOffset {
-  const _NeighborOffset(this.dx, this.dy, this.heading);
+final class _ElbowNeighborOffset {
+  const _ElbowNeighborOffset(this.dx, this.dy, this.heading);
 
   final int dx;
   final int dy;
   final ElbowHeading heading;
 }
 
-const List<_NeighborOffset> _neighborOffsets = [
-  _NeighborOffset(0, -1, ElbowHeading.up),
-  _NeighborOffset(1, 0, ElbowHeading.right),
-  _NeighborOffset(0, 1, ElbowHeading.down),
-  _NeighborOffset(-1, 0, ElbowHeading.left),
+const List<_ElbowNeighborOffset> _neighborOffsets = [
+  _ElbowNeighborOffset(0, -1, ElbowHeading.up),
+  _ElbowNeighborOffset(1, 0, ElbowHeading.right),
+  _ElbowNeighborOffset(0, 1, ElbowHeading.down),
+  _ElbowNeighborOffset(-1, 0, ElbowHeading.left),
 ];
 
 class _BinaryHeap<T> {

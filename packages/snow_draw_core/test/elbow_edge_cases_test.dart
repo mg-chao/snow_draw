@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
@@ -78,6 +79,47 @@ void main() {
     expect(result.fixedSegments, isNull);
     expect(result.localPoints.length, greaterThanOrEqualTo(2));
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+  });
+
+  test('computeElbowEdit sanitizes duplicate and diagonal fixed segments', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 80, y: 0),
+      const DrawPoint(x: 80, y: 60),
+      const DrawPoint(x: 160, y: 60),
+    ];
+    final element = _arrowElement(points);
+    final data = element.data as ArrowData;
+
+    final overrides = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 2, start: points[0], end: points[1]),
+      const ElbowFixedSegment(
+        index: 3,
+        start: DrawPoint(x: 0, y: 0),
+        end: DrawPoint(x: 80, y: 60),
+      ),
+    ];
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: overrides,
+    );
+
+    expect(result.fixedSegments, isNotNull);
+    expect(result.fixedSegments!.length, 1);
+
+    final fixed = result.fixedSegments!.first;
+    final dx = (fixed.start.x - fixed.end.x).abs();
+    final dy = (fixed.start.y - fixed.end.y).abs();
+    expect(
+      dx <= ElbowConstants.dedupThreshold ||
+          dy <= ElbowConstants.dedupThreshold,
+      isTrue,
+    );
   });
 }
 
