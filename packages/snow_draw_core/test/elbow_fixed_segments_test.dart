@@ -1,15 +1,15 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'elbow_test_utils.dart';
 
 void main() {
   test('endpoint drag preserves segment count and fixed segment direction', () {
@@ -395,7 +395,7 @@ void main() {
       final data = element.data as ArrowData;
 
       const rect = DrawRect(minX: 300, minY: 200, maxX: 360, maxY: 260);
-      final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+      final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
       const binding = ArrowBinding(
         elementId: 'rect-1',
         anchor: DrawPoint(x: 1, y: 0.5),
@@ -456,7 +456,7 @@ void main() {
     final data = element.data as ArrowData;
 
     const rect = DrawRect(minX: 150, minY: 200, maxX: 250, maxY: 260);
-    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 1),
@@ -511,7 +511,7 @@ void main() {
       final data = element.data as ArrowData;
 
       const rect = DrawRect(minX: 240, minY: 80, maxX: 260, maxY: 120);
-      final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+      final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
       const binding = ArrowBinding(
         elementId: 'rect-1',
         anchor: DrawPoint(x: 1, y: 0.5),
@@ -562,7 +562,7 @@ void main() {
     final data = element.data as ArrowData;
 
     const rect = DrawRect(minX: 800, minY: 200, maxX: 860, maxY: 260);
-    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
@@ -621,7 +621,7 @@ void main() {
     final data = element.data as ArrowData;
 
     const rect = DrawRect(minX: -900, minY: 260, maxX: -840, maxY: 320);
-    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0, y: 0.5),
@@ -680,7 +680,7 @@ void main() {
     final data = element.data as ArrowData;
 
     const rect = DrawRect(minX: 500, minY: 200, maxX: 560, maxY: 260);
-    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
@@ -1016,7 +1016,7 @@ void main() {
     final data = element.data as ArrowData;
 
     const rect = DrawRect(minX: 300, minY: 200, maxX: 360, maxY: 260);
-    final boundElement = _rectangleElement(id: 'rect-1', rect: rect);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
@@ -1078,7 +1078,7 @@ ElementState _arrowElement(
   List<DrawPoint> points, {
   List<ElbowFixedSegment>? fixedSegments,
 }) {
-  final rect = _rectForPoints(points);
+  final rect = elbowRectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
@@ -1096,34 +1096,6 @@ ElementState _arrowElement(
     zIndex: 0,
     data: data,
   );
-}
-
-DrawRect _rectForPoints(List<DrawPoint> points) {
-  var minX = points.first.x;
-  var maxX = points.first.x;
-  var minY = points.first.y;
-  var maxY = points.first.y;
-  for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
 
 double _manhattanDistance(DrawPoint a, DrawPoint b) =>
@@ -1169,15 +1141,3 @@ int? _closestBaselineSegmentIndex(
   return bestIndex;
 }
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-  double strokeWidth = 2,
-}) => ElementState(
-  id: id,
-  rect: rect,
-  rotation: 0,
-  opacity: 1,
-  zIndex: 0,
-  data: RectangleData(strokeWidth: strokeWidth),
-);

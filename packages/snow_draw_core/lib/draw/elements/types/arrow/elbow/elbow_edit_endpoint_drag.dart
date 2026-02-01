@@ -36,6 +36,26 @@ final class _EndpointDragContext {
   bool get isFullyUnbound => startBinding == null && endBinding == null;
 }
 
+/// State container for endpoint-drag processing.
+@immutable
+final class _EndpointDragState {
+  const _EndpointDragState({
+    required this.points,
+    required this.fixedSegments,
+  });
+
+  final List<DrawPoint> points;
+  final List<ElbowFixedSegment> fixedSegments;
+
+  _EndpointDragState copyWith({
+    List<DrawPoint>? points,
+    List<ElbowFixedSegment>? fixedSegments,
+  }) => _EndpointDragState(
+    points: points ?? this.points,
+    fixedSegments: fixedSegments ?? this.fixedSegments,
+  );
+}
+
 List<DrawPoint> _referencePointsForEndpointDrag({
   required List<DrawPoint> basePoints,
   required List<DrawPoint> incomingPoints,
@@ -62,6 +82,128 @@ _FixedSegmentPathResult _maybeAdoptBaselineRoute({
   return _FixedSegmentPathResult(
     points: currentPoints,
     fixedSegments: fixedSegments,
+  );
+}
+
+/// Step A: pick a stable reference path and apply endpoint overrides.
+_EndpointDragState _buildEndpointDragState(_EndpointDragContext context) {
+  final referencePoints = _referencePointsForEndpointDrag(
+    basePoints: context.basePoints,
+    incomingPoints: context.incomingPoints,
+  );
+  final updated = List<DrawPoint>.from(referencePoints);
+  updated[0] = context.incomingPoints.first;
+  updated[updated.length - 1] = context.incomingPoints.last;
+  return _EndpointDragState(
+    points: updated,
+    fixedSegments: context.fixedSegments,
+  );
+}
+
+/// Step B: adopt a bound-aware baseline route when available.
+_EndpointDragState _adoptBaselineRouteIfNeeded({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  if (!context.hasBindings) {
+    return state;
+  }
+  final baseline = _routeLocalPath(
+    element: context.element,
+    elementsById: context.elementsById,
+    startLocal: state.points.first,
+    endLocal: state.points.last,
+    startArrowhead: context.startArrowhead,
+    endArrowhead: context.endArrowhead,
+    startBinding: context.startBinding,
+    endBinding: context.endBinding,
+  );
+  final adopted = _maybeAdoptBaselineRoute(
+    currentPoints: state.points,
+    fixedSegments: state.fixedSegments,
+    baseline: baseline,
+  );
+  return state.copyWith(
+    points: List<DrawPoint>.from(adopted.points),
+    fixedSegments: adopted.fixedSegments,
+  );
+}
+
+/// Step C/F: enforce fixed segment axes after any endpoint movement.
+_EndpointDragState _applyFixedSegmentAxes(_EndpointDragState state) {
+  final updated = _applyFixedSegmentsToPoints(
+    state.points,
+    state.fixedSegments,
+  );
+  return state.copyWith(points: List<DrawPoint>.from(updated));
+}
+
+/// Step D: re-route for diagonal drift when fully unbound.
+_EndpointDragState _rerouteForDiagonalDrift({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  if (!context.isFullyUnbound || !_hasDiagonalSegments(state.points)) {
+    return state;
+  }
+  final baseline = _routeLocalPath(
+    element: context.element,
+    elementsById: context.elementsById,
+    startLocal: state.points.first,
+    endLocal: state.points.last,
+    startArrowhead: context.startArrowhead,
+    endArrowhead: context.endArrowhead,
+  );
+  final adopted = _maybeAdoptBaselineRoute(
+    currentPoints: state.points,
+    fixedSegments: state.fixedSegments,
+    baseline: baseline,
+  );
+  return state.copyWith(
+    points: List<DrawPoint>.from(adopted.points),
+    fixedSegments: adopted.fixedSegments,
+  );
+}
+
+/// Step E: snap unbound endpoint neighbors to stay orthogonal.
+_EndpointDragState _snapUnboundNeighbors({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  var points = state.points;
+  if (!context.hasBoundStart) {
+    points = _snapUnboundStartNeighbor(
+      points: points,
+      fixedSegments: state.fixedSegments,
+    );
+  }
+  if (!context.hasBoundEnd) {
+    points = _snapUnboundEndNeighbor(
+      points: points,
+      fixedSegments: state.fixedSegments,
+    );
+  }
+  return state.copyWith(points: points);
+}
+
+/// Step G: merge a trailing collinear segment for unbound paths.
+_EndpointDragState _mergeTailIfUnbound({
+  required _EndpointDragContext context,
+  required _EndpointDragState state,
+}) {
+  if (!context.isFullyUnbound) {
+    return state;
+  }
+  final merged = _mergeFixedSegmentWithEndCollinear(
+    points: state.points,
+    fixedSegments: state.fixedSegments,
+  );
+  if (merged.fixedSegments.length != state.fixedSegments.length) {
+    return state;
+  }
+  return state.copyWith(
+    points: merged.points,
+    fixedSegments: merged.fixedSegments,
   );
 }
 
@@ -131,102 +273,34 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     );
   }
 
-  // Step A: select a stable reference path and apply endpoint overrides.
-  final referencePoints = _referencePointsForEndpointDrag(
-    basePoints: context.basePoints,
-    incomingPoints: context.incomingPoints,
-  );
-  var updated = List<DrawPoint>.from(referencePoints);
-  var workingFixedSegments = context.fixedSegments;
-  updated[0] = context.incomingPoints.first;
-  updated[updated.length - 1] = context.incomingPoints.last;
-
-  // Step B: if any bindings exist, prefer a baseline route that respects them.
-  if (context.hasBindings) {
-    final baseline = _routeLocalPath(
-      element: context.element,
-      elementsById: context.elementsById,
-      startLocal: updated.first,
-      endLocal: updated.last,
-      startArrowhead: context.startArrowhead,
-      endArrowhead: context.endArrowhead,
-      startBinding: context.startBinding,
-      endBinding: context.endBinding,
-    );
-    final adopted = _maybeAdoptBaselineRoute(
-      currentPoints: updated,
-      fixedSegments: workingFixedSegments,
-      baseline: baseline,
-    );
-    updated = List<DrawPoint>.from(adopted.points);
-    workingFixedSegments = adopted.fixedSegments;
-  }
-
+  // Step A: apply endpoint overrides to a stable reference path.
+  var state = _buildEndpointDragState(context);
+  // Step B: adopt a bound-aware baseline route when possible.
+  state = _adoptBaselineRouteIfNeeded(context: context, state: state);
   // Step C: enforce fixed segment axes after endpoint changes.
-  updated = List<DrawPoint>.from(
-    _applyFixedSegmentsToPoints(updated, workingFixedSegments),
-  );
-
+  state = _applyFixedSegmentAxes(state);
   // Step D: for unbound arrows, re-route if a diagonal drift appears.
-  if (context.isFullyUnbound && _hasDiagonalSegments(updated)) {
-    final baseline = _routeLocalPath(
-      element: context.element,
-      elementsById: context.elementsById,
-      startLocal: updated.first,
-      endLocal: updated.last,
-      startArrowhead: context.startArrowhead,
-      endArrowhead: context.endArrowhead,
-    );
-    final adopted = _maybeAdoptBaselineRoute(
-      currentPoints: updated,
-      fixedSegments: workingFixedSegments,
-      baseline: baseline,
-    );
-    updated = List<DrawPoint>.from(adopted.points);
-    workingFixedSegments = adopted.fixedSegments;
-  }
-
+  state = _rerouteForDiagonalDrift(context: context, state: state);
   // Step E: snap neighbors to maintain orthogonality for unbound endpoints.
-  if (!context.hasBoundStart) {
-    updated = _snapUnboundStartNeighbor(
-      points: updated,
-      fixedSegments: workingFixedSegments,
-    );
-  }
-  if (!context.hasBoundEnd) {
-    updated = _snapUnboundEndNeighbor(
-      points: updated,
-      fixedSegments: workingFixedSegments,
-    );
-  }
-
+  state = _snapUnboundNeighbors(context: context, state: state);
   // Step F: re-apply fixed segments after neighbor snapping.
-  updated = List<DrawPoint>.from(
-    _applyFixedSegmentsToPoints(updated, workingFixedSegments),
+  state = _applyFixedSegmentAxes(state);
+  // Step G: merge collinear tail segments for fully unbound paths.
+  state = _mergeTailIfUnbound(context: context, state: state);
+
+  final synced = _syncFixedSegmentsToPoints(
+    state.points,
+    state.fixedSegments,
   );
-
-  // Step G: merge collinear tail segments for unbound paths.
   if (context.isFullyUnbound) {
-    final merged = _mergeFixedSegmentWithEndCollinear(
-      points: updated,
-      fixedSegments: workingFixedSegments,
-    );
-    if (merged.fixedSegments.length == workingFixedSegments.length) {
-      updated = merged.points;
-      workingFixedSegments = merged.fixedSegments;
-    }
-  }
-
-  final synced = _syncFixedSegmentsToPoints(updated, workingFixedSegments);
-  if (context.isFullyUnbound) {
-    return _FixedSegmentPathResult(points: updated, fixedSegments: synced);
+    return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
 
   // Step H: enforce perpendicularity for bound endpoints in world space.
   return _ensurePerpendicularBindings(
     element: context.element,
     elementsById: context.elementsById,
-    points: updated,
+    points: state.points,
     fixedSegments: synced,
     startBinding: context.startBinding,
     endBinding: context.endBinding,

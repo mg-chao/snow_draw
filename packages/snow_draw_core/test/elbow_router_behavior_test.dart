@@ -1,14 +1,11 @@
-﻿import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'elbow_test_utils.dart';
 
 void main() {
   test('elbow routing fallback uses a midpoint elbow for unbound endpoints', () {
@@ -26,7 +23,7 @@ void main() {
     expect(result.points.last, end);
     expect(result.points[1], const DrawPoint(x: 50, y: 0));
     expect(result.points[2], const DrawPoint(x: 50, y: 50));
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
   });
 
   test('elbow routing fallback uses a stable midpoint for short arrows', () {
@@ -44,7 +41,7 @@ void main() {
     expect(result.points.last, end);
     expect(result.points[1], const DrawPoint(x: 0, y: 1.5));
     expect(result.points[2], const DrawPoint(x: 4, y: 1.5));
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
   });
 
   test('elbow routing fallback is direct when aligned', () {
@@ -58,12 +55,12 @@ void main() {
     );
 
     expect(result.points, [start, end]);
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
   });
 
   test('aligned endpoints with incompatible headings route with an elbow', () {
     const rect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
-    final element = _rectangleElement(id: 'rect-1', rect: rect);
+    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
@@ -84,7 +81,7 @@ void main() {
     );
 
     expect(result.points.length, greaterThan(2));
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
 
     final startPoint = result.points.first;
     final nextPoint = result.points[1];
@@ -102,7 +99,7 @@ void main() {
 
   test('elbow routing respects a bound start heading', () {
     const rect = DrawRect(minX: 100, minY: 100, maxX: 300, maxY: 200);
-    final element = _rectangleElement(id: 'rect-1', rect: rect);
+    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
 
     final result = routeElbowArrow(
       start: const DrawPoint(x: 0, y: 0),
@@ -115,8 +112,8 @@ void main() {
       startArrowhead: ArrowheadStyle.triangle,
     );
 
-    expect(_pathIntersectsBounds(result.points, rect), isFalse);
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIntersectsBounds(result.points, rect), isFalse);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
 
     final startPoint = result.points.first;
     final nextPoint = result.points[1];
@@ -135,8 +132,8 @@ void main() {
   test('elbow routing avoids multiple bound rectangles', () {
     const rectA = DrawRect(minX: 100, minY: 100, maxX: 240, maxY: 220);
     const rectB = DrawRect(minX: 340, minY: 140, maxX: 480, maxY: 260);
-    final elementA = _rectangleElement(id: 'rect-a', rect: rectA);
-    final elementB = _rectangleElement(id: 'rect-b', rect: rectB);
+    final elementA = elbowRectangleElement(id: 'rect-a', rect: rectA);
+    final elementB = elbowRectangleElement(id: 'rect-b', rect: rectB);
 
     final result = routeElbowArrow(
       start: DrawPoint(x: rectA.minX - 120, y: rectA.centerY),
@@ -157,16 +154,16 @@ void main() {
       endArrowhead: ArrowheadStyle.triangle,
     );
 
-    expect(_pathIntersectsBounds(result.points, rectA), isFalse);
-    expect(_pathIntersectsBounds(result.points, rectB), isFalse);
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIntersectsBounds(result.points, rectA), isFalse);
+    expect(elbowPathIntersectsBounds(result.points, rectB), isFalse);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
   });
 
   test('elbow routing handles overlapping bound obstacles', () {
     const rectA = DrawRect(minX: 100, minY: 120, maxX: 240, maxY: 260);
     const rectB = DrawRect(minX: 200, minY: 160, maxX: 340, maxY: 300);
-    final elementA = _rectangleElement(id: 'rect-a', rect: rectA);
-    final elementB = _rectangleElement(id: 'rect-b', rect: rectB);
+    final elementA = elbowRectangleElement(id: 'rect-a', rect: rectA);
+    final elementB = elbowRectangleElement(id: 'rect-b', rect: rectB);
 
     final result = routeElbowArrow(
       start: DrawPoint(x: rectA.minX - 140, y: rectA.centerY),
@@ -188,7 +185,7 @@ void main() {
     );
 
     expect(result.points.length, greaterThan(2));
-    expect(_pathIsOrthogonal(result.points), isTrue);
+    expect(elbowPathIsOrthogonal(result.points), isTrue);
 
     final startPoint = result.points.first;
     final nextPoint = result.points[1];
@@ -218,76 +215,3 @@ void main() {
   });
 }
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-  double strokeWidth = 2,
-}) => ElementState(
-  id: id,
-  rect: rect,
-  rotation: 0,
-  opacity: 1,
-  zIndex: 0,
-  data: RectangleData(strokeWidth: strokeWidth),
-);
-
-bool _pathIsOrthogonal(List<DrawPoint> points) {
-  for (var i = 0; i < points.length - 1; i++) {
-    final dx = (points[i].x - points[i + 1].x).abs();
-    final dy = (points[i].y - points[i + 1].y).abs();
-    if (dx > ElbowConstants.intersectionEpsilon && dy > ElbowConstants.intersectionEpsilon) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool _pathIntersectsBounds(List<DrawPoint> points, DrawRect bounds) {
-  for (var i = 0; i < points.length - 1; i++) {
-    if (_segmentIntersectsBounds(points[i], points[i + 1], bounds)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
-  final dx = (start.x - end.x).abs();
-  final dy = (start.y - end.y).abs();
-  if (dx <= ElbowConstants.dedupThreshold) {
-    final x = (start.x + end.x) / 2;
-    if (x < bounds.minX - ElbowConstants.dedupThreshold ||
-        x > bounds.maxX + ElbowConstants.dedupThreshold) {
-      return false;
-    }
-    final minY = math.min(start.y, end.y);
-    final maxY = math.max(start.y, end.y);
-    final overlapStart = math.max(minY, bounds.minY);
-    final overlapEnd = math.min(maxY, bounds.maxY);
-    return overlapEnd - overlapStart > ElbowConstants.intersectionEpsilon;
-  }
-  if (dy <= ElbowConstants.dedupThreshold) {
-    final y = (start.y + end.y) / 2;
-    if (y < bounds.minY - ElbowConstants.dedupThreshold ||
-        y > bounds.maxY + ElbowConstants.dedupThreshold) {
-      return false;
-    }
-    final minX = math.min(start.x, end.x);
-    final maxX = math.max(start.x, end.x);
-    final overlapStart = math.max(minX, bounds.minX);
-    final overlapEnd = math.min(maxX, bounds.maxX);
-    return overlapEnd - overlapStart > ElbowConstants.intersectionEpsilon;
-  }
-
-  final minX = math.min(start.x, end.x);
-  final maxX = math.max(start.x, end.x);
-  final minY = math.min(start.y, end.y);
-  final maxY = math.max(start.y, end.y);
-  if (maxX < bounds.minX - ElbowConstants.dedupThreshold ||
-      minX > bounds.maxX + ElbowConstants.dedupThreshold ||
-      maxY < bounds.minY - ElbowConstants.dedupThreshold ||
-      minY > bounds.maxY + ElbowConstants.dedupThreshold) {
-    return false;
-  }
-  return true;
-}

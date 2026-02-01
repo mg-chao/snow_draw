@@ -1,5 +1,3 @@
-﻿import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
@@ -7,11 +5,11 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'elbow_test_utils.dart';
 
 void main() {
   test('fixed segment release preserves remaining axis', () {
@@ -40,7 +38,7 @@ void main() {
 
     expect(result.fixedSegments, isNotNull);
     expect(result.fixedSegments!.length, 1);
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
 
     final before = fixedSegments[1];
     final after = result.fixedSegments!.first;
@@ -86,7 +84,7 @@ void main() {
 
     expect(result.fixedSegments, isNotNull);
     expect(result.fixedSegments!.length, 1);
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
 
     final fixed = result.fixedSegments!.first;
     expect(_isHorizontal(fixed.start, fixed.end), isFalse);
@@ -96,7 +94,7 @@ void main() {
 
   test('binding edits keep a perpendicular start segment', () {
     const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
-    final target = _rectangleElement(id: 'target', rect: targetRect);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
     final points = <DrawPoint>[
       const DrawPoint(x: 150, y: 150),
@@ -120,7 +118,7 @@ void main() {
       localPointsOverride: points,
     );
 
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
 
     final startPoint = result.localPoints.first;
     final nextPoint = result.localPoints[1];
@@ -139,7 +137,7 @@ void main() {
 
   test('binding edits keep a perpendicular end segment', () {
     const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
-    final target = _rectangleElement(id: 'target', rect: targetRect);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
     final points = <DrawPoint>[
       const DrawPoint(x: 20, y: 150),
@@ -163,7 +161,7 @@ void main() {
       localPointsOverride: points,
     );
 
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
 
     final penultimate = result.localPoints[result.localPoints.length - 2];
     final endPoint = result.localPoints.last;
@@ -246,7 +244,7 @@ void main() {
       fixedSegmentsOverride: fixedSegments,
     );
 
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     final start = result.localPoints.first;
     final neighbor = result.localPoints[1];
     expect((neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold, isTrue);
@@ -254,7 +252,7 @@ void main() {
 
   test('binding edits enforce a perpendicular start during endpoint drag', () {
     const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
-    final target = _rectangleElement(id: 'target', rect: targetRect);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
     final points = <DrawPoint>[
       const DrawPoint(x: 150, y: 100),
@@ -356,7 +354,7 @@ void main() {
     expect(result.localPoints.length, greaterThanOrEqualTo(2));
     expect(result.localPoints.first, points.first);
     expect(result.localPoints.last, points.last);
-    expect(_pathIsOrthogonal(result.localPoints), isTrue);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
   });
 }
 
@@ -368,7 +366,7 @@ ElementState _arrowElement(
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
-  final rect = _rectForPoints(points);
+  final rect = elbowRectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
@@ -392,50 +390,6 @@ ElementState _arrowElement(
   );
 }
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-  double strokeWidth = 2,
-}) => ElementState(
-  id: id,
-  rect: rect,
-  rotation: 0,
-  opacity: 1,
-  zIndex: 0,
-  data: RectangleData(strokeWidth: strokeWidth),
-);
-
-DrawRect _rectForPoints(List<DrawPoint> points) {
-  var minX = points.first.x;
-  var maxX = points.first.x;
-  var minY = points.first.y;
-  var maxY = points.first.y;
-  for (final point in points.skip(1)) {
-    minX = math.min(minX, point.x);
-    maxX = math.max(maxX, point.x);
-    minY = math.min(minY, point.y);
-    maxY = math.max(maxY, point.y);
-  }
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
-
-bool _pathIsOrthogonal(List<DrawPoint> points) {
-  for (var i = 0; i < points.length - 1; i++) {
-    final dx = (points[i].x - points[i + 1].x).abs();
-    final dy = (points[i].y - points[i + 1].y).abs();
-    if (dx > ElbowConstants.intersectionEpsilon &&
-        dy > ElbowConstants.intersectionEpsilon) {
-      return false;
-    }
-  }
-  return true;
-}
 
 bool _isHorizontal(DrawPoint a, DrawPoint b) =>
     (a.y - b.y).abs() <= (a.x - b.x).abs();
