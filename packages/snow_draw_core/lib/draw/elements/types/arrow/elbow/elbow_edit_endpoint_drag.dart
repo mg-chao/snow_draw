@@ -108,6 +108,14 @@ _EndpointDragState _adoptBaselineRouteIfNeeded({
   if (!context.hasBindings) {
     return state;
   }
+  final boundStart = context.hasBoundStart;
+  final boundEnd = context.hasBoundEnd;
+  if (!boundStart && !boundEnd) {
+    return state;
+  }
+  if (context.fixedSegments.isNotEmpty && (boundStart != boundEnd)) {
+    return state;
+  }
   final baseline = _routeLocalPath(
     element: context.element,
     elementsById: context.elementsById,

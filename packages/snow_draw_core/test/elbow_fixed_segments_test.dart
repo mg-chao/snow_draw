@@ -1072,6 +1072,180 @@ void main() {
       reason: 'End spacing should match the non-fixed routed path.',
     );
   });
+
+  test('bound end preserves prefix before fixed segment', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 200, y: 0),
+      const DrawPoint(x: 200, y: 200),
+      const DrawPoint(x: 100, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final unbound = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: fixedSegments,
+    );
+    expect(unbound.fixedSegments, isNotNull);
+    final unboundFixed = unbound.fixedSegments!.first;
+    final unboundPrefix = _prefixThroughPoint(
+      unbound.localPoints,
+      unboundFixed.start,
+    );
+
+    const rect = DrawRect(minX: 80, minY: 550, maxX: 120, maxY: 650);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: false,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final bound = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+    expect(bound.fixedSegments, isNotNull);
+    final boundFixed = bound.fixedSegments!.first;
+    final boundPrefix = _prefixThroughPoint(
+      bound.localPoints,
+      boundFixed.start,
+    );
+
+    _expectPointSequenceClose(
+      boundPrefix,
+      unboundPrefix,
+      reason: 'Prefix before fixed segment should stay stable.',
+    );
+
+    final baseline = routeElbowArrow(
+      start: movedPoints.first,
+      end: boundPoint,
+      startBinding: null,
+      endBinding: binding,
+      elementsById: {'rect-1': boundElement},
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+    ).points;
+    if (baseline.length > 1 &&
+        !elbowPointsClose(baseline[1], unboundPrefix[1])) {
+      expect(
+        elbowPointsClose(boundPrefix[1], baseline[1]),
+        isFalse,
+        reason: 'Prefix should not adopt the bound baseline route.',
+      );
+    }
+  });
+
+  test('bound start preserves suffix after fixed segment', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 200, y: 0),
+      const DrawPoint(x: 200, y: 200),
+      const DrawPoint(x: 100, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final unbound = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: fixedSegments,
+    );
+    expect(unbound.fixedSegments, isNotNull);
+    final unboundFixed = unbound.fixedSegments!.first;
+    final unboundSuffix = _suffixFromPoint(
+      unbound.localPoints,
+      unboundFixed.end,
+    );
+
+    const rect = DrawRect(minX: -220, minY: -40, maxX: -140, maxY: 40);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0, y: 0.5),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: false,
+        ) ??
+        points.first;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[0] = boundPoint;
+
+    final bound = computeElbowEdit(
+      element: element,
+      data: data.copyWith(startBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      startBindingOverride: binding,
+    );
+    expect(bound.fixedSegments, isNotNull);
+    final boundFixed = bound.fixedSegments!.first;
+    final boundSuffix = _suffixFromPoint(
+      bound.localPoints,
+      boundFixed.end,
+    );
+
+    _expectPointSequenceClose(
+      boundSuffix,
+      unboundSuffix,
+      reason: 'Suffix after fixed segment should stay stable.',
+    );
+
+    final baseline = routeElbowArrow(
+      start: boundPoint,
+      end: movedPoints.last,
+      startBinding: binding,
+      endBinding: null,
+      elementsById: {'rect-1': boundElement},
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+    ).points;
+    if (baseline.length > 1 &&
+        !elbowPointsClose(
+          baseline[baseline.length - 2],
+          unboundSuffix[unboundSuffix.length - 2],
+        )) {
+      expect(
+        elbowPointsClose(
+          boundSuffix[boundSuffix.length - 2],
+          baseline[baseline.length - 2],
+        ),
+        isFalse,
+        reason: 'Suffix should not adopt the bound baseline route.',
+      );
+    }
+  });
 }
 
 ElementState _arrowElement(
@@ -1139,5 +1313,48 @@ int? _closestBaselineSegmentIndex(
     }
   }
   return bestIndex;
+}
+
+int _indexOfPoint(List<DrawPoint> points, DrawPoint target) {
+  for (var i = 0; i < points.length; i++) {
+    if (elbowPointsClose(points[i], target)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+List<DrawPoint> _prefixThroughPoint(
+  List<DrawPoint> points,
+  DrawPoint target,
+) {
+  final index = _indexOfPoint(points, target);
+  expect(index, isNot(-1));
+  return points.sublist(0, index + 1);
+}
+
+List<DrawPoint> _suffixFromPoint(
+  List<DrawPoint> points,
+  DrawPoint target,
+) {
+  final index = _indexOfPoint(points, target);
+  expect(index, isNot(-1));
+  return points.sublist(index);
+}
+
+void _expectPointSequenceClose(
+  List<DrawPoint> actual,
+  List<DrawPoint> expected, {
+  String? reason,
+}) {
+  expect(actual.length, expected.length, reason: reason);
+  final baseReason = reason ?? 'Point sequence mismatch.';
+  for (var i = 0; i < expected.length; i++) {
+    expect(
+      elbowPointsClose(actual[i], expected[i]),
+      isTrue,
+      reason: '$baseReason (point $i).',
+    );
+  }
 }
 
