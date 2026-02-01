@@ -107,9 +107,16 @@ class SelectPlugin extends DrawInputPlugin {
         position: position,
       );
       final now = DateTime.now();
-      if (handle != null &&
-          handle.isFixed &&
-          _isDoubleClick(handle, position, now)) {
+      final element = stateView.state.domain.document.getElementById(
+        intent.elementId,
+      );
+      final data =
+          element?.data is ArrowData ? element!.data as ArrowData : null;
+      final canDoubleClick =
+          handle != null &&
+          data != null &&
+          _isArrowHandleDoubleClickCandidate(handle: handle, data: data);
+      if (canDoubleClick && _isDoubleClick(handle!, position, now)) {
         _clearArrowHandleClickState();
         final doubleClickIntent = StartArrowPointIntent(
           elementId: intent.elementId,
@@ -122,12 +129,17 @@ class SelectPlugin extends DrawInputPlugin {
           position,
           editModifiers,
         );
-        return handledIntent
-            ? handled(message: 'Arrow segment released')
-            : unhandled();
+        if (!handledIntent) {
+          return unhandled();
+        }
+        return handled(
+          message: handle.isFixed
+              ? 'Arrow segment released'
+              : 'Arrow point deleted',
+        );
       }
-      if (handle != null) {
-        _recordArrowHandleClick(handle, position, now);
+      if (canDoubleClick) {
+        _recordArrowHandleClick(handle!, position, now);
       } else {
         _clearArrowHandleClickState();
       }
@@ -396,6 +408,20 @@ class SelectPlugin extends DrawInputPlugin {
       position: position,
       isFixed: isFixed,
     );
+  }
+
+  bool _isArrowHandleDoubleClickCandidate({
+    required ArrowPointHandle handle,
+    required ArrowData data,
+  }) {
+    if (handle.isFixed) {
+      return true;
+    }
+    if (handle.kind != ArrowPointKind.turning) {
+      return false;
+    }
+    final pointCount = data.points.length;
+    return handle.index > 0 && handle.index < pointCount - 1;
   }
 
   bool _isDoubleClick(

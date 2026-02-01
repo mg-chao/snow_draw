@@ -238,6 +238,89 @@ void main() {
     expect(fixed.end, result.localPoints[fixed.index]);
   });
 
+  test('releasing a fixed segment merges collinear neighbor segments', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 100),
+      const DrawPoint(x: 200, y: 100),
+      const DrawPoint(x: 200, y: 200),
+      const DrawPoint(x: 300, y: 200),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+    );
+    // debug: print(result.localPoints);
+
+    expect(result.fixedSegments, isNotNull);
+    expect(result.fixedSegments!.length, 1);
+    expect(_hasDiagonalSegments(result.localPoints), isFalse);
+    expect(
+      result.localPoints.length,
+      4,
+      reason: 'Expected released collinear segments to merge.',
+    );
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+    expect(fixed.start, result.localPoints[fixed.index - 1]);
+    expect(fixed.end, result.localPoints[fixed.index]);
+    expect((fixed.start.x - 200).abs() <= 1, isTrue);
+    expect((fixed.end.x - 200).abs() <= 1, isTrue);
+  });
+
+  test('releasing a fixed segment avoids extra elbow detours', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 200, y: 0),
+      const DrawPoint(x: 200, y: 200),
+      const DrawPoint(x: 400, y: 200),
+      const DrawPoint(x: 400, y: 0),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+    );
+
+    expect(
+      result.localPoints.length,
+      4,
+      reason: 'Released segment should collapse to a 3-segment path.',
+    );
+    expect(
+      _hasDiagonalSegments(result.localPoints),
+      isFalse,
+      reason: 'Released path should remain orthogonal.',
+    );
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+    expect((fixed.start.y - 200).abs() <= 1, isTrue);
+    expect((fixed.end.y - 200).abs() <= 1, isTrue);
+    expect(result.localPoints.first, points.first);
+    expect(result.localPoints.last, points.last);
+  });
+
   test('diagonal fixed segments are rejected', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

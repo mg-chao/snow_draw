@@ -88,6 +88,12 @@ class ArrowPointOperation extends EditOperation {
         fixedSegments.any(
           (segment) => segment.index == typedParams.pointIndex + 1,
         );
+    final shouldDeletePoint =
+        typedParams.isDoubleClick &&
+        !shouldReleaseSegment &&
+        typedParams.pointKind == ArrowPointKind.turning &&
+        typedParams.pointIndex > 0 &&
+        typedParams.pointIndex < points.length - 1;
 
     final startBounds = requireSelectionBounds(
       selectionData: SelectionDataComputer.compute(state),
@@ -125,6 +131,7 @@ class ArrowPointOperation extends EditOperation {
       pointIndex: typedParams.pointIndex,
       dragOffset: dragOffset,
       releaseFixedSegment: shouldReleaseSegment,
+      deletePointOnStart: shouldDeletePoint,
       bindingTargetCache: BindingTargetCache(),
     );
   }
@@ -146,6 +153,18 @@ class ArrowPointOperation extends EditOperation {
     var points = typedContext.initialPoints;
     var fixedSegments = data?.fixedSegments;
     var hasChanges = false;
+    if (typedContext.deletePointOnStart) {
+      return ArrowPointTransform(
+        currentPosition: startPosition,
+        points: points,
+        fixedSegments: fixedSegments,
+        startBinding: data?.startBinding,
+        endBinding: data?.endBinding,
+        activeIndex: typedContext.pointIndex,
+        shouldDelete: true,
+        hasChanges: true,
+      );
+    }
     if (typedContext.releaseFixedSegment &&
         element != null &&
         data != null &&
@@ -195,6 +214,9 @@ class ArrowPointOperation extends EditOperation {
       operationName: 'ArrowPointOperation.update',
     );
     if (typedContext.releaseFixedSegment) {
+      return EditUpdateResult<EditTransform>(transform: typedTransform);
+    }
+    if (typedContext.deletePointOnStart) {
       return EditUpdateResult<EditTransform>(transform: typedTransform);
     }
 
@@ -325,7 +347,7 @@ class ArrowPointOperation extends EditOperation {
     final result = data.arrowType == ArrowType.elbow
         ? () {
             final fixedSegments =
-                typedTransform.fixedSegments ?? data.fixedSegments;
+                typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
             final updated = computeElbowEdit(
               element: element,
               data: dataWithBindings,
@@ -430,7 +452,7 @@ class ArrowPointOperation extends EditOperation {
     final result = data.arrowType == ArrowType.elbow
         ? () {
             final fixedSegments =
-                typedTransform.fixedSegments ?? data.fixedSegments;
+                typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
             final updated = computeElbowEdit(
               element: element,
               data: dataWithBindings,
@@ -512,6 +534,7 @@ final class ArrowPointEditContext extends EditContext {
     required this.pointIndex,
     required this.dragOffset,
     required this.releaseFixedSegment,
+    required this.deletePointOnStart,
     required BindingTargetCache bindingTargetCache,
   }) : _bindingTargetCache = bindingTargetCache;
 
@@ -525,6 +548,7 @@ final class ArrowPointEditContext extends EditContext {
   final int pointIndex;
   final DrawPoint dragOffset;
   final bool releaseFixedSegment;
+  final bool deletePointOnStart;
   final BindingTargetCache _bindingTargetCache;
 }
 
