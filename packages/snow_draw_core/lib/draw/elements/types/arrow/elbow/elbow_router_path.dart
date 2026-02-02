@@ -288,14 +288,87 @@ List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
 List<DrawPoint> _finalizeRoutedPath({
   required List<DrawPoint> points,
   required ElbowHeading startHeading,
+  required List<DrawRect> obstacles,
 }) {
   // Step 5: enforce orthogonality, remove tiny segments, and clamp.
   final orthogonalized = _ensureOrthogonalPath(
     points: points,
     startHeading: startHeading,
   );
-  final cleaned = _getCornerPoints(_removeShortSegments(orthogonalized));
+  final backtrackCollapsed = _collapseRouteBacktracks(
+    points: orthogonalized,
+    obstacles: obstacles,
+  );
+  final cleaned = _getCornerPoints(_removeShortSegments(backtrackCollapsed));
   return cleaned.map(_clampPoint).toList(growable: false);
+}
+
+// Collapse detours that return to the same axis when the straight segment is clear.
+List<DrawPoint> _collapseRouteBacktracks({
+  required List<DrawPoint> points,
+  required List<DrawRect> obstacles,
+}) {
+  if (points.length < 3) {
+    return points;
+  }
+  var updated = List<DrawPoint>.from(points);
+  var changed = true;
+
+  while (changed) {
+    changed = false;
+    for (var i = 0; i < updated.length - 2; i++) {
+      if (i == 0) {
+        continue;
+      }
+      for (var j = i + 2; j < updated.length; j++) {
+        if (j == updated.length - 1) {
+          continue;
+        }
+        final a = updated[i];
+        final d = updated[j];
+        final alignedX =
+            (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
+        final alignedY =
+            (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
+        if (!alignedX && !alignedY) {
+          continue;
+        }
+        if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
+          continue;
+        }
+        var deviates = false;
+        for (var k = i + 1; k < j; k++) {
+          final candidate = updated[k];
+          if (alignedX) {
+            if ((candidate.x - a.x).abs() > ElbowConstants.dedupThreshold) {
+              deviates = true;
+              break;
+            }
+          } else {
+            if ((candidate.y - a.y).abs() > ElbowConstants.dedupThreshold) {
+              deviates = true;
+              break;
+            }
+          }
+        }
+        if (!deviates) {
+          continue;
+        }
+        updated = [
+          ...updated.sublist(0, i + 1),
+          d,
+          ...updated.sublist(j + 1),
+        ];
+        changed = true;
+        break;
+      }
+      if (changed) {
+        break;
+      }
+    }
+  }
+
+  return updated;
 }
 
 ElbowHeading _headingBetween(DrawPoint from, DrawPoint to) =>

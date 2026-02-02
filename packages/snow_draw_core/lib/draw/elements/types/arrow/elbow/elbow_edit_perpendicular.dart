@@ -208,6 +208,86 @@ _PerpendicularAdjustment? _alignStartSegmentLength({
   );
 }
 
+_PerpendicularAdjustment? _slideStartCornerToPadding({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required double? desiredLength,
+}) {
+  if (points.length < 4 ||
+      desiredLength == null ||
+      !desiredLength.isFinite ||
+      desiredLength <= ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final desiredHorizontal = heading.isHorizontal;
+  final start = points.first;
+  final neighbor = points[1];
+  final corner = points[2];
+  final target = _offsetPoint(start, heading, desiredLength);
+
+  if (desiredHorizontal) {
+    if ((neighbor.y - start.y).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    if ((corner.x - neighbor.x).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final next = points[3];
+    if ((next.y - corner.y).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final originalDelta = next.x - corner.x;
+    final newDelta = next.x - target.x;
+    if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
+        newDelta.abs() <= ElbowConstants.dedupThreshold ||
+        originalDelta.sign != newDelta.sign ||
+        newDelta.abs() <= originalDelta.abs() * 0.5) {
+      return null;
+    }
+    if ((neighbor.x - target.x).abs() <= ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final updated = List<DrawPoint>.from(points);
+    updated[1] = neighbor.copyWith(x: target.x);
+    updated[2] = corner.copyWith(x: target.x);
+    return _PerpendicularAdjustment(
+      points: updated,
+      moved: true,
+      inserted: false,
+    );
+  }
+
+  if ((neighbor.x - start.x).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  if ((corner.y - neighbor.y).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final next = points[3];
+  if ((next.x - corner.x).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final originalDelta = next.y - corner.y;
+  final newDelta = next.y - target.y;
+  if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
+      newDelta.abs() <= ElbowConstants.dedupThreshold ||
+      originalDelta.sign != newDelta.sign ||
+      newDelta.abs() <= originalDelta.abs() * 0.5) {
+    return null;
+  }
+  if ((neighbor.y - target.y).abs() <= ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final updated = List<DrawPoint>.from(points);
+  updated[1] = neighbor.copyWith(y: target.y);
+  updated[2] = corner.copyWith(y: target.y);
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: true,
+    inserted: false,
+  );
+}
+
 _PerpendicularAdjustment? _alignEndSegmentLength({
   required List<DrawPoint> points,
   required ElbowHeading heading,
@@ -244,6 +324,92 @@ _PerpendicularAdjustment? _alignEndSegmentLength({
   updated[neighborIndex] = desiredHorizontal
       ? neighbor.copyWith(x: target.x)
       : neighbor.copyWith(y: target.y);
+  return _PerpendicularAdjustment(
+    points: updated,
+    moved: true,
+    inserted: false,
+  );
+}
+
+_PerpendicularAdjustment? _slideEndCornerToPadding({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required double? desiredLength,
+}) {
+  if (points.length < 4 ||
+      desiredLength == null ||
+      !desiredLength.isFinite ||
+      desiredLength <= ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final desiredHorizontal = heading.isHorizontal;
+  final lastIndex = points.length - 1;
+  final neighborIndex = lastIndex - 1;
+  final cornerIndex = neighborIndex - 1;
+  if (cornerIndex < 1) {
+    return null;
+  }
+  final endPoint = points[lastIndex];
+  final neighbor = points[neighborIndex];
+  final corner = points[cornerIndex];
+  final target = _offsetPoint(endPoint, heading, desiredLength);
+
+  if (desiredHorizontal) {
+    if ((neighbor.y - endPoint.y).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    if ((corner.x - neighbor.x).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final prev = points[cornerIndex - 1];
+    if ((prev.y - corner.y).abs() > ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final originalDelta = corner.x - prev.x;
+    final newDelta = target.x - prev.x;
+    if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
+        newDelta.abs() <= ElbowConstants.dedupThreshold ||
+        originalDelta.sign != newDelta.sign ||
+        newDelta.abs() <= originalDelta.abs() * 0.5) {
+      return null;
+    }
+    if ((neighbor.x - target.x).abs() <= ElbowConstants.dedupThreshold) {
+      return null;
+    }
+    final updated = List<DrawPoint>.from(points);
+    updated[neighborIndex] = neighbor.copyWith(x: target.x);
+    updated[cornerIndex] = corner.copyWith(x: target.x);
+    return _PerpendicularAdjustment(
+      points: updated,
+      moved: true,
+      inserted: false,
+    );
+  }
+
+  if ((neighbor.x - endPoint.x).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  if ((corner.y - neighbor.y).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final prev = points[cornerIndex - 1];
+  if ((prev.x - corner.x).abs() > ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final originalDelta = corner.y - prev.y;
+  final newDelta = target.y - prev.y;
+  if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
+      newDelta.abs() <= ElbowConstants.dedupThreshold ||
+      originalDelta.sign != newDelta.sign ||
+      newDelta.abs() <= originalDelta.abs() * 0.5) {
+    return null;
+  }
+  if ((neighbor.y - target.y).abs() <= ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final updated = List<DrawPoint>.from(points);
+  updated[neighborIndex] = neighbor.copyWith(y: target.y);
+  updated[cornerIndex] = corner.copyWith(y: target.y);
   return _PerpendicularAdjustment(
     points: updated,
     moved: true,
@@ -348,6 +514,14 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     );
     if (adjusted != null) {
       return adjusted;
+    }
+    final slid = _slideStartCornerToPadding(
+      points: points,
+      heading: heading,
+      desiredLength: directionPadding,
+    );
+    if (slid != null) {
+      return slid;
     }
     return _PerpendicularAdjustment(
       points: points,
@@ -511,6 +685,14 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
     );
     if (adjusted != null) {
       return adjusted;
+    }
+    final slid = _slideEndCornerToPadding(
+      points: points,
+      heading: heading,
+      desiredLength: directionPadding,
+    );
+    if (slid != null) {
+      return slid;
     }
     return _PerpendicularAdjustment(
       points: points,

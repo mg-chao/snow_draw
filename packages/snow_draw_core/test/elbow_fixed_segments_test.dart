@@ -1367,6 +1367,122 @@ void main() {
     );
   });
 
+  test('bound end spacing matches between top and right bindings', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 60),
+      const DrawPoint(x: 260, y: 60),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 200, minY: 160, maxX: 300, maxY: 220);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+
+    const topBinding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final topBound =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: topBinding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+    final movedTop = List<DrawPoint>.from(points);
+    movedTop[movedTop.length - 1] = topBound;
+
+    final topResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: topBinding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedTop,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: topBinding,
+    );
+
+    final topPoints = topResult.localPoints;
+    expect(elbowPathIsOrthogonal(topPoints), isTrue);
+    final topEnd = topPoints.last;
+    final topNeighbor = topPoints[topPoints.length - 2];
+    final topCorner = topPoints[topPoints.length - 3];
+    expect(
+      (topNeighbor.x - topEnd.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Top binding should approach vertically.',
+    );
+    expect(
+      topNeighbor.y < topEnd.y,
+      isTrue,
+      reason: 'Top binding should approach from above.',
+    );
+    expect(
+      (topCorner.y - topNeighbor.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Top penultimate segment should be horizontal.',
+    );
+    final topSpacing = rect.minY - topNeighbor.y;
+    expect(topSpacing, greaterThan(0));
+
+    const rightBinding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final rightBound =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: rightBinding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+    final movedRight = List<DrawPoint>.from(points);
+    movedRight[movedRight.length - 1] = rightBound;
+
+    final rightResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: rightBinding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedRight,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: rightBinding,
+    );
+
+    final rightPoints = rightResult.localPoints;
+    expect(elbowPathIsOrthogonal(rightPoints), isTrue);
+    final rightEnd = rightPoints.last;
+    final rightNeighbor = rightPoints[rightPoints.length - 2];
+    final rightCorner = rightPoints[rightPoints.length - 3];
+    expect(
+      (rightNeighbor.y - rightEnd.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Right binding should approach horizontally.',
+    );
+    expect(
+      rightNeighbor.x > rightEnd.x,
+      isTrue,
+      reason: 'Right binding should approach from the right.',
+    );
+    expect(
+      (rightCorner.x - rightNeighbor.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Right penultimate segment should be vertical.',
+    );
+    final rightSpacing = rightNeighbor.x - rect.maxX;
+    expect(rightSpacing, greaterThan(0));
+
+    expect(
+      (rightSpacing - topSpacing).abs() <= 1,
+      isTrue,
+      reason:
+          'Right-edge spacing should match top-edge spacing for fixed segments.',
+    );
+  });
+
   test('binding above elements preserves fixed middle segment length', () {
     const leftRect = DrawRect(minX: 0, minY: 200, maxX: 120, maxY: 260);
     const rightRect = DrawRect(minX: 300, minY: 200, maxX: 420, maxY: 260);

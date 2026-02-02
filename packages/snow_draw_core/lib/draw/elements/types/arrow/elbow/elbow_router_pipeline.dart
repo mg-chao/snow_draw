@@ -72,6 +72,7 @@ final class _ElbowRoutePipeline {
     final finalized = _finalizeRoutedPath(
       points: routed,
       startHeading: plan.start.heading,
+      obstacles: plan.layout.obstacles,
     );
 
     return _buildRouteResult(

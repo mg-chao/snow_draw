@@ -603,6 +603,15 @@ _ElbowEndpointBounds _resolveEndpointBounds({
     endObstacle = _clampBounds(split.end);
   }
 
+  startObstacle = _clampObstacleExitToBasePadding(
+    endpoint: start,
+    obstacle: startObstacle,
+  );
+  endObstacle = _clampObstacleExitToBasePadding(
+    endpoint: end,
+    obstacle: endObstacle,
+  );
+
   return (start: startObstacle, end: endObstacle);
 }
 
@@ -616,6 +625,42 @@ DrawRect _resolveCommonBounds({
         ElbowConstants.basePadding,
       ),
     );
+
+DrawRect _clampObstacleExitToBasePadding({
+  required _ResolvedEndpoint endpoint,
+  required DrawRect obstacle,
+}) {
+  if (!endpoint.isBound || endpoint.elementBounds == null) {
+    return obstacle;
+  }
+  final bounds = endpoint.elementBounds!;
+  switch (endpoint.heading) {
+    case ElbowHeading.up:
+      final target = bounds.minY - ElbowConstants.basePadding;
+      if (obstacle.minY >= target) {
+        return obstacle;
+      }
+      return obstacle.copyWith(minY: target);
+    case ElbowHeading.right:
+      final target = bounds.maxX + ElbowConstants.basePadding;
+      if (obstacle.maxX <= target) {
+        return obstacle;
+      }
+      return obstacle.copyWith(maxX: target);
+    case ElbowHeading.down:
+      final target = bounds.maxY + ElbowConstants.basePadding;
+      if (obstacle.maxY <= target) {
+        return obstacle;
+      }
+      return obstacle.copyWith(maxY: target);
+    case ElbowHeading.left:
+      final target = bounds.minX - ElbowConstants.basePadding;
+      if (obstacle.minX >= target) {
+        return obstacle;
+      }
+      return obstacle.copyWith(minX: target);
+  }
+}
 
 _ElbowObstacleLayout _planObstacleLayout({
   required _ResolvedEndpoint start,
