@@ -497,6 +497,26 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
           : null;
       return adjusted ?? inserted;
     }
+    if (aligned) {
+      if (canSlideNeighbor) {
+        final adjusted = _slideStartNeighborToPadding(
+          points: points,
+          heading: heading,
+          desiredLength: fixedPadding,
+          cornerInserted: false,
+        );
+        if (adjusted != null) {
+          return adjusted;
+        }
+      }
+      // Keep the aligned segment when forcing direction would backtrack
+      // against a fixed neighbor.
+      return _PerpendicularAdjustment(
+        points: points,
+        moved: false,
+        inserted: false,
+      );
+    }
     return _insertStartDirectionStub(
       points: points,
       heading: heading,
@@ -667,6 +687,39 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
             )
           : null;
       return adjusted ?? inserted;
+    }
+    if (!directionOk &&
+        !desiredHorizontal &&
+        fixedNeighborAxis != desiredHorizontal) {
+      final snapped = _snapEndPointToFixedAxisAtAnchor(
+        points: points,
+        neighborIndex: neighborIndex,
+        binding: binding,
+        elementsById: elementsById,
+      );
+      if (snapped != null) {
+        return snapped;
+      }
+    }
+    if (aligned) {
+      if (canSlideNeighbor) {
+        final adjusted = _slideEndNeighborToPadding(
+          points: points,
+          heading: heading,
+          desiredLength: fixedPadding,
+          cornerInserted: false,
+        );
+        if (adjusted != null) {
+          return adjusted;
+        }
+      }
+      // Keep the aligned segment when forcing direction would backtrack
+      // against a fixed neighbor.
+      return _PerpendicularAdjustment(
+        points: points,
+        moved: false,
+        inserted: false,
+      );
     }
     return _insertEndDirectionStub(
       points: points,
@@ -1171,6 +1224,46 @@ _PerpendicularAdjustment _insertEndCorner({
     points: updated,
     moved: false,
     inserted: true,
+  );
+}
+
+_PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
+  required List<DrawPoint> points,
+  required int neighborIndex,
+  required ArrowBinding binding,
+  required Map<String, ElementState> elementsById,
+}) {
+  if (neighborIndex <= 0 || neighborIndex >= points.length - 1) {
+    return null;
+  }
+  final element = elementsById[binding.elementId];
+  if (element == null) {
+    return null;
+  }
+  final anchor = ArrowBindingUtils.resolveElbowAnchorPoint(
+    binding: binding,
+    target: element,
+  );
+  if (anchor == null || !anchor.x.isFinite || !anchor.y.isFinite) {
+    return null;
+  }
+  final neighbor = points[neighborIndex];
+  if ((anchor.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold) {
+    return null;
+  }
+  final slid = _slideRunForward(
+    points: points,
+    startIndex: neighborIndex,
+    horizontal: false,
+    target: anchor.x,
+  );
+  if (!slid.moved) {
+    return null;
+  }
+  return _PerpendicularAdjustment(
+    points: slid.points,
+    moved: true,
+    inserted: false,
   );
 }
 
