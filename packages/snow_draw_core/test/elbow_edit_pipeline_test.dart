@@ -239,7 +239,6 @@ void main() {
       equals(const <DrawPoint>[
         DrawPoint(x: 0, y: 0),
         DrawPoint(x: 100, y: 0),
-        DrawPoint(x: 100, y: 60),
         DrawPoint(x: 100, y: 120),
         DrawPoint(x: 20, y: 120),
       ]),
@@ -290,7 +289,6 @@ void main() {
       equals(const <DrawPoint>[
         DrawPoint(x: 20, y: 120),
         DrawPoint(x: 100, y: 120),
-        DrawPoint(x: 100, y: 60),
         DrawPoint(x: 100, y: 0),
         DrawPoint(x: 180, y: 0),
       ]),

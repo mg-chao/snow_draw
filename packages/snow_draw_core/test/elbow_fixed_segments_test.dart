@@ -549,6 +549,66 @@ void main() {
     },
   );
 
+  test('bound end readjusts fixed segment length to bound spacing', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 80, y: 0),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 160, y: 40),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 120, minY: 200, maxX: 220, maxY: 280);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    expect(result.fixedSegments, isNotNull);
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+
+    final originalLength = _manhattanDistance(points[1], points[2]);
+    final updatedLength = _manhattanDistance(fixed.start, fixed.end);
+    expect(
+      updatedLength,
+      greaterThan(originalLength + 60),
+      reason: 'Fixed segment should expand toward the bound element spacing.',
+    );
+
+    final expectedLane = rect.minY - ElbowConstants.basePadding;
+    expect(
+      (fixed.end.y - expectedLane).abs() <= 1,
+      isTrue,
+      reason: 'Fixed segment should align with the bound top padding lane.',
+    );
+  });
+
   test('bound end maps fixed segment direction to baseline route', () {
     final points = <DrawPoint>[
       const DrawPoint(x: 0, y: 0),

@@ -92,14 +92,10 @@ int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
     segment.end,
     isHorizontal: fixedHorizontal,
   );
-  final fixedMid = fixedHorizontal
-      ? (segment.start.x + segment.end.x) / 2
-      : (segment.start.y + segment.end.y) / 2;
   final maxIndex = points.length - 1;
   const minIndex = 2;
   int? bestIndex;
   var bestAxisDelta = double.infinity;
-  var bestMidDelta = double.infinity;
   var bestIndexDelta = double.infinity;
   for (var i = minIndex; i < maxIndex; i++) {
     if (ElbowGeometry.isHorizontal(points[i - 1], points[i]) !=
@@ -112,25 +108,13 @@ int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
       isHorizontal: fixedHorizontal,
     );
     final axisDelta = (candidateAxis - fixedAxis).abs();
-    final candidateMid = fixedHorizontal
-        ? (points[i - 1].x + points[i].x) / 2
-        : (points[i - 1].y + points[i].y) / 2;
-    final midDelta = (candidateMid - fixedMid).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
     final axisCloser =
         axisDelta < bestAxisDelta - ElbowConstants.dedupThreshold;
     final axisTie =
         (axisDelta - bestAxisDelta).abs() <= ElbowConstants.dedupThreshold;
-    final midCloser =
-        midDelta < bestMidDelta - ElbowConstants.dedupThreshold;
-    final midTie =
-        (midDelta - bestMidDelta).abs() <= ElbowConstants.dedupThreshold;
-    if (axisCloser ||
-        (axisTie &&
-            (midCloser ||
-                (midTie && indexDelta < bestIndexDelta)))) {
+    if (axisCloser || (axisTie && indexDelta < bestIndexDelta)) {
       bestAxisDelta = axisDelta;
-      bestMidDelta = midDelta;
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
@@ -225,7 +209,6 @@ int? _resolveBaselineSegmentIndex({
   required bool isHorizontal,
   required int preferredIndex,
   required double axis,
-  required double mid,
   double axisTolerance = ElbowConstants.dedupThreshold,
   Set<int> usedIndices = const {},
 }) {
@@ -236,7 +219,6 @@ int? _resolveBaselineSegmentIndex({
   const minIndex = 2;
   int? bestIndex;
   var bestAxisDelta = double.infinity;
-  var bestMidDelta = double.infinity;
   var bestIndexDelta = double.infinity;
   for (var i = minIndex; i < maxIndex; i++) {
     if (usedIndices.contains(i)) {
@@ -255,25 +237,13 @@ int? _resolveBaselineSegmentIndex({
     if (axisDelta > axisTolerance) {
       continue;
     }
-    final candidateMid = isHorizontal
-        ? (baseline[i - 1].x + baseline[i].x) / 2
-        : (baseline[i - 1].y + baseline[i].y) / 2;
-    final midDelta = (candidateMid - mid).abs();
     final indexDelta = (i - preferredIndex).abs().toDouble();
     final axisCloser =
         axisDelta < bestAxisDelta - ElbowConstants.dedupThreshold;
     final axisTie =
         (axisDelta - bestAxisDelta).abs() <= ElbowConstants.dedupThreshold;
-    final midCloser =
-        midDelta < bestMidDelta - ElbowConstants.dedupThreshold;
-    final midTie =
-        (midDelta - bestMidDelta).abs() <= ElbowConstants.dedupThreshold;
-    if (axisCloser ||
-        (axisTie &&
-            (midCloser ||
-                (midTie && indexDelta < bestIndexDelta)))) {
+    if (axisCloser || (axisTie && indexDelta < bestIndexDelta)) {
       bestAxisDelta = axisDelta;
-      bestMidDelta = midDelta;
       bestIndexDelta = indexDelta;
       bestIndex = i;
     }
@@ -303,15 +273,11 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
       segment.end,
       isHorizontal: isHorizontal,
     );
-    final mid = isHorizontal
-        ? (segment.start.x + segment.end.x) / 2
-        : (segment.start.y + segment.end.y) / 2;
     final index = _resolveBaselineSegmentIndex(
       baseline: updated,
       isHorizontal: isHorizontal,
       preferredIndex: segment.index,
       axis: axis,
-      mid: mid,
       usedIndices: usedIndices,
     );
     if (index == null || index <= 1 || index >= updated.length - 1) {

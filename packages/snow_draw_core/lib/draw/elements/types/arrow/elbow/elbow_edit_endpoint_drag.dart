@@ -628,7 +628,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   }
 
   // Step J: enforce perpendicularity for bound endpoints in world space.
-  return _ensurePerpendicularBindings(
+  final perpendicular = _ensurePerpendicularBindings(
     element: context.element,
     elementsById: context.elementsById,
     points: state.points,
@@ -638,4 +638,331 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     startArrowhead: context.startArrowhead,
     endArrowhead: context.endArrowhead,
   );
+  return _alignFixedSegmentsToBoundLanes(
+    element: context.element,
+    elementsById: context.elementsById,
+    points: perpendicular.points,
+    fixedSegments: perpendicular.fixedSegments,
+    startBinding: context.startBinding,
+    endBinding: context.endBinding,
+  );
+}
+
+_FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
+  required ElementState element,
+  required Map<String, ElementState> elementsById,
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+  if (startBinding == null && endBinding == null) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final space = ElementSpace(
+    rotation: element.rotation,
+    origin: element.rect.center,
+  );
+  var worldPoints = points.map(space.toWorld).toList(growable: false);
+  var changed = false;
+
+  if (startBinding != null) {
+    final result = _slideFixedSpanForBoundStart(
+      points: worldPoints,
+      fixedSegments: fixedSegments,
+      binding: startBinding,
+      elementsById: elementsById,
+    );
+    if (result.moved) {
+      worldPoints = result.points;
+      changed = true;
+    }
+  }
+
+  if (endBinding != null) {
+    final result = _slideFixedSpanForBoundEnd(
+      points: worldPoints,
+      fixedSegments: fixedSegments,
+      binding: endBinding,
+      elementsById: elementsById,
+    );
+    if (result.moved) {
+      worldPoints = result.points;
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+  }
+
+  final localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
+  final synced = _syncFixedSegmentsToPoints(localPoints, fixedSegments);
+  return _mergeFixedSegmentsWithCollinearNeighbors(
+    points: localPoints,
+    fixedSegments: synced,
+  );
+}
+
+({List<DrawPoint> points, bool moved}) _slideFixedSpanForBoundEnd({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  required ArrowBinding binding,
+  required Map<String, ElementState> elementsById,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return (points: points, moved: false);
+  }
+  final heading = _resolveBoundHeading(
+    binding: binding,
+    elementsById: elementsById,
+    point: points.last,
+  );
+  if (heading == null) {
+    return (points: points, moved: false);
+  }
+  final targetFixedHorizontal = !heading.isHorizontal;
+  ElbowFixedSegment? candidate;
+  for (var i = fixedSegments.length - 1; i >= 0; i--) {
+    final segment = fixedSegments[i];
+    final isHorizontal = ElbowGeometry.isHorizontal(
+      segment.start,
+      segment.end,
+    );
+    if (isHorizontal == targetFixedHorizontal) {
+      candidate = segment;
+      break;
+    }
+  }
+  if (candidate == null) {
+    return (points: points, moved: false);
+  }
+
+  final index = candidate.index;
+  if (index <= 0 || index >= points.length - 1) {
+    return (points: points, moved: false);
+  }
+
+  final nextHorizontal = (points[index].y - points[index + 1].y).abs() <=
+      ElbowConstants.dedupThreshold;
+  if (heading.isHorizontal && !nextHorizontal) {
+    return (points: points, moved: false);
+  }
+  if (!heading.isHorizontal && nextHorizontal) {
+    return (points: points, moved: false);
+  }
+
+  final targetElement = elementsById[binding.elementId];
+  if (targetElement == null) {
+    return (points: points, moved: false);
+  }
+  final bounds = SelectionCalculator.computeElementWorldAabb(targetElement);
+  final reference = points[index];
+  final lane = _resolveBoundLaneCoordinate(
+    heading: heading,
+    bounds: bounds,
+    reference: reference,
+  );
+  if (lane == null) {
+    return (points: points, moved: false);
+  }
+
+  final updated = _slideRunForward(
+    points: points,
+    startIndex: index,
+    horizontal: heading.isHorizontal,
+    target: lane,
+  );
+  return (
+    points: updated.points,
+    moved: updated.moved,
+  );
+}
+
+({List<DrawPoint> points, bool moved}) _slideFixedSpanForBoundStart({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  required ArrowBinding binding,
+  required Map<String, ElementState> elementsById,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return (points: points, moved: false);
+  }
+  final heading = _resolveBoundHeading(
+    binding: binding,
+    elementsById: elementsById,
+    point: points.first,
+  );
+  if (heading == null) {
+    return (points: points, moved: false);
+  }
+  final targetFixedHorizontal = !heading.isHorizontal;
+  ElbowFixedSegment? candidate;
+  for (final segment in fixedSegments) {
+    final isHorizontal = ElbowGeometry.isHorizontal(
+      segment.start,
+      segment.end,
+    );
+    if (isHorizontal == targetFixedHorizontal) {
+      candidate = segment;
+      break;
+    }
+  }
+  if (candidate == null) {
+    return (points: points, moved: false);
+  }
+
+  final index = candidate.index;
+  final anchorIndex = index - 1;
+  if (anchorIndex <= 0 || anchorIndex >= points.length) {
+    return (points: points, moved: false);
+  }
+
+  final prevHorizontal = (points[anchorIndex - 1].y - points[anchorIndex].y)
+          .abs() <=
+      ElbowConstants.dedupThreshold;
+  if (heading.isHorizontal && !prevHorizontal) {
+    return (points: points, moved: false);
+  }
+  if (!heading.isHorizontal && prevHorizontal) {
+    return (points: points, moved: false);
+  }
+
+  final targetElement = elementsById[binding.elementId];
+  if (targetElement == null) {
+    return (points: points, moved: false);
+  }
+  final bounds = SelectionCalculator.computeElementWorldAabb(targetElement);
+  final reference = points[anchorIndex];
+  final lane = _resolveBoundLaneCoordinate(
+    heading: heading,
+    bounds: bounds,
+    reference: reference,
+  );
+  if (lane == null) {
+    return (points: points, moved: false);
+  }
+
+  final updated = _slideRunBackward(
+    points: points,
+    startIndex: anchorIndex,
+    horizontal: heading.isHorizontal,
+    target: lane,
+  );
+  return (
+    points: updated.points,
+    moved: updated.moved,
+  );
+}
+
+double? _resolveBoundLaneCoordinate({
+  required ElbowHeading heading,
+  required DrawRect bounds,
+  required DrawPoint reference,
+}) {
+  if (heading.isHorizontal) {
+    final above = bounds.minY - ElbowConstants.basePadding;
+    final below = bounds.maxY + ElbowConstants.basePadding;
+    if (reference.y <= bounds.minY) {
+      return above;
+    }
+    if (reference.y >= bounds.maxY) {
+      return below;
+    }
+    return (reference.y - above).abs() <= (reference.y - below).abs()
+        ? above
+        : below;
+  }
+
+  final left = bounds.minX - ElbowConstants.basePadding;
+  final right = bounds.maxX + ElbowConstants.basePadding;
+  if (reference.x <= bounds.minX) {
+    return left;
+  }
+  if (reference.x >= bounds.maxX) {
+    return right;
+  }
+  return (reference.x - left).abs() <= (reference.x - right).abs()
+      ? left
+      : right;
+}
+
+({List<DrawPoint> points, bool moved}) _slideRunForward({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required bool horizontal,
+  required double target,
+}) {
+  if (startIndex < 0 || startIndex >= points.length) {
+    return (points: points, moved: false);
+  }
+  final current =
+      horizontal ? points[startIndex].y : points[startIndex].x;
+  if ((current - target).abs() <= ElbowConstants.dedupThreshold) {
+    return (points: points, moved: false);
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  updated[startIndex] = horizontal
+      ? updated[startIndex].copyWith(y: target)
+      : updated[startIndex].copyWith(x: target);
+
+  var i = startIndex;
+  while (i + 1 < points.length) {
+    final curr = points[i];
+    final next = points[i + 1];
+    final isHorizontal =
+        (curr.y - next.y).abs() <= ElbowConstants.dedupThreshold;
+    if (isHorizontal != horizontal) {
+      break;
+    }
+    updated[i + 1] = horizontal
+        ? updated[i + 1].copyWith(y: target)
+        : updated[i + 1].copyWith(x: target);
+    i++;
+  }
+
+  return (points: updated, moved: true);
+}
+
+({List<DrawPoint> points, bool moved}) _slideRunBackward({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required bool horizontal,
+  required double target,
+}) {
+  if (startIndex < 0 || startIndex >= points.length) {
+    return (points: points, moved: false);
+  }
+  final current =
+      horizontal ? points[startIndex].y : points[startIndex].x;
+  if ((current - target).abs() <= ElbowConstants.dedupThreshold) {
+    return (points: points, moved: false);
+  }
+
+  final updated = List<DrawPoint>.from(points);
+  updated[startIndex] = horizontal
+      ? updated[startIndex].copyWith(y: target)
+      : updated[startIndex].copyWith(x: target);
+
+  var i = startIndex;
+  while (i - 1 >= 0) {
+    final prev = points[i - 1];
+    final curr = points[i];
+    final isHorizontal =
+        (prev.y - curr.y).abs() <= ElbowConstants.dedupThreshold;
+    if (isHorizontal != horizontal) {
+      break;
+    }
+    updated[i - 1] = horizontal
+        ? updated[i - 1].copyWith(y: target)
+        : updated[i - 1].copyWith(x: target);
+    i--;
+  }
+
+  return (points: updated, moved: true);
 }
