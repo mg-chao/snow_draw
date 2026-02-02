@@ -588,6 +588,7 @@ void main() {
       endBindingOverride: binding,
     );
 
+    printOnFailure('right anchor points: ${result.localPoints}');
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     expect(result.fixedSegments, isNotNull);
     final fixed = result.fixedSegments!.first;
@@ -1424,6 +1425,132 @@ void main() {
       isTrue,
       reason:
           'Fixed segment should end at the bound spacing, not its pre-binding length.',
+    );
+  });
+
+  test('top binding keeps end aligned for a right-shifted anchor', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 120),
+      const DrawPoint(x: 260, y: 120),
+      const DrawPoint(x: 260, y: 240),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 140, minY: 240, maxX: 220, maxY: 300);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.8, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        )!;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    final endPoint = result.localPoints.last;
+    final neighbor = result.localPoints[result.localPoints.length - 2];
+    expect(
+      (endPoint.x - boundPoint.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound top edge.',
+    );
+    expect(
+      (endPoint.y - boundPoint.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound top edge.',
+    );
+    expect(
+      (neighbor.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End segment should be vertical for a top binding.',
+    );
+    expect(
+      neighbor.y < endPoint.y,
+      isTrue,
+      reason: 'Top binding should approach from above.',
+    );
+  });
+
+  test('top binding keeps end perpendicular for a left-shifted anchor', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 120),
+      const DrawPoint(x: 260, y: 120),
+      const DrawPoint(x: 260, y: 240),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 140, minY: 240, maxX: 220, maxY: 300);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.2, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        )!;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    final endPoint = result.localPoints.last;
+    final neighbor = result.localPoints[result.localPoints.length - 2];
+    expect(
+      (endPoint.x - boundPoint.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound top edge.',
+    );
+    expect(
+      (endPoint.y - boundPoint.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound top edge.',
+    );
+    expect(
+      (neighbor.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End segment should be vertical for a top binding.',
+    );
+    expect(
+      neighbor.y < endPoint.y,
+      isTrue,
+      reason: 'Top binding should approach from above.',
     );
   });
 

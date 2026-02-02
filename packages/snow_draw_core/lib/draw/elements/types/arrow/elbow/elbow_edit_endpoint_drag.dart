@@ -700,12 +700,30 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
   }
 
-  final localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
+  var localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
+  localPoints = _trimTrailingDuplicates(localPoints);
   final synced = _syncFixedSegmentsToPoints(localPoints, fixedSegments);
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: localPoints,
     fixedSegments: synced,
   );
+}
+
+List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
+  if (points.length < 2) {
+    return points;
+  }
+  final updated = List<DrawPoint>.from(points);
+  while (updated.length > 1) {
+    final last = updated[updated.length - 1];
+    final prev = updated[updated.length - 2];
+    if (ElbowGeometry.manhattanDistance(last, prev) >
+        ElbowConstants.dedupThreshold) {
+      break;
+    }
+    updated.removeLast();
+  }
+  return List<DrawPoint>.unmodifiable(updated);
 }
 
 ({List<DrawPoint> points, bool moved}) _slideFixedSpanForBoundEnd({
@@ -762,11 +780,13 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   }
   final bounds = SelectionCalculator.computeElementWorldAabb(targetElement);
   final reference = points[index];
-  final lane = _resolveBoundLaneCoordinate(
-    heading: heading,
-    bounds: bounds,
-    reference: reference,
-  );
+  final lane = heading.isHorizontal
+      ? _resolveBoundLaneCoordinate(
+          horizontal: true,
+          bounds: bounds,
+          reference: reference,
+        )
+      : points.last.x;
   if (lane == null) {
     return (points: points, moved: false);
   }
@@ -838,11 +858,13 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   }
   final bounds = SelectionCalculator.computeElementWorldAabb(targetElement);
   final reference = points[anchorIndex];
-  final lane = _resolveBoundLaneCoordinate(
-    heading: heading,
-    bounds: bounds,
-    reference: reference,
-  );
+  final lane = heading.isHorizontal
+      ? _resolveBoundLaneCoordinate(
+          horizontal: true,
+          bounds: bounds,
+          reference: reference,
+        )
+      : points.first.x;
   if (lane == null) {
     return (points: points, moved: false);
   }
@@ -860,11 +882,11 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
 }
 
 double? _resolveBoundLaneCoordinate({
-  required ElbowHeading heading,
+  required bool horizontal,
   required DrawRect bounds,
   required DrawPoint reference,
 }) {
-  if (heading.isHorizontal) {
+  if (horizontal) {
     final above = bounds.minY - ElbowConstants.basePadding;
     final below = bounds.maxY + ElbowConstants.basePadding;
     if (reference.y <= bounds.minY) {
