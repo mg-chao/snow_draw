@@ -1309,6 +1309,64 @@ void main() {
     );
   });
 
+  test('binding top edge recomputes fixed vertical segment length', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 60),
+      const DrawPoint(x: 20, y: 60),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: -10, minY: 160, maxX: 50, maxY: 220);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+
+    final endPoint = result.localPoints.last;
+    final gap = ArrowBindingUtils.elbowBindingGapBase *
+        (data.endArrowhead != ArrowheadStyle.none
+            ? ArrowBindingUtils.elbowArrowheadGapMultiplier
+            : ElbowConstants.elbowNoArrowheadGapMultiplier);
+    final headPadding = ElbowConstants.basePadding - gap;
+    final expectedFixedEndY = endPoint.y - headPadding;
+    final actualFixedEndY = result.localPoints[fixed.index].y;
+    expect(
+      (actualFixedEndY - expectedFixedEndY).abs() <= 1,
+      isTrue,
+      reason:
+          'Fixed segment should end at the bound spacing, not its pre-binding length.',
+    );
+  });
+
   test('binding above elements preserves fixed middle segment length', () {
     const leftRect = DrawRect(minX: 0, minY: 200, maxX: 120, maxY: 260);
     const rightRect = DrawRect(minX: 300, minY: 200, maxX: 420, maxY: 260);
