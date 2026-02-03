@@ -189,19 +189,6 @@ DrawRect _pointBounds(DrawPoint point, double padding) => DrawRect(
   maxY: point.y + padding,
 );
 
-double _arrowheadGapMultiplier(bool hasArrowhead) => hasArrowhead
-    ? ArrowBindingUtils.elbowArrowheadGapMultiplier
-    : ElbowConstants.elbowNoArrowheadGapMultiplier;
-
-double _arrowheadGap(bool hasArrowhead) =>
-    ArrowBindingUtils.elbowBindingGapBase *
-    _arrowheadGapMultiplier(hasArrowhead);
-
-double _headPadding(bool hasArrowhead) {
-  final padding = ElbowConstants.basePadding - _arrowheadGap(hasArrowhead);
-  return math.max(0, padding);
-}
-
 DrawRect _elementBoundsForElbow({
   required DrawPoint point,
   required DrawRect? elementBounds,
@@ -212,7 +199,7 @@ DrawRect _elementBoundsForElbow({
     return _pointBounds(point, 0);
   }
 
-  final headOffset = _arrowheadGap(hasArrowhead);
+  final headOffset = ElbowSpacing.bindingGap(hasArrowhead: hasArrowhead);
   final padding = _paddingFromHeading(
     heading,
     headOffset,
@@ -234,7 +221,7 @@ _BoundsPadding _routingPadding({
   required bool hasArrowhead,
 }) => _paddingFromHeading(
   heading,
-  _headPadding(hasArrowhead),
+  ElbowSpacing.headPadding(hasArrowhead: hasArrowhead),
   ElbowConstants.basePadding,
 );
 

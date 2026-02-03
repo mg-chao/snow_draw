@@ -14,6 +14,7 @@ import '../arrow_geometry.dart';
 import 'elbow_constants.dart';
 import 'elbow_geometry.dart';
 import 'elbow_heading.dart';
+import 'elbow_spacing.dart';
 
 export 'elbow_heading.dart';
 
@@ -98,21 +99,44 @@ ElbowRoutedPoints routeElbowArrowForElement({
   final localStart = startOverride ?? basePoints.first;
   final localEnd = endOverride ?? basePoints.last;
 
+  return routeElbowArrowForElementPoints(
+    element: element,
+    startLocal: localStart,
+    endLocal: localEnd,
+    elementsById: elementsById,
+    startBinding: data.startBinding,
+    endBinding: data.endBinding,
+    startArrowhead: data.startArrowhead,
+    endArrowhead: data.endArrowhead,
+  );
+}
+
+/// Routes an elbow arrow for explicit local endpoints on an element.
+ElbowRoutedPoints routeElbowArrowForElementPoints({
+  required ElementState element,
+  required DrawPoint startLocal,
+  required DrawPoint endLocal,
+  required Map<String, ElementState> elementsById,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+  ArrowheadStyle startArrowhead = ArrowheadStyle.none,
+  ArrowheadStyle endArrowhead = ArrowheadStyle.none,
+}) {
   final space = ElementSpace(
     rotation: element.rotation,
     origin: element.rect.center,
   );
-  final worldStart = space.toWorld(localStart);
-  final worldEnd = space.toWorld(localEnd);
+  final worldStart = space.toWorld(startLocal);
+  final worldEnd = space.toWorld(endLocal);
 
   final routed = routeElbowArrow(
     start: worldStart,
     end: worldEnd,
-    startBinding: data.startBinding,
-    endBinding: data.endBinding,
+    startBinding: startBinding,
+    endBinding: endBinding,
     elementsById: elementsById,
-    startArrowhead: data.startArrowhead,
-    endArrowhead: data.endArrowhead,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
   );
 
   final localPoints = routed.points

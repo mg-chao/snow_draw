@@ -15,6 +15,7 @@ import 'elbow_constants.dart';
 import 'elbow_fixed_segment.dart';
 import 'elbow_geometry.dart';
 import 'elbow_router.dart';
+import 'elbow_spacing.dart';
 
 part 'elbow_edit_endpoint_drag.dart';
 part 'elbow_edit_fixed_segments.dart';

@@ -12,22 +12,17 @@ List<DrawPoint> _routeLocalPath({
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
 }) {
-  final space = ElementSpace(
-    rotation: element.rotation,
-    origin: element.rect.center,
-  );
-  final worldStart = space.toWorld(startLocal);
-  final worldEnd = space.toWorld(endLocal);
-  final routed = routeElbowArrow(
-    start: worldStart,
-    end: worldEnd,
+  final routed = routeElbowArrowForElementPoints(
+    element: element,
+    startLocal: startLocal,
+    endLocal: endLocal,
+    elementsById: elementsById,
     startBinding: startBinding,
     endBinding: endBinding,
-    elementsById: elementsById,
     startArrowhead: startArrowhead,
     endArrowhead: endArrowhead,
   );
-  return routed.points.map(space.fromWorld).toList(growable: false);
+  return routed.localPoints;
 }
 
 List<DrawPoint> _directElbowPath(
