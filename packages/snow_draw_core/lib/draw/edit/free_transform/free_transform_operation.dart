@@ -220,10 +220,7 @@ class FreeTransformOperation extends EditOperation {
       updatedById[entry.key] = updated;
     }
 
-    final elementsById = {
-      ...state.domain.document.elementMap,
-      ...updatedById,
-    };
+    final elementsById = {...state.domain.document.elementMap, ...updatedById};
     final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
       elementsById: elementsById,
       changedElementIds: updatedById.keys.toSet(),

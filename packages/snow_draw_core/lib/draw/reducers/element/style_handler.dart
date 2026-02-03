@@ -5,6 +5,8 @@ import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
+import '../../elements/types/arrow/arrow_layout.dart';
+import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_layout.dart';
 import '../../models/draw_state.dart';
@@ -79,9 +81,10 @@ DrawState handleUpdateElementsStyle(
             updatedData is ArrowData &&
             _shouldRecalculateArrowRect(data, updatedData)) {
           final result = _resolveArrowRectAndData(
-            currentRect: next.rect,
+            element: next,
             data: updatedData,
             previousArrowType: data.arrowType,
+            elementsById: state.domain.document.elementMap,
           );
           next = next.copyWith(rect: result.rect, data: result.data);
         }
@@ -99,8 +102,7 @@ DrawState handleUpdateElementsStyle(
   }
 
   final interaction = state.application.interaction;
-  if (interaction is TextEditingState &&
-      ids.contains(interaction.elementId)) {
+  if (interaction is TextEditingState && ids.contains(interaction.elementId)) {
     nextTextEdit = _applyTextEditingStyleUpdate(
       interaction,
       styleUpdate,
@@ -141,10 +143,7 @@ TextEditingState? _applyTextEditingStyleUpdate(
       nextData = updatedData;
       changed = true;
       nextRect = _resolveTextRect(
-        origin: DrawPoint(
-          x: interaction.rect.minX,
-          y: interaction.rect.minY,
-        ),
+        origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
         currentRect: interaction.rect,
         data: nextData,
         autoResize: nextData.autoResize,
@@ -179,9 +178,7 @@ DrawRect _resolveTextRect({
   required bool autoResize,
   bool allowShrinkHeight = false,
 }) {
-  final maxWidth = autoResize
-      ? double.infinity
-      : currentRect.width;
+  final maxWidth = autoResize ? double.infinity : currentRect.width;
   final layout = layoutText(data: data, maxWidth: maxWidth);
   final horizontalPadding = resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
@@ -211,21 +208,51 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
     oldData.arrowType != newData.arrowType;
 
 ({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
-  required DrawRect currentRect,
+  required ElementState element,
   required ArrowData data,
   required ArrowType previousArrowType,
+  required Map<String, ElementState> elementsById,
 }) {
-  // Resolve world points from the current rect and normalized points
-  var worldPoints = ArrowGeometry.resolveWorldPoints(
-    rect: currentRect,
-    normalizedPoints: data.points,
-  ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
-  if (data.arrowType == ArrowType.polyline &&
-      previousArrowType != ArrowType.polyline) {
-    worldPoints = ArrowGeometry.ensurePolylineCreationPoints(
-      [worldPoints.first, worldPoints.last],
+  if (data.arrowType == ArrowType.elbow &&
+      previousArrowType != ArrowType.elbow) {
+    final elbowData = data.copyWith(
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
     );
+    final routed = routeElbowArrowForElement(
+      element: element,
+      data: elbowData,
+      elementsById: elementsById,
+    );
+    final result = computeArrowRectAndPoints(
+      localPoints: routed.localPoints,
+      oldRect: element.rect,
+      rotation: element.rotation,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    );
+    final updatedData = elbowData.copyWith(points: normalized);
+    return (rect: result.rect, data: updatedData);
   }
+
+  final sanitizedData = data.arrowType == ArrowType.elbow
+      ? data
+      : data.copyWith(
+          fixedSegments: null,
+          startIsSpecial: null,
+          endIsSpecial: null,
+        );
+
+  // Resolve world points from the current rect and normalized points
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: element.rect,
+    normalizedPoints: sanitizedData.points,
+  ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
 
   // Calculate new bounds based on arrow type
   final newRect = ArrowGeometry.calculatePathBounds(
@@ -240,7 +267,7 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
   );
 
   // Update data with normalized points to maintain consistency
-  final updatedData = data.copyWith(points: normalizedPoints);
+  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
 
   return (rect: newRect, data: updatedData);
 }

@@ -97,11 +97,7 @@ double fitTextFontSizeToHeight({
   var high = baseFontSize < safeTargetHeight ? safeTargetHeight : baseFontSize;
   var highHeight = high == baseFontSize
       ? baseHeight
-      : _resolveHeight(
-          data: data,
-          fontSize: high,
-          maxWidth: safeWidth,
-        );
+      : _resolveHeight(data: data, fontSize: high, maxWidth: safeWidth);
   if (highHeight < safeTargetHeight) {
     var attempts = 0;
     while (highHeight < safeTargetHeight && attempts < maxIterations) {

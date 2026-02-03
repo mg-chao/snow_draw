@@ -207,6 +207,20 @@ class CreatePlugin extends DrawInputPlugin {
     final isDoubleClick =
         !wasMeaningfulDrag && _isDoubleClick(event.position, now);
 
+    if (wasMultiPoint && _isElbowArrowCreating(state)) {
+      await dispatch(
+        UpdateCreatingElement(
+          currentPosition: event.position,
+          maintainAspectRatio: event.modifiers.shift,
+          createFromCenter: event.modifiers.alt,
+          snapOverride: event.modifiers.control,
+        ),
+      );
+      await dispatch(const FinishCreateElement());
+      _resetPointCreationState();
+      return handled(message: 'Create finished (elbow)');
+    }
+
     if (isDoubleClick) {
       await dispatch(const FinishCreateElement());
       _resetPointCreationState();
@@ -219,12 +233,6 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
-    if (_shouldAutoFinishPolyline()) {
-      await dispatch(const FinishCreateElement());
-      _resetPointCreationState();
-      return handled(message: 'Create finished (polyline)');
-    }
-
     _recordClick(event.position, now);
     return handled(message: 'Create point added');
   }
@@ -280,16 +288,13 @@ class CreatePlugin extends DrawInputPlugin {
     return interaction is CreatingState && interaction.isPointCreation;
   }
 
-  bool _shouldAutoFinishPolyline() {
+  bool _isElbowArrowCreating(DrawState state) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return false;
     }
     final data = interaction.elementData;
-    if (data is! ArrowData || data.arrowType != ArrowType.polyline) {
-      return false;
-    }
-    return interaction.fixedPoints.length >= 2;
+    return data is ArrowData && data.arrowType == ArrowType.elbow;
   }
 
   bool _isDoubleClick(DrawPoint position, DateTime now) {

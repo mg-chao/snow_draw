@@ -315,20 +315,20 @@ class DynamicCanvasPainter extends CustomPainter {
     final handleTolerance =
         selectionConfig.interaction.handleTolerance / effectiveScale;
     final loopThreshold = handleTolerance * 1.5;
+    final baseHandleSize =
+        selectionConfig.render.controlPointSize / effectiveScale;
+    // Apply multiplier for arrow point handles to make them larger
+    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final overlay = ArrowPointUtils.buildOverlay(
       element: effectiveElement,
       loopThreshold: loopThreshold,
+      handleSize: handleSize,
     );
     if (overlay.turningPoints.isEmpty &&
         overlay.addablePoints.isEmpty &&
         overlay.loopPoints.isEmpty) {
       return;
     }
-
-    final baseHandleSize =
-        selectionConfig.render.controlPointSize / effectiveScale;
-    // Apply multiplier for arrow point handles to make them larger
-    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final strokeWidth = selectionConfig.render.strokeWidth / effectiveScale;
     final fillColor = selectionConfig.render.cornerFillColor;
     final strokeColor = selectionConfig.render.strokeColor;
@@ -394,38 +394,41 @@ class DynamicCanvasPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..color = highlightStroke
       ..isAntiAlias = true;
+    final fixedFillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = fillColor.withValues(alpha: 0.90)
+      ..isAntiAlias = true;
+    final fixedStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.9)
+      ..isAntiAlias = true;
+    final fixedStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = highlightStroke
+      ..isAntiAlias = true;
     final hoverOuterFillPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = strokeColor.withValues(alpha: 0.25)
       ..isAntiAlias = true;
 
-    final arrowData = effectiveElement.data as ArrowData;
-    final isPolyline = arrowData.arrowType == ArrowType.polyline;
-    final lastSegmentIndex = overlay.addablePoints.isEmpty
-        ? -1
-        : overlay.addablePoints.length - 1;
-
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
+      final isFixed = handle.isFixed;
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
       }
-      final isBendControl =
-          isPolyline && handle.index > 0 && handle.index < lastSegmentIndex;
-      final fillPaint = isBendControl
-          ? turningFillPaint
-          : isHighlighted
-          ? addableFillPaintHighlighted
-          : addableFillPaint;
-      final strokePaint = isBendControl
-          ? isHighlighted
-                ? turningStrokePaintHighlighted
-                : turningStrokePaint
-          : isHighlighted
-          ? addableStrokePaintHighlighted
-          : addableStrokePaint;
-      final radius = isBendControl ? turnRadius : addableRadius;
+      final fillPaint = isFixed
+          ? fixedFillPaint
+          : (isHighlighted ? addableFillPaintHighlighted : addableFillPaint);
+      final strokePaint = isFixed
+          ? (isHighlighted ? fixedStrokePaintHighlighted : fixedStrokePaint)
+          : (isHighlighted
+                ? addableStrokePaintHighlighted
+                : addableStrokePaint);
+      final radius = addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
         ..drawCircle(center, radius, strokePaint);
@@ -485,17 +488,10 @@ class DynamicCanvasPainter extends CustomPainter {
     required Canvas canvas,
     required double scale,
   }) {
-    final highlight = _resolveArrowBindingHighlight();
-    if (highlight == null) {
+    final highlights = _resolveArrowBindingHighlights();
+    if (highlights.isEmpty) {
       return;
     }
-    final element = stateView.state.domain.document.getElementById(
-      highlight.elementId,
-    );
-    if (element == null || element.data is! RectangleData) {
-      return;
-    }
-    final effectiveElement = stateView.effectiveElement(element);
     final effectiveScale = scale == 0 ? 1.0 : scale;
     final strokeColor = renderKey.selectionConfig.render.strokeColor;
     final paint = Paint()
@@ -505,34 +501,44 @@ class DynamicCanvasPainter extends CustomPainter {
       ..color = strokeColor.withValues(alpha: 0.9)
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
-    final rect = effectiveElement.rect;
-    final data = effectiveElement.data as RectangleData;
-    final highlightRect = Rect.fromLTWH(
-      rect.minX,
-      rect.minY,
-      rect.width,
-      rect.height,
-    );
 
-    canvas.save();
-    if (effectiveElement.rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(effectiveElement.rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
-    if (data.cornerRadius > 0) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          highlightRect,
-          Radius.circular(data.cornerRadius),
-        ),
-        paint,
+    for (final highlight in highlights) {
+      final element = stateView.state.domain.document.getElementById(
+        highlight.elementId,
       );
-    } else {
-      canvas.drawRect(highlightRect, paint);
+      if (element == null || element.data is! RectangleData) {
+        continue;
+      }
+      final effectiveElement = stateView.effectiveElement(element);
+      final rect = effectiveElement.rect;
+      final data = effectiveElement.data as RectangleData;
+      final highlightRect = Rect.fromLTWH(
+        rect.minX,
+        rect.minY,
+        rect.width,
+        rect.height,
+      );
+
+      canvas.save();
+      if (effectiveElement.rotation != 0) {
+        canvas
+          ..translate(rect.centerX, rect.centerY)
+          ..rotate(effectiveElement.rotation)
+          ..translate(-rect.centerX, -rect.centerY);
+      }
+      if (data.cornerRadius > 0) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            highlightRect,
+            Radius.circular(data.cornerRadius),
+          ),
+          paint,
+        );
+      } else {
+        canvas.drawRect(highlightRect, paint);
+      }
+      canvas.restore();
     }
-    canvas.restore();
   }
 
   void _drawArrowHoverOutline({
@@ -713,43 +719,71 @@ class DynamicCanvasPainter extends CustomPainter {
   Offset _localOffset(DrawRect rect, DrawPoint point) =>
       Offset(point.x - rect.minX, point.y - rect.minY);
 
-  _ArrowBindingHighlight? _resolveArrowBindingHighlight() {
+  List<_ArrowBindingHighlight> _resolveArrowBindingHighlights() {
+    final highlights = <_ArrowBindingHighlight>[];
+    final hoveredBindingElementId = renderKey.hoveredBindingElementId;
+    if (hoveredBindingElementId != null) {
+      highlights.add(
+        _ArrowBindingHighlight(elementId: hoveredBindingElementId),
+      );
+    }
     final interaction = stateView.state.application.interaction;
     if (interaction is EditingState &&
         interaction.context is ArrowPointEditContext) {
       final handle = renderKey.activeArrowHandle;
       if (handle == null) {
-        return null;
+        return _dedupeArrowBindingHighlights(highlights);
       }
       final element = stateView.state.domain.document.getElementById(
         handle.elementId,
       );
       if (element == null || element.data is! ArrowData) {
-        return null;
+        return _dedupeArrowBindingHighlights(highlights);
       }
       final effectiveElement = stateView.effectiveElement(element);
       final data = effectiveElement.data as ArrowData;
-      final points = _resolveArrowWorldPoints(
-        effectiveElement,
-        data,
-      );
+      final points = _resolveArrowWorldPoints(effectiveElement, data);
       final endpoint = _resolveEndpointForHandle(handle, points.length);
       final binding = switch (endpoint) {
         _ArrowEndpoint.start => data.startBinding,
         _ArrowEndpoint.end => data.endBinding,
         null => null,
       };
-      return _highlightFromBinding(binding);
+      final highlight = _highlightFromBinding(binding);
+      if (highlight != null) {
+        highlights.add(highlight);
+      }
+      return _dedupeArrowBindingHighlights(highlights);
     }
     if (interaction is CreatingState) {
       final element = interaction.element;
       final data = element.data;
       if (data is! ArrowData || !interaction.isPointCreation) {
-        return null;
+        return _dedupeArrowBindingHighlights(highlights);
       }
-      return _highlightFromBinding(data.endBinding);
+      final endHighlight = _highlightFromBinding(data.endBinding);
+      if (endHighlight != null) {
+        highlights.add(endHighlight);
+      }
+      final startHighlight = _highlightFromBinding(data.startBinding);
+      if (startHighlight != null) {
+        highlights.add(startHighlight);
+      }
+      return _dedupeArrowBindingHighlights(highlights);
     }
-    return null;
+    return _dedupeArrowBindingHighlights(highlights);
+  }
+
+  List<_ArrowBindingHighlight> _dedupeArrowBindingHighlights(
+    List<_ArrowBindingHighlight> highlights,
+  ) {
+    if (highlights.isEmpty) {
+      return const <_ArrowBindingHighlight>[];
+    }
+    final unique = <String, _ArrowBindingHighlight>{
+      for (final highlight in highlights) highlight.elementId: highlight,
+    };
+    return unique.values.toList(growable: false);
   }
 
   _ArrowBindingHighlight? _highlightFromBinding(ArrowBinding? binding) {
@@ -769,11 +803,12 @@ class DynamicCanvasPainter extends CustomPainter {
     return switch (handle.kind) {
       ArrowPointKind.loopStart => _ArrowEndpoint.start,
       ArrowPointKind.loopEnd => _ArrowEndpoint.end,
-      ArrowPointKind.turning => handle.index == 0
-          ? _ArrowEndpoint.start
-          : handle.index == pointCount - 1
-          ? _ArrowEndpoint.end
-          : null,
+      ArrowPointKind.turning =>
+        handle.index == 0
+            ? _ArrowEndpoint.start
+            : handle.index == pointCount - 1
+            ? _ArrowEndpoint.end
+            : null,
       _ => null,
     };
   }
@@ -786,14 +821,10 @@ class DynamicCanvasPainter extends CustomPainter {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(resolved)
-        : resolved;
-    return effective
+    return resolved
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }
-
 
   /// Draw box-selection overlay.
   void _drawBoxSelection(Canvas canvas, DrawRect bounds, double scale) {
@@ -1160,9 +1191,7 @@ class DynamicCanvasPainter extends CustomPainter {
 enum _ArrowEndpoint { start, end }
 
 class _ArrowBindingHighlight {
-  const _ArrowBindingHighlight({
-    required this.elementId,
-  });
+  const _ArrowBindingHighlight({required this.elementId});
 
   final String elementId;
 }

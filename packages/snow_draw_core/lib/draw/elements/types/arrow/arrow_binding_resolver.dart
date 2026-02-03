@@ -9,6 +9,7 @@ import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
+import 'elbow/elbow_editing.dart';
 
 @immutable
 final class ArrowBindingResolver {
@@ -263,7 +264,6 @@ ElementState? _applyBindings({
   if (localPoints.length < 2) {
     return null;
   }
-  final originalPoints = List<DrawPoint>.from(localPoints);
 
   final rect = element.rect;
   final space = ElementSpace(rotation: element.rotation, origin: rect.center);
@@ -279,8 +279,15 @@ ElementState? _applyBindings({
 
   if (updateStart && data.startBinding != null) {
     final target = elementsById[data.startBinding!.elementId];
+    final isElbow = data.arrowType == ArrowType.elbow;
     final bound = target == null
         ? null
+        : isElbow
+        ? ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: data.startBinding!,
+            target: target,
+            hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+          )
         : ArrowBindingUtils.resolveBoundPoint(
             binding: data.startBinding!,
             target: target,
@@ -294,8 +301,15 @@ ElementState? _applyBindings({
 
   if (updateEnd && data.endBinding != null) {
     final target = elementsById[data.endBinding!.elementId];
+    final isElbow = data.arrowType == ArrowType.elbow;
     final bound = target == null
         ? null
+        : isElbow
+        ? ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: data.endBinding!,
+            target: target,
+            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+          )
         : ArrowBindingUtils.resolveBoundPoint(
             binding: data.endBinding!,
             target: target,
@@ -311,18 +325,47 @@ ElementState? _applyBindings({
     return null;
   }
 
-  var adjustedPoints = localPoints;
-  if (data.arrowType == ArrowType.polyline) {
-    adjustedPoints = _adjustPolylineEndpoints(
-      points: localPoints,
-      originalPoints: originalPoints,
-      startUpdated: startUpdated,
-      endUpdated: endUpdated,
+  if (data.arrowType == ArrowType.elbow) {
+    final updated = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: elementsById,
+      localPointsOverride: localPoints,
+      fixedSegmentsOverride: data.fixedSegments,
+      startBindingOverride: data.startBinding,
+      endBindingOverride: data.endBinding,
     );
+    final result = computeArrowRectAndPoints(
+      localPoints: updated.localPoints,
+      oldRect: rect,
+      rotation: element.rotation,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    final transformedFixedSegments = transformFixedSegments(
+      segments: updated.fixedSegments,
+      oldRect: rect,
+      newRect: result.rect,
+      rotation: element.rotation,
+    );
+    final normalized = ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    );
+    final updatedData = data.copyWith(
+      points: normalized,
+      fixedSegments: transformedFixedSegments,
+      startIsSpecial: updated.startIsSpecial,
+      endIsSpecial: updated.endIsSpecial,
+    );
+    if (updatedData == data && result.rect == rect) {
+      return null;
+    }
+    return element.copyWith(rect: result.rect, data: updatedData);
   }
 
   final result = computeArrowRectAndPoints(
-    localPoints: adjustedPoints,
+    localPoints: localPoints,
     oldRect: rect,
     rotation: element.rotation,
     arrowType: data.arrowType,
@@ -347,51 +390,7 @@ List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final effective = data.arrowType == ArrowType.polyline
-      ? ArrowGeometry.expandPolylinePoints(resolved)
-      : resolved;
-  return effective
+  return resolved
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
-}
-
-List<DrawPoint> _adjustPolylineEndpoints({
-  required List<DrawPoint> points,
-  required List<DrawPoint> originalPoints,
-  required bool startUpdated,
-  required bool endUpdated,
-}) {
-  if (points.length < 2) {
-    return points;
-  }
-
-  final updated = List<DrawPoint>.from(points);
-
-  if (startUpdated && originalPoints.length >= 2) {
-    final wasHorizontal = ArrowGeometry.isPolylineSegmentHorizontal(
-      originalPoints[0],
-      originalPoints[1],
-    );
-    final anchor = updated[0];
-    final neighbor = updated[1];
-    updated[1] = wasHorizontal
-        ? DrawPoint(x: neighbor.x, y: anchor.y)
-        : DrawPoint(x: anchor.x, y: neighbor.y);
-  }
-
-  if (endUpdated && originalPoints.length >= 2) {
-    final lastIndex = updated.length - 1;
-    final prevIndex = lastIndex - 1;
-    final wasHorizontal = ArrowGeometry.isPolylineSegmentHorizontal(
-      originalPoints[prevIndex],
-      originalPoints[lastIndex],
-    );
-    final anchor = updated[lastIndex];
-    final neighbor = updated[prevIndex];
-    updated[prevIndex] = wasHorizontal
-        ? DrawPoint(x: neighbor.x, y: anchor.y)
-        : DrawPoint(x: anchor.x, y: neighbor.y);
-  }
-
-  return updated;
 }

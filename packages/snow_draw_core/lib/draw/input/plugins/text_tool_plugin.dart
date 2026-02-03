@@ -87,9 +87,7 @@ class TextToolPlugin extends DrawInputPlugin {
     return builder.build(state);
   }
 
-  Future<PluginResult> _handlePointerDown(
-    PointerDownInputEvent event,
-  ) async {
+  Future<PluginResult> _handlePointerDown(PointerDownInputEvent event) async {
     final interaction = state.application.interaction;
     if (interaction is TextEditingState) {
       if (_isInsideEditingRect(interaction, event.position)) {
@@ -113,10 +111,7 @@ class TextToolPlugin extends DrawInputPlugin {
         final hitId = _hitTextElementId(event.position);
         if (hitId != null) {
           await dispatch(
-            StartTextEdit(
-              elementId: hitId,
-              position: event.position,
-            ),
+            StartTextEdit(elementId: hitId, position: event.position),
           );
           return handled(message: 'Text edit restarted');
         }
@@ -284,9 +279,10 @@ class TextToolPlugin extends DrawInputPlugin {
   bool _isInsideRect(DrawRect rect, double rotation, DrawPoint position) {
     final local = rotation == 0
         ? position
-        : ElementSpace(rotation: rotation, origin: rect.center).fromWorld(
-            position,
-          );
+        : ElementSpace(
+            rotation: rotation,
+            origin: rect.center,
+          ).fromWorld(position);
     return local.x >= rect.minX &&
         local.x <= rect.maxX &&
         local.y >= rect.minY &&
@@ -308,10 +304,7 @@ class TextToolPlugin extends DrawInputPlugin {
     final trimmed = interaction.draftData.text.trim();
     if (!interaction.isNew && trimmed.isNotEmpty) {
       await dispatch(
-        SelectElement(
-          elementId: interaction.elementId,
-          position: position,
-        ),
+        SelectElement(elementId: interaction.elementId, position: position),
       );
     }
   }
@@ -339,10 +332,7 @@ class TextToolPlugin extends DrawInputPlugin {
     return hitId != null;
   }
 
-  String? _hitTextElementId(
-    DrawPoint position, {
-    Set<String>? allowedIds,
-  }) {
+  String? _hitTextElementId(DrawPoint position, {Set<String>? allowedIds}) {
     final stateView = _stateView;
     final registry = drawContext.elementRegistry;
     final elements = stateView.elements;

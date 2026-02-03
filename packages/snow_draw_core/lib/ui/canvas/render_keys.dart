@@ -145,6 +145,7 @@ class DynamicCanvasRenderKey {
     required this.boxSelectionBounds,
     required this.selectedIds,
     required this.hoveredElementId,
+    required this.hoveredBindingElementId,
     required this.hoveredArrowHandle,
     required this.activeArrowHandle,
     required this.hoverSelectionConfig,
@@ -175,6 +176,7 @@ class DynamicCanvasRenderKey {
 
   /// Hovered element ID for selection preview outline.
   final String? hoveredElementId;
+  final String? hoveredBindingElementId;
   final ArrowPointHandle? hoveredArrowHandle;
   final ArrowPointHandle? activeArrowHandle;
 
@@ -218,25 +220,26 @@ class DynamicCanvasRenderKey {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DynamicCanvasRenderKey &&
-      other.creatingElement == creatingElement &&
-      other.effectiveSelection == effectiveSelection &&
-      other.boxSelectionBounds == boxSelectionBounds &&
-      _setEquals(other.selectedIds, selectedIds) &&
-      other.hoveredElementId == hoveredElementId &&
-      other.hoveredArrowHandle == hoveredArrowHandle &&
-      other.activeArrowHandle == activeArrowHandle &&
-      other.hoverSelectionConfig == hoverSelectionConfig &&
-      _listEquals(other.snapGuides, snapGuides) &&
-      other.documentVersion == documentVersion &&
-      other.camera == camera &&
-      _mapsEqual(other.previewElementsById, previewElementsById) &&
-      other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
-      other.scaleFactor == scaleFactor &&
-      other.selectionConfig == selectionConfig &&
-      other.boxSelectionConfig == boxSelectionConfig &&
-      other.snapConfig == snapConfig &&
-      other.elementRegistry == elementRegistry &&
-      other.locale == locale;
+          other.creatingElement == creatingElement &&
+          other.effectiveSelection == effectiveSelection &&
+          other.boxSelectionBounds == boxSelectionBounds &&
+          _setEquals(other.selectedIds, selectedIds) &&
+          other.hoveredElementId == hoveredElementId &&
+          other.hoveredBindingElementId == hoveredBindingElementId &&
+          other.hoveredArrowHandle == hoveredArrowHandle &&
+          other.activeArrowHandle == activeArrowHandle &&
+          other.hoverSelectionConfig == hoverSelectionConfig &&
+          _listEquals(other.snapGuides, snapGuides) &&
+          other.documentVersion == documentVersion &&
+          other.camera == camera &&
+          _mapsEqual(other.previewElementsById, previewElementsById) &&
+          other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
+          other.scaleFactor == scaleFactor &&
+          other.selectionConfig == selectionConfig &&
+          other.boxSelectionConfig == boxSelectionConfig &&
+          other.snapConfig == snapConfig &&
+          other.elementRegistry == elementRegistry &&
+          other.locale == locale;
 
   @override
   int get hashCode => Object.hash(
@@ -245,6 +248,7 @@ class DynamicCanvasRenderKey {
     boxSelectionBounds,
     Object.hashAllUnordered(selectedIds),
     hoveredElementId,
+    hoveredBindingElementId,
     hoveredArrowHandle,
     activeArrowHandle,
     hoverSelectionConfig,

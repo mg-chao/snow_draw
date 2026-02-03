@@ -403,10 +403,7 @@ class ResizeOperation extends EditOperation {
       return null;
     }
 
-    final elementsById = {
-      ...state.domain.document.elementMap,
-      ...updatedById,
-    };
+    final elementsById = {...state.domain.document.elementMap, ...updatedById};
     final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
       elementsById: elementsById,
       changedElementIds: updatedById.keys.toSet(),
@@ -455,13 +452,11 @@ class ResizeOperation extends EditOperation {
   List<ElementState> _resolveReferenceElements(
     DrawState state,
     Set<String> selectedIds,
-  ) =>
-      state.domain.document.elements
-          .where(
-            (element) =>
-                element.opacity > 0 && !selectedIds.contains(element.id),
-          )
-          .toList();
+  ) => state.domain.document.elements
+      .where(
+        (element) => element.opacity > 0 && !selectedIds.contains(element.id),
+      )
+      .toList();
 
   bool _isIdentityTransform(
     double scaleX,

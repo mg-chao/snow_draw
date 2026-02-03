@@ -19,8 +19,9 @@ class TextRenderer extends ElementTypeRenderer {
   static final _lineShaderCache = _LruCache<_LineShaderKey, Shader>(
     maxEntries: 128,
   );
-  static final _elementLayoutCache =
-      _LruCache<String, _ElementTextLayoutCache>(maxEntries: 256);
+  static final _elementLayoutCache = _LruCache<String, _ElementTextLayoutCache>(
+    maxEntries: 256,
+  );
 
   Shader _buildLineShader({
     required double spacing,
@@ -461,13 +462,8 @@ class _TextLayoutSignature {
           other.paintKey == paintKey;
 
   @override
-  int get hashCode => Object.hash(
-        text,
-        fontSize,
-        fontFamily,
-        horizontalAlign,
-        paintKey,
-      );
+  int get hashCode =>
+      Object.hash(text, fontSize, fontFamily, horizontalAlign, paintKey);
 }
 
 @immutable
@@ -542,16 +538,16 @@ class _TextPaintSignature {
 
   @override
   int get hashCode => Object.hash(
-        color,
-        paintStyle,
-        strokeWidth,
-        strokeCap,
-        strokeJoin,
-        strokeMiterLimit,
-        isAntiAlias,
-        blendMode,
-        shaderId,
-      );
+    color,
+    paintStyle,
+    strokeWidth,
+    strokeCap,
+    strokeJoin,
+    strokeMiterLimit,
+    isAntiAlias,
+    blendMode,
+    shaderId,
+  );
 }
 
 class _LruCache<K, V> {

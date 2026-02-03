@@ -6,7 +6,10 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../../utils/selection_calculator.dart';
 import '../rectangle/rectangle_data.dart';
+import 'elbow/elbow_geometry.dart';
+import 'elbow/elbow_heading.dart';
 
 enum ArrowBindingMode { inside, orbit }
 
@@ -89,6 +92,10 @@ final class ArrowBindingResult {
 class ArrowBindingUtils {
   const ArrowBindingUtils._();
 
+  static const double elbowBindingGapBase = _elbowBindingGapBase;
+  static const double elbowArrowheadGapMultiplier =
+      _bindingArrowheadGapMultiplier;
+
   static double resolveBindingSearchDistance(double snapDistance) =>
       snapDistance * (1 + _bindingHitToleranceFactor);
 
@@ -145,6 +152,59 @@ class ArrowBindingUtils {
     return best;
   }
 
+  static ArrowBindingResult? resolveElbowBindingCandidate({
+    required DrawPoint worldPoint,
+    required Iterable<ElementState> targets,
+    required double snapDistance,
+    required bool hasArrowhead,
+    ArrowBinding? preferredBinding,
+    bool allowNewBinding = true,
+  }) {
+    if (snapDistance <= 0) {
+      return null;
+    }
+    if (!allowNewBinding && preferredBinding == null) {
+      return null;
+    }
+
+    ArrowBindingResult? best;
+    var bestScore = double.infinity;
+
+    for (final target in targets) {
+      if (target.opacity <= 0) {
+        continue;
+      }
+      if (!allowNewBinding &&
+          preferredBinding != null &&
+          target.id != preferredBinding.elementId) {
+        continue;
+      }
+
+      final result = _resolveElbowBindingOnTarget(
+        target: target,
+        worldPoint: worldPoint,
+        snapDistance: snapDistance,
+        hasArrowhead: hasArrowhead,
+      );
+      if (result == null) {
+        continue;
+      }
+
+      var score = result.distance;
+      if (preferredBinding != null && preferredBinding.elementId == target.id) {
+        score = math.max(0, score - snapDistance * 0.25);
+      }
+
+      if (score < bestScore ||
+          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+        best = result;
+        bestScore = score;
+      }
+    }
+
+    return best;
+  }
+
   static DrawPoint? resolveBoundPoint({
     required ArrowBinding binding,
     required ElementState target,
@@ -174,6 +234,57 @@ class ArrowBindingUtils {
       gap: gap,
     );
     return space.toWorld(snapPoint);
+  }
+
+  static DrawPoint? resolveElbowBoundPoint({
+    required ArrowBinding binding,
+    required ElementState target,
+    required bool hasArrowhead,
+  }) {
+    final rect = target.rect;
+    if (rect.width == 0 || rect.height == 0) {
+      return null;
+    }
+
+    final localAnchor = DrawPoint(
+      x: rect.minX + rect.width * binding.anchor.x,
+      y: rect.minY + rect.height * binding.anchor.y,
+    );
+    final anchorPoint = _resolveElbowAnchorPoint(
+      rect: rect,
+      point: localAnchor,
+    );
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    final worldAnchor = space.toWorld(anchorPoint);
+    final heading = ElbowGeometry.headingForPointOnBounds(
+      SelectionCalculator.computeElementWorldAabb(target),
+      worldAnchor,
+    );
+    final gap = _resolveElbowBindingGap(hasArrowhead);
+    return DrawPoint(
+      x: worldAnchor.x + heading.dx * gap,
+      y: worldAnchor.y + heading.dy * gap,
+    );
+  }
+
+  static DrawPoint? resolveElbowAnchorPoint({
+    required ArrowBinding binding,
+    required ElementState target,
+  }) {
+    final rect = target.rect;
+    if (rect.width == 0 || rect.height == 0) {
+      return null;
+    }
+    final localAnchor = DrawPoint(
+      x: rect.minX + rect.width * binding.anchor.x,
+      y: rect.minY + rect.height * binding.anchor.y,
+    );
+    final anchorPoint = _resolveElbowAnchorPoint(
+      rect: rect,
+      point: localAnchor,
+    );
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    return space.toWorld(anchorPoint);
   }
 
   static ArrowBinding? bindingFromLocalPoint({
@@ -257,7 +368,10 @@ final class _BindingHit {
 }
 
 const _bindingGapBase = 6.0;
+const _elbowBindingGapBase = 5.0;
 const _bindingHitToleranceFactor = 0.4;
+const double _bindingArrowheadGapMultiplier =
+    _bindingGapBase / _elbowBindingGapBase;
 const _intersectionEpsilon = 1e-6;
 const _insideEpsilon = 1e-6;
 
@@ -318,6 +432,14 @@ double _resolveBindingGap(ElementState target) {
   final data = target.data;
   final strokeWidth = data is RectangleData ? data.strokeWidth : 0.0;
   return _bindingGapBase + strokeWidth / 2;
+}
+
+double _resolveElbowBindingGap(bool hasArrowhead) {
+  const baseGap = _elbowBindingGapBase;
+  if (!hasArrowhead) {
+    return baseGap;
+  }
+  return baseGap * _bindingArrowheadGapMultiplier;
 }
 
 DrawRect _inflateRect(DrawRect rect, double delta) => DrawRect(
@@ -402,6 +524,55 @@ _BindingHit? _resolveBindingHit({
   );
 }
 
+ArrowBindingResult? _resolveElbowBindingOnTarget({
+  required ElementState target,
+  required DrawPoint worldPoint,
+  required double snapDistance,
+  required bool hasArrowhead,
+}) {
+  final rect = target.rect;
+  if (rect.width == 0 || rect.height == 0) {
+    return null;
+  }
+
+  final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+  final localPoint = space.fromWorld(worldPoint);
+  final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localPoint);
+
+  final distance = _isStrictlyInsideRect(rect, localPoint)
+      ? 0.0
+      : localPoint.distance(anchorPoint);
+  if (distance > snapDistance * (1 + _bindingHitToleranceFactor)) {
+    return null;
+  }
+
+  final binding = ArrowBindingUtils.bindingFromLocalPoint(
+    target: target,
+    localPoint: anchorPoint,
+  );
+  if (binding == null) {
+    return null;
+  }
+
+  final worldAnchor = space.toWorld(anchorPoint);
+  final heading = ElbowGeometry.headingForPointOnBounds(
+    SelectionCalculator.computeElementWorldAabb(target),
+    worldAnchor,
+  );
+  final gap = _resolveElbowBindingGap(hasArrowhead);
+  final snapPoint = DrawPoint(
+    x: worldAnchor.x + heading.dx * gap,
+    y: worldAnchor.y + heading.dy * gap,
+  );
+
+  return ArrowBindingResult(
+    binding: binding,
+    snapPoint: snapPoint,
+    distance: distance,
+    zIndex: target.zIndex,
+  );
+}
+
 DrawPoint _clampPointToRect(DrawRect rect, DrawPoint point) => DrawPoint(
   x: _clamp(point.x, rect.minX, rect.maxX),
   y: _clamp(point.y, rect.minY, rect.maxY),
@@ -425,6 +596,20 @@ DrawPoint _resolveOrbitAnchorPoint({
     }
   }
   return _nearestPointOnRectBoundary(rect, localPoint);
+}
+
+DrawPoint _resolveElbowAnchorPoint({
+  required DrawRect rect,
+  required DrawPoint point,
+}) {
+  final center = rect.center;
+  final intersection = _intersectRectAlongLine(
+    rect: rect,
+    reference: center,
+    target: point,
+    preferRay: true,
+  );
+  return intersection ?? _nearestPointOnRectBoundary(rect, point);
 }
 
 DrawPoint _resolveOrbitSnapPoint({

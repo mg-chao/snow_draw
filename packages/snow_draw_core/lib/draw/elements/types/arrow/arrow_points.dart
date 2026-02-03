@@ -18,6 +18,7 @@ class ArrowPointHandle {
     required this.kind,
     required this.index,
     required this.position,
+    this.isFixed = false,
   });
 
   /// Element id that owns this control point.
@@ -32,20 +33,25 @@ class ArrowPointHandle {
   /// World-space position in the element's un-rotated coordinate space.
   final DrawPoint position;
 
+  /// Whether the handle represents a fixed elbow segment.
+  final bool isFixed;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ArrowPointHandle &&
           other.elementId == elementId &&
           other.kind == kind &&
-          other.index == index;
+          other.index == index &&
+          other.isFixed == isFixed;
 
   @override
-  int get hashCode => Object.hash(elementId, kind, index);
+  int get hashCode => Object.hash(elementId, kind, index, isFixed);
 
   @override
   String toString() =>
-      'ArrowPointHandle(id: $elementId, kind: $kind, index: $index)';
+      'ArrowPointHandle(id: $elementId, kind: $kind, index: $index, '
+      'isFixed: $isFixed)';
 }
 
 @immutable
@@ -69,6 +75,7 @@ class ArrowPointUtils {
   static ArrowPointOverlay buildOverlay({
     required ElementState element,
     required double loopThreshold,
+    double? handleSize,
   }) {
     final data = element.data;
     if (data is! ArrowData) {
@@ -79,8 +86,8 @@ class ArrowPointUtils {
       );
     }
 
-    final points = _resolveWorldPoints(element, data);
-    if (points.length < 2) {
+    final rawPoints = _resolveWorldPoints(element, data);
+    if (rawPoints.length < 2) {
       return const ArrowPointOverlay(
         turningPoints: [],
         addablePoints: [],
@@ -88,51 +95,76 @@ class ArrowPointUtils {
       );
     }
 
-    final isPolyline = data.arrowType == ArrowType.polyline;
-    final loopActive =
-        points.first.distanceSquared(points.last) <=
-        loopThreshold * loopThreshold;
-
-    final turningPoints = <ArrowPointHandle>[];
-    if (isPolyline) {
-      if (!loopActive) {
-        turningPoints
-          ..add(
-            ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: 0,
-              position: points.first,
-            ),
-          )
-          ..add(
-            ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: points.length - 1,
-              position: points.last,
-            ),
-          );
-      }
-    } else {
-      for (var i = 0; i < points.length; i++) {
-        if (loopActive && (i == 0 || i == points.length - 1)) {
-          continue;
-        }
+    if (data.arrowType == ArrowType.elbow) {
+      final turningPoints = <ArrowPointHandle>[
+        ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: 0,
+          position: rawPoints.first,
+        ),
+      ];
+      if (rawPoints.length > 1) {
         turningPoints.add(
           ArrowPointHandle(
             elementId: element.id,
             kind: ArrowPointKind.turning,
-            index: i,
-            position: points[i],
+            index: rawPoints.length - 1,
+            position: rawPoints.last,
           ),
         );
       }
+      final addablePoints = <ArrowPointHandle>[];
+      final fixedSegments = data.fixedSegments ?? const [];
+      for (var i = 0; i < rawPoints.length - 1; i++) {
+        if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
+          continue;
+        }
+        final segmentIndex = i + 1;
+        final isFixed = fixedSegments.any(
+          (segment) => segment.index == segmentIndex,
+        );
+        addablePoints.add(
+          ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.addable,
+            index: i,
+            position: _midpoint(rawPoints[i], rawPoints[i + 1]),
+            isFixed: isFixed,
+          ),
+        );
+      }
+      return ArrowPointOverlay(
+        turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
+        addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
+        loopPoints: const [],
+      );
+    }
+
+    final segmentPoints = _resolveSegmentPoints(rawPoints);
+
+    final loopActive =
+        rawPoints.first.distanceSquared(rawPoints.last) <=
+        loopThreshold * loopThreshold;
+
+    final turningPoints = <ArrowPointHandle>[];
+    for (var i = 0; i < rawPoints.length; i++) {
+      if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
+        continue;
+      }
+      turningPoints.add(
+        ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: i,
+          position: rawPoints[i],
+        ),
+      );
     }
 
     final addablePoints = <ArrowPointHandle>[];
-    for (var i = 0; i < points.length - 1; i++) {
-      final mid = _calculateMidpoint(points, i, data.arrowType);
+    for (var i = 0; i < segmentPoints.length - 1; i++) {
+      final mid = _calculateMidpoint(segmentPoints, i, data.arrowType);
       addablePoints.add(
         ArrowPointHandle(
           elementId: element.id,
@@ -142,7 +174,6 @@ class ArrowPointUtils {
         ),
       );
     }
-
     final loopPoints = <ArrowPointHandle>[];
     if (loopActive) {
       loopPoints
@@ -151,15 +182,15 @@ class ArrowPointUtils {
             elementId: element.id,
             kind: ArrowPointKind.loopStart,
             index: 0,
-            position: points.first,
+            position: rawPoints.first,
           ),
         )
         ..add(
           ArrowPointHandle(
             elementId: element.id,
             kind: ArrowPointKind.loopEnd,
-            index: points.length - 1,
-            position: points.last,
+            index: rawPoints.length - 1,
+            position: rawPoints.last,
           ),
         );
     }
@@ -182,10 +213,12 @@ class ArrowPointUtils {
     if (data is! ArrowData) {
       return null;
     }
-    final points = _resolveWorldPoints(element, data);
-    if (points.length < 2) {
+    final rawPoints = _resolveWorldPoints(element, data);
+    if (rawPoints.length < 2) {
       return null;
     }
+
+    final segmentPoints = _resolveSegmentPoints(rawPoints);
 
     final localPosition = _toLocalPosition(element, position);
     final visualPointRadius = handleSize == null || handleSize <= 0
@@ -195,15 +228,65 @@ class ArrowPointUtils {
         ? 0.0
         : handleSize * 1.0;
     final visualLoopInnerRadius = visualPointRadius;
-    final isPolyline = data.arrowType == ArrowType.polyline;
     final loopActive =
-        points.first.distanceSquared(points.last) <=
+        rawPoints.first.distanceSquared(rawPoints.last) <=
         loopThreshold * loopThreshold;
+
+    if (data.arrowType == ArrowType.elbow) {
+      ArrowPointHandle? nearest;
+      var nearestDistance = double.infinity;
+      var turningHitRadius = hitRadius * 1.11;
+      if (visualPointRadius > turningHitRadius) {
+        turningHitRadius = visualPointRadius;
+      }
+      final localPoints = [rawPoints.first, rawPoints.last];
+      for (var i = 0; i < localPoints.length; i++) {
+        final index = i == 0 ? 0 : rawPoints.length - 1;
+        final distanceSq = localPosition.distanceSquared(localPoints[i]);
+        if (distanceSq <= turningHitRadius * turningHitRadius &&
+            distanceSq < nearestDistance) {
+          nearestDistance = distanceSq;
+          nearest = ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.turning,
+            index: index,
+            position: localPoints[i],
+          );
+        }
+      }
+      if (nearest != null) {
+        return nearest;
+      }
+
+      final fixedSegments = data.fixedSegments ?? const [];
+      final segmentHitRadius = hitRadius;
+      for (var i = 0; i < rawPoints.length - 1; i++) {
+        if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
+          continue;
+        }
+        final midpoint = _midpoint(rawPoints[i], rawPoints[i + 1]);
+        final distanceSq = localPosition.distanceSquared(midpoint);
+        if (distanceSq <= segmentHitRadius * segmentHitRadius) {
+          final segmentIndex = i + 1;
+          final isFixed = fixedSegments.any(
+            (segment) => segment.index == segmentIndex,
+          );
+          return ArrowPointHandle(
+            elementId: element.id,
+            kind: ArrowPointKind.addable,
+            index: i,
+            position: midpoint,
+            isFixed: isFixed,
+          );
+        }
+      }
+      return null;
+    }
 
     if (loopActive) {
       // Use the midpoint between first and last as the loop center for hit
       // testing
-      final loopCenter = _midpoint(points.first, points.last);
+      final loopCenter = _midpoint(rawPoints.first, rawPoints.last);
       final distanceSq = localPosition.distanceSquared(loopCenter);
 
       // Loop outer radius: 0.65 (was 0.55), scale hit radius proportionally
@@ -225,7 +308,7 @@ class ArrowPointUtils {
           elementId: element.id,
           kind: ArrowPointKind.loopStart,
           index: 0,
-          position: points.first,
+          position: rawPoints.first,
         );
       }
 
@@ -234,8 +317,8 @@ class ArrowPointUtils {
         return ArrowPointHandle(
           elementId: element.id,
           kind: ArrowPointKind.loopEnd,
-          index: points.length - 1,
-          position: points.last,
+          index: rawPoints.length - 1,
+          position: rawPoints.last,
         );
       }
     }
@@ -247,39 +330,20 @@ class ArrowPointUtils {
     if (visualPointRadius > turningHitRadius) {
       turningHitRadius = visualPointRadius;
     }
-    if (isPolyline) {
-      if (!loopActive) {
-        final endpoints = <int>[0, points.length - 1];
-        for (final i in endpoints) {
-          final distanceSq = localPosition.distanceSquared(points[i]);
-          if (distanceSq <= turningHitRadius * turningHitRadius &&
-              distanceSq < nearestDistance) {
-            nearestDistance = distanceSq;
-            nearest = ArrowPointHandle(
-              elementId: element.id,
-              kind: ArrowPointKind.turning,
-              index: i,
-              position: points[i],
-            );
-          }
-        }
+    for (var i = 0; i < rawPoints.length; i++) {
+      if (loopActive && (i == 0 || i == rawPoints.length - 1)) {
+        continue;
       }
-    } else {
-      for (var i = 0; i < points.length; i++) {
-        if (loopActive && (i == 0 || i == points.length - 1)) {
-          continue;
-        }
-        final distanceSq = localPosition.distanceSquared(points[i]);
-        if (distanceSq <= turningHitRadius * turningHitRadius &&
-            distanceSq < nearestDistance) {
-          nearestDistance = distanceSq;
-          nearest = ArrowPointHandle(
-            elementId: element.id,
-            kind: ArrowPointKind.turning,
-            index: i,
-            position: points[i],
-          );
-        }
+      final distanceSq = localPosition.distanceSquared(rawPoints[i]);
+      if (distanceSq <= turningHitRadius * turningHitRadius &&
+          distanceSq < nearestDistance) {
+        nearestDistance = distanceSq;
+        nearest = ArrowPointHandle(
+          elementId: element.id,
+          kind: ArrowPointKind.turning,
+          index: i,
+          position: rawPoints[i],
+        );
       }
     }
     if (nearest != null) {
@@ -291,8 +355,8 @@ class ArrowPointUtils {
     if (visualPointRadius > addableHitRadius) {
       addableHitRadius = visualPointRadius;
     }
-    for (var i = 0; i < points.length - 1; i++) {
-      final mid = _calculateMidpoint(points, i, data.arrowType);
+    for (var i = 0; i < segmentPoints.length - 1; i++) {
+      final mid = _calculateMidpoint(segmentPoints, i, data.arrowType);
       final distanceSq = localPosition.distanceSquared(mid);
       if (distanceSq <= addableHitRadius * addableHitRadius) {
         return ArrowPointHandle(
@@ -315,13 +379,13 @@ class ArrowPointUtils {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final effective = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(resolved)
-        : resolved;
-    return effective
+    return resolved
         .map((point) => DrawPoint(x: point.dx, y: point.dy))
         .toList(growable: false);
   }
+
+  static List<DrawPoint> _resolveSegmentPoints(List<DrawPoint> rawPoints) =>
+      rawPoints;
 
   static DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
     if (element.rotation == 0) {
@@ -334,7 +398,7 @@ class ArrowPointUtils {
 
   /// Calculates the midpoint for an addable point between two control points.
   /// For curved arrows, this uses the actual curve position at t=0.5.
-  /// For straight and polyline arrows, this uses linear interpolation.
+  /// For straight arrows, this uses linear interpolation.
   static DrawPoint _calculateMidpoint(
     List<DrawPoint> points,
     int segmentIndex,
@@ -359,10 +423,22 @@ class ArrowPointUtils {
       }
     }
 
-    // For straight and polyline arrows, use linear midpoint
+    // For straight arrows, use linear midpoint
     return _midpoint(points[segmentIndex], points[segmentIndex + 1]);
   }
 
   static DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>
       DrawPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2);
+
+  static bool _isSegmentTooShort(
+    DrawPoint start,
+    DrawPoint end,
+    double? handleSize,
+  ) {
+    if (handleSize == null || handleSize <= 0) {
+      return false;
+    }
+    final length = start.distance(end);
+    return length < handleSize * 0.5;
+  }
 }

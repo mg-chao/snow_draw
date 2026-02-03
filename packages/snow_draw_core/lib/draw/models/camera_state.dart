@@ -13,8 +13,7 @@ class CameraState {
   static const minZoom = 0.1;
   static const maxZoom = 30.0;
 
-  static double clampZoom(double zoom) =>
-      zoom.clamp(minZoom, maxZoom);
+  static double clampZoom(double zoom) => zoom.clamp(minZoom, maxZoom);
 
   CameraState copyWith({DrawPoint? position, double? zoom}) =>
       CameraState(position: position ?? this.position, zoom: zoom ?? this.zoom);

@@ -1440,8 +1440,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
               icon: const ArrowTypeCurvedIcon(),
             ),
             _StyleOption(
-              value: ArrowType.polyline,
-              label: widget.strings.arrowTypePolyline,
+              value: ArrowType.elbow,
+              label: widget.strings.arrowTypeElbow,
               icon: const ArrowTypeElbowIcon(),
             ),
           ],

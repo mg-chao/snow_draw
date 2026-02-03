@@ -106,11 +106,7 @@ TextLayoutMetrics layoutText({
   final resolvedText = data.text.isEmpty ? _fallbackText : data.text;
   final resolvedStyle =
       styleOverride ??
-      buildTextStyle(
-        data: data,
-        colorOverride: colorOverride,
-        locale: locale,
-      );
+      buildTextStyle(data: data, colorOverride: colorOverride, locale: locale);
 
   // Create cache key for this layout request
   final cacheKey = _TextLayoutCacheKey(
@@ -122,8 +118,7 @@ TextLayoutMetrics layoutText({
     letterSpacing: resolvedStyle.letterSpacing,
     wordSpacing: resolvedStyle.wordSpacing,
     height: resolvedStyle.height,
-    textBaseline:
-        resolvedStyle.textBaseline ?? TextBaseline.alphabetic,
+    textBaseline: resolvedStyle.textBaseline ?? TextBaseline.alphabetic,
     horizontalAlign: data.horizontalAlign,
     maxWidth: safeMaxWidth,
     minWidth: safeMinWidth,
@@ -150,10 +145,7 @@ TextLayoutMetrics layoutText({
     // Cache miss - perform layout
     final strutStyle = resolveTextStrutStyle(resolvedStyle);
     final painter = TextPainter(
-      text: TextSpan(
-        text: resolvedText,
-        style: resolvedStyle,
-      ),
+      text: TextSpan(text: resolvedText, style: resolvedStyle),
       textAlign: _toFlutterAlign(data.horizontalAlign),
       textDirection: TextDirection.ltr,
       textHeightBehavior: textLayoutHeightBehavior,
@@ -168,7 +160,8 @@ TextLayoutMetrics layoutText({
     // Try to get font metrics from cache (width-independent)
     final fontMetrics = _fontMetricsCache.getOrCreate(fontMetricsKey, () {
       final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
-      final baseline = primaryLine?.baseline ??
+      final baseline =
+          primaryLine?.baseline ??
           painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
       final lineHeight = primaryLine?.height ?? painter.preferredLineHeight;
       final ascent = primaryLine?.ascent ?? baseline;
@@ -277,8 +270,8 @@ class _TextLayoutCacheKey {
     required this.paintKey,
     required this.locale,
     required bool isResizing,
-  })  : maxWidth = isResizing ? _quantizeCoarse(maxWidth) : _quantize(maxWidth),
-        minWidth = isResizing ? _quantizeCoarse(minWidth) : _quantize(minWidth);
+  }) : maxWidth = isResizing ? _quantizeCoarse(maxWidth) : _quantize(maxWidth),
+       minWidth = isResizing ? _quantizeCoarse(minWidth) : _quantize(minWidth);
 
   final String text;
   final double fontSize;
@@ -325,22 +318,22 @@ class _TextLayoutCacheKey {
 
   @override
   int get hashCode => Object.hash(
-        text,
-        fontSize,
-        fontFamily,
-        fontWeight,
-        fontStyle,
-        letterSpacing,
-        wordSpacing,
-        height,
-        textBaseline,
-        horizontalAlign,
-        maxWidth,
-        minWidth,
-        widthBasis,
-        paintKey,
-        locale,
-      );
+    text,
+    fontSize,
+    fontFamily,
+    fontWeight,
+    fontStyle,
+    letterSpacing,
+    wordSpacing,
+    height,
+    textBaseline,
+    horizontalAlign,
+    maxWidth,
+    minWidth,
+    widthBasis,
+    paintKey,
+    locale,
+  );
 }
 
 @immutable
@@ -415,16 +408,16 @@ class _TextPaintKey {
 
   @override
   int get hashCode => Object.hash(
-        color,
-        paintStyle,
-        strokeWidth,
-        strokeCap,
-        strokeJoin,
-        strokeMiterLimit,
-        isAntiAlias,
-        blendMode,
-        shaderId,
-      );
+    color,
+    paintStyle,
+    strokeWidth,
+    strokeCap,
+    strokeJoin,
+    strokeMiterLimit,
+    isAntiAlias,
+    blendMode,
+    shaderId,
+  );
 }
 
 /// Width-independent font metrics for two-tier caching
@@ -485,13 +478,13 @@ class _FontMetricsCacheKey {
 
   @override
   int get hashCode => Object.hash(
-        fontSize,
-        fontFamily,
-        fontWeight,
-        fontStyle,
-        letterSpacing,
-        wordSpacing,
-        height,
-        locale,
-      );
+    fontSize,
+    fontFamily,
+    fontWeight,
+    fontStyle,
+    letterSpacing,
+    wordSpacing,
+    height,
+    locale,
+  );
 }

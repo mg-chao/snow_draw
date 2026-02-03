@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -574,11 +574,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
                               value: ArrowType.curved,
                               label: widget.strings.arrowTypeCurved,
                               icon: const ArrowTypeCurvedIcon(),
-                            ),
-                            _StyleOption(
-                              value: ArrowType.polyline,
-                              label: widget.strings.arrowTypePolyline,
-                              icon: const ArrowTypeElbowIcon(),
                             ),
                           ],
                           selected: arrowStyleValues.arrowType.value,
@@ -2338,3 +2333,5 @@ class _DashedBorderPainter extends CustomPainter {
       oldDelegate.dashWidth != dashWidth ||
       oldDelegate.dashSpace != dashSpace;
 }
+
+

@@ -34,19 +34,14 @@ class CreateElementReducer {
     DrawState state,
     DrawAction action,
     CreateElementReducerDeps context,
-  ) =>
-      switch (action) {
-        final CreateElement a => _startCreateElement(state, a, context),
-        final UpdateCreatingElement a => _updateCreatingElement(
-          state,
-          a,
-          context,
-        ),
-        final AddArrowPoint a => _addCreationPoint(state, a, context),
-        FinishCreateElement _ => _finishCreateElement(state, context),
-        CancelCreateElement _ => _cancelCreateElement(state),
-        _ => null,
-      };
+  ) => switch (action) {
+    final CreateElement a => _startCreateElement(state, a, context),
+    final UpdateCreatingElement a => _updateCreatingElement(state, a, context),
+    final AddArrowPoint a => _addCreationPoint(state, a, context),
+    FinishCreateElement _ => _finishCreateElement(state, context),
+    CancelCreateElement _ => _cancelCreateElement(state),
+    _ => null,
+  };
 
   DrawState _startCreateElement(
     DrawState state,

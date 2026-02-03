@@ -6,8 +6,6 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import 'arrow_data.dart';
 
-enum _PolylineAxis { horizontal, vertical }
-
 class _CubicSegment {
   const _CubicSegment({
     required this.start,
@@ -25,11 +23,10 @@ class _CubicSegment {
 class ArrowGeometry {
   const ArrowGeometry._();
 
-  static const List<DrawPoint> _defaultPoints = [
+  static const _defaultPoints = <DrawPoint>[
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
   ];
-  static const _polylineSnapTolerance = 1.0;
 
   static List<Offset> resolveLocalPoints({
     required DrawRect rect,
@@ -95,7 +92,6 @@ class ArrowGeometry {
     // Apply insets to shorten the shaft
     final adjustedPoints = _applyInsets(
       points: points,
-      arrowType: arrowType,
       startInset: startInset,
       endInset: endInset,
     );
@@ -119,8 +115,8 @@ class ArrowGeometry {
     }
     return switch (arrowType) {
       ArrowType.curved => _buildCurvedPath(points),
-      ArrowType.polyline => _buildPolylinePath(points),
       ArrowType.straight => _buildStraightPath(points),
+      ArrowType.elbow => _buildStraightPath(points),
     };
   }
 
@@ -134,13 +130,9 @@ class ArrowGeometry {
     if (arrowType == ArrowType.curved && points.length > 2) {
       return _approximateCurvedLength(points);
     }
-
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
-        : points;
     var length = 0.0;
-    for (var i = 1; i < resolvedPoints.length; i++) {
-      length += (resolvedPoints[i] - resolvedPoints[i - 1]).distance;
+    for (var i = 1; i < points.length; i++) {
+      length += (points[i] - points[i - 1]).distance;
     }
     return length;
   }
@@ -160,7 +152,6 @@ class ArrowGeometry {
     final workingPoints = hasInsets
         ? _applyInsets(
             points: points,
-            arrowType: arrowType,
             startInset: startInset,
             endInset: endInset,
           )
@@ -181,13 +172,10 @@ class ArrowGeometry {
       }
     }
 
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(workingPoints)
-        : workingPoints;
-    if (resolvedPoints.length < 2) {
+    if (workingPoints.length < 2) {
       return null;
     }
-    final vector = resolvedPoints.first - resolvedPoints[1];
+    final vector = workingPoints.first - workingPoints[1];
     return _normalize(vector);
   }
 
@@ -206,7 +194,6 @@ class ArrowGeometry {
     final workingPoints = hasInsets
         ? _applyInsets(
             points: points,
-            arrowType: arrowType,
             startInset: startInset,
             endInset: endInset,
           )
@@ -227,96 +214,11 @@ class ArrowGeometry {
       }
     }
 
-    final resolvedPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(workingPoints)
-        : workingPoints;
-    if (resolvedPoints.length < 2) {
+    if (workingPoints.length < 2) {
       return null;
     }
-    final vector =
-        resolvedPoints.last - resolvedPoints[resolvedPoints.length - 2];
+    final vector = workingPoints.last - workingPoints[workingPoints.length - 2];
     return _normalize(vector);
-  }
-
-  static List<Offset> expandPolylinePoints(List<Offset> points) =>
-      List<Offset>.from(points);
-
-  static bool isPolylineSegmentHorizontal(DrawPoint start, DrawPoint end) =>
-      _resolvePolylineAxis(Offset(start.x, start.y), Offset(end.x, end.y)) ==
-      _PolylineAxis.horizontal;
-
-  static List<DrawPoint> normalizePolylinePoints(List<DrawPoint> points) {
-    if (points.length < 2) {
-      return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
-    }
-
-    final offsets = points
-        .map((point) => Offset(point.x, point.y))
-        .toList(growable: false);
-    final normalized = _simplifyPolylinePoints(offsets);
-    if (normalized.length < 2) {
-      return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
-    }
-    return List<DrawPoint>.unmodifiable(
-      normalized
-          .map((point) => DrawPoint(x: point.dx, y: point.dy))
-          .toList(growable: false),
-    );
-  }
-
-  static List<DrawPoint> ensurePolylineCreationPoints(List<DrawPoint> points) {
-    if (points.length < 2) {
-      return List<DrawPoint>.unmodifiable(_ensureMinPoints(points));
-    }
-    final created = points.length == 2
-        ? _buildPolylineCreationPoints(start: points.first, end: points.last)
-        : points;
-    return normalizePolylinePoints(created);
-  }
-
-  static List<DrawPoint> _buildPolylineCreationPoints({
-    required DrawPoint start,
-    required DrawPoint end,
-  }) {
-    final startOffset = Offset(start.x, start.y);
-    final endOffset = Offset(end.x, end.y);
-    if (_isSamePoint(startOffset, endOffset) || _isAxisAligned(start, end)) {
-      return [start, end];
-    }
-
-    final firstAxis = _dominantPolylineAxis(startOffset, endOffset);
-    return _buildElbowPolylinePoints(
-      start: start,
-      end: end,
-      firstAxis: firstAxis,
-    );
-  }
-
-  static bool _isAxisAligned(DrawPoint start, DrawPoint end) =>
-      start.x == end.x || start.y == end.y;
-
-  static List<DrawPoint> _buildElbowPolylinePoints({
-    required DrawPoint start,
-    required DrawPoint end,
-    required _PolylineAxis firstAxis,
-  }) {
-    if (firstAxis == _PolylineAxis.horizontal) {
-      final midX = (start.x + end.x) / 2;
-      return [
-        start,
-        DrawPoint(x: midX, y: start.y),
-        DrawPoint(x: midX, y: end.y),
-        end,
-      ];
-    }
-
-    final midY = (start.y + end.y) / 2;
-    return [
-      start,
-      DrawPoint(x: start.x, y: midY),
-      DrawPoint(x: end.x, y: midY),
-      end,
-    ];
   }
 
   static Path buildArrowheadPath({
@@ -394,9 +296,6 @@ class ArrowGeometry {
     }
     return path;
   }
-
-  static Path _buildPolylinePath(List<Offset> points) =>
-      _buildStraightPath(expandPolylinePoints(points));
 
   static Path _buildCurvedPath(List<Offset> points) {
     if (points.length < 3) {
@@ -641,150 +540,6 @@ class ArrowGeometry {
     return value;
   }
 
-  static bool _nearZero(double value) => value.abs() <= _polylineSnapTolerance;
-
-  static bool _isSamePoint(Offset a, Offset b) =>
-      _nearZero(a.dx - b.dx) && _nearZero(a.dy - b.dy);
-
-  static _PolylineAxis _resolvePolylineAxis(Offset start, Offset end) =>
-      _alignedPolylineAxis(start, end) ?? _dominantPolylineAxis(start, end);
-
-  static _PolylineAxis? _alignedPolylineAxis(Offset start, Offset end) {
-    final dx = end.dx - start.dx;
-    final dy = end.dy - start.dy;
-    if (_nearZero(dx) && _nearZero(dy)) {
-      return null;
-    }
-    if (_nearZero(dx)) {
-      return _PolylineAxis.vertical;
-    }
-    if (_nearZero(dy)) {
-      return _PolylineAxis.horizontal;
-    }
-    return null;
-  }
-
-  static _PolylineAxis _dominantPolylineAxis(Offset start, Offset end) {
-    final dx = (end.dx - start.dx).abs();
-    final dy = (end.dy - start.dy).abs();
-    return dx >= dy ? _PolylineAxis.horizontal : _PolylineAxis.vertical;
-  }
-
-  static Offset _snapToAxis(Offset start, Offset end, _PolylineAxis axis) =>
-      axis == _PolylineAxis.horizontal
-      ? Offset(end.dx, start.dy)
-      : Offset(start.dx, end.dy);
-
-  static List<Offset> _simplifyPolylinePoints(List<Offset> points) {
-    if (points.length < 2) {
-      return points;
-    }
-
-    final routed = _routeOrthogonalPolyline(points);
-    if (routed.length < 2) {
-      return routed;
-    }
-    return _removeRedundantPolylinePoints(routed);
-  }
-
-  static List<Offset> _routeOrthogonalPolyline(List<Offset> points) {
-    final routed = <Offset>[points.first];
-    _PolylineAxis? previousAxis;
-
-    void appendPoint(Offset point) {
-      if (_isSamePoint(routed.last, point)) {
-        return;
-      }
-      routed.add(point);
-      if (routed.length >= 2) {
-        previousAxis = _resolvePolylineAxis(
-          routed[routed.length - 2],
-          routed.last,
-        );
-      }
-    }
-
-    for (var i = 1; i < points.length; i++) {
-      final prev = routed.last;
-      final current = points[i];
-
-      if (_isSamePoint(prev, current)) {
-        continue;
-      }
-
-      final alignedAxis = _alignedPolylineAxis(prev, current);
-      if (alignedAxis != null) {
-        appendPoint(_snapToAxis(prev, current, alignedAxis));
-        continue;
-      }
-
-      final next = i + 1 < points.length ? points[i + 1] : null;
-      final nextAxis = next == null
-          ? null
-          : _alignedPolylineAxis(current, next);
-      final routedPoints = _routeDiagonalSegment(
-        prev: prev,
-        current: current,
-        previousAxis: previousAxis,
-        nextAxis: nextAxis,
-      );
-      for (final point in routedPoints) {
-        appendPoint(point);
-      }
-    }
-
-    return routed;
-  }
-
-  static List<Offset> _routeDiagonalSegment({
-    required Offset prev,
-    required Offset current,
-    required _PolylineAxis? previousAxis,
-    required _PolylineAxis? nextAxis,
-  }) {
-    if (previousAxis != null && nextAxis != null && previousAxis == nextAxis) {
-      return [_snapToAxis(prev, current, previousAxis)];
-    }
-
-    final firstAxis =
-        previousAxis ?? nextAxis ?? _dominantPolylineAxis(prev, current);
-    final elbow = firstAxis == _PolylineAxis.horizontal
-        ? Offset(current.dx, prev.dy)
-        : Offset(prev.dx, current.dy);
-    return [elbow, current];
-  }
-
-  static List<Offset> _removeRedundantPolylinePoints(List<Offset> points) {
-    if (points.length < 3) {
-      return points;
-    }
-
-    final simplified = <Offset>[points.first];
-    for (var i = 1; i < points.length - 1; i++) {
-      final prev = simplified.last;
-      final current = points[i];
-      final next = points[i + 1];
-
-      if (_isSamePoint(prev, current)) {
-        continue;
-      }
-
-      final prevAxis = _alignedPolylineAxis(prev, current);
-      final nextAxis = _alignedPolylineAxis(current, next);
-      if (prevAxis != null && nextAxis != null && prevAxis == nextAxis) {
-        continue;
-      }
-
-      simplified.add(current);
-    }
-
-    final last = points.last;
-    if (simplified.isEmpty || !_isSamePoint(simplified.last, last)) {
-      simplified.add(last);
-    }
-    return simplified;
-  }
-
   static Offset? _normalize(Offset value) {
     final length = value.distance;
     if (length == 0) {
@@ -833,9 +588,7 @@ class ArrowGeometry {
           continue;
         }
         if (remaining <= length || i == segmentCount - 1) {
-          final t = length == 0
-              ? 0.0
-              : (remaining / length).clamp(0.0, 1.0);
+          final t = length == 0 ? 0.0 : (remaining / length).clamp(0.0, 1.0);
           return _normalize(_cubicTangent(segment, t));
         }
         remaining -= length;
@@ -999,7 +752,7 @@ class ArrowGeometry {
   /// Calculates accurate bounding box for arrow paths, accounting for
   /// curve overshoot.
   /// For curved arrows, computes cubic bounds analytically.
-  /// For straight/polyline arrows, uses control points.
+  /// For straight arrows, uses control points.
   static DrawRect calculatePathBounds({
     required List<DrawPoint> worldPoints,
     required ArrowType arrowType,
@@ -1008,7 +761,7 @@ class ArrowGeometry {
       return const DrawRect();
     }
 
-    // For straight and polyline arrows, control points define the bounds
+    // For straight arrows, control points define the bounds
     if (arrowType != ArrowType.curved || worldPoints.length < 3) {
       return _boundsFromPoints(worldPoints);
     }
@@ -1080,24 +833,13 @@ class ArrowGeometry {
   /// This prevents the shaft from penetrating into closed arrowheads.
   static List<Offset> _applyInsets({
     required List<Offset> points,
-    required ArrowType arrowType,
     required double startInset,
     required double endInset,
   }) {
     if (points.length < 2) {
       return points;
     }
-
-    // Expand polyline points first if needed
-    final workingPoints = arrowType == ArrowType.polyline
-        ? expandPolylinePoints(points)
-        : points;
-
-    if (workingPoints.length < 2) {
-      return workingPoints;
-    }
-
-    var adjustedPoints = workingPoints;
+    var adjustedPoints = points;
 
     // Apply start inset
     if (startInset > 0) {
@@ -1175,10 +917,7 @@ class ArrowGeometry {
 }
 
 class ArrowGeometryDescriptor {
-  ArrowGeometryDescriptor({
-    required this.data,
-    required this.rect,
-  });
+  ArrowGeometryDescriptor({required this.data, required this.rect});
 
   final ArrowData data;
   final DrawRect rect;
@@ -1210,9 +949,7 @@ class ArrowGeometryDescriptor {
     }
     final local = localPoints;
     final world = local
-        .map(
-          (point) => Offset(point.dx + rect.minX, point.dy + rect.minY),
-        )
+        .map((point) => Offset(point.dx + rect.minX, point.dy + rect.minY))
         .toList(growable: false);
     _worldPoints = world;
     return world;
@@ -1224,25 +961,22 @@ class ArrowGeometryDescriptor {
         strokeWidth: data.strokeWidth,
       );
 
-  double get endInset =>
-      _endInset ??= ArrowGeometry.calculateArrowheadInset(
-        style: data.endArrowhead,
+  double get endInset => _endInset ??= ArrowGeometry.calculateArrowheadInset(
+    style: data.endArrowhead,
+    strokeWidth: data.strokeWidth,
+  );
+
+  double get startDirectionOffset =>
+      _startDirectionOffset ??= ArrowGeometry.calculateArrowheadDirectionOffset(
+        style: data.startArrowhead,
         strokeWidth: data.strokeWidth,
       );
 
-  double get startDirectionOffset =>
-      _startDirectionOffset ??=
-          ArrowGeometry.calculateArrowheadDirectionOffset(
-            style: data.startArrowhead,
-            strokeWidth: data.strokeWidth,
-          );
-
   double get endDirectionOffset =>
-      _endDirectionOffset ??=
-          ArrowGeometry.calculateArrowheadDirectionOffset(
-            style: data.endArrowhead,
-            strokeWidth: data.strokeWidth,
-          );
+      _endDirectionOffset ??= ArrowGeometry.calculateArrowheadDirectionOffset(
+        style: data.endArrowhead,
+        strokeWidth: data.strokeWidth,
+      );
 
   List<Offset> get insetPoints {
     final cached = _insetPoints;
@@ -1257,7 +991,6 @@ class ArrowGeometryDescriptor {
         ? localPoints
         : ArrowGeometry._applyInsets(
             points: localPoints,
-            arrowType: data.arrowType,
             startInset: startInset,
             endInset: endInset,
           );
@@ -1286,12 +1019,9 @@ class ArrowGeometryDescriptor {
       _shaftLength = analysis.totalLength;
       return analysis.totalLength;
     }
-    final resolvedPoints = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(points)
-        : points;
     var length = 0.0;
-    for (var i = 1; i < resolvedPoints.length; i++) {
-      length += (resolvedPoints[i] - resolvedPoints[i - 1]).distance;
+    for (var i = 1; i < points.length; i++) {
+      length += (points[i] - points[i - 1]).distance;
     }
     _shaftLength = length;
     return length;
@@ -1356,15 +1086,12 @@ class ArrowGeometryDescriptor {
       return fromStart ? Offset(-direction.dx, -direction.dy) : direction;
     }
 
-    final resolvedPoints = data.arrowType == ArrowType.polyline
-        ? ArrowGeometry.expandPolylinePoints(points)
-        : points;
-    if (resolvedPoints.length < 2) {
+    if (points.length < 2) {
       return null;
     }
     final vector = fromStart
-        ? resolvedPoints.first - resolvedPoints[1]
-        : resolvedPoints.last - resolvedPoints[resolvedPoints.length - 2];
+        ? points.first - points[1]
+        : points.last - points[points.length - 2];
     return ArrowGeometry._normalize(vector);
   }
 
@@ -1438,9 +1165,7 @@ class _CurvedPathAnalysis {
         continue;
       }
       if (remaining <= length || i == segments.length - 1) {
-        final t = length == 0
-            ? 0.0
-            : (remaining / length).clamp(0.0, 1.0);
+        final t = length == 0 ? 0.0 : (remaining / length).clamp(0.0, 1.0);
         final tangent = ArrowGeometry._cubicTangent(segments[i], t);
         return ArrowGeometry._normalize(tangent);
       }

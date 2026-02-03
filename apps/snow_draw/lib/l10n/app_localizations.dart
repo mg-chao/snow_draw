@@ -28,7 +28,7 @@ class AppLocalizations {
   String get arrowType => 'Arrow Type';
   String get arrowTypeStraight => 'Straight';
   String get arrowTypeCurved => 'Curved';
-  String get arrowTypePolyline => 'Polyline';
+  String get arrowTypeElbow => 'Elbow';
   String get arrowheads => 'Arrowheads';
   String get startArrowhead => 'Start Arrowhead';
   String get endArrowhead => 'End Arrowhead';

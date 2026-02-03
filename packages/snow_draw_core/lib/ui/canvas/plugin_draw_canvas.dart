@@ -11,7 +11,9 @@ import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
 import '../../draw/elements/core/element_type_id.dart';
+import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -32,6 +34,7 @@ import '../../draw/types/draw_rect.dart';
 import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
+import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'grid_shader_painter.dart';
@@ -129,6 +132,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   MouseCursor _cursor = _defaultCursor;
   DrawPoint? _lastPointerPosition;
   String? _hoveredSelectionElementId;
+  String? _hoveredBindingElementId;
   ArrowPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
   int? _middlePanPointerId;
@@ -278,6 +282,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
               state: widget.store.state,
               position: _lastPointerPosition!,
             );
+      _hoveredBindingElementId = _lastPointerPosition == null
+          ? null
+          : _resolveHoverBindingElementId(
+              state: widget.store.state,
+              position: _lastPointerPosition!,
+            );
       setState(() {});
     });
   }
@@ -315,6 +325,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           _hoveredSelectionElementId = _lastPointerPosition == null
               ? null
               : _resolveHoverSelectionElementId(
+                  state: widget.store.state,
+                  position: _lastPointerPosition!,
+                );
+          _hoveredBindingElementId = _lastPointerPosition == null
+              ? null
+              : _resolveHoverBindingElementId(
                   state: widget.store.state,
                   position: _lastPointerPosition!,
                 );
@@ -395,6 +411,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       boxSelectionBounds: _extractBoxSelectionBounds(stateView),
       selectedIds: stateView.selectedIds,
       hoveredElementId: _hoveredSelectionElementId,
+      hoveredBindingElementId: _hoveredBindingElementId,
       hoveredArrowHandle: _hoveredArrowHandle,
       activeArrowHandle: _resolveActiveArrowHandle(stateView),
       hoverSelectionConfig: _resolveHoverSelectionConfig(),
@@ -786,9 +803,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerExit(PointerExitEvent event) {
     _isPointerInside = false;
     _lastPointerPosition = null;
-    if (_hoveredSelectionElementId != null || _hoveredArrowHandle != null) {
+    if (_hoveredSelectionElementId != null ||
+        _hoveredBindingElementId != null ||
+        _hoveredArrowHandle != null) {
       setState(() {
         _hoveredSelectionElementId = null;
+        _hoveredBindingElementId = null;
         _hoveredArrowHandle = null;
       });
     }
@@ -845,6 +865,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _hoveredSelectionElementId = _lastPointerPosition == null
         ? null
         : _resolveHoverSelectionElementId(
+            state: widget.store.state,
+            position: _lastPointerPosition!,
+          );
+    _hoveredBindingElementId = _lastPointerPosition == null
+        ? null
+        : _resolveHoverBindingElementId(
             state: widget.store.state,
             position: _lastPointerPosition!,
           );
@@ -1159,16 +1185,22 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       state: widget.store.state,
       position: position,
     );
+    final nextBindingHover = _resolveHoverBindingElementId(
+      state: widget.store.state,
+      position: position,
+    );
     final nextArrowHandle = _resolveArrowPointHandleForPosition(
       state: widget.store.state,
       position: position,
     );
     if (_hoveredSelectionElementId == nextHover &&
+        _hoveredBindingElementId == nextBindingHover &&
         _hoveredArrowHandle == nextArrowHandle) {
       return;
     }
     setState(() {
       _hoveredSelectionElementId = nextHover;
+      _hoveredBindingElementId = nextBindingHover;
       _hoveredArrowHandle = nextArrowHandle;
     });
   }
@@ -1209,6 +1241,110 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     return elementId;
+  }
+
+  String? _resolveHoverBindingElementId({
+    required DrawState state,
+    required DrawPoint position,
+  }) {
+    if (!_isPointerInside || _middlePanPointerId != null) {
+      return null;
+    }
+    if (widget.currentToolTypeId != ArrowData.typeIdToken) {
+      return null;
+    }
+    final interaction = state.application.interaction;
+    if (interaction is EditingState ||
+        interaction is CreatingState ||
+        interaction is BoxSelectingState ||
+        interaction is TextEditingState) {
+      return null;
+    }
+
+    final config = widget.store.config;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: _currentModifiers.control,
+    );
+    if (!_shouldPreviewArrowBinding(
+      snapConfig: config.snap,
+      snappingMode: snappingMode,
+    )) {
+      return null;
+    }
+
+    final zoom = state.application.view.camera.zoom;
+    final effectiveZoom = _doubleEquals(zoom, 0) ? 1.0 : zoom;
+    final bindingDistance = config.snap.arrowBindingDistance / effectiveZoom;
+    if (bindingDistance <= 0) {
+      return null;
+    }
+
+    final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
+      bindingDistance,
+    );
+    final targets = _resolveBindingTargets(state, position, searchDistance);
+    if (targets.isEmpty) {
+      return null;
+    }
+
+    final arrowStyle = config.arrowStyle;
+    final candidate = arrowStyle.arrowType == ArrowType.elbow
+        ? ArrowBindingUtils.resolveElbowBindingCandidate(
+            worldPoint: position,
+            targets: targets,
+            snapDistance: bindingDistance,
+            hasArrowhead: arrowStyle.startArrowhead != ArrowheadStyle.none,
+          )
+        : ArrowBindingUtils.resolveBindingCandidate(
+            worldPoint: position,
+            targets: targets,
+            snapDistance: bindingDistance,
+          );
+    if (candidate == null) {
+      return null;
+    }
+    return candidate.binding.elementId;
+  }
+
+  bool _shouldPreviewArrowBinding({
+    required SnapConfig snapConfig,
+    required SnappingMode snappingMode,
+  }) {
+    if (!snapConfig.enableArrowBinding) {
+      return false;
+    }
+    if (snappingMode == SnappingMode.grid) {
+      return false;
+    }
+    if (snapConfig.enabled && snappingMode == SnappingMode.none) {
+      return false;
+    }
+    return true;
+  }
+
+  List<ElementState> _resolveBindingTargets(
+    DrawState state,
+    DrawPoint position,
+    double distance,
+  ) {
+    final document = state.domain.document;
+    final entries = document.spatialIndex.searchPointEntries(
+      position,
+      distance,
+    );
+    final targets = <ElementState>[];
+    for (final entry in entries) {
+      final element = document.getElementById(entry.id);
+      if (element == null) {
+        continue;
+      }
+      if (element.opacity <= 0 || element.data is! RectangleData) {
+        continue;
+      }
+      targets.add(element);
+    }
+    return targets;
   }
 
   ArrowPointHandle? _resolveArrowPointHandleForPosition({
@@ -1265,22 +1401,70 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     var index = context.pointIndex;
     final transform = interaction.currentTransform;
     if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
-      if (context.arrowType == ArrowType.polyline) {
-        final resolvedIndex = transform.activeIndex;
-        if (resolvedIndex != null) {
-          index = resolvedIndex;
-        }
-      } else if (transform.didInsert) {
+      if (transform.didInsert) {
         kind = ArrowPointKind.turning;
         index = context.pointIndex + 1;
+      } else if (transform.activeIndex != null) {
+        index = transform.activeIndex!;
       }
+    }
+    var isFixed = false;
+    final element = stateView.state.domain.document.getElementById(
+      context.elementId,
+    );
+    final effectiveElement = element == null
+        ? null
+        : stateView.effectiveElement(element);
+    final data = effectiveElement?.data;
+    if (data is ArrowData &&
+        data.arrowType == ArrowType.elbow &&
+        kind == ArrowPointKind.addable) {
+      final segmentIndex = index + 1;
+      isFixed =
+          data.fixedSegments?.any((segment) => segment.index == segmentIndex) ??
+          false;
     }
     return ArrowPointHandle(
       elementId: context.elementId,
       kind: kind,
       index: index,
       position: DrawPoint.zero,
+      isFixed: isFixed,
     );
+  }
+
+  MouseCursor? _resolveArrowHandleCursor({
+    required DrawState state,
+    required ArrowPointHandle handle,
+  }) {
+    if (handle.kind != ArrowPointKind.addable) {
+      return null;
+    }
+    final element = state.domain.document.getElementById(handle.elementId);
+    if (element == null || element.data is! ArrowData) {
+      return null;
+    }
+    final data = element.data as ArrowData;
+    if (data.arrowType != ArrowType.elbow) {
+      return null;
+    }
+    final points = ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final startIndex = handle.index;
+    final endIndex = startIndex + 1;
+    if (startIndex < 0 || endIndex >= points.length) {
+      return null;
+    }
+    final start = points[startIndex];
+    final end = points[endIndex];
+    final dx = (start.dx - end.dx).abs();
+    final dy = (start.dy - end.dy).abs();
+    final isHorizontal = dy <= dx;
+    return isHorizontal
+        ? SystemMouseCursors.resizeUp
+        : SystemMouseCursors.resizeLeft;
   }
 
   SelectionConfig _resolveSelectionConfig(DrawState state) {
@@ -1436,9 +1620,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawPoint position,
     required draw_hit_test.HitTestResult hitResult,
     required SelectionConfig selectionConfig,
-  }) =>
-      hitResult.isHandleHit ||
-      hitResult.isInSelectionPadding;
+  }) => hitResult.isHandleHit || hitResult.isInSelectionPadding;
 
   bool _shouldDeferToSelectionBox({
     required DrawStateView stateView,
@@ -1578,7 +1760,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
     );
     if (arrowHandle != null) {
-      return _cursorResolver.grabCursor();
+      return _resolveArrowHandleCursor(state: state, handle: arrowHandle) ??
+          _cursorResolver.grabCursor();
     }
 
     final stateView = _buildStateView(state);
@@ -1937,10 +2120,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastVerticalSelection = nextSelection;
   }
 
-  int _lineIndexForCaretOffset(
-    double caretDy,
-    List<LineMetrics> lineMetrics,
-  ) {
+  int _lineIndexForCaretOffset(double caretDy, List<LineMetrics> lineMetrics) {
     for (var i = 0; i < lineMetrics.length; i++) {
       if (lineMetrics[i].baseline > caretDy) {
         return i;
@@ -2060,6 +2240,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             state: widget.store.state,
             position: _lastPointerPosition!,
           );
+    final nextBindingHover = _lastPointerPosition == null
+        ? null
+        : _resolveHoverBindingElementId(
+            state: widget.store.state,
+            position: _lastPointerPosition!,
+          );
     final nextArrowHandle = _lastPointerPosition == null
         ? null
         : _resolveArrowPointHandleForPosition(
@@ -2069,11 +2255,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       _cursor = cursor;
       _hoveredSelectionElementId = nextHover;
+      _hoveredBindingElementId = nextBindingHover;
       _hoveredArrowHandle = nextArrowHandle;
       return;
     }
     _updateCursorIfChanged(cursor);
     _hoveredSelectionElementId = nextHover;
+    _hoveredBindingElementId = nextBindingHover;
     _hoveredArrowHandle = nextArrowHandle;
     setState(() {});
   }

@@ -1,0 +1,88 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter test packages/snow_draw_core/test/elbow_*_test.dart
+
+## exception
+
+ArgumentError: Invalid argument(s): Illegal character in path
+
+```
+#0      _Uri._checkWindowsPathReservedCharacters (dart:core/uri.dart:2169:11)
+#1      _Uri._makeWindowsFileUrl (dart:core/uri.dart:2242:7)
+#2      new _Uri.file (dart:core/uri.dart:2132:11)
+#3      TestCommand._parseTestArgument (package:flutter_tools/src/commands/test.dart:771:16)
+#4      MappedListIterable.elementAt (dart:_internal/iterable.dart:442:31)
+#5      ListIterator.moveNext (dart:_internal/iterable.dart:371:26)
+#6      new _GrowableList._ofEfficientLengthIterable (dart:core-patch/growable_array.dart:194:27)
+#7      new _GrowableList.of (dart:core-patch/growable_array.dart:154:28)
+#8      new List.of (dart:core-patch/array_patch.dart:39:18)
+#9      ListIterable.toList (dart:_internal/iterable.dart:224:7)
+#10     TestCommand.verifyThenRunCommand (package:flutter_tools/src/commands/test.dart:346:73)
+#11     FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1590:33)
+<asynchronous suspension>
+#12     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#13     CommandRunner.runCommand (package:args/command_runner.dart:212:13)
+<asynchronous suspension>
+#14     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
+<asynchronous suspension>
+#15     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#16     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+<asynchronous suspension>
+#17     FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
+<asynchronous suspension>
+#18     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+<asynchronous suspension>
+#19     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+<asynchronous suspension>
+#20     main (package:flutter_tools/executable.dart:103:3)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel master, 3.41.0-1.0.pre-262, on Microsoft Windows [版本 10.0.26100.7623], locale zh-CN) [2.4s]
+    • Flutter version 3.41.0-1.0.pre-262 on channel master at C:\Users\chao\develop\flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision 20d960a521 (8 days ago), 2026-01-24 13:21:49 -0500
+    • Engine revision 20d960a521
+    • Dart version 3.12.0 (build 3.12.0-68.0.dev)
+    • DevTools version 2.54.0
+    • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, cli-animations, enable-native-assets, omit-legacy-version-file, enable-lldb-debugging, enable-uiscene-migration, enable-riscv64
+
+[✓] Windows Version (Windows 11 or higher, 24H2, 2009) [776ms]
+
+[✗] Android toolchain - develop for Android devices [153ms]
+    ✗ Unable to locate Android SDK.
+      Install Android Studio from: https://developer.android.com/studio/index.html
+      On first launch it will assist you in installing the Android SDK components.
+      (or visit https://flutter.dev/to/windows-android-setup for detailed instructions).
+      If the Android SDK has been installed to a custom location, please use
+      `flutter config --android-sdk` to update to that location.
+
+
+[✓] Chrome - develop for the web [136ms]
+    • Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[✓] Visual Studio - develop Windows apps (Visual Studio 生成工具 2022 17.14.19) [134ms]
+    • Visual Studio at C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+    • Visual Studio 生成工具 2022 version 17.14.36623.8
+    • Windows 10 SDK version 10.0.26100.0
+
+[✓] Connected device (3 available) [113ms]
+    • Windows (desktop) • windows • windows-x64    • Microsoft Windows [版本 10.0.26100.7623]
+    • Chrome (web)      • chrome  • web-javascript • Google Chrome 143.0.7499.193
+    • Edge (web)        • edge    • web-javascript • Microsoft Edge 144.0.3719.104
+
+[!] Network resources [21.1s]
+    ✗ A cryptographic error occurred while checking "https://storage.googleapis.com/": Connection terminated during handshake
+      You may be experiencing a man-in-the-middle attack, your network may be compromised, or you may have malware installed on your computer.
+    ✗ A network error occurred while checking "https://maven.google.com/": 信号灯超时时间已到
+
+! Doctor found issues in 2 categories.
+```

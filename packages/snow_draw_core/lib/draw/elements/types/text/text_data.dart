@@ -37,10 +37,9 @@ final class TextData extends ElementData
     fontSize:
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultTextFontSize,
-    fontFamily:
-        (json['fontFamily'] as String?)?.trim().isEmpty ?? true
-            ? null
-            : json['fontFamily'] as String?,
+    fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
+        ? null
+        : json['fontFamily'] as String?,
     horizontalAlign: TextHorizontalAlign.values.firstWhere(
       (value) => value.name == json['horizontalAlign'],
       orElse: () => ConfigDefaults.defaultTextHorizontalAlign,
@@ -122,8 +121,9 @@ final class TextData extends ElementData
   ElementData withElementStyle(ElementStyleConfig style) => copyWith(
     color: style.color,
     fontSize: style.fontSize,
-    fontFamily:
-        style.fontFamily?.trim().isEmpty ?? true ? null : style.fontFamily,
+    fontFamily: style.fontFamily?.trim().isEmpty ?? true
+        ? null
+        : style.fontFamily,
     horizontalAlign: style.textAlign,
     verticalAlign: style.verticalAlign,
     fillColor: style.fillColor,

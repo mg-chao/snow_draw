@@ -189,10 +189,9 @@ class ElementStyleConfig {
     startArrowhead: startArrowhead ?? this.startArrowhead,
     endArrowhead: endArrowhead ?? this.endArrowhead,
     fontSize: fontSize ?? this.fontSize,
-    fontFamily:
-        fontFamily == null
-            ? this.fontFamily
-            : (fontFamily.trim().isEmpty ? null : fontFamily),
+    fontFamily: fontFamily == null
+        ? this.fontFamily
+        : (fontFamily.trim().isEmpty ? null : fontFamily),
     textAlign: textAlign ?? this.textAlign,
     verticalAlign: verticalAlign ?? this.verticalAlign,
     textStrokeColor: textStrokeColor ?? this.textStrokeColor,
@@ -222,26 +221,25 @@ class ElementStyleConfig {
           other.textStrokeWidth == textStrokeWidth;
 
   @override
-  int get hashCode =>
-      Object.hash(
-        opacity,
-        zIndex,
-        strokeWidth,
-        color,
-        fillColor,
-        strokeStyle,
-        fillStyle,
-        cornerRadius,
-        arrowType,
-        startArrowhead,
-        endArrowhead,
-        fontSize,
-        fontFamily,
-        textAlign,
-        verticalAlign,
-        textStrokeColor,
-        textStrokeWidth,
-      );
+  int get hashCode => Object.hash(
+    opacity,
+    zIndex,
+    strokeWidth,
+    color,
+    fillColor,
+    strokeStyle,
+    fillStyle,
+    cornerRadius,
+    arrowType,
+    startArrowhead,
+    endArrowhead,
+    fontSize,
+    fontFamily,
+    textAlign,
+    verticalAlign,
+    textStrokeColor,
+    textStrokeWidth,
+  );
 
   @override
   String toString() =>

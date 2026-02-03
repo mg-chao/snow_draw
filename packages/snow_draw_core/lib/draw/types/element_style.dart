@@ -6,7 +6,7 @@ enum StrokeStyle { solid, dashed, dotted }
 
 enum FillStyle { solid, line, crossLine }
 
-enum ArrowType { straight, curved, polyline }
+enum ArrowType { straight, curved, elbow }
 
 enum ArrowheadStyle {
   none,
