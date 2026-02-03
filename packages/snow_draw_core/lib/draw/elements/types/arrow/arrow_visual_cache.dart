@@ -4,8 +4,8 @@ import 'dart:ui';
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
-import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_like_data.dart';
 
 class ArrowVisualCacheEntry {
   ArrowVisualCacheEntry({
@@ -20,7 +20,7 @@ class ArrowVisualCacheEntry {
     List<PathMetric>? pathMetrics,
   }) : _pathMetrics = pathMetrics;
 
-  final ArrowData data;
+  final ArrowLikeData data;
   final double width;
   final double height;
   final ArrowGeometryDescriptor geometry;
@@ -30,7 +30,7 @@ class ArrowVisualCacheEntry {
   final Path? dottedShaftPath;
   List<PathMetric>? _pathMetrics;
 
-  bool matches(ArrowData data, double width, double height) =>
+  bool matches(ArrowLikeData data, double width, double height) =>
       identical(this.data, data) &&
       this.width == width &&
       this.height == height;
@@ -49,7 +49,7 @@ class ArrowVisualCache {
 
   ArrowVisualCacheEntry resolve({
     required ElementState element,
-    required ArrowData data,
+    required ArrowLikeData data,
   }) {
     final id = element.id;
     final width = element.rect.width;
@@ -68,13 +68,13 @@ class ArrowVisualCache {
 
   ArrowVisualCacheEntry _buildEntry({
     required ElementState element,
-    required ArrowData data,
+    required ArrowLikeData data,
   }) {
     final rect = element.rect;
     final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
     final localPoints = geometry.localPoints;
 
-    if (localPoints.length < 2 || data.strokeWidth <= 0) {
+    if (localPoints.length < 2) {
       return ArrowVisualCacheEntry(
         data: data,
         width: rect.width,
@@ -104,30 +104,32 @@ class ArrowVisualCache {
     Path? dottedShaftPath;
     List<PathMetric>? pathMetrics;
 
-    switch (data.strokeStyle) {
-      case StrokeStyle.solid:
-        combinedStrokePath = _combineStrokePaths(shaftPath, arrowheadPaths);
-      case StrokeStyle.dashed:
-        final dashLength = data.strokeWidth * 2.0;
-        final gapLength = dashLength * 1.2;
-        pathMetrics = shaftPath.computeMetrics().toList(growable: false);
-        final dashedShaft = _buildDashedPath(
-          shaftPath,
-          dashLength,
-          gapLength,
-          metrics: pathMetrics,
-        );
-        combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
-      case StrokeStyle.dotted:
-        final dotSpacing = data.strokeWidth * 2.0;
-        final dotRadius = data.strokeWidth * 0.5;
-        pathMetrics = shaftPath.computeMetrics().toList(growable: false);
-        dottedShaftPath = _buildDottedPath(
-          shaftPath,
-          dotSpacing,
-          dotRadius,
-          metrics: pathMetrics,
-        );
+    if (data.strokeWidth > 0) {
+      switch (data.strokeStyle) {
+        case StrokeStyle.solid:
+          combinedStrokePath = _combineStrokePaths(shaftPath, arrowheadPaths);
+        case StrokeStyle.dashed:
+          final dashLength = data.strokeWidth * 2.0;
+          final gapLength = dashLength * 1.2;
+          pathMetrics = shaftPath.computeMetrics().toList(growable: false);
+          final dashedShaft = _buildDashedPath(
+            shaftPath,
+            dashLength,
+            gapLength,
+            metrics: pathMetrics,
+          );
+          combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
+        case StrokeStyle.dotted:
+          final dotSpacing = data.strokeWidth * 2.0;
+          final dotRadius = data.strokeWidth * 0.5;
+          pathMetrics = shaftPath.computeMetrics().toList(growable: false);
+          dottedShaftPath = _buildDottedPath(
+            shaftPath,
+            dotSpacing,
+            dotRadius,
+            metrics: pathMetrics,
+          );
+      }
     }
 
     return ArrowVisualCacheEntry(

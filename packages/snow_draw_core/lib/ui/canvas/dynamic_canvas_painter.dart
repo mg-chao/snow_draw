@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import '../../draw/config/draw_config.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
-import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
+import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -87,7 +87,7 @@ class DynamicCanvasPainter extends CustomPainter {
       if (hoveredElement != null) {
         final effectiveElement = stateView.effectiveElement(hoveredElement);
         // For arrow elements, render an arrow outline instead of a rectangle
-        if (effectiveElement.data is ArrowData) {
+        if (effectiveElement.data is ArrowLikeData) {
           _drawArrowHoverOutline(
             canvas: canvas,
             element: effectiveElement,
@@ -141,20 +141,17 @@ class DynamicCanvasPainter extends CustomPainter {
         // Check if this is a single 2-point arrow selection.
         // For 2-point arrows, skip selection box rendering since all operations
         // can be performed through the point editor.
+        final firstSelectedData = stateView.selectedElements.isNotEmpty
+            ? stateView.selectedElements.first.data
+            : null;
         final isSingleTwoPointArrow =
             selectedIds.length == 1 &&
-            stateView.selectedElements.isNotEmpty &&
-            stateView.selectedElements.first.data is ArrowData &&
-            (stateView.selectedElements.first.data as ArrowData)
-                    .points
-                    .length ==
-                2;
+            firstSelectedData is ArrowLikeData &&
+            firstSelectedData.points.length == 2;
 
         // Determine corner handle offset for single arrow selections.
         final cornerHandleOffset =
-            selectedIds.length == 1 &&
-                stateView.selectedElements.isNotEmpty &&
-                stateView.selectedElements.first.data is ArrowData
+            selectedIds.length == 1 && firstSelectedData is ArrowLikeData
             ? 8.0
             : 0.0;
 
@@ -305,7 +302,7 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     final selectedId = renderKey.selectedIds.first;
     final element = stateView.state.domain.document.getElementById(selectedId);
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return;
     }
 
@@ -547,7 +544,7 @@ class DynamicCanvasPainter extends CustomPainter {
     required double scale,
   }) {
     final data = element.data;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       return;
     }
 
@@ -737,11 +734,11 @@ class DynamicCanvasPainter extends CustomPainter {
       final element = stateView.state.domain.document.getElementById(
         handle.elementId,
       );
-      if (element == null || element.data is! ArrowData) {
+      if (element == null || element.data is! ArrowLikeData) {
         return _dedupeArrowBindingHighlights(highlights);
       }
       final effectiveElement = stateView.effectiveElement(element);
-      final data = effectiveElement.data as ArrowData;
+      final data = effectiveElement.data as ArrowLikeData;
       final points = _resolveArrowWorldPoints(effectiveElement, data);
       final endpoint = _resolveEndpointForHandle(handle, points.length);
       final binding = switch (endpoint) {
@@ -758,7 +755,7 @@ class DynamicCanvasPainter extends CustomPainter {
     if (interaction is CreatingState) {
       final element = interaction.element;
       final data = element.data;
-      if (data is! ArrowData || !interaction.isPointCreation) {
+      if (data is! ArrowLikeData || !interaction.isPointCreation) {
         return _dedupeArrowBindingHighlights(highlights);
       }
       final endHighlight = _highlightFromBinding(data.endBinding);
@@ -815,7 +812,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
   List<DrawPoint> _resolveArrowWorldPoints(
     ElementState element,
-    ArrowData data,
+    ArrowLikeData data,
   ) {
     final resolved = ArrowGeometry.resolveWorldPoints(
       rect: element.rect,

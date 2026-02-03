@@ -2,7 +2,7 @@ import '../../actions/draw_actions.dart';
 import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
-import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
@@ -294,7 +294,7 @@ class CreatePlugin extends DrawInputPlugin {
       return false;
     }
     final data = interaction.elementData;
-    return data is ArrowData && data.arrowType == ArrowType.elbow;
+    return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
   }
 
   bool _isDoubleClick(DrawPoint position, DateTime now) {

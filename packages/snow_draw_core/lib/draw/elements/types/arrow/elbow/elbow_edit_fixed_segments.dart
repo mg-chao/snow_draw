@@ -242,7 +242,10 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
             ),
             fixedSegments: const [],
           )
-        : _FixedSegmentPathResult(points: baseline, fixedSegments: fixedSegments);
+        : _FixedSegmentPathResult(
+            points: baseline,
+            fixedSegments: fixedSegments,
+          );
   }
 
   final updated = List<DrawPoint>.from(baseline);
@@ -294,7 +297,9 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
       start = alignedStart;
       end = alignedEnd;
     }
-    mappedSegments.add(ElbowFixedSegment(index: index, start: start, end: end));
+    mappedSegments.add(
+      ElbowFixedSegment(index: index, start: start, end: end),
+    );
   }
 
   if (requireAll && mappedSegments.length != fixedSegments.length) {
@@ -314,8 +319,6 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
     _mapFixedSegmentsToBaseline(
       baseline: baseline,
       fixedSegments: fixedSegments,
-      enforceAxisOnPoints: false,
-      requireAll: false,
     ) ??
     _FixedSegmentPathResult(points: baseline, fixedSegments: fixedSegments);
 

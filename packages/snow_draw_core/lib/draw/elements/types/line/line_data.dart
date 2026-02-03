@@ -9,12 +9,12 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
-import 'arrow_binding.dart';
-import 'arrow_like_data.dart';
-import 'elbow/elbow_fixed_segment.dart';
+import '../arrow/arrow_binding.dart';
+import '../arrow/arrow_like_data.dart';
+import '../arrow/elbow/elbow_fixed_segment.dart';
 
 @immutable
-final class ArrowData extends ElementData
+final class LineData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData
     implements ArrowLikeData {
   static const _startBindingUnset = Object();
@@ -23,25 +23,30 @@ final class ArrowData extends ElementData
   static const _startIsSpecialUnset = Object();
   static const _endIsSpecialUnset = Object();
 
-  const ArrowData({
+  const LineData({
     this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
     this.color = ConfigDefaults.defaultColor,
+    this.fillColor = ConfigDefaults.defaultFillColor,
+    this.fillStyle = ConfigDefaults.defaultFillStyle,
     this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
-    this.arrowType = ConfigDefaults.defaultArrowType,
-    this.startArrowhead = ConfigDefaults.defaultStartArrowhead,
-    this.endArrowhead = ConfigDefaults.defaultEndArrowhead,
     this.startBinding,
     this.endBinding,
     this.fixedSegments,
     this.startIsSpecial,
     this.endIsSpecial,
-  });
+  }) : arrowType = ArrowType.curved,
+       startArrowhead = ArrowheadStyle.none,
+       endArrowhead = ArrowheadStyle.none;
 
-  factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
+  factory LineData.fromJson(Map<String, dynamic> json) => LineData(
     points: _decodePoints(json['points']),
     color: Color(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
+    ),
+    fillColor: Color(
+      (json['fillColor'] as int?) ??
+          ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
@@ -50,14 +55,9 @@ final class ArrowData extends ElementData
       (style) => style.name == json['strokeStyle'],
       orElse: () => ConfigDefaults.defaultStrokeStyle,
     ),
-    arrowType: _decodeArrowType(json['arrowType']),
-    startArrowhead: ArrowheadStyle.values.firstWhere(
-      (style) => style.name == json['startArrowhead'],
-      orElse: () => ConfigDefaults.defaultStartArrowhead,
-    ),
-    endArrowhead: ArrowheadStyle.values.firstWhere(
-      (style) => style.name == json['endArrowhead'],
-      orElse: () => ConfigDefaults.defaultEndArrowhead,
+    fillStyle: FillStyle.values.firstWhere(
+      (style) => style.name == json['fillStyle'],
+      orElse: () => ConfigDefaults.defaultFillStyle,
     ),
     startBinding: _decodeBinding(json['startBinding']),
     endBinding: _decodeBinding(json['endBinding']),
@@ -66,12 +66,14 @@ final class ArrowData extends ElementData
     endIsSpecial: json['endIsSpecial'] as bool?,
   );
 
-  static const typeIdToken = ElementTypeId<ArrowData>('arrow');
+  static const typeIdToken = ElementTypeId<LineData>('line');
 
   /// Normalized control points in element-local space (0..1).
   @override
   final List<DrawPoint> points;
   final Color color;
+  final Color fillColor;
+  final FillStyle fillStyle;
   @override
   final double strokeWidth;
   @override
@@ -94,12 +96,14 @@ final class ArrowData extends ElementData
   final bool? endIsSpecial;
 
   @override
-  ElementTypeId<ArrowData> get typeId => ArrowData.typeIdToken;
+  ElementTypeId<LineData> get typeId => LineData.typeIdToken;
 
   @override
-  ArrowData copyWith({
+  LineData copyWith({
     List<DrawPoint>? points,
     Color? color,
+    Color? fillColor,
+    FillStyle? fillStyle,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
     ArrowType? arrowType,
@@ -110,49 +114,61 @@ final class ArrowData extends ElementData
     Object? fixedSegments = _fixedSegmentsUnset,
     Object? startIsSpecial = _startIsSpecialUnset,
     Object? endIsSpecial = _endIsSpecialUnset,
-  }) => ArrowData(
-    points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
-    color: color ?? this.color,
-    strokeWidth: strokeWidth ?? this.strokeWidth,
-    strokeStyle: strokeStyle ?? this.strokeStyle,
-    arrowType: arrowType ?? this.arrowType,
-    startArrowhead: startArrowhead ?? this.startArrowhead,
-    endArrowhead: endArrowhead ?? this.endArrowhead,
-    startBinding: startBinding == _startBindingUnset
-        ? this.startBinding
-        : startBinding as ArrowBinding?,
-    endBinding: endBinding == _endBindingUnset
-        ? this.endBinding
-        : endBinding as ArrowBinding?,
-    fixedSegments: fixedSegments == _fixedSegmentsUnset
-        ? this.fixedSegments
-        : _coerceFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
-    startIsSpecial: startIsSpecial == _startIsSpecialUnset
-        ? this.startIsSpecial
-        : startIsSpecial as bool?,
-    endIsSpecial: endIsSpecial == _endIsSpecialUnset
-        ? this.endIsSpecial
-        : endIsSpecial as bool?,
-  );
+  }) {
+    assert(
+      arrowType == null || arrowType == ArrowType.curved,
+      'LineData only supports curved arrow type',
+    );
+    assert(
+      startArrowhead == null || startArrowhead == ArrowheadStyle.none,
+      'LineData does not support start arrowheads',
+    );
+    assert(
+      endArrowhead == null || endArrowhead == ArrowheadStyle.none,
+      'LineData does not support end arrowheads',
+    );
+    return LineData(
+      points:
+          points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+      color: color ?? this.color,
+      fillColor: fillColor ?? this.fillColor,
+      fillStyle: fillStyle ?? this.fillStyle,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      strokeStyle: strokeStyle ?? this.strokeStyle,
+      startBinding: startBinding == _startBindingUnset
+          ? this.startBinding
+          : startBinding as ArrowBinding?,
+      endBinding: endBinding == _endBindingUnset
+          ? this.endBinding
+          : endBinding as ArrowBinding?,
+      fixedSegments: fixedSegments == _fixedSegmentsUnset
+          ? this.fixedSegments
+          : _coerceFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
+      startIsSpecial: startIsSpecial == _startIsSpecialUnset
+          ? this.startIsSpecial
+          : startIsSpecial as bool?,
+      endIsSpecial: endIsSpecial == _endIsSpecialUnset
+          ? this.endIsSpecial
+          : endIsSpecial as bool?,
+    );
+  }
 
   @override
   ElementData withElementStyle(ElementStyleConfig style) => copyWith(
     color: style.color,
+    fillColor: style.fillColor,
+    fillStyle: style.fillStyle,
     strokeWidth: style.strokeWidth,
     strokeStyle: style.strokeStyle,
-    arrowType: style.arrowType,
-    startArrowhead: style.startArrowhead,
-    endArrowhead: style.endArrowhead,
   );
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     color: update.color ?? color,
+    fillColor: update.fillColor ?? fillColor,
+    fillStyle: update.fillStyle ?? fillStyle,
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
-    arrowType: update.arrowType ?? arrowType,
-    startArrowhead: update.startArrowhead ?? startArrowhead,
-    endArrowhead: update.endArrowhead ?? endArrowhead,
   );
 
   @override
@@ -160,8 +176,10 @@ final class ArrowData extends ElementData
     'typeId': typeId.value,
     'points': points.map((point) => {'x': point.x, 'y': point.y}).toList(),
     'color': color.toARGB32(),
+    'fillColor': fillColor.toARGB32(),
     'strokeWidth': strokeWidth,
     'strokeStyle': strokeStyle.name,
+    'fillStyle': fillStyle.name,
     'arrowType': arrowType.name,
     'startArrowhead': startArrowhead.name,
     'endArrowhead': endArrowhead.name,
@@ -191,82 +209,6 @@ final class ArrowData extends ElementData
     }
 
     return List<DrawPoint>.unmodifiable(points);
-  }
-
-  static ArrowType _decodeArrowType(Object? raw) {
-    if (raw is String) {
-      return ArrowType.values.firstWhere(
-        (style) => style.name == raw,
-        orElse: () => ConfigDefaults.defaultArrowType,
-      );
-    }
-    return ConfigDefaults.defaultArrowType;
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is ArrowData &&
-          _pointsEqual(other.points, points) &&
-          other.color == color &&
-          other.strokeWidth == strokeWidth &&
-          other.strokeStyle == strokeStyle &&
-          other.arrowType == arrowType &&
-          other.startArrowhead == startArrowhead &&
-          other.endArrowhead == endArrowhead &&
-          other.startBinding == startBinding &&
-          other.endBinding == endBinding &&
-          _fixedSegmentsEqual(other.fixedSegments, fixedSegments) &&
-          other.startIsSpecial == startIsSpecial &&
-          other.endIsSpecial == endIsSpecial;
-
-  @override
-  int get hashCode => Object.hash(
-    Object.hashAll(points),
-    color,
-    strokeWidth,
-    strokeStyle,
-    arrowType,
-    startArrowhead,
-    endArrowhead,
-    startBinding,
-    endBinding,
-    fixedSegments == null ? null : Object.hashAll(fixedSegments!),
-    startIsSpecial,
-    endIsSpecial,
-  );
-
-  static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _fixedSegmentsEqual(
-    List<ElbowFixedSegment>? a,
-    List<ElbowFixedSegment>? b,
-  ) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a == null || b == null) {
-      return a == null && b == null;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
   }
 
   static ArrowBinding? _decodeBinding(Object? raw) {
@@ -314,5 +256,69 @@ final class ArrowData extends ElementData
       return null;
     }
     return List<ElbowFixedSegment>.unmodifiable(segments);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LineData &&
+          _pointsEqual(other.points, points) &&
+          other.color == color &&
+          other.fillColor == fillColor &&
+          other.fillStyle == fillStyle &&
+          other.strokeWidth == strokeWidth &&
+          other.strokeStyle == strokeStyle &&
+          other.startBinding == startBinding &&
+          other.endBinding == endBinding &&
+          _fixedSegmentsEqual(other.fixedSegments, fixedSegments) &&
+          other.startIsSpecial == startIsSpecial &&
+          other.endIsSpecial == endIsSpecial;
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(points),
+    color,
+    fillColor,
+    fillStyle,
+    strokeWidth,
+    strokeStyle,
+    startBinding,
+    endBinding,
+    fixedSegments == null ? null : Object.hashAll(fixedSegments!),
+    startIsSpecial,
+    endIsSpecial,
+  );
+
+  static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _fixedSegmentsEqual(
+    List<ElbowFixedSegment>? a,
+    List<ElbowFixedSegment>? b,
+  ) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a == null || b == null) {
+      return a == null && b == null;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }

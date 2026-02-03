@@ -14,7 +14,9 @@ import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
+import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
@@ -767,6 +769,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     if (toolTypeId == RectangleData.typeIdToken ||
         toolTypeId == ArrowData.typeIdToken ||
+        toolTypeId == LineData.typeIdToken ||
         toolTypeId == null) {
       _adjustStrokeWidth(event);
       return;
@@ -920,9 +923,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     // Determine base stroke width from selected elements or config
     final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
+    final lineAverage = _resolveAverageSelectedLineStrokeWidth(state);
     final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
     final base =
-        arrowAverage ?? rectangleAverage ?? config.arrowStyle.strokeWidth;
+        arrowAverage ??
+        lineAverage ??
+        rectangleAverage ??
+        config.arrowStyle.strokeWidth;
 
     // Find next stepped value
     final next = _findNextSteppedValue(
@@ -955,6 +962,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
 
+    // Update selected lines
+    final lineIds = _resolveLineSelectionIds(state);
+    if (lineIds.isNotEmpty) {
+      unawaited(
+        widget.store.dispatch(
+          UpdateElementsStyle(elementIds: lineIds, strokeWidth: next),
+        ),
+      );
+    }
+
     // Update arrow style config if needed
     if (!_doubleEquals(next, config.arrowStyle.strokeWidth)) {
       final nextStyle = config.arrowStyle.copyWith(strokeWidth: next);
@@ -971,6 +988,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       unawaited(
         widget.store.dispatch(
           UpdateConfig(config.copyWith(rectangleStyle: nextStyle)),
+        ),
+      );
+    }
+
+    // Update line style config if needed
+    if (!_doubleEquals(next, config.lineStyle.strokeWidth)) {
+      final nextStyle = config.lineStyle.copyWith(strokeWidth: next);
+      unawaited(
+        widget.store.dispatch(
+          UpdateConfig(config.copyWith(lineStyle: nextStyle)),
         ),
       );
     }
@@ -1105,6 +1132,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return total / count;
   }
 
+  double? _resolveAverageSelectedLineStrokeWidth(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return null;
+    }
+    var count = 0;
+    var total = 0.0;
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      final data = element?.data;
+      if (data is LineData) {
+        total += data.strokeWidth;
+        count += 1;
+      }
+    }
+    if (count == 0) {
+      return null;
+    }
+    return total / count;
+  }
+
   double? _resolveAverageSelectedFontSize(DrawState state) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
@@ -1150,6 +1198,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     for (final id in selectedIds) {
       final element = state.domain.document.getElementById(id);
       if (element?.data is ArrowData) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  List<String> _resolveLineSelectionIds(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const [];
+    }
+    final ids = <String>[];
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is LineData) {
         ids.add(id);
       }
     }
@@ -1250,7 +1313,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!_isPointerInside || _middlePanPointerId != null) {
       return null;
     }
-    if (widget.currentToolTypeId != ArrowData.typeIdToken) {
+    if (widget.currentToolTypeId != ArrowData.typeIdToken &&
+        widget.currentToolTypeId != LineData.typeIdToken) {
       return null;
     }
     final interaction = state.application.interaction;
@@ -1367,7 +1431,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = state.domain.document.getElementById(selectedIds.first);
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return null;
     }
 
@@ -1416,7 +1480,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ? null
         : stateView.effectiveElement(element);
     final data = effectiveElement?.data;
-    if (data is ArrowData &&
+    if (data is ArrowLikeData &&
         data.arrowType == ArrowType.elbow &&
         kind == ArrowPointKind.addable) {
       final segmentIndex = index + 1;
@@ -1441,10 +1505,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = state.domain.document.getElementById(handle.elementId);
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return null;
     }
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
     if (data.arrowType != ArrowType.elbow) {
       return null;
     }

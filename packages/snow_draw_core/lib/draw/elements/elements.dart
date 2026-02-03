@@ -4,5 +4,6 @@ export 'core/elements_core.dart';
 export 'registration.dart';
 // Types
 export 'types/arrow/arrow.dart';
+export 'types/line/line.dart';
 export 'types/rectangle/rectangle.dart';
 export 'types/text/text.dart';

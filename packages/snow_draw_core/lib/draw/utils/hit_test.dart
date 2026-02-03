@@ -4,7 +4,7 @@ import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/element_type_id.dart';
-import '../elements/types/arrow/arrow_data.dart';
+import '../elements/types/arrow/arrow_like_data.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
@@ -135,8 +135,8 @@ class HitTest {
       final element = stateView.state.domain.document.getElementById(
         selectedIds.first,
       );
-      if (element != null && element.data is ArrowData) {
-        final data = element.data as ArrowData;
+      if (element != null && element.data is ArrowLikeData) {
+        final data = element.data as ArrowLikeData;
         if (data.points.length == 2) {
           return false;
         }
@@ -189,13 +189,13 @@ class HitTest {
     final selectedIds = state.domain.selection.selectedIds;
 
     // Determine corner handle offset for single arrow selections.
-    ArrowData? singleSelectedArrow;
+    ArrowLikeData? singleSelectedArrow;
     if (selectedIds.length == 1) {
       final element = state.domain.document.getElementById(selectedIds.first);
       if (element != null) {
         final effectiveElement = stateView.effectiveElement(element);
         final data = effectiveElement.data;
-        if (data is ArrowData) {
+        if (data is ArrowLikeData) {
           singleSelectedArrow = data;
         }
       }

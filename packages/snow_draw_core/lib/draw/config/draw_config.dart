@@ -136,11 +136,13 @@ class DrawConfig {
     this.elementStyle = const ElementStyleConfig(),
     ElementStyleConfig? rectangleStyle,
     ElementStyleConfig? arrowStyle,
+    ElementStyleConfig? lineStyle,
     ElementStyleConfig? textStyle,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
        arrowStyle = arrowStyle ?? elementStyle,
+       lineStyle = lineStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle;
   final SelectionConfig selection;
   final ElementConfig element;
@@ -149,6 +151,7 @@ class DrawConfig {
   final ElementStyleConfig elementStyle;
   final ElementStyleConfig rectangleStyle;
   final ElementStyleConfig arrowStyle;
+  final ElementStyleConfig lineStyle;
   final ElementStyleConfig textStyle;
   final GridConfig grid;
   final SnapConfig snap;
@@ -163,6 +166,7 @@ class DrawConfig {
     ElementStyleConfig? elementStyle,
     ElementStyleConfig? rectangleStyle,
     ElementStyleConfig? arrowStyle,
+    ElementStyleConfig? lineStyle,
     ElementStyleConfig? textStyle,
     GridConfig? grid,
     SnapConfig? snap,
@@ -180,6 +184,9 @@ class DrawConfig {
       arrowStyle:
           arrowStyle ??
           (elementStyle != null ? nextElementStyle : this.arrowStyle),
+      lineStyle:
+          lineStyle ??
+          (elementStyle != null ? nextElementStyle : this.lineStyle),
       textStyle:
           textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
@@ -199,6 +206,7 @@ class DrawConfig {
           other.elementStyle == elementStyle &&
           other.rectangleStyle == rectangleStyle &&
           other.arrowStyle == arrowStyle &&
+          other.lineStyle == lineStyle &&
           other.textStyle == textStyle &&
           other.grid == grid &&
           other.snap == snap;
@@ -212,6 +220,7 @@ class DrawConfig {
     elementStyle,
     rectangleStyle,
     arrowStyle,
+    lineStyle,
     textStyle,
     grid,
     snap,
@@ -227,6 +236,7 @@ class DrawConfig {
       'elementStyle: $elementStyle, '
       'rectangleStyle: $rectangleStyle, '
       'arrowStyle: $arrowStyle, '
+      'lineStyle: $lineStyle, '
       'textStyle: $textStyle, '
       'grid: $grid, '
       'snap: $snap'
