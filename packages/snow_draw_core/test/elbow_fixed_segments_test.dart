@@ -687,6 +687,71 @@ void main() {
     },
   );
 
+  test('left binding flips fixed horizontal segment to avoid overlap', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 0),
+      const DrawPoint(x: 0, y: 40),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 80, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: -40, minY: 140, maxX: 40, maxY: 220);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0, y: 0.5),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: boundElement,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      elementsById: {'rect-1': boundElement},
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    expect(
+      elbowPathHasOnlyCorners(result.localPoints),
+      isTrue,
+      reason: 'Left binding should not introduce overlapping tail segments.',
+    );
+
+    final fixed = result.fixedSegments!.first;
+    expect(
+      ElbowGeometry.headingForSegment(fixed.start, fixed.end),
+      ElbowHeading.left,
+      reason: 'Fixed segment should flip to the left for left binding.',
+    );
+
+    final headings = _headingSequence(result.localPoints);
+    expect(
+      headings,
+      equals(const <ElbowHeading>[
+        ElbowHeading.down,
+        ElbowHeading.left,
+        ElbowHeading.down,
+        ElbowHeading.right,
+      ]),
+    );
+  });
+
   test(
     'aligned bound end keeps approach direction with fixed segment',
     () {

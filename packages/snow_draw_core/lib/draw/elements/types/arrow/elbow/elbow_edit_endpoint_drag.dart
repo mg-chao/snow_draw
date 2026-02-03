@@ -1050,6 +1050,7 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: localPoints,
     fixedSegments: synced,
+    allowDirectionFlip: true,
   );
 }
 

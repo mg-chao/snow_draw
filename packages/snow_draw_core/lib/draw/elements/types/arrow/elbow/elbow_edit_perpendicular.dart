@@ -85,6 +85,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     return _mergeFixedSegmentsWithCollinearNeighbors(
       points: localPoints,
       fixedSegments: updatedFixedSegments,
+      allowDirectionFlip: true,
     );
   }
 
@@ -97,12 +98,14 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     return _mergeFixedSegmentsWithCollinearNeighbors(
       points: localPoints,
       fixedSegments: updatedFixedSegments,
+      allowDirectionFlip: true,
     );
   }
 
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: points,
     fixedSegments: fixedSegments,
+    allowDirectionFlip: true,
   );
 }
 

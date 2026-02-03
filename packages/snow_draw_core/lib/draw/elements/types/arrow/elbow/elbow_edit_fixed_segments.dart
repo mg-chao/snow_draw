@@ -375,15 +375,18 @@ _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
 _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
+  bool allowDirectionFlip = false,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
     return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
   }
 
-  final collapsed = _collapseFixedSegmentBacktracks(
-    points: points,
-    fixedSegments: fixedSegments,
-  );
+  final collapsed = allowDirectionFlip
+      ? _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments)
+      : _collapseFixedSegmentBacktracks(
+          points: points,
+          fixedSegments: fixedSegments,
+        );
   var updatedPoints = List<DrawPoint>.from(collapsed.points);
   var updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
   var merged = true;
