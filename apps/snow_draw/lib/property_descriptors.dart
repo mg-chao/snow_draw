@@ -12,6 +12,7 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
         supportedElementTypes: const {
           ElementType.rectangle,
           ElementType.arrow,
+          ElementType.line,
           ElementType.text,
         },
       );
@@ -25,6 +26,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.color);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.color);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.color);
@@ -41,6 +45,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.color;
     }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.color;
+    }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.color;
     }
@@ -53,7 +60,11 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
   const StrokeWidthPropertyDescriptor()
     : super(
         id: 'strokeWidth',
-        supportedElementTypes: const {ElementType.rectangle, ElementType.arrow},
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.arrow,
+          ElementType.line,
+        },
       );
 
   @override
@@ -65,6 +76,9 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.strokeWidth);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.strokeWidth);
     }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.doubleEquals);
@@ -78,6 +92,9 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.strokeWidth;
     }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.strokeWidth;
+    }
     return 2;
   }
 }
@@ -87,7 +104,11 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
   const StrokeStylePropertyDescriptor()
     : super(
         id: 'strokeStyle',
-        supportedElementTypes: const {ElementType.rectangle, ElementType.arrow},
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.arrow,
+          ElementType.line,
+        },
       );
 
   @override
@@ -99,6 +120,9 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.strokeStyle);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.strokeStyle);
     }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.enumEquals);
@@ -112,6 +136,9 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.strokeStyle;
     }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.strokeStyle;
+    }
     return StrokeStyle.solid;
   }
 }
@@ -121,7 +148,11 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
   const FillColorPropertyDescriptor()
     : super(
         id: 'fillColor',
-        supportedElementTypes: const {ElementType.rectangle, ElementType.text},
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.line,
+          ElementType.text,
+        },
       );
 
   @override
@@ -130,6 +161,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
 
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       values.add(context.rectangleStyleValues.fillColor);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.fillColor);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillColor);
@@ -143,6 +177,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       return context.rectangleDefaults.fillColor;
     }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.fillColor;
+    }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillColor;
     }
@@ -155,7 +192,11 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
   const FillStylePropertyDescriptor()
     : super(
         id: 'fillStyle',
-        supportedElementTypes: const {ElementType.rectangle, ElementType.text},
+        supportedElementTypes: const {
+          ElementType.rectangle,
+          ElementType.line,
+          ElementType.text,
+        },
       );
 
   @override
@@ -164,6 +205,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
 
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       values.add(context.rectangleStyleValues.fillStyle);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.fillStyle);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillStyle);
@@ -176,6 +220,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
   FillStyle getDefaultValue(StylePropertyContext context) {
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       return context.rectangleDefaults.fillStyle;
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.fillStyle;
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillStyle;
@@ -192,6 +239,7 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
         supportedElementTypes: const {
           ElementType.rectangle,
           ElementType.arrow,
+          ElementType.line,
           ElementType.text,
         },
       );
@@ -205,6 +253,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.opacity);
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      values.add(context.lineStyleValues.opacity);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.opacity);
@@ -220,6 +271,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.opacity;
+    }
+    if (context.selectedElementTypes.contains(ElementType.line)) {
+      return context.lineDefaults.opacity;
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.opacity;

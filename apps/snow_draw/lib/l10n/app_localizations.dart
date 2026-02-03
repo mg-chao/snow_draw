@@ -16,6 +16,7 @@ class AppLocalizations {
   String get toolSelection => 'Selection';
   String get toolRectangle => 'Rectangle';
   String get toolArrow => 'Arrow';
+  String get toolLine => 'Line';
   String get toolText => 'Text';
   String get objectSnapping => 'Object Snapping';
   String get gridSnapping => 'Grid Snapping';

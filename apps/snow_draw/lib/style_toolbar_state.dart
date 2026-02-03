@@ -192,30 +192,77 @@ class ArrowStyleValues {
   );
 }
 
+/// Resolved style values for line elements, supporting multi-selection.
+@immutable
+class LineStyleValues {
+  const LineStyleValues({
+    required this.color,
+    required this.fillColor,
+    required this.fillStyle,
+    required this.strokeWidth,
+    required this.strokeStyle,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<Color> fillColor;
+  final MixedValue<FillStyle> fillStyle;
+  final MixedValue<double> strokeWidth;
+  final MixedValue<StrokeStyle> strokeStyle;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LineStyleValues &&
+          other.color == color &&
+          other.fillColor == fillColor &&
+          other.fillStyle == fillStyle &&
+          other.strokeWidth == strokeWidth &&
+          other.strokeStyle == strokeStyle &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    fillColor,
+    fillStyle,
+    strokeWidth,
+    strokeStyle,
+    opacity,
+  );
+}
+
 @immutable
 class StyleToolbarState {
   const StyleToolbarState({
     required this.rectangleStyle,
     required this.arrowStyle,
+    required this.lineStyle,
     required this.textStyle,
     required this.styleValues,
     required this.arrowStyleValues,
+    required this.lineStyleValues,
     required this.textStyleValues,
     required this.hasSelection,
     required this.hasSelectedRectangles,
     required this.hasSelectedArrows,
+    required this.hasSelectedLines,
     required this.hasSelectedTexts,
   });
 
   final ElementStyleConfig rectangleStyle;
   final ElementStyleConfig arrowStyle;
+  final ElementStyleConfig lineStyle;
   final ElementStyleConfig textStyle;
   final RectangleStyleValues styleValues;
   final ArrowStyleValues arrowStyleValues;
+  final LineStyleValues lineStyleValues;
   final TextStyleValues textStyleValues;
   final bool hasSelection;
   final bool hasSelectedRectangles;
   final bool hasSelectedArrows;
+  final bool hasSelectedLines;
   final bool hasSelectedTexts;
 
   @override
@@ -224,26 +271,32 @@ class StyleToolbarState {
       other is StyleToolbarState &&
           other.rectangleStyle == rectangleStyle &&
           other.arrowStyle == arrowStyle &&
+          other.lineStyle == lineStyle &&
           other.textStyle == textStyle &&
           other.styleValues == styleValues &&
           other.arrowStyleValues == arrowStyleValues &&
+          other.lineStyleValues == lineStyleValues &&
           other.textStyleValues == textStyleValues &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
           other.hasSelectedArrows == hasSelectedArrows &&
+          other.hasSelectedLines == hasSelectedLines &&
           other.hasSelectedTexts == hasSelectedTexts;
 
   @override
   int get hashCode => Object.hash(
     rectangleStyle,
     arrowStyle,
+    lineStyle,
     textStyle,
     styleValues,
     arrowStyleValues,
+    lineStyleValues,
     textStyleValues,
     hasSelection,
     hasSelectedRectangles,
     hasSelectedArrows,
+    hasSelectedLines,
     hasSelectedTexts,
   );
 }
