@@ -11,7 +11,7 @@ final class ElbowConstants {
   /// Epsilon used when testing segment intersections with obstacle bounds.
   static const intersectionEpsilon = 1e-6;
 
-  /// Minimum ma distance before a stable midpoint elbow is used.
+  /// Minimum Manhattan distance before a stable midpoint elbow is used.
   static const double minArrowLength = 8;
 
   /// Clamp for route coordinates to prevent runaway values.

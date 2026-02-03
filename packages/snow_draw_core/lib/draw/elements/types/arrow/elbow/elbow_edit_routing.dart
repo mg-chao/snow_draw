@@ -25,24 +25,6 @@ List<DrawPoint> _routeLocalPath({
   return routed.localPoints;
 }
 
-List<DrawPoint> _directElbowPath(
-  DrawPoint start,
-  DrawPoint end, {
-  required bool preferHorizontal,
-}) {
-  if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold ||
-      (start.y - end.y).abs() <= ElbowConstants.dedupThreshold) {
-    return [start, end];
-  }
-  final mid = preferHorizontal
-      ? DrawPoint(x: end.x, y: start.y)
-      : DrawPoint(x: start.x, y: end.y);
-  if (mid == start || mid == end) {
-    return [start, end];
-  }
-  return [start, mid, end];
-}
-
 bool? _preferredHorizontalForRelease({
   required ElbowFixedSegment? previous,
   required ElbowFixedSegment? next,
@@ -51,10 +33,10 @@ bool? _preferredHorizontalForRelease({
     return null;
   }
   if (previous != null) {
-    return ElbowGeometry.isHorizontal(previous.start, previous.end);
+    return ElbowPathUtils.segmentIsHorizontal(previous.start, previous.end);
   }
   if (next != null) {
-    return !ElbowGeometry.isHorizontal(next.start, next.end);
+    return !ElbowPathUtils.segmentIsHorizontal(next.start, next.end);
   }
   return null;
 }
@@ -89,7 +71,7 @@ List<DrawPoint> _routeReleasedRegion({
     next: nextFixed,
   );
   if (preferHorizontal != null) {
-    return _directElbowPath(
+    return ElbowPathUtils.directElbowPath(
       startLocal,
       endLocal,
       preferHorizontal: preferHorizontal,

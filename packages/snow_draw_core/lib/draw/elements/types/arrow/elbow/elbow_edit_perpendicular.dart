@@ -199,7 +199,7 @@ _PerpendicularAdjustment? _alignEndpointSegmentLength({
   if (points.length > 2) {
     final adjacentIndex = isStart ? neighborIndex + 1 : neighborIndex - 1;
     if (adjacentIndex >= 0 && adjacentIndex < points.length) {
-      final adjacentHorizontal = ElbowGeometry.isHorizontal(
+      final adjacentHorizontal = ElbowPathUtils.segmentIsHorizontal(
         points[neighborIndex],
         points[adjacentIndex],
       );
@@ -511,7 +511,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   }
 
   final nextHorizontal = points.length > 2
-      ? ElbowGeometry.isHorizontal(neighbor, points[2])
+      ? ElbowPathUtils.segmentIsHorizontal(neighbor, points[2])
       : desiredHorizontal;
   final conflict = nextHorizontal == desiredHorizontal;
   final canShiftDirection =
@@ -716,7 +716,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   }
 
   final prevHorizontal = points.length > 2
-      ? ElbowGeometry.isHorizontal(points[neighborIndex - 1], neighbor)
+      ? ElbowPathUtils.segmentIsHorizontal(points[neighborIndex - 1], neighbor)
       : desiredHorizontal;
   final conflict = prevHorizontal == desiredHorizontal;
   final canShiftDirection =
@@ -970,7 +970,7 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
 
   if (allowExtend && points.length > 2) {
     final adjacent = isStart ? points[2] : points[points.length - 3];
-    final adjacentHorizontal = ElbowGeometry.isHorizontal(
+    final adjacentHorizontal = ElbowPathUtils.segmentIsHorizontal(
       neighbor,
       adjacent,
     );
@@ -1155,6 +1155,20 @@ _PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
     inserted: false,
   );
 }
+
+({List<DrawPoint> points, bool moved}) _slideRunForward({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required bool horizontal,
+  required double target,
+}) =>
+    _slideRun(
+      points: points,
+      startIndex: startIndex,
+      horizontal: horizontal,
+      target: target,
+      direction: 1,
+    );
 
 DrawPoint _offsetPoint(
   DrawPoint point,

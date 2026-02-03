@@ -5,7 +5,8 @@ import '../../../../types/draw_point.dart';
 /// A fixed (pinned) segment of an elbow path whose direction and axis are
 /// preserved.
 ///
-/// [index] points to the segment's start point in the path list.
+/// [index] refers to the segment end point in the path list
+/// (segment spans points[index - 1] -> points[index]).
 @immutable
 final class ElbowFixedSegment {
   const ElbowFixedSegment({

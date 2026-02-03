@@ -238,45 +238,6 @@ List<DrawPoint> _postProcessPath({
   return points;
 }
 
-List<DrawPoint> _removeShortSegments(List<DrawPoint> points) {
-  if (points.length < 4) {
-    return points;
-  }
-  final filtered = <DrawPoint>[];
-  for (var i = 0; i < points.length; i++) {
-    if (i == 0 || i == points.length - 1) {
-      filtered.add(points[i]);
-      continue;
-    }
-    if (ElbowGeometry.manhattanDistance(points[i - 1], points[i]) >
-        ElbowConstants.dedupThreshold) {
-      filtered.add(points[i]);
-    }
-  }
-  return filtered;
-}
-
-List<DrawPoint> _getCornerPoints(List<DrawPoint> points) {
-  if (points.length <= 2) {
-    return points;
-  }
-
-  var previousIsHorizontal = ElbowGeometry.isHorizontal(points[0], points[1]);
-  final result = <DrawPoint>[points.first];
-  for (var i = 1; i < points.length - 1; i++) {
-    final nextIsHorizontal = ElbowGeometry.isHorizontal(
-      points[i],
-      points[i + 1],
-    );
-    if (previousIsHorizontal != nextIsHorizontal) {
-      result.add(points[i]);
-    }
-    previousIsHorizontal = nextIsHorizontal;
-  }
-  result.add(points.last);
-  return result;
-}
-
 /// Final cleanup for routed paths: orthogonalize, prune, and clamp.
 List<DrawPoint> _finalizeRoutedPath({
   required List<DrawPoint> points,
@@ -292,7 +253,9 @@ List<DrawPoint> _finalizeRoutedPath({
     points: orthogonalized,
     obstacles: obstacles,
   );
-  final cleaned = _getCornerPoints(_removeShortSegments(backtrackCollapsed));
+  final cleaned = ElbowPathUtils.cornerPoints(
+    ElbowPathUtils.removeShortSegments(backtrackCollapsed),
+  );
   return cleaned.map(_clampPoint).toList(growable: false);
 }
 
@@ -401,7 +364,10 @@ List<DrawPoint> _ensureOrthogonalPath({
     }
 
     final preferHorizontal = result.length > 1
-        ? ElbowGeometry.isHorizontal(result[result.length - 2], previous)
+        ? ElbowPathUtils.segmentIsHorizontal(
+            result[result.length - 2],
+            previous,
+          )
         : startHeading.isHorizontal;
     final mid = preferHorizontal
         ? DrawPoint(x: next.x, y: previous.y)
