@@ -2,7 +2,7 @@ import '../../actions/draw_actions.dart';
 import '../../edit/core/edit_modifiers.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
-import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
@@ -110,8 +110,8 @@ class SelectPlugin extends DrawInputPlugin {
       final element = stateView.state.domain.document.getElementById(
         intent.elementId,
       );
-      final data = element?.data is ArrowData
-          ? element!.data as ArrowData
+      final data = element?.data is ArrowLikeData
+          ? element!.data as ArrowLikeData
           : null;
       final canDoubleClick =
           handle != null &&
@@ -391,10 +391,10 @@ class SelectPlugin extends DrawInputPlugin {
     final element = stateView.state.domain.document.getElementById(
       intent.elementId,
     );
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return null;
     }
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
     final isFixed =
         data.arrowType == ArrowType.elbow &&
         intent.pointKind == ArrowPointKind.addable &&
@@ -413,7 +413,7 @@ class SelectPlugin extends DrawInputPlugin {
 
   bool _isArrowHandleDoubleClickCandidate({
     required ArrowPointHandle handle,
-    required ArrowData data,
+    required ArrowLikeData data,
   }) {
     if (handle.isFixed) {
       return true;

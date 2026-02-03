@@ -2,7 +2,7 @@ import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/element_type_id.dart';
-import '../elements/types/arrow/arrow_data.dart';
+import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
@@ -144,7 +144,7 @@ class EditIntentDetector {
     final element = stateView.state.domain.document.getElementById(
       selectedIds.first,
     );
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return null;
     }
 

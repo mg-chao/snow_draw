@@ -150,9 +150,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
           tool == ToolType.rectangle || state.hasSelectedRectangles;
       final showArrowControls =
           tool == ToolType.arrow || state.hasSelectedArrows;
+      final showLineControls = tool == ToolType.line || state.hasSelectedLines;
       final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
       final showToolbar =
-          showRectangleControls || showArrowControls || showTextControls;
+          showRectangleControls ||
+          showArrowControls ||
+          showLineControls ||
+          showTextControls;
       if (showTextControls) {
         _requestSystemFonts();
       }
@@ -1155,6 +1159,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
+    if (state.hasSelectedLines) {
+      selectedTypes.add(ElementType.line);
+    }
     if (state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
@@ -1168,6 +1175,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
           selectedTypes.add(ElementType.rectangle);
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
+        case ToolType.line:
+          selectedTypes.add(ElementType.line);
         case ToolType.text:
           selectedTypes.add(ElementType.text);
         case ToolType.selection:
@@ -1178,9 +1187,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
     return StylePropertyContext(
       rectangleStyleValues: state.styleValues,
       arrowStyleValues: state.arrowStyleValues,
+      lineStyleValues: state.lineStyleValues,
       textStyleValues: state.textStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
+      lineDefaults: state.lineStyle,
       textDefaults: state.textStyle,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,

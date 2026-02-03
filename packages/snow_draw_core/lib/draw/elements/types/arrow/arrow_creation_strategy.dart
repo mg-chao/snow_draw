@@ -15,8 +15,8 @@ import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../arrow/arrow_binding.dart';
 import '../rectangle/rectangle_data.dart';
-import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_like_data.dart';
 import 'elbow/elbow_router.dart';
 
 /// Creation strategy for arrow elements (single- and multi-point).
@@ -29,7 +29,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required ElementData data,
     required DrawPoint startPosition,
   }) {
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       return CreationUpdateResult(
         data: data,
         rect: DrawRect(
@@ -76,7 +76,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       // Point creation ignores these modifiers.
     }
     final elementData = creatingState.elementData;
-    if (elementData is! ArrowData) {
+    if (elementData is! ArrowLikeData) {
       return CreationUpdateResult(
         data: elementData,
         rect: creatingState.currentRect,
@@ -201,7 +201,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     }
 
     final elementData = creatingState.elementData;
-    if (elementData is! ArrowData) {
+    if (elementData is! ArrowLikeData) {
       return null;
     }
     if (elementData.arrowType == ArrowType.elbow) {
@@ -312,7 +312,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required CreatingState creatingState,
   }) {
     final data = creatingState.elementData;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       return CreationFinishResult(
         data: data,
         rect: creatingState.currentRect,

@@ -8,6 +8,7 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
@@ -66,13 +67,13 @@ class ArrowPointOperation extends EditOperation {
       operationName: 'ArrowPointOperation.createContext',
     );
     final element = state.domain.document.getElementById(typedParams.elementId);
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       throw const EditMissingDataError(
         dataName: 'arrow element',
         operationName: 'ArrowPointOperation.createContext',
       );
     }
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
     final points = _resolveWorldPoints(element, data);
     if (points.length < 2) {
       throw const EditMissingDataError(
@@ -149,25 +150,32 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    final data = element?.data is ArrowData ? element!.data as ArrowData : null;
+    final elementData = element?.data;
+    if (element == null || elementData is! ArrowLikeData) {
+      return ArrowPointTransform(
+        currentPosition: startPosition,
+        points: typedContext.initialPoints,
+      );
+    }
+    final data = elementData;
     var points = typedContext.initialPoints;
-    var fixedSegments = data?.fixedSegments;
+    var fixedSegments = data.fixedSegments;
     var hasChanges = false;
     if (typedContext.deletePointOnStart) {
       return ArrowPointTransform(
         currentPosition: startPosition,
         points: points,
         fixedSegments: fixedSegments,
-        startBinding: data?.startBinding,
-        endBinding: data?.endBinding,
+        startBinding: data.startBinding,
+        endBinding: data.endBinding,
         activeIndex: typedContext.pointIndex,
         shouldDelete: true,
         hasChanges: true,
       );
     }
+    final arrowData = data is ArrowData ? data : null;
     if (typedContext.releaseFixedSegment &&
-        element != null &&
-        data != null &&
+        arrowData != null &&
         data.arrowType == ArrowType.elbow) {
       final segmentIndex = typedContext.pointIndex + 1;
       final updatedFixed = (data.fixedSegments ?? const [])
@@ -175,7 +183,7 @@ class ArrowPointOperation extends EditOperation {
           .toList(growable: false);
       final updated = computeElbowEdit(
         element: element,
-        data: data,
+        data: arrowData,
         elementsById: state.domain.document.elementMap,
         localPointsOverride: points,
         fixedSegmentsOverride: updatedFixed,
@@ -190,8 +198,8 @@ class ArrowPointOperation extends EditOperation {
       currentPosition: startPosition,
       points: points,
       fixedSegments: fixedSegments,
-      startBinding: data?.startBinding,
-      endBinding: data?.endBinding,
+      startBinding: data.startBinding,
+      endBinding: data.endBinding,
       hasChanges: hasChanges,
     );
   }
@@ -246,7 +254,9 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    final data = element?.data is ArrowData ? element!.data as ArrowData : null;
+    final data = element?.data is ArrowLikeData
+        ? element!.data as ArrowLikeData
+        : null;
     final zoom = state.application.view.camera.zoom;
     final effectiveZoom = zoom == 0 ? 1.0 : zoom;
     final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
@@ -332,11 +342,12 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
+    final arrowData = data is ArrowData ? data : null;
     final dataWithBindings = data.copyWith(
       startBinding: typedTransform.startBinding,
       endBinding: typedTransform.endBinding,
@@ -344,13 +355,17 @@ class ArrowPointOperation extends EditOperation {
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = data.arrowType == ArrowType.elbow
+    final result = data.arrowType == ArrowType.elbow && arrowData != null
         ? () {
             final fixedSegments =
                 typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
+            final elbowData = arrowData.copyWith(
+              startBinding: typedTransform.startBinding,
+              endBinding: typedTransform.endBinding,
+            );
             final updated = computeElbowEdit(
               element: element,
-              data: dataWithBindings,
+              data: elbowData,
               elementsById: state.domain.document.elementMap,
               localPointsOverride: points,
               fixedSegmentsOverride: fixedSegments,
@@ -390,14 +405,17 @@ class ArrowPointOperation extends EditOperation {
       rect: rectAndPoints.rect,
     );
 
-    final updatedData = data.arrowType == ArrowType.elbow && result.$3 != null
-        ? dataWithBindings.copyWith(
-            points: normalized,
-            fixedSegments: result.$2,
-            startIsSpecial: result.$3!.startIsSpecial,
-            endIsSpecial: result.$3!.endIsSpecial,
-          )
-        : dataWithBindings.copyWith(points: normalized);
+    final updatedData =
+        data.arrowType == ArrowType.elbow &&
+                arrowData != null &&
+                result.$3 != null
+            ? dataWithBindings.copyWith(
+                points: normalized,
+                fixedSegments: result.$2,
+                startIsSpecial: result.$3!.startIsSpecial,
+                endIsSpecial: result.$3!.endIsSpecial,
+              )
+            : dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: rectAndPoints.rect,
       data: updatedData,
@@ -436,11 +454,12 @@ class ArrowPointOperation extends EditOperation {
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       return EditPreview.none;
     }
 
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
+    final arrowData = data is ArrowData ? data : null;
     final dataWithBindings = data.copyWith(
       startBinding: typedTransform.startBinding,
       endBinding: typedTransform.endBinding,
@@ -449,13 +468,13 @@ class ArrowPointOperation extends EditOperation {
     // Transform local-space points to world space, then back to local space
     // with the new rect center. This preserves world-space positions while
     // keeping the same rotation angle.
-    final result = data.arrowType == ArrowType.elbow
+    final result = data.arrowType == ArrowType.elbow && arrowData != null
         ? () {
             final fixedSegments =
                 typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
             final updated = computeElbowEdit(
               element: element,
-              data: dataWithBindings,
+              data: arrowData,
               elementsById: state.domain.document.elementMap,
               localPointsOverride: typedTransform.points,
               fixedSegmentsOverride: fixedSegments,
@@ -890,7 +909,7 @@ _ArrowPointComputation _compute({
   );
 }
 
-List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowData data) {
+List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowLikeData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,

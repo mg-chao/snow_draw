@@ -8,8 +8,8 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
-import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_like_data.dart';
 
 class ArrowHitTester implements ElementHitTester {
   const ArrowHitTester();
@@ -32,9 +32,10 @@ class ArrowHitTester implements ElementHitTester {
     double tolerance = 0,
   }) {
     final data = element.data;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       throw StateError(
-        'ArrowHitTester can only hit test ArrowData (got ${data.runtimeType})',
+        'ArrowHitTester can only hit test ArrowLikeData '
+        '(got ${data.runtimeType})',
       );
     }
 
@@ -131,7 +132,10 @@ class ArrowHitTester implements ElementHitTester {
     return dx * dx + dy * dy;
   }
 
-  _ArrowHitTestCacheEntry _resolveCache(ElementState element, ArrowData data) {
+  _ArrowHitTestCacheEntry _resolveCache(
+    ElementState element,
+    ArrowLikeData data,
+  ) {
     final id = element.id;
     final width = element.rect.width;
     final height = element.rect.height;
@@ -177,18 +181,18 @@ class _ArrowHitTestCacheEntry {
   final String id;
   final double width;
   final double height;
-  final ArrowData data;
+  final ArrowLikeData data;
   final List<Offset> shaftPoints;
   final List<_ArrowheadHitTarget> arrowheadTargets;
 
-  bool matches(double width, double height, ArrowData data) =>
+  bool matches(double width, double height, ArrowLikeData data) =>
       this.width == width &&
       this.height == height &&
       identical(this.data, data);
 
   factory _ArrowHitTestCacheEntry.build({
     required ElementState element,
-    required ArrowData data,
+    required ArrowLikeData data,
   }) {
     final rect = element.rect;
     final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
@@ -297,7 +301,7 @@ class _CubicSegmentPool {
 
 double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
 
-double _arrowheadExtent(ArrowData data) {
+double _arrowheadExtent(ArrowLikeData data) {
   final hasArrowhead =
       data.startArrowhead != ArrowheadStyle.none ||
       data.endArrowhead != ArrowheadStyle.none;

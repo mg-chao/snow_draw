@@ -4,7 +4,7 @@ import 'dart:ui';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import 'arrow_data.dart';
+import 'arrow_like_data.dart';
 
 class _CubicSegment {
   const _CubicSegment({
@@ -919,7 +919,7 @@ class ArrowGeometry {
 class ArrowGeometryDescriptor {
   ArrowGeometryDescriptor({required this.data, required this.rect});
 
-  final ArrowData data;
+  final ArrowLikeData data;
   final DrawRect rect;
 
   List<Offset>? _localPoints;

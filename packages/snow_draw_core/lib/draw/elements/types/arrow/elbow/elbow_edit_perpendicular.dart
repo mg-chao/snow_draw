@@ -978,7 +978,8 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
         (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
         (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
-    final collinear = adjacentHorizontal ? connectorHorizontal : connectorVertical;
+    final collinear =
+        adjacentHorizontal ? connectorHorizontal : connectorVertical;
     if (collinear) {
       updated[neighborIndex] = connector;
       moved = true;

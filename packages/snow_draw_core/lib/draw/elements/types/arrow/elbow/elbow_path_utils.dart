@@ -1,11 +1,8 @@
-import 'package:meta/meta.dart';
-
 import '../../../../types/draw_point.dart';
 import 'elbow_constants.dart';
 import 'elbow_geometry.dart';
 
 /// Internal axis tagging for elbow paths.
-@internal
 enum ElbowAxis {
   horizontal,
   vertical;
@@ -18,7 +15,6 @@ enum ElbowAxis {
 ///
 /// Centralizes alignment/collinearity definitions so edits and routing stay in
 /// sync after multiple iterations.
-@internal
 final class ElbowPathUtils {
   const ElbowPathUtils._();
 

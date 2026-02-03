@@ -9,6 +9,7 @@ import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
+import 'arrow_like_data.dart';
 import 'elbow/elbow_editing.dart';
 
 @immutable
@@ -40,7 +41,7 @@ final class ArrowBindingResolver {
         continue;
       }
       final data = element.data;
-      if (data is! ArrowData) {
+      if (data is! ArrowLikeData) {
         continue;
       }
       final startBinding = data.startBinding;
@@ -155,7 +156,7 @@ void _rebuildBindingIndex(Iterable<ElementState> elements) {
 
   for (final element in elements) {
     final data = element.data;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       continue;
     }
     final entry = _ArrowBindingEntry(
@@ -176,7 +177,7 @@ void _updateBindingIndex({
 }) {
   for (final id in changedElementIds) {
     final element = elementsById[id];
-    if (element == null || element.data is! ArrowData) {
+    if (element == null || element.data is! ArrowLikeData) {
       final previous = _cachedArrowBindings.remove(id);
       if (previous != null) {
         _removeBindingEntry(id, previous);
@@ -184,7 +185,7 @@ void _updateBindingIndex({
       continue;
     }
 
-    final data = element.data as ArrowData;
+    final data = element.data as ArrowLikeData;
     final next = _ArrowBindingEntry(
       startId: data.startBinding?.elementId,
       endId: data.endBinding?.elementId,
@@ -255,7 +256,7 @@ class _ArrowBindingEntry {
 
 ElementState? _applyBindings({
   required ElementState element,
-  required ArrowData data,
+  required ArrowLikeData data,
   required Map<String, ElementState> elementsById,
   required bool updateStart,
   required bool updateEnd,
@@ -325,7 +326,7 @@ ElementState? _applyBindings({
     return null;
   }
 
-  if (data.arrowType == ArrowType.elbow) {
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
     final updated = computeElbowEdit(
       element: element,
       data: data,
@@ -385,7 +386,10 @@ ElementState? _applyBindings({
   return element.copyWith(rect: result.rect, data: updatedData);
 }
 
-List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
+List<DrawPoint> _resolveLocalPoints(
+  ElementState element,
+  ArrowLikeData data,
+) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,

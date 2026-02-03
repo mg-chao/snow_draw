@@ -6,8 +6,8 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
-import 'arrow_data.dart';
 import 'arrow_geometry.dart';
+import 'arrow_like_data.dart';
 
 enum ArrowPointKind { turning, addable, loopStart, loopEnd }
 
@@ -78,7 +78,7 @@ class ArrowPointUtils {
     double? handleSize,
   }) {
     final data = element.data;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       return const ArrowPointOverlay(
         turningPoints: [],
         addablePoints: [],
@@ -210,7 +210,7 @@ class ArrowPointUtils {
     double? handleSize,
   }) {
     final data = element.data;
-    if (data is! ArrowData) {
+    if (data is! ArrowLikeData) {
       return null;
     }
     final rawPoints = _resolveWorldPoints(element, data);
@@ -373,7 +373,7 @@ class ArrowPointUtils {
 
   static List<DrawPoint> _resolveWorldPoints(
     ElementState element,
-    ArrowData data,
+    ArrowLikeData data,
   ) {
     final resolved = ArrowGeometry.resolveWorldPoints(
       rect: element.rect,
