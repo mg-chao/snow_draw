@@ -1,4 +1,4 @@
-﻿import '../../actions/draw_actions.dart';
+import '../../actions/draw_actions.dart';
 import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';

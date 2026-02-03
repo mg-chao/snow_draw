@@ -1,15 +1,12 @@
-﻿import 'package:meta/meta.dart';
-
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
 import 'elbow_heading.dart';
 
 /// Shared geometry helpers for elbow routing and editing.
-@internal
 final class ElbowGeometry {
   const ElbowGeometry._();
 
-  static const double _headingEpsilon = 1e-6;
+  static const _headingEpsilon = 1e-6;
 
   /// Returns the dominant cardinal heading for a vector.
   ///

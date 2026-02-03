@@ -24,7 +24,6 @@ part 'elbow_router_grid.dart';
 part 'elbow_router_pipeline.dart';
 
 /// Elbow arrow routing entry points.
-/// See docs/elbow_arrows.md for the full step-by-step pipeline.
 ///
 /// Routing overview:
 /// 1) Resolve bindings into concrete endpoints + headings.
@@ -70,20 +69,19 @@ ElbowRouteResult routeElbowArrow({
   ArrowBinding? endBinding,
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
-}) {
-  // Route through the explicit step-based pipeline for readability.
-  return _ElbowRoutePipeline(
-    _ElbowRouteRequest(
-      start: start,
-      end: end,
-      elementsById: elementsById,
-      startBinding: startBinding,
-      endBinding: endBinding,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
-    ),
-  ).run();
-}
+}) =>
+    // Route through the explicit step-based pipeline for readability.
+    _ElbowRoutePipeline(
+      _ElbowRouteRequest(
+        start: start,
+        end: end,
+        elementsById: elementsById,
+        startBinding: startBinding,
+        endBinding: endBinding,
+        startArrowhead: startArrowhead,
+        endArrowhead: endArrowhead,
+      ),
+    ).run();
 
 /// Routes an elbow arrow for an element and returns both local + world points.
 ElbowRoutedPoints routeElbowArrowForElement({

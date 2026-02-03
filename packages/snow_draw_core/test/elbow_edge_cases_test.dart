@@ -13,7 +13,7 @@ import 'elbow_test_utils.dart';
 
 void main() {
   test('routeElbowArrow ignores missing binding targets', () {
-    const start = DrawPoint(x: 0, y: 0);
+    const start = DrawPoint.zero;
     const end = DrawPoint(x: 100, y: 50);
     const missingBinding = ArrowBinding(
       elementId: 'missing',
@@ -37,10 +37,7 @@ void main() {
   });
 
   test('computeElbowEdit returns early for insufficient points', () {
-    final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
-      const DrawPoint(x: 100, y: 0),
-    ];
+    final points = <DrawPoint>[DrawPoint.zero, const DrawPoint(x: 100, y: 0)];
     final element = _arrowElement(points);
     final data = element.data as ArrowData;
 
@@ -57,7 +54,7 @@ void main() {
 
   test('computeElbowEdit drops invalid fixed segments', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 100, y: 0),
       const DrawPoint(x: 100, y: 80),
     ];
@@ -83,7 +80,7 @@ void main() {
 
   test('computeElbowEdit sanitizes duplicate and diagonal fixed segments', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 80, y: 0),
       const DrawPoint(x: 80, y: 60),
       const DrawPoint(x: 160, y: 60),
@@ -96,7 +93,7 @@ void main() {
       ElbowFixedSegment(index: 2, start: points[0], end: points[1]),
       const ElbowFixedSegment(
         index: 3,
-        start: DrawPoint(x: 0, y: 0),
+        start: DrawPoint.zero,
         end: DrawPoint(x: 80, y: 60),
       ),
     ];
@@ -129,10 +126,7 @@ ElementState _arrowElement(List<DrawPoint> points) {
     worldPoints: points,
     rect: rect,
   );
-  final data = ArrowData(
-    points: normalized,
-    arrowType: ArrowType.elbow,
-  );
+  final data = ArrowData(points: normalized, arrowType: ArrowType.elbow);
   return ElementState(
     id: 'arrow',
     rect: rect,

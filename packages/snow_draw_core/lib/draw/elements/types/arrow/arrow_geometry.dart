@@ -23,7 +23,7 @@ class _CubicSegment {
 class ArrowGeometry {
   const ArrowGeometry._();
 
-  static const List<DrawPoint> _defaultPoints = [
+  static const _defaultPoints = <DrawPoint>[
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
   ];

@@ -1,4 +1,4 @@
-﻿/// Cardinal directions used by elbow routing and editing logic.
+/// Cardinal directions used by elbow routing and editing logic.
 enum ElbowHeading { right, down, left, up }
 
 extension ElbowHeadingX on ElbowHeading {

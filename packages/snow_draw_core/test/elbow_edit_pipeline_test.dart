@@ -13,10 +13,7 @@ import 'elbow_test_utils.dart';
 
 void main() {
   test('computeElbowEdit reroutes diagonal input when no fixed segments', () {
-    final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
-      const DrawPoint(x: 120, y: 80),
-    ];
+    final points = <DrawPoint>[DrawPoint.zero, const DrawPoint(x: 120, y: 80)];
     final element = _arrowElement(points);
     final data = element.data as ArrowData;
 
@@ -33,7 +30,7 @@ void main() {
 
   test('fixed segment release preserves remaining axis', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 60, y: 0),
       const DrawPoint(x: 60, y: 60),
       const DrawPoint(x: 120, y: 60),
@@ -76,7 +73,7 @@ void main() {
 
   test('endpoint drag keeps fixed segment axis', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 100, y: 0),
       const DrawPoint(x: 100, y: 80),
       const DrawPoint(x: 200, y: 80),
@@ -269,8 +266,7 @@ void main() {
     expect(elbowPathHasOnlyCorners(topResult.localPoints), isTrue);
     expect(topResult.localPoints.length, lessThanOrEqualTo(5));
 
-    final penultimate =
-        topResult.localPoints[topResult.localPoints.length - 2];
+    final penultimate = topResult.localPoints[topResult.localPoints.length - 2];
     final endPoint = topResult.localPoints.last;
     expect(
       (penultimate.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold,
@@ -290,110 +286,113 @@ void main() {
     );
   });
 
-  test('binding switch resets active end span with multiple fixed segments', () {
-    const targetRect = DrawRect(minX: 100, minY: 200, maxX: 200, maxY: 300);
-    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+  test(
+    'binding switch resets active end span with multiple fixed segments',
+    () {
+      const targetRect = DrawRect(minX: 100, minY: 200, maxX: 200, maxY: 300);
+      final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
-    final basePoints = <DrawPoint>[
-      const DrawPoint(x: 0, y: 40),
-      const DrawPoint(x: 80, y: 40),
-      const DrawPoint(x: 80, y: 100),
-      const DrawPoint(x: 160, y: 100),
-      const DrawPoint(x: 160, y: 60),
-      const DrawPoint(x: 220, y: 60),
-    ];
-    final fixedSegments = <ElbowFixedSegment>[
-      ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
-      ElbowFixedSegment(index: 4, start: basePoints[3], end: basePoints[4]),
-    ];
-    final element = _arrowElement(
-      basePoints,
-      fixedSegments: fixedSegments,
-      endArrowhead: ArrowheadStyle.triangle,
-    );
-    final data = element.data as ArrowData;
+      final basePoints = <DrawPoint>[
+        const DrawPoint(x: 0, y: 40),
+        const DrawPoint(x: 80, y: 40),
+        const DrawPoint(x: 80, y: 100),
+        const DrawPoint(x: 160, y: 100),
+        const DrawPoint(x: 160, y: 60),
+        const DrawPoint(x: 220, y: 60),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
+        ElbowFixedSegment(index: 4, start: basePoints[3], end: basePoints[4]),
+      ];
+      final element = _arrowElement(
+        basePoints,
+        fixedSegments: fixedSegments,
+        endArrowhead: ArrowheadStyle.triangle,
+      );
+      final data = element.data as ArrowData;
 
-    const bottomBinding = ArrowBinding(
-      elementId: 'target',
-      anchor: DrawPoint(x: 0.8, y: 1),
-    );
-    final bottomPoint = ArrowBindingUtils.resolveElbowBoundPoint(
-      binding: bottomBinding,
-      target: target,
-      hasArrowhead: true,
-    )!;
-    final toBottom = List<DrawPoint>.from(basePoints)
-      ..[basePoints.length - 1] = bottomPoint;
+      const bottomBinding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.8, y: 1),
+      );
+      final bottomPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: bottomBinding,
+        target: target,
+        hasArrowhead: true,
+      )!;
+      final toBottom = List<DrawPoint>.from(basePoints)
+        ..[basePoints.length - 1] = bottomPoint;
 
-    final bottomResult = computeElbowEdit(
-      element: element,
-      data: data.copyWith(endBinding: bottomBinding),
-      elementsById: {'target': target},
-      localPointsOverride: toBottom,
-      fixedSegmentsOverride: fixedSegments,
-      endBindingOverride: bottomBinding,
-    );
+      final bottomResult = computeElbowEdit(
+        element: element,
+        data: data.copyWith(endBinding: bottomBinding),
+        elementsById: {'target': target},
+        localPointsOverride: toBottom,
+        fixedSegmentsOverride: fixedSegments,
+        endBindingOverride: bottomBinding,
+      );
 
-    final bottomElement = _arrowElement(
-      bottomResult.localPoints,
-      fixedSegments: bottomResult.fixedSegments,
-      endBinding: bottomBinding,
-      endArrowhead: ArrowheadStyle.triangle,
-    );
-    final bottomData = bottomElement.data as ArrowData;
+      final bottomElement = _arrowElement(
+        bottomResult.localPoints,
+        fixedSegments: bottomResult.fixedSegments,
+        endBinding: bottomBinding,
+        endArrowhead: ArrowheadStyle.triangle,
+      );
+      final bottomData = bottomElement.data as ArrowData;
 
-    const topBinding = ArrowBinding(
-      elementId: 'target',
-      anchor: DrawPoint(x: 0.8, y: 0),
-    );
-    final topPoint = ArrowBindingUtils.resolveElbowBoundPoint(
-      binding: topBinding,
-      target: target,
-      hasArrowhead: true,
-    )!;
-    final toTop = List<DrawPoint>.from(bottomResult.localPoints)
-      ..[bottomResult.localPoints.length - 1] = topPoint;
+      const topBinding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.8, y: 0),
+      );
+      final topPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: topBinding,
+        target: target,
+        hasArrowhead: true,
+      )!;
+      final toTop = List<DrawPoint>.from(bottomResult.localPoints)
+        ..[bottomResult.localPoints.length - 1] = topPoint;
 
-    final topResult = computeElbowEdit(
-      element: bottomElement,
-      data: bottomData.copyWith(endBinding: topBinding),
-      elementsById: {'target': target},
-      localPointsOverride: toTop,
-      fixedSegmentsOverride: bottomResult.fixedSegments,
-      endBindingOverride: topBinding,
-    );
+      final topResult = computeElbowEdit(
+        element: bottomElement,
+        data: bottomData.copyWith(endBinding: topBinding),
+        elementsById: {'target': target},
+        localPointsOverride: toTop,
+        fixedSegmentsOverride: bottomResult.fixedSegments,
+        endBindingOverride: topBinding,
+      );
 
-    expect(elbowPathIsOrthogonal(topResult.localPoints), isTrue);
-    expect(topResult.localPoints.length, lessThanOrEqualTo(8));
+      expect(elbowPathIsOrthogonal(topResult.localPoints), isTrue);
+      expect(topResult.localPoints.length, lessThanOrEqualTo(8));
 
-    final penultimate =
-        topResult.localPoints[topResult.localPoints.length - 2];
-    final endPoint = topResult.localPoints.last;
-    expect(
-      (penultimate.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-    expect(
-      penultimate.y < endPoint.y,
-      isTrue,
-      reason: 'Top binding should approach downward.',
-    );
+      final penultimate =
+          topResult.localPoints[topResult.localPoints.length - 2];
+      final endPoint = topResult.localPoints.last;
+      expect(
+        (penultimate.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+      expect(
+        penultimate.y < endPoint.y,
+        isTrue,
+        reason: 'Top binding should approach downward.',
+      );
 
-    final fixed = topResult.fixedSegments!;
-    expect(fixed.length, 2);
-    expect(_isHorizontal(fixed[0].start, fixed[0].end), isFalse);
-    expect(_isHorizontal(fixed[1].start, fixed[1].end), isFalse);
-    final axis0 = (fixed[0].start.x + fixed[0].end.x) / 2;
-    final axis1 = (fixed[1].start.x + fixed[1].end.x) / 2;
-    expect(
-      (axis0 - basePoints[1].x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-    expect(
-      (axis1 - basePoints[3].x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-  });
+      final fixed = topResult.fixedSegments!;
+      expect(fixed.length, 2);
+      expect(_isHorizontal(fixed[0].start, fixed[0].end), isFalse);
+      expect(_isHorizontal(fixed[1].start, fixed[1].end), isFalse);
+      final axis0 = (fixed[0].start.x + fixed[0].end.x) / 2;
+      final axis1 = (fixed[1].start.x + fixed[1].end.x) / 2;
+      expect(
+        (axis0 - basePoints[1].x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+      expect(
+        (axis1 - basePoints[3].x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+    },
+  );
 
   test('binding switch resets active start span', () {
     const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
@@ -492,116 +491,118 @@ void main() {
     );
   });
 
-  test('binding switch resets active start span with multiple fixed segments',
-      () {
-    const targetRect = DrawRect(minX: 100, minY: 200, maxX: 200, maxY: 300);
-    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+  test(
+    'binding switch resets active start span with multiple fixed segments',
+    () {
+      const targetRect = DrawRect(minX: 100, minY: 200, maxX: 200, maxY: 300);
+      final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
-    final basePoints = <DrawPoint>[
-      const DrawPoint(x: 220, y: 60),
-      const DrawPoint(x: 160, y: 60),
-      const DrawPoint(x: 160, y: 100),
-      const DrawPoint(x: 80, y: 100),
-      const DrawPoint(x: 80, y: 40),
-      const DrawPoint(x: 0, y: 40),
-    ];
-    final fixedSegments = <ElbowFixedSegment>[
-      ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
-      ElbowFixedSegment(index: 4, start: basePoints[3], end: basePoints[4]),
-    ];
-    final element = _arrowElement(
-      basePoints,
-      fixedSegments: fixedSegments,
-      startArrowhead: ArrowheadStyle.triangle,
-    );
-    final data = element.data as ArrowData;
+      final basePoints = <DrawPoint>[
+        const DrawPoint(x: 220, y: 60),
+        const DrawPoint(x: 160, y: 60),
+        const DrawPoint(x: 160, y: 100),
+        const DrawPoint(x: 80, y: 100),
+        const DrawPoint(x: 80, y: 40),
+        const DrawPoint(x: 0, y: 40),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
+        ElbowFixedSegment(index: 4, start: basePoints[3], end: basePoints[4]),
+      ];
+      final element = _arrowElement(
+        basePoints,
+        fixedSegments: fixedSegments,
+        startArrowhead: ArrowheadStyle.triangle,
+      );
+      final data = element.data as ArrowData;
 
-    const bottomBinding = ArrowBinding(
-      elementId: 'target',
-      anchor: DrawPoint(x: 0.8, y: 1),
-    );
-    final bottomPoint = ArrowBindingUtils.resolveElbowBoundPoint(
-      binding: bottomBinding,
-      target: target,
-      hasArrowhead: true,
-    )!;
-    final toBottom = List<DrawPoint>.from(basePoints)..[0] = bottomPoint;
+      const bottomBinding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.8, y: 1),
+      );
+      final bottomPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: bottomBinding,
+        target: target,
+        hasArrowhead: true,
+      )!;
+      final toBottom = List<DrawPoint>.from(basePoints)..[0] = bottomPoint;
 
-    final bottomResult = computeElbowEdit(
-      element: element,
-      data: data.copyWith(startBinding: bottomBinding),
-      elementsById: {'target': target},
-      localPointsOverride: toBottom,
-      fixedSegmentsOverride: fixedSegments,
-      startBindingOverride: bottomBinding,
-    );
+      final bottomResult = computeElbowEdit(
+        element: element,
+        data: data.copyWith(startBinding: bottomBinding),
+        elementsById: {'target': target},
+        localPointsOverride: toBottom,
+        fixedSegmentsOverride: fixedSegments,
+        startBindingOverride: bottomBinding,
+      );
 
-    final bottomElement = _arrowElement(
-      bottomResult.localPoints,
-      fixedSegments: bottomResult.fixedSegments,
-      startBinding: bottomBinding,
-      startArrowhead: ArrowheadStyle.triangle,
-    );
-    final bottomData = bottomElement.data as ArrowData;
+      final bottomElement = _arrowElement(
+        bottomResult.localPoints,
+        fixedSegments: bottomResult.fixedSegments,
+        startBinding: bottomBinding,
+        startArrowhead: ArrowheadStyle.triangle,
+      );
+      final bottomData = bottomElement.data as ArrowData;
 
-    const topBinding = ArrowBinding(
-      elementId: 'target',
-      anchor: DrawPoint(x: 0.8, y: 0),
-    );
-    final topPoint = ArrowBindingUtils.resolveElbowBoundPoint(
-      binding: topBinding,
-      target: target,
-      hasArrowhead: true,
-    )!;
-    final toTop = List<DrawPoint>.from(bottomResult.localPoints)
-      ..[0] = topPoint;
+      const topBinding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.8, y: 0),
+      );
+      final topPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: topBinding,
+        target: target,
+        hasArrowhead: true,
+      )!;
+      final toTop = List<DrawPoint>.from(bottomResult.localPoints)
+        ..[0] = topPoint;
 
-    final topResult = computeElbowEdit(
-      element: bottomElement,
-      data: bottomData.copyWith(startBinding: topBinding),
-      elementsById: {'target': target},
-      localPointsOverride: toTop,
-      fixedSegmentsOverride: bottomResult.fixedSegments,
-      startBindingOverride: topBinding,
-    );
+      final topResult = computeElbowEdit(
+        element: bottomElement,
+        data: bottomData.copyWith(startBinding: topBinding),
+        elementsById: {'target': target},
+        localPointsOverride: toTop,
+        fixedSegmentsOverride: bottomResult.fixedSegments,
+        startBindingOverride: topBinding,
+      );
 
-    expect(elbowPathIsOrthogonal(topResult.localPoints), isTrue);
-    expect(topResult.localPoints.length, lessThanOrEqualTo(8));
+      expect(elbowPathIsOrthogonal(topResult.localPoints), isTrue);
+      expect(topResult.localPoints.length, lessThanOrEqualTo(8));
 
-    final startPoint = topResult.localPoints.first;
-    final nextPoint = topResult.localPoints[1];
-    expect(
-      (startPoint.x - nextPoint.x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-    expect(
-      nextPoint.y < startPoint.y,
-      isTrue,
-      reason: 'Top binding should depart upward.',
-    );
+      final startPoint = topResult.localPoints.first;
+      final nextPoint = topResult.localPoints[1];
+      expect(
+        (startPoint.x - nextPoint.x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+      expect(
+        nextPoint.y < startPoint.y,
+        isTrue,
+        reason: 'Top binding should depart upward.',
+      );
 
-    final fixed = topResult.fixedSegments!;
-    expect(fixed.length, 2);
-    expect(_isHorizontal(fixed[0].start, fixed[0].end), isFalse);
-    expect(_isHorizontal(fixed[1].start, fixed[1].end), isFalse);
-    final axis0 = (fixed[0].start.x + fixed[0].end.x) / 2;
-    final axis1 = (fixed[1].start.x + fixed[1].end.x) / 2;
-    expect(
-      (axis0 - basePoints[1].x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-    expect(
-      (axis1 - basePoints[3].x).abs() <= ElbowConstants.dedupThreshold,
-      isTrue,
-    );
-  });
+      final fixed = topResult.fixedSegments!;
+      expect(fixed.length, 2);
+      expect(_isHorizontal(fixed[0].start, fixed[0].end), isFalse);
+      expect(_isHorizontal(fixed[1].start, fixed[1].end), isFalse);
+      final axis0 = (fixed[0].start.x + fixed[0].end.x) / 2;
+      final axis1 = (fixed[1].start.x + fixed[1].end.x) / 2;
+      expect(
+        (axis0 - basePoints[1].x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+      expect(
+        (axis1 - basePoints[3].x).abs() <= ElbowConstants.dedupThreshold,
+        isTrue,
+      );
+    },
+  );
 
   test('binding removal reroutes a freed end span', () {
-    const targetRect = DrawRect(minX: 0, minY: 100, maxX: 40, maxY: 140);
+    const targetRect = DrawRect(minY: 100, maxX: 40, maxY: 140);
     final target = elbowRectangleElement(id: 'target', rect: targetRect);
 
     final boundPoints = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 100, y: 0),
       const DrawPoint(x: 100, y: 60),
       const DrawPoint(x: 180, y: 60),
@@ -631,14 +632,13 @@ void main() {
       elementsById: {'target': target},
       localPointsOverride: unboundPoints,
       fixedSegmentsOverride: fixedSegments,
-      endBindingOverride: null,
     );
 
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     expect(
       result.localPoints,
       equals(const <DrawPoint>[
-        DrawPoint(x: 0, y: 0),
+        DrawPoint.zero,
         DrawPoint(x: 100, y: 0),
         DrawPoint(x: 100, y: 120),
         DrawPoint(x: 20, y: 120),
@@ -681,7 +681,6 @@ void main() {
       elementsById: {'target': target},
       localPointsOverride: unboundPoints,
       fixedSegmentsOverride: fixedSegments,
-      startBindingOverride: null,
     );
 
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
@@ -698,7 +697,7 @@ void main() {
 
   test('changing a fixed segment axis re-applies points', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 100, y: 0),
       const DrawPoint(x: 100, y: 100),
       const DrawPoint(x: 200, y: 100),
@@ -737,7 +736,7 @@ void main() {
 
   test('endpoint drag snaps an unbound start neighbor orthogonally', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 100, y: 0),
       const DrawPoint(x: 100, y: 80),
       const DrawPoint(x: 200, y: 80),
@@ -821,7 +820,7 @@ void main() {
 
   test('fixed segment release preserves prefix outside released region', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 0, y: 40),
       const DrawPoint(x: 80, y: 40),
       const DrawPoint(x: 80, y: 80),
@@ -849,40 +848,38 @@ void main() {
     expect(result.localPoints.contains(points[2]), isTrue);
   });
 
-  test(
-    'fixed segment release keeps endpoints and orthogonality with only next fixed',
-    () {
-      final points = <DrawPoint>[
-        const DrawPoint(x: 0, y: 0),
-        const DrawPoint(x: 80, y: 0),
-        const DrawPoint(x: 80, y: 40),
-        const DrawPoint(x: 160, y: 40),
-        const DrawPoint(x: 160, y: 100),
-      ];
-      final fixedSegments = <ElbowFixedSegment>[
-        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
-        ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
-      ];
-      final element = _arrowElement(points, fixedSegments: fixedSegments);
-      final data = element.data as ArrowData;
+  test('fixed segment release keeps endpoints '
+      'and orthogonality with only next fixed', () {
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 80, y: 0),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 160, y: 40),
+      const DrawPoint(x: 160, y: 100),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
 
-      final result = computeElbowEdit(
-        element: element,
-        data: data,
-        elementsById: const {},
-        localPointsOverride: points,
-        fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
-      );
-      expect(result.localPoints.length, greaterThanOrEqualTo(2));
-      expect(result.localPoints.first, points.first);
-      expect(result.localPoints.last, points.last);
-      expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
-    },
-  );
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      elementsById: const {},
+      localPointsOverride: points,
+      fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
+    );
+    expect(result.localPoints.length, greaterThanOrEqualTo(2));
+    expect(result.localPoints.first, points.first);
+    expect(result.localPoints.last, points.last);
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+  });
 
   test('fixed segment release clears fixed segments when none remain', () {
     final points = <DrawPoint>[
-      const DrawPoint(x: 0, y: 0),
+      DrawPoint.zero,
       const DrawPoint(x: 60, y: 0),
       const DrawPoint(x: 60, y: 60),
       const DrawPoint(x: 120, y: 60),

@@ -1,10 +1,7 @@
-import 'package:meta/meta.dart';
-
 /// Centralized constants for elbow routing + editing.
 ///
 /// These values are intentionally shared so routing and editing maintain the
 /// same geometric tolerances and padding behavior.
-@internal
 final class ElbowConstants {
   const ElbowConstants._();
 
@@ -12,9 +9,9 @@ final class ElbowConstants {
   static const double dedupThreshold = 1;
 
   /// Epsilon used when testing segment intersections with obstacle bounds.
-  static const double intersectionEpsilon = 1e-6;
+  static const intersectionEpsilon = 1e-6;
 
-  /// Minimum manhattan distance before a stable midpoint elbow is used.
+  /// Minimum ma distance before a stable midpoint elbow is used.
   static const double minArrowLength = 8;
 
   /// Clamp for route coordinates to prevent runaway values.

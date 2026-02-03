@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
@@ -7,14 +7,14 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   test('elbow binding gap grows when an arrowhead is present', () {
-    const rect = DrawRect(minX: 0, minY: 0, maxX: 200, maxY: 100);
-    final element = ElementState(
+    const rect = DrawRect(maxX: 200, maxY: 100);
+    const element = ElementState(
       id: 'rect-1',
       rect: rect,
       rotation: 0,
       opacity: 1,
       zIndex: 0,
-      data: const RectangleData(strokeWidth: 2),
+      data: RectangleData(),
     );
     const binding = ArrowBinding(
       elementId: 'rect-1',
@@ -40,8 +40,8 @@ void main() {
     expect(withoutArrowhead, isNotNull);
     expect(withArrowhead, isNotNull);
 
-    final baseGap = ArrowBindingUtils.elbowBindingGapBase;
-    final arrowGap =
+    const baseGap = ArrowBindingUtils.elbowBindingGapBase;
+    const arrowGap =
         ArrowBindingUtils.elbowBindingGapBase *
         ArrowBindingUtils.elbowArrowheadGapMultiplier;
 

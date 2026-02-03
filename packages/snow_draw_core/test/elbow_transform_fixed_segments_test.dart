@@ -42,7 +42,7 @@ void main() {
   );
 
   test('transformFixedSegments returns null for empty segments', () {
-    const oldRect = DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100);
+    const oldRect = DrawRect(maxX: 100, maxY: 100);
     const newRect = DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110);
 
     final transformed = transformFixedSegments(

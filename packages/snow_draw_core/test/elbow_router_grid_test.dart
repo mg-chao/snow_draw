@@ -25,10 +25,7 @@ void main() {
         elementId: 'rect-b',
         anchor: DrawPoint(x: 1, y: 0.5),
       ),
-      elementsById: {
-        'rect-a': elementA,
-        'rect-b': elementB,
-      },
+      elementsById: {'rect-a': elementA, 'rect-b': elementB},
       startArrowhead: ArrowheadStyle.triangle,
       endArrowhead: ArrowheadStyle.triangle,
     );
@@ -57,10 +54,7 @@ void main() {
         elementId: 'end',
         anchor: DrawPoint(x: 1, y: 0.5),
       ),
-      elementsById: {
-        'start': startElement,
-        'end': endElement,
-      },
+      elementsById: {'start': startElement, 'end': endElement},
       startArrowhead: ArrowheadStyle.triangle,
       endArrowhead: ArrowheadStyle.triangle,
     );
@@ -97,4 +91,3 @@ void main() {
     );
   });
 }
-

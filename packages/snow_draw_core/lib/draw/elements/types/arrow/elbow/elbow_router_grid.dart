@@ -167,8 +167,7 @@ final class _ElbowGridRouter {
 
   List<_ElbowGridNode> findPath() {
     // A* with bend penalties to discourage unnecessary elbows.
-    final openSet = _BinaryHeap<_ElbowGridNode>((node) => node.f)
-      ..push(start);
+    final openSet = _BinaryHeap<_ElbowGridNode>((node) => node.f)..push(start);
 
     final bendPenalty = _BendPenalty(
       ElbowGeometry.manhattanDistance(start.pos, end.pos),
@@ -219,10 +218,7 @@ final class _ElbowGridRouter {
         }
 
         final directionChanged = neighborHeading != previousHeading;
-        final moveCost = ElbowGeometry.manhattanDistance(
-          current.pos,
-          next.pos,
-        );
+        final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
         final bendCost = directionChanged ? bendPenalty.cubed : 0;
         final gScore = current.g + moveCost + bendCost;
 
@@ -409,7 +405,7 @@ final class _ElbowNeighborOffset {
   final ElbowHeading heading;
 }
 
-const List<_ElbowNeighborOffset> _neighborOffsets = [
+const _neighborOffsets = <_ElbowNeighborOffset>[
   _ElbowNeighborOffset(0, -1, ElbowHeading.up),
   _ElbowNeighborOffset(1, 0, ElbowHeading.right),
   _ElbowNeighborOffset(0, 1, ElbowHeading.down),

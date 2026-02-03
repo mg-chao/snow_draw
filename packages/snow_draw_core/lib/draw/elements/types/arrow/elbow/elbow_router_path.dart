@@ -98,10 +98,7 @@ List<DrawPoint>? _directPathIfClear({
 }
 
 bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
-  final innerBounds = _shrinkBounds(
-    bounds,
-    ElbowConstants.intersectionEpsilon,
-  );
+  final innerBounds = _shrinkBounds(bounds, ElbowConstants.intersectionEpsilon);
   if (!_hasArea(innerBounds)) {
     return false;
   }
@@ -127,12 +124,8 @@ DrawRect _shrinkBounds(DrawRect bounds, double inset) => DrawRect(
 bool _hasArea(DrawRect bounds) =>
     bounds.minX < bounds.maxX && bounds.minY < bounds.maxY;
 
-double _overlapLength(
-  double minA,
-  double maxA,
-  double minB,
-  double maxB,
-) => math.min(maxA, maxB) - math.max(minA, minB);
+double _overlapLength(double minA, double maxA, double minB, double maxB) =>
+    math.min(maxA, maxB) - math.max(minA, minB);
 
 bool _verticalSegmentIntersectsBounds(
   DrawPoint start,
@@ -303,7 +296,8 @@ List<DrawPoint> _finalizeRoutedPath({
   return cleaned.map(_clampPoint).toList(growable: false);
 }
 
-// Collapse detours that return to the same axis when the straight segment is clear.
+// Collapse detours that return to the same axis when the straight segment is
+// clear.
 List<DrawPoint> _collapseRouteBacktracks({
   required List<DrawPoint> points,
   required List<DrawRect> obstacles,
@@ -326,10 +320,8 @@ List<DrawPoint> _collapseRouteBacktracks({
         }
         final a = updated[i];
         final d = updated[j];
-        final alignedX =
-            (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
-        final alignedY =
-            (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
+        final alignedX = (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
+        final alignedY = (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
         if (!alignedX && !alignedY) {
           continue;
         }
@@ -354,11 +346,7 @@ List<DrawPoint> _collapseRouteBacktracks({
         if (!deviates) {
           continue;
         }
-        updated = [
-          ...updated.sublist(0, i + 1),
-          d,
-          ...updated.sublist(j + 1),
-        ];
+        updated = [...updated.sublist(0, i + 1), d, ...updated.sublist(j + 1)];
         changed = true;
         break;
       }

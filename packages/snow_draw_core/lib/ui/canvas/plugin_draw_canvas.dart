@@ -1280,8 +1280,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
 
-    final searchDistance =
-        ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
+    final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
+      bindingDistance,
+    );
     final targets = _resolveBindingTargets(state, position, searchDistance);
     if (targets.isEmpty) {
       return null;
@@ -1328,7 +1329,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double distance,
   ) {
     final document = state.domain.document;
-    final entries = document.spatialIndex.searchPointEntries(position, distance);
+    final entries = document.spatialIndex.searchPointEntries(
+      position,
+      distance,
+    );
     final targets = <ElementState>[];
     for (final entry in entries) {
       final element = document.getElementById(entry.id);

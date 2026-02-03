@@ -8,20 +8,11 @@ part of 'elbow_editing.dart';
 bool _isInteriorSegmentIndex(int index, int pointCount) =>
     index > 1 && index < pointCount - 1;
 
-bool _isSegmentIndexInRange(int index, int pointCount) =>
-    index >= 1 && index < pointCount;
-
-bool _segmentIsHorizontal(DrawPoint start, DrawPoint end) =>
-    ElbowGeometry.isHorizontal(start, end);
-
 double _segmentAxisValue(
   DrawPoint start,
   DrawPoint end, {
   required bool isHorizontal,
-}) =>
-    isHorizontal
-        ? (start.y + end.y) / 2
-        : (start.x + end.x) / 2;
+}) => isHorizontal ? (start.y + end.y) / 2 : (start.x + end.x) / 2;
 
 List<ElbowFixedSegment> _sanitizeFixedSegments(
   List<ElbowFixedSegment>? segments,
@@ -41,10 +32,7 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
         dy > ElbowConstants.dedupThreshold) {
       continue;
     }
-    final length = ElbowGeometry.manhattanDistance(
-      segment.start,
-      segment.end,
-    );
+    final length = ElbowGeometry.manhattanDistance(segment.start, segment.end);
     if (length <= ElbowConstants.dedupThreshold) {
       continue;
     }
@@ -134,10 +122,7 @@ bool? _fixedSegmentIsHorizontal(
   return null;
 }
 
-bool _fixedSegmentsEqual(
-  List<ElbowFixedSegment> a,
-  List<ElbowFixedSegment> b,
-) {
+bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
   if (a.length != b.length) {
     return false;
   }
@@ -178,10 +163,7 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
     }
     final start = updated[index - 1];
     final end = updated[index];
-    final isHorizontal = ElbowGeometry.isHorizontal(
-      segment.start,
-      segment.end,
-    );
+    final isHorizontal = ElbowGeometry.isHorizontal(segment.start, segment.end);
     final axis = isHorizontal
         ? (segment.start.y + segment.end.y) / 2
         : (segment.start.x + segment.end.x) / 2;
@@ -256,7 +238,10 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (fixedSegments.isEmpty || baseline.length < 2) {
-    return _FixedSegmentPathResult(points: baseline, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: baseline,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final updated = List<DrawPoint>.from(baseline);
@@ -264,10 +249,7 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
   final mappedSegments = <ElbowFixedSegment>[];
 
   for (final segment in fixedSegments) {
-    final isHorizontal = ElbowGeometry.isHorizontal(
-      segment.start,
-      segment.end,
-    );
+    final isHorizontal = ElbowGeometry.isHorizontal(segment.start, segment.end);
     final axis = _segmentAxisValue(
       segment.start,
       segment.end,
@@ -290,13 +272,7 @@ _FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
     final end = isHorizontal
         ? updated[index].copyWith(y: axis)
         : updated[index].copyWith(x: axis);
-    mappedSegments.add(
-      ElbowFixedSegment(
-        index: index,
-        start: start,
-        end: end,
-      ),
-    );
+    mappedSegments.add(ElbowFixedSegment(index: index, start: start, end: end));
   }
 
   return _FixedSegmentPathResult(
@@ -338,24 +314,34 @@ _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final updated = List<DrawPoint>.from(points);
   final updatedSegments = List<ElbowFixedSegment>.from(fixedSegments);
   final neighborIndex = updated.length - 2;
   final fixedIndex = neighborIndex;
-  final fixedPos =
-      updatedSegments.indexWhere((segment) => segment.index == fixedIndex);
+  final fixedPos = updatedSegments.indexWhere(
+    (segment) => segment.index == fixedIndex,
+  );
   if (fixedPos == -1) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final a = updated[neighborIndex - 1];
   final b = updated[neighborIndex];
   final c = updated[neighborIndex + 1];
   if (!_segmentsCollinear(a, b, c)) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   updated.removeAt(neighborIndex);
@@ -378,7 +364,10 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   bool allowDirectionFlip = false,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final collapsed = allowDirectionFlip
@@ -494,7 +483,10 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 4 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   var updatedPoints = List<DrawPoint>.from(points);
@@ -515,10 +507,10 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
         continue;
       }
       final fixedHorizontal = ElbowGeometry.isHorizontal(prev, curr);
-      final fixedDelta =
-          fixedHorizontal ? (curr.x - prev.x) : (curr.y - prev.y);
-      final nextDelta =
-          fixedHorizontal ? (next.x - curr.x) : (next.y - curr.y);
+      final fixedDelta = fixedHorizontal
+          ? (curr.x - prev.x)
+          : (curr.y - prev.y);
+      final nextDelta = fixedHorizontal ? (next.x - curr.x) : (next.y - curr.y);
       if (fixedDelta.abs() <= ElbowConstants.dedupThreshold ||
           nextDelta.abs() <= ElbowConstants.dedupThreshold) {
         continue;
@@ -540,10 +532,7 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
         }
       }
 
-      final reindexed = _reindexFixedSegments(
-        candidatePoints,
-        updatedSegments,
-      );
+      final reindexed = _reindexFixedSegments(candidatePoints, updatedSegments);
       if (reindexed.length != updatedSegments.length) {
         continue;
       }
@@ -568,10 +557,7 @@ Set<DrawPoint> _collectPinnedPoints({
   if (points.isEmpty) {
     return const <DrawPoint>{};
   }
-  final pinned = <DrawPoint>{
-    points.first,
-    points.last,
-  };
+  final pinned = <DrawPoint>{points.first, points.last};
   for (final segment in fixedSegments) {
     final index = segment.index;
     if (index <= 0 || index >= points.length) {
@@ -590,7 +576,10 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
   final pinned = _collectPinnedPoints(
     points: points,
@@ -601,13 +590,17 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
   return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }
 
-/// Normalizes a path after fixed-segment release by merging collinear neighbors.
+/// Normalizes a path after fixed-segment release by merging collinear
+/// neighbors.
 _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   // 1) Re-apply fixed axes before any simplification.

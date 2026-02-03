@@ -8,26 +8,29 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
-  test('elbow routing fallback uses a midpoint elbow for unbound endpoints', () {
-    const start = DrawPoint(x: 0, y: 0);
-    const end = DrawPoint(x: 100, y: 50);
+  test(
+    'elbow routing fallback uses a midpoint elbow for unbound endpoints',
+    () {
+      const start = DrawPoint.zero;
+      const end = DrawPoint(x: 100, y: 50);
 
-    final result = routeElbowArrow(
-      start: start,
-      end: end,
-      elementsById: const {},
-    );
+      final result = routeElbowArrow(
+        start: start,
+        end: end,
+        elementsById: const {},
+      );
 
-    expect(result.points.length, 4);
-    expect(result.points.first, start);
-    expect(result.points.last, end);
-    expect(result.points[1], const DrawPoint(x: 50, y: 0));
-    expect(result.points[2], const DrawPoint(x: 50, y: 50));
-    expect(elbowPathIsOrthogonal(result.points), isTrue);
-  });
+      expect(result.points.length, 4);
+      expect(result.points.first, start);
+      expect(result.points.last, end);
+      expect(result.points[1], const DrawPoint(x: 50, y: 0));
+      expect(result.points[2], const DrawPoint(x: 50, y: 50));
+      expect(elbowPathIsOrthogonal(result.points), isTrue);
+    },
+  );
 
   test('elbow routing fallback uses a stable midpoint for short arrows', () {
-    const start = DrawPoint(x: 0, y: 0);
+    const start = DrawPoint.zero;
     const end = DrawPoint(x: 4, y: 3);
 
     final result = routeElbowArrow(
@@ -102,7 +105,7 @@ void main() {
     final element = elbowRectangleElement(id: 'rect-1', rect: rect);
 
     final result = routeElbowArrow(
-      start: const DrawPoint(x: 0, y: 0),
+      start: DrawPoint.zero,
       end: DrawPoint(x: rect.centerX, y: rect.maxY + 200),
       startBinding: const ArrowBinding(
         elementId: 'rect-1',
@@ -146,10 +149,7 @@ void main() {
         elementId: 'rect-b',
         anchor: DrawPoint(x: 1, y: 0.5),
       ),
-      elementsById: {
-        'rect-a': elementA,
-        'rect-b': elementB,
-      },
+      elementsById: {'rect-a': elementA, 'rect-b': elementB},
       startArrowhead: ArrowheadStyle.triangle,
       endArrowhead: ArrowheadStyle.triangle,
     );
@@ -176,10 +176,7 @@ void main() {
         elementId: 'rect-b',
         anchor: DrawPoint(x: 1, y: 0.5),
       ),
-      elementsById: {
-        'rect-a': elementA,
-        'rect-b': elementB,
-      },
+      elementsById: {'rect-a': elementA, 'rect-b': elementB},
       startArrowhead: ArrowheadStyle.triangle,
       endArrowhead: ArrowheadStyle.triangle,
     );
@@ -214,4 +211,3 @@ void main() {
     );
   });
 }
-

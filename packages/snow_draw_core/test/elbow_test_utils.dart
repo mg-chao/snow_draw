@@ -39,11 +39,7 @@ DrawRect elbowRectForPoints(List<DrawPoint> points) {
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
 
-bool elbowPointsClose(
-  DrawPoint a,
-  DrawPoint b, {
-  double epsilon = 1e-3,
-}) =>
+bool elbowPointsClose(DrawPoint a, DrawPoint b, {double epsilon = 1e-3}) =>
     (a.x - b.x).abs() <= epsilon && (a.y - b.y).abs() <= epsilon;
 
 bool elbowPathIsOrthogonal(
@@ -112,8 +108,7 @@ bool elbowSegmentIntersectsBounds(
   final dy = (start.y - end.y).abs();
   if (dx <= dedupThreshold) {
     final x = (start.x + end.x) / 2;
-    if (x < bounds.minX - dedupThreshold ||
-        x > bounds.maxX + dedupThreshold) {
+    if (x < bounds.minX - dedupThreshold || x > bounds.maxX + dedupThreshold) {
       return false;
     }
     final minY = math.min(start.y, end.y);
@@ -124,8 +119,7 @@ bool elbowSegmentIntersectsBounds(
   }
   if (dy <= dedupThreshold) {
     final y = (start.y + end.y) / 2;
-    if (y < bounds.minY - dedupThreshold ||
-        y > bounds.maxY + dedupThreshold) {
+    if (y < bounds.minY - dedupThreshold || y > bounds.maxY + dedupThreshold) {
       return false;
     }
     final minX = math.min(start.x, end.x);

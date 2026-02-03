@@ -123,8 +123,10 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
 }) {
-  final removedIndices =
-      _resolveRemovedFixedIndices(previousFixed, remainingFixed);
+  final removedIndices = _resolveRemovedFixedIndices(
+    previousFixed,
+    remainingFixed,
+  );
   if (removedIndices.isEmpty || currentPoints.length < 2) {
     return _FixedSegmentPathResult(
       points: currentPoints,
@@ -163,13 +165,10 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
     elementsById: elementsById,
     startLocal: startPoint,
     endLocal: endPoint,
-    startArrowhead: startIndex == 0
-        ? data.startArrowhead
+    startArrowhead: startIndex == 0 ? data.startArrowhead : ArrowheadStyle.none,
+    endArrowhead: endIndex == currentPoints.length - 1
+        ? data.endArrowhead
         : ArrowheadStyle.none,
-    endArrowhead:
-        endIndex == currentPoints.length - 1
-            ? data.endArrowhead
-            : ArrowheadStyle.none,
     previousFixed: previous,
     nextFixed: next,
     startBinding: startIndex == 0 ? startBinding : null,
@@ -183,11 +182,7 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
       ? currentPoints.sublist(endIndex + 1)
       : const <DrawPoint>[];
 
-  final stitched = <DrawPoint>[
-    ...prefix,
-    ...routed,
-    ...suffix,
-  ];
+  final stitched = <DrawPoint>[...prefix, ...routed, ...suffix];
 
   return _FixedSegmentPathResult(
     points: List<DrawPoint>.unmodifiable(stitched),

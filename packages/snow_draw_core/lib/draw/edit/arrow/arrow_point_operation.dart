@@ -661,8 +661,9 @@ _ArrowPointComputation _compute({
           points: List<DrawPoint>.unmodifiable(boundary.points),
           didInsert: false,
           shouldDelete: false,
-          activeIndex:
-              segmentIndex == 1 ? context.pointIndex + 1 : context.pointIndex,
+          activeIndex: segmentIndex == 1
+              ? context.pointIndex + 1
+              : context.pointIndex,
           hasChanges: pointsChanged || segmentsChanged,
           startBinding: nextStartBinding,
           endBinding: nextEndBinding,
@@ -1179,8 +1180,9 @@ List<ElbowFixedSegment> _buildBoundaryFixedSegments({
 
   final moved = _fixedSegmentForIndex(updatedPoints, movedSegmentIndex);
   if (moved != null) {
-    updated.removeWhere((segment) => segment.index == moved.index);
-    updated.add(moved);
+    updated
+      ..removeWhere((segment) => segment.index == moved.index)
+      ..add(moved);
   }
 
   updated.sort((a, b) => a.index.compareTo(b.index));
@@ -1212,10 +1214,7 @@ int? _mapBoundaryFixedIndex({
   return originalIndex;
 }
 
-ElbowFixedSegment? _fixedSegmentForIndex(
-  List<DrawPoint> points,
-  int index,
-) {
+ElbowFixedSegment? _fixedSegmentForIndex(List<DrawPoint> points, int index) {
   if (index <= 1 || index >= points.length - 1) {
     return null;
   }

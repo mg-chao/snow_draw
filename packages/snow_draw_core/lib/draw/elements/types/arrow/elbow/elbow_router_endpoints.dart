@@ -105,7 +105,7 @@ final class _ResolvedEndpoints {
 
 _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
   // Step 1: resolve bindings, arrowhead gaps, and endpoint headings.
-  ElbowHeading _resolveHeadingFor(_EndpointInfo info, ElbowHeading fallback) =>
+  ElbowHeading resolveHeadingFor(_EndpointInfo info, ElbowHeading fallback) =>
       _resolveEndpointHeading(
         elementBounds: info.elementBounds,
         point: info.point,
@@ -139,8 +139,8 @@ _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
     startPoint.x - endPoint.x,
     startPoint.y - endPoint.y,
   );
-  final startHeading = _resolveHeadingFor(startInfo, vectorHeading);
-  final endHeading = _resolveHeadingFor(endInfo, reverseVectorHeading);
+  final startHeading = resolveHeadingFor(startInfo, vectorHeading);
+  final endHeading = resolveHeadingFor(endInfo, reverseVectorHeading);
 
   return _ResolvedEndpoints(
     start: _ResolvedEndpoint(

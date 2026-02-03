@@ -21,10 +21,7 @@ void main() {
       worldPoints: points,
       rect: rect,
     );
-    final data = ArrowData(
-      points: normalized,
-      arrowType: ArrowType.elbow,
-    );
+    final data = ArrowData(points: normalized, arrowType: ArrowType.elbow);
     final element = ElementState(
       id: 'arrow',
       rect: rect,

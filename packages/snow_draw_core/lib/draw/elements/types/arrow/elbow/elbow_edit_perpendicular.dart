@@ -16,10 +16,16 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   required ArrowheadStyle endArrowhead,
 }) {
   if (points.length < 2) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
   if (startBinding == null && endBinding == null) {
-    return _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final space = ElementSpace(
@@ -40,7 +46,10 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   );
 
   if (startBinding != null) {
-    final fixedNeighborAxis = _fixedSegmentIsHorizontal(updatedFixedSegments, 2);
+    final fixedNeighborAxis = _fixedSegmentIsHorizontal(
+      updatedFixedSegments,
+      2,
+    );
     final adjustment = _adjustPerpendicularStart(
       points: worldPoints,
       binding: startBinding,
@@ -425,8 +434,8 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
-  bool? fixedNeighborAxis,
   required bool hasArrowhead,
+  bool? fixedNeighborAxis,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -573,7 +582,8 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
       : desiredHorizontal;
   final conflict = nextHorizontal == desiredHorizontal;
   final canShiftDirection =
-      points.length <= 2 || (desiredHorizontal ? nextHorizontal : !nextHorizontal);
+      points.length <= 2 ||
+      (desiredHorizontal ? nextHorizontal : !nextHorizontal);
 
   if (!conflict && (directionOk || canShiftDirection)) {
     var updatedNeighbor = neighbor;
@@ -613,8 +623,8 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
-  bool? fixedNeighborAxis,
   required bool hasArrowhead,
+  bool? fixedNeighborAxis,
 }) {
   if (points.length < 2) {
     return _PerpendicularAdjustment(
@@ -777,7 +787,8 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
       : desiredHorizontal;
   final conflict = prevHorizontal == desiredHorizontal;
   final canShiftDirection =
-      points.length <= 2 || (desiredHorizontal ? prevHorizontal : !prevHorizontal);
+      points.length <= 2 ||
+      (desiredHorizontal ? prevHorizontal : !prevHorizontal);
 
   if (!conflict && (directionOk || canShiftDirection)) {
     var updatedNeighbor = neighbor;
@@ -829,16 +840,13 @@ ElbowHeading? _resolveBoundHeading({
   return ElbowGeometry.headingForPointOnBounds(bounds, anchor ?? point);
 }
 
-bool _directionMatches(
-  DrawPoint from,
-  DrawPoint to,
-  ElbowHeading heading,
-) => switch (heading) {
-  ElbowHeading.right => to.x - from.x > ElbowConstants.dedupThreshold,
-  ElbowHeading.left => from.x - to.x > ElbowConstants.dedupThreshold,
-  ElbowHeading.down => to.y - from.y > ElbowConstants.dedupThreshold,
-  ElbowHeading.up => from.y - to.y > ElbowConstants.dedupThreshold,
-};
+bool _directionMatches(DrawPoint from, DrawPoint to, ElbowHeading heading) =>
+    switch (heading) {
+      ElbowHeading.right => to.x - from.x > ElbowConstants.dedupThreshold,
+      ElbowHeading.left => from.x - to.x > ElbowConstants.dedupThreshold,
+      ElbowHeading.down => to.y - from.y > ElbowConstants.dedupThreshold,
+      ElbowHeading.up => from.y - to.y > ElbowConstants.dedupThreshold,
+    };
 
 DrawPoint _applyStartDirection(
   DrawPoint neighbor,
@@ -846,18 +854,22 @@ DrawPoint _applyStartDirection(
   ElbowHeading heading,
   double padding,
 ) => switch (heading) {
-  ElbowHeading.right => neighbor.x > start.x + padding
-      ? neighbor
-      : neighbor.copyWith(x: start.x + padding),
-  ElbowHeading.left => neighbor.x < start.x - padding
-      ? neighbor
-      : neighbor.copyWith(x: start.x - padding),
-  ElbowHeading.down => neighbor.y > start.y + padding
-      ? neighbor
-      : neighbor.copyWith(y: start.y + padding),
-  ElbowHeading.up => neighbor.y < start.y - padding
-      ? neighbor
-      : neighbor.copyWith(y: start.y - padding),
+  ElbowHeading.right =>
+    neighbor.x > start.x + padding
+        ? neighbor
+        : neighbor.copyWith(x: start.x + padding),
+  ElbowHeading.left =>
+    neighbor.x < start.x - padding
+        ? neighbor
+        : neighbor.copyWith(x: start.x - padding),
+  ElbowHeading.down =>
+    neighbor.y > start.y + padding
+        ? neighbor
+        : neighbor.copyWith(y: start.y + padding),
+  ElbowHeading.up =>
+    neighbor.y < start.y - padding
+        ? neighbor
+        : neighbor.copyWith(y: start.y - padding),
 };
 
 DrawPoint _applyEndDirection(
@@ -866,18 +878,22 @@ DrawPoint _applyEndDirection(
   ElbowHeading requiredHeading,
   double padding,
 ) => switch (requiredHeading) {
-  ElbowHeading.right => neighbor.x < endPoint.x - padding
-      ? neighbor
-      : neighbor.copyWith(x: endPoint.x - padding),
-  ElbowHeading.left => neighbor.x > endPoint.x + padding
-      ? neighbor
-      : neighbor.copyWith(x: endPoint.x + padding),
-  ElbowHeading.down => neighbor.y < endPoint.y - padding
-      ? neighbor
-      : neighbor.copyWith(y: endPoint.y - padding),
-  ElbowHeading.up => neighbor.y > endPoint.y + padding
-      ? neighbor
-      : neighbor.copyWith(y: endPoint.y + padding),
+  ElbowHeading.right =>
+    neighbor.x < endPoint.x - padding
+        ? neighbor
+        : neighbor.copyWith(x: endPoint.x - padding),
+  ElbowHeading.left =>
+    neighbor.x > endPoint.x + padding
+        ? neighbor
+        : neighbor.copyWith(x: endPoint.x + padding),
+  ElbowHeading.down =>
+    neighbor.y < endPoint.y - padding
+        ? neighbor
+        : neighbor.copyWith(y: endPoint.y - padding),
+  ElbowHeading.up =>
+    neighbor.y > endPoint.y + padding
+        ? neighbor
+        : neighbor.copyWith(y: endPoint.y + padding),
 };
 
 bool _canSlideFixedNeighbor({
@@ -886,7 +902,8 @@ bool _canSlideFixedNeighbor({
 }) => fixedNeighborAxis != null && fixedNeighborAxis == desiredHorizontal;
 
 double _resolveFixedNeighborPadding(bool hasArrowhead) {
-  final gap = ArrowBindingUtils.elbowBindingGapBase *
+  final gap =
+      ArrowBindingUtils.elbowBindingGapBase *
       (hasArrowhead
           ? ArrowBindingUtils.elbowArrowheadGapMultiplier
           : ElbowConstants.elbowNoArrowheadGapMultiplier);
@@ -1014,7 +1031,7 @@ _PerpendicularAdjustment? _slideStartNeighborToPadding({
   final updated = List<DrawPoint>.from(points);
   updated[neighborIndex] = updatedNeighbor;
   if (cornerInserted) {
-    final cornerIndex = 1;
+    const cornerIndex = 1;
     final corner = updated[cornerIndex];
     updated[cornerIndex] = heading.isHorizontal
         ? corner.copyWith(x: updatedNeighbor.x)
@@ -1060,8 +1077,7 @@ _PerpendicularAdjustment _insertStartDirectionStub({
         (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
         (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
-    final collinear =
-        nextHorizontal ? connectorHorizontal : connectorVertical;
+    final collinear = nextHorizontal ? connectorHorizontal : connectorVertical;
     if (collinear) {
       updated[1] = connector;
       moved = true;
@@ -1124,8 +1140,7 @@ _PerpendicularAdjustment _insertEndDirectionStub({
         (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
         (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
-    final collinear =
-        prevHorizontal ? connectorHorizontal : connectorVertical;
+    final collinear = prevHorizontal ? connectorHorizontal : connectorVertical;
     if (collinear) {
       updated[neighborIndex] = connector;
       moved = true;
@@ -1183,8 +1198,7 @@ _PerpendicularAdjustment _insertStartCorner({
     );
   }
 
-  final updated = List<DrawPoint>.from(points);
-  updated.insert(1, corner);
+  final updated = List<DrawPoint>.from(points)..insert(1, corner);
   return _PerpendicularAdjustment(
     points: updated,
     moved: false,

@@ -26,10 +26,7 @@ final class _ElbowRouteRequest {
 /// Shared routing context for a single elbow routing run.
 @immutable
 final class _ElbowRouteContext {
-  const _ElbowRouteContext({
-    required this.request,
-    required this.endpoints,
-  });
+  const _ElbowRouteContext({required this.request, required this.endpoints});
 
   final _ElbowRouteRequest request;
   final _ResolvedEndpoints endpoints;

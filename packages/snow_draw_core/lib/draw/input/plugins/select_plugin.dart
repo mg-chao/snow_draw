@@ -110,13 +110,14 @@ class SelectPlugin extends DrawInputPlugin {
       final element = stateView.state.domain.document.getElementById(
         intent.elementId,
       );
-      final data =
-          element?.data is ArrowData ? element!.data as ArrowData : null;
+      final data = element?.data is ArrowData
+          ? element!.data as ArrowData
+          : null;
       final canDoubleClick =
           handle != null &&
           data != null &&
           _isArrowHandleDoubleClickCandidate(handle: handle, data: data);
-      if (canDoubleClick && _isDoubleClick(handle!, position, now)) {
+      if (canDoubleClick && _isDoubleClick(handle, position, now)) {
         _clearArrowHandleClickState();
         final doubleClickIntent = StartArrowPointIntent(
           elementId: intent.elementId,
@@ -139,7 +140,7 @@ class SelectPlugin extends DrawInputPlugin {
         );
       }
       if (canDoubleClick) {
-        _recordArrowHandleClick(handle!, position, now);
+        _recordArrowHandleClick(handle, position, now);
       } else {
         _clearArrowHandleClickState();
       }

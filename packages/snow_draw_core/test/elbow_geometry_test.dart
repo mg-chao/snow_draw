@@ -13,7 +13,7 @@ void main() {
   });
 
   test('headingForSegment mirrors headingForVector', () {
-    const start = DrawPoint(x: 0, y: 0);
+    const start = DrawPoint.zero;
     expect(
       ElbowGeometry.headingForSegment(start, const DrawPoint(x: 40, y: 5)),
       ElbowHeading.right,
@@ -29,24 +29,18 @@ void main() {
   });
 
   test('manhattanDistance sums axis deltas', () {
-    const a = DrawPoint(x: 0, y: 0);
+    const a = DrawPoint.zero;
     const b = DrawPoint(x: 3, y: 4);
     expect(ElbowGeometry.manhattanDistance(a, b), 7);
   });
 
   test('isHorizontal flags segments with wider X delta', () {
     expect(
-      ElbowGeometry.isHorizontal(
-        const DrawPoint(x: 0, y: 0),
-        const DrawPoint(x: 10, y: 1),
-      ),
+      ElbowGeometry.isHorizontal(DrawPoint.zero, const DrawPoint(x: 10, y: 1)),
       isTrue,
     );
     expect(
-      ElbowGeometry.isHorizontal(
-        const DrawPoint(x: 0, y: 0),
-        const DrawPoint(x: 1, y: 10),
-      ),
+      ElbowGeometry.isHorizontal(DrawPoint.zero, const DrawPoint(x: 1, y: 10)),
       isFalse,
     );
   });

@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
@@ -12,19 +12,18 @@ import '../arrow_binding.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
 import 'elbow_constants.dart';
-import 'elbow_geometry.dart';
 import 'elbow_fixed_segment.dart';
+import 'elbow_geometry.dart';
 import 'elbow_router.dart';
 
-part 'elbow_edit_geometry.dart';
-part 'elbow_edit_fixed_segments.dart';
-part 'elbow_edit_routing.dart';
 part 'elbow_edit_endpoint_drag.dart';
+part 'elbow_edit_fixed_segments.dart';
+part 'elbow_edit_geometry.dart';
 part 'elbow_edit_perpendicular.dart';
 part 'elbow_edit_pipeline.dart';
+part 'elbow_edit_routing.dart';
 
 /// Elbow arrow editing entry points.
-/// See docs/elbow_arrows.md for the step-by-step edit pipeline.
 /// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
 final class ElbowEditResult {
@@ -49,18 +48,17 @@ ElbowEditResult computeElbowEdit({
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   ArrowBinding? startBindingOverride,
   ArrowBinding? endBindingOverride,
-}) {
-  // Route the edit through a step-based pipeline for clarity.
-  return _ElbowEditPipeline(
-    element: element,
-    data: data,
-    elementsById: elementsById,
-    localPointsOverride: localPointsOverride,
-    fixedSegmentsOverride: fixedSegmentsOverride,
-    startBindingOverride: startBindingOverride,
-    endBindingOverride: endBindingOverride,
-  ).run();
-}
+}) =>
+    // Route the edit through a step-based pipeline for clarity.
+    _ElbowEditPipeline(
+      element: element,
+      data: data,
+      elementsById: elementsById,
+      localPointsOverride: localPointsOverride,
+      fixedSegmentsOverride: fixedSegmentsOverride,
+      startBindingOverride: startBindingOverride,
+      endBindingOverride: endBindingOverride,
+    ).run();
 
 /// Transforms fixed segments when the owning element is resized/rotated.
 List<ElbowFixedSegment>? transformFixedSegments({

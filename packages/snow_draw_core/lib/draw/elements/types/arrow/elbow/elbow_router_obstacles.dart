@@ -15,10 +15,22 @@ DrawRect _inflateBounds(DrawRect rect, double padding) => DrawRect(
 );
 
 DrawRect _clampBounds(DrawRect rect) => DrawRect(
-  minX: rect.minX.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
-  minY: rect.minY.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
-  maxX: rect.maxX.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
-  maxY: rect.maxY.clamp(-ElbowConstants.maxPosition, ElbowConstants.maxPosition),
+  minX: rect.minX.clamp(
+    -ElbowConstants.maxPosition,
+    ElbowConstants.maxPosition,
+  ),
+  minY: rect.minY.clamp(
+    -ElbowConstants.maxPosition,
+    ElbowConstants.maxPosition,
+  ),
+  maxX: rect.maxX.clamp(
+    -ElbowConstants.maxPosition,
+    ElbowConstants.maxPosition,
+  ),
+  maxY: rect.maxY.clamp(
+    -ElbowConstants.maxPosition,
+    ElbowConstants.maxPosition,
+  ),
 );
 
 DrawPoint _clampPoint(DrawPoint point) => DrawPoint(
@@ -427,10 +439,7 @@ final class _ElbowEndpointBounds {
 /// Builds the obstacle layout for a single routed elbow path.
 @immutable
 final class _ElbowObstacleLayoutBuilder {
-  const _ElbowObstacleLayoutBuilder({
-    required this.start,
-    required this.end,
-  });
+  const _ElbowObstacleLayoutBuilder({required this.start, required this.end});
 
   final _ResolvedEndpoint start;
   final _ResolvedEndpoint end;
@@ -525,7 +534,8 @@ _ElbowEndpointBounds _resolveEndpointBounds({
     hasArrowhead: end.hasArrowhead,
   );
 
-  final boundsOverlap = start.isBound &&
+  final boundsOverlap =
+      start.isBound &&
       end.isBound &&
       _boundsOverlap(startElbowBounds, endElbowBounds);
 
@@ -565,10 +575,7 @@ _ElbowEndpointBounds _resolveEndpointBounds({
         );
   final endPadding = boundsOverlap
       ? _overlapPadding(end.heading)
-      : _routingPadding(
-          heading: end.heading,
-          hasArrowhead: end.hasArrowhead,
-        );
+      : _routingPadding(heading: end.heading, hasArrowhead: end.hasArrowhead);
   return (start: startPadding, end: endPadding);
 }
 
@@ -618,13 +625,12 @@ _ElbowEndpointBounds _resolveEndpointBounds({
 DrawRect _resolveCommonBounds({
   required DrawRect startObstacle,
   required DrawRect endObstacle,
-}) =>
-    _clampBounds(
-      _inflateBounds(
-        _unionBounds([startObstacle, endObstacle]),
-        ElbowConstants.basePadding,
-      ),
-    );
+}) => _clampBounds(
+  _inflateBounds(
+    _unionBounds([startObstacle, endObstacle]),
+    ElbowConstants.basePadding,
+  ),
+);
 
 DrawRect _clampObstacleExitToBasePadding({
   required _ResolvedEndpoint endpoint,

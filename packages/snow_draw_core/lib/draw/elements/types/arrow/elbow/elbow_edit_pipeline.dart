@@ -141,7 +141,8 @@ final class _ElbowEditPipeline {
   }
 
   _ElbowEditContext _buildContext() {
-    // Step 1: resolve the base local points from the element and incoming edits.
+    // Step 1: resolve the base local points from the element and incoming
+    // edits.
     final basePoints = _resolveLocalPoints(element, data);
     final incomingPoints = localPointsOverride ?? basePoints;
 
@@ -156,8 +157,9 @@ final class _ElbowEditPipeline {
     );
     final startBinding = startBindingOverride ?? data.startBinding;
     final endBinding = endBindingOverride ?? data.endBinding;
-    final previousData =
-        element.data is ArrowData ? element.data as ArrowData : data;
+    final previousData = element.data is ArrowData
+        ? element.data as ArrowData
+        : data;
     final previousStartBinding = previousData.startBinding;
     final previousEndBinding = previousData.endBinding;
     final bindingChanged =
@@ -165,8 +167,7 @@ final class _ElbowEditPipeline {
         previousEndBinding != endBinding;
     final startBindingRemoved =
         previousStartBinding != null && startBinding == null;
-    final endBindingRemoved =
-        previousEndBinding != null && endBinding == null;
+    final endBindingRemoved = previousEndBinding != null && endBinding == null;
 
     final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
     final fixedSegmentsChanged = !_fixedSegmentsEqual(
@@ -253,16 +254,17 @@ final class _ElbowEditPipeline {
 
   ElbowEditResult _handleEndpointDragFlow(_ElbowEditContext context) {
     // Step 5: endpoint drag while fixed segments stay pinned.
-    final startPointChanged = context.basePoints.isNotEmpty &&
+    final startPointChanged =
+        context.basePoints.isNotEmpty &&
         context.incomingPoints.isNotEmpty &&
         context.basePoints.first != context.incomingPoints.first;
-    final endPointChanged = context.basePoints.isNotEmpty &&
+    final endPointChanged =
+        context.basePoints.isNotEmpty &&
         context.incomingPoints.isNotEmpty &&
         context.basePoints.last != context.incomingPoints.last;
     final startBindingChanged =
         context.previousStartBinding != context.startBinding;
-    final endBindingChanged =
-        context.previousEndBinding != context.endBinding;
+    final endBindingChanged = context.previousEndBinding != context.endBinding;
     final startWasBound = context.previousStartBinding != null;
     final endWasBound = context.previousEndBinding != null;
     final updated = _applyEndpointDragWithFixedSegments(
