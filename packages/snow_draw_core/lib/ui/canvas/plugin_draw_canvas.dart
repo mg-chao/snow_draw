@@ -278,18 +278,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _updateCursorIfChanged(
         _resolveCursorForState(widget.store.state, _lastPointerPosition),
       );
-      _hoveredSelectionElementId = _lastPointerPosition == null
+      final hoverTargets = _lastPointerPosition == null
           ? null
-          : _resolveHoverSelectionElementId(
+          : _resolveHoverSelectionAndBinding(
               state: widget.store.state,
               position: _lastPointerPosition!,
             );
-      _hoveredBindingElementId = _lastPointerPosition == null
-          ? null
-          : _resolveHoverBindingElementId(
-              state: widget.store.state,
-              position: _lastPointerPosition!,
-            );
+      _hoveredSelectionElementId = hoverTargets?.selectionId;
+      _hoveredBindingElementId = hoverTargets?.bindingId;
       setState(() {});
     });
   }
@@ -324,18 +320,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           _updateCursorIfChanged(
             _resolveCursorForState(widget.store.state, _lastPointerPosition),
           );
-          _hoveredSelectionElementId = _lastPointerPosition == null
+          final hoverTargets = _lastPointerPosition == null
               ? null
-              : _resolveHoverSelectionElementId(
+              : _resolveHoverSelectionAndBinding(
                   state: widget.store.state,
                   position: _lastPointerPosition!,
                 );
-          _hoveredBindingElementId = _lastPointerPosition == null
-              ? null
-              : _resolveHoverBindingElementId(
-                  state: widget.store.state,
-                  position: _lastPointerPosition!,
-                );
+          _hoveredSelectionElementId = hoverTargets?.selectionId;
+          _hoveredBindingElementId = hoverTargets?.bindingId;
           setState(() {});
         });
 
@@ -865,18 +857,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
-    _hoveredSelectionElementId = _lastPointerPosition == null
+    final hoverTargets = _lastPointerPosition == null
         ? null
-        : _resolveHoverSelectionElementId(
+        : _resolveHoverSelectionAndBinding(
             state: widget.store.state,
             position: _lastPointerPosition!,
           );
-    _hoveredBindingElementId = _lastPointerPosition == null
-        ? null
-        : _resolveHoverBindingElementId(
-            state: widget.store.state,
-            position: _lastPointerPosition!,
-          );
+    _hoveredSelectionElementId = hoverTargets?.selectionId;
+    _hoveredBindingElementId = hoverTargets?.bindingId;
   }
 
   double? _resolvePrimaryScrollDelta(PointerScrollEvent event) {
@@ -1244,14 +1232,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _updateHoverSelectionForPosition(DrawPoint position) {
-    final nextHover = _resolveHoverSelectionElementId(
+    final hoverTargets = _resolveHoverSelectionAndBinding(
       state: widget.store.state,
       position: position,
     );
-    final nextBindingHover = _resolveHoverBindingElementId(
-      state: widget.store.state,
-      position: position,
-    );
+    final nextHover = hoverTargets.selectionId;
+    final nextBindingHover = hoverTargets.bindingId;
     final nextArrowHandle = _resolveArrowPointHandleForPosition(
       state: widget.store.state,
       position: position,
@@ -1304,6 +1290,24 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     return elementId;
+  }
+
+  ({String? selectionId, String? bindingId}) _resolveHoverSelectionAndBinding({
+    required DrawState state,
+    required DrawPoint position,
+  }) {
+    final selectionId = _resolveHoverSelectionElementId(
+      state: state,
+      position: position,
+    );
+    if (selectionId != null) {
+      return (selectionId: selectionId, bindingId: null);
+    }
+    final bindingId = _resolveHoverBindingElementId(
+      state: state,
+      position: position,
+    );
+    return (selectionId: selectionId, bindingId: bindingId);
   }
 
   String? _resolveHoverBindingElementId({
@@ -2298,18 +2302,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widget.store.state,
       _lastPointerPosition,
     );
-    final nextHover = _lastPointerPosition == null
+    final hoverTargets = _lastPointerPosition == null
         ? null
-        : _resolveHoverSelectionElementId(
+        : _resolveHoverSelectionAndBinding(
             state: widget.store.state,
             position: _lastPointerPosition!,
           );
-    final nextBindingHover = _lastPointerPosition == null
-        ? null
-        : _resolveHoverBindingElementId(
-            state: widget.store.state,
-            position: _lastPointerPosition!,
-          );
+    final nextHover = hoverTargets?.selectionId;
+    final nextBindingHover = hoverTargets?.bindingId;
     final nextArrowHandle = _lastPointerPosition == null
         ? null
         : _resolveArrowPointHandleForPosition(
