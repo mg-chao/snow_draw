@@ -3,6 +3,8 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_heading.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
@@ -2330,6 +2332,84 @@ void main() {
       );
     }
   });
+
+  const bindingRect = DrawRect(minX: 80, minY: 160, maxX: 200, maxY: 240);
+  const bindingCases = <_ElbowBindingCase>[
+    _ElbowBindingCase(
+      name: 'top-right binding adds a downward tail',
+      anchor: DrawPoint(x: 0.9, y: 0),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.right,
+        ElbowHeading.down,
+      ],
+    ),
+    _ElbowBindingCase(
+      name: 'top-left binding adds a leftward detour',
+      anchor: DrawPoint(x: 0.1, y: 0),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.left,
+        ElbowHeading.down,
+      ],
+    ),
+    _ElbowBindingCase(
+      name: 'left-edge binding approaches from the left',
+      anchor: DrawPoint(x: 0, y: 0.5),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.left,
+        ElbowHeading.down,
+        ElbowHeading.right,
+      ],
+    ),
+    _ElbowBindingCase(
+      name: 'bottom-left binding approaches upward',
+      anchor: DrawPoint(x: 0.1, y: 1),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.left,
+        ElbowHeading.up,
+      ],
+    ),
+    _ElbowBindingCase(
+      name: 'bottom-right binding approaches upward',
+      anchor: DrawPoint(x: 0.9, y: 1),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.right,
+        ElbowHeading.up,
+      ],
+    ),
+    _ElbowBindingCase(
+      name: 'right-edge binding approaches from the right',
+      anchor: DrawPoint(x: 1, y: 0.8),
+      expected: <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.left,
+      ],
+    ),
+  ];
+
+  for (final bindingCase in bindingCases) {
+    test(
+      'fixed down segment reroutes with ${bindingCase.name}',
+      () => _expectFixedDownBindingPath(
+        rect: bindingRect,
+        anchor: bindingCase.anchor,
+        expected: bindingCase.expected,
+        label: bindingCase.name,
+      ),
+    );
+  }
 }
 
 ElementState _arrowElement(
@@ -2455,5 +2535,117 @@ void _expectPointSequenceClose(
       reason: '$baseReason (point $i).',
     );
   }
+}
+
+void _expectFixedDownBindingPath({
+  required DrawRect rect,
+  required DrawPoint anchor,
+  required List<ElbowHeading> expected,
+  String? label,
+}) {
+  final points = <DrawPoint>[
+    const DrawPoint(x: 0, y: 0),
+    const DrawPoint(x: 120, y: 0),
+    const DrawPoint(x: 120, y: 80),
+    const DrawPoint(x: 240, y: 80),
+  ];
+  final fixedSegments = <ElbowFixedSegment>[
+    ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+  ];
+  final element = _arrowElement(points, fixedSegments: fixedSegments);
+  final data = element.data as ArrowData;
+
+  expect(points.first.y < rect.minY, isTrue, reason: label);
+  expect(points.last.y < rect.minY, isTrue, reason: label);
+  expect(
+    _headingSequence(points),
+    equals(const <ElbowHeading>[
+      ElbowHeading.right,
+      ElbowHeading.down,
+      ElbowHeading.right,
+    ]),
+    reason: label,
+  );
+
+  final binding = ArrowBinding(elementId: 'rect-1', anchor: anchor);
+  final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+  final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+    binding: binding,
+    target: boundElement,
+    hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+  );
+  expect(boundPoint, isNotNull, reason: label);
+
+  final movedPoints = List<DrawPoint>.from(points);
+  movedPoints[movedPoints.length - 1] = boundPoint!;
+
+  final result = computeElbowEdit(
+    element: element,
+    data: data.copyWith(endBinding: binding),
+    elementsById: {'rect-1': boundElement},
+    localPointsOverride: movedPoints,
+    fixedSegmentsOverride: fixedSegments,
+    endBindingOverride: binding,
+  );
+
+  expect(elbowPathIsOrthogonal(result.localPoints), isTrue, reason: label);
+  expect(result.fixedSegments, isNotNull, reason: label);
+  final fixed = result.fixedSegments!.first;
+  expect(
+    ElbowGeometry.headingForSegment(fixed.start, fixed.end),
+    ElbowHeading.down,
+    reason: label,
+  );
+
+  final headings = _headingSequence(result.localPoints);
+  expect(headings, equals(expected), reason: label);
+}
+
+List<ElbowHeading> _headingSequence(List<DrawPoint> points) {
+  if (points.length < 2) {
+    return const <ElbowHeading>[];
+  }
+  final collapsed = <DrawPoint>[];
+  for (final point in points) {
+    if (collapsed.isEmpty ||
+        !elbowPointsClose(
+          collapsed.last,
+          point,
+          epsilon: ElbowConstants.dedupThreshold,
+        )) {
+      collapsed.add(point);
+    }
+  }
+  if (collapsed.length < 2) {
+    return const <ElbowHeading>[];
+  }
+  final headings = <ElbowHeading>[];
+  for (var i = 0; i < collapsed.length - 1; i++) {
+    final start = collapsed[i];
+    final end = collapsed[i + 1];
+    final dx = (end.x - start.x).abs();
+    final dy = (end.y - start.y).abs();
+    if (dx <= ElbowConstants.dedupThreshold &&
+        dy <= ElbowConstants.dedupThreshold) {
+      continue;
+    }
+    final heading = ElbowGeometry.headingForSegment(start, end);
+    if (headings.isEmpty || headings.last != heading) {
+      headings.add(heading);
+    }
+  }
+  return headings;
+}
+
+class _ElbowBindingCase {
+  const _ElbowBindingCase({
+    required this.name,
+    required this.anchor,
+    required this.expected,
+  });
+
+  final String name;
+  final DrawPoint anchor;
+  final List<ElbowHeading> expected;
 }
 
