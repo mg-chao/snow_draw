@@ -7,6 +7,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import 'free_draw_data.dart';
+import 'free_draw_path_utils.dart';
 
 class FreeDrawHitTester implements ElementHitTester {
   const FreeDrawHitTester();
@@ -43,14 +44,14 @@ class FreeDrawHitTester implements ElementHitTester {
       return false;
     }
 
-    final localPoints = _resolveLocalPoints(
+    final localPoints = resolveFreeDrawLocalPoints(
       rect: rect,
       points: data.points,
     );
     if (localPoints.length < 3) {
       return false;
     }
-    final fillPath = _buildSmoothPath(localPoints)..close();
+    final fillPath = buildFreeDrawSmoothPath(localPoints)..close();
     final testPoint = Offset(
       localPosition.x - rect.minX,
       localPosition.y - rect.minY,
@@ -81,7 +82,10 @@ bool _hitTestStroke(
   double tolerance,
 ) {
   final rect = element.rect;
-  final localPoints = _resolveLocalPoints(rect: rect, points: data.points);
+  final localPoints = resolveFreeDrawLocalPoints(
+    rect: rect,
+    points: data.points,
+  );
   if (localPoints.length < 2) {
     return false;
   }
@@ -95,7 +99,7 @@ bool _hitTestStroke(
     localPosition.x - rect.minX,
     localPosition.y - rect.minY,
   );
-  final smoothedPath = _buildSmoothPath(localPoints);
+  final smoothedPath = buildFreeDrawSmoothPath(localPoints);
   final flattened = _flattenPath(smoothedPath, _sampleStep(data.strokeWidth));
   if (flattened.length < 2) {
     return false;
@@ -141,112 +145,7 @@ double _distanceSquaredToSegment(Offset p, Offset a, Offset b) {
   return dx * dx + dy * dy;
 }
 
-List<Offset> _resolveLocalPoints({
-  required DrawRect rect,
-  required List<DrawPoint> points,
-}) {
-  if (points.isEmpty) {
-    return const <Offset>[];
-  }
-  final width = rect.width;
-  final height = rect.height;
-  return points
-      .map((point) => Offset(point.x * width, point.y * height))
-      .toList(growable: false);
-}
-
-Path _buildSmoothPath(List<Offset> points) {
-  if (points.length < 2) {
-    return Path();
-  }
-  if (points.length == 2) {
-    return Path()
-      ..moveTo(points.first.dx, points.first.dy)
-      ..lineTo(points.last.dx, points.last.dy);
-  }
-
-  final closed = points.first == points.last;
-  final source = closed ? points.sublist(0, points.length - 1) : points;
-  final smoothed = _smoothPoints(source, closed: closed);
-  if (smoothed.length < 2) {
-    return Path();
-  }
-
-  final path = Path()..moveTo(smoothed.first.dx, smoothed.first.dy);
-  const tension = 0.5;
-  final count = smoothed.length;
-
-  if (closed) {
-    for (var i = 0; i < count; i++) {
-      final p0 = smoothed[(i - 1 + count) % count];
-      final p1 = smoothed[i];
-      final p2 = smoothed[(i + 1) % count];
-      final p3 = smoothed[(i + 2) % count];
-
-      final cp1 = p1 + (p2 - p0) * (tension / 6);
-      final cp2 = p2 - (p3 - p1) * (tension / 6);
-      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
-    }
-    path.close();
-    return path;
-  }
-
-  for (var i = 0; i < count - 1; i++) {
-    final p0 = i == 0 ? smoothed[i] : smoothed[i - 1];
-    final p1 = smoothed[i];
-    final p2 = smoothed[i + 1];
-    final p3 = i + 2 < count ? smoothed[i + 2] : smoothed[i + 1];
-
-    final cp1 = p1 + (p2 - p0) * (tension / 6);
-    final cp2 = p2 - (p3 - p1) * (tension / 6);
-    path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
-  }
-  return path;
-}
-
 double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
-
-List<Offset> _smoothPoints(List<Offset> points, {required bool closed}) {
-  if (points.length < 3) {
-    return points;
-  }
-
-  const iterations = 3;
-  var working = List<Offset>.from(points);
-
-  for (var iter = 0; iter < iterations; iter++) {
-    final next = List<Offset>.from(working);
-    final lastIndex = working.length - 1;
-
-    if (closed) {
-      for (var i = 0; i <= lastIndex; i++) {
-        final prev = working[(i - 1 + working.length) % working.length];
-        final curr = working[i];
-        final nextPoint = working[(i + 1) % working.length];
-        next[i] = Offset(
-          (prev.dx + curr.dx * 2 + nextPoint.dx) * 0.25,
-          (prev.dy + curr.dy * 2 + nextPoint.dy) * 0.25,
-        );
-      }
-    } else {
-      for (var i = 1; i < lastIndex; i++) {
-        final prev = working[i - 1];
-        final curr = working[i];
-        final nextPoint = working[i + 1];
-        next[i] = Offset(
-          (prev.dx + curr.dx * 2 + nextPoint.dx) * 0.25,
-          (prev.dy + curr.dy * 2 + nextPoint.dy) * 0.25,
-        );
-      }
-      next[0] = working[0];
-      next[lastIndex] = working[lastIndex];
-    }
-
-    working = next;
-  }
-
-  return working;
-}
 
 List<Offset> _flattenPath(Path path, double step) {
   if (step <= 0) {

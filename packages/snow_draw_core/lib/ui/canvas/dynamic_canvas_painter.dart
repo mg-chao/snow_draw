@@ -10,6 +10,8 @@ import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
+import '../../draw/elements/types/free_draw/free_draw_data.dart';
+import '../../draw/elements/types/free_draw/free_draw_path_utils.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
@@ -96,6 +98,12 @@ class DynamicCanvasPainter extends CustomPainter {
         } else if (effectiveElement.data is TextData) {
           // For text elements, render underlines instead of a rectangle
           _drawTextHoverUnderlines(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else if (effectiveElement.data is FreeDrawData) {
+          _drawFreeDrawHoverOutline(
             canvas: canvas,
             element: effectiveElement,
             scale: scale,
@@ -659,6 +667,47 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.restore();
   }
 
+  void _drawFreeDrawHoverOutline({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! FreeDrawData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final localPoints = resolveFreeDrawLocalPoints(
+      rect: rect,
+      points: data.points,
+    );
+    if (localPoints.length < 2) {
+      return;
+    }
+
+    final path = buildFreeDrawSmoothPath(localPoints);
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 / effectiveScale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = renderKey.hoverSelectionConfig.render.strokeColor
+      ..isAntiAlias = true;
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+    canvas.drawPath(path, strokePaint);
+    canvas.restore();
+  }
+
   Offset _resolveTextOffsetForUnderline({
     required Size containerSize,
     required Size textSize,
@@ -1153,17 +1202,66 @@ class DynamicCanvasPainter extends CustomPainter {
           bounds.maxY >= aabb.maxY) {
         // Draw preview border using same style as multi-select outlines
         final effectiveElement = stateView.effectiveElement(element);
-        elementRenderer.renderSelectionOutline(
-          canvas: canvas,
-          bounds: effectiveElement.rect,
-          scaleFactor: scale,
-          config: renderKey.selectionConfig,
-          rotation: effectiveElement.rotation,
-          rotationCenter: effectiveElement.center,
-          dashed: false,
-        );
+        if (effectiveElement.data is FreeDrawData) {
+          _drawFreeDrawSelectionPreview(
+            canvas: canvas,
+            element: effectiveElement,
+            scale: scale,
+          );
+        } else {
+          elementRenderer.renderSelectionOutline(
+            canvas: canvas,
+            bounds: effectiveElement.rect,
+            scaleFactor: scale,
+            config: renderKey.selectionConfig,
+            rotation: effectiveElement.rotation,
+            rotationCenter: effectiveElement.center,
+            dashed: false,
+          );
+        }
       }
     }
+  }
+
+  void _drawFreeDrawSelectionPreview({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+  }) {
+    final data = element.data;
+    if (data is! FreeDrawData) {
+      return;
+    }
+
+    final rect = element.rect;
+    final localPoints = resolveFreeDrawLocalPoints(
+      rect: rect,
+      points: data.points,
+    );
+    if (localPoints.length < 2) {
+      return;
+    }
+
+    final path = buildFreeDrawSmoothPath(localPoints);
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0 / effectiveScale
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = renderKey.selectionConfig.render.strokeColor
+      ..isAntiAlias = true;
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+    canvas.drawPath(path, strokePaint);
+    canvas.restore();
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>
