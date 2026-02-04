@@ -1137,11 +1137,28 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   final bounds = SelectionCalculator.computeElementWorldAabb(targetElement);
   final reference = points[anchorIndex];
   final lane = heading.isHorizontal
-      ? _resolveBoundLaneCoordinate(
-          horizontal: true,
-          bounds: bounds,
-          reference: reference,
-        )
+      ? () {
+          final inBounds = reference.y >= bounds.minY - ElbowConstants
+                  .intersectionEpsilon &&
+              reference.y <= bounds.maxY + ElbowConstants.intersectionEpsilon;
+          if (inBounds) {
+            final intersects = _runIntersectsBounds(
+              points: points,
+              startIndex: anchorIndex,
+              direction: isStart ? -1 : 1,
+              horizontal: true,
+              bounds: bounds,
+            );
+            if (!intersects) {
+              return reference.y;
+            }
+          }
+          return _resolveBoundLaneCoordinate(
+            horizontal: true,
+            bounds: bounds,
+            reference: reference,
+          );
+        }()
       : (isStart ? points.first.x : points.last.x);
   if (lane == null) {
     return (points: points, moved: false);
@@ -1187,6 +1204,58 @@ double? _resolveBoundLaneCoordinate({
   return (reference.x - left).abs() <= (reference.x - right).abs()
       ? left
       : right;
+}
+
+bool _runIntersectsBounds({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required int direction,
+  required bool horizontal,
+  required DrawRect bounds,
+}) {
+  if (points.length < 2) {
+    return false;
+  }
+  if (startIndex < 0 || startIndex >= points.length) {
+    return false;
+  }
+  final epsilon = ElbowConstants.intersectionEpsilon;
+  final constant = horizontal ? points[startIndex].y : points[startIndex].x;
+  if (horizontal) {
+    if (constant < bounds.minY - epsilon || constant > bounds.maxY + epsilon) {
+      return false;
+    }
+  } else if (constant < bounds.minX - epsilon ||
+      constant > bounds.maxX + epsilon) {
+    return false;
+  }
+
+  var minVar = horizontal ? points[startIndex].x : points[startIndex].y;
+  var maxVar = minVar;
+  var i = startIndex;
+  while (true) {
+    final nextIndex = i + direction;
+    if (nextIndex < 0 || nextIndex >= points.length) {
+      break;
+    }
+    final curr = points[i];
+    final next = points[nextIndex];
+    final isHorizontal =
+        (curr.y - next.y).abs() <= ElbowConstants.dedupThreshold;
+    if (isHorizontal != horizontal) {
+      break;
+    }
+    final value = horizontal ? next.x : next.y;
+    minVar = math.min(minVar, value);
+    maxVar = math.max(maxVar, value);
+    i = nextIndex;
+  }
+
+  if (horizontal) {
+    return maxVar >= bounds.minX - epsilon &&
+        minVar <= bounds.maxX + epsilon;
+  }
+  return maxVar >= bounds.minY - epsilon && minVar <= bounds.maxY + epsilon;
 }
 
 ({List<DrawPoint> points, bool moved}) _slideRun({
