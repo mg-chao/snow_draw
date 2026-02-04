@@ -482,6 +482,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
     }
+    if (interaction is TextEditingState && interaction.isNew) {
+      // Avoid double-rendering the draft text (static + dynamic) while creating.
+      return const <String, ElementState>{};
+    }
     if (dynamicLayerStartIndex == null) {
       return view.previewElementsById;
     }
