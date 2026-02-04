@@ -6,6 +6,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../utils/selection_calculator.dart';
+import '../arrow/arrow_binding.dart';
 import '../text/text_data.dart';
 import '../text/text_layout.dart';
 import 'serial_number_data.dart';
@@ -92,7 +93,8 @@ SerialNumberTextConnection? resolveSerialNumberTextConnection({
   }
 
   final radius = math.min(serialRect.width, serialRect.height) / 2;
-  final totalOffset = radius + lineWidth;
+  final bindingGap = ArrowBindingUtils.resolveBindingGap(target: serialElement);
+  final totalOffset = radius + bindingGap + lineWidth / 2;
   if (distance <= totalOffset) {
     return null;
   }
@@ -100,8 +102,8 @@ SerialNumberTextConnection? resolveSerialNumberTextConnection({
   final ux = dx / distance;
   final uy = dy / distance;
   final start = DrawPoint(
-    x: center.x + ux * (radius + lineWidth / 2),
-    y: center.y + uy * (radius + lineWidth / 2),
+    x: center.x + ux * (radius + bindingGap),
+    y: center.y + uy * (radius + bindingGap),
   );
   final end = DrawPoint(
     x: anchor.x - ux * (lineWidth / 2),

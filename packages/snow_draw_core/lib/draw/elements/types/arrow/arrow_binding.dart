@@ -106,6 +106,9 @@ class ArrowBindingUtils {
         data is SerialNumberData;
   }
 
+  static double resolveBindingGap({required ElementState target}) =>
+      _resolveBindingGap(target);
+
   static double resolveBindingSearchDistance(double snapDistance) =>
       snapDistance * (1 + _bindingHitToleranceFactor);
 

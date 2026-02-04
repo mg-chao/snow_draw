@@ -1734,7 +1734,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final isSelectionToolActive = widget.currentToolTypeId == null;
-    if (!isSelectionToolActive) {
+    final isSerialToolActive =
+        widget.currentToolTypeId == SerialNumberData.typeIdToken;
+    final isSelectionLikeToolActive =
+        isSelectionToolActive || isSerialToolActive;
+    if (!isSelectionLikeToolActive) {
       return false;
     }
 
