@@ -395,7 +395,10 @@ class FontSizePropertyDescriptor extends PropertyDescriptor<double> {
   const FontSizePropertyDescriptor()
     : super(
         id: 'fontSize',
-        supportedElementTypes: const {ElementType.text, ElementType.serialNumber},
+        supportedElementTypes: const {
+          ElementType.text,
+          ElementType.serialNumber,
+        },
       );
 
   @override
@@ -429,7 +432,10 @@ class FontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
   const FontFamilyPropertyDescriptor()
     : super(
         id: 'fontFamily',
-        supportedElementTypes: const {ElementType.text, ElementType.serialNumber},
+        supportedElementTypes: const {
+          ElementType.text,
+          ElementType.serialNumber,
+        },
       );
 
   @override
@@ -443,18 +449,22 @@ class FontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
       values.add(context.serialNumberStyleValues.fontFamily);
     }
 
-    return PropertyUtils.mergeMixedValues(values, PropertyUtils.stringEquals);
+    return PropertyUtils.mergeMixedValues(
+      values,
+      PropertyUtils.stringEquals,
+      treatNullAsValue: true,
+    );
   }
 
   @override
   String getDefaultValue(StylePropertyContext context) {
     if (context.selectedElementTypes.contains(ElementType.text)) {
-      return context.textDefaults.fontFamily ?? 'Arial';
+      return context.textDefaults.fontFamily ?? '';
     }
     if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
-      return context.serialNumberDefaults.fontFamily ?? 'Arial';
+      return context.serialNumberDefaults.fontFamily ?? '';
     }
-    return context.textDefaults.fontFamily ?? 'Arial';
+    return context.textDefaults.fontFamily ?? '';
   }
 }
 

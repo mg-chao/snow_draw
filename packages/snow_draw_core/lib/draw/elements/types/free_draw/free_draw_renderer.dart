@@ -224,7 +224,9 @@ class _FreeDrawVisualCacheEntry {
   final Path? dottedPath;
 
   bool matches(FreeDrawData data, double width, double height) =>
-      identical(this.data, data) && this.width == width && this.height == height;
+      identical(this.data, data) &&
+      this.width == width &&
+      this.height == height;
 }
 
 class _FreeDrawVisualCache {
@@ -304,7 +306,6 @@ class _FreeDrawVisualCache {
     );
   }
 }
-
 
 Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
   final dashed = Path();

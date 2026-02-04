@@ -161,16 +161,8 @@ bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
       return false;
     }
     final axis = aHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
-    final aAxis = ElbowPathUtils.axisValue(
-      a[i].start,
-      a[i].end,
-      axis: axis,
-    );
-    final bAxis = ElbowPathUtils.axisValue(
-      b[i].start,
-      b[i].end,
-      axis: axis,
-    );
+    final aAxis = ElbowPathUtils.axisValue(a[i].start, a[i].end, axis: axis);
+    final bAxis = ElbowPathUtils.axisValue(b[i].start, b[i].end, axis: axis);
     if ((aAxis - bAxis).abs() > ElbowConstants.dedupThreshold) {
       return false;
     }
@@ -270,8 +262,7 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
       isHorizontal: isHorizontal,
       preferredIndex: segment.index,
       axisValue: axis,
-      axisTolerance:
-          isActive ? double.infinity : ElbowConstants.dedupThreshold,
+      axisTolerance: isActive ? double.infinity : ElbowConstants.dedupThreshold,
       usedIndices: usedIndices,
     );
     if (index == null || index <= 1 || index >= updated.length - 1) {
@@ -297,9 +288,7 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
       start = alignedStart;
       end = alignedEnd;
     }
-    mappedSegments.add(
-      ElbowFixedSegment(index: index, start: start, end: end),
-    );
+    mappedSegments.add(ElbowFixedSegment(index: index, start: start, end: end));
   }
 
   if (requireAll && mappedSegments.length != fixedSegments.length) {
@@ -663,10 +652,7 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
     points: merged.points,
     fixedSegments: merged.fixedSegments,
   );
-  final simplified = ElbowPathUtils.simplifyPath(
-    merged.points,
-    pinned: pinned,
-  );
+  final simplified = ElbowPathUtils.simplifyPath(merged.points, pinned: pinned);
   final reindexed = _reindexFixedSegments(simplified, merged.fixedSegments);
   return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }

@@ -1,8 +1,6 @@
-﻿import 'dart:math' as math;
-import 'dart:ui' show BoxHeightStyle, BoxWidthStyle;
+import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
-import 'package:flutter/services.dart' show TextSelection;
 import 'package:meta/meta.dart';
 
 import '../../../types/draw_point.dart';
@@ -111,8 +109,6 @@ Rect? _resolveVisualBounds(TextPainter painter, String text) {
   final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
   final boxes = painter.getBoxesForSelection(
     selection,
-    boxHeightStyle: BoxHeightStyle.tight,
-    boxWidthStyle: BoxWidthStyle.tight,
   );
   if (boxes.isEmpty) {
     return null;

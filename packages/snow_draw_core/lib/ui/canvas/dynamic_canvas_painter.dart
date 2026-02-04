@@ -703,9 +703,10 @@ class DynamicCanvasPainter extends CustomPainter {
         ..rotate(element.rotation)
         ..translate(-rect.centerX, -rect.centerY);
     }
-    canvas.translate(rect.minX, rect.minY);
-    canvas.drawPath(path, strokePaint);
-    canvas.restore();
+    canvas
+      ..translate(rect.minX, rect.minY)
+      ..drawPath(path, strokePaint)
+      ..restore();
   }
 
   Offset _resolveTextOffsetForUnderline({
@@ -1259,9 +1260,10 @@ class DynamicCanvasPainter extends CustomPainter {
         ..rotate(element.rotation)
         ..translate(-rect.centerX, -rect.centerY);
     }
-    canvas.translate(rect.minX, rect.minY);
-    canvas.drawPath(path, strokePaint);
-    canvas.restore();
+    canvas
+      ..translate(rect.minX, rect.minY)
+      ..drawPath(path, strokePaint)
+      ..restore();
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

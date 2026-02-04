@@ -58,16 +58,14 @@ final class ElbowPathUtils {
     DrawPoint a,
     DrawPoint b, {
     double epsilon = ElbowConstants.dedupThreshold,
-  }) =>
-      axisForSegment(a, b, epsilon: epsilon).isHorizontal;
+  }) => axisForSegment(a, b, epsilon: epsilon).isHorizontal;
 
   /// Returns true when a segment is (or should be treated as) vertical.
   static bool segmentIsVertical(
     DrawPoint a,
     DrawPoint b, {
     double epsilon = ElbowConstants.dedupThreshold,
-  }) =>
-      axisForSegment(a, b, epsilon: epsilon).isVertical;
+  }) => axisForSegment(a, b, epsilon: epsilon).isVertical;
 
   /// Returns the shared axis coordinate for a segment.
   static double axisValue(
@@ -81,16 +79,14 @@ final class ElbowPathUtils {
     DrawPoint a,
     DrawPoint b, {
     double epsilon = ElbowConstants.dedupThreshold,
-  }) =>
-      (a.x - b.x).abs() <= epsilon && (a.y - b.y).abs() <= epsilon;
+  }) => (a.x - b.x).abs() <= epsilon && (a.y - b.y).abs() <= epsilon;
 
   /// Returns true when two points align on either axis.
   static bool pointsAligned(
     DrawPoint a,
     DrawPoint b, {
     double epsilon = ElbowConstants.dedupThreshold,
-  }) =>
-      (a.x - b.x).abs() <= epsilon || (a.y - b.y).abs() <= epsilon;
+  }) => (a.x - b.x).abs() <= epsilon || (a.y - b.y).abs() <= epsilon;
 
   /// Returns true when three points form a straight orthogonal line.
   static bool segmentsCollinear(

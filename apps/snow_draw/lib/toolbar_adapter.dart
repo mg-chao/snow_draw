@@ -220,8 +220,7 @@ class StyleToolbarAdapter {
         config.rectangleStyle != _config.rectangleStyle;
     final arrowStyleChanged = config.arrowStyle != _config.arrowStyle;
     final lineStyleChanged = config.lineStyle != _config.lineStyle;
-    final freeDrawStyleChanged =
-        config.freeDrawStyle != _config.freeDrawStyle;
+    final freeDrawStyleChanged = config.freeDrawStyle != _config.freeDrawStyle;
     final textStyleChanged = config.textStyle != _config.textStyle;
     final serialNumberStyleChanged =
         config.serialNumberStyle != _config.serialNumberStyle;

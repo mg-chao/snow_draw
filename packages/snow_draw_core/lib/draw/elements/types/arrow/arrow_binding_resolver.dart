@@ -386,10 +386,7 @@ ElementState? _applyBindings({
   return element.copyWith(rect: result.rect, data: updatedData);
 }
 
-List<DrawPoint> _resolveLocalPoints(
-  ElementState element,
-  ArrowLikeData data,
-) {
+List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowLikeData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,

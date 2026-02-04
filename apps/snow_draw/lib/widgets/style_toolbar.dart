@@ -1279,22 +1279,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
-          break;
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
-          break;
         case ToolType.line:
           selectedTypes.add(ElementType.line);
-          break;
         case ToolType.freeDraw:
           selectedTypes.add(ElementType.freeDraw);
-          break;
         case ToolType.text:
           selectedTypes.add(ElementType.text);
-          break;
         case ToolType.serialNumber:
           selectedTypes.add(ElementType.serialNumber);
-          break;
         case ToolType.selection:
           break;
       }

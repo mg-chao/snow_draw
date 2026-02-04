@@ -407,15 +407,15 @@ class ArrowPointOperation extends EditOperation {
 
     final updatedData =
         data.arrowType == ArrowType.elbow &&
-                arrowData != null &&
-                result.$3 != null
-            ? dataWithBindings.copyWith(
-                points: normalized,
-                fixedSegments: result.$2,
-                startIsSpecial: result.$3!.startIsSpecial,
-                endIsSpecial: result.$3!.endIsSpecial,
-              )
-            : dataWithBindings.copyWith(points: normalized);
+            arrowData != null &&
+            result.$3 != null
+        ? dataWithBindings.copyWith(
+            points: normalized,
+            fixedSegments: result.$2,
+            startIsSpecial: result.$3!.startIsSpecial,
+            endIsSpecial: result.$3!.endIsSpecial,
+          )
+        : dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: rectAndPoints.rect,
       data: updatedData,

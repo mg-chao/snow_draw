@@ -1,4 +1,4 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
 import '../../../elements/core/element_data.dart';

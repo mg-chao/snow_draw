@@ -233,7 +233,8 @@ class LineStyleValues {
   );
 }
 
-/// Resolved style values for serial number elements, supporting multi-selection.
+/// Resolved style values for serial number elements, supporting
+/// multi-selection.
 @immutable
 class SerialNumberStyleValues {
   const SerialNumberStyleValues({

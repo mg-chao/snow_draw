@@ -484,7 +484,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String, ElementState>{};
     }
     if (interaction is TextEditingState && interaction.isNew) {
-      // Avoid double-rendering the draft text (static + dynamic) while creating.
+      // Avoid double-rendering the draft text (static + dynamic) while
+      // creating.
       return const <String, ElementState>{};
     }
     if (dynamicLayerStartIndex == null) {
@@ -1067,7 +1068,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final serialNumberIds = _resolveSerialNumberSelectionIds(state);
     final updateSerialNumberStyle =
-        serialNumberIds.isNotEmpty || toolTypeId == SerialNumberData.typeIdToken;
+        serialNumberIds.isNotEmpty ||
+        toolTypeId == SerialNumberData.typeIdToken;
     if (updateSerialNumberStyle &&
         !_doubleEquals(next, config.serialNumberStyle.fontSize)) {
       final nextStyle = config.serialNumberStyle.copyWith(fontSize: next);

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../core/element_definition.dart';
 import 'serial_number_creation_strategy.dart';

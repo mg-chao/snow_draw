@@ -8,8 +8,9 @@ class PropertyUtils {
   /// Merge multiple MixedValue instances using an equality function
   static MixedValue<T> mergeMixedValues<T>(
     List<MixedValue<T>> values,
-    bool Function(T, T) equals,
-  ) {
+    bool Function(T, T) equals, {
+    bool treatNullAsValue = false,
+  }) {
     if (values.isEmpty) {
       return MixedValue<T>(value: null, isMixed: true);
     }
@@ -22,7 +23,15 @@ class PropertyUtils {
     // Get first non-null value
     final firstValue = values.first.value;
     if (firstValue == null) {
-      return MixedValue<T>(value: null, isMixed: true);
+      if (!treatNullAsValue) {
+        return MixedValue<T>(value: null, isMixed: true);
+      }
+      for (final value in values.skip(1)) {
+        if (value.value != null) {
+          return MixedValue<T>(value: null, isMixed: true);
+        }
+      }
+      return MixedValue<T>(value: null, isMixed: false);
     }
 
     // Check if all values equal the first

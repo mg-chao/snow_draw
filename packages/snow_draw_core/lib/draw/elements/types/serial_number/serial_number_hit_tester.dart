@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
@@ -32,38 +32,14 @@ class SerialNumberHitTester implements ElementHitTester {
     final center = rect.center;
     final dx = position.x - center.x;
     final dy = position.y - center.y;
-    final distance = math.sqrt(dx * dx + dy * dy);
-
-    final strokeHit = _testStroke(
-      radius: radius,
-      distance: distance,
-      strokeWidth: data.strokeWidth,
-      tolerance: tolerance,
-    );
-    if (strokeHit) {
-      return true;
-    }
-
-    final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
-    if (fillOpacity <= 0) {
+    final distanceSq = dx * dx + dy * dy;
+    final strokeMargin = data.strokeWidth > 0 ? data.strokeWidth / 2 : 0.0;
+    final effectiveRadius = radius + strokeMargin + tolerance;
+    if (effectiveRadius <= 0) {
       return false;
     }
 
-    return distance <= radius;
-  }
-
-  bool _testStroke({
-    required double radius,
-    required double distance,
-    required double strokeWidth,
-    required double tolerance,
-  }) {
-    if (strokeWidth <= 0) {
-      return false;
-    }
-    final strokeMargin = (strokeWidth / 2) + tolerance;
-    return distance >= radius - strokeMargin &&
-        distance <= radius + strokeMargin;
+    return distanceSq <= effectiveRadius * effectiveRadius;
   }
 
   @override

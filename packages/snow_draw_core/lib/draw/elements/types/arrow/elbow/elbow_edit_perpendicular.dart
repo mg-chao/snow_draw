@@ -277,8 +277,7 @@ _PerpendicularAdjustment? _slideEndpointCornerToPadding({
     if ((outer.y - corner.y).abs() > ElbowConstants.dedupThreshold) {
       return null;
     }
-    final originalDelta =
-        isStart ? outer.x - corner.x : corner.x - outer.x;
+    final originalDelta = isStart ? outer.x - corner.x : corner.x - outer.x;
     final newDelta = isStart ? outer.x - target.x : target.x - outer.x;
     if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
         newDelta.abs() <= ElbowConstants.dedupThreshold ||
@@ -874,11 +873,11 @@ _PerpendicularAdjustment? _slideEndpointNeighborToPadding({
       : (isStart ? reference.y - neighbor.y : neighbor.y - reference.y);
   final newDelta = heading.isHorizontal
       ? (isStart
-          ? reference.x - updatedNeighbor.x
-          : updatedNeighbor.x - reference.x)
+            ? reference.x - updatedNeighbor.x
+            : updatedNeighbor.x - reference.x)
       : (isStart
-          ? reference.y - updatedNeighbor.y
-          : updatedNeighbor.y - reference.y);
+            ? reference.y - updatedNeighbor.y
+            : updatedNeighbor.y - reference.y);
   final originalLength = originalDelta.abs();
   final newLength = newDelta.abs();
   if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
@@ -978,8 +977,9 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
         (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold;
     final connectorVertical =
         (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
-    final collinear =
-        adjacentHorizontal ? connectorHorizontal : connectorVertical;
+    final collinear = adjacentHorizontal
+        ? connectorHorizontal
+        : connectorVertical;
     if (collinear) {
       updated[neighborIndex] = connector;
       moved = true;
@@ -1162,14 +1162,13 @@ _PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
   required int startIndex,
   required bool horizontal,
   required double target,
-}) =>
-    _slideRun(
-      points: points,
-      startIndex: startIndex,
-      horizontal: horizontal,
-      target: target,
-      direction: 1,
-    );
+}) => _slideRun(
+  points: points,
+  startIndex: startIndex,
+  horizontal: horizontal,
+  target: target,
+  direction: 1,
+);
 
 DrawPoint _offsetPoint(
   DrawPoint point,

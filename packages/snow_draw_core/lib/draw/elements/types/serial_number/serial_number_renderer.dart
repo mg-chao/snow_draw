@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -186,7 +186,8 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       colorOverride: data.color.withValues(alpha: textOpacity),
       locale: locale,
     );
-    final visualCenter = layout.visualBounds?.center ??
+    final visualCenter =
+        layout.visualBounds?.center ??
         Offset(layout.size.width / 2, layout.size.height / 2);
     final offset = Offset(
       circleRect.center.dx - visualCenter.dx,
