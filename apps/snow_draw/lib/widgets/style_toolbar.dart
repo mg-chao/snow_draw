@@ -151,11 +151,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final showArrowControls =
           tool == ToolType.arrow || state.hasSelectedArrows;
       final showLineControls = tool == ToolType.line || state.hasSelectedLines;
+      final showFreeDrawControls =
+          tool == ToolType.freeDraw || state.hasSelectedFreeDraws;
       final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
       final showToolbar =
           showRectangleControls ||
           showArrowControls ||
           showLineControls ||
+          showFreeDrawControls ||
           showTextControls;
       if (showTextControls) {
         _requestSystemFonts();
@@ -1162,6 +1165,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedLines) {
       selectedTypes.add(ElementType.line);
     }
+    if (state.hasSelectedFreeDraws) {
+      selectedTypes.add(ElementType.freeDraw);
+    }
     if (state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
@@ -1173,12 +1179,19 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
+          break;
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
+          break;
         case ToolType.line:
           selectedTypes.add(ElementType.line);
+          break;
+        case ToolType.freeDraw:
+          selectedTypes.add(ElementType.freeDraw);
+          break;
         case ToolType.text:
           selectedTypes.add(ElementType.text);
+          break;
         case ToolType.selection:
           break;
       }
@@ -1188,10 +1201,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
       rectangleStyleValues: state.styleValues,
       arrowStyleValues: state.arrowStyleValues,
       lineStyleValues: state.lineStyleValues,
+      freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
       lineDefaults: state.lineStyle,
+      freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,

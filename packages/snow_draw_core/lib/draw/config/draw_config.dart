@@ -137,12 +137,14 @@ class DrawConfig {
     ElementStyleConfig? rectangleStyle,
     ElementStyleConfig? arrowStyle,
     ElementStyleConfig? lineStyle,
+    ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
        arrowStyle = arrowStyle ?? elementStyle,
        lineStyle = lineStyle ?? elementStyle,
+       freeDrawStyle = freeDrawStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle;
   final SelectionConfig selection;
   final ElementConfig element;
@@ -152,6 +154,7 @@ class DrawConfig {
   final ElementStyleConfig rectangleStyle;
   final ElementStyleConfig arrowStyle;
   final ElementStyleConfig lineStyle;
+  final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
   final GridConfig grid;
   final SnapConfig snap;
@@ -167,6 +170,7 @@ class DrawConfig {
     ElementStyleConfig? rectangleStyle,
     ElementStyleConfig? arrowStyle,
     ElementStyleConfig? lineStyle,
+    ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     GridConfig? grid,
     SnapConfig? snap,
@@ -187,6 +191,9 @@ class DrawConfig {
       lineStyle:
           lineStyle ??
           (elementStyle != null ? nextElementStyle : this.lineStyle),
+      freeDrawStyle:
+          freeDrawStyle ??
+          (elementStyle != null ? nextElementStyle : this.freeDrawStyle),
       textStyle:
           textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
@@ -207,6 +214,7 @@ class DrawConfig {
           other.rectangleStyle == rectangleStyle &&
           other.arrowStyle == arrowStyle &&
           other.lineStyle == lineStyle &&
+          other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
           other.grid == grid &&
           other.snap == snap;
@@ -221,6 +229,7 @@ class DrawConfig {
     rectangleStyle,
     arrowStyle,
     lineStyle,
+    freeDrawStyle,
     textStyle,
     grid,
     snap,
@@ -237,6 +246,7 @@ class DrawConfig {
       'rectangleStyle: $rectangleStyle, '
       'arrowStyle: $arrowStyle, '
       'lineStyle: $lineStyle, '
+      'freeDrawStyle: $freeDrawStyle, '
       'textStyle: $textStyle, '
       'grid: $grid, '
       'snap: $snap'

@@ -239,30 +239,36 @@ class StyleToolbarState {
     required this.rectangleStyle,
     required this.arrowStyle,
     required this.lineStyle,
+    required this.freeDrawStyle,
     required this.textStyle,
     required this.styleValues,
     required this.arrowStyleValues,
     required this.lineStyleValues,
+    required this.freeDrawStyleValues,
     required this.textStyleValues,
     required this.hasSelection,
     required this.hasSelectedRectangles,
     required this.hasSelectedArrows,
     required this.hasSelectedLines,
+    required this.hasSelectedFreeDraws,
     required this.hasSelectedTexts,
   });
 
   final ElementStyleConfig rectangleStyle;
   final ElementStyleConfig arrowStyle;
   final ElementStyleConfig lineStyle;
+  final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
   final RectangleStyleValues styleValues;
   final ArrowStyleValues arrowStyleValues;
   final LineStyleValues lineStyleValues;
+  final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
   final bool hasSelection;
   final bool hasSelectedRectangles;
   final bool hasSelectedArrows;
   final bool hasSelectedLines;
+  final bool hasSelectedFreeDraws;
   final bool hasSelectedTexts;
 
   @override
@@ -272,15 +278,18 @@ class StyleToolbarState {
           other.rectangleStyle == rectangleStyle &&
           other.arrowStyle == arrowStyle &&
           other.lineStyle == lineStyle &&
+          other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
           other.styleValues == styleValues &&
           other.arrowStyleValues == arrowStyleValues &&
           other.lineStyleValues == lineStyleValues &&
+          other.freeDrawStyleValues == freeDrawStyleValues &&
           other.textStyleValues == textStyleValues &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
           other.hasSelectedArrows == hasSelectedArrows &&
           other.hasSelectedLines == hasSelectedLines &&
+          other.hasSelectedFreeDraws == hasSelectedFreeDraws &&
           other.hasSelectedTexts == hasSelectedTexts;
 
   @override
@@ -288,15 +297,18 @@ class StyleToolbarState {
     rectangleStyle,
     arrowStyle,
     lineStyle,
+    freeDrawStyle,
     textStyle,
     styleValues,
     arrowStyleValues,
     lineStyleValues,
+    freeDrawStyleValues,
     textStyleValues,
     hasSelection,
     hasSelectedRectangles,
     hasSelectedArrows,
     hasSelectedLines,
+    hasSelectedFreeDraws,
     hasSelectedTexts,
   );
 }

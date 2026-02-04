@@ -13,6 +13,7 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
           ElementType.rectangle,
           ElementType.arrow,
           ElementType.line,
+          ElementType.freeDraw,
           ElementType.text,
         },
       );
@@ -29,6 +30,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.color);
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.color);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.color);
@@ -48,6 +52,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.color;
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.color;
+    }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.color;
     }
@@ -64,6 +71,7 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
           ElementType.rectangle,
           ElementType.arrow,
           ElementType.line,
+          ElementType.freeDraw,
         },
       );
 
@@ -80,6 +88,9 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.strokeWidth);
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.strokeWidth);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.doubleEquals);
   }
@@ -95,6 +106,9 @@ class StrokeWidthPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.strokeWidth;
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.strokeWidth;
+    }
     return 2;
   }
 }
@@ -108,6 +122,7 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
           ElementType.rectangle,
           ElementType.arrow,
           ElementType.line,
+          ElementType.freeDraw,
         },
       );
 
@@ -124,6 +139,9 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.strokeStyle);
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.strokeStyle);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.enumEquals);
   }
@@ -139,6 +157,9 @@ class StrokeStylePropertyDescriptor extends PropertyDescriptor<StrokeStyle> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.strokeStyle;
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.strokeStyle;
+    }
     return StrokeStyle.solid;
   }
 }
@@ -151,6 +172,7 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
         supportedElementTypes: const {
           ElementType.rectangle,
           ElementType.line,
+          ElementType.freeDraw,
           ElementType.text,
         },
       );
@@ -164,6 +186,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.fillColor);
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.fillColor);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillColor);
@@ -180,6 +205,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.fillColor;
     }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.fillColor;
+    }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillColor;
     }
@@ -195,6 +223,7 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
         supportedElementTypes: const {
           ElementType.rectangle,
           ElementType.line,
+          ElementType.freeDraw,
           ElementType.text,
         },
       );
@@ -208,6 +237,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.fillStyle);
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.fillStyle);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillStyle);
@@ -223,6 +255,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.fillStyle;
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.fillStyle;
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillStyle;
@@ -240,6 +275,7 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
           ElementType.rectangle,
           ElementType.arrow,
           ElementType.line,
+          ElementType.freeDraw,
           ElementType.text,
         },
       );
@@ -256,6 +292,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       values.add(context.lineStyleValues.opacity);
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      values.add(context.freeDrawStyleValues.opacity);
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.opacity);
@@ -274,6 +313,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.line)) {
       return context.lineDefaults.opacity;
+    }
+    if (context.selectedElementTypes.contains(ElementType.freeDraw)) {
+      return context.freeDrawDefaults.opacity;
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.opacity;
