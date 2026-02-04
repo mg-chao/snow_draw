@@ -5,6 +5,7 @@ import 'types/arrow/arrow_definition.dart';
 import 'types/free_draw/free_draw_definition.dart';
 import 'types/line/line_definition.dart';
 import 'types/rectangle/rectangle_definition.dart';
+import 'types/serial_number/serial_number_definition.dart';
 import 'types/text/text_definition.dart';
 
 /// Registers all built-in element types.
@@ -26,5 +27,8 @@ void registerBuiltInElements(DefaultElementRegistry registry) {
   }
   if (registry.get(textDefinition.typeId) == null) {
     registry.register(textDefinition);
+  }
+  if (registry.get(serialNumberDefinition.typeId) == null) {
+    registry.register(serialNumberDefinition);
   }
 }

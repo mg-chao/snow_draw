@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
@@ -90,6 +91,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
   Timer? _sliderUpdateTimer;
   double? _pendingCornerRadius;
   double? _pendingOpacity;
+  int? _pendingSerialNumber;
+  late final TextEditingController _serialNumberController;
+  late final FocusNode _serialNumberFocusNode;
   List<String> _systemFontFamilies = const [];
   var _fontLoadRequested = false;
 
@@ -97,6 +101,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _serialNumberController = TextEditingController();
+    _serialNumberFocusNode = FocusNode();
     _mergedListenable = Listenable.merge([
       widget.toolController,
       widget.adapter.stateListenable,
@@ -107,6 +113,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
   void dispose() {
     _sliderUpdateTimer?.cancel();
     _scrollController.dispose();
+    _serialNumberController.dispose();
+    _serialNumberFocusNode.dispose();
     super.dispose();
   }
 
@@ -154,13 +162,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final showFreeDrawControls =
           tool == ToolType.freeDraw || state.hasSelectedFreeDraws;
       final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
+      final showSerialNumberControls =
+          tool == ToolType.serialNumber || state.hasSelectedSerialNumbers;
       final showToolbar =
           showRectangleControls ||
           showArrowControls ||
           showLineControls ||
           showFreeDrawControls ||
-          showTextControls;
-      if (showTextControls) {
+          showTextControls ||
+          showSerialNumberControls;
+      if (showTextControls || showSerialNumberControls) {
         _requestSystemFonts();
       }
       final maxHeight = math
@@ -475,6 +486,92 @@ class _StyleToolbarState extends State<StyleToolbar> {
             }
             onSelect(value as String);
           },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSerialNumberControl({
+    required MixedValue<int> value,
+    required int defaultValue,
+  }) {
+    final theme = Theme.of(context);
+    final isMixed = value.isMixed && _pendingSerialNumber == null;
+    final resolvedValue = _pendingSerialNumber ?? value.valueOr(defaultValue);
+    final displayText = isMixed ? '' : resolvedValue.toString();
+
+    if (!_serialNumberFocusNode.hasFocus &&
+        _serialNumberController.text != displayText) {
+      _serialNumberController.text = displayText;
+    }
+
+    void commitValue(int next) {
+      final sanitized = next < 0 ? 0 : next;
+      setState(() => _pendingSerialNumber = null);
+      _serialNumberController.text = sanitized.toString();
+      unawaited(_applyStyleUpdate(serialNumber: sanitized));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(widget.strings.number),
+        const SizedBox(height: _sectionGap),
+        Row(
+          children: [
+            _buildOutlinedIconButton(
+              icon: Icons.remove,
+              message: 'Decrease',
+              onPressed: resolvedValue > 0
+                  ? () => commitValue(resolvedValue - 1)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _serialNumberController,
+                focusNode: _serialNumberFocusNode,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: isMixed ? widget.strings.mixed : null,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                ),
+                style: theme.textTheme.bodyMedium,
+                onChanged: (text) {
+                  final parsed = int.tryParse(text);
+                  setState(() => _pendingSerialNumber = parsed);
+                },
+                onSubmitted: (text) {
+                  final parsed = int.tryParse(text);
+                  if (parsed != null) {
+                    commitValue(parsed);
+                  } else {
+                    setState(() => _pendingSerialNumber = null);
+                  }
+                },
+                onEditingComplete: () {
+                  final parsed = int.tryParse(_serialNumberController.text);
+                  if (parsed != null) {
+                    commitValue(parsed);
+                  } else {
+                    setState(() => _pendingSerialNumber = null);
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildOutlinedIconButton(
+              icon: Icons.add,
+              message: 'Increase',
+              onPressed: () => commitValue(resolvedValue + 1),
+            ),
+          ],
         ),
       ],
     );
@@ -1171,6 +1268,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
+    if (state.hasSelectedSerialNumbers) {
+      selectedTypes.add(ElementType.serialNumber);
+    }
 
     // If no elements are selected, use the current tool to determine which
     // properties to show (for styling the element to be created)
@@ -1192,6 +1292,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
         case ToolType.text:
           selectedTypes.add(ElementType.text);
           break;
+        case ToolType.serialNumber:
+          selectedTypes.add(ElementType.serialNumber);
+          break;
         case ToolType.selection:
           break;
       }
@@ -1203,11 +1306,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
       lineStyleValues: state.lineStyleValues,
       freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
+      serialNumberStyleValues: state.serialNumberStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
       lineDefaults: state.lineStyle,
       freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
+      serialNumberDefaults: state.serialNumberStyle,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,
     );
@@ -1505,6 +1610,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
           endDefault: endDefault,
         );
 
+      case 'serialNumber':
+        final value = property.extractValue(context) as MixedValue<int>;
+        final defaultValue = property.getDefaultValue(context) as int;
+        return _buildSerialNumberControl(
+          value: value,
+          defaultValue: defaultValue,
+        );
+
       case 'fontSize':
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildStyleOptions<double>(
@@ -1624,6 +1737,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    int? serialNumber,
   }) => widget.adapter.applyStyleUpdate(
     color: color,
     fillColor: fillColor,
@@ -1641,6 +1755,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     opacity: opacity,
     textStrokeColor: textStrokeColor,
     textStrokeWidth: textStrokeWidth,
+    serialNumber: serialNumber,
     toolType: widget.toolController.value,
   );
 

@@ -82,6 +82,7 @@ class ElementStyleConfig {
   const ElementStyleConfig({
     this.opacity = ConfigDefaults.defaultOpacity,
     this.zIndex = 1,
+    this.serialNumber = ConfigDefaults.defaultSerialNumber,
     this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
     this.color = ConfigDefaults.defaultColor,
     this.fillColor = ConfigDefaults.defaultFillColor,
@@ -99,6 +100,7 @@ class ElementStyleConfig {
     this.textStrokeWidth = ConfigDefaults.defaultTextStrokeWidth,
   }) : assert(opacity >= 0 && opacity <= 1, 'opacity must be in [0, 1]'),
        assert(zIndex >= 0, 'zIndex must be non-negative'),
+       assert(serialNumber >= 0, 'serialNumber must be non-negative'),
        assert(strokeWidth >= 0, 'strokeWidth must be non-negative'),
        assert(cornerRadius >= 0, 'cornerRadius must be non-negative'),
        assert(fontSize >= 0, 'fontSize must be non-negative'),
@@ -112,6 +114,9 @@ class ElementStyleConfig {
   /// Note: the runtime may still enforce its own z-indexing strategy to keep
   /// layer ordering stable.
   final int zIndex;
+
+  /// Default serial number value for serial number elements.
+  final int serialNumber;
 
   /// Default stroke width used by element types that support strokes.
   final double strokeWidth;
@@ -161,6 +166,7 @@ class ElementStyleConfig {
   ElementStyleConfig copyWith({
     double? opacity,
     int? zIndex,
+    int? serialNumber,
     double? strokeWidth,
     Color? color,
     Color? fillColor,
@@ -179,6 +185,7 @@ class ElementStyleConfig {
   }) => ElementStyleConfig(
     opacity: opacity ?? this.opacity,
     zIndex: zIndex ?? this.zIndex,
+    serialNumber: serialNumber ?? this.serialNumber,
     strokeWidth: strokeWidth ?? this.strokeWidth,
     color: color ?? this.color,
     fillColor: fillColor ?? this.fillColor,
@@ -204,6 +211,7 @@ class ElementStyleConfig {
       other is ElementStyleConfig &&
           other.opacity == opacity &&
           other.zIndex == zIndex &&
+          other.serialNumber == serialNumber &&
           other.strokeWidth == strokeWidth &&
           other.color == color &&
           other.fillColor == fillColor &&
@@ -224,6 +232,7 @@ class ElementStyleConfig {
   int get hashCode => Object.hash(
     opacity,
     zIndex,
+    serialNumber,
     strokeWidth,
     color,
     fillColor,
@@ -246,6 +255,7 @@ class ElementStyleConfig {
       'ElementStyleConfig('
       'opacity: $opacity, '
       'zIndex: $zIndex, '
+      'serialNumber: $serialNumber, '
       'strokeWidth: $strokeWidth, '
       'color: $color, '
       'fillColor: $fillColor, '

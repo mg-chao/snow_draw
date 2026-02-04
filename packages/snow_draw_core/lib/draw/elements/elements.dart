@@ -7,4 +7,5 @@ export 'types/arrow/arrow.dart';
 export 'types/free_draw/free_draw.dart';
 export 'types/line/line.dart';
 export 'types/rectangle/rectangle.dart';
+export 'types/serial_number/serial_number.dart';
 export 'types/text/text.dart';

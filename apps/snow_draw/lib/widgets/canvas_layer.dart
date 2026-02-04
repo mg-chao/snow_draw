@@ -4,6 +4,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/ui/canvas/draw_canvas.dart';
@@ -55,6 +56,8 @@ class _CanvasLayerState extends State<CanvasLayer> {
           ? FreeDrawData.typeIdToken
           : tool == ToolType.text
           ? TextData.typeIdToken
+          : tool == ToolType.serialNumber
+          ? SerialNumberData.typeIdToken
           : null,
     ),
   );

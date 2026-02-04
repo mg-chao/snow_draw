@@ -41,6 +41,7 @@ class ElementStyleUpdate {
     this.verticalAlign,
     this.textStrokeColor,
     this.textStrokeWidth,
+    this.serialNumber,
   });
 
   final Color? color;
@@ -58,6 +59,7 @@ class ElementStyleUpdate {
   final TextVerticalAlign? verticalAlign;
   final Color? textStrokeColor;
   final double? textStrokeWidth;
+  final int? serialNumber;
 
   bool get isEmpty =>
       color == null &&
@@ -74,7 +76,8 @@ class ElementStyleUpdate {
       textAlign == null &&
       verticalAlign == null &&
       textStrokeColor == null &&
-      textStrokeWidth == null;
+      textStrokeWidth == null &&
+      serialNumber == null;
 
   ElementStyleUpdate copyWith({
     Color? color,
@@ -92,6 +95,7 @@ class ElementStyleUpdate {
     TextVerticalAlign? verticalAlign,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    int? serialNumber,
   }) => ElementStyleUpdate(
     color: color ?? this.color,
     fillColor: fillColor ?? this.fillColor,
@@ -108,5 +112,6 @@ class ElementStyleUpdate {
     verticalAlign: verticalAlign ?? this.verticalAlign,
     textStrokeColor: textStrokeColor ?? this.textStrokeColor,
     textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
+    serialNumber: serialNumber ?? this.serialNumber,
   );
 }

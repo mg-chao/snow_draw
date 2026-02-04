@@ -233,6 +233,51 @@ class LineStyleValues {
   );
 }
 
+/// Resolved style values for serial number elements, supporting multi-selection.
+@immutable
+class SerialNumberStyleValues {
+  const SerialNumberStyleValues({
+    required this.color,
+    required this.fillColor,
+    required this.fillStyle,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.number,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<Color> fillColor;
+  final MixedValue<FillStyle> fillStyle;
+  final MixedValue<double> fontSize;
+  final MixedValue<String> fontFamily;
+  final MixedValue<int> number;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SerialNumberStyleValues &&
+          other.color == color &&
+          other.fillColor == fillColor &&
+          other.fillStyle == fillStyle &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.number == number &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    fillColor,
+    fillStyle,
+    fontSize,
+    fontFamily,
+    number,
+    opacity,
+  );
+}
+
 @immutable
 class StyleToolbarState {
   const StyleToolbarState({
@@ -241,17 +286,20 @@ class StyleToolbarState {
     required this.lineStyle,
     required this.freeDrawStyle,
     required this.textStyle,
+    required this.serialNumberStyle,
     required this.styleValues,
     required this.arrowStyleValues,
     required this.lineStyleValues,
     required this.freeDrawStyleValues,
     required this.textStyleValues,
+    required this.serialNumberStyleValues,
     required this.hasSelection,
     required this.hasSelectedRectangles,
     required this.hasSelectedArrows,
     required this.hasSelectedLines,
     required this.hasSelectedFreeDraws,
     required this.hasSelectedTexts,
+    required this.hasSelectedSerialNumbers,
   });
 
   final ElementStyleConfig rectangleStyle;
@@ -259,17 +307,20 @@ class StyleToolbarState {
   final ElementStyleConfig lineStyle;
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
+  final ElementStyleConfig serialNumberStyle;
   final RectangleStyleValues styleValues;
   final ArrowStyleValues arrowStyleValues;
   final LineStyleValues lineStyleValues;
   final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
+  final SerialNumberStyleValues serialNumberStyleValues;
   final bool hasSelection;
   final bool hasSelectedRectangles;
   final bool hasSelectedArrows;
   final bool hasSelectedLines;
   final bool hasSelectedFreeDraws;
   final bool hasSelectedTexts;
+  final bool hasSelectedSerialNumbers;
 
   @override
   bool operator ==(Object other) =>
@@ -280,17 +331,20 @@ class StyleToolbarState {
           other.lineStyle == lineStyle &&
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
+          other.serialNumberStyle == serialNumberStyle &&
           other.styleValues == styleValues &&
           other.arrowStyleValues == arrowStyleValues &&
           other.lineStyleValues == lineStyleValues &&
           other.freeDrawStyleValues == freeDrawStyleValues &&
           other.textStyleValues == textStyleValues &&
+          other.serialNumberStyleValues == serialNumberStyleValues &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
           other.hasSelectedArrows == hasSelectedArrows &&
           other.hasSelectedLines == hasSelectedLines &&
           other.hasSelectedFreeDraws == hasSelectedFreeDraws &&
-          other.hasSelectedTexts == hasSelectedTexts;
+          other.hasSelectedTexts == hasSelectedTexts &&
+          other.hasSelectedSerialNumbers == hasSelectedSerialNumbers;
 
   @override
   int get hashCode => Object.hash(
@@ -299,16 +353,19 @@ class StyleToolbarState {
     lineStyle,
     freeDrawStyle,
     textStyle,
+    serialNumberStyle,
     styleValues,
     arrowStyleValues,
     lineStyleValues,
     freeDrawStyleValues,
     textStyleValues,
+    serialNumberStyleValues,
     hasSelection,
     hasSelectedRectangles,
     hasSelectedArrows,
     hasSelectedLines,
     hasSelectedFreeDraws,
     hasSelectedTexts,
+    hasSelectedSerialNumbers,
   );
 }
