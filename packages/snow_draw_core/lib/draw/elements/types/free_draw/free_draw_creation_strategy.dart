@@ -45,7 +45,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     return CreationUpdateResult(
       data: data.copyWith(points: normalized),
       rect: rect,
-      creationMode: const RectCreationMode(),
+      creationMode: const _FreeDrawCreationMode(),
     );
   }
 
@@ -87,18 +87,25 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       normalizedPoints: elementData.points,
     );
 
+    final mode = _resolveFreeDrawMode(creatingState.creationMode);
     List<DrawPoint> nextPoints;
     if (maintainAspectRatio) {
-      nextPoints = [creatingState.startPosition, adjustedPosition];
-    } else {
-      nextPoints = worldPoints.isEmpty
-          ? <DrawPoint>[adjustedPosition]
-          : List<DrawPoint>.from(worldPoints);
-      if (nextPoints.length == 1) {
-        nextPoints.add(adjustedPosition);
-      } else if (nextPoints.last != adjustedPosition) {
-        nextPoints.add(adjustedPosition);
+      if (mode.isLineActive) {
+        nextPoints = _updateLineSegment(
+          worldPoints: worldPoints,
+          currentPosition: adjustedPosition,
+        );
+      } else {
+        nextPoints = _startLineSegment(
+          worldPoints: worldPoints,
+          currentPosition: adjustedPosition,
+        );
       }
+    } else {
+      nextPoints = _appendFreeDrawPoint(
+        worldPoints: worldPoints,
+        currentPosition: adjustedPosition,
+      );
     }
 
     final rect = _boundsFromPoints(nextPoints);
@@ -111,7 +118,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     return CreationUpdateResult(
       data: updatedData,
       rect: rect,
-      creationMode: creatingState.creationMode,
+      creationMode: mode.copyWith(isLineActive: maintainAspectRatio),
     );
   }
 
@@ -253,4 +260,73 @@ double _pathLength(List<DrawPoint> points) {
     length += points[i - 1].distance(points[i]);
   }
   return length;
+}
+
+_FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
+    mode is _FreeDrawCreationMode ? mode : const _FreeDrawCreationMode();
+
+List<DrawPoint> _appendFreeDrawPoint({
+  required List<DrawPoint> worldPoints,
+  required DrawPoint currentPosition,
+}) {
+  final nextPoints = worldPoints.isEmpty
+      ? <DrawPoint>[currentPosition]
+      : List<DrawPoint>.from(worldPoints);
+  if (nextPoints.length == 1) {
+    nextPoints.add(currentPosition);
+  } else if (nextPoints.last != currentPosition) {
+    nextPoints.add(currentPosition);
+  }
+  return nextPoints;
+}
+
+List<DrawPoint> _startLineSegment({
+  required List<DrawPoint> worldPoints,
+  required DrawPoint currentPosition,
+}) {
+  final nextPoints = List<DrawPoint>.from(worldPoints);
+  if (nextPoints.isEmpty) {
+    nextPoints.add(currentPosition);
+  }
+  final anchor = nextPoints.last;
+  nextPoints.add(anchor);
+  nextPoints[nextPoints.length - 1] = currentPosition;
+  return nextPoints;
+}
+
+List<DrawPoint> _updateLineSegment({
+  required List<DrawPoint> worldPoints,
+  required DrawPoint currentPosition,
+}) {
+  if (worldPoints.isEmpty) {
+    return <DrawPoint>[currentPosition];
+  }
+  final nextPoints = List<DrawPoint>.from(worldPoints);
+  if (nextPoints.length == 1) {
+    nextPoints.add(currentPosition);
+  } else {
+    nextPoints[nextPoints.length - 1] = currentPosition;
+  }
+  return nextPoints;
+}
+
+@immutable
+class _FreeDrawCreationMode extends CreationMode {
+  const _FreeDrawCreationMode({this.isLineActive = false});
+
+  final bool isLineActive;
+
+  _FreeDrawCreationMode copyWith({bool? isLineActive}) =>
+      _FreeDrawCreationMode(isLineActive: isLineActive ?? this.isLineActive);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _FreeDrawCreationMode && other.isLineActive == isLineActive;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, isLineActive);
+
+  @override
+  String toString() => '_FreeDrawCreationMode(isLineActive: $isLineActive)';
 }
