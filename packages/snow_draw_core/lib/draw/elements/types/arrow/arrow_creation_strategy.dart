@@ -143,6 +143,18 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       referencePoint: segmentStart,
     );
     adjustedCurrent = bindingResult.position;
+    var endBinding = bindingResult.binding;
+    final closeTolerance =
+        config.selection.interaction.handleTolerance *
+        _loopCloseToleranceMultiplier;
+    if (elementData.arrowType != ArrowType.elbow && fixedPoints.length >= 2) {
+      final startPoint = fixedPoints.first;
+      if (adjustedCurrent.distanceSquared(startPoint) <=
+          closeTolerance * closeTolerance) {
+        adjustedCurrent = startPoint;
+        endBinding = startBindingResult.binding;
+      }
+    }
 
     final allPoints = _appendCurrentPoint(
       fixedPoints: fixedPoints,
@@ -171,7 +183,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final updatedData = elementData.copyWith(
       points: normalizedPoints,
       startBinding: startBindingResult.binding,
-      endBinding: bindingResult.binding,
+      endBinding: endBinding,
     );
 
     return CreationUpdateResult(
@@ -336,7 +348,11 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             normalizedPoints: data.points,
           )
         : rawPoints;
-    if (finalPoints.length < 2) {
+    final closeTolerance = finishTolerance * _loopCloseToleranceMultiplier;
+    final closedPoints = data.arrowType == ArrowType.elbow
+        ? finalPoints
+        : _closeIfNeeded(finalPoints, closeTolerance: closeTolerance);
+    if (closedPoints.length < 2) {
       return CreationFinishResult(
         data: data,
         rect: creatingState.currentRect,
@@ -345,12 +361,12 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     }
 
     final arrowRect = _calculateArrowRect(
-      points: finalPoints,
+      points: closedPoints,
       arrowType: data.arrowType,
       strokeWidth: data.strokeWidth,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
-      worldPoints: finalPoints,
+      worldPoints: closedPoints,
       rect: arrowRect,
     );
     final updatedData = data.copyWith(points: normalizedPoints);
@@ -377,6 +393,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     );
   }
 }
+
+const double _loopCloseToleranceMultiplier = 1.5;
 
 /// Calculates accurate bounding rect for arrow, accounting for curved paths.
 DrawRect _calculateArrowRect({
@@ -434,6 +452,26 @@ List<DrawPoint> _resolveFinalArrowPoints({
     return points;
   }
   points.add(currentPoint);
+  return points;
+}
+
+List<DrawPoint> _closeIfNeeded(
+  List<DrawPoint> points, {
+  required double closeTolerance,
+}) {
+  if (points.length < 3) {
+    return points;
+  }
+  final first = points.first;
+  final last = points.last;
+  if (first == last) {
+    return points;
+  }
+  if (first.distanceSquared(last) <= closeTolerance * closeTolerance) {
+    final closed = List<DrawPoint>.from(points);
+    closed[closed.length - 1] = first;
+    return closed;
+  }
   return points;
 }
 

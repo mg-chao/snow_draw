@@ -82,6 +82,7 @@ abstract class ConfigDefaults {
 
   // ===== Interaction =====
   static const handleTolerance = 6.0;
+  static const freeDrawCloseToleranceMultiplier = 1.5;
   static const dragThreshold = 0.0;
 
   // ===== Elements =====

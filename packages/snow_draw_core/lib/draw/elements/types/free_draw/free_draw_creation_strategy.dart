@@ -151,7 +151,9 @@ class FreeDrawCreationStrategy extends CreationStrategy {
 
     points = _closeIfNeeded(
       points,
-      closeTolerance: config.selection.interaction.handleTolerance,
+      closeTolerance:
+          config.selection.interaction.handleTolerance *
+          ConfigDefaults.freeDrawCloseToleranceMultiplier,
     );
     final length = _pathLength(points);
     if (!length.isFinite || length < config.element.minCreateSize) {
