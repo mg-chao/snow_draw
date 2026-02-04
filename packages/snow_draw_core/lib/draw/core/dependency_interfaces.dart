@@ -58,10 +58,11 @@ abstract class CreateElementReducerDeps
 
 abstract class TextEditReducerDeps implements HasConfig, HasIdGenerator {}
 
-abstract class SelectionReducerDeps implements HasLogService, HasEventBus {}
+abstract class SelectionReducerDeps
+    implements HasLogService, HasEventBus, HasConfig, HasIdGenerator {}
 
 abstract class ElementReducerDeps
-    implements HasLogService, HasEventBus, HasIdGenerator {}
+    implements HasLogService, HasEventBus, HasIdGenerator, HasConfig {}
 
 abstract class EditReducerDeps implements HasEditConfigProvider {}
 

@@ -15,6 +15,7 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
           ElementType.line,
           ElementType.freeDraw,
           ElementType.text,
+          ElementType.serialNumber,
         },
       );
 
@@ -37,6 +38,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.color);
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.color);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.colorEquals);
   }
@@ -57,6 +61,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.color;
+    }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.color;
     }
     return Colors.black;
   }
@@ -174,6 +181,7 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
           ElementType.line,
           ElementType.freeDraw,
           ElementType.text,
+          ElementType.serialNumber,
         },
       );
 
@@ -193,6 +201,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillColor);
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.fillColor);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.colorEquals);
   }
@@ -211,6 +222,9 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillColor;
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.fillColor;
+    }
     return Colors.transparent;
   }
 }
@@ -225,6 +239,7 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
           ElementType.line,
           ElementType.freeDraw,
           ElementType.text,
+          ElementType.serialNumber,
         },
       );
 
@@ -244,6 +259,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.fillStyle);
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.fillStyle);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.enumEquals);
   }
@@ -262,6 +280,9 @@ class FillStylePropertyDescriptor extends PropertyDescriptor<FillStyle> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.fillStyle;
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.fillStyle;
+    }
     return FillStyle.solid;
   }
 }
@@ -277,6 +298,7 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
           ElementType.line,
           ElementType.freeDraw,
           ElementType.text,
+          ElementType.serialNumber,
         },
       );
 
@@ -299,6 +321,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.text)) {
       values.add(context.textStyleValues.opacity);
     }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.opacity);
+    }
 
     return PropertyUtils.mergeMixedValues(values, PropertyUtils.doubleEquals);
   }
@@ -319,6 +344,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.text)) {
       return context.textDefaults.opacity;
+    }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.opacity;
     }
     return 1;
   }
@@ -365,37 +393,100 @@ class CornerRadiusPropertyDescriptor extends PropertyDescriptor<double> {
 /// Property descriptor for font size
 class FontSizePropertyDescriptor extends PropertyDescriptor<double> {
   const FontSizePropertyDescriptor()
-    : super(id: 'fontSize', supportedElementTypes: const {ElementType.text});
+    : super(
+        id: 'fontSize',
+        supportedElementTypes: const {
+          ElementType.text,
+          ElementType.serialNumber,
+        },
+      );
 
   @override
   MixedValue<double> extractValue(StylePropertyContext context) {
+    final values = <MixedValue<double>>[];
+
     if (context.selectedElementTypes.contains(ElementType.text)) {
-      return context.textStyleValues.fontSize;
+      values.add(context.textStyleValues.fontSize);
     }
-    return const MixedValue(value: null, isMixed: true);
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.fontSize);
+    }
+
+    return PropertyUtils.mergeMixedValues(values, PropertyUtils.doubleEquals);
   }
 
   @override
-  double getDefaultValue(StylePropertyContext context) =>
-      context.textDefaults.fontSize;
+  double getDefaultValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.text)) {
+      return context.textDefaults.fontSize;
+    }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.fontSize;
+    }
+    return context.textDefaults.fontSize;
+  }
 }
 
 /// Property descriptor for font family
 class FontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
   const FontFamilyPropertyDescriptor()
-    : super(id: 'fontFamily', supportedElementTypes: const {ElementType.text});
+    : super(
+        id: 'fontFamily',
+        supportedElementTypes: const {
+          ElementType.text,
+          ElementType.serialNumber,
+        },
+      );
 
   @override
   MixedValue<String> extractValue(StylePropertyContext context) {
+    final values = <MixedValue<String>>[];
+
     if (context.selectedElementTypes.contains(ElementType.text)) {
-      return context.textStyleValues.fontFamily;
+      values.add(context.textStyleValues.fontFamily);
+    }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      values.add(context.serialNumberStyleValues.fontFamily);
+    }
+
+    return PropertyUtils.mergeMixedValues(
+      values,
+      PropertyUtils.stringEquals,
+      treatNullAsValue: true,
+    );
+  }
+
+  @override
+  String getDefaultValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.text)) {
+      return context.textDefaults.fontFamily ?? '';
+    }
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberDefaults.fontFamily ?? '';
+    }
+    return context.textDefaults.fontFamily ?? '';
+  }
+}
+
+/// Property descriptor for serial number value
+class SerialNumberPropertyDescriptor extends PropertyDescriptor<int> {
+  const SerialNumberPropertyDescriptor()
+    : super(
+        id: 'serialNumber',
+        supportedElementTypes: const {ElementType.serialNumber},
+      );
+
+  @override
+  MixedValue<int> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.serialNumber)) {
+      return context.serialNumberStyleValues.number;
     }
     return const MixedValue(value: null, isMixed: true);
   }
 
   @override
-  String getDefaultValue(StylePropertyContext context) =>
-      context.textDefaults.fontFamily ?? 'Arial';
+  int getDefaultValue(StylePropertyContext context) =>
+      context.serialNumberDefaults.serialNumber;
 }
 
 /// Property descriptor for text alignment

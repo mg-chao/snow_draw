@@ -12,7 +12,6 @@ import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
-import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -407,15 +406,15 @@ class ArrowPointOperation extends EditOperation {
 
     final updatedData =
         data.arrowType == ArrowType.elbow &&
-                arrowData != null &&
-                result.$3 != null
-            ? dataWithBindings.copyWith(
-                points: normalized,
-                fixedSegments: result.$2,
-                startIsSpecial: result.$3!.startIsSpecial,
-                endIsSpecial: result.$3!.endIsSpecial,
-              )
-            : dataWithBindings.copyWith(points: normalized);
+            arrowData != null &&
+            result.$3 != null
+        ? dataWithBindings.copyWith(
+            points: normalized,
+            fixedSegments: result.$2,
+            startIsSpecial: result.$3!.startIsSpecial,
+            endIsSpecial: result.$3!.endIsSpecial,
+          )
+        : dataWithBindings.copyWith(points: normalized);
     final updatedElement = element.copyWith(
       rect: rectAndPoints.rect,
       data: updatedData,
@@ -935,7 +934,7 @@ List<ElementState> _resolveBindingTargets(
     }
     if (element.opacity <= 0 ||
         element.id == excludeId ||
-        element.data is! RectangleData) {
+        !ArrowBindingUtils.isBindableTarget(element)) {
       continue;
     }
     targets.add(element);

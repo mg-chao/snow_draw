@@ -45,8 +45,7 @@ final class LineData extends ElementData
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
     fillColor: Color(
-      (json['fillColor'] as int?) ??
-          ConfigDefaults.defaultFillColor.toARGB32(),
+      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
@@ -128,8 +127,9 @@ final class LineData extends ElementData
       'LineData does not support end arrowheads',
     );
     return LineData(
-      points:
-          points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+      points: points == null
+          ? this.points
+          : List<DrawPoint>.unmodifiable(points),
       color: color ?? this.color,
       fillColor: fillColor ?? this.fillColor,
       fillStyle: fillStyle ?? this.fillStyle,

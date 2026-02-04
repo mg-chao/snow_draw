@@ -19,6 +19,7 @@ class AppLocalizations {
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';
   String get toolText => 'Text';
+  String get toolSerialNumber => 'Serial Number';
   String get objectSnapping => 'Object Snapping';
   String get gridSnapping => 'Grid Snapping';
   String get color => 'Color';
@@ -45,6 +46,10 @@ class AppLocalizations {
   String get textStrokeWidth => 'Text Stroke Width';
   String get fontSize => 'Font Size';
   String get fontFamily => 'Font Family';
+  String get number => 'Number';
+  String get increase => 'Increase';
+  String get decrease => 'Decrease';
+  String get createText => 'Create Text';
   String get fontFamilySystem => 'System';
   String get fontFamilySans => 'Sans Serif';
   String get fontFamilySerif => 'Serif';

@@ -19,6 +19,7 @@ import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
+import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/events/event_bus.dart';
@@ -483,7 +484,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String, ElementState>{};
     }
     if (interaction is TextEditingState && interaction.isNew) {
-      // Avoid double-rendering the draft text (static + dynamic) while creating.
+      // Avoid double-rendering the draft text (static + dynamic) while
+      // creating.
       return const <String, ElementState>{};
     }
     if (dynamicLayerStartIndex == null) {
@@ -760,7 +762,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final toolTypeId = widget.currentToolTypeId;
-    if (toolTypeId == TextData.typeIdToken) {
+    if (toolTypeId == TextData.typeIdToken ||
+        toolTypeId == SerialNumberData.typeIdToken) {
       _adjustFontSize(event);
       return;
     }
@@ -1026,10 +1029,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final state = widget.store.state;
     final config = widget.store.config;
+    final toolTypeId = widget.currentToolTypeId;
     final base =
         _resolveEditingFontSize(state) ??
         _resolveAverageSelectedFontSize(state) ??
-        config.textStyle.fontSize;
+        (toolTypeId == SerialNumberData.typeIdToken
+            ? config.serialNumberStyle.fontSize
+            : config.textStyle.fontSize);
 
     // Find next stepped value
     final next = _findNextSteppedValue(
@@ -1056,6 +1062,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       unawaited(
         widget.store.dispatch(
           UpdateConfig(config.copyWith(textStyle: nextStyle)),
+        ),
+      );
+    }
+
+    final serialNumberIds = _resolveSerialNumberSelectionIds(state);
+    final updateSerialNumberStyle =
+        serialNumberIds.isNotEmpty ||
+        toolTypeId == SerialNumberData.typeIdToken;
+    if (updateSerialNumberStyle &&
+        !_doubleEquals(next, config.serialNumberStyle.fontSize)) {
+      final nextStyle = config.serialNumberStyle.copyWith(fontSize: next);
+      unawaited(
+        widget.store.dispatch(
+          UpdateConfig(config.copyWith(serialNumberStyle: nextStyle)),
         ),
       );
     }
@@ -1204,6 +1224,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         total += data.fontSize;
         count += 1;
       }
+      if (data is SerialNumberData) {
+        total += data.fontSize;
+        count += 1;
+      }
     }
     if (count == 0) {
       return null;
@@ -1276,7 +1300,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final selectedIds = state.domain.selection.selectedIds;
     for (final id in selectedIds) {
       final element = state.domain.document.getElementById(id);
-      if (element?.data is TextData) {
+      if (element?.data is TextData || element?.data is SerialNumberData) {
         ids.add(id);
       }
     }
@@ -1288,6 +1312,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const [];
     }
     return ids.toList(growable: false);
+  }
+
+  List<String> _resolveSerialNumberSelectionIds(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const [];
+    }
+    final ids = <String>[];
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is SerialNumberData) {
+        ids.add(id);
+      }
+    }
+    return ids;
   }
 
   void _updateCursorForPosition(DrawPoint position) {
@@ -1471,7 +1510,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (element == null) {
         continue;
       }
-      if (element.opacity <= 0 || element.data is! RectangleData) {
+      if (element.opacity <= 0 ||
+          !ArrowBindingUtils.isBindableTarget(element)) {
         continue;
       }
       targets.add(element);
@@ -1694,7 +1734,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final isSelectionToolActive = widget.currentToolTypeId == null;
-    if (!isSelectionToolActive) {
+    final isSerialToolActive =
+        widget.currentToolTypeId == SerialNumberData.typeIdToken;
+    final isSelectionLikeToolActive =
+        isSelectionToolActive || isSerialToolActive;
+    if (!isSelectionLikeToolActive) {
       return false;
     }
 

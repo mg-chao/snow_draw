@@ -268,6 +268,7 @@ class UpdateElementsStyle extends DrawAction {
     this.opacity,
     this.textStrokeColor,
     this.textStrokeWidth,
+    this.serialNumber,
   });
 
   final List<String> elementIds;
@@ -287,6 +288,7 @@ class UpdateElementsStyle extends DrawAction {
   final double? opacity;
   final Color? textStrokeColor;
   final double? textStrokeWidth;
+  final int? serialNumber;
 
   @override
   bool get conflictsWithEditing => true;
@@ -300,6 +302,30 @@ class UpdateElementsStyle extends DrawAction {
   @override
   String toString() =>
       'UpdateElementsStyle(ids: $elementIds, opacity: $opacity)';
+}
+
+class CreateSerialNumberTextElements extends DrawAction implements Recordable {
+  const CreateSerialNumberTextElements({required this.elementIds});
+
+  final List<String> elementIds;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  HistoryPolicy get historyPolicy => HistoryPolicy.record;
+
+  @override
+  bool get requiresPreActionSnapshot => true;
+
+  @override
+  String get historyDescription => 'Create serial number text';
+
+  @override
+  HistoryRecordType get recordType => HistoryRecordType.create;
+
+  @override
+  String toString() => 'CreateSerialNumberTextElements(ids: $elementIds)';
 }
 
 class StartTextEdit extends DrawAction implements NonRecordable {

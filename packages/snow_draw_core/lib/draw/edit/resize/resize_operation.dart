@@ -2,6 +2,7 @@ import '../../config/draw_config.dart';
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/geometry/resize_geometry.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -153,6 +154,12 @@ class ResizeOperation extends EditOperation {
       center: startBounds.center,
       isMultiSelect: selectedIdsAtStart.length > 1,
     );
+    final forceSerialNumberAspectRatio = _shouldLockSerialNumberAspectRatio(
+      state: state,
+      selectedIds: selectedIdsAtStart,
+    );
+    final maintainAspectRatio =
+        modifiers.maintainAspectRatio || forceSerialNumberAspectRatio;
 
     final boundsResult = calculateResizeBounds(
       ResizeBoundsParams(
@@ -161,7 +168,7 @@ class ResizeOperation extends EditOperation {
         currentPointerWorld: currentPosition,
         handleOffsetLocal: typedContext.handleOffset,
         selectionPadding: typedContext.selectionPadding,
-        maintainAspectRatio: modifiers.maintainAspectRatio,
+        maintainAspectRatio: maintainAspectRatio,
         resizeFromCenter: modifiers.fromCenter,
       ),
     );
@@ -194,9 +201,7 @@ class ResizeOperation extends EditOperation {
     // conflicts
     // between the aspect ratio constraint and grid alignment.
     final shouldGridSnap =
-        canSnap &&
-        snappingMode == SnappingMode.grid &&
-        !modifiers.maintainAspectRatio;
+        canSnap && snappingMode == SnappingMode.grid && !maintainAspectRatio;
     final shouldObjectSnap =
         canSnap &&
         snappingMode == SnappingMode.object &&
@@ -464,4 +469,21 @@ class ResizeOperation extends EditOperation {
     DrawRect startBounds,
     DrawRect newBounds,
   ) => scaleX == 1.0 && scaleY == 1.0 && newBounds == startBounds;
+
+  bool _shouldLockSerialNumberAspectRatio({
+    required DrawState state,
+    required Set<String> selectedIds,
+  }) {
+    if (selectedIds.isEmpty) {
+      return false;
+    }
+    final elementsById = state.domain.document.elementMap;
+    for (final id in selectedIds) {
+      final element = elementsById[id];
+      if (element == null || element.data is! SerialNumberData) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

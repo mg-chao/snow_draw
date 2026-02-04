@@ -5,6 +5,8 @@ import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/element_type_id.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
+import '../elements/types/serial_number/serial_number_data.dart';
+import '../elements/types/text/text_data.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/edit_enums.dart';
@@ -187,6 +189,10 @@ class HitTest {
 
     final selection = stateView.effectiveSelection;
     final selectedIds = state.domain.selection.selectedIds;
+    final document = state.domain.document;
+    final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
+        ? _collectBoundTextIds(document.elements)
+        : null;
 
     // Determine corner handle offset for single arrow selections.
     ArrowLikeData? singleSelectedArrow;
@@ -244,7 +250,6 @@ class HitTest {
     }
 
     // 2. Check elements using spatial index (top-most first).
-    final document = state.domain.document;
     final candidates = document.spatialIndex.searchPointEntries(
       position,
       actualTolerance,
@@ -255,25 +260,32 @@ class HitTest {
         continue;
       }
       if (filterTypeId != null && candidate.typeId != filterTypeId) {
-        continue;
+        if (!_allowsSerialBoundText(
+          filterTypeId: filterTypeId,
+          candidate: candidate,
+          boundTextIds: boundTextIds,
+        )) {
+          continue;
+        }
       }
       final element = stateView.effectiveElement(candidate);
-      if (_testElement(element, position, registry, actualTolerance)) {
-        return _storeCache(
-          result: HitTestResult(
-            elementId: element.id,
-            cursorHint: CursorHint.move,
-            target: HitTestTarget.element,
-            isInSelectionPadding: isInSelectionPadding,
-          ),
-          state: state,
-          config: config,
-          tolerance: actualTolerance,
-          filterTypeId: filterTypeId,
-          positionX: quantizedX,
-          positionY: quantizedY,
-        );
+      if (!_testElement(element, position, registry, actualTolerance)) {
+        continue;
       }
+      return _storeCache(
+        result: HitTestResult(
+          elementId: element.id,
+          cursorHint: CursorHint.move,
+          target: HitTestTarget.element,
+          isInSelectionPadding: isInSelectionPadding,
+        ),
+        state: state,
+        config: config,
+        tolerance: actualTolerance,
+        filterTypeId: filterTypeId,
+        positionX: quantizedX,
+        positionY: quantizedY,
+      );
     }
 
     // 3. Check the padded selection area (allows dragging from padding).
@@ -311,6 +323,31 @@ class HitTest {
       positionX: quantizedX,
       positionY: quantizedY,
     );
+  }
+
+  bool _allowsSerialBoundText({
+    required ElementTypeId<ElementData>? filterTypeId,
+    required ElementState candidate,
+    required Set<String>? boundTextIds,
+  }) {
+    if (filterTypeId != SerialNumberData.typeIdToken) {
+      return false;
+    }
+    if (candidate.data is! TextData) {
+      return false;
+    }
+    return boundTextIds?.contains(candidate.id) ?? false;
+  }
+
+  Set<String> _collectBoundTextIds(List<ElementState> elements) {
+    final boundTextIds = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is SerialNumberData && data.textElementId != null) {
+        boundTextIds.add(data.textElementId!);
+      }
+    }
+    return boundTextIds;
   }
 
   /// Tests whether [position] hits any selection handle.

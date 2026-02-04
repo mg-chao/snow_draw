@@ -46,6 +46,7 @@ class _MainToolbarState extends State<MainToolbar> {
       final isLine = tool == ToolType.line;
       final isFreeDraw = tool == ToolType.freeDraw;
       final isText = tool == ToolType.text;
+      final isSerialNumber = tool == ToolType.serialNumber;
       final selectedColor = theme.colorScheme.primary;
       final unselectedColor = theme.iconTheme.color ?? Colors.black;
       final selectedBackground = selectedColor.withValues(alpha: 0.12);
@@ -120,6 +121,17 @@ class _MainToolbarState extends State<MainToolbar> {
                 icon: Icons.text_fields,
                 selected: isText,
                 onPressed: () => widget.toolController.setTool(ToolType.text),
+                selectedColor: selectedColor,
+                unselectedColor: unselectedColor,
+                selectedBackground: selectedBackground,
+              ),
+              const SizedBox(width: _buttonGap),
+              _buildToolButton(
+                tooltip: widget.strings.toolSerialNumber,
+                icon: Icons.looks_one_outlined,
+                selected: isSerialNumber,
+                onPressed: () =>
+                    widget.toolController.setTool(ToolType.serialNumber),
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
                 selectedBackground: selectedBackground,

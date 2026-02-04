@@ -28,8 +28,7 @@ final class FreeDrawData extends ElementData
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
     fillColor: Color(
-      (json['fillColor'] as int?) ??
-          ConfigDefaults.defaultFillColor.toARGB32(),
+      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
@@ -64,17 +63,14 @@ final class FreeDrawData extends ElementData
     FillStyle? fillStyle,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
-  }) {
-    return FreeDrawData(
-      points:
-          points == null ? this.points : List<DrawPoint>.unmodifiable(points),
-      color: color ?? this.color,
-      fillColor: fillColor ?? this.fillColor,
-      fillStyle: fillStyle ?? this.fillStyle,
-      strokeWidth: strokeWidth ?? this.strokeWidth,
-      strokeStyle: strokeStyle ?? this.strokeStyle,
-    );
-  }
+  }) => FreeDrawData(
+    points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+    color: color ?? this.color,
+    fillColor: fillColor ?? this.fillColor,
+    fillStyle: fillStyle ?? this.fillStyle,
+    strokeWidth: strokeWidth ?? this.strokeWidth,
+    strokeStyle: strokeStyle ?? this.strokeStyle,
+  );
 
   @override
   ElementData withElementStyle(ElementStyleConfig style) => copyWith(
@@ -158,5 +154,4 @@ final class FreeDrawData extends ElementData
     }
     return true;
   }
-
 }

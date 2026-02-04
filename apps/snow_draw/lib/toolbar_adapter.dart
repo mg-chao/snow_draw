@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
@@ -30,6 +31,7 @@ class StyleToolbarAdapter {
     _lineStyleValues = _resolveLineStyles();
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
+    _serialNumberStyleValues = _resolveSerialNumberStyles();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
       _handleStateChange,
@@ -51,12 +53,14 @@ class StyleToolbarAdapter {
   List<ElementState> _selectedLines = const [];
   List<ElementState> _selectedFreeDraws = const [];
   List<ElementState> _selectedTexts = const [];
+  List<ElementState> _selectedSerialNumbers = const [];
   Map<String, _ElementStyleSnapshot> _styleSnapshot = const {};
   late RectangleStyleValues _styleValues;
   late ArrowStyleValues _arrowStyleValues;
   late LineStyleValues _lineStyleValues;
   late LineStyleValues _freeDrawStyleValues;
   late TextStyleValues _textStyleValues;
+  late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
 
@@ -89,6 +93,7 @@ class StyleToolbarAdapter {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    int? serialNumber,
     ToolType? toolType,
   }) async {
     final resolvedFamily = fontFamily?.trim();
@@ -120,6 +125,7 @@ class StyleToolbarAdapter {
           opacity: opacity,
           textStrokeColor: textStrokeColor,
           textStrokeWidth: textStrokeWidth,
+          serialNumber: serialNumber,
         ),
       );
     }
@@ -141,6 +147,7 @@ class StyleToolbarAdapter {
       opacity: opacity,
       textStrokeColor: textStrokeColor,
       textStrokeWidth: textStrokeWidth,
+      serialNumber: serialNumber,
       toolType: toolType,
     );
   }
@@ -163,6 +170,17 @@ class StyleToolbarAdapter {
     await _store.dispatch(DeleteElements(elementIds: ids));
   }
 
+  Future<void> createSerialNumberTextElements() async {
+    if (_selectedSerialNumbers.isEmpty) {
+      return;
+    }
+    await _store.dispatch(
+      CreateSerialNumberTextElements(
+        elementIds: _selectedSerialNumbers.map((e) => e.id).toList(),
+      ),
+    );
+  }
+
   Future<void> changeZOrder(ZIndexOperation operation) async {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
@@ -183,6 +201,7 @@ class StyleToolbarAdapter {
       _lineStyleValues = _resolveLineStyles();
       _freeDrawStyleValues = _resolveFreeDrawStyles();
       _textStyleValues = _resolveTextStyles();
+      _serialNumberStyleValues = _resolveSerialNumberStyles();
       _publishState();
       return;
     }
@@ -200,6 +219,7 @@ class StyleToolbarAdapter {
     _lineStyleValues = _resolveLineStyles();
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
+    _serialNumberStyleValues = _resolveSerialNumberStyles();
     _publishState();
   }
 
@@ -211,15 +231,17 @@ class StyleToolbarAdapter {
         config.rectangleStyle != _config.rectangleStyle;
     final arrowStyleChanged = config.arrowStyle != _config.arrowStyle;
     final lineStyleChanged = config.lineStyle != _config.lineStyle;
-    final freeDrawStyleChanged =
-        config.freeDrawStyle != _config.freeDrawStyle;
+    final freeDrawStyleChanged = config.freeDrawStyle != _config.freeDrawStyle;
     final textStyleChanged = config.textStyle != _config.textStyle;
+    final serialNumberStyleChanged =
+        config.serialNumberStyle != _config.serialNumberStyle;
     _config = config;
     if (!rectangleStyleChanged &&
         !arrowStyleChanged &&
         !lineStyleChanged &&
         !freeDrawStyleChanged &&
-        !textStyleChanged) {
+        !textStyleChanged &&
+        !serialNumberStyleChanged) {
       return;
     }
     if (_selectedRectangles.isEmpty && rectangleStyleChanged) {
@@ -237,6 +259,9 @@ class StyleToolbarAdapter {
     if (_selectedTexts.isEmpty && textStyleChanged) {
       _textStyleValues = _resolveTextStyles();
     }
+    if (_selectedSerialNumbers.isEmpty && serialNumberStyleChanged) {
+      _serialNumberStyleValues = _resolveSerialNumberStyles();
+    }
     _publishState();
   }
 
@@ -250,6 +275,7 @@ class StyleToolbarAdapter {
           _selectedLines.isNotEmpty ||
           _selectedFreeDraws.isNotEmpty ||
           _selectedTexts.isNotEmpty ||
+          _selectedSerialNumbers.isNotEmpty ||
           _styleSnapshot.isNotEmpty;
       if (changed) {
         _selectedElements = const [];
@@ -258,6 +284,7 @@ class StyleToolbarAdapter {
         _selectedLines = const [];
         _selectedFreeDraws = const [];
         _selectedTexts = const [];
+        _selectedSerialNumbers = const [];
         _styleSnapshot = const {};
       }
       return changed;
@@ -270,6 +297,7 @@ class StyleToolbarAdapter {
     final selectedLines = <ElementState>[];
     final selectedFreeDraws = <ElementState>[];
     final selectedTexts = <ElementState>[];
+    final selectedSerialNumbers = <ElementState>[];
     final nextSnapshot = <String, _ElementStyleSnapshot>{};
     var snapshotChanged = false;
     for (final id in selectedIds) {
@@ -294,6 +322,9 @@ class StyleToolbarAdapter {
       if (element.data is TextData) {
         selectedTexts.add(element);
       }
+      if (element.data is SerialNumberData) {
+        selectedSerialNumbers.add(element);
+      }
       final snapshot = _ElementStyleSnapshot.fromElement(element);
       nextSnapshot[id] = snapshot;
       final previous = _styleSnapshot[id];
@@ -315,6 +346,7 @@ class StyleToolbarAdapter {
     _selectedLines = selectedLines;
     _selectedFreeDraws = selectedFreeDraws;
     _selectedTexts = selectedTexts;
+    _selectedSerialNumbers = selectedSerialNumbers;
     _styleSnapshot = nextSnapshot;
     return true;
   }
@@ -997,6 +1029,123 @@ class StyleToolbarAdapter {
     );
   }
 
+  /// Resolves serial number style values for the current selection.
+  SerialNumberStyleValues _resolveSerialNumberStyles() {
+    final defaults = _config.serialNumberStyle;
+    if (_selectedSerialNumbers.isEmpty) {
+      return SerialNumberStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        fillColor: MixedValue(value: defaults.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
+        fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
+        fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
+        number: MixedValue(value: defaults.serialNumber, isMixed: false),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    final first = _selectedSerialNumbers.first;
+    final firstData = first.data;
+    if (firstData is! SerialNumberData) {
+      return SerialNumberStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        fillColor: MixedValue(value: defaults.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
+        fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
+        fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
+        number: MixedValue(value: defaults.serialNumber, isMixed: false),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    if (_selectedSerialNumbers.length == 1) {
+      final opacity = _resolveMixedOpacity(defaults.opacity);
+      return SerialNumberStyleValues(
+        color: MixedValue(value: firstData.color, isMixed: false),
+        fillColor: MixedValue(value: firstData.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
+        fontSize: MixedValue(value: firstData.fontSize, isMixed: false),
+        fontFamily: MixedValue(value: firstData.fontFamily, isMixed: false),
+        number: MixedValue(value: firstData.number, isMixed: false),
+        opacity: opacity,
+      );
+    }
+
+    final color = firstData.color;
+    final fillColor = firstData.fillColor;
+    final fillStyle = firstData.fillStyle;
+    final fontSize = firstData.fontSize;
+    final fontFamily = firstData.fontFamily;
+    final number = firstData.number;
+
+    var colorMixed = false;
+    var fillColorMixed = false;
+    var fillStyleMixed = false;
+    var fontSizeMixed = false;
+    var fontFamilyMixed = false;
+    var numberMixed = false;
+
+    for (final element in _selectedSerialNumbers.skip(1)) {
+      final data = element.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      if (!colorMixed && data.color != color) {
+        colorMixed = true;
+      }
+      if (!fillColorMixed && data.fillColor != fillColor) {
+        fillColorMixed = true;
+      }
+      if (!fillStyleMixed && data.fillStyle != fillStyle) {
+        fillStyleMixed = true;
+      }
+      if (!fontSizeMixed && !_doubleEquals(data.fontSize, fontSize)) {
+        fontSizeMixed = true;
+      }
+      if (!fontFamilyMixed && data.fontFamily != fontFamily) {
+        fontFamilyMixed = true;
+      }
+      if (!numberMixed && data.number != number) {
+        numberMixed = true;
+      }
+      if (colorMixed &&
+          fillColorMixed &&
+          fillStyleMixed &&
+          fontSizeMixed &&
+          fontFamilyMixed &&
+          numberMixed) {
+        break;
+      }
+    }
+
+    final opacity = _resolveMixedOpacity(defaults.opacity);
+
+    return SerialNumberStyleValues(
+      color: MixedValue(value: colorMixed ? null : color, isMixed: colorMixed),
+      fillColor: MixedValue(
+        value: fillColorMixed ? null : fillColor,
+        isMixed: fillColorMixed,
+      ),
+      fillStyle: MixedValue(
+        value: fillStyleMixed ? null : fillStyle,
+        isMixed: fillStyleMixed,
+      ),
+      fontSize: MixedValue(
+        value: fontSizeMixed ? null : fontSize,
+        isMixed: fontSizeMixed,
+      ),
+      fontFamily: MixedValue(
+        value: fontFamilyMixed ? null : fontFamily,
+        isMixed: fontFamilyMixed,
+      ),
+      number: MixedValue(
+        value: numberMixed ? null : number,
+        isMixed: numberMixed,
+      ),
+      opacity: opacity,
+    );
+  }
+
   MixedValue<double> _resolveMixedOpacity(double fallback) {
     if (_selectedElements.isEmpty) {
       return MixedValue(value: fallback, isMixed: false);
@@ -1037,6 +1186,7 @@ class StyleToolbarAdapter {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    int? serialNumber,
     ToolType? toolType,
   }) {
     final hasSelection = _selectedIds.isNotEmpty;
@@ -1057,12 +1207,16 @@ class StyleToolbarAdapter {
         _selectedTexts.isNotEmpty ||
         interaction is TextEditingState ||
         (!hasSelection && toolType == ToolType.text);
+    final updateSerialNumberDefaults =
+        _selectedSerialNumbers.isNotEmpty ||
+        (!hasSelection && toolType == ToolType.serialNumber);
 
     if (!updateRectangleDefaults &&
         !updateArrowDefaults &&
         !updateLineDefaults &&
         !updateFreeDrawDefaults &&
-        !updateTextDefaults) {
+        !updateTextDefaults &&
+        !updateSerialNumberDefaults) {
       return;
     }
 
@@ -1071,6 +1225,7 @@ class StyleToolbarAdapter {
     var nextLineStyle = _config.lineStyle;
     var nextFreeDrawStyle = _config.freeDrawStyle;
     var nextTextStyle = _config.textStyle;
+    var nextSerialNumberStyle = _config.serialNumberStyle;
 
     if (updateRectangleDefaults) {
       nextRectangleStyle = nextRectangleStyle.copyWith(
@@ -1137,12 +1292,26 @@ class StyleToolbarAdapter {
         textStrokeWidth: textStrokeWidth,
       );
     }
+    if (updateSerialNumberDefaults) {
+      nextSerialNumberStyle = nextSerialNumberStyle.copyWith(
+        serialNumber: serialNumber,
+        color: color,
+        fillColor: fillColor,
+        fillStyle: fillStyle,
+        strokeWidth: strokeWidth,
+        strokeStyle: strokeStyle,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        opacity: opacity,
+      );
+    }
 
     if (nextRectangleStyle == _config.rectangleStyle &&
         nextArrowStyle == _config.arrowStyle &&
         nextLineStyle == _config.lineStyle &&
         nextFreeDrawStyle == _config.freeDrawStyle &&
-        nextTextStyle == _config.textStyle) {
+        nextTextStyle == _config.textStyle &&
+        nextSerialNumberStyle == _config.serialNumberStyle) {
       return;
     }
 
@@ -1155,6 +1324,7 @@ class StyleToolbarAdapter {
             lineStyle: nextLineStyle,
             freeDrawStyle: nextFreeDrawStyle,
             textStyle: nextTextStyle,
+            serialNumberStyle: nextSerialNumberStyle,
           ),
         ),
       ),
@@ -1190,17 +1360,20 @@ class StyleToolbarAdapter {
     lineStyle: _config.lineStyle,
     freeDrawStyle: _config.freeDrawStyle,
     textStyle: _config.textStyle,
+    serialNumberStyle: _config.serialNumberStyle,
     styleValues: _styleValues,
     arrowStyleValues: _arrowStyleValues,
     lineStyleValues: _lineStyleValues,
     freeDrawStyleValues: _freeDrawStyleValues,
     textStyleValues: _textStyleValues,
+    serialNumberStyleValues: _serialNumberStyleValues,
     hasSelection: _selectedIds.isNotEmpty,
     hasSelectedRectangles: _selectedRectangles.isNotEmpty,
     hasSelectedArrows: _selectedArrows.isNotEmpty,
     hasSelectedLines: _selectedLines.isNotEmpty,
     hasSelectedFreeDraws: _selectedFreeDraws.isNotEmpty,
     hasSelectedTexts: _selectedTexts.isNotEmpty,
+    hasSelectedSerialNumbers: _selectedSerialNumbers.isNotEmpty,
   );
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
@@ -1215,6 +1388,7 @@ class _ElementStyleSnapshot {
     this.lineData,
     this.freeDrawData,
     this.textData,
+    this.serialNumberData,
   });
 
   final double opacity;
@@ -1223,6 +1397,7 @@ class _ElementStyleSnapshot {
   final LineData? lineData;
   final FreeDrawData? freeDrawData;
   final TextData? textData;
+  final SerialNumberData? serialNumberData;
 
   factory _ElementStyleSnapshot.fromElement(ElementState element) =>
       _ElementStyleSnapshot(
@@ -1236,6 +1411,9 @@ class _ElementStyleSnapshot {
             ? element.data as FreeDrawData
             : null,
         textData: element.data is TextData ? element.data as TextData : null,
+        serialNumberData: element.data is SerialNumberData
+            ? element.data as SerialNumberData
+            : null,
       );
 
   bool matches(
@@ -1247,5 +1425,6 @@ class _ElementStyleSnapshot {
       identical(lineData, other.lineData) &&
       identical(freeDrawData, other.freeDrawData) &&
       identical(textData, other.textData) &&
+      identical(serialNumberData, other.serialNumberData) &&
       equals(opacity, other.opacity);
 }

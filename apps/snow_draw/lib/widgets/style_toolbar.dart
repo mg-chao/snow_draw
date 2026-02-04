@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
@@ -67,6 +69,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
   static const double _toggleButtonHeight = 32;
   static const double _toggleButtonWidth = 40;
   static const double _toggleButtonRadius = 8;
+  static const double _numberControlHeight = 32;
+  static const double _numberControlRadius = 8;
+  static const double _numberStepperWidth = 32;
+  static const double _numberControlTargetWidth = 140;
   static const double _sliderTrackHeight = 2;
   static const double _sliderThumbRadius = 6;
   static const double _sliderOverlayRadius = 12;
@@ -90,6 +96,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
   Timer? _sliderUpdateTimer;
   double? _pendingCornerRadius;
   double? _pendingOpacity;
+  int? _pendingSerialNumber;
+  late final TextEditingController _serialNumberController;
+  late final FocusNode _serialNumberFocusNode;
   List<String> _systemFontFamilies = const [];
   var _fontLoadRequested = false;
 
@@ -97,6 +106,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _serialNumberController = TextEditingController();
+    _serialNumberFocusNode = FocusNode();
+    _serialNumberFocusNode.addListener(_handleSerialNumberFocusChange);
     _mergedListenable = Listenable.merge([
       widget.toolController,
       widget.adapter.stateListenable,
@@ -107,6 +119,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
   void dispose() {
     _sliderUpdateTimer?.cancel();
     _scrollController.dispose();
+    _serialNumberController.dispose();
+    _serialNumberFocusNode
+      ..removeListener(_handleSerialNumberFocusChange)
+      ..dispose();
     super.dispose();
   }
 
@@ -119,6 +135,28 @@ class _StyleToolbarState extends State<StyleToolbar> {
         widget.toolController,
         widget.adapter.stateListenable,
       ]);
+    }
+  }
+
+  void _commitSerialNumberValue(int next) {
+    final sanitized = next < 0 ? 0 : next;
+    setState(() => _pendingSerialNumber = null);
+    _serialNumberController.text = sanitized.toString();
+    unawaited(_applyStyleUpdate(serialNumber: sanitized));
+  }
+
+  void _handleSerialNumberFocusChange() {
+    if (_serialNumberFocusNode.hasFocus) {
+      return;
+    }
+    if (_pendingSerialNumber == null) {
+      return;
+    }
+    final parsed = int.tryParse(_serialNumberController.text);
+    if (parsed != null) {
+      _commitSerialNumberValue(parsed);
+    } else {
+      setState(() => _pendingSerialNumber = null);
     }
   }
 
@@ -154,13 +192,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final showFreeDrawControls =
           tool == ToolType.freeDraw || state.hasSelectedFreeDraws;
       final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
+      final showSerialNumberControls =
+          tool == ToolType.serialNumber || state.hasSelectedSerialNumbers;
       final showToolbar =
           showRectangleControls ||
           showArrowControls ||
           showLineControls ||
           showFreeDrawControls ||
-          showTextControls;
-      if (showTextControls) {
+          showTextControls ||
+          showSerialNumberControls;
+      if (showTextControls || showSerialNumberControls) {
         _requestSystemFonts();
       }
       final maxHeight = math
@@ -479,6 +520,212 @@ class _StyleToolbarState extends State<StyleToolbar> {
       ],
     );
   }
+
+  Widget _buildSerialNumberControl({
+    required MixedValue<int> value,
+    required int defaultValue,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isMixed = value.isMixed && _pendingSerialNumber == null;
+    final resolvedValue = _pendingSerialNumber ?? value.valueOr(defaultValue);
+    final displayText = isMixed ? '' : resolvedValue.toString();
+
+    if (!_serialNumberFocusNode.hasFocus &&
+        _serialNumberController.text != displayText) {
+      _serialNumberController.text = displayText;
+    }
+
+    final canDecrement = resolvedValue > 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(widget.strings.number),
+        const SizedBox(height: _sectionGap),
+        LayoutBuilder(
+          builder: (context, constraints) => Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: math.min(constraints.maxWidth, _numberControlTargetWidth),
+              child: AnimatedBuilder(
+                animation: _serialNumberFocusNode,
+                builder: (context, _) {
+                  final hasFocus = _serialNumberFocusNode.hasFocus;
+                  final borderColor = hasFocus
+                      ? scheme.primary
+                      : scheme.outlineVariant;
+                  final fillColor = hasFocus
+                      ? Color.alphaBlend(
+                          scheme.primary.withValues(alpha: 0.06),
+                          scheme.surface,
+                        )
+                      : scheme.surface;
+                  final dividerColor = hasFocus
+                      ? scheme.primary.withValues(alpha: 0.55)
+                      : scheme.outlineVariant.withValues(alpha: 0.7);
+
+                  return Listener(
+                    onPointerSignal: (event) {
+                      if (event is! PointerScrollEvent) {
+                        return;
+                      }
+                      GestureBinding.instance.pointerSignalResolver.register(
+                        event,
+                        (event) {
+                          if (event is! PointerScrollEvent) {
+                            return;
+                          }
+                          if (event.scrollDelta.dy == 0) {
+                            return;
+                          }
+                          final next = event.scrollDelta.dy < 0
+                              ? resolvedValue + 1
+                              : resolvedValue - 1;
+                          _commitSerialNumberValue(next);
+                        },
+                      );
+                    },
+                    child: Container(
+                      height: _numberControlHeight,
+                      decoration: BoxDecoration(
+                        color: fillColor,
+                        borderRadius: BorderRadius.circular(
+                          _numberControlRadius,
+                        ),
+                        border: Border.all(color: borderColor),
+                        boxShadow: hasFocus
+                            ? [
+                                BoxShadow(
+                                  color: scheme.primary.withValues(alpha: 0.18),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        children: [
+                          _buildSerialNumberStepperButton(
+                            icon: Icons.remove_rounded,
+                            tooltip: widget.strings.decrease,
+                            onPressed: canDecrement
+                                ? () => _commitSerialNumberValue(
+                                    resolvedValue - 1,
+                                  )
+                                : null,
+                            borderRadius: const BorderRadius.horizontal(
+                              left: Radius.circular(_numberControlRadius),
+                            ),
+                          ),
+                          _buildSerialNumberDivider(dividerColor),
+                          Expanded(
+                            child: TextField(
+                              controller: _serialNumberController,
+                              focusNode: _serialNumberFocusNode,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                              textAlign: TextAlign.center,
+                              textAlignVertical: TextAlignVertical.center,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                hintText: isMixed ? widget.strings.mixed : null,
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 6,
+                                ),
+                              ),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: scheme.onSurface,
+                              ),
+                              onChanged: (text) {
+                                final parsed = int.tryParse(text);
+                                setState(() => _pendingSerialNumber = parsed);
+                              },
+                              onSubmitted: (text) {
+                                final parsed = int.tryParse(text);
+                                if (parsed != null) {
+                                  _commitSerialNumberValue(parsed);
+                                } else {
+                                  setState(() => _pendingSerialNumber = null);
+                                }
+                              },
+                              onEditingComplete: () {
+                                final parsed = int.tryParse(
+                                  _serialNumberController.text,
+                                );
+                                if (parsed != null) {
+                                  _commitSerialNumberValue(parsed);
+                                } else {
+                                  setState(() => _pendingSerialNumber = null);
+                                }
+                              },
+                            ),
+                          ),
+                          _buildSerialNumberDivider(dividerColor),
+                          _buildSerialNumberStepperButton(
+                            icon: Icons.add_rounded,
+                            tooltip: widget.strings.increase,
+                            onPressed: () =>
+                                _commitSerialNumberValue(resolvedValue + 1),
+                            borderRadius: const BorderRadius.horizontal(
+                              right: Radius.circular(_numberControlRadius),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSerialNumberStepperButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+    required BorderRadius borderRadius,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isEnabled = onPressed != null;
+    final fillColor = isEnabled
+        ? scheme.surface
+        : scheme.surface.withValues(alpha: 0.7);
+    final iconColor = isEnabled
+        ? scheme.onSurface
+        : scheme.onSurfaceVariant.withValues(alpha: 0.5);
+
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: _numberStepperWidth,
+        height: double.infinity,
+        child: Material(
+          color: fillColor,
+          shape: RoundedRectangleBorder(borderRadius: borderRadius),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onPressed,
+            child: Center(
+              child: Icon(icon, size: _iconSize, color: iconColor),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSerialNumberDivider(Color color) =>
+      Container(width: 1, height: double.infinity, color: color);
 
   Widget _buildTextAlignmentControl({
     required MixedValue<TextHorizontalAlign> horizontalAlign,
@@ -1171,6 +1418,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
+    if (state.hasSelectedSerialNumbers) {
+      selectedTypes.add(ElementType.serialNumber);
+    }
 
     // If no elements are selected, use the current tool to determine which
     // properties to show (for styling the element to be created)
@@ -1179,19 +1429,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
-          break;
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
-          break;
         case ToolType.line:
           selectedTypes.add(ElementType.line);
-          break;
         case ToolType.freeDraw:
           selectedTypes.add(ElementType.freeDraw);
-          break;
         case ToolType.text:
           selectedTypes.add(ElementType.text);
-          break;
+        case ToolType.serialNumber:
+          selectedTypes.add(ElementType.serialNumber);
         case ToolType.selection:
           break;
       }
@@ -1203,11 +1450,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
       lineStyleValues: state.lineStyleValues,
       freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
+      serialNumberStyleValues: state.serialNumberStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
       lineDefaults: state.lineStyle,
       freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
+      serialNumberDefaults: state.serialNumberStyle,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,
     );
@@ -1505,6 +1754,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
           endDefault: endDefault,
         );
 
+      case 'serialNumber':
+        final value = property.extractValue(context) as MixedValue<int>;
+        final defaultValue = property.getDefaultValue(context) as int;
+        return _buildSerialNumberControl(
+          value: value,
+          defaultValue: defaultValue,
+        );
+
       case 'fontSize':
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildStyleOptions<double>(
@@ -1624,6 +1881,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    int? serialNumber,
   }) => widget.adapter.applyStyleUpdate(
     color: color,
     fillColor: fillColor,
@@ -1641,6 +1899,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     opacity: opacity,
     textStrokeColor: textStrokeColor,
     textStrokeWidth: textStrokeWidth,
+    serialNumber: serialNumber,
     toolType: widget.toolController.value,
   );
 

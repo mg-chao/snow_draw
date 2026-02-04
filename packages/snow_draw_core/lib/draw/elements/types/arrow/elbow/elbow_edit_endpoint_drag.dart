@@ -97,14 +97,13 @@ _FixedSegmentPathResult? _mapBaselineWithActiveSegment({
   required List<DrawPoint> baseline,
   required List<ElbowFixedSegment> fixedSegments,
   ElbowFixedSegment? activeSegment,
-}) =>
-    _mapFixedSegmentsToBaseline(
-      baseline: baseline,
-      fixedSegments: fixedSegments,
-      activeSegment: activeSegment,
-      enforceAxisOnPoints: true,
-      requireAll: true,
-    );
+}) => _mapFixedSegmentsToBaseline(
+  baseline: baseline,
+  fixedSegments: fixedSegments,
+  activeSegment: activeSegment,
+  enforceAxisOnPoints: true,
+  requireAll: true,
+);
 
 List<DrawPoint>? _buildFallbackPointsForActiveFixed({
   required DrawPoint start,
@@ -1121,9 +1120,9 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
 
   final adjacentHorizontal = isStart
       ? (points[anchorIndex - 1].y - points[anchorIndex].y).abs() <=
-          ElbowConstants.dedupThreshold
+            ElbowConstants.dedupThreshold
       : (points[anchorIndex].y - points[anchorIndex + 1].y).abs() <=
-          ElbowConstants.dedupThreshold;
+            ElbowConstants.dedupThreshold;
   if (heading.isHorizontal && !adjacentHorizontal) {
     return (points: points, moved: false);
   }

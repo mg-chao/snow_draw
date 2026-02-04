@@ -20,6 +20,7 @@ void initializePropertyRegistry() {
     ..register(const StartArrowheadPropertyDescriptor())
     ..register(const EndArrowheadPropertyDescriptor())
     // Text properties
+    ..register(const SerialNumberPropertyDescriptor())
     ..register(const FontSizePropertyDescriptor())
     ..register(const FontFamilyPropertyDescriptor())
     ..register(const TextAlignPropertyDescriptor())

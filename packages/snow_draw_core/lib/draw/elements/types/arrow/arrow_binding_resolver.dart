@@ -266,59 +266,88 @@ ElementState? _applyBindings({
     return null;
   }
 
+  var shouldUpdateStart = updateStart;
+  var shouldUpdateEnd = updateEnd;
+  if ((shouldUpdateStart || shouldUpdateEnd) &&
+      data.startBinding != null &&
+      data.endBinding != null) {
+    // Keep both ends in sync when a dual-bound arrow changes.
+    shouldUpdateStart = true;
+    shouldUpdateEnd = true;
+  }
+
   final rect = element.rect;
   final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-  final startReference = localPoints.length > 1
-      ? space.toWorld(localPoints[1])
-      : null;
-  final endReference = localPoints.length > 1
-      ? space.toWorld(localPoints[localPoints.length - 2])
-      : null;
 
   var startUpdated = false;
   var endUpdated = false;
 
-  if (updateStart && data.startBinding != null) {
-    final target = elementsById[data.startBinding!.elementId];
+  if (shouldUpdateStart || shouldUpdateEnd) {
     final isElbow = data.arrowType == ArrowType.elbow;
-    final bound = target == null
-        ? null
-        : isElbow
-        ? ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: data.startBinding!,
-            target: target,
-            hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-          )
-        : ArrowBindingUtils.resolveBoundPoint(
-            binding: data.startBinding!,
-            target: target,
-            referencePoint: startReference,
-          );
-    if (bound != null) {
-      localPoints[0] = space.fromWorld(bound);
-      startUpdated = true;
-    }
-  }
+    final maxIterations =
+        shouldUpdateStart && shouldUpdateEnd && localPoints.length == 2 ? 4 : 2;
+    for (var i = 0; i < maxIterations; i++) {
+      var changed = false;
+      final startReference = localPoints.length > 1
+          ? space.toWorld(localPoints[1])
+          : null;
+      final endReference = localPoints.length > 1
+          ? space.toWorld(localPoints[localPoints.length - 2])
+          : null;
 
-  if (updateEnd && data.endBinding != null) {
-    final target = elementsById[data.endBinding!.elementId];
-    final isElbow = data.arrowType == ArrowType.elbow;
-    final bound = target == null
-        ? null
-        : isElbow
-        ? ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: data.endBinding!,
-            target: target,
-            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-          )
-        : ArrowBindingUtils.resolveBoundPoint(
-            binding: data.endBinding!,
-            target: target,
-            referencePoint: endReference,
-          );
-    if (bound != null) {
-      localPoints[localPoints.length - 1] = space.fromWorld(bound);
-      endUpdated = true;
+      if (shouldUpdateStart && data.startBinding != null) {
+        final target = elementsById[data.startBinding!.elementId];
+        final bound = target == null
+            ? null
+            : isElbow
+            ? ArrowBindingUtils.resolveElbowBoundPoint(
+                binding: data.startBinding!,
+                target: target,
+                hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+              )
+            : ArrowBindingUtils.resolveBoundPoint(
+                binding: data.startBinding!,
+                target: target,
+                referencePoint: startReference,
+              );
+        if (bound != null) {
+          final nextLocal = space.fromWorld(bound);
+          if (nextLocal != localPoints[0]) {
+            localPoints[0] = nextLocal;
+            changed = true;
+          }
+          startUpdated = true;
+        }
+      }
+
+      if (shouldUpdateEnd && data.endBinding != null) {
+        final target = elementsById[data.endBinding!.elementId];
+        final bound = target == null
+            ? null
+            : isElbow
+            ? ArrowBindingUtils.resolveElbowBoundPoint(
+                binding: data.endBinding!,
+                target: target,
+                hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+              )
+            : ArrowBindingUtils.resolveBoundPoint(
+                binding: data.endBinding!,
+                target: target,
+                referencePoint: endReference,
+              );
+        if (bound != null) {
+          final nextLocal = space.fromWorld(bound);
+          if (nextLocal != localPoints[localPoints.length - 1]) {
+            localPoints[localPoints.length - 1] = nextLocal;
+            changed = true;
+          }
+          endUpdated = true;
+        }
+      }
+
+      if (!changed) {
+        break;
+      }
     }
   }
 
@@ -386,10 +415,7 @@ ElementState? _applyBindings({
   return element.copyWith(rect: result.rect, data: updatedData);
 }
 
-List<DrawPoint> _resolveLocalPoints(
-  ElementState element,
-  ArrowLikeData data,
-) {
+List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowLikeData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,

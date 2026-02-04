@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import '../../../config/draw_config.dart';
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
@@ -34,7 +35,7 @@ class FreeDrawHitTester implements ElementHitTester {
     }
 
     final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
-    if (fillOpacity <= 0 || !_isClosed(data)) {
+    if (fillOpacity <= 0 || !_isClosed(data, element.rect)) {
       return false;
     }
 
@@ -68,8 +69,22 @@ class FreeDrawHitTester implements ElementHitTester {
     return space.fromWorld(position);
   }
 
-  bool _isClosed(FreeDrawData data) =>
-      data.points.length > 2 && data.points.first == data.points.last;
+  bool _isClosed(FreeDrawData data, DrawRect rect) {
+    if (data.points.length < 3) {
+      return false;
+    }
+    final first = data.points.first;
+    final last = data.points.last;
+    if (first == last) {
+      return true;
+    }
+    final tolerance =
+        ConfigDefaults.handleTolerance *
+        ConfigDefaults.freeDrawCloseToleranceMultiplier;
+    final dx = (first.x - last.x) * rect.width;
+    final dy = (first.y - last.y) * rect.height;
+    return (dx * dx + dy * dy) <= tolerance * tolerance;
+  }
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;

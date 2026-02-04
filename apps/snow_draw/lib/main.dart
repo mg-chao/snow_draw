@@ -19,6 +19,7 @@ import 'toolbar_adapter.dart';
 import 'widgets/canvas_layer.dart';
 import 'widgets/history_controls.dart';
 import 'widgets/main_toolbar.dart';
+import 'widgets/serial_number_operations_toolbar.dart';
 import 'widgets/snap_controls.dart';
 import 'widgets/style_toolbar.dart';
 import 'widgets/zoom_controls.dart';
@@ -175,6 +176,11 @@ class _MyAppState extends State<MyApp> {
                         topInset: styleToolbarTop,
                         bottomInset: styleToolbarBottomInset,
                       ),
+                    ),
+                    SerialNumberOperationsToolbar(
+                      strings: strings,
+                      store: store,
+                      adapter: styleToolbarAdapter,
                     ),
                     Positioned(
                       left: 12,

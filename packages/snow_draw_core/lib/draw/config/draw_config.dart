@@ -50,10 +50,12 @@ abstract class ConfigDefaults {
 
   // ===== Text =====
   static const defaultTextFontSize = 21.0;
+  static const defaultSerialNumberFontSize = 16.0;
   static const String? defaultTextFontFamily = null;
   static const defaultTextStrokeColor = Color(0xFFF8F4EC);
   static const defaultTextStrokeWidth = 0.0;
   static const defaultTextCornerRadius = 0.0;
+  static const defaultSerialNumber = 1;
   static const TextHorizontalAlign defaultTextHorizontalAlign =
       TextHorizontalAlign.left;
   static const TextVerticalAlign defaultTextVerticalAlign =
@@ -80,6 +82,7 @@ abstract class ConfigDefaults {
 
   // ===== Interaction =====
   static const handleTolerance = 6.0;
+  static const freeDrawCloseToleranceMultiplier = 1.5;
   static const dragThreshold = 0.0;
 
   // ===== Elements =====
@@ -128,7 +131,7 @@ abstract class ConfigDefaults {
 /// Top-level draw configuration.
 @immutable
 class DrawConfig {
-  const DrawConfig({
+  DrawConfig({
     this.selection = const SelectionConfig(),
     this.element = const ElementConfig(),
     this.canvas = const CanvasConfig(),
@@ -139,13 +142,19 @@ class DrawConfig {
     ElementStyleConfig? lineStyle,
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
+    ElementStyleConfig? serialNumberStyle,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
        arrowStyle = arrowStyle ?? elementStyle,
        lineStyle = lineStyle ?? elementStyle,
        freeDrawStyle = freeDrawStyle ?? elementStyle,
-       textStyle = textStyle ?? elementStyle;
+       textStyle = textStyle ?? elementStyle,
+       serialNumberStyle =
+           serialNumberStyle ??
+           elementStyle.copyWith(
+             fontSize: ConfigDefaults.defaultSerialNumberFontSize,
+           );
   final SelectionConfig selection;
   final ElementConfig element;
   final CanvasConfig canvas;
@@ -156,10 +165,11 @@ class DrawConfig {
   final ElementStyleConfig lineStyle;
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
+  final ElementStyleConfig serialNumberStyle;
   final GridConfig grid;
   final SnapConfig snap;
 
-  static const defaultConfig = DrawConfig();
+  static final defaultConfig = DrawConfig();
 
   DrawConfig copyWith({
     SelectionConfig? selection,
@@ -172,6 +182,7 @@ class DrawConfig {
     ElementStyleConfig? lineStyle,
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
+    ElementStyleConfig? serialNumberStyle,
     GridConfig? grid,
     SnapConfig? snap,
   }) {
@@ -197,6 +208,9 @@ class DrawConfig {
       textStyle:
           textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
+      serialNumberStyle:
+          serialNumberStyle ??
+          (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
       grid: grid ?? this.grid,
       snap: snap ?? this.snap,
     );
@@ -216,6 +230,7 @@ class DrawConfig {
           other.lineStyle == lineStyle &&
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
+          other.serialNumberStyle == serialNumberStyle &&
           other.grid == grid &&
           other.snap == snap;
 
@@ -231,6 +246,7 @@ class DrawConfig {
     lineStyle,
     freeDrawStyle,
     textStyle,
+    serialNumberStyle,
     grid,
     snap,
   );
@@ -248,6 +264,7 @@ class DrawConfig {
       'lineStyle: $lineStyle, '
       'freeDrawStyle: $freeDrawStyle, '
       'textStyle: $textStyle, '
+      'serialNumberStyle: $serialNumberStyle, '
       'grid: $grid, '
       'snap: $snap'
       ')';

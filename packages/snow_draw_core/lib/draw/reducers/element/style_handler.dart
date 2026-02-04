@@ -7,6 +7,8 @@ import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/elbow/elbow_router.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
+import '../../elements/types/serial_number/serial_number_layout.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_layout.dart';
 import '../../models/draw_state.dart';
@@ -42,6 +44,7 @@ DrawState handleUpdateElementsStyle(
     verticalAlign: action.verticalAlign,
     textStrokeColor: action.textStrokeColor,
     textStrokeWidth: action.textStrokeWidth,
+    serialNumber: action.serialNumber,
   );
 
   final elements = <ElementState>[];
@@ -73,6 +76,16 @@ DrawState handleUpdateElementsStyle(
             data: updatedData,
             autoResize: updatedData.autoResize,
             allowShrinkHeight: true,
+          );
+          if (nextRect != next.rect) {
+            next = next.copyWith(rect: nextRect);
+          }
+        } else if (data is SerialNumberData &&
+            updatedData is SerialNumberData &&
+            _shouldRelayoutSerialNumber(styleUpdate)) {
+          final nextRect = resolveSerialNumberRect(
+            origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
+            data: updatedData,
           );
           if (nextRect != next.rect) {
             next = next.copyWith(rect: nextRect);
@@ -203,6 +216,11 @@ DrawRect _resolveTextRect({
 
 bool _shouldRelayoutText(ElementStyleUpdate update) =>
     update.fontSize != null || update.fontFamily != null;
+
+bool _shouldRelayoutSerialNumber(ElementStyleUpdate update) =>
+    update.fontSize != null ||
+    update.fontFamily != null ||
+    update.serialNumber != null;
 
 bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
     oldData.arrowType != newData.arrowType;

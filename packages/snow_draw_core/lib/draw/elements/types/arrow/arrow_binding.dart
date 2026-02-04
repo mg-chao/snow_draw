@@ -8,6 +8,9 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../utils/selection_calculator.dart';
 import '../rectangle/rectangle_data.dart';
+import '../serial_number/serial_number_data.dart';
+import '../serial_number/serial_number_layout.dart';
+import '../text/text_data.dart';
 import 'elbow/elbow_geometry.dart';
 import 'elbow/elbow_heading.dart';
 
@@ -95,6 +98,16 @@ class ArrowBindingUtils {
   static const double elbowBindingGapBase = _elbowBindingGapBase;
   static const double elbowArrowheadGapMultiplier =
       _bindingArrowheadGapMultiplier;
+
+  static bool isBindableTarget(ElementState target) {
+    final data = target.data;
+    return data is RectangleData ||
+        data is TextData ||
+        data is SerialNumberData;
+  }
+
+  static double resolveBindingGap({required ElementState target}) =>
+      _resolveBindingGap(target);
 
   static double resolveBindingSearchDistance(double snapDistance) =>
       snapDistance * (1 + _bindingHitToleranceFactor);
@@ -227,6 +240,20 @@ class ArrowBindingUtils {
     final localReference = referencePoint == null
         ? null
         : space.fromWorld(referencePoint);
+    if (_isCircularTarget(target)) {
+      final radius = _resolveCircleRadius(rect);
+      if (radius <= 0) {
+        return null;
+      }
+      final snapPoint = _resolveCircleOrbitSnapPoint(
+        center: rect.center,
+        radius: radius,
+        anchorPoint: localAnchor,
+        localReference: localReference,
+        gap: gap,
+      );
+      return space.toWorld(snapPoint);
+    }
     final snapPoint = _resolveOrbitSnapPoint(
       rect: rect,
       anchorPoint: localAnchor,
@@ -250,11 +277,32 @@ class ArrowBindingUtils {
       x: rect.minX + rect.width * binding.anchor.x,
       y: rect.minY + rect.height * binding.anchor.y,
     );
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    if (_isCircularTarget(target)) {
+      final radius = _resolveCircleRadius(rect);
+      if (radius <= 0) {
+        return null;
+      }
+      final anchorPoint = _resolveCircleElbowAnchorPoint(
+        center: rect.center,
+        radius: radius,
+        point: localAnchor,
+      );
+      final worldAnchor = space.toWorld(anchorPoint);
+      final heading = ElbowGeometry.headingForVector(
+        worldAnchor.x - rect.centerX,
+        worldAnchor.y - rect.centerY,
+      );
+      final gap = _resolveElbowBindingGap(hasArrowhead);
+      return DrawPoint(
+        x: worldAnchor.x + heading.dx * gap,
+        y: worldAnchor.y + heading.dy * gap,
+      );
+    }
     final anchorPoint = _resolveElbowAnchorPoint(
       rect: rect,
       point: localAnchor,
     );
-    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
     final worldAnchor = space.toWorld(anchorPoint);
     final heading = ElbowGeometry.headingForPointOnBounds(
       SelectionCalculator.computeElementWorldAabb(target),
@@ -279,11 +327,23 @@ class ArrowBindingUtils {
       x: rect.minX + rect.width * binding.anchor.x,
       y: rect.minY + rect.height * binding.anchor.y,
     );
+    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
+    if (_isCircularTarget(target)) {
+      final radius = _resolveCircleRadius(rect);
+      if (radius <= 0) {
+        return null;
+      }
+      final anchorPoint = _resolveCircleElbowAnchorPoint(
+        center: rect.center,
+        radius: radius,
+        point: localAnchor,
+      );
+      return space.toWorld(anchorPoint);
+    }
     final anchorPoint = _resolveElbowAnchorPoint(
       rect: rect,
       point: localAnchor,
     );
-    final space = ElementSpace(rotation: target.rotation, origin: rect.center);
     return space.toWorld(anchorPoint);
   }
 
@@ -323,13 +383,22 @@ class ArrowBindingUtils {
     final localReference = referencePoint == null
         ? null
         : space.fromWorld(referencePoint);
-    final hit = _resolveBindingHit(
-      rect: rect,
-      localPoint: localPoint,
-      localReference: localReference,
-      snapDistance: snapDistance,
-      gap: _resolveBindingGap(target),
-    );
+    final gap = _resolveBindingGap(target);
+    final hit = _isCircularTarget(target)
+        ? _resolveCircleBindingHit(
+            rect: rect,
+            localPoint: localPoint,
+            localReference: localReference,
+            snapDistance: snapDistance,
+            gap: gap,
+          )
+        : _resolveBindingHit(
+            rect: rect,
+            localPoint: localPoint,
+            localReference: localReference,
+            snapDistance: snapDistance,
+            gap: gap,
+          );
     if (hit == null) {
       return null;
     }
@@ -397,6 +466,27 @@ double _resolveInsideDepth(DrawRect rect, DrawPoint point) {
   return math.min(math.min(left, right), math.min(top, bottom));
 }
 
+double _resolveCircleInsideBindingThreshold({
+  required double radius,
+  required double snapDistance,
+}) {
+  if (snapDistance <= 0 || radius <= 0) {
+    return 0;
+  }
+  return math.min(snapDistance, radius);
+}
+
+double _resolveCircleInsideDepth({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint point,
+}) {
+  final dx = point.x - center.x;
+  final dy = point.y - center.y;
+  final distance = math.sqrt(dx * dx + dy * dy);
+  return radius - distance;
+}
+
 DrawPoint _nearestPointOnRectBoundary(DrawRect rect, DrawPoint point) {
   final clampedX = _clamp(point.x, rect.minX, rect.maxX);
   final clampedY = _clamp(point.y, rect.minY, rect.maxY);
@@ -428,9 +518,34 @@ DrawPoint _nearestPointOnRectBoundary(DrawRect rect, DrawPoint point) {
   return DrawPoint(x: point.x, y: rect.maxY);
 }
 
+DrawPoint _nearestPointOnCircleBoundary(
+  DrawPoint center,
+  double radius,
+  DrawPoint point,
+) {
+  if (radius <= 0) {
+    return center;
+  }
+  final dx = point.x - center.x;
+  final dy = point.y - center.y;
+  final length = math.sqrt(dx * dx + dy * dy);
+  if (length <= _intersectionEpsilon) {
+    return DrawPoint(x: center.x + radius, y: center.y);
+  }
+  final scale = radius / length;
+  return DrawPoint(x: center.x + dx * scale, y: center.y + dy * scale);
+}
+
 double _resolveBindingGap(ElementState target) {
   final data = target.data;
-  final strokeWidth = data is RectangleData ? data.strokeWidth : 0.0;
+  var strokeWidth = 0.0;
+  if (data is RectangleData) {
+    strokeWidth = data.strokeWidth;
+  } else if (data is TextData) {
+    strokeWidth = data.strokeWidth;
+  } else if (data is SerialNumberData) {
+    strokeWidth = resolveSerialNumberStrokeWidth(data: data);
+  }
   return _bindingGapBase + strokeWidth / 2;
 }
 
@@ -441,6 +556,11 @@ double _resolveElbowBindingGap(bool hasArrowhead) {
   }
   return baseGap * _bindingArrowheadGapMultiplier;
 }
+
+bool _isCircularTarget(ElementState target) => target.data is SerialNumberData;
+
+double _resolveCircleRadius(DrawRect rect) =>
+    math.min(rect.width.abs(), rect.height.abs()) / 2;
 
 DrawRect _inflateRect(DrawRect rect, double delta) => DrawRect(
   minX: rect.minX - delta,
@@ -524,6 +644,102 @@ _BindingHit? _resolveBindingHit({
   );
 }
 
+_BindingHit? _resolveCircleBindingHit({
+  required DrawRect rect,
+  required DrawPoint localPoint,
+  required DrawPoint? localReference,
+  required double snapDistance,
+  required double gap,
+}) {
+  final radius = _resolveCircleRadius(rect);
+  if (radius <= 0) {
+    return null;
+  }
+  final center = rect.center;
+  if (_isStrictlyInsideCircle(
+    center: center,
+    radius: radius,
+    point: localPoint,
+  )) {
+    final referenceInside =
+        localReference != null &&
+        _isStrictlyInsideCircle(
+          center: center,
+          radius: radius,
+          point: localReference,
+        );
+    var allowInside = localReference == null || referenceInside;
+    if (!allowInside) {
+      final insideDepth = _resolveCircleInsideDepth(
+        center: center,
+        radius: radius,
+        point: localPoint,
+      );
+      final insideThreshold = _resolveCircleInsideBindingThreshold(
+        radius: radius,
+        snapDistance: snapDistance,
+      );
+      allowInside = insideDepth >= insideThreshold;
+    }
+    if (allowInside) {
+      return _BindingHit(
+        anchorPoint: localPoint,
+        snapPoint: localPoint,
+        mode: ArrowBindingMode.inside,
+        distance: 0,
+      );
+    }
+
+    final anchorPoint = _resolveCircleOrbitAnchorPoint(
+      center: center,
+      radius: radius,
+      localPoint: localPoint,
+      localReference: localReference,
+    );
+    final snapPoint = _resolveCircleOrbitSnapPoint(
+      center: center,
+      radius: radius,
+      anchorPoint: anchorPoint,
+      localReference: localReference,
+      gap: gap,
+      targetPoint: localPoint,
+    );
+    return _BindingHit(
+      anchorPoint: anchorPoint,
+      snapPoint: snapPoint,
+      mode: ArrowBindingMode.orbit,
+      distance: 0,
+    );
+  }
+
+  final anchorPoint = _resolveCircleOrbitAnchorPoint(
+    center: center,
+    radius: radius,
+    localPoint: localPoint,
+    localReference: localReference,
+  );
+  final distance = localPoint.distance(anchorPoint);
+  if (distance > snapDistance * (1 + _bindingHitToleranceFactor)) {
+    return null;
+  }
+
+  final snapPoint = _resolveCircleOrbitSnapPoint(
+    center: center,
+    radius: radius,
+    anchorPoint: anchorPoint,
+    localReference: localReference,
+    gap: gap,
+    targetPoint: localPoint,
+  );
+
+  return _BindingHit(
+    anchorPoint: anchorPoint,
+    snapPoint: snapPoint,
+    mode: ArrowBindingMode.orbit,
+    distance: distance,
+  );
+}
+
 ArrowBindingResult? _resolveElbowBindingOnTarget({
   required ElementState target,
   required DrawPoint worldPoint,
@@ -537,6 +753,56 @@ ArrowBindingResult? _resolveElbowBindingOnTarget({
 
   final space = ElementSpace(rotation: target.rotation, origin: rect.center);
   final localPoint = space.fromWorld(worldPoint);
+  if (_isCircularTarget(target)) {
+    final radius = _resolveCircleRadius(rect);
+    if (radius <= 0) {
+      return null;
+    }
+    final anchorPoint = _resolveCircleElbowAnchorPoint(
+      center: rect.center,
+      radius: radius,
+      point: localPoint,
+    );
+
+    final distance =
+        _isStrictlyInsideCircle(
+          center: rect.center,
+          radius: radius,
+          point: localPoint,
+        )
+        ? 0.0
+        : localPoint.distance(anchorPoint);
+    if (distance > snapDistance * (1 + _bindingHitToleranceFactor)) {
+      return null;
+    }
+
+    final binding = ArrowBindingUtils.bindingFromLocalPoint(
+      target: target,
+      localPoint: anchorPoint,
+    );
+    if (binding == null) {
+      return null;
+    }
+
+    final worldAnchor = space.toWorld(anchorPoint);
+    final heading = ElbowGeometry.headingForVector(
+      worldAnchor.x - rect.centerX,
+      worldAnchor.y - rect.centerY,
+    );
+    final gap = _resolveElbowBindingGap(hasArrowhead);
+    final snapPoint = DrawPoint(
+      x: worldAnchor.x + heading.dx * gap,
+      y: worldAnchor.y + heading.dy * gap,
+    );
+
+    return ArrowBindingResult(
+      binding: binding,
+      snapPoint: snapPoint,
+      distance: distance,
+      zIndex: target.zIndex,
+    );
+  }
+
   final anchorPoint = _resolveElbowAnchorPoint(rect: rect, point: localPoint);
 
   final distance = _isStrictlyInsideRect(rect, localPoint)
@@ -637,11 +903,89 @@ DrawPoint _resolveOrbitSnapPoint({
   return _nearestPointOnRectBoundary(snapRect, directionPoint);
 }
 
+DrawPoint _resolveCircleOrbitAnchorPoint({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint localPoint,
+  required DrawPoint? localReference,
+}) {
+  if (localReference != null) {
+    final intersection = _intersectCircleAlongLine(
+      center: center,
+      radius: radius,
+      reference: localReference,
+      target: localPoint,
+      preferPoint: localPoint,
+    );
+    if (intersection != null) {
+      return intersection;
+    }
+  }
+  return _nearestPointOnCircleBoundary(center, radius, localPoint);
+}
+
+DrawPoint _resolveCircleElbowAnchorPoint({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint point,
+}) {
+  final dx = point.x - center.x;
+  final dy = point.y - center.y;
+  final length = math.sqrt(dx * dx + dy * dy);
+  if (length <= _intersectionEpsilon) {
+    return DrawPoint(x: center.x + radius, y: center.y);
+  }
+  final scale = radius / length;
+  return DrawPoint(x: center.x + dx * scale, y: center.y + dy * scale);
+}
+
+DrawPoint _resolveCircleOrbitSnapPoint({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint anchorPoint,
+  required DrawPoint? localReference,
+  required double gap,
+  DrawPoint? targetPoint,
+}) {
+  final snapRadius = radius + gap;
+  final directionPoint = targetPoint ?? anchorPoint;
+
+  if (localReference != null) {
+    final intersection = _intersectCircleAlongLine(
+      center: center,
+      radius: snapRadius,
+      reference: localReference,
+      target: directionPoint,
+      preferRay: true,
+    );
+    if (intersection != null) {
+      return intersection;
+    }
+  }
+
+  return _nearestPointOnCircleBoundary(center, snapRadius, directionPoint);
+}
+
 bool _isStrictlyInsideRect(DrawRect rect, DrawPoint point) =>
     point.x > rect.minX + _insideEpsilon &&
     point.x < rect.maxX - _insideEpsilon &&
     point.y > rect.minY + _insideEpsilon &&
     point.y < rect.maxY - _insideEpsilon;
+
+bool _isStrictlyInsideCircle({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint point,
+}) {
+  if (radius <= _insideEpsilon) {
+    return false;
+  }
+  final dx = point.x - center.x;
+  final dy = point.y - center.y;
+  final distanceSquared = dx * dx + dy * dy;
+  final threshold = radius - _insideEpsilon;
+  return distanceSquared < threshold * threshold;
+}
 
 DrawPoint? _intersectRectAlongLine({
   required DrawRect rect,
@@ -707,6 +1051,68 @@ DrawPoint? _intersectRectAlongLine({
         sortPoint.distanceSquared(a).compareTo(sortPoint.distanceSquared(b)),
   );
   return intersections.first;
+}
+
+DrawPoint? _intersectCircleAlongLine({
+  required DrawPoint center,
+  required double radius,
+  required DrawPoint reference,
+  required DrawPoint target,
+  DrawPoint? preferPoint,
+  bool preferRay = false,
+}) {
+  if (radius <= 0) {
+    return null;
+  }
+  final dx = target.x - reference.x;
+  final dy = target.y - reference.y;
+  final a = dx * dx + dy * dy;
+  if (a <= _intersectionEpsilon) {
+    return null;
+  }
+
+  final ox = reference.x - center.x;
+  final oy = reference.y - center.y;
+  final b = 2 * (dx * ox + dy * oy);
+  final c = ox * ox + oy * oy - radius * radius;
+  final discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) {
+    return null;
+  }
+
+  final sqrtD = math.sqrt(discriminant);
+  final t1 = (-b - sqrtD) / (2 * a);
+  final t2 = (-b + sqrtD) / (2 * a);
+
+  final candidates = <double>[t1, t2];
+  if (preferRay) {
+    double? bestT;
+    for (final t in candidates) {
+      if (t < -_intersectionEpsilon) {
+        continue;
+      }
+      if (bestT == null || t < bestT) {
+        bestT = t;
+      }
+    }
+    if (bestT == null) {
+      return null;
+    }
+    return DrawPoint(x: reference.x + dx * bestT, y: reference.y + dy * bestT);
+  }
+
+  final sortPoint = preferPoint ?? reference;
+  DrawPoint? best;
+  var bestDistance = double.infinity;
+  for (final t in candidates) {
+    final point = DrawPoint(x: reference.x + dx * t, y: reference.y + dy * t);
+    final distance = sortPoint.distanceSquared(point);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = point;
+    }
+  }
+  return best;
 }
 
 List<DrawPoint> _segmentRectIntersections({
