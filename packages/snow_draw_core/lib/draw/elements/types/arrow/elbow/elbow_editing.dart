@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
@@ -7,6 +7,7 @@ import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
 import '../../../../types/element_style.dart';
+import '../../../../utils/combined_element_lookup.dart';
 import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
@@ -42,10 +43,12 @@ final class ElbowEditResult {
   final bool? endIsSpecial;
 }
 
+/// Computes elbow edit using [CombinedElementLookup] for efficient element
+/// access.
 ElbowEditResult computeElbowEdit({
   required ElementState element,
   required ArrowData data,
-  required Map<String, ElementState> elementsById,
+  required CombinedElementLookup lookup,
   List<DrawPoint>? localPointsOverride,
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   ArrowBinding? startBindingOverride,
@@ -55,7 +58,7 @@ ElbowEditResult computeElbowEdit({
     _ElbowEditPipeline(
       element: element,
       data: data,
-      elementsById: elementsById,
+      lookup: lookup,
       localPointsOverride: localPointsOverride,
       fixedSegmentsOverride: fixedSegmentsOverride,
       startBindingOverride: startBindingOverride,

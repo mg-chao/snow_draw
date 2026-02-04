@@ -99,7 +99,7 @@ class StaticCanvasPainter extends CustomPainter {
       final indexB = document.getOrderIndex(b.id) ?? -1;
       return indexA.compareTo(indexB);
     });
-    final serialConnectors = buildSerialNumberConnectorMap(stateView);
+    final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
     // Draw visible elements in document z-order, applying preview geometry
     // without lifting elements to the top layer.

@@ -24,6 +24,7 @@ import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
+import '../../utils/combined_element_lookup.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_errors.dart';
@@ -183,7 +184,7 @@ class ArrowPointOperation extends EditOperation {
       final updated = computeElbowEdit(
         element: element,
         data: arrowData,
-        elementsById: state.domain.document.elementMap,
+        lookup: CombinedElementLookup(base: state.domain.document.elementMap),
         localPointsOverride: points,
         fixedSegmentsOverride: updatedFixed,
         startBindingOverride: data.startBinding,
@@ -365,7 +366,9 @@ class ArrowPointOperation extends EditOperation {
             final updated = computeElbowEdit(
               element: element,
               data: elbowData,
-              elementsById: state.domain.document.elementMap,
+              lookup: CombinedElementLookup(
+                base: state.domain.document.elementMap,
+              ),
               localPointsOverride: points,
               fixedSegmentsOverride: fixedSegments,
               startBindingOverride: typedTransform.startBinding,
@@ -474,7 +477,9 @@ class ArrowPointOperation extends EditOperation {
             final updated = computeElbowEdit(
               element: element,
               data: arrowData,
-              elementsById: state.domain.document.elementMap,
+              lookup: CombinedElementLookup(
+                base: state.domain.document.elementMap,
+              ),
               localPointsOverride: typedTransform.points,
               fixedSegmentsOverride: fixedSegments,
               startBindingOverride: typedTransform.startBinding,

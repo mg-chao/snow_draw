@@ -394,7 +394,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
   }
 }
 
-const double _loopCloseToleranceMultiplier = 1.5;
+const _loopCloseToleranceMultiplier = 1.5;
 
 /// Calculates accurate bounding rect for arrow, accounting for curved paths.
 DrawRect _calculateArrowRect({

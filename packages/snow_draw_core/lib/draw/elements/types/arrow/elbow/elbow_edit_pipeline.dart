@@ -46,7 +46,7 @@ final class _ElbowEditContext {
   const _ElbowEditContext({
     required this.element,
     required this.data,
-    required this.elementsById,
+    required this.lookup,
     required this.basePoints,
     required this.incomingPoints,
     required this.previousFixedSegments,
@@ -65,7 +65,7 @@ final class _ElbowEditContext {
 
   final ElementState element;
   final ArrowData data;
-  final Map<String, ElementState> elementsById;
+  final CombinedElementLookup lookup;
   final List<DrawPoint> basePoints;
   final List<DrawPoint> incomingPoints;
   final List<ElbowFixedSegment> previousFixedSegments;
@@ -96,6 +96,10 @@ final class _ElbowEditContext {
     }
     return _ElbowEditMode.applyFixedSegments;
   }
+
+  /// Returns a concrete map for downstream functions that require it.
+  /// Lazily computed only when needed.
+  Map<String, ElementState> get elementsById => lookup.toMap();
 }
 
 /// Step-by-step edit orchestration used by [computeElbowEdit].
@@ -103,7 +107,7 @@ final class _ElbowEditPipeline {
   _ElbowEditPipeline({
     required this.element,
     required this.data,
-    required this.elementsById,
+    required this.lookup,
     this.localPointsOverride,
     this.fixedSegmentsOverride,
     this.startBindingOverride,
@@ -112,7 +116,7 @@ final class _ElbowEditPipeline {
 
   final ElementState element;
   final ArrowData data;
-  final Map<String, ElementState> elementsById;
+  final CombinedElementLookup lookup;
   final List<DrawPoint>? localPointsOverride;
   final List<ElbowFixedSegment>? fixedSegmentsOverride;
   final ArrowBinding? startBindingOverride;
@@ -181,7 +185,7 @@ final class _ElbowEditPipeline {
     return _ElbowEditContext(
       element: element,
       data: data,
-      elementsById: elementsById,
+      lookup: lookup,
       basePoints: basePoints,
       incomingPoints: incomingPoints,
       previousFixedSegments: previousFixedSegments,

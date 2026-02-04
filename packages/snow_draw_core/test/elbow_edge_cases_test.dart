@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/combined_element_lookup.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
@@ -44,7 +45,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: <DrawPoint>[points.first],
     );
 
@@ -68,7 +69,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: invalidSegments,
     );
@@ -101,7 +102,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: overrides,
     );

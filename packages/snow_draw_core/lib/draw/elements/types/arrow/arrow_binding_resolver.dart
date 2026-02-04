@@ -5,6 +5,7 @@ import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/combined_element_lookup.dart';
 import 'arrow_binding.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
@@ -12,12 +13,35 @@ import 'arrow_layout.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_editing.dart';
 
-@immutable
-final class ArrowBindingResolver {
-  const ArrowBindingResolver._();
+/// Resolves arrow bindings when bound elements change position.
+///
+/// Maintains a cached index of arrow bindings for efficient lookup.
+/// Uses version-based invalidation to minimize rebuilds.
+class ArrowBindingResolver {
+  ArrowBindingResolver._();
 
-  static Map<String, ElementState> resolveBoundArrows({
-    required Map<String, ElementState> elementsById,
+  /// Global instance for shared caching across the application.
+  static final instance = ArrowBindingResolver._();
+
+  var _cachedElementsVersion = -1;
+  Map<String, Set<String>> _bindingIndex = {};
+  Map<String, _ArrowBindingEntry> _arrowBindings = {};
+
+  /// Resolves bound arrows when elements change.
+  ///
+  /// This is the primary entry point. Uses [CombinedElementLookup] to avoid
+  /// map allocation when combining document elements with updates.
+  ///
+  /// Parameters:
+  /// - [baseElements]: The document's element map
+  /// - [updatedElements]: Elements that have been modified (overlay)
+  /// - [changedElementIds]: IDs of elements that changed
+  /// - [document]: Optional document for version-based cache invalidation
+  ///
+  /// Returns a map of arrow IDs to their updated states.
+  Map<String, ElementState> resolve({
+    required Map<String, ElementState> baseElements,
+    required Map<String, ElementState> updatedElements,
     required Set<String> changedElementIds,
     DocumentState? document,
   }) {
@@ -25,18 +49,23 @@ final class ArrowBindingResolver {
       return const {};
     }
 
-    final updates = <String, ElementState>{};
+    final lookup = CombinedElementLookup(
+      base: baseElements,
+      overlay: updatedElements,
+    );
+
     final arrowIds = _resolveBoundArrowIds(
       changedElementIds: changedElementIds,
-      elementsById: elementsById,
+      lookup: lookup,
       document: document,
     );
     if (arrowIds.isEmpty) {
       return const {};
     }
 
+    final updates = <String, ElementState>{};
     for (final arrowId in arrowIds) {
-      final element = elementsById[arrowId];
+      final element = lookup[arrowId];
       if (element == null) {
         continue;
       }
@@ -63,7 +92,7 @@ final class ArrowBindingResolver {
       final updated = _applyBindings(
         element: element,
         data: data,
-        elementsById: elementsById,
+        lookup: lookup,
         updateStart: updateStart,
         updateEnd: updateEnd,
       );
@@ -74,153 +103,157 @@ final class ArrowBindingResolver {
 
     return updates;
   }
-}
 
-var _cachedElementsVersion = -1;
-var _cachedBindingIndex = <String, Set<String>>{};
-var _cachedArrowBindings = <String, _ArrowBindingEntry>{};
-
-Set<String> _resolveBoundArrowIds({
-  required Set<String> changedElementIds,
-  required Map<String, ElementState> elementsById,
-  DocumentState? document,
-}) {
-  final bindingIndex = _resolveBindingIndex(
-    changedElementIds: changedElementIds,
-    elementsById: elementsById,
-    document: document,
-  );
-  final arrowIds = <String>{};
-  for (final id in changedElementIds) {
-    final bound = bindingIndex[id];
-    if (bound != null) {
-      arrowIds.addAll(bound);
-    }
+  /// Invalidates the cache, forcing a full rebuild on next resolve.
+  void invalidate() {
+    _cachedElementsVersion = -1;
+    _bindingIndex = {};
+    _arrowBindings = {};
   }
-  return arrowIds;
-}
 
-Map<String, Set<String>> _resolveBindingIndex({
-  required Set<String> changedElementIds,
-  required Map<String, ElementState> elementsById,
-  DocumentState? document,
-}) {
-  final documentVersion = document?.elementsVersion;
-  if (_cachedElementsVersion == -1 ||
-      (documentVersion != null && documentVersion < _cachedElementsVersion)) {
-    _rebuildBindingIndex(document?.elements ?? elementsById.values);
+  Set<String> _resolveBoundArrowIds({
+    required Set<String> changedElementIds,
+    required CombinedElementLookup lookup,
+    DocumentState? document,
+  }) {
+    _updateBindingIndexIfNeeded(
+      changedElementIds: changedElementIds,
+      lookup: lookup,
+      document: document,
+    );
+
+    final arrowIds = <String>{};
+    for (final id in changedElementIds) {
+      final bound = _bindingIndex[id];
+      if (bound != null) {
+        arrowIds.addAll(bound);
+      }
+    }
+    return arrowIds;
+  }
+
+  void _updateBindingIndexIfNeeded({
+    required Set<String> changedElementIds,
+    required CombinedElementLookup lookup,
+    DocumentState? document,
+  }) {
+    final documentVersion = document?.elementsVersion;
+
+    // Check if we need a full rebuild
+    if (_cachedElementsVersion == -1 ||
+        (documentVersion != null && documentVersion < _cachedElementsVersion)) {
+      _rebuildBindingIndex(document?.elements ?? lookup.values);
+      _cachedElementsVersion = documentVersion ?? 0;
+      return;
+    }
+
+    // Check for version gap (missed updates)
+    if (documentVersion != null &&
+        _cachedElementsVersion >= 0 &&
+        documentVersion > _cachedElementsVersion + 1) {
+      _rebuildBindingIndex(document?.elements ?? lookup.values);
+      _cachedElementsVersion = documentVersion;
+      return;
+    }
+
+    // Determine if update is needed
+    final shouldUpdate =
+        documentVersion == null ||
+        documentVersion != _cachedElementsVersion ||
+        changedElementIds.isNotEmpty;
+    if (!shouldUpdate) {
+      return;
+    }
+
+    // Incremental update or full rebuild
+    if (changedElementIds.isEmpty) {
+      _rebuildBindingIndex(document?.elements ?? lookup.values);
+    } else {
+      _incrementalUpdateBindingIndex(
+        changedElementIds: changedElementIds,
+        lookup: lookup,
+      );
+    }
+
     if (documentVersion != null) {
       _cachedElementsVersion = documentVersion;
     } else if (_cachedElementsVersion == -1) {
       _cachedElementsVersion = 0;
     }
-    return _cachedBindingIndex;
   }
 
-  if (documentVersion != null &&
-      _cachedElementsVersion >= 0 &&
-      documentVersion > _cachedElementsVersion + 1) {
-    _rebuildBindingIndex(document?.elements ?? elementsById.values);
-    _cachedElementsVersion = documentVersion;
-    return _cachedBindingIndex;
-  }
+  void _rebuildBindingIndex(Iterable<ElementState> elements) {
+    _bindingIndex = <String, Set<String>>{};
+    _arrowBindings = <String, _ArrowBindingEntry>{};
 
-  final shouldUpdate =
-      documentVersion == null ||
-      documentVersion != _cachedElementsVersion ||
-      changedElementIds.isNotEmpty;
-  if (!shouldUpdate) {
-    return _cachedBindingIndex;
-  }
-
-  if (changedElementIds.isEmpty) {
-    _rebuildBindingIndex(document?.elements ?? elementsById.values);
-  } else {
-    _updateBindingIndex(
-      changedElementIds: changedElementIds,
-      elementsById: elementsById,
-    );
-  }
-
-  if (documentVersion != null) {
-    _cachedElementsVersion = documentVersion;
-  } else if (_cachedElementsVersion == -1) {
-    _cachedElementsVersion = 0;
-  }
-  return _cachedBindingIndex;
-}
-
-void _rebuildBindingIndex(Iterable<ElementState> elements) {
-  _cachedBindingIndex = <String, Set<String>>{};
-  _cachedArrowBindings = <String, _ArrowBindingEntry>{};
-
-  for (final element in elements) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      continue;
+    for (final element in elements) {
+      final data = element.data;
+      if (data is! ArrowLikeData) {
+        continue;
+      }
+      final entry = _ArrowBindingEntry(
+        startId: data.startBinding?.elementId,
+        endId: data.endBinding?.elementId,
+      );
+      if (entry.isEmpty) {
+        continue;
+      }
+      _arrowBindings[element.id] = entry;
+      _addBindingEntry(element.id, entry);
     }
-    final entry = _ArrowBindingEntry(
-      startId: data.startBinding?.elementId,
-      endId: data.endBinding?.elementId,
-    );
-    if (entry.isEmpty) {
-      continue;
-    }
-    _cachedArrowBindings[element.id] = entry;
-    _addBindingEntry(element.id, entry);
   }
-}
 
-void _updateBindingIndex({
-  required Set<String> changedElementIds,
-  required Map<String, ElementState> elementsById,
-}) {
-  for (final id in changedElementIds) {
-    final element = elementsById[id];
-    if (element == null || element.data is! ArrowLikeData) {
-      final previous = _cachedArrowBindings.remove(id);
+  void _incrementalUpdateBindingIndex({
+    required Set<String> changedElementIds,
+    required CombinedElementLookup lookup,
+  }) {
+    for (final id in changedElementIds) {
+      final element = lookup[id];
+      if (element == null || element.data is! ArrowLikeData) {
+        final previous = _arrowBindings.remove(id);
+        if (previous != null) {
+          _removeBindingEntry(id, previous);
+        }
+        continue;
+      }
+
+      final data = element.data as ArrowLikeData;
+      final next = _ArrowBindingEntry(
+        startId: data.startBinding?.elementId,
+        endId: data.endBinding?.elementId,
+      );
+      final previous = _arrowBindings[id];
+      if (previous != null && previous == next) {
+        continue;
+      }
       if (previous != null) {
         _removeBindingEntry(id, previous);
       }
-      continue;
+      if (next.isEmpty) {
+        _arrowBindings.remove(id);
+        continue;
+      }
+      _arrowBindings[id] = next;
+      _addBindingEntry(id, next);
     }
-
-    final data = element.data as ArrowLikeData;
-    final next = _ArrowBindingEntry(
-      startId: data.startBinding?.elementId,
-      endId: data.endBinding?.elementId,
-    );
-    final previous = _cachedArrowBindings[id];
-    if (previous != null && previous == next) {
-      continue;
-    }
-    if (previous != null) {
-      _removeBindingEntry(id, previous);
-    }
-    if (next.isEmpty) {
-      _cachedArrowBindings.remove(id);
-      continue;
-    }
-    _cachedArrowBindings[id] = next;
-    _addBindingEntry(id, next);
   }
-}
 
-void _addBindingEntry(String arrowId, _ArrowBindingEntry entry) {
-  for (final targetId in entry.targetIds) {
-    (_cachedBindingIndex[targetId] ??= <String>{}).add(arrowId);
-  }
-}
-
-void _removeBindingEntry(String arrowId, _ArrowBindingEntry entry) {
-  for (final targetId in entry.targetIds) {
-    final arrows = _cachedBindingIndex[targetId];
-    if (arrows == null) {
-      continue;
+  void _addBindingEntry(String arrowId, _ArrowBindingEntry entry) {
+    for (final targetId in entry.targetIds) {
+      (_bindingIndex[targetId] ??= <String>{}).add(arrowId);
     }
-    arrows.remove(arrowId);
-    if (arrows.isEmpty) {
-      _cachedBindingIndex.remove(targetId);
+  }
+
+  void _removeBindingEntry(String arrowId, _ArrowBindingEntry entry) {
+    for (final targetId in entry.targetIds) {
+      final arrows = _bindingIndex[targetId];
+      if (arrows == null) {
+        continue;
+      }
+      arrows.remove(arrowId);
+      if (arrows.isEmpty) {
+        _bindingIndex.remove(targetId);
+      }
     }
   }
 }
@@ -257,7 +290,7 @@ class _ArrowBindingEntry {
 ElementState? _applyBindings({
   required ElementState element,
   required ArrowLikeData data,
-  required Map<String, ElementState> elementsById,
+  required CombinedElementLookup lookup,
   required bool updateStart,
   required bool updateEnd,
 }) {
@@ -296,7 +329,7 @@ ElementState? _applyBindings({
           : null;
 
       if (shouldUpdateStart && data.startBinding != null) {
-        final target = elementsById[data.startBinding!.elementId];
+        final target = lookup[data.startBinding!.elementId];
         final bound = target == null
             ? null
             : isElbow
@@ -321,7 +354,7 @@ ElementState? _applyBindings({
       }
 
       if (shouldUpdateEnd && data.endBinding != null) {
-        final target = elementsById[data.endBinding!.elementId];
+        final target = lookup[data.endBinding!.elementId];
         final bound = target == null
             ? null
             : isElbow
@@ -359,7 +392,7 @@ ElementState? _applyBindings({
     final updated = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: elementsById,
+      lookup: lookup,
       localPointsOverride: localPoints,
       fixedSegmentsOverride: data.fixedSegments,
       startBindingOverride: data.startBinding,
