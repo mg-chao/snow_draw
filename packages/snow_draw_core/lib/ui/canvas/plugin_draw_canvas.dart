@@ -16,6 +16,7 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -762,6 +763,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (toolTypeId == RectangleData.typeIdToken ||
         toolTypeId == ArrowData.typeIdToken ||
         toolTypeId == LineData.typeIdToken ||
+        toolTypeId == FreeDrawData.typeIdToken ||
         toolTypeId == null) {
       _adjustStrokeWidth(event);
       return;
@@ -912,10 +914,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Determine base stroke width from selected elements or config
     final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
     final lineAverage = _resolveAverageSelectedLineStrokeWidth(state);
+    final freeDrawAverage = _resolveAverageSelectedFreeDrawStrokeWidth(state);
     final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
     final base =
         arrowAverage ??
         lineAverage ??
+        freeDrawAverage ??
         rectangleAverage ??
         config.arrowStyle.strokeWidth;
 
@@ -960,6 +964,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
 
+    // Update selected free draw elements
+    final freeDrawIds = _resolveFreeDrawSelectionIds(state);
+    if (freeDrawIds.isNotEmpty) {
+      unawaited(
+        widget.store.dispatch(
+          UpdateElementsStyle(elementIds: freeDrawIds, strokeWidth: next),
+        ),
+      );
+    }
+
     // Update arrow style config if needed
     if (!_doubleEquals(next, config.arrowStyle.strokeWidth)) {
       final nextStyle = config.arrowStyle.copyWith(strokeWidth: next);
@@ -986,6 +1000,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       unawaited(
         widget.store.dispatch(
           UpdateConfig(config.copyWith(lineStyle: nextStyle)),
+        ),
+      );
+    }
+
+    // Update free draw style config if needed
+    if (!_doubleEquals(next, config.freeDrawStyle.strokeWidth)) {
+      final nextStyle = config.freeDrawStyle.copyWith(strokeWidth: next);
+      unawaited(
+        widget.store.dispatch(
+          UpdateConfig(config.copyWith(freeDrawStyle: nextStyle)),
         ),
       );
     }
@@ -1141,6 +1165,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return total / count;
   }
 
+  double? _resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return null;
+    }
+    var count = 0;
+    var total = 0.0;
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      final data = element?.data;
+      if (data is FreeDrawData) {
+        total += data.strokeWidth;
+        count += 1;
+      }
+    }
+    if (count == 0) {
+      return null;
+    }
+    return total / count;
+  }
+
   double? _resolveAverageSelectedFontSize(DrawState state) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
@@ -1201,6 +1246,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     for (final id in selectedIds) {
       final element = state.domain.document.getElementById(id);
       if (element?.data is LineData) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
+  List<String> _resolveFreeDrawSelectionIds(DrawState state) {
+    final selectedIds = state.domain.selection.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const [];
+    }
+    final ids = <String>[];
+    for (final id in selectedIds) {
+      final element = state.domain.document.getElementById(id);
+      if (element?.data is FreeDrawData) {
         ids.add(id);
       }
     }

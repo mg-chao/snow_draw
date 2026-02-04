@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
@@ -27,6 +28,7 @@ class StyleToolbarAdapter {
     _styleValues = _resolveRectangleStyles();
     _arrowStyleValues = _resolveArrowStyles();
     _lineStyleValues = _resolveLineStyles();
+    _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
@@ -47,11 +49,13 @@ class StyleToolbarAdapter {
   List<ElementState> _selectedRectangles = const [];
   List<ElementState> _selectedArrows = const [];
   List<ElementState> _selectedLines = const [];
+  List<ElementState> _selectedFreeDraws = const [];
   List<ElementState> _selectedTexts = const [];
   Map<String, _ElementStyleSnapshot> _styleSnapshot = const {};
   late RectangleStyleValues _styleValues;
   late ArrowStyleValues _arrowStyleValues;
   late LineStyleValues _lineStyleValues;
+  late LineStyleValues _freeDrawStyleValues;
   late TextStyleValues _textStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
@@ -177,6 +181,7 @@ class StyleToolbarAdapter {
       _styleValues = _resolveRectangleStyles();
       _arrowStyleValues = _resolveArrowStyles();
       _lineStyleValues = _resolveLineStyles();
+      _freeDrawStyleValues = _resolveFreeDrawStyles();
       _textStyleValues = _resolveTextStyles();
       _publishState();
       return;
@@ -193,6 +198,7 @@ class StyleToolbarAdapter {
     _styleValues = _resolveRectangleStyles();
     _arrowStyleValues = _resolveArrowStyles();
     _lineStyleValues = _resolveLineStyles();
+    _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
     _publishState();
   }
@@ -205,11 +211,14 @@ class StyleToolbarAdapter {
         config.rectangleStyle != _config.rectangleStyle;
     final arrowStyleChanged = config.arrowStyle != _config.arrowStyle;
     final lineStyleChanged = config.lineStyle != _config.lineStyle;
+    final freeDrawStyleChanged =
+        config.freeDrawStyle != _config.freeDrawStyle;
     final textStyleChanged = config.textStyle != _config.textStyle;
     _config = config;
     if (!rectangleStyleChanged &&
         !arrowStyleChanged &&
         !lineStyleChanged &&
+        !freeDrawStyleChanged &&
         !textStyleChanged) {
       return;
     }
@@ -221,6 +230,9 @@ class StyleToolbarAdapter {
     }
     if (_selectedLines.isEmpty && lineStyleChanged) {
       _lineStyleValues = _resolveLineStyles();
+    }
+    if (_selectedFreeDraws.isEmpty && freeDrawStyleChanged) {
+      _freeDrawStyleValues = _resolveFreeDrawStyles();
     }
     if (_selectedTexts.isEmpty && textStyleChanged) {
       _textStyleValues = _resolveTextStyles();
@@ -236,6 +248,7 @@ class StyleToolbarAdapter {
           _selectedRectangles.isNotEmpty ||
           _selectedArrows.isNotEmpty ||
           _selectedLines.isNotEmpty ||
+          _selectedFreeDraws.isNotEmpty ||
           _selectedTexts.isNotEmpty ||
           _styleSnapshot.isNotEmpty;
       if (changed) {
@@ -243,6 +256,7 @@ class StyleToolbarAdapter {
         _selectedRectangles = const [];
         _selectedArrows = const [];
         _selectedLines = const [];
+        _selectedFreeDraws = const [];
         _selectedTexts = const [];
         _styleSnapshot = const {};
       }
@@ -254,6 +268,7 @@ class StyleToolbarAdapter {
     final selectedRectangles = <ElementState>[];
     final selectedArrows = <ElementState>[];
     final selectedLines = <ElementState>[];
+    final selectedFreeDraws = <ElementState>[];
     final selectedTexts = <ElementState>[];
     final nextSnapshot = <String, _ElementStyleSnapshot>{};
     var snapshotChanged = false;
@@ -272,6 +287,9 @@ class StyleToolbarAdapter {
       }
       if (element.data is LineData) {
         selectedLines.add(element);
+      }
+      if (element.data is FreeDrawData) {
+        selectedFreeDraws.add(element);
       }
       if (element.data is TextData) {
         selectedTexts.add(element);
@@ -295,6 +313,7 @@ class StyleToolbarAdapter {
     _selectedRectangles = selectedRectangles;
     _selectedArrows = selectedArrows;
     _selectedLines = selectedLines;
+    _selectedFreeDraws = selectedFreeDraws;
     _selectedTexts = selectedTexts;
     _styleSnapshot = nextSnapshot;
     return true;
@@ -660,6 +679,110 @@ class StyleToolbarAdapter {
     );
   }
 
+  /// Resolves free draw style values for the current selection.
+  LineStyleValues _resolveFreeDrawStyles() {
+    final defaults = _config.freeDrawStyle;
+    if (_selectedFreeDraws.isEmpty) {
+      return LineStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        fillColor: MixedValue(value: defaults.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
+        strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    final first = _selectedFreeDraws.first;
+    final firstData = first.data;
+    if (firstData is! FreeDrawData) {
+      return LineStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        fillColor: MixedValue(value: defaults.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
+        strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    if (_selectedFreeDraws.length == 1) {
+      final opacity = _resolveMixedOpacity(defaults.opacity);
+      return LineStyleValues(
+        color: MixedValue(value: firstData.color, isMixed: false),
+        fillColor: MixedValue(value: firstData.fillColor, isMixed: false),
+        fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
+        strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
+        strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
+        opacity: opacity,
+      );
+    }
+
+    final color = firstData.color;
+    final fillColor = firstData.fillColor;
+    final fillStyle = firstData.fillStyle;
+    final strokeWidth = firstData.strokeWidth;
+    final strokeStyle = firstData.strokeStyle;
+
+    var colorMixed = false;
+    var fillColorMixed = false;
+    var fillStyleMixed = false;
+    var strokeWidthMixed = false;
+    var strokeStyleMixed = false;
+
+    for (final element in _selectedFreeDraws.skip(1)) {
+      final data = element.data;
+      if (data is! FreeDrawData) {
+        continue;
+      }
+      if (!colorMixed && data.color != color) {
+        colorMixed = true;
+      }
+      if (!fillColorMixed && data.fillColor != fillColor) {
+        fillColorMixed = true;
+      }
+      if (!fillStyleMixed && data.fillStyle != fillStyle) {
+        fillStyleMixed = true;
+      }
+      if (!strokeWidthMixed && !_doubleEquals(data.strokeWidth, strokeWidth)) {
+        strokeWidthMixed = true;
+      }
+      if (!strokeStyleMixed && data.strokeStyle != strokeStyle) {
+        strokeStyleMixed = true;
+      }
+      if (colorMixed &&
+          fillColorMixed &&
+          fillStyleMixed &&
+          strokeWidthMixed &&
+          strokeStyleMixed) {
+        break;
+      }
+    }
+
+    final opacity = _resolveMixedOpacity(defaults.opacity);
+
+    return LineStyleValues(
+      color: MixedValue(value: colorMixed ? null : color, isMixed: colorMixed),
+      fillColor: MixedValue(
+        value: fillColorMixed ? null : fillColor,
+        isMixed: fillColorMixed,
+      ),
+      fillStyle: MixedValue(
+        value: fillStyleMixed ? null : fillStyle,
+        isMixed: fillStyleMixed,
+      ),
+      strokeWidth: MixedValue(
+        value: strokeWidthMixed ? null : strokeWidth,
+        isMixed: strokeWidthMixed,
+      ),
+      strokeStyle: MixedValue(
+        value: strokeStyleMixed ? null : strokeStyle,
+        isMixed: strokeStyleMixed,
+      ),
+      opacity: opacity,
+    );
+  }
+
   /// Resolves text style values for the current selection.
   ///
   /// This method implements a multi-selection style resolution algorithm:
@@ -927,6 +1050,9 @@ class StyleToolbarAdapter {
     final updateLineDefaults =
         _selectedLines.isNotEmpty ||
         (!hasSelection && toolType == ToolType.line);
+    final updateFreeDrawDefaults =
+        _selectedFreeDraws.isNotEmpty ||
+        (!hasSelection && toolType == ToolType.freeDraw);
     final updateTextDefaults =
         _selectedTexts.isNotEmpty ||
         interaction is TextEditingState ||
@@ -935,6 +1061,7 @@ class StyleToolbarAdapter {
     if (!updateRectangleDefaults &&
         !updateArrowDefaults &&
         !updateLineDefaults &&
+        !updateFreeDrawDefaults &&
         !updateTextDefaults) {
       return;
     }
@@ -942,6 +1069,7 @@ class StyleToolbarAdapter {
     var nextRectangleStyle = _config.rectangleStyle;
     var nextArrowStyle = _config.arrowStyle;
     var nextLineStyle = _config.lineStyle;
+    var nextFreeDrawStyle = _config.freeDrawStyle;
     var nextTextStyle = _config.textStyle;
 
     if (updateRectangleDefaults) {
@@ -982,6 +1110,16 @@ class StyleToolbarAdapter {
         opacity: opacity,
       );
     }
+    if (updateFreeDrawDefaults) {
+      nextFreeDrawStyle = nextFreeDrawStyle.copyWith(
+        color: color,
+        fillColor: fillColor,
+        strokeWidth: strokeWidth,
+        strokeStyle: strokeStyle,
+        fillStyle: fillStyle,
+        opacity: opacity,
+      );
+    }
     if (updateTextDefaults) {
       nextTextStyle = nextTextStyle.copyWith(
         color: color,
@@ -1003,6 +1141,7 @@ class StyleToolbarAdapter {
     if (nextRectangleStyle == _config.rectangleStyle &&
         nextArrowStyle == _config.arrowStyle &&
         nextLineStyle == _config.lineStyle &&
+        nextFreeDrawStyle == _config.freeDrawStyle &&
         nextTextStyle == _config.textStyle) {
       return;
     }
@@ -1014,6 +1153,7 @@ class StyleToolbarAdapter {
             rectangleStyle: nextRectangleStyle,
             arrowStyle: nextArrowStyle,
             lineStyle: nextLineStyle,
+            freeDrawStyle: nextFreeDrawStyle,
             textStyle: nextTextStyle,
           ),
         ),
@@ -1048,15 +1188,18 @@ class StyleToolbarAdapter {
     rectangleStyle: _config.rectangleStyle,
     arrowStyle: _config.arrowStyle,
     lineStyle: _config.lineStyle,
+    freeDrawStyle: _config.freeDrawStyle,
     textStyle: _config.textStyle,
     styleValues: _styleValues,
     arrowStyleValues: _arrowStyleValues,
     lineStyleValues: _lineStyleValues,
+    freeDrawStyleValues: _freeDrawStyleValues,
     textStyleValues: _textStyleValues,
     hasSelection: _selectedIds.isNotEmpty,
     hasSelectedRectangles: _selectedRectangles.isNotEmpty,
     hasSelectedArrows: _selectedArrows.isNotEmpty,
     hasSelectedLines: _selectedLines.isNotEmpty,
+    hasSelectedFreeDraws: _selectedFreeDraws.isNotEmpty,
     hasSelectedTexts: _selectedTexts.isNotEmpty,
   );
 
@@ -1070,6 +1213,7 @@ class _ElementStyleSnapshot {
     this.rectangleData,
     this.arrowData,
     this.lineData,
+    this.freeDrawData,
     this.textData,
   });
 
@@ -1077,6 +1221,7 @@ class _ElementStyleSnapshot {
   final RectangleData? rectangleData;
   final ArrowData? arrowData;
   final LineData? lineData;
+  final FreeDrawData? freeDrawData;
   final TextData? textData;
 
   factory _ElementStyleSnapshot.fromElement(ElementState element) =>
@@ -1087,6 +1232,9 @@ class _ElementStyleSnapshot {
             : null,
         arrowData: element.data is ArrowData ? element.data as ArrowData : null,
         lineData: element.data is LineData ? element.data as LineData : null,
+        freeDrawData: element.data is FreeDrawData
+            ? element.data as FreeDrawData
+            : null,
         textData: element.data is TextData ? element.data as TextData : null,
       );
 
@@ -1097,6 +1245,7 @@ class _ElementStyleSnapshot {
       identical(rectangleData, other.rectangleData) &&
       identical(arrowData, other.arrowData) &&
       identical(lineData, other.lineData) &&
+      identical(freeDrawData, other.freeDrawData) &&
       identical(textData, other.textData) &&
       equals(opacity, other.opacity);
 }

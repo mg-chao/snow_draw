@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-enum ToolType { selection, rectangle, arrow, line, text }
+enum ToolType { selection, rectangle, arrow, line, freeDraw, text }
 
 class ToolController extends ValueNotifier<ToolType> {
   ToolController([super.value = ToolType.selection]);

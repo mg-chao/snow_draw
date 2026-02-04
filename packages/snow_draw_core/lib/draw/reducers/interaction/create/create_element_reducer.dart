@@ -9,6 +9,7 @@ import '../../../elements/core/element_style_configurable_data.dart';
 import '../../../elements/core/element_type_id.dart';
 import '../../../elements/core/rect_creation_strategy.dart';
 import '../../../elements/types/arrow/arrow_data.dart';
+import '../../../elements/types/free_draw/free_draw_data.dart';
 import '../../../elements/types/line/line_data.dart';
 import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/text/text_data.dart';
@@ -125,6 +126,9 @@ class CreateElementReducer {
     }
     if (typeId == LineData.typeIdToken) {
       return config.lineStyle;
+    }
+    if (typeId == FreeDrawData.typeIdToken) {
+      return config.freeDrawStyle;
     }
     if (typeId == TextData.typeIdToken) {
       return config.textStyle;

@@ -3,7 +3,7 @@ import 'style_toolbar_state.dart';
 import 'tool_controller.dart';
 
 /// Element types that can be selected
-enum ElementType { rectangle, arrow, line, text }
+enum ElementType { rectangle, arrow, line, freeDraw, text }
 
 /// Context containing all style information needed for property evaluation
 class StylePropertyContext {
@@ -11,10 +11,12 @@ class StylePropertyContext {
     required this.rectangleStyleValues,
     required this.arrowStyleValues,
     required this.lineStyleValues,
+    required this.freeDrawStyleValues,
     required this.textStyleValues,
     required this.rectangleDefaults,
     required this.arrowDefaults,
     required this.lineDefaults,
+    required this.freeDrawDefaults,
     required this.textDefaults,
     required this.selectedElementTypes,
     this.currentTool,
@@ -23,10 +25,12 @@ class StylePropertyContext {
   final RectangleStyleValues rectangleStyleValues;
   final ArrowStyleValues arrowStyleValues;
   final LineStyleValues lineStyleValues;
+  final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
   final ElementStyleConfig rectangleDefaults;
   final ElementStyleConfig arrowDefaults;
   final ElementStyleConfig lineDefaults;
+  final ElementStyleConfig freeDrawDefaults;
   final ElementStyleConfig textDefaults;
   final Set<ElementType> selectedElementTypes;
   final ToolType? currentTool;
