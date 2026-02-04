@@ -189,16 +189,16 @@ ValidationResult _validateUpdateElementsStyle(
       update.endArrowhead == null &&
       update.fontSize == null &&
       update.fontFamily == null &&
-        update.textAlign == null &&
-        update.verticalAlign == null &&
-        update.opacity == null &&
-        update.textStrokeColor == null &&
-        update.textStrokeWidth == null &&
-        update.serialNumber == null) {
-      return const ValidationResult.invalid(
-        'UpdateElementsStyle has no fields to update',
-      );
-    }
+      update.textAlign == null &&
+      update.verticalAlign == null &&
+      update.opacity == null &&
+      update.textStrokeColor == null &&
+      update.textStrokeWidth == null &&
+      update.serialNumber == null) {
+    return const ValidationResult.invalid(
+      'UpdateElementsStyle has no fields to update',
+    );
+  }
   return const ValidationResult.valid();
 }
 

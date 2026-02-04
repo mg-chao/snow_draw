@@ -123,9 +123,7 @@ Rect? _resolveVisualBounds(TextPainter painter, String text) {
     return null;
   }
   final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
-  final boxes = painter.getBoxesForSelection(
-    selection,
-  );
+  final boxes = painter.getBoxesForSelection(selection);
   if (boxes.isEmpty) {
     return null;
   }

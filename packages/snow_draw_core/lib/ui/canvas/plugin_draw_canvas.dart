@@ -1510,7 +1510,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (element == null) {
         continue;
       }
-      if (element.opacity <= 0 || element.data is! RectangleData) {
+      if (element.opacity <= 0 ||
+          !ArrowBindingUtils.isBindableTarget(element)) {
         continue;
       }
       targets.add(element);

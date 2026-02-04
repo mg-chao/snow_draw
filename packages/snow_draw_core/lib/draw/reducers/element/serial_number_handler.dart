@@ -38,8 +38,9 @@ DrawState handleCreateSerialNumberTextElements(
     }
 
     final boundId = data.textElementId;
-    final boundElement =
-        boundId == null ? null : state.domain.document.getElementById(boundId);
+    final boundElement = boundId == null
+        ? null
+        : state.domain.document.getElementById(boundId);
     if (boundElement != null && boundElement.data is TextData) {
       if (isSingleTarget && element.id == singleTargetId) {
         focusTextId = boundId;

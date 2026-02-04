@@ -201,9 +201,7 @@ class ResizeOperation extends EditOperation {
     // conflicts
     // between the aspect ratio constraint and grid alignment.
     final shouldGridSnap =
-        canSnap &&
-        snappingMode == SnappingMode.grid &&
-        !maintainAspectRatio;
+        canSnap && snappingMode == SnappingMode.grid && !maintainAspectRatio;
     final shouldObjectSnap =
         canSnap &&
         snappingMode == SnappingMode.object &&

@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -27,41 +27,40 @@ final class SerialNumberData extends ElementData
     this.textElementId,
   });
 
-  factory SerialNumberData.fromJson(Map<String, dynamic> json) =>
-      SerialNumberData(
-        number: _coerceNumber(
-          (json['number'] as num?)?.toInt(),
-          ConfigDefaults.defaultSerialNumber,
-        ),
-        color: Color(
-          (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
-        ),
-        fillColor: Color(
-          (json['fillColor'] as int?) ??
-              ConfigDefaults.defaultFillColor.toARGB32(),
-        ),
-        fillStyle: FillStyle.values.firstWhere(
-          (style) => style.name == json['fillStyle'],
-          orElse: () => ConfigDefaults.defaultFillStyle,
-        ),
-        fontSize:
-            (json['fontSize'] as num?)?.toDouble() ??
-            ConfigDefaults.defaultSerialNumberFontSize,
-        fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
-            ? null
-            : json['fontFamily'] as String?,
-        strokeWidth:
-            (json['strokeWidth'] as num?)?.toDouble() ??
-            ConfigDefaults.defaultStrokeWidth,
-        strokeStyle: StrokeStyle.values.firstWhere(
-          (style) => style.name == json['strokeStyle'],
-          orElse: () => ConfigDefaults.defaultStrokeStyle,
-        ),
-        textElementId: (json['textElementId'] as String?)?.trim().isEmpty ??
-                true
-            ? null
-            : json['textElementId'] as String?,
-      );
+  factory SerialNumberData.fromJson(
+    Map<String, dynamic> json,
+  ) => SerialNumberData(
+    number: _coerceNumber(
+      (json['number'] as num?)?.toInt(),
+      ConfigDefaults.defaultSerialNumber,
+    ),
+    color: Color(
+      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
+    ),
+    fillColor: Color(
+      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
+    ),
+    fillStyle: FillStyle.values.firstWhere(
+      (style) => style.name == json['fillStyle'],
+      orElse: () => ConfigDefaults.defaultFillStyle,
+    ),
+    fontSize:
+        (json['fontSize'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultSerialNumberFontSize,
+    fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
+        ? null
+        : json['fontFamily'] as String?,
+    strokeWidth:
+        (json['strokeWidth'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultStrokeWidth,
+    strokeStyle: StrokeStyle.values.firstWhere(
+      (style) => style.name == json['strokeStyle'],
+      orElse: () => ConfigDefaults.defaultStrokeStyle,
+    ),
+    textElementId: (json['textElementId'] as String?)?.trim().isEmpty ?? true
+        ? null
+        : json['textElementId'] as String?,
+  );
 
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
 

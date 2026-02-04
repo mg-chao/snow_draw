@@ -14,7 +14,6 @@ import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../arrow/arrow_binding.dart';
-import '../rectangle/rectangle_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_router.dart';
@@ -575,7 +574,7 @@ List<ElementState> _resolveBindingTargets(
     if (element == null) {
       continue;
     }
-    if (element.opacity <= 0 || element.data is! RectangleData) {
+    if (element.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(element)) {
       continue;
     }
     targets.add(element);

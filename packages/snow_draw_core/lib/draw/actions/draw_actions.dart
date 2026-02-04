@@ -304,8 +304,7 @@ class UpdateElementsStyle extends DrawAction {
       'UpdateElementsStyle(ids: $elementIds, opacity: $opacity)';
 }
 
-class CreateSerialNumberTextElements extends DrawAction
-    implements Recordable {
+class CreateSerialNumberTextElements extends DrawAction implements Recordable {
   const CreateSerialNumberTextElements({required this.elementIds});
 
   final List<String> elementIds;

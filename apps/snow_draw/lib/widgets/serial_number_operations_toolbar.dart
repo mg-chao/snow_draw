@@ -45,8 +45,6 @@ class SerialNumberOperationsToolbar extends StatefulWidget {
 class _SerialNumberOperationsToolbarState
     extends State<SerialNumberOperationsToolbar> {
   static const double _toolbarRadius = 12;
-  static const double _toolbarPaddingX = 0;
-  static const double _toolbarPaddingY = 0;
   static const double _buttonGapSmall = 0;
   static const double _buttonGapLarge = 0;
   static const double _buttonSize = 28;
@@ -85,92 +83,91 @@ class _SerialNumberOperationsToolbarState
   }
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<StyleToolbarState>(
-    valueListenable: widget.adapter.stateListenable,
-    builder: (context, styleState, _) {
-      if (!styleState.hasSelectedSerialNumbers) {
-        return const SizedBox.shrink();
-      }
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<StyleToolbarState>(
+        valueListenable: widget.adapter.stateListenable,
+        builder: (context, styleState, _) {
+          if (!styleState.hasSelectedSerialNumbers) {
+            return const SizedBox.shrink();
+          }
 
-      final state = widget.store.state;
-      final selection = state.domain.selection;
-      if (!selection.hasSelection || selection.selectedIds.length != 1) {
-        return const SizedBox.shrink();
-      }
+          final state = widget.store.state;
+          final selection = state.domain.selection;
+          if (!selection.hasSelection || selection.selectedIds.length != 1) {
+            return const SizedBox.shrink();
+          }
 
-      final selectionBounds = _resolveSelectionBounds(state);
-      if (selectionBounds == null) {
-        return const SizedBox.shrink();
-      }
+          final selectionBounds = _resolveSelectionBounds(state);
+          if (selectionBounds == null) {
+            return const SizedBox.shrink();
+          }
 
-      final camera = state.application.view.camera;
-      final zoom = camera.zoom == 0 ? 1.0 : camera.zoom;
-      final screenBounds = _toScreenRect(
-        selectionBounds,
-        camera.position,
-        zoom,
-      );
+          final camera = state.application.view.camera;
+          final zoom = camera.zoom == 0 ? 1.0 : camera.zoom;
+          final screenBounds = _toScreenRect(
+            selectionBounds,
+            camera.position,
+            zoom,
+          );
 
-      final selectionConfig = widget.store.config.selection;
-      final extraPadding =
-          selectionConfig.padding + selectionConfig.render.controlPointSize / 2;
-      final desiredTop = screenBounds.bottom + extraPadding + widget.verticalGap;
+          final selectionConfig = widget.store.config.selection;
+          final extraPadding =
+              selectionConfig.padding +
+              selectionConfig.render.controlPointSize / 2;
+          final desiredTop =
+              screenBounds.bottom + extraPadding + widget.verticalGap;
 
-      final left = screenBounds.center.dx;
-      final top = desiredTop;
+          final left = screenBounds.center.dx;
+          final top = desiredTop;
 
-      final value = styleState.serialNumberStyleValues.number;
-      final defaultValue = styleState.serialNumberStyle.serialNumber;
-      final resolvedValue = value.valueOr(defaultValue);
-      final canDecrement = resolvedValue > 0;
+          final value = styleState.serialNumberStyleValues.number;
+          final defaultValue = styleState.serialNumberStyle.serialNumber;
+          final resolvedValue = value.valueOr(defaultValue);
+          final canDecrement = resolvedValue > 0;
 
-      return Positioned(
-        left: left.toDouble(),
-        top: top.toDouble(),
-        child: FractionalTranslation(
-          translation: const Offset(-0.5, 0),
-          child: Material(
-            elevation: 3,
-            borderRadius: BorderRadius.circular(_toolbarRadius),
-            color: Colors.white,
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _toolbarPaddingX,
-                vertical: _toolbarPaddingY,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildIconButton(
-                    icon: Icons.remove_rounded,
-                    tooltip: widget.strings.decrease,
-                    onPressed: canDecrement
-                        ? () => _commitSerialNumberValue(resolvedValue - 1)
-                        : null,
+          return Positioned(
+            left: left,
+            top: top,
+            child: FractionalTranslation(
+              translation: const Offset(-0.5, 0),
+              child: Material(
+                elevation: 3,
+                borderRadius: BorderRadius.circular(_toolbarRadius),
+                color: Colors.white,
+                clipBehavior: Clip.antiAlias,
+                child: Padding(
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildIconButton(
+                        icon: Icons.remove_rounded,
+                        tooltip: widget.strings.decrease,
+                        onPressed: canDecrement
+                            ? () => _commitSerialNumberValue(resolvedValue - 1)
+                            : null,
+                      ),
+                      const SizedBox(width: _buttonGapSmall),
+                      _buildIconButton(
+                        icon: Icons.add_rounded,
+                        tooltip: widget.strings.increase,
+                        onPressed: () =>
+                            _commitSerialNumberValue(resolvedValue + 1),
+                      ),
+                      const SizedBox(width: _buttonGapLarge),
+                      _buildIconButton(
+                        icon: Icons.text_fields,
+                        tooltip: widget.strings.createText,
+                        onPressed: _handleCreateSerialNumberText,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: _buttonGapSmall),
-                  _buildIconButton(
-                    icon: Icons.add_rounded,
-                    tooltip: widget.strings.increase,
-                    onPressed: () => _commitSerialNumberValue(
-                      resolvedValue + 1,
-                    ),
-                  ),
-                  const SizedBox(width: _buttonGapLarge),
-                  _buildIconButton(
-                    icon: Icons.text_fields,
-                    tooltip: widget.strings.createText,
-                    onPressed: _handleCreateSerialNumberText,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       );
-    },
-  );
 
   Widget _buildIconButton({
     required IconData icon,
@@ -192,9 +189,7 @@ class _SerialNumberOperationsToolbarState
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            customBorder: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-            ),
+            customBorder: const RoundedRectangleBorder(),
             child: Center(
               child: Icon(icon, size: _iconSize, color: iconColor),
             ),

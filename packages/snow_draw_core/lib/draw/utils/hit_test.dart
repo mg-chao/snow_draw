@@ -190,10 +190,9 @@ class HitTest {
     final selection = stateView.effectiveSelection;
     final selectedIds = state.domain.selection.selectedIds;
     final document = state.domain.document;
-    final boundTextIds =
-        filterTypeId == SerialNumberData.typeIdToken
-            ? _collectBoundTextIds(document.elements)
-            : null;
+    final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
+        ? _collectBoundTextIds(document.elements)
+        : null;
 
     // Determine corner handle offset for single arrow selections.
     ArrowLikeData? singleSelectedArrow;

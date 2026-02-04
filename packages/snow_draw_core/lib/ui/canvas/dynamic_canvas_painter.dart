@@ -348,8 +348,10 @@ class DynamicCanvasPainter extends CustomPainter {
         continue;
       }
 
-      final opacity =
-          (effectiveData.color.a * effectiveSerial.opacity).clamp(0.0, 1.0);
+      final opacity = (effectiveData.color.a * effectiveSerial.opacity).clamp(
+        0.0,
+        1.0,
+      );
       if (opacity <= 0 || lineWidth <= 0) {
         continue;
       }
@@ -587,12 +589,12 @@ class DynamicCanvasPainter extends CustomPainter {
       final element = stateView.state.domain.document.getElementById(
         highlight.elementId,
       );
-      if (element == null || element.data is! RectangleData) {
+      if (element == null) {
         continue;
       }
       final effectiveElement = stateView.effectiveElement(element);
       final rect = effectiveElement.rect;
-      final data = effectiveElement.data as RectangleData;
+      final data = effectiveElement.data;
       final highlightRect = Rect.fromLTWH(
         rect.minX,
         rect.minY,
@@ -607,16 +609,29 @@ class DynamicCanvasPainter extends CustomPainter {
           ..rotate(effectiveElement.rotation)
           ..translate(-rect.centerX, -rect.centerY);
       }
-      if (data.cornerRadius > 0) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            highlightRect,
-            Radius.circular(data.cornerRadius),
-          ),
-          paint,
-        );
-      } else {
+      if (data is RectangleData) {
+        if (data.cornerRadius > 0) {
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              highlightRect,
+              Radius.circular(data.cornerRadius),
+            ),
+            paint,
+          );
+        } else {
+          canvas.drawRect(highlightRect, paint);
+        }
+      } else if (data is TextData) {
         canvas.drawRect(highlightRect, paint);
+      } else if (data is SerialNumberData) {
+        final radius = math.min(rect.width, rect.height) / 2;
+        if (radius > 0) {
+          final circleRect = Rect.fromCircle(
+            center: Offset(rect.centerX, rect.centerY),
+            radius: radius,
+          );
+          canvas.drawOval(circleRect, paint);
+        }
       }
       canvas.restore();
     }

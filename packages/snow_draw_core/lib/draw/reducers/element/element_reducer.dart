@@ -17,6 +17,6 @@ DrawState? elementReducer(
   final ChangeElementsZIndex a => handleChangeZIndexBatch(state, a, context),
   final UpdateElementsStyle a => handleUpdateElementsStyle(state, a, context),
   final CreateSerialNumberTextElements a =>
-      handleCreateSerialNumberTextElements(state, a, context),
+    handleCreateSerialNumberTextElements(state, a, context),
   _ => null,
 };

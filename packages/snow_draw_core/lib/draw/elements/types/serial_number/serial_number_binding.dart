@@ -42,10 +42,9 @@ DrawRect resolveSerialNumberBoundTextRect({
   final width = layout.size.width + horizontalPadding * 2;
   final height = math.max(layout.size.height, layout.lineHeight);
   final strokeWidth = resolveSerialNumberStrokeWidth(data: serialData);
-  final resolvedGap = gap ??
-      math
-          .max(_defaultTextGap, strokeWidth * _gapStrokeMultiplier)
-          .toDouble();
+  final resolvedGap =
+      gap ??
+      math.max(_defaultTextGap, strokeWidth * _gapStrokeMultiplier).toDouble();
 
   final rect = serialElement.rect;
   final minX = rect.maxX + resolvedGap;
@@ -129,14 +128,11 @@ _TextAttachment _resolveTextAttachment({
 
   if ((isAbove || isBelow) && centeredHorizontally) {
     return _TextAttachment(
-      anchor: DrawPoint(
-        x: centerX,
-        y: isAbove ? textRect.maxY : textRect.minY,
-      ),
+      anchor: DrawPoint(x: centerX, y: isAbove ? textRect.maxY : textRect.minY),
     );
   }
 
-  final anchorX = centerX.clamp(textRect.minX, textRect.maxX) as double;
+  final anchorX = centerX.clamp(textRect.minX, textRect.maxX);
   final baselineY = textRect.maxY;
   return _TextAttachment(
     anchor: DrawPoint(x: anchorX, y: baselineY),

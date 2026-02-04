@@ -64,15 +64,13 @@ final class FreeDrawData extends ElementData
     double? strokeWidth,
     StrokeStyle? strokeStyle,
   }) => FreeDrawData(
-      points: points == null
-          ? this.points
-          : List<DrawPoint>.unmodifiable(points),
-      color: color ?? this.color,
-      fillColor: fillColor ?? this.fillColor,
-      fillStyle: fillStyle ?? this.fillStyle,
-      strokeWidth: strokeWidth ?? this.strokeWidth,
-      strokeStyle: strokeStyle ?? this.strokeStyle,
-    );
+    points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+    color: color ?? this.color,
+    fillColor: fillColor ?? this.fillColor,
+    fillStyle: fillStyle ?? this.fillStyle,
+    strokeWidth: strokeWidth ?? this.strokeWidth,
+    strokeStyle: strokeStyle ?? this.strokeStyle,
+  );
 
   @override
   ElementData withElementStyle(ElementStyleConfig style) => copyWith(

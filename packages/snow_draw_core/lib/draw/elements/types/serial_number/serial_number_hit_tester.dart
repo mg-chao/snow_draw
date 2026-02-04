@@ -35,8 +35,9 @@ class SerialNumberHitTester implements ElementHitTester {
     final dy = position.y - center.y;
     final distanceSq = dx * dx + dy * dy;
     final effectiveStrokeWidth = resolveSerialNumberStrokeWidth(data: data);
-    final strokeMargin =
-        effectiveStrokeWidth > 0 ? effectiveStrokeWidth / 2 : 0.0;
+    final strokeMargin = effectiveStrokeWidth > 0
+        ? effectiveStrokeWidth / 2
+        : 0.0;
     final effectiveRadius = radius + strokeMargin + tolerance;
     if (effectiveRadius <= 0) {
       return false;

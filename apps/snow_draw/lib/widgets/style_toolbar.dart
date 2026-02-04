@@ -547,16 +547,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
           builder: (context, constraints) => Align(
             alignment: Alignment.centerLeft,
             child: SizedBox(
-              width: math.min(
-                constraints.maxWidth,
-                _numberControlTargetWidth,
-              ),
+              width: math.min(constraints.maxWidth, _numberControlTargetWidth),
               child: AnimatedBuilder(
                 animation: _serialNumberFocusNode,
                 builder: (context, _) {
                   final hasFocus = _serialNumberFocusNode.hasFocus;
-                  final borderColor =
-                      hasFocus ? scheme.primary : scheme.outlineVariant;
+                  final borderColor = hasFocus
+                      ? scheme.primary
+                      : scheme.outlineVariant;
                   final fillColor = hasFocus
                       ? Color.alphaBlend(
                           scheme.primary.withValues(alpha: 0.06),
@@ -592,14 +590,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
                       height: _numberControlHeight,
                       decoration: BoxDecoration(
                         color: fillColor,
-                        borderRadius:
-                            BorderRadius.circular(_numberControlRadius),
+                        borderRadius: BorderRadius.circular(
+                          _numberControlRadius,
+                        ),
                         border: Border.all(color: borderColor),
                         boxShadow: hasFocus
                             ? [
                                 BoxShadow(
-                                  color:
-                                      scheme.primary.withValues(alpha: 0.18),
+                                  color: scheme.primary.withValues(alpha: 0.18),
                                   blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
@@ -613,8 +611,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
                             tooltip: widget.strings.decrease,
                             onPressed: canDecrement
                                 ? () => _commitSerialNumberValue(
-                                      resolvedValue - 1,
-                                    )
+                                    resolvedValue - 1,
+                                  )
                                 : null,
                             borderRadius: const BorderRadius.horizontal(
                               left: Radius.circular(_numberControlRadius),
@@ -633,8 +631,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                               textAlignVertical: TextAlignVertical.center,
                               decoration: InputDecoration(
                                 isDense: true,
-                                hintText:
-                                    isMixed ? widget.strings.mixed : null,
+                                hintText: isMixed ? widget.strings.mixed : null,
                                 border: InputBorder.none,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 6,
@@ -654,9 +651,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                                 if (parsed != null) {
                                   _commitSerialNumberValue(parsed);
                                 } else {
-                                  setState(
-                                    () => _pendingSerialNumber = null,
-                                  );
+                                  setState(() => _pendingSerialNumber = null);
                                 }
                               },
                               onEditingComplete: () {
@@ -666,9 +661,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                                 if (parsed != null) {
                                   _commitSerialNumberValue(parsed);
                                 } else {
-                                  setState(
-                                    () => _pendingSerialNumber = null,
-                                  );
+                                  setState(() => _pendingSerialNumber = null);
                                 }
                               },
                             ),
@@ -677,9 +670,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           _buildSerialNumberStepperButton(
                             icon: Icons.add_rounded,
                             tooltip: widget.strings.increase,
-                            onPressed: () => _commitSerialNumberValue(
-                              resolvedValue + 1,
-                            ),
+                            onPressed: () =>
+                                _commitSerialNumberValue(resolvedValue + 1),
                             borderRadius: const BorderRadius.horizontal(
                               right: Radius.circular(_numberControlRadius),
                             ),
@@ -732,11 +724,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
-  Widget _buildSerialNumberDivider(Color color) => Container(
-    width: 1,
-    height: double.infinity,
-    color: color,
-  );
+  Widget _buildSerialNumberDivider(Color color) =>
+      Container(width: 1, height: double.infinity, color: color);
 
   Widget _buildTextAlignmentControl({
     required MixedValue<TextHorizontalAlign> horizontalAlign,
@@ -1920,7 +1909,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Future<void> _handleZOrder(ZIndexOperation operation) =>
       widget.adapter.changeZOrder(operation);
-
 }
 
 @immutable
