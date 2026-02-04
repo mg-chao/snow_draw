@@ -10,6 +10,7 @@ import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'grid_shader_painter.dart';
 import 'render_keys.dart';
+import 'serial_number_connection_painter.dart';
 
 /// Static canvas painter.
 ///
@@ -98,6 +99,8 @@ class StaticCanvasPainter extends CustomPainter {
       final indexB = document.getOrderIndex(b.id) ?? -1;
       return indexA.compareTo(indexB);
     });
+    final serialConnectors = buildSerialNumberConnectorMap(stateView);
+
     // Draw visible elements in document z-order, applying preview geometry
     // without lifting elements to the top layer.
     if (previewElements.isEmpty) {
@@ -108,6 +111,11 @@ class StaticCanvasPainter extends CustomPainter {
           scaleFactor: scale,
           registry: renderKey.elementRegistry,
           locale: renderKey.locale,
+        );
+        drawSerialNumberConnectorsForText(
+          canvas: canvas,
+          textElement: element,
+          connectorsByTextId: serialConnectors,
         );
       }
     } else {
@@ -128,6 +136,11 @@ class StaticCanvasPainter extends CustomPainter {
           scaleFactor: scale,
           registry: renderKey.elementRegistry,
           locale: renderKey.locale,
+        );
+        drawSerialNumberConnectorsForText(
+          canvas: canvas,
+          textElement: effectiveElement,
+          connectorsByTextId: serialConnectors,
         );
       }
     }
