@@ -7,6 +7,7 @@ import '../../edit/core/edit_cancel_reason.dart';
 import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../events/edit_events.dart';
 import '../../events/error_events.dart';
 import '../../events/event_bus.dart';
@@ -234,6 +235,12 @@ class ActionProcessor {
       }
     }
 
+    _maybeIncrementSerialNumberDefaults(
+      previousState: initialContext.initialState,
+      nextState: finalContext.currentState,
+      action: initialContext.action,
+    );
+
     if (finalContext.events.isNotEmpty) {
       _services.publishEditEvents(finalContext.events);
     }
@@ -251,6 +258,40 @@ class ActionProcessor {
     _emitStateChangeEvents(
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
+    );
+  }
+
+  void _maybeIncrementSerialNumberDefaults({
+    required DrawState previousState,
+    required DrawState nextState,
+    required DrawAction action,
+  }) {
+    if (action is! FinishCreateElement) {
+      return;
+    }
+
+    final previousElements = previousState.domain.document.elements;
+    final nextElements = nextState.domain.document.elements;
+    if (nextElements.length <= previousElements.length) {
+      return;
+    }
+
+    final created = nextElements.isNotEmpty ? nextElements.last : null;
+    final data = created?.data;
+    if (data is! SerialNumberData) {
+      return;
+    }
+
+    final nextSerial = data.number + 1;
+    final currentConfig = _services.configManager.current;
+    final nextSerialStyle = currentConfig.serialNumberStyle.copyWith(
+      serialNumber: nextSerial,
+    );
+    if (nextSerialStyle == currentConfig.serialNumberStyle) {
+      return;
+    }
+    _services.configManager.update(
+      currentConfig.copyWith(serialNumberStyle: nextSerialStyle),
     );
   }
 

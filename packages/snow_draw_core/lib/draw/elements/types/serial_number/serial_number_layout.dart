@@ -3,13 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
 
+import '../../../config/draw_config.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import 'serial_number_data.dart';
 
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
 const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
-const _serialNumberPaddingFactor = 0.35;
+const _serialNumberPaddingFactor = 0.26;
 
 @immutable
 class SerialNumberTextLayout {
@@ -75,6 +76,21 @@ double resolveSerialNumberDiameter({
     return minDiameter;
   }
   return math.max(diameter, minDiameter);
+}
+
+double resolveSerialNumberStrokeWidth({
+  required SerialNumberData data,
+  double minStrokeWidth = 0,
+}) {
+  const baseFontSize = ConfigDefaults.defaultSerialNumberFontSize;
+  if (baseFontSize <= 0) {
+    return math.max(data.strokeWidth, minStrokeWidth);
+  }
+  final scaled = data.strokeWidth * (data.fontSize / baseFontSize);
+  if (scaled.isNaN || scaled.isInfinite) {
+    return minStrokeWidth;
+  }
+  return math.max(scaled, minStrokeWidth);
 }
 
 DrawRect resolveSerialNumberRect({

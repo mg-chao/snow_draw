@@ -30,7 +30,7 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     );
     return CreationUpdateResult(
       data: serialData,
-      rect: _rectFromPosition(startPosition, diameter),
+      rect: _rectFromCenter(startPosition, diameter),
       creationMode: const RectCreationMode(),
     );
   }
@@ -60,7 +60,7 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     );
     return CreationUpdateResult(
       data: serialData,
-      rect: _rectFromPosition(snappedPosition, diameter),
+      rect: _rectFromCenter(snappedPosition, diameter),
       creationMode: creatingState.creationMode,
     );
   }
@@ -85,9 +85,9 @@ class SerialNumberCreationStrategy extends CreationStrategy {
   }
 }
 
-DrawRect _rectFromPosition(DrawPoint origin, double size) => DrawRect(
-  minX: origin.x,
-  minY: origin.y,
-  maxX: origin.x + size,
-  maxY: origin.y + size,
+DrawRect _rectFromCenter(DrawPoint center, double size) => DrawRect(
+  minX: center.x - size / 2,
+  minY: center.y - size / 2,
+  maxX: center.x + size / 2,
+  maxY: center.y + size / 2,
 );

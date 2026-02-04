@@ -13,16 +13,18 @@ import '../../core/element_type_id.dart';
 final class SerialNumberData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
   static const _fontFamilyUnset = Object();
+  static const _textElementIdUnset = Object();
 
   const SerialNumberData({
     this.number = ConfigDefaults.defaultSerialNumber,
     this.color = ConfigDefaults.defaultColor,
     this.fillColor = ConfigDefaults.defaultFillColor,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
-    this.fontSize = ConfigDefaults.defaultTextFontSize,
+    this.fontSize = ConfigDefaults.defaultSerialNumberFontSize,
     this.fontFamily = ConfigDefaults.defaultTextFontFamily,
     this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
+    this.textElementId,
   });
 
   factory SerialNumberData.fromJson(Map<String, dynamic> json) =>
@@ -44,7 +46,7 @@ final class SerialNumberData extends ElementData
         ),
         fontSize:
             (json['fontSize'] as num?)?.toDouble() ??
-            ConfigDefaults.defaultTextFontSize,
+            ConfigDefaults.defaultSerialNumberFontSize,
         fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
             ? null
             : json['fontFamily'] as String?,
@@ -55,6 +57,10 @@ final class SerialNumberData extends ElementData
           (style) => style.name == json['strokeStyle'],
           orElse: () => ConfigDefaults.defaultStrokeStyle,
         ),
+        textElementId: (json['textElementId'] as String?)?.trim().isEmpty ??
+                true
+            ? null
+            : json['textElementId'] as String?,
       );
 
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
@@ -67,6 +73,7 @@ final class SerialNumberData extends ElementData
   final String? fontFamily;
   final double strokeWidth;
   final StrokeStyle strokeStyle;
+  final String? textElementId;
 
   @override
   ElementTypeId<SerialNumberData> get typeId => SerialNumberData.typeIdToken;
@@ -80,6 +87,7 @@ final class SerialNumberData extends ElementData
     Object? fontFamily = _fontFamilyUnset,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
+    Object? textElementId = _textElementIdUnset,
   }) => SerialNumberData(
     number: _coerceNumber(number, this.number),
     color: color ?? this.color,
@@ -89,6 +97,9 @@ final class SerialNumberData extends ElementData
     fontFamily: _resolveFontFamily(fontFamily, this.fontFamily),
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeStyle: strokeStyle ?? this.strokeStyle,
+    textElementId: textElementId == _textElementIdUnset
+        ? this.textElementId
+        : textElementId as String?,
   );
 
   @override
@@ -130,6 +141,7 @@ final class SerialNumberData extends ElementData
     'fontFamily': fontFamily ?? '',
     'strokeWidth': strokeWidth,
     'strokeStyle': strokeStyle.name,
+    'textElementId': textElementId ?? '',
   };
 
   @override
@@ -143,7 +155,8 @@ final class SerialNumberData extends ElementData
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
           other.strokeWidth == strokeWidth &&
-          other.strokeStyle == strokeStyle;
+          other.strokeStyle == strokeStyle &&
+          other.textElementId == textElementId;
 
   @override
   int get hashCode => Object.hash(
@@ -155,6 +168,7 @@ final class SerialNumberData extends ElementData
     fontFamily,
     strokeWidth,
     strokeStyle,
+    textElementId,
   );
 }
 

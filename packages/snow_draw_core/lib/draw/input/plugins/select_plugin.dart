@@ -4,6 +4,8 @@ import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
+import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
@@ -380,7 +382,27 @@ class SelectPlugin extends DrawInputPlugin {
       return true;
     }
     final element = state.domain.document.getElementById(elementId);
-    return element?.typeId == toolTypeId;
+    if (element == null) {
+      return false;
+    }
+    if (element.typeId == toolTypeId) {
+      return true;
+    }
+    if (toolTypeId == SerialNumberData.typeIdToken &&
+        element.data is TextData) {
+      return _isBoundSerialText(elementId);
+    }
+    return false;
+  }
+
+  bool _isBoundSerialText(String textElementId) {
+    for (final element in state.domain.document.elements) {
+      final data = element.data;
+      if (data is SerialNumberData && data.textElementId == textElementId) {
+        return true;
+      }
+    }
+    return false;
   }
 
   ArrowPointHandle? _resolveArrowHandleForIntent({

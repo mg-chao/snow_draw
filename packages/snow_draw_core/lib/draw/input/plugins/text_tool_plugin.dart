@@ -2,6 +2,7 @@ import '../../actions/draw_actions.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
@@ -48,6 +49,12 @@ class TextToolPlugin extends DrawInputPlugin {
 
   bool get _isSelectionToolActive => currentToolTypeId == null;
 
+  bool get _isSerialToolActive =>
+      currentToolTypeId == SerialNumberData.typeIdToken;
+
+  bool get _isSelectionLikeToolActive =>
+      _isSelectionToolActive || _isSerialToolActive;
+
   @override
   bool canHandle(InputEvent event, DrawState state) {
     if (state.application.interaction is TextEditingState) {
@@ -57,6 +64,9 @@ class TextToolPlugin extends DrawInputPlugin {
       return _routingPolicy.allowCreate(state);
     }
     if (_isSelectionToolActive) {
+      return _routingPolicy.allowSelection(state);
+    }
+    if (_isSerialToolActive) {
       return _routingPolicy.allowSelection(state);
     }
     return false;
@@ -313,7 +323,7 @@ class TextToolPlugin extends DrawInputPlugin {
     if (_isTextToolActive) {
       return false;
     }
-    if (!_isSelectionToolActive) {
+    if (!_isSelectionLikeToolActive) {
       return false;
     }
     if (event.modifiers.shift) {

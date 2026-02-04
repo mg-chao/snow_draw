@@ -170,6 +170,17 @@ class StyleToolbarAdapter {
     await _store.dispatch(DeleteElements(elementIds: ids));
   }
 
+  Future<void> createSerialNumberTextElements() async {
+    if (_selectedSerialNumbers.isEmpty) {
+      return;
+    }
+    await _store.dispatch(
+      CreateSerialNumberTextElements(
+        elementIds: _selectedSerialNumbers.map((e) => e.id).toList(),
+      ),
+    );
+  }
+
   Future<void> changeZOrder(ZIndexOperation operation) async {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {

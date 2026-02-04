@@ -50,6 +50,7 @@ abstract class ConfigDefaults {
 
   // ===== Text =====
   static const defaultTextFontSize = 21.0;
+  static const defaultSerialNumberFontSize = 16.0;
   static const String? defaultTextFontFamily = null;
   static const defaultTextStrokeColor = Color(0xFFF8F4EC);
   static const defaultTextStrokeWidth = 0.0;
@@ -129,7 +130,7 @@ abstract class ConfigDefaults {
 /// Top-level draw configuration.
 @immutable
 class DrawConfig {
-  const DrawConfig({
+  DrawConfig({
     this.selection = const SelectionConfig(),
     this.element = const ElementConfig(),
     this.canvas = const CanvasConfig(),
@@ -148,7 +149,11 @@ class DrawConfig {
        lineStyle = lineStyle ?? elementStyle,
        freeDrawStyle = freeDrawStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle,
-       serialNumberStyle = serialNumberStyle ?? elementStyle;
+       serialNumberStyle =
+           serialNumberStyle ??
+           elementStyle.copyWith(
+             fontSize: ConfigDefaults.defaultSerialNumberFontSize,
+           );
   final SelectionConfig selection;
   final ElementConfig element;
   final CanvasConfig canvas;
@@ -163,7 +168,7 @@ class DrawConfig {
   final GridConfig grid;
   final SnapConfig snap;
 
-  static const defaultConfig = DrawConfig();
+  static final defaultConfig = DrawConfig();
 
   DrawConfig copyWith({
     SelectionConfig? selection,

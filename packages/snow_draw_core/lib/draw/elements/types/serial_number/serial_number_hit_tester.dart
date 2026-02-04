@@ -5,6 +5,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import 'serial_number_data.dart';
+import 'serial_number_layout.dart';
 
 class SerialNumberHitTester implements ElementHitTester {
   const SerialNumberHitTester();
@@ -33,7 +34,9 @@ class SerialNumberHitTester implements ElementHitTester {
     final dx = position.x - center.x;
     final dy = position.y - center.y;
     final distanceSq = dx * dx + dy * dy;
-    final strokeMargin = data.strokeWidth > 0 ? data.strokeWidth / 2 : 0.0;
+    final effectiveStrokeWidth = resolveSerialNumberStrokeWidth(data: data);
+    final strokeMargin =
+        effectiveStrokeWidth > 0 ? effectiveStrokeWidth / 2 : 0.0;
     final effectiveRadius = radius + strokeMargin + tolerance;
     if (effectiveRadius <= 0) {
       return false;

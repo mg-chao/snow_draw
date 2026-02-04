@@ -13,6 +13,9 @@ import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_path_utils.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
+import '../../draw/elements/types/serial_number/serial_number_binding.dart';
+import '../../draw/elements/types/serial_number/serial_number_data.dart';
+import '../../draw/elements/types/serial_number/serial_number_layout.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/models/draw_state_view.dart';
@@ -54,6 +57,8 @@ class DynamicCanvasPainter extends CustomPainter {
       ..save()
       ..translate(camera.position.x, camera.position.y)
       ..scale(scale, scale);
+
+    _drawSerialNumberTextBindings(canvas: canvas);
 
     // Draw elements at or above the selected element to preserve z-order.
     _drawDynamicElements(canvas: canvas, size: size, scale: scale);
@@ -300,6 +305,77 @@ class DynamicCanvasPainter extends CustomPainter {
         scaleFactor: scale,
         registry: renderKey.elementRegistry,
         locale: renderKey.locale,
+      );
+    }
+  }
+
+  void _drawSerialNumberTextBindings({required Canvas canvas}) {
+    final document = stateView.state.domain.document;
+    if (document.elements.isEmpty) {
+      return;
+    }
+
+    final elementsById = {
+      ...document.elementMap,
+      ...stateView.previewElementsById,
+    };
+
+    for (final element in document.elements) {
+      if (element.data is! SerialNumberData) {
+        continue;
+      }
+      final effectiveSerial = stateView.effectiveElement(element);
+      final effectiveData = effectiveSerial.data;
+      if (effectiveData is! SerialNumberData) {
+        continue;
+      }
+      final textId = effectiveData.textElementId;
+      if (textId == null) {
+        continue;
+      }
+      final textElement = elementsById[textId];
+      if (textElement == null || textElement.data is! TextData) {
+        continue;
+      }
+
+      final lineWidth = resolveSerialNumberStrokeWidth(data: effectiveData);
+      final connection = resolveSerialNumberTextConnection(
+        serialElement: effectiveSerial,
+        textElement: textElement,
+        lineWidth: lineWidth,
+      );
+      if (connection == null) {
+        continue;
+      }
+
+      final opacity =
+          (effectiveData.color.a * effectiveSerial.opacity).clamp(0.0, 1.0);
+      if (opacity <= 0 || lineWidth <= 0) {
+        continue;
+      }
+
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lineWidth
+        ..color = effectiveData.color.withValues(alpha: opacity)
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true;
+
+      if (connection.textBaselineStart != null &&
+          connection.textBaselineEnd != null) {
+        final baselineStart = connection.textBaselineStart!;
+        final baselineEnd = connection.textBaselineEnd!;
+        canvas.drawLine(
+          Offset(baselineStart.x, baselineStart.y),
+          Offset(baselineEnd.x, baselineEnd.y),
+          paint,
+        );
+      }
+
+      canvas.drawLine(
+        Offset(connection.start.x, connection.start.y),
+        Offset(connection.end.x, connection.end.y),
+        paint,
       );
     }
   }

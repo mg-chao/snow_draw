@@ -52,6 +52,7 @@ class ValidationMiddleware extends MiddlewareBase {
     ChangeElementZIndex: _validateChangeElementZIndex,
     ChangeElementsZIndex: _validateChangeElementsZIndex,
     UpdateElementsStyle: _validateUpdateElementsStyle,
+    CreateSerialNumberTextElements: _validateCreateSerialNumberTextElements,
     SelectElement: _validateSelectElement,
     ZoomCamera: _validateZoomCamera,
     Undo: _validateUndo,
@@ -198,6 +199,19 @@ ValidationResult _validateUpdateElementsStyle(
         'UpdateElementsStyle has no fields to update',
       );
     }
+  return const ValidationResult.valid();
+}
+
+ValidationResult _validateCreateSerialNumberTextElements(
+  DrawAction action,
+  DispatchContext context,
+) {
+  final create = action as CreateSerialNumberTextElements;
+  if (create.elementIds.isEmpty) {
+    return const ValidationResult.invalid(
+      'CreateSerialNumberTextElements requires elementIds',
+    );
+  }
   return const ValidationResult.valid();
 }
 

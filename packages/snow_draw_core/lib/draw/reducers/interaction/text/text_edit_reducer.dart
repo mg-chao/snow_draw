@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../core/dependency_interfaces.dart';
+import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_layout.dart';
 import '../../../models/draw_state.dart';
@@ -126,8 +127,20 @@ class TextEditReducer {
       final remainingElements = state.domain.document.elements
           .where((element) => element.id != interaction.elementId)
           .toList();
+      final updatedElements = <ElementState>[];
+      for (final element in remainingElements) {
+        final data = element.data;
+        if (data is SerialNumberData &&
+            data.textElementId == interaction.elementId) {
+          updatedElements.add(
+            element.copyWith(data: data.copyWith(textElementId: null)),
+          );
+        } else {
+          updatedElements.add(element);
+        }
+      }
       final nextDomain = state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: remainingElements),
+        document: state.domain.document.copyWith(elements: updatedElements),
       );
       final nextState = applySelectionChange(
         state.copyWith(domain: nextDomain),

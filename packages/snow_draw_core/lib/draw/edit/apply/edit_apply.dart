@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
@@ -6,6 +7,7 @@ import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/element_state.dart';
@@ -188,6 +190,24 @@ class EditApply {
         }
         if (clampedRect != resized.rect || data != resized.data) {
           resized = resized.copyWith(rect: clampedRect, data: data);
+        }
+      }
+      if (resized.data is SerialNumberData) {
+        var data = resized.data as SerialNumberData;
+        final startRect = startElement.rect;
+        final startDiameter = math.min(startRect.width, startRect.height);
+        final nextDiameter = math.min(resized.rect.width, resized.rect.height);
+        if (startDiameter > 0 && nextDiameter > 0) {
+          final scale = nextDiameter / startDiameter;
+          if (scale.isFinite && scale > 0) {
+            final nextFontSize = data.fontSize * scale;
+            if ((nextFontSize - data.fontSize).abs() > textHeightTolerance) {
+              data = data.copyWith(fontSize: nextFontSize);
+            }
+          }
+        }
+        if (data != resized.data) {
+          resized = resized.copyWith(data: data);
         }
       }
       if (resized.data is ArrowData) {

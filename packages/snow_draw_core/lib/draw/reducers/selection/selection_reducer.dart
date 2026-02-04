@@ -20,7 +20,8 @@ DrawState _handleSelectElement(
   SelectElement action,
   SelectionReducerDeps context,
 ) {
-  if (state.domain.document.getElementById(action.elementId) == null) {
+  final element = state.domain.document.getElementById(action.elementId);
+  if (element == null) {
     context.log.store.warning('Selection failed: element not found', {
       'action': action.runtimeType.toString(),
       'elementId': action.elementId,

@@ -47,6 +47,9 @@ class AppLocalizations {
   String get fontSize => 'Font Size';
   String get fontFamily => 'Font Family';
   String get number => 'Number';
+  String get increase => 'Increase';
+  String get decrease => 'Decrease';
+  String get createText => 'Create Text';
   String get fontFamilySystem => 'System';
   String get fontFamilySans => 'Sans Serif';
   String get fontFamilySerif => 'Serif';

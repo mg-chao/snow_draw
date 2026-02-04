@@ -67,12 +67,14 @@ class SerialNumberRenderer extends ElementTypeRenderer {
         ..translate(-rect.centerX, -rect.centerY);
     }
 
+    final strokeWidth = resolveSerialNumberStrokeWidth(data: data);
+
     if (fillOpacity > 0) {
       _paintFill(canvas, data, circleRect, fillOpacity);
     }
 
-    if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      _paintStroke(canvas, data, circleRect, strokeOpacity);
+    if (strokeOpacity > 0 && strokeWidth > 0) {
+      _paintStroke(canvas, data, circleRect, strokeOpacity, strokeWidth);
     }
 
     if (textOpacity > 0) {
@@ -98,7 +100,12 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       return;
     }
 
-    final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
+    // Match text fill spacing so stripes scale with font size.
+    final equivalentStrokeWidth = data.fontSize / 42;
+    final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
+      0.5,
+      3.0,
+    );
     const lineToSpacingRatio = 4.0;
     final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
     final fillPaint = _buildLineFillPaint(
@@ -124,10 +131,11 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     SerialNumberData data,
     Rect circleRect,
     double strokeOpacity,
+    double strokeWidth,
   ) {
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = data.strokeWidth
+      ..strokeWidth = strokeWidth
       ..color = data.color.withValues(alpha: strokeOpacity)
       ..isAntiAlias = true;
 
@@ -138,7 +146,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
 
     final path = Path()..addOval(circleRect);
     if (data.strokeStyle == StrokeStyle.dashed) {
-      final dashLength = data.strokeWidth * 2.0;
+      final dashLength = strokeWidth * 2.0;
       final gapLength = dashLength * 1.2;
       final key = _StrokePathKey(
         diameter: circleRect.width,
@@ -155,8 +163,8 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       return;
     }
 
-    final dotSpacing = data.strokeWidth * 2.0;
-    final dotRadius = data.strokeWidth * 0.5;
+    final dotSpacing = strokeWidth * 2.0;
+    final dotRadius = strokeWidth * 0.5;
     final key = _StrokePathKey(
       diameter: circleRect.width,
       strokeStyle: StrokeStyle.dotted,
