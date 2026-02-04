@@ -7,8 +7,8 @@ import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
 import '../../../models/element_state.dart';
-import '../../../types/element_style.dart';
 import '../../../types/draw_rect.dart';
+import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_renderer.dart';
 import 'free_draw_data.dart';
@@ -54,9 +54,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     }
 
     final shouldFill =
-        fillOpacity > 0 &&
-        _isClosed(data, rect) &&
-        cached.pointCount > 2;
+        fillOpacity > 0 && _isClosed(data, rect) && cached.pointCount > 2;
 
     canvas.save();
     if (element.rotation != 0) {
@@ -142,7 +140,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     if (first == last) {
       return true;
     }
-    final tolerance =
+    const tolerance =
         ConfigDefaults.handleTolerance *
         ConfigDefaults.freeDrawCloseToleranceMultiplier;
     final dx = (first.x - last.x) * rect.width;

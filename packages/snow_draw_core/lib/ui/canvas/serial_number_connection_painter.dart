@@ -1,11 +1,10 @@
 import 'dart:ui';
 
 import '../../draw/elements/types/serial_number/serial_number_binding.dart';
-import '../../draw/elements/types/serial_number/serial_number_data.dart';
-import '../../draw/elements/types/serial_number/serial_number_layout.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
+import 'serial_number_connector_cache.dart';
 
 class SerialNumberTextConnector {
   const SerialNumberTextConnector({
@@ -17,76 +16,15 @@ class SerialNumberTextConnector {
   final Paint paint;
 }
 
-typedef SerialNumberConnectorMap =
-    Map<String, List<SerialNumberTextConnector>>;
+typedef SerialNumberConnectorMap = Map<String, List<SerialNumberTextConnector>>;
 
-SerialNumberConnectorMap buildSerialNumberConnectorMap(
+/// Resolves the serial number connector map using the global cache.
+///
+/// This is the preferred method for rendering as it uses version-based
+/// caching to avoid recomputing connectors on every paint cycle.
+SerialNumberConnectorMap resolveSerialNumberConnectorMap(
   DrawStateView stateView,
-) {
-  final document = stateView.state.domain.document;
-  if (document.elements.isEmpty) {
-    return const <String, List<SerialNumberTextConnector>>{};
-  }
-
-  final elementsById = {
-    ...document.elementMap,
-    ...stateView.previewElementsById,
-  };
-  final connectors = <String, List<SerialNumberTextConnector>>{};
-
-  for (final element in document.elements) {
-    if (element.data is! SerialNumberData) {
-      continue;
-    }
-
-    final effectiveSerial = stateView.effectiveElement(element);
-    final serialData = effectiveSerial.data;
-    if (serialData is! SerialNumberData) {
-      continue;
-    }
-
-    final textId = serialData.textElementId;
-    if (textId == null) {
-      continue;
-    }
-    final textElement = elementsById[textId];
-    if (textElement == null || textElement.data is! TextData) {
-      continue;
-    }
-
-    final effectiveText = stateView.effectiveElement(textElement);
-    final lineWidth = resolveSerialNumberStrokeWidth(data: serialData);
-    final connection = resolveSerialNumberTextConnection(
-      serialElement: effectiveSerial,
-      textElement: effectiveText,
-      lineWidth: lineWidth,
-    );
-    if (connection == null) {
-      continue;
-    }
-
-    final opacity = (serialData.color.a * effectiveSerial.opacity).clamp(
-      0.0,
-      1.0,
-    );
-    if (opacity <= 0 || lineWidth <= 0) {
-      continue;
-    }
-
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = lineWidth
-      ..color = serialData.color.withValues(alpha: opacity)
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
-
-    connectors
-        .putIfAbsent(textId, () => <SerialNumberTextConnector>[])
-        .add(SerialNumberTextConnector(connection: connection, paint: paint));
-  }
-
-  return connectors;
-}
+) => SerialNumberConnectorCache.instance.resolve(stateView);
 
 void drawSerialNumberConnectorsForText({
   required Canvas canvas,

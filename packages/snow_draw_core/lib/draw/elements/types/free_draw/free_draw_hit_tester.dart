@@ -78,7 +78,7 @@ class FreeDrawHitTester implements ElementHitTester {
     if (first == last) {
       return true;
     }
-    final tolerance =
+    const tolerance =
         ConfigDefaults.handleTolerance *
         ConfigDefaults.freeDrawCloseToleranceMultiplier;
     final dx = (first.x - last.x) * rect.width;

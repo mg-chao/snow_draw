@@ -408,9 +408,9 @@ class ResizeOperation extends EditOperation {
       return null;
     }
 
-    final elementsById = {...state.domain.document.elementMap, ...updatedById};
-    final bindingUpdates = ArrowBindingResolver.resolveBoundArrows(
-      elementsById: elementsById,
+    final bindingUpdates = ArrowBindingResolver.instance.resolve(
+      baseElements: state.domain.document.elementMap,
+      updatedElements: updatedById,
       changedElementIds: updatedById.keys.toSet(),
       document: state.domain.document,
     );

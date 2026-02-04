@@ -272,7 +272,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return indexA.compareTo(indexB);
     });
 
-    final serialConnectors = buildSerialNumberConnectorMap(stateView);
+    final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
     if (previewElements.isEmpty) {
       for (final element in visibleElements) {

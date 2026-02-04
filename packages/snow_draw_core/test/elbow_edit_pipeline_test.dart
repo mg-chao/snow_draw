@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/combined_element_lookup.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
@@ -20,7 +21,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
     );
 
@@ -47,7 +48,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
     );
@@ -93,7 +94,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: movedPoints,
       fixedSegmentsOverride: fixedSegments,
     );
@@ -130,7 +131,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: points,
     );
 
@@ -172,7 +173,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: points,
     );
 
@@ -227,7 +228,7 @@ void main() {
     final bottomResult = computeElbowEdit(
       element: element,
       data: data.copyWith(endBinding: bottomBinding),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: toBottom,
       fixedSegmentsOverride: fixedSegments,
       endBindingOverride: bottomBinding,
@@ -256,7 +257,7 @@ void main() {
     final topResult = computeElbowEdit(
       element: bottomElement,
       data: bottomData.copyWith(endBinding: topBinding),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: toTop,
       fixedSegmentsOverride: bottomResult.fixedSegments,
       endBindingOverride: topBinding,
@@ -326,7 +327,7 @@ void main() {
       final bottomResult = computeElbowEdit(
         element: element,
         data: data.copyWith(endBinding: bottomBinding),
-        elementsById: {'target': target},
+        lookup: CombinedElementLookup(base: {'target': target}),
         localPointsOverride: toBottom,
         fixedSegmentsOverride: fixedSegments,
         endBindingOverride: bottomBinding,
@@ -355,7 +356,7 @@ void main() {
       final topResult = computeElbowEdit(
         element: bottomElement,
         data: bottomData.copyWith(endBinding: topBinding),
-        elementsById: {'target': target},
+        lookup: CombinedElementLookup(base: {'target': target}),
         localPointsOverride: toTop,
         fixedSegmentsOverride: bottomResult.fixedSegments,
         endBindingOverride: topBinding,
@@ -428,7 +429,7 @@ void main() {
     final bottomResult = computeElbowEdit(
       element: element,
       data: data.copyWith(startBinding: bottomBinding),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: toBottom,
       fixedSegmentsOverride: fixedSegments,
       startBindingOverride: bottomBinding,
@@ -457,7 +458,7 @@ void main() {
     final topResult = computeElbowEdit(
       element: bottomElement,
       data: bottomData.copyWith(startBinding: topBinding),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: toTop,
       fixedSegmentsOverride: bottomResult.fixedSegments,
       startBindingOverride: topBinding,
@@ -530,7 +531,7 @@ void main() {
       final bottomResult = computeElbowEdit(
         element: element,
         data: data.copyWith(startBinding: bottomBinding),
-        elementsById: {'target': target},
+        lookup: CombinedElementLookup(base: {'target': target}),
         localPointsOverride: toBottom,
         fixedSegmentsOverride: fixedSegments,
         startBindingOverride: bottomBinding,
@@ -559,7 +560,7 @@ void main() {
       final topResult = computeElbowEdit(
         element: bottomElement,
         data: bottomData.copyWith(startBinding: topBinding),
-        elementsById: {'target': target},
+        lookup: CombinedElementLookup(base: {'target': target}),
         localPointsOverride: toTop,
         fixedSegmentsOverride: bottomResult.fixedSegments,
         startBindingOverride: topBinding,
@@ -629,7 +630,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data.copyWith(endBinding: null),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: unboundPoints,
       fixedSegmentsOverride: fixedSegments,
     );
@@ -678,7 +679,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data.copyWith(startBinding: null),
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: unboundPoints,
       fixedSegmentsOverride: fixedSegments,
     );
@@ -720,7 +721,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: overrideSegments,
     );
@@ -756,7 +757,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: movedPoints,
       fixedSegmentsOverride: fixedSegments,
     );
@@ -804,7 +805,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: {'target': target},
+      lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: dragged,
       fixedSegmentsOverride: fixedSegments,
     );
@@ -836,7 +837,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[0]],
     );
@@ -867,7 +868,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
     );
@@ -895,7 +896,7 @@ void main() {
     final result = computeElbowEdit(
       element: element,
       data: data,
-      elementsById: const {},
+      lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: const <ElbowFixedSegment>[],
     );

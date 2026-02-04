@@ -37,20 +37,10 @@ class MultiSelectOverlayState {
 class SelectionState {
   const SelectionState({
     this.selectedIds = const {},
-    @Deprecated(
-      'Selection overlays now live in ApplicationState. This field is ignored.',
-    )
-    this.multiSelectOverlay,
     this.selectionVersion = 0,
   });
   final Set<String> selectedIds;
   final int selectionVersion;
-
-  /// Deprecated: overlay state is now stored in ApplicationState.
-  @Deprecated(
-    'Selection overlays now live in ApplicationState. This field is ignored.',
-  )
-  final MultiSelectOverlayState? multiSelectOverlay;
 
   bool get hasSelection => selectedIds.isNotEmpty;
   bool get isMultiSelect => selectedIds.length > 1;
@@ -59,11 +49,6 @@ class SelectionState {
 
   SelectionState copyWith({
     Set<String>? selectedIds,
-    @Deprecated(
-      'Selection overlays now live in ApplicationState. This field is ignored.',
-    )
-    MultiSelectOverlayState? multiSelectOverlay,
-    bool resetMultiSelectOverlay = false,
     int? selectionVersion,
   }) => SelectionState(
     selectedIds: selectedIds ?? this.selectedIds,
