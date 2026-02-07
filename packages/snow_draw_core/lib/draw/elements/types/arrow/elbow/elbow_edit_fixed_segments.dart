@@ -824,3 +824,84 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
   final reindexed = _reindexFixedSegments(simplified, merged.fixedSegments);
   return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }
+
+ElbowEditResult _finalizeElbowEditResult({
+  required ElementState element,
+  required ArrowData data,
+  required CombinedElementLookup lookup,
+  required ElbowEditResult result,
+  required ArrowBinding? startBindingOverride,
+  required ArrowBinding? endBindingOverride,
+  required bool startBindingOverrideIsSet,
+  required bool endBindingOverrideIsSet,
+}) {
+  final fixedSegments = result.fixedSegments;
+  if (fixedSegments == null || fixedSegments.isEmpty) {
+    return result;
+  }
+  final toDrop = _fixedSegmentsWithSameHeadingAdjacency(
+    points: result.localPoints,
+    fixedSegments: fixedSegments,
+  );
+  if (toDrop.isEmpty) {
+    return result;
+  }
+  final remaining = fixedSegments
+      .where((segment) => !toDrop.contains(segment.index))
+      .toList(growable: false);
+  if (remaining.length == fixedSegments.length) {
+    return result;
+  }
+
+  return computeElbowEdit(
+    element: element,
+    data: data,
+    lookup: lookup,
+    localPointsOverride: result.localPoints,
+    fixedSegmentsOverride: remaining,
+    startBindingOverride: startBindingOverride,
+    endBindingOverride: endBindingOverride,
+    startBindingOverrideIsSet: startBindingOverrideIsSet,
+    endBindingOverrideIsSet: endBindingOverrideIsSet,
+    finalize: false,
+  );
+}
+
+Set<int> _fixedSegmentsWithSameHeadingAdjacency({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  if (points.length < 3 || fixedSegments.isEmpty) {
+    return const <int>{};
+  }
+
+  final fixedIndices = fixedSegments.map((segment) => segment.index).toSet();
+  final toDrop = <int>{};
+
+  for (var i = 1; i < points.length - 1; i++) {
+    final a = points[i - 1];
+    final b = points[i];
+    final c = points[i + 1];
+    final prevLength = ElbowGeometry.manhattanDistance(a, b);
+    final nextLength = ElbowGeometry.manhattanDistance(b, c);
+    if (prevLength <= ElbowConstants.dedupThreshold ||
+        nextLength <= ElbowConstants.dedupThreshold) {
+      continue;
+    }
+    final prevHeading = ElbowGeometry.headingForSegment(a, b);
+    final nextHeading = ElbowGeometry.headingForSegment(b, c);
+    if (prevHeading != nextHeading) {
+      continue;
+    }
+    final prevIndex = i;
+    final nextIndex = i + 1;
+    if (fixedIndices.contains(prevIndex)) {
+      toDrop.add(prevIndex);
+    }
+    if (fixedIndices.contains(nextIndex)) {
+      toDrop.add(nextIndex);
+    }
+  }
+
+  return toDrop;
+}

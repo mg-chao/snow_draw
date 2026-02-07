@@ -2731,6 +2731,78 @@ void main() {
     );
   });
 
+  test('finalize drops fixed segment when tail becomes collinear', () {
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 120, y: 0),
+      const DrawPoint(x: 120, y: 80),
+      const DrawPoint(x: 200, y: 80),
+      const DrawPoint(x: 200, y: 140),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+
+    const rect = DrawRect(minX: 100, minY: 140, maxX: 141, maxY: 200);
+    final target = elbowRectangleElement(id: 'target', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'target',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: target,
+          hasArrowhead: false,
+        ) ??
+        points.last;
+
+    final movedPoints = <DrawPoint>[
+      points.first,
+      points[1],
+      points[2],
+      DrawPoint(x: boundPoint.x, y: points[2].y),
+      boundPoint,
+    ];
+    final movedElement = _arrowElement(
+      movedPoints,
+      fixedSegments: fixedSegments,
+    );
+    final movedData = (movedElement.data as ArrowData).copyWith(
+      endBinding: binding,
+    );
+    final elementWithBinding = movedElement.copyWith(data: movedData);
+
+    final pre = computeElbowEdit(
+      element: elementWithBinding,
+      data: movedData,
+      lookup: CombinedElementLookup(base: {'target': target}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+    expect(
+      elbowPathHasOnlyCorners(pre.localPoints),
+      isFalse,
+      reason: 'Expected an invalid collinear tail before finalize.',
+    );
+
+    final finalized = computeElbowEdit(
+      element: elementWithBinding,
+      data: movedData,
+      lookup: CombinedElementLookup(base: {'target': target}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      finalize: true,
+    );
+
+    expect(
+      elbowPathHasOnlyCorners(finalized.localPoints),
+      isTrue,
+      reason: 'Finalize should remove the illegal fixed segment.',
+    );
+    expect(finalized.fixedSegments, isNull);
+  });
+
   test('bound end preserves prefix before fixed segment', () {
     final points = <DrawPoint>[
       DrawPoint.zero,
