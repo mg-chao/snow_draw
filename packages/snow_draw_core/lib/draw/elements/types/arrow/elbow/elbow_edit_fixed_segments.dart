@@ -325,9 +325,6 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
     if (index <= 1 || index >= maxIndex) {
       continue;
     }
-    if (index < 1 || index >= points.length) {
-      continue;
-    }
     final start = points[index - 1];
     final end = points[index];
     final length = ElbowGeometry.manhattanDistance(start, end);

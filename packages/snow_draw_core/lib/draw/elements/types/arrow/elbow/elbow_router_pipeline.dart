@@ -92,6 +92,7 @@ final class _ElbowRoutePipeline {
         start: endpoints.start.point,
         end: endpoints.end.point,
         startHeading: endpoints.start.heading,
+        endHeading: endpoints.end.heading,
       ),
     );
   }
@@ -153,6 +154,9 @@ final class _ElbowRoutePlan {
             start: start.point,
             end: end.point,
             startHeading: start.heading,
+            endHeading: end.heading,
+            startConstrained: start.isBound,
+            endConstrained: end.isBound,
           )
         : _postProcessPath(
             path: path,

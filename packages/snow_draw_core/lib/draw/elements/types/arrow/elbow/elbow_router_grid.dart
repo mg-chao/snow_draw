@@ -2,6 +2,10 @@ part of 'elbow_router.dart';
 
 /// Sparse grid routing (A* with bend penalties) for elbow paths.
 
+/// Forces grid routing to fail so fallback paths can be exercised in tests.
+@visibleForTesting
+bool elbowForceGridFailure = false;
+
 @immutable
 final class _ElbowGrid {
   const _ElbowGrid({
@@ -191,7 +195,7 @@ final class _ElbowGridRouter {
 
       final previousHeading = current.parent == null
           ? startHeading
-          : _headingBetween(current.pos, current.parent!.pos);
+          : _headingFromTo(current.parent!.pos, current.pos);
       final isStartNode = current.addr == start.addr;
       final col = current.addr.col;
       final row = current.addr.row;
@@ -331,13 +335,16 @@ List<_ElbowGridNode>? _tryRouteGridPath({
   required DrawPoint endExit,
   required List<DrawRect> obstacles,
 }) {
+  if (elbowForceGridFailure) {
+    return null;
+  }
   final startNode = grid.nodeForPoint(startExit);
   final endNode = grid.nodeForPoint(endExit);
   if (startNode == null || endNode == null) {
     return null;
   }
 
-  return _ElbowGridRouter(
+  final path = _ElbowGridRouter(
     grid: grid,
     start: startNode,
     end: endNode,
@@ -347,6 +354,10 @@ List<_ElbowGridNode>? _tryRouteGridPath({
     endConstrained: end.isBound,
     obstacles: obstacles,
   ).findPath();
+  if (path.isEmpty) {
+    return null;
+  }
+  return path;
 }
 
 bool _allowsHeadingFromStart({

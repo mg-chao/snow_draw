@@ -71,10 +71,11 @@ List<DrawPoint> _routeReleasedRegion({
     next: nextFixed,
   );
   if (preferHorizontal != null) {
-    return _directElbowPathStrict(
+    return ElbowPathUtils.directElbowPath(
       startLocal,
       endLocal,
       preferHorizontal: preferHorizontal,
+      epsilon: ElbowConstants.intersectionEpsilon,
     );
   }
 
@@ -88,24 +89,6 @@ List<DrawPoint> _routeReleasedRegion({
     startBinding: startBinding,
     endBinding: endBinding,
   );
-}
-
-List<DrawPoint> _directElbowPathStrict(
-  DrawPoint start,
-  DrawPoint end, {
-  required bool preferHorizontal,
-}) {
-  if ((start.x - end.x).abs() <= ElbowConstants.intersectionEpsilon ||
-      (start.y - end.y).abs() <= ElbowConstants.intersectionEpsilon) {
-    return [start, end];
-  }
-  final mid = preferHorizontal
-      ? DrawPoint(x: end.x, y: start.y)
-      : DrawPoint(x: start.x, y: end.y);
-  if (mid == start || mid == end) {
-    return [start, end];
-  }
-  return [start, mid, end];
 }
 
 _FixedSegmentPathResult _handleFixedSegmentRelease({

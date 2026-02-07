@@ -110,9 +110,10 @@ final class ElbowPathUtils {
     DrawPoint start,
     DrawPoint end, {
     required bool preferHorizontal,
+    double epsilon = ElbowConstants.dedupThreshold,
   }) {
-    if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold ||
-        (start.y - end.y).abs() <= ElbowConstants.dedupThreshold) {
+    if ((start.x - end.x).abs() <= epsilon ||
+        (start.y - end.y).abs() <= epsilon) {
       return [start, end];
     }
     final mid = preferHorizontal
