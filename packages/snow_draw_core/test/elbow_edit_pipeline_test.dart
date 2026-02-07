@@ -395,6 +395,65 @@ void main() {
     },
   );
 
+  test('end binding flips a vertical fixed segment downward', () {
+    const targetRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 180);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+
+    final basePoints = <DrawPoint>[
+      const DrawPoint(x: 0, y: 40),
+      const DrawPoint(x: 80, y: 40),
+      const DrawPoint(x: 80, y: 0),
+      const DrawPoint(x: 160, y: 0),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
+    ];
+    final element = _arrowElement(basePoints, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const topBinding = ArrowBinding(
+      elementId: 'target',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: topBinding,
+      target: target,
+      hasArrowhead: false,
+    )!;
+    final toTop = List<DrawPoint>.from(basePoints)
+      ..[basePoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: topBinding),
+      lookup: CombinedElementLookup(base: {'target': target}),
+      localPointsOverride: toTop,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: topBinding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    expect(result.fixedSegments, isNotNull);
+    expect(result.fixedSegments!.length, 1);
+
+    final fixed = result.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isFalse);
+    final axis = (fixed.start.x + fixed.end.x) / 2;
+    expect(
+      (axis - basePoints[1].x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+    );
+
+    final fixedIndex = fixed.index;
+    final fixedStart = result.localPoints[fixedIndex - 1];
+    final fixedEnd = result.localPoints[fixedIndex];
+    expect(
+      fixedEnd.y - fixedStart.y > ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'Fixed segment should flip to run downward.',
+    );
+  });
+
   test('end binding switch preserves prefix before nearest fixed segment', () {
     const firstRect = DrawRect(minX: 200, minY: 60, maxX: 240, maxY: 120);
     const secondRect = DrawRect(minX: 220, minY: 140, maxX: 260, maxY: 200);
