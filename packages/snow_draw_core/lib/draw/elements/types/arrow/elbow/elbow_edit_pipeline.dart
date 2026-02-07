@@ -112,6 +112,8 @@ final class _ElbowEditPipeline {
     this.fixedSegmentsOverride,
     this.startBindingOverride,
     this.endBindingOverride,
+    this.startBindingOverrideIsSet = false,
+    this.endBindingOverrideIsSet = false,
   });
 
   final ElementState element;
@@ -121,6 +123,8 @@ final class _ElbowEditPipeline {
   final List<ElbowFixedSegment>? fixedSegmentsOverride;
   final ArrowBinding? startBindingOverride;
   final ArrowBinding? endBindingOverride;
+  final bool startBindingOverrideIsSet;
+  final bool endBindingOverrideIsSet;
 
   ElbowEditResult run() {
     final context = _buildContext();
@@ -159,8 +163,16 @@ final class _ElbowEditPipeline {
       fixedSegmentsOverride ?? data.fixedSegments,
       incomingPoints.length,
     );
-    final startBinding = startBindingOverride ?? data.startBinding;
-    final endBinding = endBindingOverride ?? data.endBinding;
+    final startBinding = _resolveBindingOverride(
+      override: startBindingOverride,
+      overrideIsSet: startBindingOverrideIsSet,
+      fallback: data.startBinding,
+    );
+    final endBinding = _resolveBindingOverride(
+      override: endBindingOverride,
+      overrideIsSet: endBindingOverrideIsSet,
+      fallback: data.endBinding,
+    );
     final previousData = element.data is ArrowData
         ? element.data as ArrowData
         : data;
@@ -290,12 +302,47 @@ final class _ElbowEditPipeline {
         endArrowhead: context.data.endArrowhead,
       ),
     );
-    final resultSegments = updated.fixedSegments.isEmpty
+
+    var resolvedPoints = updated.points;
+    var resolvedFixed = updated.fixedSegments;
+    if (resolvedFixed.length < context.fixedSegments.length) {
+      final released = _handleFixedSegmentRelease(
+        element: context.element,
+        data: context.data,
+        elementsById: context.elementsById,
+        currentPoints: resolvedPoints,
+        previousFixed: context.fixedSegments,
+        remainingFixed: resolvedFixed,
+        startBinding: context.startBinding,
+        endBinding: context.endBinding,
+      );
+      final mapped = _applyFixedSegmentsToBaselineRoute(
+        baseline: released.points,
+        fixedSegments: released.fixedSegments,
+      );
+      final reconciled =
+          mapped.fixedSegments.length == released.fixedSegments.length
+          ? mapped
+          : released;
+      final releaseCorners = ElbowPathUtils.cornerPoints(released.points);
+      final extraPinned = releaseCorners.length > 2
+          ? releaseCorners.sublist(1, releaseCorners.length - 1).toSet()
+          : const <DrawPoint>{};
+      final normalized = _normalizeFixedSegmentReleasePath(
+        points: reconciled.points,
+        fixedSegments: reconciled.fixedSegments,
+        extraPinned: extraPinned,
+      );
+      resolvedPoints = normalized.points;
+      resolvedFixed = normalized.fixedSegments;
+    }
+
+    final resultSegments = resolvedFixed.isEmpty
         ? null
-        : List<ElbowFixedSegment>.unmodifiable(updated.fixedSegments);
+        : List<ElbowFixedSegment>.unmodifiable(resolvedFixed);
     return _buildResult(
       data: context.data,
-      points: List<DrawPoint>.unmodifiable(updated.points),
+      points: List<DrawPoint>.unmodifiable(resolvedPoints),
       fixedSegments: resultSegments,
     );
   }
@@ -341,3 +388,14 @@ ElbowEditResult _buildResult({
   startIsSpecial: data.startIsSpecial,
   endIsSpecial: data.endIsSpecial,
 );
+
+ArrowBinding? _resolveBindingOverride({
+  required ArrowBinding? override,
+  required bool overrideIsSet,
+  required ArrowBinding? fallback,
+}) {
+  if (overrideIsSet || override != null) {
+    return override;
+  }
+  return fallback;
+}

@@ -14,6 +14,7 @@ import '../models/element_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
+import '../types/element_style.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
 const _hitTestCacheSize = 4;
@@ -213,6 +214,9 @@ class HitTest {
     // can be performed through the point editor.
     final isSingleTwoPointArrow =
         singleSelectedArrow != null && singleSelectedArrow.points.length == 2;
+    final isSingleElbowArrow =
+        singleSelectedArrow != null &&
+        singleSelectedArrow.arrowType == ArrowType.elbow;
 
     _SelectionHitContext? selectionContext;
     var isInSelectionPadding = false;
@@ -234,6 +238,7 @@ class HitTest {
           tolerance: actualTolerance,
           config: config,
           isInSelectionPadding: isInSelectionPadding,
+          allowRotateHandle: !isSingleElbowArrow,
         );
         if (handleResult != null) {
           return _storeCache(
@@ -357,6 +362,7 @@ class HitTest {
     required double tolerance,
     required SelectionConfig config,
     required bool isInSelectionPadding,
+    bool allowRotateHandle = true,
   }) {
     final bounds = context.bounds;
     final paddedBounds = context.paddedBounds;
@@ -366,23 +372,25 @@ class HitTest {
     final padding = config.padding;
 
     // Check rotation handle first (same position math as rendering).
-    final margin = config.rotateHandleOffset;
-    final rotateHandleX = bounds.centerX;
-    final rotateHandleY = bounds.minY - padding - margin;
-    if (_isNearRotatedPoint(
-      position: position,
-      localX: rotateHandleX,
-      localY: rotateHandleY,
-      context: context,
-      tolerance: tolerance,
-    )) {
-      return HitTestResult(
-        handleType: HandleType.rotate,
-        cursorHint: CursorHint.rotate,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+    if (allowRotateHandle) {
+      final margin = config.rotateHandleOffset;
+      final rotateHandleX = bounds.centerX;
+      final rotateHandleY = bounds.minY - padding - margin;
+      if (_isNearRotatedPoint(
+        position: position,
+        localX: rotateHandleX,
+        localY: rotateHandleY,
+        context: context,
+        tolerance: tolerance,
+      )) {
+        return HitTestResult(
+          handleType: HandleType.rotate,
+          cursorHint: CursorHint.rotate,
+          selectionRotation: rotation,
+          target: HitTestTarget.handle,
+          isInSelectionPadding: isInSelectionPadding,
+        );
+      }
     }
 
     // Check 4 corner handles first (higher priority for precise

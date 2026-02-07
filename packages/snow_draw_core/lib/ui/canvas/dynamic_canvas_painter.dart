@@ -25,6 +25,9 @@ import '../../draw/types/draw_rect.dart';
 import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/types/snap_guides.dart';
+import '../../draw/utils/arrow_binding_highlight.dart';
+import '../../draw/utils/binding_highlight_style.dart';
+import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
@@ -158,6 +161,10 @@ class DynamicCanvasPainter extends CustomPainter {
             selectedIds.length == 1 &&
             firstSelectedData is ArrowLikeData &&
             firstSelectedData.points.length == 2;
+        final isSingleElbowArrow =
+            selectedIds.length == 1 &&
+            firstSelectedData is ArrowLikeData &&
+            firstSelectedData.arrowType == ArrowType.elbow;
 
         // Determine corner handle offset for single arrow selections.
         final cornerHandleOffset =
@@ -167,19 +174,18 @@ class DynamicCanvasPainter extends CustomPainter {
 
         // Skip selection box and rotation handle for 2-point arrows.
         if (!isSingleTwoPointArrow) {
-          elementRenderer
-            ..renderSelection(
-              canvas: canvas,
-              bounds: bounds,
-              scaleFactor: scale,
-              config: renderKey.selectionConfig,
-              rotation: effectiveSelection.rotation,
-              rotationCenter: rotationCenter,
-              dashed: selectedIds.length > 1,
-              cornerHandleOffset: cornerHandleOffset,
-            )
-            // Draw rotation handle.
-            ..renderRotationHandle(
+          elementRenderer.renderSelection(
+            canvas: canvas,
+            bounds: bounds,
+            scaleFactor: scale,
+            config: renderKey.selectionConfig,
+            rotation: effectiveSelection.rotation,
+            rotationCenter: rotationCenter,
+            dashed: selectedIds.length > 1,
+            cornerHandleOffset: cornerHandleOffset,
+          );
+          if (!isSingleElbowArrow) {
+            elementRenderer.renderRotationHandle(
               canvas: canvas,
               bounds: bounds,
               scaleFactor: scale,
@@ -187,6 +193,7 @@ class DynamicCanvasPainter extends CustomPainter {
               rotation: effectiveSelection.rotation,
               rotationCenter: rotationCenter,
             );
+          }
         }
       }
     }
@@ -513,13 +520,10 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     final effectiveScale = scale == 0 ? 1.0 : scale;
     final strokeColor = renderKey.selectionConfig.render.strokeColor;
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth =
-          renderKey.selectionConfig.render.strokeWidth * 1.5 / effectiveScale
-      ..color = strokeColor.withValues(alpha: 0.9)
-      ..strokeJoin = StrokeJoin.round
-      ..isAntiAlias = true;
+    final paint = createBindingHighlightPaint(
+      color: strokeColor,
+      scale: effectiveScale,
+    );
 
     for (final highlight in highlights) {
       final element = stateView.state.domain.document.getElementById(
@@ -537,6 +541,10 @@ class DynamicCanvasPainter extends CustomPainter {
         rect.width,
         rect.height,
       );
+      final outerRect = resolveBindingHighlightOuterRect(
+        highlightRect,
+        paint.strokeWidth,
+      );
 
       canvas.save();
       if (effectiveElement.rotation != 0) {
@@ -549,18 +557,26 @@ class DynamicCanvasPainter extends CustomPainter {
         if (data.cornerRadius > 0) {
           canvas.drawRRect(
             RRect.fromRectAndRadius(
-              highlightRect,
-              Radius.circular(data.cornerRadius),
+              outerRect,
+              Radius.circular(
+                resolveBindingHighlightOuterRadius(
+                  data.cornerRadius,
+                  paint.strokeWidth,
+                ),
+              ),
             ),
             paint,
           );
         } else {
-          canvas.drawRect(highlightRect, paint);
+          canvas.drawRect(outerRect, paint);
         }
       } else if (data is TextData) {
-        canvas.drawRect(highlightRect, paint);
+        canvas.drawRect(outerRect, paint);
       } else if (data is SerialNumberData) {
-        final radius = math.min(rect.width, rect.height) / 2;
+        final radius = resolveBindingHighlightOuterRadius(
+          math.min(rect.width, rect.height) / 2,
+          paint.strokeWidth,
+        );
         if (radius > 0) {
           final circleRect = Rect.fromCircle(
             center: Offset(rect.centerX, rect.centerY),
@@ -795,7 +811,10 @@ class DynamicCanvasPainter extends CustomPainter {
 
   List<_ArrowBindingHighlight> _resolveArrowBindingHighlights() {
     final highlights = <_ArrowBindingHighlight>[];
-    final hoveredBindingElementId = renderKey.hoveredBindingElementId;
+    final hoveredBindingElementId = resolveHoverBindingHighlightId(
+      hoveredBindingElementId: renderKey.hoveredBindingElementId,
+      hoveredArrowHandle: renderKey.hoveredArrowHandle,
+    );
     if (hoveredBindingElementId != null) {
       highlights.add(
         _ArrowBindingHighlight(elementId: hoveredBindingElementId),
@@ -804,25 +823,20 @@ class DynamicCanvasPainter extends CustomPainter {
     final interaction = stateView.state.application.interaction;
     if (interaction is EditingState &&
         interaction.context is ArrowPointEditContext) {
-      final handle = renderKey.activeArrowHandle;
-      if (handle == null) {
-        return _dedupeArrowBindingHighlights(highlights);
-      }
+      final context = interaction.context as ArrowPointEditContext;
       final element = stateView.state.domain.document.getElementById(
-        handle.elementId,
+        context.elementId,
       );
       if (element == null || element.data is! ArrowLikeData) {
         return _dedupeArrowBindingHighlights(highlights);
       }
       final effectiveElement = stateView.effectiveElement(element);
       final data = effectiveElement.data as ArrowLikeData;
-      final points = _resolveArrowWorldPoints(effectiveElement, data);
-      final endpoint = _resolveEndpointForHandle(handle, points.length);
-      final binding = switch (endpoint) {
-        _ArrowEndpoint.start => data.startBinding,
-        _ArrowEndpoint.end => data.endBinding,
-        null => null,
-      };
+      final binding = resolveArrowPointEditHighlightBinding(
+        context: context,
+        data: data,
+        transform: interaction.currentTransform,
+      );
       final highlight = _highlightFromBinding(binding);
       if (highlight != null) {
         highlights.add(highlight);
@@ -865,39 +879,6 @@ class DynamicCanvasPainter extends CustomPainter {
       return null;
     }
     return _ArrowBindingHighlight(elementId: binding.elementId);
-  }
-
-  _ArrowEndpoint? _resolveEndpointForHandle(
-    ArrowPointHandle handle,
-    int pointCount,
-  ) {
-    if (pointCount < 2) {
-      return null;
-    }
-    return switch (handle.kind) {
-      ArrowPointKind.loopStart => _ArrowEndpoint.start,
-      ArrowPointKind.loopEnd => _ArrowEndpoint.end,
-      ArrowPointKind.turning =>
-        handle.index == 0
-            ? _ArrowEndpoint.start
-            : handle.index == pointCount - 1
-            ? _ArrowEndpoint.end
-            : null,
-      _ => null,
-    };
-  }
-
-  List<DrawPoint> _resolveArrowWorldPoints(
-    ElementState element,
-    ArrowLikeData data,
-  ) {
-    final resolved = ArrowGeometry.resolveWorldPoints(
-      rect: element.rect,
-      normalizedPoints: data.points,
-    );
-    return resolved
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
   }
 
   /// Draw box-selection overlay.
@@ -1311,8 +1292,6 @@ class DynamicCanvasPainter extends CustomPainter {
   @override
   int get hashCode => renderKey.hashCode;
 }
-
-enum _ArrowEndpoint { start, end }
 
 class _ArrowBindingHighlight {
   const _ArrowBindingHighlight({required this.elementId});

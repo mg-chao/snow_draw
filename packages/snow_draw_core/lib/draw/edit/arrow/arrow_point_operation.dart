@@ -373,6 +373,8 @@ class ArrowPointOperation extends EditOperation {
               fixedSegmentsOverride: fixedSegments,
               startBindingOverride: typedTransform.startBinding,
               endBindingOverride: typedTransform.endBinding,
+              startBindingOverrideIsSet: true,
+              endBindingOverrideIsSet: true,
             );
             final rectAndPoints = computeArrowRectAndPoints(
               localPoints: updated.localPoints,
@@ -484,6 +486,8 @@ class ArrowPointOperation extends EditOperation {
               fixedSegmentsOverride: fixedSegments,
               startBindingOverride: typedTransform.startBinding,
               endBindingOverride: typedTransform.endBinding,
+              startBindingOverrideIsSet: true,
+              endBindingOverrideIsSet: true,
             );
             final rectAndPoints = computeArrowRectAndPoints(
               localPoints: updated.localPoints,

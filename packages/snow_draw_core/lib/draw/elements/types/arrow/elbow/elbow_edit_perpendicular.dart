@@ -57,6 +57,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       directionPadding: baselinePadding.start,
       fixedNeighborAxis: fixedNeighborAxis,
       hasArrowhead: startArrowhead != ArrowheadStyle.none,
+      fixedSegments: updatedFixedSegments,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -80,6 +81,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       directionPadding: baselinePadding.end,
       fixedNeighborAxis: fixedNeighborAxis,
       hasArrowhead: endArrowhead != ArrowheadStyle.none,
+      fixedSegments: updatedFixedSegments,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
@@ -367,6 +369,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
   required bool hasArrowhead,
+  required List<ElbowFixedSegment> fixedSegments,
   bool? fixedNeighborAxis,
 }) {
   if (points.length < 2) {
@@ -394,6 +397,17 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   final resolvedPadding = _resolveDirectionPadding(directionPadding);
   final start = points.first;
   final neighbor = points[1];
+  final stubPadding = _capDirectionPaddingForAxis(
+    padding: resolvedPadding,
+    endpoint: start,
+    heading: heading,
+    axis: _resolveFixedAxisLimit(
+      points: points,
+      fixedSegments: fixedSegments,
+      isStart: true,
+      heading: heading,
+    ),
+  );
   final aligned = desiredHorizontal
       ? (neighbor.y - start.y).abs() <= ElbowConstants.dedupThreshold
       : (neighbor.x - start.x).abs() <= ElbowConstants.dedupThreshold;
@@ -546,7 +560,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
     heading: heading,
     neighbor: neighbor,
     allowExtend: true,
-    padding: resolvedPadding,
+    padding: stubPadding,
   );
 }
 
@@ -556,6 +570,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   required Map<String, ElementState> elementsById,
   required double? directionPadding,
   required bool hasArrowhead,
+  required List<ElbowFixedSegment> fixedSegments,
   bool? fixedNeighborAxis,
 }) {
   if (points.length < 2) {
@@ -585,6 +600,17 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   final neighborIndex = lastIndex - 1;
   final neighbor = points[neighborIndex];
   final endPoint = points[lastIndex];
+  final stubPadding = _capDirectionPaddingForAxis(
+    padding: resolvedPadding,
+    endpoint: endPoint,
+    heading: heading,
+    axis: _resolveFixedAxisLimit(
+      points: points,
+      fixedSegments: fixedSegments,
+      isStart: false,
+      heading: heading,
+    ),
+  );
   final aligned = desiredHorizontal
       ? (neighbor.y - endPoint.y).abs() <= ElbowConstants.dedupThreshold
       : (neighbor.x - endPoint.x).abs() <= ElbowConstants.dedupThreshold;
@@ -751,7 +777,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
     heading: heading,
     neighbor: neighbor,
     allowExtend: true,
-    padding: resolvedPadding,
+    padding: stubPadding,
   );
 }
 
@@ -1178,3 +1204,61 @@ DrawPoint _offsetPoint(
   x: point.x + heading.dx * distance,
   y: point.y + heading.dy * distance,
 );
+
+double? _resolveFixedAxisLimit({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  required bool isStart,
+  required ElbowHeading heading,
+}) {
+  if (points.length < 2 || fixedSegments.isEmpty) {
+    return null;
+  }
+  final wantHorizontal = !heading.isHorizontal;
+  final ordered = isStart ? fixedSegments : fixedSegments.reversed;
+  for (final segment in ordered) {
+    final index = segment.index;
+    if (index <= 0 || index >= points.length) {
+      continue;
+    }
+    final start = points[index - 1];
+    final end = points[index];
+    final isHorizontal = ElbowPathUtils.segmentIsHorizontal(start, end);
+    if (isHorizontal != wantHorizontal) {
+      continue;
+    }
+    return isHorizontal
+        ? (start.y + end.y) / 2
+        : (start.x + end.x) / 2;
+  }
+  return null;
+}
+
+double _capDirectionPaddingForAxis({
+  required double padding,
+  required DrawPoint endpoint,
+  required ElbowHeading heading,
+  required double? axis,
+}) {
+  if (!padding.isFinite || padding <= 0) {
+    return padding;
+  }
+  if (axis == null || !axis.isFinite) {
+    return padding;
+  }
+  double maxPadding;
+  switch (heading) {
+    case ElbowHeading.left:
+      maxPadding = endpoint.x - axis;
+    case ElbowHeading.right:
+      maxPadding = axis - endpoint.x;
+    case ElbowHeading.up:
+      maxPadding = endpoint.y - axis;
+    case ElbowHeading.down:
+      maxPadding = axis - endpoint.y;
+  }
+  if (maxPadding <= ElbowConstants.dedupThreshold) {
+    return padding;
+  }
+  return math.min(padding, maxPadding);
+}

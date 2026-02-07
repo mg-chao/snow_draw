@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
@@ -68,6 +69,10 @@ class EditApply {
       final snapshot = snapshots[id];
       final current = currentElementsById[id];
       if (snapshot == null || current == null) {
+        continue;
+      }
+      final data = current.data;
+      if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
         continue;
       }
 
