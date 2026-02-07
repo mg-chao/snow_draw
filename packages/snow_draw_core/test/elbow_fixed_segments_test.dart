@@ -496,6 +496,62 @@ void main() {
     );
   });
 
+  test('end binding preserves adjacent fixed segment when fixed segments are '
+      'contiguous', () {
+    const targetRect = DrawRect(minX: 260, minY: 200, maxX: 320, maxY: 260);
+    final target = elbowRectangleElement(id: 'target', rect: targetRect);
+
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 60),
+      const DrawPoint(x: 200, y: 60),
+      const DrawPoint(x: 200, y: 120),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const binding = ArrowBinding(
+      elementId: 'target',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: target,
+      hasArrowhead: false,
+    )!;
+    final movedPoints = List<DrawPoint>.from(points)
+      ..[points.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      lookup: CombinedElementLookup(base: {'target': target}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final adjacent = fixedSegments.first;
+    final updated = result.fixedSegments!.firstWhere(
+      (segment) => segment.index == adjacent.index,
+    );
+    expect(
+      _manhattanDistance(adjacent.start, updated.start),
+      lessThanOrEqualTo(ElbowConstants.dedupThreshold),
+      reason: 'Adjacent fixed segment start should remain unchanged.',
+    );
+    expect(
+      _manhattanDistance(adjacent.end, updated.end),
+      lessThanOrEqualTo(ElbowConstants.dedupThreshold),
+      reason: 'Adjacent fixed segment end should remain unchanged.',
+    );
+  });
+
   test('bottom binding above target avoids overlapping down/up tail', () {
     const rect = DrawRect(minX: 140, minY: 200, maxX: 260, maxY: 260);
     final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
@@ -1785,6 +1841,166 @@ void main() {
     );
   });
 
+  test('left binding keeps endpoint on edge when fixed span is clear', () {
+    final points = <DrawPoint>[
+      const DrawPoint(x: 0, y: 50),
+      const DrawPoint(x: 150, y: 50),
+      const DrawPoint(x: 150, y: 150),
+      const DrawPoint(x: 250, y: 150),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 300, minY: 100, maxX: 400, maxY: 200);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0, y: 0.5),
+    );
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
+    expect(boundPoint.x < rect.minX, isTrue);
+
+    final movedPoints = List<DrawPoint>.from(points);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      lookup: CombinedElementLookup(base: {'rect-1': boundElement}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    final endPoint = result.localPoints.last;
+    expect(
+      (endPoint.x - boundPoint.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound left edge.',
+    );
+    expect(
+      (endPoint.y - boundPoint.y).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should stay on the bound left edge.',
+    );
+    expect(
+      endPoint.y >= rect.minY - ElbowConstants.dedupThreshold &&
+          endPoint.y <= rect.maxY + ElbowConstants.dedupThreshold,
+      isTrue,
+      reason: 'End point should remain within the left edge span.',
+    );
+  });
+
+  test('moving a bound left target keeps fixed down path stable', () {
+    final basePoints = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 100, y: 0),
+      const DrawPoint(x: 100, y: 80),
+      const DrawPoint(x: 180, y: 80),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: basePoints[1], end: basePoints[2]),
+    ];
+    final baseElement = _arrowElement(basePoints, fixedSegments: fixedSegments);
+    final baseData = baseElement.data as ArrowData;
+
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0, y: 0.5),
+    );
+    const rect = DrawRect(minX: 240, minY: 40, maxX: 320, maxY: 120);
+    final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: baseData.endArrowhead != ArrowheadStyle.none,
+    )!;
+
+    final movedPoints = List<DrawPoint>.from(basePoints);
+    movedPoints[movedPoints.length - 1] = boundPoint;
+
+    final firstBind = computeElbowEdit(
+      element: baseElement,
+      data: baseData.copyWith(endBinding: binding),
+      lookup: CombinedElementLookup(base: {'rect-1': boundElement}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final boundRect = elbowRectForPoints(firstBind.localPoints);
+    final boundData = ArrowData(
+      points: ArrowGeometry.normalizePoints(
+        worldPoints: firstBind.localPoints,
+        rect: boundRect,
+      ),
+      arrowType: ArrowType.elbow,
+      fixedSegments: firstBind.fixedSegments,
+      endBinding: binding,
+    );
+    final boundArrow = ElementState(
+      id: 'arrow',
+      rect: boundRect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: boundData,
+    );
+
+    const movedRect = DrawRect(minX: 320, minY: 40, maxX: 400, maxY: 120);
+    final movedBoundElement = elbowRectangleElement(
+      id: 'rect-1',
+      rect: movedRect,
+    );
+    final movedBoundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: movedBoundElement,
+      hasArrowhead: boundData.endArrowhead != ArrowheadStyle.none,
+    )!;
+
+    final movedBoundPoints = List<DrawPoint>.from(firstBind.localPoints);
+    movedBoundPoints[movedBoundPoints.length - 1] = movedBoundPoint;
+
+    final updated = computeElbowEdit(
+      element: boundArrow,
+      data: boundData,
+      lookup: CombinedElementLookup(base: {'rect-1': movedBoundElement}),
+      localPointsOverride: movedBoundPoints,
+      fixedSegmentsOverride: firstBind.fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    final baseline = routeElbowArrow(
+      start: movedBoundPoints.first,
+      end: movedBoundPoint,
+      endBinding: binding,
+      elementsById: {'rect-1': movedBoundElement},
+      startArrowhead: boundData.startArrowhead,
+      endArrowhead: boundData.endArrowhead,
+    ).points;
+
+    printOnFailure('moved left binding points: ${updated.localPoints}');
+    printOnFailure('baseline left binding points: $baseline');
+    final headings = _headingSequence(updated.localPoints);
+    expect(
+      headings,
+      equals(const <ElbowHeading>[
+        ElbowHeading.right,
+        ElbowHeading.down,
+        ElbowHeading.right,
+      ]),
+      reason: 'Fixed down path should remain a 3-segment elbow.',
+    );
+  });
+
   test('bound end spacing matches between top and right bindings', () {
     final points = <DrawPoint>[
       DrawPoint.zero,
@@ -2203,6 +2419,316 @@ void main() {
         reason: 'No collinear segment should follow the fixed segment.',
       );
     }
+  });
+
+  test('moving a bound end extends the adjacent fixed segment instead of '
+      'inserting a collinear segment', () {
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 0, y: 120),
+      const DrawPoint(x: 200, y: 120),
+      const DrawPoint(x: 200, y: 180),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 160, minY: 220, maxX: 240, maxY: 280);
+    final target = elbowRectangleElement(id: 'rect-1', rect: rect);
+    const binding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 0.5, y: 0),
+    );
+
+    final boundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: target,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+    final boundPoints = List<DrawPoint>.from(points)
+      ..[points.length - 1] = boundPoint;
+
+    final boundResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: binding),
+      lookup: CombinedElementLookup(base: {'rect-1': target}),
+      localPointsOverride: boundPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    expect(boundResult.fixedSegments, isNotNull);
+    final boundElement = _arrowElement(
+      boundResult.localPoints,
+      fixedSegments: boundResult.fixedSegments,
+    );
+    final boundData = (boundElement.data as ArrowData).copyWith(
+      endBinding: binding,
+    );
+    final boundElementWithBinding = boundElement.copyWith(data: boundData);
+
+    const movedRect = DrawRect(minX: 160, minY: 320, maxX: 240, maxY: 380);
+    final movedTarget = elbowRectangleElement(id: 'rect-1', rect: movedRect);
+    final movedBoundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: binding,
+          target: movedTarget,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        boundResult.localPoints.last;
+    final movedPoints = List<DrawPoint>.from(boundResult.localPoints)
+      ..[boundResult.localPoints.length - 1] = movedBoundPoint;
+
+    final movedResult = computeElbowEdit(
+      element: boundElementWithBinding,
+      data: boundData,
+      lookup: CombinedElementLookup(base: {'rect-1': movedTarget}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: boundResult.fixedSegments,
+      endBindingOverride: binding,
+    );
+
+    printOnFailure('moved points: ${movedResult.localPoints}');
+    printOnFailure('fixed segments: ${movedResult.fixedSegments}');
+
+    expect(elbowPathIsOrthogonal(movedResult.localPoints), isTrue);
+    expect(movedResult.fixedSegments, isNotNull);
+    expect(movedResult.fixedSegments!.length, 1);
+    final fixed = movedResult.fixedSegments!.first;
+    expect(_isHorizontal(fixed.start, fixed.end), isTrue);
+
+    if (fixed.index + 1 < movedResult.localPoints.length) {
+      final nextHorizontal = _isHorizontal(
+        movedResult.localPoints[fixed.index],
+        movedResult.localPoints[fixed.index + 1],
+      );
+      expect(
+        nextHorizontal,
+        isFalse,
+        reason:
+            'The segment after the fixed axis should be vertical when the '
+            'bound endpoint moves.',
+      );
+    }
+  });
+
+  test(
+    'switching a bound end from right to bottom avoids a vertical backtrack',
+    () {
+      final points = <DrawPoint>[
+        DrawPoint.zero,
+        const DrawPoint(x: 0, y: 120),
+        const DrawPoint(x: 200, y: 120),
+        const DrawPoint(x: 200, y: 180),
+      ];
+      final fixedSegments = <ElbowFixedSegment>[
+        ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ];
+      final element = _arrowElement(points, fixedSegments: fixedSegments);
+      final data = element.data as ArrowData;
+
+      const rect = DrawRect(minX: 140, minY: 240, maxX: 220, maxY: 300);
+      final target = elbowRectangleElement(id: 'rect-1', rect: rect);
+
+      const rightBinding = ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      );
+      final rightBoundPoint =
+          ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: rightBinding,
+            target: target,
+            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+          ) ??
+          points.last;
+      final rightPoints = List<DrawPoint>.from(points)
+        ..[points.length - 1] = rightBoundPoint;
+
+      final rightResult = computeElbowEdit(
+        element: element,
+        data: data.copyWith(endBinding: rightBinding),
+        lookup: CombinedElementLookup(base: {'rect-1': target}),
+        localPointsOverride: rightPoints,
+        fixedSegmentsOverride: fixedSegments,
+        endBindingOverride: rightBinding,
+      );
+
+      final rightElement = _arrowElement(
+        rightResult.localPoints,
+        fixedSegments: rightResult.fixedSegments,
+      );
+      final rightData = (rightElement.data as ArrowData).copyWith(
+        endBinding: rightBinding,
+      );
+      final rightElementWithBinding = rightElement.copyWith(data: rightData);
+
+      const bottomBinding = ArrowBinding(
+        elementId: 'rect-1',
+        anchor: DrawPoint(x: 0.5, y: 1),
+      );
+      final bottomBoundPoint =
+          ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: bottomBinding,
+            target: target,
+            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+          ) ??
+          rightResult.localPoints.last;
+      final bottomPoints = List<DrawPoint>.from(rightResult.localPoints)
+        ..[rightResult.localPoints.length - 1] = bottomBoundPoint;
+
+      final bottomResult = computeElbowEdit(
+        element: rightElementWithBinding,
+        data: rightData,
+        lookup: CombinedElementLookup(base: {'rect-1': target}),
+        localPointsOverride: bottomPoints,
+        fixedSegmentsOverride: rightResult.fixedSegments,
+        endBindingOverride: bottomBinding,
+      );
+
+      printOnFailure('bottom points: ${bottomResult.localPoints}');
+      printOnFailure('fixed segments: ${bottomResult.fixedSegments}');
+
+      final headings = _headingSequence(bottomResult.localPoints);
+      expect(headings, isNotEmpty);
+      expect(
+        headings,
+        equals(const <ElbowHeading>[
+          ElbowHeading.down,
+          ElbowHeading.right,
+          ElbowHeading.down,
+        ]),
+        reason: 'Binding to bottom should not introduce a backtracking tail.',
+      );
+    },
+  );
+
+  test('dragging a previously bound end clears the bound tail immediately', () {
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 0, y: 120),
+      const DrawPoint(x: 200, y: 120),
+      const DrawPoint(x: 200, y: 180),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    const rect = DrawRect(minX: 140, minY: 240, maxX: 220, maxY: 300);
+    final target = elbowRectangleElement(id: 'rect-1', rect: rect);
+
+    const rightBinding = ArrowBinding(
+      elementId: 'rect-1',
+      anchor: DrawPoint(x: 1, y: 0.5),
+    );
+    final rightBoundPoint =
+        ArrowBindingUtils.resolveElbowBoundPoint(
+          binding: rightBinding,
+          target: target,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+        ) ??
+        points.last;
+    final rightPoints = List<DrawPoint>.from(points)
+      ..[points.length - 1] = rightBoundPoint;
+
+    final rightResult = computeElbowEdit(
+      element: element,
+      data: data.copyWith(endBinding: rightBinding),
+      lookup: CombinedElementLookup(base: {'rect-1': target}),
+      localPointsOverride: rightPoints,
+      fixedSegmentsOverride: fixedSegments,
+      endBindingOverride: rightBinding,
+    );
+
+    final rightHeadings = _headingSequence(rightResult.localPoints);
+    expect(rightHeadings, isNotEmpty);
+
+    final rightElement = _arrowElement(
+      rightResult.localPoints,
+      fixedSegments: rightResult.fixedSegments,
+    );
+    final rightData = (rightElement.data as ArrowData).copyWith(
+      endBinding: rightBinding,
+    );
+    final rightElementWithBinding = rightElement.copyWith(data: rightData);
+
+    final dragPoint = DrawPoint(
+      x: rightResult.localPoints.last.x + 80,
+      y: rightResult.localPoints.last.y,
+    );
+    final dragPoints = List<DrawPoint>.from(rightResult.localPoints)
+      ..[rightResult.localPoints.length - 1] = dragPoint;
+
+    final unboundResult = computeElbowEdit(
+      element: rightElementWithBinding,
+      data: rightData,
+      lookup: CombinedElementLookup(base: {'rect-1': target}),
+      localPointsOverride: dragPoints,
+      fixedSegmentsOverride: rightResult.fixedSegments,
+      endBindingOverride: null,
+      endBindingOverrideIsSet: true,
+    );
+
+    printOnFailure('unbound points: ${unboundResult.localPoints}');
+    printOnFailure('fixed segments: ${unboundResult.fixedSegments}');
+
+    final headings = _headingSequence(unboundResult.localPoints);
+    expect(headings, isNotEmpty);
+    expect(
+      headings,
+      equals(const <ElbowHeading>[
+        ElbowHeading.down,
+        ElbowHeading.right,
+        ElbowHeading.down,
+      ]),
+      reason: 'Unbinding during drag should drop the bound tail immediately.',
+    );
+  });
+
+  test('collapsing a fixed segment reroutes the tail when the end aligns', () {
+    final points = <DrawPoint>[
+      DrawPoint.zero,
+      const DrawPoint(x: 0, y: 120),
+      const DrawPoint(x: 200, y: 120),
+      const DrawPoint(x: 200, y: 20),
+      const DrawPoint(x: 320, y: 20),
+    ];
+    final fixedSegments = <ElbowFixedSegment>[
+      ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+      ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
+    ];
+    final element = _arrowElement(points, fixedSegments: fixedSegments);
+    final data = element.data as ArrowData;
+
+    final movedPoints = List<DrawPoint>.from(points)
+      ..[points.length - 1] = const DrawPoint(x: 320, y: 119);
+
+    final result = computeElbowEdit(
+      element: element,
+      data: data,
+      lookup: const CombinedElementLookup(base: {}),
+      localPointsOverride: movedPoints,
+      fixedSegmentsOverride: fixedSegments,
+    );
+
+    printOnFailure('points: ${result.localPoints}');
+    printOnFailure('fixed: ${result.fixedSegments}');
+
+    expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
+    final last = result.localPoints.last;
+    final prev = result.localPoints[result.localPoints.length - 2];
+    expect(
+      (last.x - prev.x).abs() <= ElbowConstants.dedupThreshold,
+      isTrue,
+      reason:
+          'When the fixed vertical segment collapses, the trailing right '
+          'segment should be rerouted away.',
+    );
   });
 
   test('bound end preserves prefix before fixed segment', () {

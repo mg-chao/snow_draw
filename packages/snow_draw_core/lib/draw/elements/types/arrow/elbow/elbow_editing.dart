@@ -53,6 +53,8 @@ ElbowEditResult computeElbowEdit({
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   ArrowBinding? startBindingOverride,
   ArrowBinding? endBindingOverride,
+  bool startBindingOverrideIsSet = false,
+  bool endBindingOverrideIsSet = false,
 }) =>
     // Route the edit through a step-based pipeline for clarity.
     _ElbowEditPipeline(
@@ -63,6 +65,8 @@ ElbowEditResult computeElbowEdit({
       fixedSegmentsOverride: fixedSegmentsOverride,
       startBindingOverride: startBindingOverride,
       endBindingOverride: endBindingOverride,
+      startBindingOverrideIsSet: startBindingOverrideIsSet,
+      endBindingOverrideIsSet: endBindingOverrideIsSet,
     ).run();
 
 /// Transforms fixed segments when the owning element is resized/rotated.
