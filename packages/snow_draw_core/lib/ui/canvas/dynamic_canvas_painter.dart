@@ -28,6 +28,8 @@ import '../../draw/utils/arrow_binding_highlight.dart';
 import '../../draw/utils/binding_highlight_style.dart';
 import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'highlight_mask_painter.dart';
+import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 
@@ -53,6 +55,12 @@ class DynamicCanvasPainter extends CustomPainter {
     final state = stateView.state;
     final camera = state.application.view.camera;
     final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
+    final viewportRect = DrawRect(
+      minX: -camera.position.x / scale,
+      minY: -camera.position.y / scale,
+      maxX: (size.width - camera.position.x) / scale,
+      maxY: (size.height - camera.position.y) / scale,
+    );
 
     canvas
       ..save()
@@ -74,6 +82,22 @@ class DynamicCanvasPainter extends CustomPainter {
         scaleFactor: scale,
         registry: renderKey.elementRegistry,
         locale: renderKey.locale,
+      );
+    }
+
+    if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
+      final creatingSnapshot = renderKey.creatingElement;
+      final creatingPreview = creatingSnapshot == null
+          ? null
+          : creatingSnapshot.element.copyWith(
+              rect: creatingSnapshot.currentRect,
+            );
+      paintHighlightMask(
+        canvas: canvas,
+        stateView: stateView,
+        viewportRect: viewportRect,
+        maskConfig: renderKey.highlightMaskConfig,
+        creatingElement: creatingPreview,
       );
     }
 

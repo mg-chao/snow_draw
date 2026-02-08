@@ -10,6 +10,7 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/snap_guides.dart';
+import 'highlight_mask_visibility.dart';
 
 /// Snapshot of element creation state for render key comparison.
 @immutable
@@ -54,6 +55,8 @@ class StaticCanvasRenderKey {
     required this.scaleFactor,
     required this.canvasConfig,
     required this.gridConfig,
+    required this.highlightMaskLayer,
+    required this.highlightMaskConfig,
     required this.elementRegistry,
     this.locale,
   });
@@ -79,6 +82,12 @@ class StaticCanvasRenderKey {
   /// Grid configuration.
   final GridConfig gridConfig;
 
+  /// Highlight mask rendering layer.
+  final HighlightMaskLayer highlightMaskLayer;
+
+  /// Highlight mask configuration.
+  final HighlightMaskConfig highlightMaskConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -96,6 +105,8 @@ class StaticCanvasRenderKey {
           other.scaleFactor == scaleFactor &&
           other.canvasConfig == canvasConfig &&
           other.gridConfig == gridConfig &&
+          other.highlightMaskLayer == highlightMaskLayer &&
+          other.highlightMaskConfig == highlightMaskConfig &&
           other.elementRegistry == elementRegistry &&
           other.locale == locale;
 
@@ -110,6 +121,8 @@ class StaticCanvasRenderKey {
     scaleFactor,
     canvasConfig,
     gridConfig,
+    highlightMaskLayer,
+    highlightMaskConfig,
     elementRegistry,
     locale,
   );
@@ -158,6 +171,8 @@ class DynamicCanvasRenderKey {
     required this.selectionConfig,
     required this.boxSelectionConfig,
     required this.snapConfig,
+    required this.highlightMaskLayer,
+    required this.highlightMaskConfig,
     required this.elementRegistry,
     this.locale,
   });
@@ -210,6 +225,12 @@ class DynamicCanvasRenderKey {
   /// Snap configuration.
   final SnapConfig snapConfig;
 
+  /// Highlight mask rendering layer.
+  final HighlightMaskLayer highlightMaskLayer;
+
+  /// Highlight mask configuration.
+  final HighlightMaskConfig highlightMaskConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -238,6 +259,8 @@ class DynamicCanvasRenderKey {
           other.selectionConfig == selectionConfig &&
           other.boxSelectionConfig == boxSelectionConfig &&
           other.snapConfig == snapConfig &&
+          other.highlightMaskLayer == highlightMaskLayer &&
+          other.highlightMaskConfig == highlightMaskConfig &&
           other.elementRegistry == elementRegistry &&
           other.locale == locale;
 
@@ -263,6 +286,8 @@ class DynamicCanvasRenderKey {
     selectionConfig,
     boxSelectionConfig,
     snapConfig,
+    highlightMaskLayer,
+    highlightMaskConfig,
     elementRegistry,
     locale,
   );
