@@ -6,6 +6,8 @@ enum StrokeStyle { solid, dashed, dotted }
 
 enum FillStyle { solid, line, crossLine }
 
+enum HighlightShape { rectangle, ellipse }
+
 enum ArrowType { straight, curved, elbow }
 
 enum ArrowheadStyle {
@@ -31,6 +33,7 @@ class ElementStyleUpdate {
     this.strokeWidth,
     this.strokeStyle,
     this.fillStyle,
+    this.highlightShape,
     this.cornerRadius,
     this.arrowType,
     this.startArrowhead,
@@ -49,6 +52,7 @@ class ElementStyleUpdate {
   final double? strokeWidth;
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
+  final HighlightShape? highlightShape;
   final double? cornerRadius;
   final ArrowType? arrowType;
   final ArrowheadStyle? startArrowhead;
@@ -67,6 +71,7 @@ class ElementStyleUpdate {
       strokeWidth == null &&
       strokeStyle == null &&
       fillStyle == null &&
+      highlightShape == null &&
       cornerRadius == null &&
       arrowType == null &&
       startArrowhead == null &&
@@ -85,6 +90,7 @@ class ElementStyleUpdate {
     double? strokeWidth,
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
+    HighlightShape? highlightShape,
     double? cornerRadius,
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
@@ -102,6 +108,7 @@ class ElementStyleUpdate {
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
+    highlightShape: highlightShape ?? this.highlightShape,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,

@@ -88,6 +88,7 @@ class ElementStyleConfig {
     this.fillColor = ConfigDefaults.defaultFillColor,
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
+    this.highlightShape = ConfigDefaults.defaultHighlightShape,
     this.cornerRadius = ConfigDefaults.defaultCornerRadius,
     this.arrowType = ConfigDefaults.defaultArrowType,
     this.startArrowhead = ConfigDefaults.defaultStartArrowhead,
@@ -133,6 +134,9 @@ class ElementStyleConfig {
   /// Default fill style used by element types that support fills.
   final FillStyle fillStyle;
 
+  /// Default highlight shape for highlight elements.
+  final HighlightShape highlightShape;
+
   /// Default corner radius for supported elements.
   final double cornerRadius;
 
@@ -172,6 +176,7 @@ class ElementStyleConfig {
     Color? fillColor,
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
+    HighlightShape? highlightShape,
     double? cornerRadius,
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
@@ -191,6 +196,7 @@ class ElementStyleConfig {
     fillColor: fillColor ?? this.fillColor,
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
+    highlightShape: highlightShape ?? this.highlightShape,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,
@@ -217,6 +223,7 @@ class ElementStyleConfig {
           other.fillColor == fillColor &&
           other.strokeStyle == strokeStyle &&
           other.fillStyle == fillStyle &&
+          other.highlightShape == highlightShape &&
           other.cornerRadius == cornerRadius &&
           other.arrowType == arrowType &&
           other.startArrowhead == startArrowhead &&
@@ -238,6 +245,7 @@ class ElementStyleConfig {
     fillColor,
     strokeStyle,
     fillStyle,
+    highlightShape,
     cornerRadius,
     arrowType,
     startArrowhead,
@@ -261,6 +269,7 @@ class ElementStyleConfig {
       'fillColor: $fillColor, '
       'strokeStyle: $strokeStyle, '
       'fillStyle: $fillStyle, '
+      'highlightShape: $highlightShape, '
       'cornerRadius: $cornerRadius, '
       'arrowType: $arrowType, '
       'startArrowhead: $startArrowhead, '

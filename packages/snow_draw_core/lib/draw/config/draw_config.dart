@@ -10,6 +10,7 @@ part 'element_config.dart';
 part 'canvas_config.dart';
 part 'grid_config.dart';
 part 'snap_config.dart';
+part 'highlight_config.dart';
 
 /// Centralized default values for the configuration system.
 ///
@@ -33,6 +34,15 @@ abstract class ConfigDefaults {
 
   /// Default element fill color.
   static const defaultFillColor = Color(0x00000000);
+
+  /// Default highlight fill color.
+  static const defaultHighlightColor = Color(0xFFF5222D);
+
+  /// Default highlight shape.
+  static const HighlightShape defaultHighlightShape = HighlightShape.rectangle;
+
+  /// Default mask color.
+  static const defaultMaskColor = Color(0xFF000000);
 
   /// Default element corner radius.
   static const defaultCornerRadius = 4.0;
@@ -143,6 +153,8 @@ class DrawConfig {
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     ElementStyleConfig? serialNumberStyle,
+    ElementStyleConfig? highlightStyle,
+    HighlightMaskConfig? highlight,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
@@ -154,7 +166,16 @@ class DrawConfig {
            serialNumberStyle ??
            elementStyle.copyWith(
              fontSize: ConfigDefaults.defaultSerialNumberFontSize,
-           );
+           ),
+       highlightStyle =
+           highlightStyle ??
+           elementStyle.copyWith(
+             color: ConfigDefaults.defaultHighlightColor,
+             textStrokeColor: ConfigDefaults.defaultHighlightColor,
+             textStrokeWidth: 0,
+             highlightShape: ConfigDefaults.defaultHighlightShape,
+           ),
+       highlight = highlight ?? const HighlightMaskConfig();
   final SelectionConfig selection;
   final ElementConfig element;
   final CanvasConfig canvas;
@@ -166,6 +187,8 @@ class DrawConfig {
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
   final ElementStyleConfig serialNumberStyle;
+  final ElementStyleConfig highlightStyle;
+  final HighlightMaskConfig highlight;
   final GridConfig grid;
   final SnapConfig snap;
 
@@ -183,10 +206,18 @@ class DrawConfig {
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     ElementStyleConfig? serialNumberStyle,
+    ElementStyleConfig? highlightStyle,
+    HighlightMaskConfig? highlight,
     GridConfig? grid,
     SnapConfig? snap,
   }) {
     final nextElementStyle = elementStyle ?? this.elementStyle;
+    final nextHighlightStyle = nextElementStyle.copyWith(
+      color: ConfigDefaults.defaultHighlightColor,
+      textStrokeColor: ConfigDefaults.defaultHighlightColor,
+      textStrokeWidth: 0,
+      highlightShape: ConfigDefaults.defaultHighlightShape,
+    );
     return DrawConfig(
       selection: selection ?? this.selection,
       element: element ?? this.element,
@@ -209,8 +240,12 @@ class DrawConfig {
           textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
       serialNumberStyle:
-          serialNumberStyle ??
-          (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
+        serialNumberStyle ??
+        (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
+      highlightStyle:
+          highlightStyle ??
+          (elementStyle != null ? nextHighlightStyle : this.highlightStyle),
+      highlight: highlight ?? this.highlight,
       grid: grid ?? this.grid,
       snap: snap ?? this.snap,
     );
@@ -231,6 +266,8 @@ class DrawConfig {
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
           other.serialNumberStyle == serialNumberStyle &&
+          other.highlightStyle == highlightStyle &&
+          other.highlight == highlight &&
           other.grid == grid &&
           other.snap == snap;
 
@@ -247,6 +284,8 @@ class DrawConfig {
     freeDrawStyle,
     textStyle,
     serialNumberStyle,
+    highlightStyle,
+    highlight,
     grid,
     snap,
   );
@@ -265,6 +304,8 @@ class DrawConfig {
       'freeDrawStyle: $freeDrawStyle, '
       'textStyle: $textStyle, '
       'serialNumberStyle: $serialNumberStyle, '
+      'highlightStyle: $highlightStyle, '
+      'highlight: $highlight, '
       'grid: $grid, '
       'snap: $snap'
       ')';
