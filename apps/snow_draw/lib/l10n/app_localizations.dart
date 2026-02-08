@@ -45,6 +45,13 @@ class AppLocalizations {
   String get arrowheadInvertedTriangle => 'Inverted Triangle';
   String get arrowheadVerticalLine => 'Vertical Line';
   String get textStrokeWidth => 'Text Stroke Width';
+  String get highlightShape => 'Highlight Shape';
+  String get highlightShapeRectangle => 'Rectangle';
+  String get highlightShapeEllipse => 'Ellipse';
+  String get highlightTextStrokeWidth => 'Highlight Text Stroke Width';
+  String get highlightTextStrokeColor => 'Highlight Text Stroke Color';
+  String get maskColor => 'Mask Color';
+  String get maskOpacity => 'Mask Opacity';
   String get fontSize => 'Font Size';
   String get fontFamily => 'Font Family';
   String get number => 'Number';
