@@ -44,6 +44,7 @@ DrawState handleUpdateElementsStyle(
     verticalAlign: action.verticalAlign,
     textStrokeColor: action.textStrokeColor,
     textStrokeWidth: action.textStrokeWidth,
+    highlightShape: action.highlightShape,
     serialNumber: action.serialNumber,
   );
 
