@@ -181,10 +181,7 @@ final class _ElbowGridRouter {
 
     while (openSet.isNotEmpty) {
       final current = openSet.pop();
-      if (current == null) {
-        break;
-      }
-      if (current.closed) {
+      if (current == null || current.closed) {
         continue;
       }
       if (current.addr == end.addr) {
@@ -197,16 +194,15 @@ final class _ElbowGridRouter {
           ? startHeading
           : _headingFromTo(current.parent!.pos, current.pos);
       final isStartNode = current.addr == start.addr;
-      final col = current.addr.col;
-      final row = current.addr.row;
 
       for (final offset in _neighborOffsets) {
-        final next = grid.nodeAt(col + offset.dx, row + offset.dy);
+        final next = grid.nodeAt(
+          current.addr.col + offset.dx,
+          current.addr.row + offset.dy,
+        );
         if (next == null || next.closed) {
           continue;
         }
-
-        final neighborHeading = offset.heading;
 
         if (!_canTraverseNeighbor(
           current: current,
@@ -214,14 +210,14 @@ final class _ElbowGridRouter {
           isStartNode: isStartNode,
           endAddress: end.addr,
           previousHeading: previousHeading,
-          neighborHeading: neighborHeading,
+          neighborHeading: offset.heading,
           startHeadingFlip: startHeadingFlip,
           endHeadingFlip: endHeadingFlip,
         )) {
           continue;
         }
 
-        final directionChanged = neighborHeading != previousHeading;
+        final directionChanged = offset.heading != previousHeading;
         final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
         final bendCost = directionChanged ? bendPenalty.cubed : 0;
         final gScore = current.g + moveCost + bendCost;
@@ -230,7 +226,7 @@ final class _ElbowGridRouter {
           final hScore = _heuristicScore(
             from: next.pos,
             to: end.pos,
-            fromHeading: neighborHeading,
+            fromHeading: offset.heading,
             endHeading: endHeadingFlip,
             bendPenaltySquared: bendPenalty.squared,
           );

@@ -55,82 +55,57 @@ DrawRect _unionBounds(List<DrawRect> bounds) {
 bool _boundsOverlap(DrawRect a, DrawRect b) =>
     a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;
 
-({DrawRect start, DrawRect end}) _splitOverlappingHorizontally({
+({DrawRect start, DrawRect end}) _splitOverlappingOnAxis({
   required DrawRect startBounds,
   required DrawRect endBounds,
   required DrawRect startObstacle,
   required DrawRect endObstacle,
-  required double splitX,
-  required double overlapMinX,
-  required double overlapMaxX,
+  required double splitValue,
+  required double overlapMin,
+  required double overlapMax,
   required bool startBeforeEnd,
+  required bool horizontal,
 }) {
-  var minSplit = startBeforeEnd ? startBounds.maxX : endBounds.maxX;
-  var maxSplit = startBeforeEnd ? endBounds.minX : startBounds.minX;
+  var minSplit = startBeforeEnd
+      ? (horizontal ? startBounds.maxX : startBounds.maxY)
+      : (horizontal ? endBounds.maxX : endBounds.maxY);
+  var maxSplit = startBeforeEnd
+      ? (horizontal ? endBounds.minX : endBounds.minY)
+      : (horizontal ? startBounds.minX : startBounds.minY);
+
   if (maxSplit < minSplit) {
-    minSplit = overlapMinX;
-    maxSplit = overlapMaxX;
+    minSplit = overlapMin;
+    maxSplit = overlapMax;
   }
   if (maxSplit - minSplit <= ElbowConstants.intersectionEpsilon) {
     return (start: startObstacle, end: endObstacle);
   }
-  final clamped = splitX.clamp(minSplit, maxSplit);
+
+  final clamped = splitValue.clamp(minSplit, maxSplit);
+
+  if (horizontal) {
+    if (startBeforeEnd) {
+      return (
+        start: startObstacle.copyWith(maxX: math.min(startObstacle.maxX, clamped)),
+        end: endObstacle.copyWith(minX: math.max(endObstacle.minX, clamped)),
+      );
+    }
+    return (
+      start: startObstacle.copyWith(minX: math.max(startObstacle.minX, clamped)),
+      end: endObstacle.copyWith(maxX: math.min(endObstacle.maxX, clamped)),
+    );
+  }
+
   if (startBeforeEnd) {
-    final nextStart = startObstacle.copyWith(
-      maxX: math.min(startObstacle.maxX, clamped),
+    return (
+      start: startObstacle.copyWith(maxY: math.min(startObstacle.maxY, clamped)),
+      end: endObstacle.copyWith(minY: math.max(endObstacle.minY, clamped)),
     );
-    final nextEnd = endObstacle.copyWith(
-      minX: math.max(endObstacle.minX, clamped),
-    );
-    return (start: nextStart, end: nextEnd);
   }
-
-  final nextStart = startObstacle.copyWith(
-    minX: math.max(startObstacle.minX, clamped),
+  return (
+    start: startObstacle.copyWith(minY: math.max(startObstacle.minY, clamped)),
+    end: endObstacle.copyWith(maxY: math.min(endObstacle.maxY, clamped)),
   );
-  final nextEnd = endObstacle.copyWith(
-    maxX: math.min(endObstacle.maxX, clamped),
-  );
-  return (start: nextStart, end: nextEnd);
-}
-
-({DrawRect start, DrawRect end}) _splitOverlappingVertically({
-  required DrawRect startBounds,
-  required DrawRect endBounds,
-  required DrawRect startObstacle,
-  required DrawRect endObstacle,
-  required double splitY,
-  required double overlapMinY,
-  required double overlapMaxY,
-  required bool startBeforeEnd,
-}) {
-  var minSplit = startBeforeEnd ? startBounds.maxY : endBounds.maxY;
-  var maxSplit = startBeforeEnd ? endBounds.minY : startBounds.minY;
-  if (maxSplit < minSplit) {
-    minSplit = overlapMinY;
-    maxSplit = overlapMaxY;
-  }
-  if (maxSplit - minSplit <= ElbowConstants.intersectionEpsilon) {
-    return (start: startObstacle, end: endObstacle);
-  }
-  final clamped = splitY.clamp(minSplit, maxSplit);
-  if (startBeforeEnd) {
-    final nextStart = startObstacle.copyWith(
-      maxY: math.min(startObstacle.maxY, clamped),
-    );
-    final nextEnd = endObstacle.copyWith(
-      minY: math.max(endObstacle.minY, clamped),
-    );
-    return (start: nextStart, end: nextEnd);
-  }
-
-  final nextStart = startObstacle.copyWith(
-    minY: math.max(startObstacle.minY, clamped),
-  );
-  final nextEnd = endObstacle.copyWith(
-    maxY: math.min(endObstacle.maxY, clamped),
-  );
-  return (start: nextStart, end: nextEnd);
 }
 
 ({DrawRect start, DrawRect end}) _splitOverlappingObstacles({
@@ -157,28 +132,30 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
 
   if (dx >= dy) {
     final splitX = (startCenter.x + endCenter.x) / 2;
-    return _splitOverlappingHorizontally(
+    return _splitOverlappingOnAxis(
       startBounds: startBounds,
       endBounds: endBounds,
       startObstacle: startObstacle,
       endObstacle: endObstacle,
-      splitX: splitX,
-      overlapMinX: overlapMinX,
-      overlapMaxX: overlapMaxX,
+      splitValue: splitX,
+      overlapMin: overlapMinX,
+      overlapMax: overlapMaxX,
       startBeforeEnd: startCenter.x <= endCenter.x,
+      horizontal: true,
     );
   }
 
   final splitY = (startCenter.y + endCenter.y) / 2;
-  return _splitOverlappingVertically(
+  return _splitOverlappingOnAxis(
     startBounds: startBounds,
     endBounds: endBounds,
     startObstacle: startObstacle,
     endObstacle: endObstacle,
-    splitY: splitY,
-    overlapMinY: overlapMinY,
-    overlapMaxY: overlapMaxY,
+    splitValue: splitY,
+    overlapMin: overlapMinY,
+    overlapMax: overlapMaxY,
     startBeforeEnd: startCenter.y <= endCenter.y,
+    horizontal: false,
   );
 }
 
@@ -239,61 +216,100 @@ DrawRect _dynamicAabbFor({
   DrawRect? selfElementBounds,
   DrawRect? otherElementBounds,
 }) {
-  // Expand each obstacle by a heading-aware padding and a separation split.
   final selfElement = selfElementBounds ?? self;
   final otherElement = otherElementBounds ?? other;
-  final separatedX = self.minX > other.maxX || self.maxX < other.minX;
-  final separatedY = self.minY > other.maxY || self.maxY < other.minY;
-  final splitFromRight = (selfElement.minX + otherElement.maxX) / 2;
-  final splitFromLeft = (selfElement.maxX + otherElement.minX) / 2;
-  final splitFromBottom = (selfElement.minY + otherElement.maxY) / 2;
-  final splitFromTop = (selfElement.maxY + otherElement.minY) / 2;
 
-  double minX;
-  if (self.minX > other.maxX) {
-    minX = separatedY
-        ? math.min(splitFromRight, self.minX - padding.left)
-        : splitFromRight;
-  } else if (self.minX > other.minX) {
-    minX = self.minX - padding.left;
-  } else {
-    minX = common.minX - padding.left;
-  }
+  final minX = _computeMinEdge(
+    selfMin: self.minX,
+    selfMax: self.maxX,
+    otherMin: other.minX,
+    otherMax: other.maxX,
+    commonMin: common.minX,
+    padding: padding.left,
+    selfElement: selfElement.minX,
+    otherElement: otherElement.maxX,
+    separated: self.minY > other.maxY || self.maxY < other.minY,
+  );
 
-  double minY;
-  if (self.minY > other.maxY) {
-    minY = separatedX
-        ? math.min(splitFromBottom, self.minY - padding.top)
-        : splitFromBottom;
-  } else if (self.minY > other.minY) {
-    minY = self.minY - padding.top;
-  } else {
-    minY = common.minY - padding.top;
-  }
+  final minY = _computeMinEdge(
+    selfMin: self.minY,
+    selfMax: self.maxY,
+    otherMin: other.minY,
+    otherMax: other.maxY,
+    commonMin: common.minY,
+    padding: padding.top,
+    selfElement: selfElement.minY,
+    otherElement: otherElement.maxY,
+    separated: self.minX > other.maxX || self.maxX < other.minX,
+  );
 
-  double maxX;
-  if (self.maxX < other.minX) {
-    maxX = separatedY
-        ? math.max(splitFromLeft, self.maxX + padding.right)
-        : splitFromLeft;
-  } else if (self.maxX < other.maxX) {
-    maxX = self.maxX + padding.right;
-  } else {
-    maxX = common.maxX + padding.right;
-  }
+  final maxX = _computeMaxEdge(
+    selfMin: self.minX,
+    selfMax: self.maxX,
+    otherMin: other.minX,
+    otherMax: other.maxX,
+    commonMax: common.maxX,
+    padding: padding.right,
+    selfElement: selfElement.maxX,
+    otherElement: otherElement.minX,
+    separated: self.minY > other.maxY || self.maxY < other.minY,
+  );
 
-  double maxY;
-  if (self.maxY < other.minY) {
-    maxY = separatedX
-        ? math.max(splitFromTop, self.maxY + padding.bottom)
-        : splitFromTop;
-  } else if (self.maxY < other.maxY) {
-    maxY = self.maxY + padding.bottom;
-  } else {
-    maxY = common.maxY + padding.bottom;
-  }
+  final maxY = _computeMaxEdge(
+    selfMin: self.minY,
+    selfMax: self.maxY,
+    otherMin: other.minY,
+    otherMax: other.maxY,
+    commonMax: common.maxY,
+    padding: padding.bottom,
+    selfElement: selfElement.maxY,
+    otherElement: otherElement.minY,
+    separated: self.minX > other.maxX || self.maxX < other.minX,
+  );
 
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+double _computeMinEdge({
+  required double selfMin,
+  required double selfMax,
+  required double otherMin,
+  required double otherMax,
+  required double commonMin,
+  required double padding,
+  required double selfElement,
+  required double otherElement,
+  required bool separated,
+}) {
+  if (selfMin > otherMax) {
+    final split = (selfElement + otherElement) / 2;
+    return separated ? math.min(split, selfMin - padding) : split;
+  }
+  if (selfMin > otherMin) {
+    return selfMin - padding;
+  }
+  return commonMin - padding;
+}
+
+double _computeMaxEdge({
+  required double selfMin,
+  required double selfMax,
+  required double otherMin,
+  required double otherMax,
+  required double commonMax,
+  required double padding,
+  required double selfElement,
+  required double otherElement,
+  required bool separated,
+}) {
+  if (selfMax < otherMin) {
+    final split = (selfElement + otherElement) / 2;
+    return separated ? math.max(split, selfMax + padding) : split;
+  }
+  if (selfMax < otherMax) {
+    return selfMax + padding;
+  }
+  return commonMax + padding;
 }
 
 DrawRect _selectObstacleBounds({

@@ -251,6 +251,32 @@ List<DrawPoint>? _fallbackPathConstrained({
   required bool startConstrained,
   required bool endConstrained,
 }) {
+  final candidates = _generateFallbackCandidates(
+    start: start,
+    end: end,
+    startHeading: startHeading,
+    endHeading: endHeading,
+    startConstrained: startConstrained,
+    endConstrained: endConstrained,
+  );
+
+  return _selectBestCandidate(
+    candidates: candidates,
+    startHeading: startHeading,
+    endHeading: endHeading,
+    startConstrained: startConstrained,
+    endConstrained: endConstrained,
+  );
+}
+
+List<List<DrawPoint>> _generateFallbackCandidates({
+  required DrawPoint start,
+  required DrawPoint end,
+  required ElbowHeading startHeading,
+  required ElbowHeading endHeading,
+  required bool startConstrained,
+  required bool endConstrained,
+}) {
   final candidates = <List<DrawPoint>>[
     [start, end],
     ElbowPathUtils.directElbowPath(start, end, preferHorizontal: true),
@@ -293,8 +319,19 @@ List<DrawPoint>? _fallbackPathConstrained({
     ]);
   }
 
+  return candidates;
+}
+
+List<DrawPoint>? _selectBestCandidate({
+  required List<List<DrawPoint>> candidates,
+  required ElbowHeading startHeading,
+  required ElbowHeading endHeading,
+  required bool startConstrained,
+  required bool endConstrained,
+}) {
   List<DrawPoint>? best;
   var bestLength = double.infinity;
+
   for (final candidate in candidates) {
     final normalized = _normalizeFallbackCandidate(
       points: candidate,
@@ -537,53 +574,70 @@ List<DrawPoint> _collapseRouteBacktracks({
 
   while (changed) {
     changed = false;
-    for (var i = 0; i < updated.length - 2; i++) {
-      if (i == 0) {
-        continue;
-      }
-      for (var j = i + 2; j < updated.length; j++) {
-        if (j == updated.length - 1) {
-          continue;
-        }
-        final a = updated[i];
-        final d = updated[j];
-        final alignedX = (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
-        final alignedY = (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
-        if (!alignedX && !alignedY) {
-          continue;
-        }
-        if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
-          continue;
-        }
-        var deviates = false;
-        for (var k = i + 1; k < j; k++) {
-          final candidate = updated[k];
-          if (alignedX) {
-            if ((candidate.x - a.x).abs() > ElbowConstants.dedupThreshold) {
-              deviates = true;
-              break;
-            }
-          } else {
-            if ((candidate.y - a.y).abs() > ElbowConstants.dedupThreshold) {
-              deviates = true;
-              break;
-            }
-          }
-        }
-        if (!deviates) {
-          continue;
-        }
-        updated = [...updated.sublist(0, i + 1), d, ...updated.sublist(j + 1)];
-        changed = true;
-        break;
-      }
-      if (changed) {
-        break;
-      }
+    final collapsed = _tryCollapseOneBacktrack(updated, obstacles);
+    if (collapsed != null) {
+      updated = collapsed;
+      changed = true;
     }
   }
 
   return updated;
+}
+
+List<DrawPoint>? _tryCollapseOneBacktrack(
+  List<DrawPoint> points,
+  List<DrawRect> obstacles,
+) {
+  for (var i = 1; i < points.length - 2; i++) {
+    for (var j = i + 2; j < points.length - 1; j++) {
+      final a = points[i];
+      final d = points[j];
+      final alignedX = (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
+      final alignedY = (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
+
+      if (!alignedX && !alignedY) {
+        continue;
+      }
+      if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
+        continue;
+      }
+
+      final deviates = _pathDeviatesFromAxis(
+        points: points,
+        start: i,
+        end: j,
+        alignedX: alignedX,
+        reference: a,
+      );
+
+      if (deviates) {
+        return [...points.sublist(0, i + 1), d, ...points.sublist(j + 1)];
+      }
+    }
+  }
+  return null;
+}
+
+bool _pathDeviatesFromAxis({
+  required List<DrawPoint> points,
+  required int start,
+  required int end,
+  required bool alignedX,
+  required DrawPoint reference,
+}) {
+  for (var k = start + 1; k < end; k++) {
+    final candidate = points[k];
+    if (alignedX) {
+      if ((candidate.x - reference.x).abs() > ElbowConstants.dedupThreshold) {
+        return true;
+      }
+    } else {
+      if ((candidate.y - reference.y).abs() > ElbowConstants.dedupThreshold) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 ElbowHeading _headingFromTo(DrawPoint from, DrawPoint to) =>
