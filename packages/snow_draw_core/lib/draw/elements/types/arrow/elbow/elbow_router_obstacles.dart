@@ -86,25 +86,41 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
   if (horizontal) {
     if (startBeforeEnd) {
       return (
-        start: startObstacle.copyWith(maxX: math.min(startObstacle.maxX, clamped)),
-        end: endObstacle.copyWith(minX: math.max(endObstacle.minX, clamped)),
+        start: startObstacle.copyWith(
+          maxX: math.min(startObstacle.maxX, clamped),
+        ),
+        end: endObstacle.copyWith(
+          minX: math.max(endObstacle.minX, clamped),
+        ),
       );
     }
     return (
-      start: startObstacle.copyWith(minX: math.max(startObstacle.minX, clamped)),
-      end: endObstacle.copyWith(maxX: math.min(endObstacle.maxX, clamped)),
+      start: startObstacle.copyWith(
+        minX: math.max(startObstacle.minX, clamped),
+      ),
+      end: endObstacle.copyWith(
+        maxX: math.min(endObstacle.maxX, clamped),
+      ),
     );
   }
 
   if (startBeforeEnd) {
     return (
-      start: startObstacle.copyWith(maxY: math.min(startObstacle.maxY, clamped)),
-      end: endObstacle.copyWith(minY: math.max(endObstacle.minY, clamped)),
+      start: startObstacle.copyWith(
+        maxY: math.min(startObstacle.maxY, clamped),
+      ),
+      end: endObstacle.copyWith(
+        minY: math.max(endObstacle.minY, clamped),
+      ),
     );
   }
   return (
-    start: startObstacle.copyWith(minY: math.max(startObstacle.minY, clamped)),
-    end: endObstacle.copyWith(maxY: math.min(endObstacle.maxY, clamped)),
+    start: startObstacle.copyWith(
+      minY: math.max(startObstacle.minY, clamped),
+    ),
+    end: endObstacle.copyWith(
+      maxY: math.min(endObstacle.maxY, clamped),
+    ),
   );
 }
 
@@ -768,7 +784,7 @@ DrawRect _applyObstacleSpacing({
 };
 
 double _minBindingSpacing({required bool hasArrowhead}) {
-  final base = ArrowBindingUtils.elbowBindingGapBase;
+  const base = ArrowBindingUtils.elbowBindingGapBase;
   if (!hasArrowhead) {
     return base;
   }

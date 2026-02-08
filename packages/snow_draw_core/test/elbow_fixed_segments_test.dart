@@ -2670,7 +2670,6 @@ void main() {
       lookup: CombinedElementLookup(base: {'rect-1': target}),
       localPointsOverride: dragPoints,
       fixedSegmentsOverride: rightResult.fixedSegments,
-      endBindingOverride: null,
       endBindingOverrideIsSet: true,
     );
 

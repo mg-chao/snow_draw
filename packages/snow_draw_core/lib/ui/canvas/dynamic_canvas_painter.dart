@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../draw/config/draw_config.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
-import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';

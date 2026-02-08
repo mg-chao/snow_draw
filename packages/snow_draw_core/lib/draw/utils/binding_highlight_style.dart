@@ -1,7 +1,7 @@
 import 'dart:ui';
 
-const double _bindingHighlightStrokeWidth = 6;
-const double _bindingHighlightAlpha = 0.32;
+const _bindingHighlightStrokeWidth = 6.0;
+const _bindingHighlightAlpha = 0.32;
 
 double resolveBindingHighlightStrokeWidth(double scale) {
   final effectiveScale = scale == 0 ? 1.0 : scale;

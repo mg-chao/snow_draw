@@ -4,7 +4,7 @@ part of 'elbow_router.dart';
 
 /// Forces grid routing to fail so fallback paths can be exercised in tests.
 @visibleForTesting
-bool elbowForceGridFailure = false;
+var elbowForceGridFailure = false;
 
 @immutable
 final class _ElbowGrid {

@@ -16,12 +16,13 @@ void main() {
       scale: 1,
     );
 
-    expect(paint.color.alpha, 82);
+    final alpha = (paint.color.a * 255.0).round().clamp(0, 255);
+    expect(alpha, 82);
     expect(paint.strokeWidth, 6);
   });
 
   test('resolveBindingHighlightOuterRect inflates by half stroke width', () {
-    final rect = Rect.fromLTWH(0, 0, 10, 10);
+    const rect = Rect.fromLTWH(0, 0, 10, 10);
 
     final outer = resolveBindingHighlightOuterRect(rect, 6);
 

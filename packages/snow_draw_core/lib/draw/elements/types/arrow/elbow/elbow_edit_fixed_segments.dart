@@ -863,7 +863,6 @@ ElbowEditResult _finalizeElbowEditResult({
     endBindingOverride: endBindingOverride,
     startBindingOverrideIsSet: startBindingOverrideIsSet,
     endBindingOverrideIsSet: endBindingOverrideIsSet,
-    finalize: false,
   );
 }
 

@@ -5,7 +5,7 @@ import 'package:snow_draw_core/draw/utils/binding_highlight_visibility.dart';
 
 void main() {
   test('hovered arrow handles suppress binding highlight', () {
-    final handle = ArrowPointHandle(
+    const handle = ArrowPointHandle(
       elementId: 'arrow',
       kind: ArrowPointKind.turning,
       index: 0,

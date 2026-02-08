@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_geometry.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_heading.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
@@ -45,7 +44,6 @@ void main() {
       startBinding: startBinding,
       endBinding: endBinding,
       elementsById: {'rect-1': element},
-      startArrowhead: ArrowheadStyle.none,
       endArrowhead: ArrowheadStyle.triangle,
     );
 
