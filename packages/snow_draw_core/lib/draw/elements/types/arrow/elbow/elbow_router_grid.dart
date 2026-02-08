@@ -380,7 +380,7 @@ bool _allowsHeadingIntoEnd({
   if (constrained) {
     return neighborHeading == endHeadingFlip;
   }
-  return neighborHeading != endHeadingFlip;
+  return true;
 }
 
 List<_ElbowGridNode> _reconstructPath(
