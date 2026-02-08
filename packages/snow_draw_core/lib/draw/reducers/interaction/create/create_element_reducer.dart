@@ -10,6 +10,7 @@ import '../../../elements/core/element_type_id.dart';
 import '../../../elements/core/rect_creation_strategy.dart';
 import '../../../elements/types/arrow/arrow_data.dart';
 import '../../../elements/types/free_draw/free_draw_data.dart';
+import '../../../elements/types/highlight/highlight_data.dart';
 import '../../../elements/types/line/line_data.dart';
 import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
@@ -130,6 +131,9 @@ class CreateElementReducer {
     }
     if (typeId == FreeDrawData.typeIdToken) {
       return config.freeDrawStyle;
+    }
+    if (typeId == HighlightData.typeIdToken) {
+      return config.highlightStyle;
     }
     if (typeId == TextData.typeIdToken) {
       return config.textStyle;
