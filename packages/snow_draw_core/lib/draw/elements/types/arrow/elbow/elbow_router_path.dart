@@ -28,15 +28,16 @@ bool _headingsCompatibleWithAlignment({
   required ElbowHeading startHeading,
   required ElbowHeading endHeading,
 }) {
-  if (alignment.alignedY &&
-      (!startHeading.isHorizontal || !endHeading.isHorizontal)) {
+  if (!alignment.isAligned) {
+    return true;
+  }
+  if (alignment.alignedX && alignment.alignedY) {
     return false;
   }
-  if (alignment.alignedX &&
-      (startHeading.isHorizontal || endHeading.isHorizontal)) {
-    return false;
+  if (alignment.alignedY) {
+    return startHeading.isHorizontal && endHeading.isHorizontal;
   }
-  return true;
+  return !startHeading.isHorizontal && !endHeading.isHorizontal;
 }
 
 /// Ensures a direct segment does not violate bound endpoint headings.
@@ -203,6 +204,28 @@ List<DrawPoint> _fallbackPath({
   );
 }
 
+List<DrawPoint> _buildElbowThroughMid({
+  required DrawPoint start,
+  required DrawPoint end,
+  required bool horizontal,
+  required double mid,
+}) {
+  if (horizontal) {
+    return [
+      start,
+      DrawPoint(x: mid, y: start.y),
+      DrawPoint(x: mid, y: end.y),
+      end,
+    ];
+  }
+  return [
+    start,
+    DrawPoint(x: start.x, y: mid),
+    DrawPoint(x: end.x, y: mid),
+    end,
+  ];
+}
+
 List<DrawPoint> _fallbackPathUnconstrained({
   required DrawPoint start,
   required DrawPoint end,
@@ -211,12 +234,12 @@ List<DrawPoint> _fallbackPathUnconstrained({
   if (ElbowGeometry.manhattanDistance(start, end) <
       ElbowConstants.minArrowLength) {
     final midY = (start.y + end.y) / 2;
-    return [
-      start,
-      DrawPoint(x: start.x, y: midY),
-      DrawPoint(x: end.x, y: midY),
-      end,
-    ];
+    return _buildElbowThroughMid(
+      start: start,
+      end: end,
+      horizontal: false,
+      mid: midY,
+    );
   }
 
   if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold ||
@@ -224,23 +247,14 @@ List<DrawPoint> _fallbackPathUnconstrained({
     return [start, end];
   }
 
-  if (startHeading.isHorizontal) {
-    final midX = (start.x + end.x) / 2;
-    return [
-      start,
-      DrawPoint(x: midX, y: start.y),
-      DrawPoint(x: midX, y: end.y),
-      end,
-    ];
-  }
-
-  final midY = (start.y + end.y) / 2;
-  return [
-    start,
-    DrawPoint(x: start.x, y: midY),
-    DrawPoint(x: end.x, y: midY),
-    end,
-  ];
+  final horizontal = startHeading.isHorizontal;
+  final mid = horizontal ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
+  return _buildElbowThroughMid(
+    start: start,
+    end: end,
+    horizontal: horizontal,
+    mid: mid,
+  );
 }
 
 List<DrawPoint>? _fallbackPathConstrained({
@@ -283,41 +297,31 @@ List<List<DrawPoint>> _generateFallbackCandidates({
     ElbowPathUtils.directElbowPath(start, end, preferHorizontal: false),
   ];
 
-  final midX = _resolveFallbackMid(
-    start: start,
-    end: end,
-    startHeading: startHeading,
-    endHeading: endHeading,
-    startConstrained: startConstrained,
-    endConstrained: endConstrained,
-    horizontal: true,
-  );
-  if (midX != null) {
-    candidates.add([
-      start,
-      DrawPoint(x: midX, y: start.y),
-      DrawPoint(x: midX, y: end.y),
-      end,
-    ]);
+  void addMidCandidate({required bool horizontal}) {
+    final mid = _resolveFallbackMid(
+      start: start,
+      end: end,
+      startHeading: startHeading,
+      endHeading: endHeading,
+      startConstrained: startConstrained,
+      endConstrained: endConstrained,
+      horizontal: horizontal,
+    );
+    if (mid == null) {
+      return;
+    }
+    candidates.add(
+      _buildElbowThroughMid(
+        start: start,
+        end: end,
+        horizontal: horizontal,
+        mid: mid,
+      ),
+    );
   }
 
-  final midY = _resolveFallbackMid(
-    start: start,
-    end: end,
-    startHeading: startHeading,
-    endHeading: endHeading,
-    startConstrained: startConstrained,
-    endConstrained: endConstrained,
-    horizontal: false,
-  );
-  if (midY != null) {
-    candidates.add([
-      start,
-      DrawPoint(x: start.x, y: midY),
-      DrawPoint(x: end.x, y: midY),
-      end,
-    ]);
-  }
+  addMidCandidate(horizontal: true);
+  addMidCandidate(horizontal: false);
 
   return candidates;
 }
@@ -369,29 +373,34 @@ double? _resolveFallbackMid({
   var min = double.negativeInfinity;
   var max = double.infinity;
 
-  if (startConstrained && startHeading.isHorizontal == horizontal) {
-    final startValue = horizontal ? start.x : start.y;
+  void applyConstraint({
+    required bool constrained,
+    required ElbowHeading heading,
+    required double value,
+  }) {
+    if (!constrained || heading.isHorizontal != horizontal) {
+      return;
+    }
     final positive = horizontal
-        ? startHeading == ElbowHeading.right
-        : startHeading == ElbowHeading.down;
+        ? heading == ElbowHeading.right
+        : heading == ElbowHeading.down;
     if (positive) {
-      min = math.max(min, startValue + padding);
+      min = math.max(min, value + padding);
     } else {
-      max = math.min(max, startValue - padding);
+      max = math.min(max, value - padding);
     }
   }
 
-  if (endConstrained && endHeading.isHorizontal == horizontal) {
-    final endValue = horizontal ? end.x : end.y;
-    final positive = horizontal
-        ? endHeading == ElbowHeading.right
-        : endHeading == ElbowHeading.down;
-    if (positive) {
-      min = math.max(min, endValue + padding);
-    } else {
-      max = math.min(max, endValue - padding);
-    }
-  }
+  applyConstraint(
+    constrained: startConstrained,
+    heading: startHeading,
+    value: horizontal ? start.x : start.y,
+  );
+  applyConstraint(
+    constrained: endConstrained,
+    heading: endHeading,
+    value: horizontal ? end.x : end.y,
+  );
 
   if (min.isFinite && max.isFinite && min > max) {
     return null;
@@ -651,12 +660,9 @@ bool _segmentIntersectsAnyBounds(
   DrawPoint end,
   List<DrawRect> obstacles,
 ) {
-  for (final obstacle in obstacles) {
-    if (_segmentIntersectsBounds(start, end, obstacle)) {
-      return true;
-    }
-  }
-  return false;
+  return obstacles.any(
+    (obstacle) => _segmentIntersectsBounds(start, end, obstacle),
+  );
 }
 
 @immutable
