@@ -75,6 +75,7 @@ List<DrawPoint> _routeReleasedRegion({
       startLocal,
       endLocal,
       preferHorizontal: preferHorizontal,
+      epsilon: ElbowConstants.intersectionEpsilon,
     );
   }
 

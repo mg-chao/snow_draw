@@ -2,6 +2,10 @@ part of 'elbow_router.dart';
 
 /// Sparse grid routing (A* with bend penalties) for elbow paths.
 
+/// Forces grid routing to fail so fallback paths can be exercised in tests.
+@visibleForTesting
+bool elbowForceGridFailure = false;
+
 @immutable
 final class _ElbowGrid {
   const _ElbowGrid({
@@ -177,10 +181,7 @@ final class _ElbowGridRouter {
 
     while (openSet.isNotEmpty) {
       final current = openSet.pop();
-      if (current == null) {
-        break;
-      }
-      if (current.closed) {
+      if (current == null || current.closed) {
         continue;
       }
       if (current.addr == end.addr) {
@@ -191,18 +192,17 @@ final class _ElbowGridRouter {
 
       final previousHeading = current.parent == null
           ? startHeading
-          : _headingBetween(current.pos, current.parent!.pos);
+          : _headingFromTo(current.parent!.pos, current.pos);
       final isStartNode = current.addr == start.addr;
-      final col = current.addr.col;
-      final row = current.addr.row;
 
       for (final offset in _neighborOffsets) {
-        final next = grid.nodeAt(col + offset.dx, row + offset.dy);
+        final next = grid.nodeAt(
+          current.addr.col + offset.dx,
+          current.addr.row + offset.dy,
+        );
         if (next == null || next.closed) {
           continue;
         }
-
-        final neighborHeading = offset.heading;
 
         if (!_canTraverseNeighbor(
           current: current,
@@ -210,14 +210,14 @@ final class _ElbowGridRouter {
           isStartNode: isStartNode,
           endAddress: end.addr,
           previousHeading: previousHeading,
-          neighborHeading: neighborHeading,
+          neighborHeading: offset.heading,
           startHeadingFlip: startHeadingFlip,
           endHeadingFlip: endHeadingFlip,
         )) {
           continue;
         }
 
-        final directionChanged = neighborHeading != previousHeading;
+        final directionChanged = offset.heading != previousHeading;
         final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
         final bendCost = directionChanged ? bendPenalty.cubed : 0;
         final gScore = current.g + moveCost + bendCost;
@@ -226,7 +226,7 @@ final class _ElbowGridRouter {
           final hScore = _heuristicScore(
             from: next.pos,
             to: end.pos,
-            fromHeading: neighborHeading,
+            fromHeading: offset.heading,
             endHeading: endHeadingFlip,
             bendPenaltySquared: bendPenalty.squared,
           );
@@ -331,13 +331,16 @@ List<_ElbowGridNode>? _tryRouteGridPath({
   required DrawPoint endExit,
   required List<DrawRect> obstacles,
 }) {
+  if (elbowForceGridFailure) {
+    return null;
+  }
   final startNode = grid.nodeForPoint(startExit);
   final endNode = grid.nodeForPoint(endExit);
   if (startNode == null || endNode == null) {
     return null;
   }
 
-  return _ElbowGridRouter(
+  final path = _ElbowGridRouter(
     grid: grid,
     start: startNode,
     end: endNode,
@@ -347,6 +350,10 @@ List<_ElbowGridNode>? _tryRouteGridPath({
     endConstrained: end.isBound,
     obstacles: obstacles,
   ).findPath();
+  if (path.isEmpty) {
+    return null;
+  }
+  return path;
 }
 
 bool _allowsHeadingFromStart({
@@ -369,7 +376,7 @@ bool _allowsHeadingIntoEnd({
   if (constrained) {
     return neighborHeading == endHeadingFlip;
   }
-  return neighborHeading != endHeadingFlip;
+  return true;
 }
 
 List<_ElbowGridNode> _reconstructPath(

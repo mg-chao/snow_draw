@@ -71,11 +71,16 @@ final class _ElbowRoutePipeline {
       startHeading: plan.start.heading,
       obstacles: plan.layout.obstacles,
     );
+    final harmonized = _harmonizeBoundSpacing(
+      points: finalized,
+      start: plan.start,
+      end: plan.end,
+    );
 
     return _buildRouteResult(
       startPoint: context.endpoints.start.point,
       endPoint: context.endpoints.end.point,
-      points: finalized,
+      points: harmonized,
     );
   }
 
@@ -92,6 +97,7 @@ final class _ElbowRoutePipeline {
         start: endpoints.start.point,
         end: endpoints.end.point,
         startHeading: endpoints.start.heading,
+        endHeading: endpoints.end.heading,
       ),
     );
   }
@@ -153,6 +159,9 @@ final class _ElbowRoutePlan {
             start: start.point,
             end: end.point,
             startHeading: start.heading,
+            endHeading: end.heading,
+            startConstrained: start.isBound,
+            endConstrained: end.isBound,
           )
         : _postProcessPath(
             path: path,

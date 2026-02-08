@@ -1,5 +1,6 @@
 import '../../config/draw_config.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -10,6 +11,7 @@ import '../../types/draw_point.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_style.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
@@ -289,12 +291,32 @@ class RotateOperation extends EditOperation {
       document: state.domain.document,
     );
     if (bindingUpdates.isNotEmpty) {
-      updatedById.addAll(bindingUpdates);
+      for (final entry in bindingUpdates.entries) {
+        if (_shouldSkipBindingUpdate(
+          entry.key,
+          entry.value,
+          context.selectedIdsAtStart,
+        )) {
+          continue;
+        }
+        updatedById[entry.key] = entry.value;
+      }
     }
 
     return EditComputedResult(
       updatedElements: updatedById,
       multiSelectRotation: context.baseRotation + transform.appliedAngle,
     );
+  }
+
+  bool _shouldSkipBindingUpdate(
+    String id,
+    ElementState element,
+    Set<String> selectedIds,
+  ) => selectedIds.contains(id) && _isElbowArrow(element);
+
+  bool _isElbowArrow(ElementState element) {
+    final data = element.data;
+    return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
   }
 }

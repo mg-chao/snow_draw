@@ -2,6 +2,7 @@
 .idea
 melos_snow_draw_workspace.iml
 build
+.worktrees/
 
 # Agents
 .claude
