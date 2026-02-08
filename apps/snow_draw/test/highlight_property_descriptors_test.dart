@@ -100,13 +100,8 @@ void main() {
       highlightDefaults: ElementStyleConfig(
         color: Color(0xFFF5222D),
         textStrokeColor: Color(0xFFF5222D),
-        textStrokeWidth: 0,
-        highlightShape: HighlightShape.rectangle,
       ),
-      highlightMask: HighlightMaskConfig(
-        maskColor: Color(0xFF000000),
-        maskOpacity: 0.4,
-      ),
+      highlightMask: HighlightMaskConfig(maskOpacity: 0.4),
       selectedElementTypes: {ElementType.highlight},
       currentTool: ToolType.highlight,
     );

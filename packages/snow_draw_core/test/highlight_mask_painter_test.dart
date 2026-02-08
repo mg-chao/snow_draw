@@ -4,11 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_painter.dart';
 
 void main() {
@@ -21,7 +20,7 @@ void main() {
       rotation: 0,
       opacity: 1,
       zIndex: 0,
-      data: HighlightData(shape: HighlightShape.rectangle),
+      data: HighlightData(),
     );
 
     final initial = DrawState.initial();
@@ -38,16 +37,13 @@ void main() {
     paintHighlightMask(
       canvas: canvas,
       stateView: view,
-      viewportRect: const DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 20),
-      maskConfig: const HighlightMaskConfig(
-        maskColor: ui.Color(0xFF000000),
-        maskOpacity: 1,
-      ),
+      viewportRect: const DrawRect(maxX: 20, maxY: 20),
+      maskConfig: const HighlightMaskConfig(maskOpacity: 1),
       creatingElement: null,
     );
 
     final image = await recorder.endRecording().toImage(20, 20);
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final bytes = await image.toByteData();
     expect(bytes, isNotNull);
 
     final data = bytes!;

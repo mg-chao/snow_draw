@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_visibility.dart';
 
@@ -16,7 +16,7 @@ void main() {
     final layer = resolveHighlightMaskLayer(
       hasHighlights: true,
       hasDynamicContent: false,
-      config: const HighlightMaskConfig(maskOpacity: 0),
+      config: const HighlightMaskConfig(),
     );
     expect(layer, HighlightMaskLayer.none);
   });

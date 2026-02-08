@@ -265,7 +265,7 @@ class DynamicCanvasRenderKey {
           other.locale == locale;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     creatingElement,
     effectiveSelection,
     boxSelectionBounds,
@@ -290,7 +290,7 @@ class DynamicCanvasRenderKey {
     highlightMaskConfig,
     elementRegistry,
     locale,
-  );
+  ]);
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
     if (a.length != b.length) {

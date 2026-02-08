@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_hit_tester.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
@@ -7,14 +7,14 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  const rect = DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100);
+  const rect = DrawRect(maxX: 100, maxY: 100);
   const element = ElementState(
     id: 'h1',
     rect: rect,
     rotation: 0,
     opacity: 1,
     zIndex: 0,
-    data: HighlightData(shape: HighlightShape.rectangle),
+    data: HighlightData(),
   );
 
   test('rectangle highlight hits inside', () {

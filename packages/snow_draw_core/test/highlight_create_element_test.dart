@@ -1,9 +1,10 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
+import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry_interface.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
@@ -13,7 +14,6 @@ import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_r
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 
 class _Deps implements CreateElementReducerDeps {
   _Deps({
@@ -53,7 +53,7 @@ void main() {
       idGenerator: SequentialIdGenerator().call,
     );
 
-    final reducer = CreateElementReducer();
+    const reducer = CreateElementReducer();
     final next = reducer.reduce(
       DrawState.initial(),
       const CreateElement(
