@@ -15,6 +15,7 @@ class AppLocalizations {
   String get appTitle => 'Snow Draw';
   String get toolSelection => 'Selection';
   String get toolRectangle => 'Rectangle';
+  String get toolHighlight => 'Highlight';
   String get toolArrow => 'Arrow';
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';

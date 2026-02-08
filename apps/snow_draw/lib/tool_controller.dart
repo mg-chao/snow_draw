@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 enum ToolType {
   selection,
   rectangle,
+  highlight,
   arrow,
   line,
   freeDraw,
