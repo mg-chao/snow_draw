@@ -606,7 +606,14 @@ _ElbowEndpointBounds _resolveEndpointBounds({
     obstacle: endObstacle,
   );
 
-  return (start: startObstacle, end: endObstacle);
+  final harmonized = _harmonizeObstacleExitSpacing(
+    start: start,
+    end: end,
+    startObstacle: startObstacle,
+    endObstacle: endObstacle,
+  );
+
+  return (start: harmonized.start, end: harmonized.end);
 }
 
 DrawRect _resolveCommonBounds({
@@ -653,6 +660,103 @@ DrawRect _clampObstacleExitToBasePadding({
       }
       return obstacle.copyWith(minX: target);
   }
+}
+
+({DrawRect start, DrawRect end}) _harmonizeObstacleExitSpacing({
+  required _ResolvedEndpoint start,
+  required _ResolvedEndpoint end,
+  required DrawRect startObstacle,
+  required DrawRect endObstacle,
+}) {
+  if (!start.isBound || !end.isBound) {
+    return (start: startObstacle, end: endObstacle);
+  }
+  final startBounds = start.elementBounds;
+  final endBounds = end.elementBounds;
+  if (startBounds == null || endBounds == null) {
+    return (start: startObstacle, end: endObstacle);
+  }
+
+  final startSpacing = _resolveObstacleSpacing(
+    elementBounds: startBounds,
+    obstacle: startObstacle,
+    heading: start.heading,
+  );
+  final endSpacing = _resolveObstacleSpacing(
+    elementBounds: endBounds,
+    obstacle: endObstacle,
+    heading: end.heading,
+  );
+  if (startSpacing == null || endSpacing == null) {
+    return (start: startObstacle, end: endObstacle);
+  }
+
+  final sharedSpacing = math.min(startSpacing, endSpacing);
+  if (!sharedSpacing.isFinite) {
+    return (start: startObstacle, end: endObstacle);
+  }
+
+  final minAllowedSpacing = math.max(
+    _minBindingSpacing(hasArrowhead: start.hasArrowhead),
+    _minBindingSpacing(hasArrowhead: end.hasArrowhead),
+  );
+  final resolvedSpacing = math.max(sharedSpacing, minAllowedSpacing);
+
+  return (
+    start: _clampBounds(
+      _applyObstacleSpacing(
+        obstacle: startObstacle,
+        elementBounds: startBounds,
+        heading: start.heading,
+        spacing: resolvedSpacing,
+      ),
+    ),
+    end: _clampBounds(
+      _applyObstacleSpacing(
+        obstacle: endObstacle,
+        elementBounds: endBounds,
+        heading: end.heading,
+        spacing: resolvedSpacing,
+      ),
+    ),
+  );
+}
+
+double? _resolveObstacleSpacing({
+  required DrawRect elementBounds,
+  required DrawRect obstacle,
+  required ElbowHeading heading,
+}) {
+  final spacing = switch (heading) {
+    ElbowHeading.up => elementBounds.minY - obstacle.minY,
+    ElbowHeading.right => obstacle.maxX - elementBounds.maxX,
+    ElbowHeading.down => obstacle.maxY - elementBounds.maxY,
+    ElbowHeading.left => elementBounds.minX - obstacle.minX,
+  };
+  if (!spacing.isFinite || spacing <= ElbowConstants.intersectionEpsilon) {
+    return null;
+  }
+  return spacing;
+}
+
+DrawRect _applyObstacleSpacing({
+  required DrawRect obstacle,
+  required DrawRect elementBounds,
+  required ElbowHeading heading,
+  required double spacing,
+}) => switch (heading) {
+  ElbowHeading.up => obstacle.copyWith(minY: elementBounds.minY - spacing),
+  ElbowHeading.right => obstacle.copyWith(maxX: elementBounds.maxX + spacing),
+  ElbowHeading.down => obstacle.copyWith(maxY: elementBounds.maxY + spacing),
+  ElbowHeading.left => obstacle.copyWith(minX: elementBounds.minX - spacing),
+};
+
+double _minBindingSpacing({required bool hasArrowhead}) {
+  final base = ArrowBindingUtils.elbowBindingGapBase;
+  if (!hasArrowhead) {
+    return base;
+  }
+  return base * ArrowBindingUtils.elbowArrowheadGapMultiplier;
 }
 
 _ElbowObstacleLayout _planObstacleLayout({
