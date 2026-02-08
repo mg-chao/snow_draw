@@ -10,6 +10,9 @@ void initializePropertyRegistry() {
     // in the toolbar
     // Color properties (stroke and fill)
     ..register(const ColorPropertyDescriptor())
+    ..register(const HighlightShapePropertyDescriptor())
+    ..register(const HighlightTextStrokeWidthPropertyDescriptor())
+    ..register(const HighlightTextStrokeColorPropertyDescriptor())
     ..register(const FillColorPropertyDescriptor())
     ..register(const FillStylePropertyDescriptor())
     // Stroke properties
@@ -28,5 +31,7 @@ void initializePropertyRegistry() {
     ..register(const TextStrokeColorPropertyDescriptor())
     // Common properties (all elements)
     ..register(const CornerRadiusPropertyDescriptor())
-    ..register(const OpacityPropertyDescriptor());
+    ..register(const OpacityPropertyDescriptor())
+    ..register(const MaskColorPropertyDescriptor())
+    ..register(const MaskOpacityPropertyDescriptor());
 }

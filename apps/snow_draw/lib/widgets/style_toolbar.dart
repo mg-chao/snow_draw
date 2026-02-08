@@ -1406,6 +1406,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedRectangles) {
       selectedTypes.add(ElementType.rectangle);
     }
+    if (state.hasSelectedHighlights) {
+      selectedTypes.add(ElementType.highlight);
+    }
     if (state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
@@ -1429,6 +1432,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
+        case ToolType.highlight:
+          selectedTypes.add(ElementType.highlight);
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
         case ToolType.line:
@@ -1450,13 +1455,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       lineStyleValues: state.lineStyleValues,
       freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
+      highlightStyleValues: state.highlightStyleValues,
       serialNumberStyleValues: state.serialNumberStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
       lineDefaults: state.lineStyle,
       freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
+      highlightDefaults: state.highlightStyle,
       serialNumberDefaults: state.serialNumberStyle,
+      highlightMask: state.highlightMask,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,
     );

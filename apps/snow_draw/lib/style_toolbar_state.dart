@@ -233,6 +233,43 @@ class LineStyleValues {
   );
 }
 
+/// Resolved style values for highlight elements, supporting multi-selection.
+@immutable
+class HighlightStyleValues {
+  const HighlightStyleValues({
+    required this.color,
+    required this.highlightShape,
+    required this.textStrokeColor,
+    required this.textStrokeWidth,
+    required this.opacity,
+  });
+
+  final MixedValue<Color> color;
+  final MixedValue<HighlightShape> highlightShape;
+  final MixedValue<Color> textStrokeColor;
+  final MixedValue<double> textStrokeWidth;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HighlightStyleValues &&
+          other.color == color &&
+          other.highlightShape == highlightShape &&
+          other.textStrokeColor == textStrokeColor &&
+          other.textStrokeWidth == textStrokeWidth &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(
+    color,
+    highlightShape,
+    textStrokeColor,
+    textStrokeWidth,
+    opacity,
+  );
+}
+
 /// Resolved style values for serial number elements, supporting
 /// multi-selection.
 @immutable
@@ -287,19 +324,23 @@ class StyleToolbarState {
     required this.lineStyle,
     required this.freeDrawStyle,
     required this.textStyle,
+    required this.highlightStyle,
     required this.serialNumberStyle,
     required this.styleValues,
     required this.arrowStyleValues,
     required this.lineStyleValues,
     required this.freeDrawStyleValues,
     required this.textStyleValues,
+    required this.highlightStyleValues,
     required this.serialNumberStyleValues,
+    required this.highlightMask,
     required this.hasSelection,
     required this.hasSelectedRectangles,
     required this.hasSelectedArrows,
     required this.hasSelectedLines,
     required this.hasSelectedFreeDraws,
     required this.hasSelectedTexts,
+    required this.hasSelectedHighlights,
     required this.hasSelectedSerialNumbers,
   });
 
@@ -308,19 +349,23 @@ class StyleToolbarState {
   final ElementStyleConfig lineStyle;
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
+  final ElementStyleConfig highlightStyle;
   final ElementStyleConfig serialNumberStyle;
   final RectangleStyleValues styleValues;
   final ArrowStyleValues arrowStyleValues;
   final LineStyleValues lineStyleValues;
   final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
+  final HighlightStyleValues highlightStyleValues;
   final SerialNumberStyleValues serialNumberStyleValues;
+  final HighlightMaskConfig highlightMask;
   final bool hasSelection;
   final bool hasSelectedRectangles;
   final bool hasSelectedArrows;
   final bool hasSelectedLines;
   final bool hasSelectedFreeDraws;
   final bool hasSelectedTexts;
+  final bool hasSelectedHighlights;
   final bool hasSelectedSerialNumbers;
 
   @override
@@ -332,41 +377,49 @@ class StyleToolbarState {
           other.lineStyle == lineStyle &&
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
+          other.highlightStyle == highlightStyle &&
           other.serialNumberStyle == serialNumberStyle &&
           other.styleValues == styleValues &&
           other.arrowStyleValues == arrowStyleValues &&
           other.lineStyleValues == lineStyleValues &&
           other.freeDrawStyleValues == freeDrawStyleValues &&
           other.textStyleValues == textStyleValues &&
+          other.highlightStyleValues == highlightStyleValues &&
           other.serialNumberStyleValues == serialNumberStyleValues &&
+          other.highlightMask == highlightMask &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
           other.hasSelectedArrows == hasSelectedArrows &&
           other.hasSelectedLines == hasSelectedLines &&
           other.hasSelectedFreeDraws == hasSelectedFreeDraws &&
           other.hasSelectedTexts == hasSelectedTexts &&
+          other.hasSelectedHighlights == hasSelectedHighlights &&
           other.hasSelectedSerialNumbers == hasSelectedSerialNumbers;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     rectangleStyle,
     arrowStyle,
     lineStyle,
     freeDrawStyle,
     textStyle,
+    highlightStyle,
     serialNumberStyle,
     styleValues,
     arrowStyleValues,
     lineStyleValues,
     freeDrawStyleValues,
     textStyleValues,
+    highlightStyleValues,
     serialNumberStyleValues,
+    highlightMask,
     hasSelection,
     hasSelectedRectangles,
     hasSelectedArrows,
     hasSelectedLines,
     hasSelectedFreeDraws,
     hasSelectedTexts,
+    hasSelectedHighlights,
     hasSelectedSerialNumbers,
-  );
+  ]);
 }
