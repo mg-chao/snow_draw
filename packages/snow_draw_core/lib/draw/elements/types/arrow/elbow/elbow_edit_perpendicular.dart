@@ -70,10 +70,18 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
 
   if (endBinding != null) {
     final endNeighborIndex = math.max(2, localPoints.length - 2);
-    final fixedNeighborAxis = _fixedSegmentIsHorizontal(
-      updatedFixedSegments,
-      endNeighborIndex,
+    final hasCorner = _endpointHasCorner(
+      points: localPoints,
+      isStart: false,
     );
+    final fixedNeighborAxis =
+        _fixedSegmentIsHorizontal(updatedFixedSegments, endNeighborIndex) ??
+        (hasCorner
+            ? _fixedSegmentIsHorizontal(
+                updatedFixedSegments,
+                endNeighborIndex - 1,
+              )
+            : null);
     final adjustment = _adjustPerpendicularEnd(
       points: worldPoints,
       binding: endBinding,
@@ -118,6 +126,23 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     fixedSegments: fixedSegments,
     allowDirectionFlip: true,
   );
+}
+
+bool _endpointHasCorner({
+  required List<DrawPoint> points,
+  required bool isStart,
+}) {
+  if (points.length < 3) {
+    return false;
+  }
+  final a = isStart ? points[0] : points[points.length - 3];
+  final b = isStart ? points[1] : points[points.length - 2];
+  final c = isStart ? points[2] : points[points.length - 1];
+  final abHorizontal =
+      (a.y - b.y).abs() <= ElbowConstants.dedupThreshold;
+  final bcHorizontal =
+      (b.y - c.y).abs() <= ElbowConstants.dedupThreshold;
+  return abHorizontal != bcHorizontal;
 }
 
 ({double? start, double? end}) _resolveBaselineEndpointPadding({
@@ -377,12 +402,15 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
 
   if (preserveNeighbor) {
     if (aligned && directionOk) {
+      final cornerInserted =
+          _endpointHasCorner(points: points, isStart: true) &&
+          _fixedSegmentIsHorizontal(fixedSegments, 2) != null;
       final adjusted = canSlideNeighbor
           ? _slideEndpointNeighborToPadding(
               points: points,
               heading: heading,
               desiredLength: fixedPadding,
-              cornerInserted: false,
+              cornerInserted: cornerInserted,
               isStart: true,
             )
           : null;
@@ -589,12 +617,15 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
 
   if (preserveNeighbor) {
     if (aligned && directionOk) {
+      final cornerInserted =
+          _endpointHasCorner(points: points, isStart: false) &&
+          _fixedSegmentIsHorizontal(fixedSegments, points.length - 3) != null;
       final adjusted = canSlideNeighbor
           ? _slideEndpointNeighborToPadding(
               points: points,
               heading: heading,
               desiredLength: fixedPadding,
-              cornerInserted: false,
+              cornerInserted: cornerInserted,
               isStart: false,
             )
           : null;

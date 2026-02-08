@@ -1409,6 +1409,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   final reference = points[anchorIndex];
   final lane = heading.isHorizontal
       ? () {
+          final endpointLane = endpoint.y;
           final inBounds =
               reference.y >= bounds.minY - ElbowConstants.intersectionEpsilon &&
               reference.y <= bounds.maxY + ElbowConstants.intersectionEpsilon;
@@ -1421,6 +1422,10 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
               bounds: bounds,
             );
             if (!intersects) {
+              if ((endpointLane - reference.y).abs() >
+                  ElbowConstants.dedupThreshold) {
+                return endpointLane;
+              }
               return reference.y;
             }
           }
