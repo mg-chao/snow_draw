@@ -18,7 +18,6 @@ import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -394,7 +393,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dynamicLayerStartIndex,
     );
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final hasHighlights = _hasHighlightElements(stateView, creatingSnapshot);
+    final hasHighlights = stateView.highlightMaskScene.hasHighlights;
     final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
     final hasDynamicContent =
         dynamicLayerStartIndex != null || creatingSnapshot != null;
@@ -614,26 +613,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
     return null;
-  }
-
-  bool _hasHighlightElements(
-    DrawStateView view,
-    CreatingElementSnapshot? creating,
-  ) {
-    for (final element in view.state.domain.document.elements) {
-      if (element.data is HighlightData) {
-        return true;
-      }
-    }
-    for (final preview in view.previewElementsById.values) {
-      if (preview.data is HighlightData) {
-        return true;
-      }
-    }
-    if (creating?.element.data is HighlightData) {
-      return true;
-    }
-    return false;
   }
 
   /// Extract box selection bounds from state view.

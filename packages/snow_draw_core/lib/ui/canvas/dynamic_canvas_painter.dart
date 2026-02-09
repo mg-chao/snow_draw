@@ -95,19 +95,11 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
-      final creatingSnapshot = renderKey.creatingElement;
-      ElementState? creatingPreview;
-      if (creatingSnapshot != null) {
-        creatingPreview = creatingSnapshot.element.copyWith(
-          rect: creatingSnapshot.currentRect,
-        );
-      }
       paintHighlightMask(
         canvas: canvas,
-        stateView: stateView,
+        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
-        creatingElement: creatingPreview,
       );
     }
 

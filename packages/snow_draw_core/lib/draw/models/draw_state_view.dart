@@ -1,10 +1,12 @@
 import 'package:meta/meta.dart';
 
+import '../elements/types/highlight/highlight_data.dart';
 import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
 import 'element_state.dart';
+import 'interaction_state.dart';
 import 'models.dart' show DrawState;
 
 /// Effective selection view (considering edit preview).
@@ -40,6 +42,25 @@ class EffectiveSelection {
   int get hashCode => Object.hash(bounds, center, rotation, hasSelection);
 }
 
+/// Precomputed highlight elements used by highlight mask rendering.
+///
+/// This snapshot is derived from the current state view and preserves the
+/// painter ordering semantics: document/effective elements first, preview-only
+/// transient elements next, then the in-progress creating element last.
+@immutable
+class HighlightMaskSceneSnapshot {
+  HighlightMaskSceneSnapshot(List<ElementState> elements)
+    : _elements = List<ElementState>.unmodifiable(elements);
+
+  final List<ElementState> _elements;
+
+  /// Highlight elements in the order expected by highlight mask compositing.
+  List<ElementState> get elements => _elements;
+
+  /// Whether at least one highlight is present in this snapshot.
+  bool get hasHighlights => _elements.isNotEmpty;
+}
+
 /// A unified "effective state" view for rendering and hit-testing.
 ///
 /// In the preview/commit architecture:
@@ -49,7 +70,7 @@ class EffectiveSelection {
 ///   needing to know how to build them.
 @immutable
 class DrawStateView {
-  const DrawStateView._({
+  DrawStateView._({
     required this.state,
     required Map<String, ElementState> previewElementsById,
     required EffectiveSelection effectiveSelection,
@@ -96,6 +117,12 @@ class DrawStateView {
   final EffectiveSelection _effectiveSelection;
   final List<SnapGuide> snapGuides;
 
+  /// Cached highlight scene payload for mask rendering.
+  ///
+  /// This is computed lazily once per [DrawStateView] instance.
+  late final HighlightMaskSceneSnapshot highlightMaskScene =
+      _buildHighlightMaskScene();
+
   /// Map of element IDs to their preview states.
   Map<String, ElementState> get previewElementsById => _previewElementsById;
 
@@ -132,6 +159,39 @@ class DrawStateView {
     return state.domain.document.elements.where(
       (e) => selectedIds.contains(e.id),
     );
+  }
+
+  HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
+    final highlights = <ElementState>[];
+
+    for (final element in state.domain.document.elements) {
+      final effective = effectiveElement(element);
+      if (effective.data is HighlightData) {
+        highlights.add(effective);
+      }
+    }
+
+    if (_previewElementsById.isNotEmpty) {
+      final document = state.domain.document;
+      for (final preview in _previewElementsById.values) {
+        if (document.getElementById(preview.id) != null) {
+          continue;
+        }
+        if (preview.data is HighlightData) {
+          highlights.add(preview);
+        }
+      }
+    }
+
+    final interaction = state.application.interaction;
+    if (interaction is CreatingState &&
+        interaction.elementData is HighlightData) {
+      highlights.add(
+        interaction.element.copyWith(rect: interaction.currentRect),
+      );
+    }
+
+    return HighlightMaskSceneSnapshot(highlights);
   }
 
   @override

@@ -153,10 +153,9 @@ class StaticCanvasPainter extends CustomPainter {
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.staticLayer) {
       paintHighlightMask(
         canvas: canvas,
-        stateView: stateView,
+        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
-        creatingElement: null,
       );
     }
 
