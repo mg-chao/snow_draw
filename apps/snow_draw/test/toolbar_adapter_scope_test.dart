@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
@@ -67,11 +65,16 @@ void main() {
       );
       await pumpEventQueue();
 
-      final highlight =
-          store.state.domain.document.getElementById('h1')?.data
-              as HighlightData;
-      final text =
-          store.state.domain.document.getElementById('t1')?.data as TextData;
+      final highlightData = store.state.domain.document
+          .getElementById('h1')
+          ?.data;
+      final textData = store.state.domain.document.getElementById('t1')?.data;
+
+      expect(highlightData, isA<HighlightData>());
+      expect(textData, isA<TextData>());
+
+      final highlight = highlightData! as HighlightData;
+      final text = textData! as TextData;
 
       expect(highlight.strokeWidth, 0);
       expect(text.strokeWidth, 3);
@@ -94,11 +97,16 @@ void main() {
       );
       await pumpEventQueue();
 
-      final highlight =
-          store.state.domain.document.getElementById('h1')?.data
-              as HighlightData;
-      final text =
-          store.state.domain.document.getElementById('t1')?.data as TextData;
+      final highlightData = store.state.domain.document
+          .getElementById('h1')
+          ?.data;
+      final textData = store.state.domain.document.getElementById('t1')?.data;
+
+      expect(highlightData, isA<HighlightData>());
+      expect(textData, isA<TextData>());
+
+      final highlight = highlightData! as HighlightData;
+      final text = textData! as TextData;
 
       expect(highlight.strokeWidth, 2);
       expect(text.strokeWidth, 5);

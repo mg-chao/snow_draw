@@ -35,7 +35,7 @@ void main() {
         elements: const [
           ElementState(
             id: 'e1',
-            rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+            rect: DrawRect(maxX: 10, maxY: 10),
             rotation: 0,
             opacity: 1,
             zIndex: 0,
@@ -43,7 +43,7 @@ void main() {
           ),
           ElementState(
             id: 'h1',
-            rect: DrawRect(minX: 20, minY: 0, maxX: 30, maxY: 10),
+            rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
             rotation: 0,
             opacity: 1,
             zIndex: 1,
@@ -51,7 +51,7 @@ void main() {
           ),
           ElementState(
             id: 'e3',
-            rect: DrawRect(minX: 40, minY: 0, maxX: 50, maxY: 10),
+            rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
             rotation: 0,
             opacity: 1,
             zIndex: 2,
@@ -72,7 +72,7 @@ void main() {
       elements: const [
         ElementState(
           id: 'e1',
-          rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+          rect: DrawRect(maxX: 10, maxY: 10),
           rotation: 0,
           opacity: 1,
           zIndex: 0,
@@ -80,7 +80,7 @@ void main() {
         ),
         ElementState(
           id: 'e2',
-          rect: DrawRect(minX: 20, minY: 0, maxX: 30, maxY: 10),
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
           rotation: 0,
           opacity: 1,
           zIndex: 1,
@@ -88,7 +88,7 @@ void main() {
         ),
         ElementState(
           id: 'e3',
-          rect: DrawRect(minX: 40, minY: 0, maxX: 50, maxY: 10),
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
           rotation: 0,
           opacity: 1,
           zIndex: 2,
@@ -147,7 +147,7 @@ DrawState _stateWith({
   const defaultElements = [
     ElementState(
       id: 'e1',
-      rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+      rect: DrawRect(maxX: 10, maxY: 10),
       rotation: 0,
       opacity: 1,
       zIndex: 0,
@@ -155,7 +155,7 @@ DrawState _stateWith({
     ),
     ElementState(
       id: 'e2',
-      rect: DrawRect(minX: 20, minY: 0, maxX: 30, maxY: 10),
+      rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
       rotation: 0,
       opacity: 1,
       zIndex: 1,
@@ -163,7 +163,7 @@ DrawState _stateWith({
     ),
     ElementState(
       id: 'e3',
-      rect: DrawRect(minX: 40, minY: 0, maxX: 50, maxY: 10),
+      rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
       rotation: 0,
       opacity: 1,
       zIndex: 2,
