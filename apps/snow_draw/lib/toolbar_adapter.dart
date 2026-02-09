@@ -1374,25 +1374,33 @@ class StyleToolbarAdapter {
     final hasSelection = _selectedIds.isNotEmpty;
     final interaction = _store.state.application.interaction;
     final updateRectangleDefaults =
-        !highlightsOnlyScope && !textsOnlyScope && _selectedRectangles.isNotEmpty ||
+        (!highlightsOnlyScope &&
+            !textsOnlyScope &&
+            _selectedRectangles.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.rectangle);
     final updateArrowDefaults =
-        !highlightsOnlyScope && !textsOnlyScope && _selectedArrows.isNotEmpty ||
+        (!highlightsOnlyScope &&
+            !textsOnlyScope &&
+            _selectedArrows.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.arrow);
     final updateLineDefaults =
-        !highlightsOnlyScope && !textsOnlyScope && _selectedLines.isNotEmpty ||
+        (!highlightsOnlyScope &&
+            !textsOnlyScope &&
+            _selectedLines.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.line);
     final updateFreeDrawDefaults =
-        !highlightsOnlyScope && !textsOnlyScope && _selectedFreeDraws.isNotEmpty ||
+        (!highlightsOnlyScope &&
+            !textsOnlyScope &&
+            _selectedFreeDraws.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
             !textsOnlyScope &&
@@ -1403,10 +1411,12 @@ class StyleToolbarAdapter {
         (!hasSelection && !highlightsOnlyScope && toolType == ToolType.text);
     final updateHighlightDefaults =
         !textsOnlyScope &&
-            (_selectedHighlights.isNotEmpty ||
-                (!hasSelection && toolType == ToolType.highlight));
+        (_selectedHighlights.isNotEmpty ||
+            (!hasSelection && toolType == ToolType.highlight));
     final updateSerialNumberDefaults =
-        !highlightsOnlyScope && !textsOnlyScope && _selectedSerialNumbers.isNotEmpty ||
+        (!highlightsOnlyScope &&
+            !textsOnlyScope &&
+            _selectedSerialNumbers.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
             !textsOnlyScope &&

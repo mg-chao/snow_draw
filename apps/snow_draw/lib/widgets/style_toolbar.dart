@@ -90,7 +90,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     Color(0xFF1677FF),
     Color(0xFFFAAD14),
   ];
-  static const _highlightColorPalette = [
+  static const List<Color> _highlightColorPalette = [
     Colors.transparent,
     Color(0xFFF5222D),
     Color(0xFF52C41A),
