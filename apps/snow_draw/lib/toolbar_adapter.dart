@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
@@ -21,6 +22,8 @@ import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';
 
+enum StyleUpdateScope { allSelectedElements, highlightsOnly, textsOnly }
+
 class StyleToolbarAdapter {
   StyleToolbarAdapter({required DrawStore store}) : _store = store {
     _config = _store.config;
@@ -31,6 +34,7 @@ class StyleToolbarAdapter {
     _lineStyleValues = _resolveLineStyles();
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
+    _highlightStyleValues = _resolveHighlightStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
@@ -49,6 +53,7 @@ class StyleToolbarAdapter {
   Set<String> _selectedIds = const {};
   List<ElementState> _selectedElements = const [];
   List<ElementState> _selectedRectangles = const [];
+  List<ElementState> _selectedHighlights = const [];
   List<ElementState> _selectedArrows = const [];
   List<ElementState> _selectedLines = const [];
   List<ElementState> _selectedFreeDraws = const [];
@@ -60,6 +65,7 @@ class StyleToolbarAdapter {
   late LineStyleValues _lineStyleValues;
   late LineStyleValues _freeDrawStyleValues;
   late TextStyleValues _textStyleValues;
+  late HighlightStyleValues _highlightStyleValues;
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
@@ -93,19 +99,51 @@ class StyleToolbarAdapter {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    HighlightShape? highlightShape,
+    Color? maskColor,
+    double? maskOpacity,
     int? serialNumber,
     ToolType? toolType,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) async {
     final resolvedFamily = fontFamily?.trim();
     if (resolvedFamily != null && resolvedFamily.isNotEmpty) {
       await ensureSystemFontLoaded(resolvedFamily);
     }
-    final ids = {..._selectedIds};
+    final ids = switch (scope) {
+      StyleUpdateScope.highlightsOnly => {
+        for (final element in _selectedHighlights) element.id,
+      },
+      StyleUpdateScope.textsOnly => {
+        for (final element in _selectedTexts) element.id,
+      },
+      StyleUpdateScope.allSelectedElements => {..._selectedIds},
+    };
     final interaction = _store.state.application.interaction;
-    if (interaction is TextEditingState) {
+    if (scope != StyleUpdateScope.highlightsOnly &&
+        interaction is TextEditingState) {
       ids.add(interaction.elementId);
     }
-    if (ids.isNotEmpty) {
+    final hasElementStyleUpdate =
+        color != null ||
+        fillColor != null ||
+        strokeWidth != null ||
+        strokeStyle != null ||
+        fillStyle != null ||
+        cornerRadius != null ||
+        arrowType != null ||
+        startArrowhead != null ||
+        endArrowhead != null ||
+        fontSize != null ||
+        fontFamily != null ||
+        textAlign != null ||
+        verticalAlign != null ||
+        opacity != null ||
+        textStrokeColor != null ||
+        textStrokeWidth != null ||
+        highlightShape != null ||
+        serialNumber != null;
+    if (ids.isNotEmpty && hasElementStyleUpdate) {
       await _store.dispatch(
         UpdateElementsStyle(
           elementIds: ids.toList(),
@@ -125,6 +163,7 @@ class StyleToolbarAdapter {
           opacity: opacity,
           textStrokeColor: textStrokeColor,
           textStrokeWidth: textStrokeWidth,
+          highlightShape: highlightShape,
           serialNumber: serialNumber,
         ),
       );
@@ -147,8 +186,12 @@ class StyleToolbarAdapter {
       opacity: opacity,
       textStrokeColor: textStrokeColor,
       textStrokeWidth: textStrokeWidth,
+      highlightShape: highlightShape,
+      maskColor: maskColor,
+      maskOpacity: maskOpacity,
       serialNumber: serialNumber,
       toolType: toolType,
+      scope: scope,
     );
   }
 
@@ -201,6 +244,7 @@ class StyleToolbarAdapter {
       _lineStyleValues = _resolveLineStyles();
       _freeDrawStyleValues = _resolveFreeDrawStyles();
       _textStyleValues = _resolveTextStyles();
+      _highlightStyleValues = _resolveHighlightStyles();
       _serialNumberStyleValues = _resolveSerialNumberStyles();
       _publishState();
       return;
@@ -219,6 +263,7 @@ class StyleToolbarAdapter {
     _lineStyleValues = _resolveLineStyles();
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
+    _highlightStyleValues = _resolveHighlightStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
     _publishState();
   }
@@ -233,15 +278,20 @@ class StyleToolbarAdapter {
     final lineStyleChanged = config.lineStyle != _config.lineStyle;
     final freeDrawStyleChanged = config.freeDrawStyle != _config.freeDrawStyle;
     final textStyleChanged = config.textStyle != _config.textStyle;
+    final highlightStyleChanged =
+        config.highlightStyle != _config.highlightStyle;
     final serialNumberStyleChanged =
         config.serialNumberStyle != _config.serialNumberStyle;
+    final highlightMaskChanged = config.highlight != _config.highlight;
     _config = config;
     if (!rectangleStyleChanged &&
         !arrowStyleChanged &&
         !lineStyleChanged &&
         !freeDrawStyleChanged &&
         !textStyleChanged &&
-        !serialNumberStyleChanged) {
+        !highlightStyleChanged &&
+        !serialNumberStyleChanged &&
+        !highlightMaskChanged) {
       return;
     }
     if (_selectedRectangles.isEmpty && rectangleStyleChanged) {
@@ -259,6 +309,9 @@ class StyleToolbarAdapter {
     if (_selectedTexts.isEmpty && textStyleChanged) {
       _textStyleValues = _resolveTextStyles();
     }
+    if (_selectedHighlights.isEmpty && highlightStyleChanged) {
+      _highlightStyleValues = _resolveHighlightStyles();
+    }
     if (_selectedSerialNumbers.isEmpty && serialNumberStyleChanged) {
       _serialNumberStyleValues = _resolveSerialNumberStyles();
     }
@@ -271,6 +324,7 @@ class StyleToolbarAdapter {
       final changed =
           _selectedElements.isNotEmpty ||
           _selectedRectangles.isNotEmpty ||
+          _selectedHighlights.isNotEmpty ||
           _selectedArrows.isNotEmpty ||
           _selectedLines.isNotEmpty ||
           _selectedFreeDraws.isNotEmpty ||
@@ -280,6 +334,7 @@ class StyleToolbarAdapter {
       if (changed) {
         _selectedElements = const [];
         _selectedRectangles = const [];
+        _selectedHighlights = const [];
         _selectedArrows = const [];
         _selectedLines = const [];
         _selectedFreeDraws = const [];
@@ -293,6 +348,7 @@ class StyleToolbarAdapter {
     final document = _store.state.domain.document;
     final selectedElements = <ElementState>[];
     final selectedRectangles = <ElementState>[];
+    final selectedHighlights = <ElementState>[];
     final selectedArrows = <ElementState>[];
     final selectedLines = <ElementState>[];
     final selectedFreeDraws = <ElementState>[];
@@ -309,6 +365,9 @@ class StyleToolbarAdapter {
       selectedElements.add(element);
       if (element.data is RectangleData) {
         selectedRectangles.add(element);
+      }
+      if (element.data is HighlightData) {
+        selectedHighlights.add(element);
       }
       if (element.data is ArrowData) {
         selectedArrows.add(element);
@@ -342,6 +401,7 @@ class StyleToolbarAdapter {
     }
     _selectedElements = selectedElements;
     _selectedRectangles = selectedRectangles;
+    _selectedHighlights = selectedHighlights;
     _selectedArrows = selectedArrows;
     _selectedLines = selectedLines;
     _selectedFreeDraws = selectedFreeDraws;
@@ -1029,6 +1089,122 @@ class StyleToolbarAdapter {
     );
   }
 
+  /// Resolves highlight style values for the current selection.
+  HighlightStyleValues _resolveHighlightStyles() {
+    final defaults = _config.highlightStyle;
+    if (_selectedHighlights.isEmpty) {
+      return HighlightStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        highlightShape: MixedValue(
+          value: defaults.highlightShape,
+          isMixed: false,
+        ),
+        textStrokeColor: MixedValue(
+          value: defaults.textStrokeColor,
+          isMixed: false,
+        ),
+        textStrokeWidth: MixedValue(
+          value: defaults.textStrokeWidth,
+          isMixed: false,
+        ),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    final first = _selectedHighlights.first;
+    final firstData = first.data;
+    if (firstData is! HighlightData) {
+      return HighlightStyleValues(
+        color: MixedValue(value: defaults.color, isMixed: false),
+        highlightShape: MixedValue(
+          value: defaults.highlightShape,
+          isMixed: false,
+        ),
+        textStrokeColor: MixedValue(
+          value: defaults.textStrokeColor,
+          isMixed: false,
+        ),
+        textStrokeWidth: MixedValue(
+          value: defaults.textStrokeWidth,
+          isMixed: false,
+        ),
+        opacity: MixedValue(value: defaults.opacity, isMixed: false),
+      );
+    }
+
+    if (_selectedHighlights.length == 1) {
+      final opacity = _resolveMixedOpacity(defaults.opacity);
+      return HighlightStyleValues(
+        color: MixedValue(value: firstData.color, isMixed: false),
+        highlightShape: MixedValue(value: firstData.shape, isMixed: false),
+        textStrokeColor: MixedValue(
+          value: firstData.strokeColor,
+          isMixed: false,
+        ),
+        textStrokeWidth: MixedValue(
+          value: firstData.strokeWidth,
+          isMixed: false,
+        ),
+        opacity: opacity,
+      );
+    }
+
+    final color = firstData.color;
+    final highlightShape = firstData.shape;
+    final textStrokeColor = firstData.strokeColor;
+    final textStrokeWidth = firstData.strokeWidth;
+
+    var colorMixed = false;
+    var highlightShapeMixed = false;
+    var textStrokeColorMixed = false;
+    var textStrokeWidthMixed = false;
+
+    for (final element in _selectedHighlights.skip(1)) {
+      final data = element.data;
+      if (data is! HighlightData) {
+        continue;
+      }
+      if (!colorMixed && data.color != color) {
+        colorMixed = true;
+      }
+      if (!highlightShapeMixed && data.shape != highlightShape) {
+        highlightShapeMixed = true;
+      }
+      if (!textStrokeColorMixed && data.strokeColor != textStrokeColor) {
+        textStrokeColorMixed = true;
+      }
+      if (!textStrokeWidthMixed &&
+          !_doubleEquals(data.strokeWidth, textStrokeWidth)) {
+        textStrokeWidthMixed = true;
+      }
+      if (colorMixed &&
+          highlightShapeMixed &&
+          textStrokeColorMixed &&
+          textStrokeWidthMixed) {
+        break;
+      }
+    }
+
+    final opacity = _resolveMixedOpacity(defaults.opacity);
+
+    return HighlightStyleValues(
+      color: MixedValue(value: colorMixed ? null : color, isMixed: colorMixed),
+      highlightShape: MixedValue(
+        value: highlightShapeMixed ? null : highlightShape,
+        isMixed: highlightShapeMixed,
+      ),
+      textStrokeColor: MixedValue(
+        value: textStrokeColorMixed ? null : textStrokeColor,
+        isMixed: textStrokeColorMixed,
+      ),
+      textStrokeWidth: MixedValue(
+        value: textStrokeWidthMixed ? null : textStrokeWidth,
+        isMixed: textStrokeWidthMixed,
+      ),
+      opacity: opacity,
+    );
+  }
+
   /// Resolves serial number style values for the current selection.
   SerialNumberStyleValues _resolveSerialNumberStyles() {
     final defaults = _config.serialNumberStyle;
@@ -1186,37 +1362,66 @@ class StyleToolbarAdapter {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    HighlightShape? highlightShape,
+    Color? maskColor,
+    double? maskOpacity,
     int? serialNumber,
     ToolType? toolType,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) {
+    final highlightsOnlyScope = scope == StyleUpdateScope.highlightsOnly;
+    final textsOnlyScope = scope == StyleUpdateScope.textsOnly;
     final hasSelection = _selectedIds.isNotEmpty;
     final interaction = _store.state.application.interaction;
     final updateRectangleDefaults =
-        _selectedRectangles.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.rectangle);
+        !highlightsOnlyScope && !textsOnlyScope && _selectedRectangles.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.rectangle);
     final updateArrowDefaults =
-        _selectedArrows.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.arrow);
+        !highlightsOnlyScope && !textsOnlyScope && _selectedArrows.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.arrow);
     final updateLineDefaults =
-        _selectedLines.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.line);
+        !highlightsOnlyScope && !textsOnlyScope && _selectedLines.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.line);
     final updateFreeDrawDefaults =
-        _selectedFreeDraws.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.freeDraw);
+        !highlightsOnlyScope && !textsOnlyScope && _selectedFreeDraws.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.freeDraw);
     final updateTextDefaults =
-        _selectedTexts.isNotEmpty ||
-        interaction is TextEditingState ||
-        (!hasSelection && toolType == ToolType.text);
+        !highlightsOnlyScope && _selectedTexts.isNotEmpty ||
+        (!highlightsOnlyScope && interaction is TextEditingState) ||
+        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.text);
+    final updateHighlightDefaults =
+        !textsOnlyScope &&
+            (_selectedHighlights.isNotEmpty ||
+                (!hasSelection && toolType == ToolType.highlight));
     final updateSerialNumberDefaults =
-        _selectedSerialNumbers.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.serialNumber);
+        !highlightsOnlyScope && !textsOnlyScope && _selectedSerialNumbers.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.serialNumber);
+    final updateHighlightMask =
+        (maskColor != null || maskOpacity != null) && updateHighlightDefaults;
 
     if (!updateRectangleDefaults &&
         !updateArrowDefaults &&
         !updateLineDefaults &&
         !updateFreeDrawDefaults &&
         !updateTextDefaults &&
-        !updateSerialNumberDefaults) {
+        !updateHighlightDefaults &&
+        !updateSerialNumberDefaults &&
+        !updateHighlightMask) {
       return;
     }
 
@@ -1225,7 +1430,9 @@ class StyleToolbarAdapter {
     var nextLineStyle = _config.lineStyle;
     var nextFreeDrawStyle = _config.freeDrawStyle;
     var nextTextStyle = _config.textStyle;
+    var nextHighlightStyle = _config.highlightStyle;
     var nextSerialNumberStyle = _config.serialNumberStyle;
+    var nextHighlightMask = _config.highlight;
 
     if (updateRectangleDefaults) {
       nextRectangleStyle = nextRectangleStyle.copyWith(
@@ -1292,6 +1499,21 @@ class StyleToolbarAdapter {
         textStrokeWidth: textStrokeWidth,
       );
     }
+    if (updateHighlightDefaults) {
+      nextHighlightStyle = nextHighlightStyle.copyWith(
+        color: color,
+        highlightShape: highlightShape,
+        textStrokeColor: textStrokeColor,
+        textStrokeWidth: textStrokeWidth,
+        opacity: opacity,
+      );
+    }
+    if (updateHighlightMask) {
+      nextHighlightMask = nextHighlightMask.copyWith(
+        maskColor: maskColor,
+        maskOpacity: maskOpacity,
+      );
+    }
     if (updateSerialNumberDefaults) {
       nextSerialNumberStyle = nextSerialNumberStyle.copyWith(
         serialNumber: serialNumber,
@@ -1311,7 +1533,9 @@ class StyleToolbarAdapter {
         nextLineStyle == _config.lineStyle &&
         nextFreeDrawStyle == _config.freeDrawStyle &&
         nextTextStyle == _config.textStyle &&
-        nextSerialNumberStyle == _config.serialNumberStyle) {
+        nextHighlightStyle == _config.highlightStyle &&
+        nextSerialNumberStyle == _config.serialNumberStyle &&
+        nextHighlightMask == _config.highlight) {
       return;
     }
 
@@ -1324,7 +1548,9 @@ class StyleToolbarAdapter {
             lineStyle: nextLineStyle,
             freeDrawStyle: nextFreeDrawStyle,
             textStyle: nextTextStyle,
+            highlightStyle: nextHighlightStyle,
             serialNumberStyle: nextSerialNumberStyle,
+            highlight: nextHighlightMask,
           ),
         ),
       ),
@@ -1360,19 +1586,23 @@ class StyleToolbarAdapter {
     lineStyle: _config.lineStyle,
     freeDrawStyle: _config.freeDrawStyle,
     textStyle: _config.textStyle,
+    highlightStyle: _config.highlightStyle,
     serialNumberStyle: _config.serialNumberStyle,
     styleValues: _styleValues,
     arrowStyleValues: _arrowStyleValues,
     lineStyleValues: _lineStyleValues,
     freeDrawStyleValues: _freeDrawStyleValues,
     textStyleValues: _textStyleValues,
+    highlightStyleValues: _highlightStyleValues,
     serialNumberStyleValues: _serialNumberStyleValues,
+    highlightMask: _config.highlight,
     hasSelection: _selectedIds.isNotEmpty,
     hasSelectedRectangles: _selectedRectangles.isNotEmpty,
     hasSelectedArrows: _selectedArrows.isNotEmpty,
     hasSelectedLines: _selectedLines.isNotEmpty,
     hasSelectedFreeDraws: _selectedFreeDraws.isNotEmpty,
     hasSelectedTexts: _selectedTexts.isNotEmpty,
+    hasSelectedHighlights: _selectedHighlights.isNotEmpty,
     hasSelectedSerialNumbers: _selectedSerialNumbers.isNotEmpty,
   );
 
@@ -1384,6 +1614,7 @@ class _ElementStyleSnapshot {
   const _ElementStyleSnapshot({
     required this.opacity,
     this.rectangleData,
+    this.highlightData,
     this.arrowData,
     this.lineData,
     this.freeDrawData,
@@ -1393,6 +1624,7 @@ class _ElementStyleSnapshot {
 
   final double opacity;
   final RectangleData? rectangleData;
+  final HighlightData? highlightData;
   final ArrowData? arrowData;
   final LineData? lineData;
   final FreeDrawData? freeDrawData;
@@ -1404,6 +1636,9 @@ class _ElementStyleSnapshot {
         opacity: element.opacity,
         rectangleData: element.data is RectangleData
             ? element.data as RectangleData
+            : null,
+        highlightData: element.data is HighlightData
+            ? element.data as HighlightData
             : null,
         arrowData: element.data is ArrowData ? element.data as ArrowData : null,
         lineData: element.data is LineData ? element.data as LineData : null,
@@ -1421,6 +1656,7 @@ class _ElementStyleSnapshot {
     bool Function(double, double) equals,
   ) =>
       identical(rectangleData, other.rectangleData) &&
+      identical(highlightData, other.highlightData) &&
       identical(arrowData, other.arrowData) &&
       identical(lineData, other.lineData) &&
       identical(freeDrawData, other.freeDrawData) &&

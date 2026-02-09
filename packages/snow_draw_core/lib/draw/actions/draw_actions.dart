@@ -268,6 +268,7 @@ class UpdateElementsStyle extends DrawAction {
     this.opacity,
     this.textStrokeColor,
     this.textStrokeWidth,
+    this.highlightShape,
     this.serialNumber,
   });
 
@@ -288,6 +289,7 @@ class UpdateElementsStyle extends DrawAction {
   final double? opacity;
   final Color? textStrokeColor;
   final double? textStrokeWidth;
+  final HighlightShape? highlightShape;
   final int? serialNumber;
 
   @override

@@ -90,12 +90,20 @@ class _StyleToolbarState extends State<StyleToolbar> {
     Color(0xFF1677FF),
     Color(0xFFFAAD14),
   ];
+  static const _highlightColorPalette = [
+    Colors.transparent,
+    Color(0xFFF5222D),
+    Color(0xFF52C41A),
+    Color(0xFF1677FF),
+    Color(0xFFFAAD14),
+  ];
 
   late Listenable _mergedListenable;
   late final ScrollController _scrollController;
   Timer? _sliderUpdateTimer;
   double? _pendingCornerRadius;
   double? _pendingOpacity;
+  double? _pendingMaskOpacity;
   int? _pendingSerialNumber;
   late final TextEditingController _serialNumberController;
   late final FocusNode _serialNumberFocusNode;
@@ -186,6 +194,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final state = widget.adapter.stateListenable.value;
       final showRectangleControls =
           tool == ToolType.rectangle || state.hasSelectedRectangles;
+      final showHighlightControls =
+          tool == ToolType.highlight || state.hasSelectedHighlights;
       final showArrowControls =
           tool == ToolType.arrow || state.hasSelectedArrows;
       final showLineControls = tool == ToolType.line || state.hasSelectedLines;
@@ -196,6 +206,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           tool == ToolType.serialNumber || state.hasSelectedSerialNumbers;
       final showToolbar =
           showRectangleControls ||
+          showHighlightControls ||
           showArrowControls ||
           showLineControls ||
           showFreeDrawControls ||
@@ -1184,7 +1195,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Widget _buildSectionHeader(String label) {
     final theme = Theme.of(context);
-    return Row(children: [Text(label, style: theme.textTheme.labelMedium)]);
+    return Text(label, style: theme.textTheme.labelMedium);
   }
 
   Future<Color?> _showColorPicker(
@@ -1406,6 +1417,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedRectangles) {
       selectedTypes.add(ElementType.rectangle);
     }
+    if (state.hasSelectedHighlights) {
+      selectedTypes.add(ElementType.highlight);
+    }
     if (state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
@@ -1429,6 +1443,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
+        case ToolType.highlight:
+          selectedTypes.add(ElementType.highlight);
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
         case ToolType.line:
@@ -1450,13 +1466,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
       lineStyleValues: state.lineStyleValues,
       freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
+      highlightStyleValues: state.highlightStyleValues,
       serialNumberStyleValues: state.serialNumberStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
       lineDefaults: state.lineStyle,
       freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
+      highlightDefaults: state.highlightStyle,
       serialNumberDefaults: state.serialNumberStyle,
+      highlightMask: state.highlightMask,
       selectedElementTypes: selectedTypes,
       currentTool: widget.toolController.value,
     );
@@ -1509,6 +1528,23 @@ class _StyleToolbarState extends State<StyleToolbar> {
         }
       }
 
+      // Hide highlightTextStrokeColor if highlightTextStrokeWidth is 0
+      if (property.id == 'highlightTextStrokeColor') {
+        final textStrokeWidthProp = PropertyRegistry.instance.getProperty(
+          'highlightTextStrokeWidth',
+        );
+        if (textStrokeWidthProp != null) {
+          final textStrokeWidth =
+              textStrokeWidthProp.extractValue(context) as MixedValue<double>;
+          final defaultWidth =
+              textStrokeWidthProp.getDefaultValue(context) as double;
+          if (!textStrokeWidth.isMixed &&
+              (textStrokeWidth.value ?? defaultWidth) <= 0) {
+            return false;
+          }
+        }
+      }
+
       // Hide cornerRadius for text if fillColor is transparent
       if (property.id == 'cornerRadius') {
         // Only apply this rule if we have text elements selected
@@ -1545,12 +1581,91 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case 'color':
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
+        final colors = context.hasOnlySelected({ElementType.highlight})
+            ? _highlightColorPalette
+            : _defaultColorPalette;
         return _buildColorRow(
           label: widget.strings.color,
-          colors: _defaultColorPalette,
+          colors: colors,
           value: value,
           customColor: value.valueOr(defaultValue),
           onSelect: (color) => _applyStyleUpdate(color: color),
+          allowAlpha: true,
+        );
+
+      case 'highlightShape':
+        final value =
+            property.extractValue(context) as MixedValue<HighlightShape>;
+        return _buildStyleOptions<HighlightShape>(
+          label: widget.strings.highlightShape,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: HighlightShape.rectangle,
+              label: widget.strings.highlightShapeRectangle,
+              icon: const Icon(Icons.rectangle_outlined, size: _iconSize),
+            ),
+            _StyleOption(
+              value: HighlightShape.ellipse,
+              label: widget.strings.highlightShapeEllipse,
+              icon: const Icon(Icons.circle_outlined, size: _iconSize),
+            ),
+          ],
+          selected: value.isMixed ? null : value.value,
+          onSelect: (shape) => _applyStyleUpdate(
+            highlightShape: shape,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
+        );
+
+      case 'highlightTextStrokeWidth':
+        final value = property.extractValue(context) as MixedValue<double>;
+        return _buildNumericOptions(
+          label: widget.strings.highlightTextStrokeWidth,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            const _StyleOption(
+              value: 0,
+              label: 'None',
+              icon: Icon(Icons.not_interested, size: _iconSize),
+            ),
+            _StyleOption(
+              value: 2,
+              label: widget.strings.small,
+              icon: const StrokeWidthSmallIcon(),
+            ),
+            _StyleOption(
+              value: 3,
+              label: widget.strings.medium,
+              icon: const StrokeWidthMediumIcon(),
+            ),
+            _StyleOption(
+              value: 5,
+              label: widget.strings.large,
+              icon: const StrokeWidthLargeIcon(),
+            ),
+          ],
+          selected: value.value,
+          onSelect: (value) => _applyStyleUpdate(
+            textStrokeWidth: value,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
+        );
+
+      case 'highlightTextStrokeColor':
+        final value = property.extractValue(context) as MixedValue<Color>;
+        final defaultValue = property.getDefaultValue(context) as Color;
+        return _buildColorRow(
+          label: widget.strings.highlightTextStrokeColor,
+          colors: _defaultColorPalette,
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(
+            textStrokeColor: color,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
           allowAlpha: true,
         );
 
@@ -1697,6 +1812,41 @@ class _StyleToolbarState extends State<StyleToolbar> {
           },
         );
 
+      case 'maskColor':
+        final value = property.extractValue(context) as MixedValue<Color>;
+        final defaultValue = property.getDefaultValue(context) as Color;
+        return _buildColorRow(
+          label: widget.strings.maskColor,
+          colors: _defaultColorPalette,
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(maskColor: color),
+          allowAlpha: false,
+        );
+
+      case 'maskOpacity':
+        final value = property.extractValue(context) as MixedValue<double>;
+        final defaultValue = property.getDefaultValue(context) as double;
+        return _buildSliderControl(
+          label: widget.strings.maskOpacity,
+          value: value,
+          defaultValue: defaultValue,
+          min: 0,
+          max: 1,
+          pendingValue: _pendingMaskOpacity,
+          onChanged: (newValue) {
+            setState(() => _pendingMaskOpacity = newValue);
+            _scheduleStyleUpdate(
+              () => _applyStyleUpdate(maskOpacity: newValue),
+            );
+          },
+          onChangeEnd: (newValue) async {
+            _flushStyleUpdate();
+            setState(() => _pendingMaskOpacity = null);
+            await _applyStyleUpdate(maskOpacity: newValue);
+          },
+        );
+
       case 'arrowType':
         final value = property.extractValue(context) as MixedValue<ArrowType>;
         return _buildStyleOptions<ArrowType>(
@@ -1838,7 +1988,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
             ),
           ],
           selected: value.value,
-          onSelect: (value) => _applyStyleUpdate(textStrokeWidth: value),
+          onSelect: (value) => _applyStyleUpdate(
+            textStrokeWidth: value,
+            scope: StyleUpdateScope.textsOnly,
+          ),
         );
 
       case 'textStrokeColor':
@@ -1855,7 +2008,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
           ],
           value: value,
           customColor: value.valueOr(defaultValue),
-          onSelect: (color) => _applyStyleUpdate(textStrokeColor: color),
+          onSelect: (color) => _applyStyleUpdate(
+            textStrokeColor: color,
+            scope: StyleUpdateScope.textsOnly,
+          ),
           allowAlpha: true,
         );
 
@@ -1881,7 +2037,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
     double? opacity,
     Color? textStrokeColor,
     double? textStrokeWidth,
+    HighlightShape? highlightShape,
+    Color? maskColor,
+    double? maskOpacity,
     int? serialNumber,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) => widget.adapter.applyStyleUpdate(
     color: color,
     fillColor: fillColor,
@@ -1899,8 +2059,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
     opacity: opacity,
     textStrokeColor: textStrokeColor,
     textStrokeWidth: textStrokeWidth,
+    highlightShape: highlightShape,
+    maskColor: maskColor,
+    maskOpacity: maskOpacity,
     serialNumber: serialNumber,
     toolType: widget.toolController.value,
+    scope: scope,
   );
 
   Future<void> _handleCopy() => widget.adapter.copySelection();

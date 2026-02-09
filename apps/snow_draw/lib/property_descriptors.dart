@@ -11,6 +11,7 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
         id: 'color',
         supportedElementTypes: const {
           ElementType.rectangle,
+          ElementType.highlight,
           ElementType.arrow,
           ElementType.line,
           ElementType.freeDraw,
@@ -25,6 +26,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
 
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       values.add(context.rectangleStyleValues.color);
+    }
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      values.add(context.highlightStyleValues.color);
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.color);
@@ -50,6 +54,9 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       return context.rectangleDefaults.color;
     }
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return context.highlightDefaults.color;
+    }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.color;
     }
@@ -67,6 +74,72 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     }
     return Colors.black;
   }
+}
+
+/// Property descriptor for highlight shape
+class HighlightShapePropertyDescriptor
+    extends PropertyDescriptor<HighlightShape> {
+  const HighlightShapePropertyDescriptor()
+    : super(
+        id: 'highlightShape',
+        supportedElementTypes: const {ElementType.highlight},
+      );
+
+  @override
+  MixedValue<HighlightShape> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return context.highlightStyleValues.highlightShape;
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  HighlightShape getDefaultValue(StylePropertyContext context) =>
+      context.highlightDefaults.highlightShape;
+}
+
+/// Property descriptor for highlight text stroke width
+class HighlightTextStrokeWidthPropertyDescriptor
+    extends PropertyDescriptor<double> {
+  const HighlightTextStrokeWidthPropertyDescriptor()
+    : super(
+        id: 'highlightTextStrokeWidth',
+        supportedElementTypes: const {ElementType.highlight},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return context.highlightStyleValues.textStrokeWidth;
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.highlightDefaults.textStrokeWidth;
+}
+
+/// Property descriptor for highlight text stroke color
+class HighlightTextStrokeColorPropertyDescriptor
+    extends PropertyDescriptor<Color> {
+  const HighlightTextStrokeColorPropertyDescriptor()
+    : super(
+        id: 'highlightTextStrokeColor',
+        supportedElementTypes: const {ElementType.highlight},
+      );
+
+  @override
+  MixedValue<Color> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return context.highlightStyleValues.textStrokeColor;
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  Color getDefaultValue(StylePropertyContext context) =>
+      context.highlightDefaults.textStrokeColor;
 }
 
 /// Property descriptor for stroke width
@@ -294,6 +367,7 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
         id: 'opacity',
         supportedElementTypes: const {
           ElementType.rectangle,
+          ElementType.highlight,
           ElementType.arrow,
           ElementType.line,
           ElementType.freeDraw,
@@ -308,6 +382,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
 
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       values.add(context.rectangleStyleValues.opacity);
+    }
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      values.add(context.highlightStyleValues.opacity);
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.opacity);
@@ -333,6 +410,9 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     if (context.selectedElementTypes.contains(ElementType.rectangle)) {
       return context.rectangleDefaults.opacity;
     }
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return context.highlightDefaults.opacity;
+    }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.opacity;
     }
@@ -350,6 +430,51 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     return 1;
   }
+}
+
+/// Property descriptor for highlight mask color
+class MaskColorPropertyDescriptor extends PropertyDescriptor<Color> {
+  const MaskColorPropertyDescriptor()
+    : super(
+        id: 'maskColor',
+        supportedElementTypes: const {ElementType.highlight},
+      );
+
+  @override
+  MixedValue<Color> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return MixedValue(value: context.highlightMask.maskColor, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  Color getDefaultValue(StylePropertyContext context) =>
+      context.highlightMask.maskColor;
+}
+
+/// Property descriptor for highlight mask opacity
+class MaskOpacityPropertyDescriptor extends PropertyDescriptor<double> {
+  const MaskOpacityPropertyDescriptor()
+    : super(
+        id: 'maskOpacity',
+        supportedElementTypes: const {ElementType.highlight},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.highlight)) {
+      return MixedValue(
+        value: context.highlightMask.maskOpacity,
+        isMixed: false,
+      );
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.highlightMask.maskOpacity;
 }
 
 /// Property descriptor for corner radius

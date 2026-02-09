@@ -3,6 +3,7 @@ import '../core/draw_context.dart' show DrawContext;
 import 'core/element_registry.dart';
 import 'types/arrow/arrow_definition.dart';
 import 'types/free_draw/free_draw_definition.dart';
+import 'types/highlight/highlight_definition.dart';
 import 'types/line/line_definition.dart';
 import 'types/rectangle/rectangle_definition.dart';
 import 'types/serial_number/serial_number_definition.dart';
@@ -24,6 +25,9 @@ void registerBuiltInElements(DefaultElementRegistry registry) {
   }
   if (registry.get(freeDrawDefinition.typeId) == null) {
     registry.register(freeDrawDefinition);
+  }
+  if (registry.get(highlightDefinition.typeId) == null) {
+    registry.register(highlightDefinition);
   }
   if (registry.get(textDefinition.typeId) == null) {
     registry.register(textDefinition);

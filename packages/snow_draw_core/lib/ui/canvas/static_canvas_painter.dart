@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
@@ -9,6 +10,8 @@ import '../../draw/render/element_renderer.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'grid_shader_painter.dart';
+import 'highlight_mask_painter.dart';
+import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 
@@ -143,6 +146,16 @@ class StaticCanvasPainter extends CustomPainter {
           connectorsByTextId: serialConnectors,
         );
       }
+    }
+
+    if (renderKey.highlightMaskLayer == HighlightMaskLayer.staticLayer) {
+      paintHighlightMask(
+        canvas: canvas,
+        stateView: stateView,
+        viewportRect: viewportRect,
+        maskConfig: renderKey.highlightMaskConfig,
+        creatingElement: null,
+      );
     }
 
     canvas.restore();

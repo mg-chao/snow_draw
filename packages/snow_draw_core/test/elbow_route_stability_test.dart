@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_constants.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_geometry.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_heading.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
@@ -11,7 +10,7 @@ import 'elbow_test_utils.dart';
 
 void main() {
   test('bound start keeps right segment stable as end moves downward', () {
-    const rect = DrawRect(minX: 0, minY: 0, maxX: 120, maxY: 80);
+    const rect = DrawRect(maxX: 120, maxY: 80);
     final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
     const binding = ArrowBinding(
       elementId: 'rect-1',

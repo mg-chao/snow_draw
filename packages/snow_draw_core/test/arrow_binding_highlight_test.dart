@@ -15,12 +15,12 @@ void main() {
       pointKind: ArrowPointKind.turning,
       pointIndex: 3,
     );
-    final binding = ArrowBinding(
+    const binding = ArrowBinding(
       elementId: 'rect',
-      anchor: const DrawPoint(x: 1, y: 0.5),
+      anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final data = ArrowData(
-      points: const [
+    const data = ArrowData(
+      points: [
         DrawPoint.zero,
         DrawPoint(x: 0.3, y: 0),
         DrawPoint(x: 0.3, y: 0.4),
@@ -52,9 +52,9 @@ void main() {
         pointKind: ArrowPointKind.turning,
         pointIndex: 1,
       );
-      final binding = ArrowBinding(
+      const binding = ArrowBinding(
         elementId: 'rect',
-        anchor: const DrawPoint(x: 1, y: 0.5),
+        anchor: DrawPoint(x: 1, y: 0.5),
       );
       final data = ArrowData(
         points: context.initialPoints,
@@ -82,7 +82,7 @@ ArrowPointEditContext _buildContext({
   required ArrowPointKind pointKind,
   required int pointIndex,
 }) {
-  const elementRect = DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100);
+  const elementRect = DrawRect(maxX: 100, maxY: 100);
   const points = [
     DrawPoint.zero,
     DrawPoint(x: 0.2, y: 0),

@@ -42,6 +42,7 @@ class _MainToolbarState extends State<MainToolbar> {
       final tool = widget.toolController.value;
       final isSelection = tool == ToolType.selection;
       final isRectangle = tool == ToolType.rectangle;
+      final isHighlight = tool == ToolType.highlight;
       final isArrow = tool == ToolType.arrow;
       final isLine = tool == ToolType.line;
       final isFreeDraw = tool == ToolType.freeDraw;
@@ -80,6 +81,17 @@ class _MainToolbarState extends State<MainToolbar> {
                 selected: isRectangle,
                 onPressed: () =>
                     widget.toolController.setTool(ToolType.rectangle),
+                selectedColor: selectedColor,
+                unselectedColor: unselectedColor,
+                selectedBackground: selectedBackground,
+              ),
+              const SizedBox(width: _buttonGap),
+              _buildToolButton(
+                tooltip: widget.strings.toolHighlight,
+                icon: Icons.highlight,
+                selected: isHighlight,
+                onPressed: () =>
+                    widget.toolController.setTool(ToolType.highlight),
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
                 selectedBackground: selectedBackground,

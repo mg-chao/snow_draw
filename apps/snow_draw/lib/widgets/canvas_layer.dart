@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
@@ -48,6 +49,8 @@ class _CanvasLayerState extends State<CanvasLayer> {
       store: widget.store,
       currentToolTypeId: tool == ToolType.rectangle
           ? RectangleData.typeIdToken
+          : tool == ToolType.highlight
+          ? HighlightData.typeIdToken
           : tool == ToolType.arrow
           ? ArrowData.typeIdToken
           : tool == ToolType.line

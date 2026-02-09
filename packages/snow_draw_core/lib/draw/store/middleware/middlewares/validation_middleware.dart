@@ -194,6 +194,7 @@ ValidationResult _validateUpdateElementsStyle(
       update.opacity == null &&
       update.textStrokeColor == null &&
       update.textStrokeWidth == null &&
+      update.highlightShape == null &&
       update.serialNumber == null) {
     return const ValidationResult.invalid(
       'UpdateElementsStyle has no fields to update',

@@ -23,19 +23,18 @@ ArrowBinding? resolveArrowPointEditHighlightBinding({
   return endpoint == _ArrowEndpoint.start ? data.startBinding : data.endBinding;
 }
 
-_ArrowEndpoint? _resolveEndpointForContext(ArrowPointEditContext context) {
-  return switch (context.pointKind) {
-    ArrowPointKind.loopStart => _ArrowEndpoint.start,
-    ArrowPointKind.loopEnd => _ArrowEndpoint.end,
-    ArrowPointKind.turning =>
-      context.pointIndex == 0
-          ? _ArrowEndpoint.start
-          : context.pointIndex == context.initialPoints.length - 1
-          ? _ArrowEndpoint.end
-          : null,
-    _ => null,
-  };
-}
+_ArrowEndpoint? _resolveEndpointForContext(ArrowPointEditContext context) =>
+    switch (context.pointKind) {
+      ArrowPointKind.loopStart => _ArrowEndpoint.start,
+      ArrowPointKind.loopEnd => _ArrowEndpoint.end,
+      ArrowPointKind.turning =>
+        context.pointIndex == 0
+            ? _ArrowEndpoint.start
+            : context.pointIndex == context.initialPoints.length - 1
+            ? _ArrowEndpoint.end
+            : null,
+      _ => null,
+    };
 
 ArrowBinding? _bindingFromTransform(
   _ArrowEndpoint endpoint,

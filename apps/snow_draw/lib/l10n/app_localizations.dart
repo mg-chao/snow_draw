@@ -15,6 +15,7 @@ class AppLocalizations {
   String get appTitle => 'Snow Draw';
   String get toolSelection => 'Selection';
   String get toolRectangle => 'Rectangle';
+  String get toolHighlight => 'Highlight';
   String get toolArrow => 'Arrow';
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';
@@ -44,6 +45,13 @@ class AppLocalizations {
   String get arrowheadInvertedTriangle => 'Inverted Triangle';
   String get arrowheadVerticalLine => 'Vertical Line';
   String get textStrokeWidth => 'Text Stroke Width';
+  String get highlightShape => 'Highlight Shape';
+  String get highlightShapeRectangle => 'Rectangle';
+  String get highlightShapeEllipse => 'Ellipse';
+  String get highlightTextStrokeWidth => 'Highlight Stroke Width';
+  String get highlightTextStrokeColor => 'Highlight Stroke Color';
+  String get maskColor => 'Mask Color';
+  String get maskOpacity => 'Mask Opacity';
   String get fontSize => 'Font Size';
   String get fontFamily => 'Font Family';
   String get number => 'Number';

@@ -17,6 +17,7 @@ import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -40,8 +41,10 @@ import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
+import 'dynamic_layer_split.dart';
 import 'dynamic_canvas_painter.dart';
 import 'grid_shader_painter.dart';
+import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
@@ -387,6 +390,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       stateView,
       dynamicLayerStartIndex,
     );
+    final creatingSnapshot = _extractCreatingSnapshot(stateView);
+    final hasHighlights = _hasHighlightElements(stateView, creatingSnapshot);
+    final hasDynamicContent =
+        dynamicLayerStartIndex != null || creatingSnapshot != null;
+    final highlightMaskLayer = resolveHighlightMaskLayer(
+      hasHighlights: hasHighlights,
+      hasDynamicContent: hasDynamicContent,
+      config: config.highlight,
+    );
 
     // Build precise render keys for each canvas layer.
     final staticRenderKey = StaticCanvasRenderKey(
@@ -397,12 +409,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       canvasConfig: config.canvas,
       gridConfig: config.grid,
+      highlightMaskLayer: highlightMaskLayer,
+      highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
       locale: locale,
     );
 
     final dynamicRenderKey = DynamicCanvasRenderKey(
-      creatingElement: _extractCreatingSnapshot(stateView),
+      creatingElement: creatingSnapshot,
       effectiveSelection: stateView.effectiveSelection,
       boxSelectionBounds: _extractBoxSelectionBounds(stateView),
       selectedIds: stateView.selectedIds,
@@ -420,6 +434,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       selectionConfig: selectionConfig,
       boxSelectionConfig: config.boxSelection,
       snapConfig: config.snap,
+      highlightMaskLayer: highlightMaskLayer,
+      highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
       locale: locale,
     );
@@ -552,30 +568,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) {
-    // When creating a new text element, render all existing elements in the
-    // static layer so the text element's background appears on top.
-    final interaction = view.state.application.interaction;
-    if (interaction is TextEditingState && interaction.isNew) {
-      return 0;
-    }
-
-    final selectedIds = view.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-
-    final document = view.state.domain.document;
-    int? minIndex;
-    for (final id in selectedIds) {
-      final orderIndex = document.getOrderIndex(id);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (minIndex == null || orderIndex < minIndex) {
-        minIndex = orderIndex;
-      }
-    }
-    return minIndex;
+    return resolveDynamicLayerStartIndex(view);
   }
 
   /// Extract creating element snapshot from state view.
@@ -588,6 +581,26 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
     return null;
+  }
+
+  bool _hasHighlightElements(
+    DrawStateView view,
+    CreatingElementSnapshot? creating,
+  ) {
+    for (final element in view.state.domain.document.elements) {
+      if (element.data is HighlightData) {
+        return true;
+      }
+    }
+    for (final preview in view.previewElementsById.values) {
+      if (preview.data is HighlightData) {
+        return true;
+      }
+    }
+    if (creating?.element.data is HighlightData) {
+      return true;
+    }
+    return false;
   }
 
   /// Extract box selection bounds from state view.
