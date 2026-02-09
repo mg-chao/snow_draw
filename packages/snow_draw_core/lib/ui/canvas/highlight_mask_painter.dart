@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import '../../draw/config/draw_config.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';

@@ -41,8 +41,8 @@ import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
-import 'dynamic_layer_split.dart';
 import 'dynamic_canvas_painter.dart';
+import 'dynamic_layer_split.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
@@ -567,9 +567,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return filtered;
   }
 
-  int? _resolveDynamicLayerStartIndex(DrawStateView view) {
-    return resolveDynamicLayerStartIndex(view);
-  }
+  int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
+      resolveDynamicLayerStartIndex(view);
 
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
