@@ -22,6 +22,8 @@ import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';
 
+enum StyleUpdateScope { allSelectedElements, highlightsOnly }
+
 class StyleToolbarAdapter {
   StyleToolbarAdapter({required DrawStore store}) : _store = store {
     _config = _store.config;
@@ -102,17 +104,40 @@ class StyleToolbarAdapter {
     double? maskOpacity,
     int? serialNumber,
     ToolType? toolType,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) async {
     final resolvedFamily = fontFamily?.trim();
     if (resolvedFamily != null && resolvedFamily.isNotEmpty) {
       await ensureSystemFontLoaded(resolvedFamily);
     }
-    final ids = {..._selectedIds};
+    final ids = scope == StyleUpdateScope.highlightsOnly
+        ? {for (final element in _selectedHighlights) element.id}
+        : {..._selectedIds};
     final interaction = _store.state.application.interaction;
-    if (interaction is TextEditingState) {
+    if (scope == StyleUpdateScope.allSelectedElements &&
+        interaction is TextEditingState) {
       ids.add(interaction.elementId);
     }
-    if (ids.isNotEmpty) {
+    final hasElementStyleUpdate =
+        color != null ||
+        fillColor != null ||
+        strokeWidth != null ||
+        strokeStyle != null ||
+        fillStyle != null ||
+        cornerRadius != null ||
+        arrowType != null ||
+        startArrowhead != null ||
+        endArrowhead != null ||
+        fontSize != null ||
+        fontFamily != null ||
+        textAlign != null ||
+        verticalAlign != null ||
+        opacity != null ||
+        textStrokeColor != null ||
+        textStrokeWidth != null ||
+        highlightShape != null ||
+        serialNumber != null;
+    if (ids.isNotEmpty && hasElementStyleUpdate) {
       await _store.dispatch(
         UpdateElementsStyle(
           elementIds: ids.toList(),
@@ -160,6 +185,7 @@ class StyleToolbarAdapter {
       maskOpacity: maskOpacity,
       serialNumber: serialNumber,
       toolType: toolType,
+      scope: scope,
     );
   }
 
@@ -1335,31 +1361,39 @@ class StyleToolbarAdapter {
     double? maskOpacity,
     int? serialNumber,
     ToolType? toolType,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) {
+    final highlightsOnlyScope = scope == StyleUpdateScope.highlightsOnly;
     final hasSelection = _selectedIds.isNotEmpty;
     final interaction = _store.state.application.interaction;
     final updateRectangleDefaults =
-        _selectedRectangles.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.rectangle);
+        !highlightsOnlyScope && _selectedRectangles.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            toolType == ToolType.rectangle);
     final updateArrowDefaults =
-        _selectedArrows.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.arrow);
+        !highlightsOnlyScope && _selectedArrows.isNotEmpty ||
+        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.arrow);
     final updateLineDefaults =
-        _selectedLines.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.line);
+        !highlightsOnlyScope && _selectedLines.isNotEmpty ||
+        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.line);
     final updateFreeDrawDefaults =
-        _selectedFreeDraws.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.freeDraw);
+        !highlightsOnlyScope && _selectedFreeDraws.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            toolType == ToolType.freeDraw);
     final updateTextDefaults =
-        _selectedTexts.isNotEmpty ||
-        interaction is TextEditingState ||
-        (!hasSelection && toolType == ToolType.text);
+        !highlightsOnlyScope && _selectedTexts.isNotEmpty ||
+        (!highlightsOnlyScope && interaction is TextEditingState) ||
+        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.text);
     final updateHighlightDefaults =
         _selectedHighlights.isNotEmpty ||
         (!hasSelection && toolType == ToolType.highlight);
     final updateSerialNumberDefaults =
-        _selectedSerialNumbers.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.serialNumber);
+        !highlightsOnlyScope && _selectedSerialNumbers.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            toolType == ToolType.serialNumber);
     final updateHighlightMask =
         (maskColor != null || maskOpacity != null) && updateHighlightDefaults;
 

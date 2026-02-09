@@ -1613,7 +1613,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
             ),
           ],
           selected: value.isMixed ? null : value.value,
-          onSelect: (shape) => _applyStyleUpdate(highlightShape: shape),
+          onSelect: (shape) => _applyStyleUpdate(
+            highlightShape: shape,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
         );
 
       case 'highlightTextStrokeWidth':
@@ -1645,7 +1648,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
             ),
           ],
           selected: value.value,
-          onSelect: (value) => _applyStyleUpdate(textStrokeWidth: value),
+          onSelect: (value) => _applyStyleUpdate(
+            textStrokeWidth: value,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
         );
 
       case 'highlightTextStrokeColor':
@@ -1656,7 +1662,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
           colors: _defaultColorPalette,
           value: value,
           customColor: value.valueOr(defaultValue),
-          onSelect: (color) => _applyStyleUpdate(textStrokeColor: color),
+          onSelect: (color) => _applyStyleUpdate(
+            textStrokeColor: color,
+            scope: StyleUpdateScope.highlightsOnly,
+          ),
           allowAlpha: true,
         );
 
@@ -2026,6 +2035,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     Color? maskColor,
     double? maskOpacity,
     int? serialNumber,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) => widget.adapter.applyStyleUpdate(
     color: color,
     fillColor: fillColor,
@@ -2048,6 +2058,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     maskOpacity: maskOpacity,
     serialNumber: serialNumber,
     toolType: widget.toolController.value,
+    scope: scope,
   );
 
   Future<void> _handleCopy() => widget.adapter.copySelection();

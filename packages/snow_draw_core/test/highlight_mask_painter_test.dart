@@ -10,6 +10,8 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_painter.dart';
 
+const _deg45 = 0.7853981633974483;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -53,4 +55,48 @@ void main() {
     expect(pixelAt(1, 1, 3), 255);
     expect(pixelAt(10, 10, 3), 0);
   });
+
+  test(
+    'highlight mask culling keeps rotated highlights near viewport edge',
+    () async {
+      const element = ElementState(
+        id: 'h2',
+        rect: DrawRect(minX: -8, minY: 0, maxX: -0.5, maxY: 8),
+        rotation: _deg45,
+        opacity: 1,
+        zIndex: 0,
+        data: HighlightData(),
+      );
+
+      final initial = DrawState.initial();
+      final state = DrawState(
+        domain: initial.domain.copyWith(
+          document: initial.domain.document.copyWith(elements: [element]),
+        ),
+        application: initial.application.copyWith(
+          interaction: const IdleState(),
+        ),
+      );
+      final view = DrawStateView.fromState(state);
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+
+      paintHighlightMask(
+        canvas: canvas,
+        stateView: view,
+        viewportRect: const DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 20),
+        maskConfig: const HighlightMaskConfig(maskOpacity: 1),
+        creatingElement: null,
+      );
+
+      final image = await recorder.endRecording().toImage(20, 20);
+      final bytes = await image.toByteData();
+      expect(bytes, isNotNull);
+
+      final data = bytes!;
+      int alphaAt(int x, int y) => data.getUint8(((y * 20) + x) * 4 + 3);
+
+      expect(alphaAt(0, 4), lessThan(255));
+    },
+  );
 }
