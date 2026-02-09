@@ -9,7 +9,7 @@ void main() {
     expect(config.highlightStyle.color, ConfigDefaults.defaultHighlightColor);
     expect(
       config.highlightStyle.textStrokeColor,
-      ConfigDefaults.defaultHighlightColor,
+      ConfigDefaults.defaultHighlightStrokeColor,
     );
     expect(config.highlightStyle.textStrokeWidth, 0);
     expect(config.highlightStyle.highlightShape, HighlightShape.rectangle);

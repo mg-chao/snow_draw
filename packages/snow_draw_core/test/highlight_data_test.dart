@@ -11,7 +11,7 @@ void main() {
 
     expect(data.shape, ConfigDefaults.defaultHighlightShape);
     expect(data.color, ConfigDefaults.defaultHighlightColor);
-    expect(data.strokeColor, ConfigDefaults.defaultHighlightColor);
+    expect(data.strokeColor, ConfigDefaults.defaultHighlightStrokeColor);
     expect(data.strokeWidth, 0);
   });
 

@@ -53,8 +53,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Highlight Shape'), findsOneWidget);
-    expect(find.text('Highlight Text Stroke Width'), findsOneWidget);
-    expect(find.text('Highlight Text Stroke Color'), findsOneWidget);
+    expect(find.text('Highlight Stroke Width'), findsOneWidget);
+    expect(find.text('Highlight Stroke Color'), findsOneWidget);
     expect(find.text('Mask Color'), findsOneWidget);
     expect(find.text('Mask Opacity'), findsOneWidget);
   });

@@ -38,6 +38,9 @@ abstract class ConfigDefaults {
   /// Default highlight fill color.
   static const defaultHighlightColor = Color(0xFFF5222D);
 
+  /// Default highlight stroke color.
+  static const defaultHighlightStrokeColor = Color(0xFF000000);
+
   /// Default highlight shape.
   static const HighlightShape defaultHighlightShape = HighlightShape.rectangle;
 
@@ -171,7 +174,7 @@ class DrawConfig {
            highlightStyle ??
            elementStyle.copyWith(
              color: ConfigDefaults.defaultHighlightColor,
-             textStrokeColor: ConfigDefaults.defaultHighlightColor,
+             textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
              textStrokeWidth: 0,
              highlightShape: ConfigDefaults.defaultHighlightShape,
            ),
@@ -214,7 +217,7 @@ class DrawConfig {
     final nextElementStyle = elementStyle ?? this.elementStyle;
     final nextHighlightStyle = nextElementStyle.copyWith(
       color: ConfigDefaults.defaultHighlightColor,
-      textStrokeColor: ConfigDefaults.defaultHighlightColor,
+      textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
       textStrokeWidth: 0,
       highlightShape: ConfigDefaults.defaultHighlightShape,
     );

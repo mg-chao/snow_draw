@@ -15,7 +15,7 @@ final class HighlightData extends ElementData
   const HighlightData({
     this.shape = ConfigDefaults.defaultHighlightShape,
     this.color = ConfigDefaults.defaultHighlightColor,
-    this.strokeColor = ConfigDefaults.defaultHighlightColor,
+    this.strokeColor = ConfigDefaults.defaultHighlightStrokeColor,
     this.strokeWidth = 0,
   });
 
@@ -30,7 +30,7 @@ final class HighlightData extends ElementData
     ),
     strokeColor: Color(
       (json['strokeColor'] as int?) ??
-          ConfigDefaults.defaultHighlightColor.toARGB32(),
+          ConfigDefaults.defaultHighlightStrokeColor.toARGB32(),
     ),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??

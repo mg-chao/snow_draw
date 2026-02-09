@@ -48,8 +48,8 @@ class AppLocalizations {
   String get highlightShape => 'Highlight Shape';
   String get highlightShapeRectangle => 'Rectangle';
   String get highlightShapeEllipse => 'Ellipse';
-  String get highlightTextStrokeWidth => 'Highlight Text Stroke Width';
-  String get highlightTextStrokeColor => 'Highlight Text Stroke Color';
+  String get highlightTextStrokeWidth => 'Highlight Stroke Width';
+  String get highlightTextStrokeColor => 'Highlight Stroke Color';
   String get maskColor => 'Mask Color';
   String get maskOpacity => 'Mask Opacity';
   String get fontSize => 'Font Size';

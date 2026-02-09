@@ -19,7 +19,10 @@ void main() {
         value: HighlightShape.rectangle,
         isMixed: false,
       ),
-      textStrokeColor: MixedValue(value: Color(0xFFF5222D), isMixed: false),
+      textStrokeColor: MixedValue(
+        value: ConfigDefaults.defaultHighlightStrokeColor,
+        isMixed: false,
+      ),
       textStrokeWidth: MixedValue(value: 0, isMixed: false),
       opacity: MixedValue(value: 1, isMixed: false),
     );
@@ -99,7 +102,7 @@ void main() {
       serialNumberDefaults: ElementStyleConfig(),
       highlightDefaults: ElementStyleConfig(
         color: Color(0xFFF5222D),
-        textStrokeColor: Color(0xFFF5222D),
+        textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
       ),
       highlightMask: HighlightMaskConfig(maskOpacity: 0.4),
       selectedElementTypes: {ElementType.highlight},

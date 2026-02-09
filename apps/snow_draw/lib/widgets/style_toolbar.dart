@@ -90,6 +90,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
     Color(0xFF1677FF),
     Color(0xFFFAAD14),
   ];
+  static const _highlightColorPalette = [
+    Colors.transparent,
+    Color(0xFFF5222D),
+    Color(0xFF52C41A),
+    Color(0xFF1677FF),
+    Color(0xFFFAAD14),
+  ];
 
   late Listenable _mergedListenable;
   late final ScrollController _scrollController;
@@ -1574,9 +1581,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case 'color':
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
+        final colors = context.hasOnlySelected({ElementType.highlight})
+            ? _highlightColorPalette
+            : _defaultColorPalette;
         return _buildColorRow(
           label: widget.strings.color,
-          colors: _defaultColorPalette,
+          colors: colors,
           value: value,
           customColor: value.valueOr(defaultValue),
           onSelect: (color) => _applyStyleUpdate(color: color),
