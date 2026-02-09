@@ -1,4 +1,4 @@
-﻿import '../../../core/coordinates/element_space.dart';
+import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -36,9 +36,6 @@ class HighlightHitTester implements ElementHitTester {
         )) {
           return true;
         }
-        if (_fillOpacity(element, data) <= 0) {
-          return false;
-        }
         return _isInsideRect(rect, localPosition);
       case HighlightShape.ellipse:
         if (_testEllipseStroke(
@@ -48,9 +45,6 @@ class HighlightHitTester implements ElementHitTester {
           tolerance: tolerance,
         )) {
           return true;
-        }
-        if (_fillOpacity(element, data) <= 0) {
-          return false;
         }
         return _isInsideEllipse(rect, localPosition);
     }
@@ -64,9 +58,6 @@ class HighlightHitTester implements ElementHitTester {
     final space = ElementSpace(rotation: element.rotation, origin: rect.center);
     return space.fromWorld(position);
   }
-
-  double _fillOpacity(ElementState element, HighlightData data) =>
-      (data.color.a * element.opacity).clamp(0.0, 1.0);
 
   bool _isInsideRect(DrawRect rect, DrawPoint position) =>
       position.x >= rect.minX &&

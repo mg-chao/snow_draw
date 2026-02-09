@@ -41,6 +41,7 @@ import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
+import 'dynamic_layer_split.dart';
 import 'dynamic_canvas_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_visibility.dart';
@@ -567,30 +568,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) {
-    // When creating a new text element, render all existing elements in the
-    // static layer so the text element's background appears on top.
-    final interaction = view.state.application.interaction;
-    if (interaction is TextEditingState && interaction.isNew) {
-      return 0;
-    }
-
-    final selectedIds = view.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-
-    final document = view.state.domain.document;
-    int? minIndex;
-    for (final id in selectedIds) {
-      final orderIndex = document.getOrderIndex(id);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (minIndex == null || orderIndex < minIndex) {
-        minIndex = orderIndex;
-      }
-    }
-    return minIndex;
+    return resolveDynamicLayerStartIndex(view);
   }
 
   /// Extract creating element snapshot from state view.

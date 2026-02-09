@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
@@ -58,7 +58,6 @@ class HighlightRenderer extends ElementTypeRenderer {
         ..style = PaintingStyle.stroke
         ..strokeWidth = data.strokeWidth
         ..color = data.strokeColor.withValues(alpha: strokeOpacity)
-        ..blendMode = BlendMode.multiply
         ..isAntiAlias = true;
       if (data.shape == HighlightShape.rectangle) {
         canvas.drawRect(shapeRect, strokePaint);
