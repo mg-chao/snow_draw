@@ -3,14 +3,11 @@ import 'dart:ui';
 
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/models/element_state.dart';
-import '../../draw/services/log/log_service.dart';
 import '../../draw/types/element_style.dart';
 import 'filter_shader_manager.dart';
 
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
-
-final ModuleLogger _filterSceneLog = LogService.fallback.render;
 
 /// Composites element scenes while honoring true z-order semantics for filters.
 class FilterSceneCompositor {
@@ -98,8 +95,9 @@ class FilterSceneCompositor {
       return recorder.endRecording();
     }
 
-    sceneCanvas.save();
-    sceneCanvas.clipPath(clipPath);
+    sceneCanvas
+      ..save()
+      ..clipPath(clipPath);
 
     switch (data.type) {
       case CanvasFilterType.mosaic:
@@ -148,41 +146,7 @@ class FilterSceneCompositor {
         )
         ..drawPicture(lowerScene)
         ..restore();
-      return;
-    }
-
-    _paintMosaicFallback(canvas, lowerScene, data, layerBounds, opacity);
-  }
-
-  void _paintMosaicFallback(
-    Canvas canvas,
-    Picture lowerScene,
-    FilterData data,
-    Rect layerBounds,
-    double opacity,
-  ) {
-    final width = layerBounds.width.ceil();
-    final height = layerBounds.height.ceil();
-    if (width <= 0 || height <= 0) {
-      return;
-    }
-
-    final offset = layerBounds.topLeft;
-    final imageRecorder = PictureRecorder();
-    final imageCanvas = Canvas(imageRecorder);
-    imageCanvas
-      ..translate(-offset.dx, -offset.dy)
-      ..drawPicture(lowerScene);
-    final rasterPicture = imageRecorder.endRecording();
-
-    Image sourceImage;
-    try {
-      sourceImage = rasterPicture.toImageSync(width, height);
-    } on Exception catch (error, stackTrace) {
-      _filterSceneLog.warning('Failed to rasterize mosaic fallback picture', {
-        'error': error,
-        'stackTrace': stackTrace,
-      });
+    } else {
       _paintBlurFilter(
         canvas,
         lowerScene,
@@ -192,73 +156,6 @@ class FilterSceneCompositor {
         minSigma: 4,
         maxSigma: 24,
       );
-      return;
-    } finally {
-      rasterPicture.dispose();
-    }
-
-    final blockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
-      strength: data.strength,
-      regionSize: layerBounds.size,
-    );
-    final sampledWidth = math.max(1, (width / blockSize).ceil());
-    final sampledHeight = math.max(1, (height / blockSize).ceil());
-
-    Image pixelatedImage;
-    try {
-      final downsampleRecorder = PictureRecorder();
-      final downsampleCanvas = Canvas(downsampleRecorder);
-      downsampleCanvas.drawImageRect(
-        sourceImage,
-        Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
-        Rect.fromLTWH(0, 0, sampledWidth.toDouble(), sampledHeight.toDouble()),
-        Paint()..filterQuality = FilterQuality.none,
-      );
-      final downsamplePicture = downsampleRecorder.endRecording();
-      try {
-        pixelatedImage = downsamplePicture.toImageSync(
-          sampledWidth,
-          sampledHeight,
-        );
-      } finally {
-        downsamplePicture.dispose();
-      }
-    } on Exception catch (error, stackTrace) {
-      sourceImage.dispose();
-      _filterSceneLog.warning('Failed to downsample mosaic fallback image', {
-        'error': error,
-        'stackTrace': stackTrace,
-      });
-      _paintBlurFilter(
-        canvas,
-        lowerScene,
-        layerBounds,
-        opacity,
-        data,
-        minSigma: 4,
-        maxSigma: 24,
-      );
-      return;
-    }
-    sourceImage.dispose();
-
-    canvas.saveLayer(layerBounds, _buildFilteredLayerPaint(opacity: opacity));
-    try {
-      final paint = Paint()..filterQuality = FilterQuality.none;
-      canvas.drawImageRect(
-        pixelatedImage,
-        Rect.fromLTWH(0, 0, sampledWidth.toDouble(), sampledHeight.toDouble()),
-        Rect.fromLTWH(
-          offset.dx,
-          offset.dy,
-          width.toDouble(),
-          height.toDouble(),
-        ),
-        paint,
-      );
-    } finally {
-      canvas.restore();
-      pixelatedImage.dispose();
     }
   }
 

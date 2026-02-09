@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -68,15 +69,15 @@ class FilterShaderManager {
   }
 
   /// Creates an `ImageFilter.shader` for mosaic if shader filtering is
-  /// available; otherwise returns `null`.
+  /// available.
+  ///
+  /// Falls back to a matrix-based pixelation filter on backends that do not
+  /// support shader filters.
   ui.ImageFilter? createMosaicFilter({
     required double strength,
     required Size regionSize,
     required Offset regionOffset,
   }) {
-    if (!isShaderFilterSupported || _mosaicProgram == null) {
-      return null;
-    }
     final width = regionSize.width;
     final height = regionSize.height;
     if (width <= 0 || height <= 0) {
@@ -88,11 +89,37 @@ class FilterShaderManager {
       regionSize: regionSize,
     );
 
+    final shaderFilter = _createShaderBackedMosaicFilter(
+      regionWidth: width,
+      regionHeight: height,
+      regionOffset: regionOffset,
+      blockSize: blockSize,
+    );
+    if (shaderFilter != null) {
+      return shaderFilter;
+    }
+
+    return _createMatrixMosaicFilter(
+      blockSize: blockSize,
+      regionOffset: regionOffset,
+    );
+  }
+
+  ui.ImageFilter? _createShaderBackedMosaicFilter({
+    required double regionWidth,
+    required double regionHeight,
+    required Offset regionOffset,
+    required double blockSize,
+  }) {
+    if (!isShaderFilterSupported || _mosaicProgram == null) {
+      return null;
+    }
+
     final shader = _mosaicProgram!.fragmentShader();
     var index = 0;
     shader
-      ..setFloat(index++, width)
-      ..setFloat(index++, height)
+      ..setFloat(index++, regionWidth)
+      ..setFloat(index++, regionHeight)
       ..setFloat(index++, blockSize)
       ..setFloat(index++, regionOffset.dx)
       ..setFloat(index++, regionOffset.dy);
@@ -103,4 +130,52 @@ class FilterShaderManager {
       return null;
     }
   }
+
+  ui.ImageFilter _createMatrixMosaicFilter({
+    required double blockSize,
+    required Offset regionOffset,
+  }) => ui.ImageFilter.compose(
+    outer: ui.ImageFilter.matrix(
+      _buildScaleMatrix(
+        scaleX: blockSize,
+        scaleY: blockSize,
+        pivotX: regionOffset.dx,
+        pivotY: regionOffset.dy,
+      ),
+      filterQuality: FilterQuality.none,
+    ),
+    inner: ui.ImageFilter.matrix(
+      _buildScaleMatrix(
+        scaleX: 1 / blockSize,
+        scaleY: 1 / blockSize,
+        pivotX: regionOffset.dx,
+        pivotY: regionOffset.dy,
+      ),
+      filterQuality: FilterQuality.none,
+    ),
+  );
+
+  Float64List _buildScaleMatrix({
+    required double scaleX,
+    required double scaleY,
+    required double pivotX,
+    required double pivotY,
+  }) => Float64List.fromList(<double>[
+    scaleX,
+    0,
+    0,
+    0,
+    0,
+    scaleY,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    pivotX * (1 - scaleX),
+    pivotY * (1 - scaleY),
+    0,
+    1,
+  ]);
 }
