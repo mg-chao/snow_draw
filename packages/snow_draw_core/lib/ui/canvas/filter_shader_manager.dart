@@ -61,7 +61,7 @@ class FilterShaderManager {
       return 1;
     }
 
-    final normalizedStrength = (strength / 6).clamp(0.0, 1.0);
+    final normalizedStrength = (strength / 3).clamp(0.0, 1.0);
     final shortestSide = width < height ? width : height;
     const minBlockSize = 2.0;
     final maxBlockSize = (shortestSide / 8).clamp(4.0, 64.0);
