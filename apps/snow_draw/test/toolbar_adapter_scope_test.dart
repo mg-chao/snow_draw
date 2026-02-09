@@ -77,6 +77,33 @@ void main() {
       expect(text.strokeWidth, 3);
     },
   );
+
+  test(
+    'texts-only scope does not mutate selected highlight stroke width',
+    () async {
+      final store = _createStore(selectedIds: const {'h1', 't1'});
+      final adapter = StyleToolbarAdapter(store: store);
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await adapter.applyStyleUpdate(
+        textStrokeWidth: 5,
+        toolType: ToolType.text,
+        scope: StyleUpdateScope.textsOnly,
+      );
+      await pumpEventQueue();
+
+      final highlight =
+          store.state.domain.document.getElementById('h1')?.data
+              as HighlightData;
+      final text =
+          store.state.domain.document.getElementById('t1')?.data as TextData;
+
+      expect(highlight.strokeWidth, 2);
+      expect(text.strokeWidth, 5);
+    },
+  );
 }
 
 DefaultDrawStore _createStore({required Set<String> selectedIds}) {

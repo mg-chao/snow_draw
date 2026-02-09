@@ -10,6 +10,27 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
+  test('highlight toolbar priority follows the configured order', () {
+    initializePropertyRegistry();
+
+    final ids = PropertyRegistry.instance.allProperties
+        .map((p) => p.id)
+        .toList();
+
+    expect(
+      ids.indexOf('highlightShape'),
+      greaterThan(ids.indexOf('strokeStyle')),
+    );
+    expect(
+      ids.indexOf('highlightTextStrokeWidth'),
+      lessThan(ids.indexOf('textStrokeWidth')),
+    );
+    expect(
+      ids.indexOf('highlightTextStrokeColor'),
+      lessThan(ids.indexOf('textStrokeWidth')),
+    );
+  });
+
   test('highlight properties appear in the expected order', () {
     initializePropertyRegistry();
 

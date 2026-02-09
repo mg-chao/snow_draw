@@ -8,16 +8,15 @@ void initializePropertyRegistry() {
     ..clear()
     // Register all property descriptors in the order they should appear
     // in the toolbar
-    // Color properties (stroke and fill)
+    // Color and fill properties
     ..register(const ColorPropertyDescriptor())
-    ..register(const HighlightShapePropertyDescriptor())
-    ..register(const HighlightTextStrokeWidthPropertyDescriptor())
-    ..register(const HighlightTextStrokeColorPropertyDescriptor())
     ..register(const FillColorPropertyDescriptor())
     ..register(const FillStylePropertyDescriptor())
     // Stroke properties
     ..register(const StrokeWidthPropertyDescriptor())
     ..register(const StrokeStylePropertyDescriptor())
+    // Highlight-specific properties
+    ..register(const HighlightShapePropertyDescriptor())
     // Arrow-specific properties
     ..register(const ArrowTypePropertyDescriptor())
     ..register(const StartArrowheadPropertyDescriptor())
@@ -27,6 +26,9 @@ void initializePropertyRegistry() {
     ..register(const FontSizePropertyDescriptor())
     ..register(const FontFamilyPropertyDescriptor())
     ..register(const TextAlignPropertyDescriptor())
+    // Stroke text properties
+    ..register(const HighlightTextStrokeWidthPropertyDescriptor())
+    ..register(const HighlightTextStrokeColorPropertyDescriptor())
     ..register(const TextStrokeWidthPropertyDescriptor())
     ..register(const TextStrokeColorPropertyDescriptor())
     // Common properties (all elements)

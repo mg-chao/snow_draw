@@ -22,7 +22,7 @@ import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';
 
-enum StyleUpdateScope { allSelectedElements, highlightsOnly }
+enum StyleUpdateScope { allSelectedElements, highlightsOnly, textsOnly }
 
 class StyleToolbarAdapter {
   StyleToolbarAdapter({required DrawStore store}) : _store = store {
@@ -110,11 +110,17 @@ class StyleToolbarAdapter {
     if (resolvedFamily != null && resolvedFamily.isNotEmpty) {
       await ensureSystemFontLoaded(resolvedFamily);
     }
-    final ids = scope == StyleUpdateScope.highlightsOnly
-        ? {for (final element in _selectedHighlights) element.id}
-        : {..._selectedIds};
+    final ids = switch (scope) {
+      StyleUpdateScope.highlightsOnly => {
+        for (final element in _selectedHighlights) element.id,
+      },
+      StyleUpdateScope.textsOnly => {
+        for (final element in _selectedTexts) element.id,
+      },
+      StyleUpdateScope.allSelectedElements => {..._selectedIds},
+    };
     final interaction = _store.state.application.interaction;
-    if (scope == StyleUpdateScope.allSelectedElements &&
+    if (scope != StyleUpdateScope.highlightsOnly &&
         interaction is TextEditingState) {
       ids.add(interaction.elementId);
     }
@@ -1364,35 +1370,46 @@ class StyleToolbarAdapter {
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) {
     final highlightsOnlyScope = scope == StyleUpdateScope.highlightsOnly;
+    final textsOnlyScope = scope == StyleUpdateScope.textsOnly;
     final hasSelection = _selectedIds.isNotEmpty;
     final interaction = _store.state.application.interaction;
     final updateRectangleDefaults =
-        !highlightsOnlyScope && _selectedRectangles.isNotEmpty ||
+        !highlightsOnlyScope && !textsOnlyScope && _selectedRectangles.isNotEmpty ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !textsOnlyScope &&
             toolType == ToolType.rectangle);
     final updateArrowDefaults =
-        !highlightsOnlyScope && _selectedArrows.isNotEmpty ||
-        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.arrow);
-    final updateLineDefaults =
-        !highlightsOnlyScope && _selectedLines.isNotEmpty ||
-        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.line);
-    final updateFreeDrawDefaults =
-        !highlightsOnlyScope && _selectedFreeDraws.isNotEmpty ||
+        !highlightsOnlyScope && !textsOnlyScope && _selectedArrows.isNotEmpty ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.arrow);
+    final updateLineDefaults =
+        !highlightsOnlyScope && !textsOnlyScope && _selectedLines.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
+            toolType == ToolType.line);
+    final updateFreeDrawDefaults =
+        !highlightsOnlyScope && !textsOnlyScope && _selectedFreeDraws.isNotEmpty ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !textsOnlyScope &&
             toolType == ToolType.freeDraw);
     final updateTextDefaults =
         !highlightsOnlyScope && _selectedTexts.isNotEmpty ||
         (!highlightsOnlyScope && interaction is TextEditingState) ||
         (!hasSelection && !highlightsOnlyScope && toolType == ToolType.text);
     final updateHighlightDefaults =
-        _selectedHighlights.isNotEmpty ||
-        (!hasSelection && toolType == ToolType.highlight);
+        !textsOnlyScope &&
+            (_selectedHighlights.isNotEmpty ||
+                (!hasSelection && toolType == ToolType.highlight));
     final updateSerialNumberDefaults =
-        !highlightsOnlyScope && _selectedSerialNumbers.isNotEmpty ||
+        !highlightsOnlyScope && !textsOnlyScope && _selectedSerialNumbers.isNotEmpty ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !textsOnlyScope &&
             toolType == ToolType.serialNumber);
     final updateHighlightMask =
         (maskColor != null || maskOpacity != null) && updateHighlightDefaults;

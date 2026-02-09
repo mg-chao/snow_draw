@@ -1988,7 +1988,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
             ),
           ],
           selected: value.value,
-          onSelect: (value) => _applyStyleUpdate(textStrokeWidth: value),
+          onSelect: (value) => _applyStyleUpdate(
+            textStrokeWidth: value,
+            scope: StyleUpdateScope.textsOnly,
+          ),
         );
 
       case 'textStrokeColor':
@@ -2005,7 +2008,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
           ],
           value: value,
           customColor: value.valueOr(defaultValue),
-          onSelect: (color) => _applyStyleUpdate(textStrokeColor: color),
+          onSelect: (color) => _applyStyleUpdate(
+            textStrokeColor: color,
+            scope: StyleUpdateScope.textsOnly,
+          ),
           allowAlpha: true,
         );
 
