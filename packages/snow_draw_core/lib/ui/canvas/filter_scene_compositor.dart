@@ -3,11 +3,14 @@ import 'dart:ui';
 
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/models/element_state.dart';
+import '../../draw/services/log/log_service.dart';
 import '../../draw/types/element_style.dart';
 import 'filter_shader_manager.dart';
 
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
+
+final ModuleLogger _filterSceneLog = LogService.fallback.render;
 
 /// Composites element scenes while honoring true z-order semantics for filters.
 class FilterSceneCompositor {
@@ -100,21 +103,9 @@ class FilterSceneCompositor {
 
     switch (data.type) {
       case CanvasFilterType.mosaic:
-        _paintMosaicFilter(
-          sceneCanvas,
-          lowerScene,
-          data,
-          layerBounds,
-          opacity,
-        );
+        _paintMosaicFilter(sceneCanvas, lowerScene, data, layerBounds, opacity);
       case CanvasFilterType.gaussianBlur:
-        _paintBlurFilter(
-          sceneCanvas,
-          lowerScene,
-          layerBounds,
-          opacity,
-          data,
-        );
+        _paintBlurFilter(sceneCanvas, lowerScene, layerBounds, opacity, data);
       case CanvasFilterType.grayscale:
         _paintColorMatrixFilter(
           sceneCanvas,
@@ -147,30 +138,128 @@ class FilterSceneCompositor {
     final shaderFilter = FilterShaderManager.instance.createMosaicFilter(
       strength: data.strength,
       regionSize: layerBounds.size,
+      regionOffset: layerBounds.topLeft,
     );
     if (shaderFilter != null) {
       canvas
         ..saveLayer(
           layerBounds,
-          _buildFilteredLayerPaint(
-            opacity: opacity,
-            imageFilter: shaderFilter,
-          ),
+          _buildFilteredLayerPaint(opacity: opacity, imageFilter: shaderFilter),
         )
         ..drawPicture(lowerScene)
         ..restore();
       return;
     }
 
-    _paintBlurFilter(
-      canvas,
-      lowerScene,
-      layerBounds,
-      opacity,
-      data,
-      minSigma: 4,
-      maxSigma: 24,
+    _paintMosaicFallback(canvas, lowerScene, data, layerBounds, opacity);
+  }
+
+  void _paintMosaicFallback(
+    Canvas canvas,
+    Picture lowerScene,
+    FilterData data,
+    Rect layerBounds,
+    double opacity,
+  ) {
+    final width = layerBounds.width.ceil();
+    final height = layerBounds.height.ceil();
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    final offset = layerBounds.topLeft;
+    final imageRecorder = PictureRecorder();
+    final imageCanvas = Canvas(imageRecorder);
+    imageCanvas
+      ..translate(-offset.dx, -offset.dy)
+      ..drawPicture(lowerScene);
+    final rasterPicture = imageRecorder.endRecording();
+
+    Image sourceImage;
+    try {
+      sourceImage = rasterPicture.toImageSync(width, height);
+    } on Exception catch (error, stackTrace) {
+      _filterSceneLog.warning('Failed to rasterize mosaic fallback picture', {
+        'error': error,
+        'stackTrace': stackTrace,
+      });
+      _paintBlurFilter(
+        canvas,
+        lowerScene,
+        layerBounds,
+        opacity,
+        data,
+        minSigma: 4,
+        maxSigma: 24,
+      );
+      return;
+    } finally {
+      rasterPicture.dispose();
+    }
+
+    final blockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
+      strength: data.strength,
+      regionSize: layerBounds.size,
     );
+    final sampledWidth = math.max(1, (width / blockSize).ceil());
+    final sampledHeight = math.max(1, (height / blockSize).ceil());
+
+    Image pixelatedImage;
+    try {
+      final downsampleRecorder = PictureRecorder();
+      final downsampleCanvas = Canvas(downsampleRecorder);
+      downsampleCanvas.drawImageRect(
+        sourceImage,
+        Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+        Rect.fromLTWH(0, 0, sampledWidth.toDouble(), sampledHeight.toDouble()),
+        Paint()..filterQuality = FilterQuality.none,
+      );
+      final downsamplePicture = downsampleRecorder.endRecording();
+      try {
+        pixelatedImage = downsamplePicture.toImageSync(
+          sampledWidth,
+          sampledHeight,
+        );
+      } finally {
+        downsamplePicture.dispose();
+      }
+    } on Exception catch (error, stackTrace) {
+      sourceImage.dispose();
+      _filterSceneLog.warning('Failed to downsample mosaic fallback image', {
+        'error': error,
+        'stackTrace': stackTrace,
+      });
+      _paintBlurFilter(
+        canvas,
+        lowerScene,
+        layerBounds,
+        opacity,
+        data,
+        minSigma: 4,
+        maxSigma: 24,
+      );
+      return;
+    }
+    sourceImage.dispose();
+
+    canvas.saveLayer(layerBounds, _buildFilteredLayerPaint(opacity: opacity));
+    try {
+      final paint = Paint()..filterQuality = FilterQuality.none;
+      canvas.drawImageRect(
+        pixelatedImage,
+        Rect.fromLTWH(0, 0, sampledWidth.toDouble(), sampledHeight.toDouble()),
+        Rect.fromLTWH(
+          offset.dx,
+          offset.dy,
+          width.toDouble(),
+          height.toDouble(),
+        ),
+        paint,
+      );
+    } finally {
+      canvas.restore();
+      pixelatedImage.dispose();
+    }
   }
 
   void _paintBlurFilter(
@@ -239,7 +328,8 @@ class FilterSceneCompositor {
   Path _buildFilterClipPath(ElementState element) {
     final rect = element.rect;
     if (element.rotation == 0) {
-      return Path()..addRect(Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height));
+      return Path()
+        ..addRect(Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height));
     }
 
     final sinRotation = math.sin(element.rotation);

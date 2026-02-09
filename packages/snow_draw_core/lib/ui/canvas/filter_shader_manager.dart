@@ -47,11 +47,32 @@ class FilterShaderManager {
     }
   }
 
+  /// Resolves the mosaic block size in logical pixels for a region.
+  ///
+  /// Larger strength values produce larger pixel blocks.
+  double resolveMosaicBlockSize({
+    required double strength,
+    required Size regionSize,
+  }) {
+    final width = regionSize.width;
+    final height = regionSize.height;
+    if (width <= 0 || height <= 0) {
+      return 1;
+    }
+
+    final normalizedStrength = (strength / 6).clamp(0.0, 1.0);
+    final shortestSide = width < height ? width : height;
+    const minBlockSize = 2.0;
+    final maxBlockSize = (shortestSide / 8).clamp(4.0, 64.0);
+    return minBlockSize + ((maxBlockSize - minBlockSize) * normalizedStrength);
+  }
+
   /// Creates an `ImageFilter.shader` for mosaic if shader filtering is
   /// available; otherwise returns `null`.
   ui.ImageFilter? createMosaicFilter({
     required double strength,
     required Size regionSize,
+    required Offset regionOffset,
   }) {
     if (!isShaderFilterSupported || _mosaicProgram == null) {
       return null;
@@ -62,19 +83,19 @@ class FilterShaderManager {
       return null;
     }
 
-    final normalizedStrength = strength.clamp(0.0, 1.0);
-    final shortestSide = width < height ? width : height;
-    const minBlockSize = 2.0;
-    final maxBlockSize = (shortestSide / 8).clamp(4.0, 64.0);
-    final blockSize =
-        minBlockSize + ((maxBlockSize - minBlockSize) * normalizedStrength);
+    final blockSize = resolveMosaicBlockSize(
+      strength: strength,
+      regionSize: regionSize,
+    );
 
     final shader = _mosaicProgram!.fragmentShader();
     var index = 0;
     shader
       ..setFloat(index++, width)
       ..setFloat(index++, height)
-      ..setFloat(index++, blockSize);
+      ..setFloat(index++, blockSize)
+      ..setFloat(index++, regionOffset.dx)
+      ..setFloat(index++, regionOffset.dy);
 
     try {
       return ui.ImageFilter.shader(shader);
