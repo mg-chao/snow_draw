@@ -10,41 +10,12 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  test('highlight toolbar priority follows the configured order', () {
+  test('filter properties appear in the expected order', () {
     initializePropertyRegistry();
 
-    final ids = PropertyRegistry.instance.allProperties
-        .map((p) => p.id)
-        .toList();
-
-    expect(
-      ids.indexOf('highlightShape'),
-      greaterThan(ids.indexOf('strokeStyle')),
-    );
-    expect(
-      ids.indexOf('highlightTextStrokeWidth'),
-      lessThan(ids.indexOf('textStrokeWidth')),
-    );
-    expect(
-      ids.indexOf('highlightTextStrokeColor'),
-      lessThan(ids.indexOf('textStrokeWidth')),
-    );
-  });
-
-  test('highlight properties appear in the expected order', () {
-    initializePropertyRegistry();
-
-    const highlightValues = HighlightStyleValues(
-      color: MixedValue(value: Color(0xFFF5222D), isMixed: false),
-      highlightShape: MixedValue(
-        value: HighlightShape.rectangle,
-        isMixed: false,
-      ),
-      textStrokeColor: MixedValue(
-        value: ConfigDefaults.defaultHighlightStrokeColor,
-        isMixed: false,
-      ),
-      textStrokeWidth: MixedValue(value: 0, isMixed: false),
+    const filterValues = FilterStyleValues(
+      filterType: MixedValue(value: CanvasFilterType.mosaic, isMixed: false),
+      filterStrength: MixedValue(value: 0.5, isMixed: false),
       opacity: MixedValue(value: 1, isMixed: false),
     );
 
@@ -114,26 +85,28 @@ void main() {
         number: MixedValue(value: 1, isMixed: false),
         opacity: MixedValue(value: 1, isMixed: false),
       ),
-      highlightStyleValues: highlightValues,
-      filterStyleValues: FilterStyleValues(
-        filterType: MixedValue(value: CanvasFilterType.mosaic, isMixed: false),
-        filterStrength: MixedValue(value: 0.5, isMixed: false),
+      highlightStyleValues: HighlightStyleValues(
+        color: MixedValue(value: Color(0xFFF5222D), isMixed: false),
+        highlightShape: MixedValue(
+          value: HighlightShape.rectangle,
+          isMixed: false,
+        ),
+        textStrokeColor: MixedValue(value: Color(0xFF000000), isMixed: false),
+        textStrokeWidth: MixedValue(value: 0, isMixed: false),
         opacity: MixedValue(value: 1, isMixed: false),
       ),
+      filterStyleValues: filterValues,
       rectangleDefaults: ElementStyleConfig(),
       arrowDefaults: ElementStyleConfig(),
       lineDefaults: ElementStyleConfig(),
       freeDrawDefaults: ElementStyleConfig(),
       textDefaults: ElementStyleConfig(),
       serialNumberDefaults: ElementStyleConfig(),
-      highlightDefaults: ElementStyleConfig(
-        color: Color(0xFFF5222D),
-        textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
-      ),
+      highlightDefaults: ElementStyleConfig(),
       filterDefaults: ElementStyleConfig(),
       highlightMask: HighlightMaskConfig(maskOpacity: 0.4),
-      selectedElementTypes: {ElementType.highlight},
-      currentTool: ToolType.highlight,
+      selectedElementTypes: {ElementType.filter},
+      currentTool: ToolType.filter,
     );
 
     final properties = PropertyRegistry.instance.getApplicableProperties(
@@ -141,14 +114,17 @@ void main() {
     );
     final ids = properties.map((p) => p.id).toList();
 
-    expect(ids, [
-      'color',
-      'highlightShape',
-      'highlightTextStrokeWidth',
-      'highlightTextStrokeColor',
-      'opacity',
-      'maskColor',
-      'maskOpacity',
-    ]);
+    expect(ids, ['filterType', 'filterStrength', 'opacity']);
+  });
+
+  test('filter properties are registered before arrow properties', () {
+    initializePropertyRegistry();
+
+    final ids = PropertyRegistry.instance.allProperties
+        .map((p) => p.id)
+        .toList();
+
+    expect(ids.indexOf('filterType'), lessThan(ids.indexOf('arrowType')));
+    expect(ids.indexOf('filterStrength'), lessThan(ids.indexOf('arrowType')));
   });
 }

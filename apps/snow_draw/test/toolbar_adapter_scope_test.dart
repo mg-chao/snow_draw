@@ -4,6 +4,7 @@ import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/events/error_events.dart';
@@ -14,6 +15,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -112,6 +114,36 @@ void main() {
       expect(text.strokeWidth, 5);
     },
   );
+
+  test(
+    'filters-only scope does not mutate selected text stroke width',
+    () async {
+      final store = _createStore(selectedIds: const {'f1', 't1'});
+      final adapter = StyleToolbarAdapter(store: store);
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await adapter.applyStyleUpdate(
+        filterType: CanvasFilterType.inversion,
+        toolType: ToolType.filter,
+        scope: StyleUpdateScope.filtersOnly,
+      );
+      await pumpEventQueue();
+
+      final filterData = store.state.domain.document.getElementById('f1')?.data;
+      final textData = store.state.domain.document.getElementById('t1')?.data;
+
+      expect(filterData, isA<FilterData>());
+      expect(textData, isA<TextData>());
+
+      final filter = filterData! as FilterData;
+      final text = textData! as TextData;
+
+      expect(filter.type, CanvasFilterType.inversion);
+      expect(text.strokeWidth, 3);
+    },
+  );
 }
 
 DefaultDrawStore _createStore({required Set<String> selectedIds}) {
@@ -135,10 +167,18 @@ DefaultDrawStore _createStore({required Set<String> selectedIds}) {
     zIndex: 1,
     data: TextData(strokeWidth: 3),
   );
+  const filter = ElementState(
+    id: 'f1',
+    rect: DrawRect(minX: 240, maxX: 320, maxY: 60),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 2,
+    data: FilterData(),
+  );
 
   final initialState = DrawState(
     domain: DomainState(
-      document: DocumentState(elements: const [highlight, text]),
+      document: DocumentState(elements: const [highlight, text, filter]),
       selection: SelectionState(selectedIds: selectedIds),
     ),
   );

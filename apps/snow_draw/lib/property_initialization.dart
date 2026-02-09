@@ -17,6 +17,9 @@ void initializePropertyRegistry() {
     ..register(const StrokeStylePropertyDescriptor())
     // Highlight-specific properties
     ..register(const HighlightShapePropertyDescriptor())
+    // Filter-specific properties
+    ..register(const FilterTypePropertyDescriptor())
+    ..register(const FilterStrengthPropertyDescriptor())
     // Arrow-specific properties
     ..register(const ArrowTypePropertyDescriptor())
     ..register(const StartArrowheadPropertyDescriptor())

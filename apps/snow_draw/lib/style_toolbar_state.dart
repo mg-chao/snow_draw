@@ -270,6 +270,31 @@ class HighlightStyleValues {
   );
 }
 
+/// Resolved style values for filter elements, supporting multi-selection.
+@immutable
+class FilterStyleValues {
+  const FilterStyleValues({
+    required this.filterType,
+    required this.filterStrength,
+    required this.opacity,
+  });
+
+  final MixedValue<CanvasFilterType> filterType;
+  final MixedValue<double> filterStrength;
+  final MixedValue<double> opacity;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FilterStyleValues &&
+          other.filterType == filterType &&
+          other.filterStrength == filterStrength &&
+          other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(filterType, filterStrength, opacity);
+}
+
 /// Resolved style values for serial number elements, supporting
 /// multi-selection.
 @immutable
@@ -325,6 +350,7 @@ class StyleToolbarState {
     required this.freeDrawStyle,
     required this.textStyle,
     required this.highlightStyle,
+    required this.filterStyle,
     required this.serialNumberStyle,
     required this.styleValues,
     required this.arrowStyleValues,
@@ -332,6 +358,7 @@ class StyleToolbarState {
     required this.freeDrawStyleValues,
     required this.textStyleValues,
     required this.highlightStyleValues,
+    required this.filterStyleValues,
     required this.serialNumberStyleValues,
     required this.highlightMask,
     required this.hasSelection,
@@ -341,6 +368,7 @@ class StyleToolbarState {
     required this.hasSelectedFreeDraws,
     required this.hasSelectedTexts,
     required this.hasSelectedHighlights,
+    required this.hasSelectedFilters,
     required this.hasSelectedSerialNumbers,
   });
 
@@ -350,6 +378,7 @@ class StyleToolbarState {
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
   final ElementStyleConfig highlightStyle;
+  final ElementStyleConfig filterStyle;
   final ElementStyleConfig serialNumberStyle;
   final RectangleStyleValues styleValues;
   final ArrowStyleValues arrowStyleValues;
@@ -357,6 +386,7 @@ class StyleToolbarState {
   final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
   final HighlightStyleValues highlightStyleValues;
+  final FilterStyleValues filterStyleValues;
   final SerialNumberStyleValues serialNumberStyleValues;
   final HighlightMaskConfig highlightMask;
   final bool hasSelection;
@@ -366,6 +396,7 @@ class StyleToolbarState {
   final bool hasSelectedFreeDraws;
   final bool hasSelectedTexts;
   final bool hasSelectedHighlights;
+  final bool hasSelectedFilters;
   final bool hasSelectedSerialNumbers;
 
   @override
@@ -378,6 +409,7 @@ class StyleToolbarState {
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
           other.highlightStyle == highlightStyle &&
+          other.filterStyle == filterStyle &&
           other.serialNumberStyle == serialNumberStyle &&
           other.styleValues == styleValues &&
           other.arrowStyleValues == arrowStyleValues &&
@@ -385,6 +417,7 @@ class StyleToolbarState {
           other.freeDrawStyleValues == freeDrawStyleValues &&
           other.textStyleValues == textStyleValues &&
           other.highlightStyleValues == highlightStyleValues &&
+          other.filterStyleValues == filterStyleValues &&
           other.serialNumberStyleValues == serialNumberStyleValues &&
           other.highlightMask == highlightMask &&
           other.hasSelection == hasSelection &&
@@ -394,6 +427,7 @@ class StyleToolbarState {
           other.hasSelectedFreeDraws == hasSelectedFreeDraws &&
           other.hasSelectedTexts == hasSelectedTexts &&
           other.hasSelectedHighlights == hasSelectedHighlights &&
+          other.hasSelectedFilters == hasSelectedFilters &&
           other.hasSelectedSerialNumbers == hasSelectedSerialNumbers;
 
   @override
@@ -404,6 +438,7 @@ class StyleToolbarState {
     freeDrawStyle,
     textStyle,
     highlightStyle,
+    filterStyle,
     serialNumberStyle,
     styleValues,
     arrowStyleValues,
@@ -411,6 +446,7 @@ class StyleToolbarState {
     freeDrawStyleValues,
     textStyleValues,
     highlightStyleValues,
+    filterStyleValues,
     serialNumberStyleValues,
     highlightMask,
     hasSelection,
@@ -420,6 +456,7 @@ class StyleToolbarState {
     hasSelectedFreeDraws,
     hasSelectedTexts,
     hasSelectedHighlights,
+    hasSelectedFilters,
     hasSelectedSerialNumbers,
   ]);
 }

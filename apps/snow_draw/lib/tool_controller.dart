@@ -4,6 +4,7 @@ enum ToolType {
   selection,
   rectangle,
   highlight,
+  filter,
   arrow,
   line,
   freeDraw,
