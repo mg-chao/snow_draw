@@ -83,6 +83,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
   static const double _fontSizeExtraLarge = 42;
   static final _fontFamilySystemKey = Object();
   static final _fontFamilyMixedKey = Object();
+  static final _filterTypeMixedKey = Object();
   static const _defaultColorPalette = [
     Color(0xFF1E1E1E),
     Color(0xFFF5222D),
@@ -1097,6 +1098,60 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
+  Widget _buildFilterTypeSelect({required MixedValue<CanvasFilterType> value}) {
+    final theme = Theme.of(context);
+    final selected = value.value;
+    final selectedKey = value.isMixed
+        ? _filterTypeMixedKey
+        : (selected?.name ?? CanvasFilterType.mosaic.name);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(widget.strings.filterType),
+        const SizedBox(height: _sectionGap),
+        DropdownButton<Object>(
+          value: selectedKey,
+          isExpanded: true,
+          icon: const Icon(Icons.arrow_drop_down),
+          style: theme.textTheme.bodyMedium,
+          items: [
+            if (value.isMixed)
+              DropdownMenuItem<Object>(
+                value: _filterTypeMixedKey,
+                child: Text(widget.strings.mixed),
+              ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.mosaic.name,
+              child: Text(widget.strings.filterTypeMosaic),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.gaussianBlur.name,
+              child: Text(widget.strings.filterTypeGaussianBlur),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.grayscale.name,
+              child: Text(widget.strings.filterTypeGrayscale),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.inversion.name,
+              child: Text(widget.strings.filterTypeInversion),
+            ),
+          ],
+          onChanged: (next) {
+            if (next == null || next == _filterTypeMixedKey) {
+              return;
+            }
+            final filterType = CanvasFilterType.values.firstWhere(
+              (item) => item.name == next,
+            );
+            unawaited(_applyStyleUpdate(filterType: filterType));
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildLayerControls(bool hasSelection) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1703,38 +1758,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case 'filterType':
         final value =
             property.extractValue(context) as MixedValue<CanvasFilterType>;
-        return _buildStyleOptions<CanvasFilterType>(
-          label: widget.strings.filterType,
-          mixed: value.isMixed,
-          mixedLabel: widget.strings.mixed,
-          options: [
-            _StyleOption(
-              value: CanvasFilterType.mosaic,
-              label: widget.strings.filterTypeMosaic,
-              icon: const Icon(Icons.grid_view_outlined, size: _iconSize),
-            ),
-            _StyleOption(
-              value: CanvasFilterType.gaussianBlur,
-              label: widget.strings.filterTypeGaussianBlur,
-              icon: const Icon(Icons.blur_on_outlined, size: _iconSize),
-            ),
-            _StyleOption(
-              value: CanvasFilterType.grayscale,
-              label: widget.strings.filterTypeGrayscale,
-              icon: const Icon(Icons.tonality_outlined, size: _iconSize),
-            ),
-            _StyleOption(
-              value: CanvasFilterType.inversion,
-              label: widget.strings.filterTypeInversion,
-              icon: const Icon(
-                Icons.invert_colors_on_outlined,
-                size: _iconSize,
-              ),
-            ),
-          ],
-          selected: value.isMixed ? null : value.value,
-          onSelect: (value) => _applyStyleUpdate(filterType: value),
-        );
+        return _buildFilterTypeSelect(value: value);
 
       case 'filterStrength':
         final value = property.extractValue(context) as MixedValue<double>;

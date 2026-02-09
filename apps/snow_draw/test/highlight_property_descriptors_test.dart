@@ -118,7 +118,6 @@ void main() {
       filterStyleValues: FilterStyleValues(
         filterType: MixedValue(value: CanvasFilterType.mosaic, isMixed: false),
         filterStrength: MixedValue(value: 0.5, isMixed: false),
-        opacity: MixedValue(value: 1, isMixed: false),
       ),
       rectangleDefaults: ElementStyleConfig(),
       arrowDefaults: ElementStyleConfig(),

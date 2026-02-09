@@ -16,7 +16,6 @@ void main() {
     const filterValues = FilterStyleValues(
       filterType: MixedValue(value: CanvasFilterType.mosaic, isMixed: false),
       filterStrength: MixedValue(value: 0.5, isMixed: false),
-      opacity: MixedValue(value: 1, isMixed: false),
     );
 
     const context = StylePropertyContext(
@@ -114,7 +113,7 @@ void main() {
     );
     final ids = properties.map((p) => p.id).toList();
 
-    expect(ids, ['filterType', 'filterStrength', 'opacity']);
+    expect(ids, ['filterType', 'filterStrength']);
   });
 
   test('filter properties are registered before arrow properties', () {

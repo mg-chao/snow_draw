@@ -276,23 +276,20 @@ class FilterStyleValues {
   const FilterStyleValues({
     required this.filterType,
     required this.filterStrength,
-    required this.opacity,
   });
 
   final MixedValue<CanvasFilterType> filterType;
   final MixedValue<double> filterStrength;
-  final MixedValue<double> opacity;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is FilterStyleValues &&
           other.filterType == filterType &&
-          other.filterStrength == filterStrength &&
-          other.opacity == opacity;
+          other.filterStrength == filterStrength;
 
   @override
-  int get hashCode => Object.hash(filterType, filterStrength, opacity);
+  int get hashCode => Object.hash(filterType, filterStrength);
 }
 
 /// Resolved style values for serial number elements, supporting

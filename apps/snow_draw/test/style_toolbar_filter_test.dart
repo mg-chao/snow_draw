@@ -45,6 +45,7 @@ void main() {
 
     expect(find.text('Filter Type'), findsOneWidget);
     expect(find.text('Filter Strength'), findsOneWidget);
+    expect(find.byType(DropdownButton<Object>), findsOneWidget);
 
     await adapter.applyStyleUpdate(
       filterType: CanvasFilterType.grayscale,

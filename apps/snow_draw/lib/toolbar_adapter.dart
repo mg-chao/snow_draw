@@ -1251,7 +1251,6 @@ class StyleToolbarAdapter {
           value: defaults.filterStrength,
           isMixed: false,
         ),
-        opacity: MixedValue(value: defaults.opacity, isMixed: false),
       );
     }
 
@@ -1264,16 +1263,13 @@ class StyleToolbarAdapter {
           value: defaults.filterStrength,
           isMixed: false,
         ),
-        opacity: MixedValue(value: defaults.opacity, isMixed: false),
       );
     }
 
     if (_selectedFilters.length == 1) {
-      final opacity = _resolveMixedOpacity(defaults.opacity);
       return FilterStyleValues(
         filterType: MixedValue(value: firstData.type, isMixed: false),
         filterStrength: MixedValue(value: firstData.strength, isMixed: false),
-        opacity: opacity,
       );
     }
 
@@ -1300,7 +1296,6 @@ class StyleToolbarAdapter {
       }
     }
 
-    final opacity = _resolveMixedOpacity(defaults.opacity);
     return FilterStyleValues(
       filterType: MixedValue(
         value: filterTypeMixed ? null : filterType,
@@ -1310,7 +1305,6 @@ class StyleToolbarAdapter {
         value: filterStrengthMixed ? null : filterStrength,
         isMixed: filterStrengthMixed,
       ),
-      opacity: opacity,
     );
   }
 
@@ -1659,7 +1653,6 @@ class StyleToolbarAdapter {
       nextFilterStyle = nextFilterStyle.copyWith(
         filterType: filterType,
         filterStrength: filterStrength,
-        opacity: opacity,
       );
     }
     if (updateHighlightMask) {

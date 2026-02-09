@@ -63,17 +63,18 @@ class FilterShaderManager {
     }
 
     final normalizedStrength = strength.clamp(0.0, 1.0);
-    const minBlocks = 12.0;
-    const maxBlocks = 120.0;
-    final blockCount =
-        maxBlocks - ((maxBlocks - minBlocks) * normalizedStrength);
+    final shortestSide = width < height ? width : height;
+    const minBlockSize = 2.0;
+    final maxBlockSize = (shortestSide / 8).clamp(4.0, 64.0);
+    final blockSize =
+        minBlockSize + ((maxBlockSize - minBlockSize) * normalizedStrength);
 
     final shader = _mosaicProgram!.fragmentShader();
     var index = 0;
     shader
       ..setFloat(index++, width)
       ..setFloat(index++, height)
-      ..setFloat(index++, blockCount);
+      ..setFloat(index++, blockSize);
 
     try {
       return ui.ImageFilter.shader(shader);

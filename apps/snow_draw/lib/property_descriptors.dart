@@ -411,7 +411,6 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
         supportedElementTypes: const {
           ElementType.rectangle,
           ElementType.highlight,
-          ElementType.filter,
           ElementType.arrow,
           ElementType.line,
           ElementType.freeDraw,
@@ -429,9 +428,6 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.highlight)) {
       values.add(context.highlightStyleValues.opacity);
-    }
-    if (context.selectedElementTypes.contains(ElementType.filter)) {
-      values.add(context.filterStyleValues.opacity);
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       values.add(context.arrowStyleValues.opacity);
@@ -459,9 +455,6 @@ class OpacityPropertyDescriptor extends PropertyDescriptor<double> {
     }
     if (context.selectedElementTypes.contains(ElementType.highlight)) {
       return context.highlightDefaults.opacity;
-    }
-    if (context.selectedElementTypes.contains(ElementType.filter)) {
-      return context.filterDefaults.opacity;
     }
     if (context.selectedElementTypes.contains(ElementType.arrow)) {
       return context.arrowDefaults.opacity;
