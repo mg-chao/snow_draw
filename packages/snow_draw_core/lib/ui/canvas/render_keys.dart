@@ -52,6 +52,7 @@ class StaticCanvasRenderKey {
     required this.camera,
     required this.previewElementsById,
     required this.dynamicLayerStartIndex,
+    required this.skipBaseElementScene,
     required this.scaleFactor,
     required this.canvasConfig,
     required this.gridConfig,
@@ -72,6 +73,9 @@ class StaticCanvasRenderKey {
 
   /// First element index that renders on the dynamic layer.
   final int? dynamicLayerStartIndex;
+
+  /// Whether static painter should skip base element scene rendering.
+  final bool skipBaseElementScene;
 
   /// Canvas scale factor.
   final double scaleFactor;
@@ -102,6 +106,7 @@ class StaticCanvasRenderKey {
           other.camera == camera &&
           _mapsEqual(other.previewElementsById, previewElementsById) &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
+          other.skipBaseElementScene == skipBaseElementScene &&
           other.scaleFactor == scaleFactor &&
           other.canvasConfig == canvasConfig &&
           other.gridConfig == gridConfig &&
@@ -118,6 +123,7 @@ class StaticCanvasRenderKey {
       previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
     ),
     dynamicLayerStartIndex,
+    skipBaseElementScene,
     scaleFactor,
     canvasConfig,
     gridConfig,
@@ -167,6 +173,7 @@ class DynamicCanvasRenderKey {
     required this.camera,
     required this.previewElementsById,
     required this.dynamicLayerStartIndex,
+    required this.rendersWholeElementScene,
     required this.scaleFactor,
     required this.selectionConfig,
     required this.boxSelectionConfig,
@@ -213,6 +220,9 @@ class DynamicCanvasRenderKey {
   /// First element index that renders on the dynamic layer.
   final int? dynamicLayerStartIndex;
 
+  /// Whether dynamic painter renders the whole element scene.
+  final bool rendersWholeElementScene;
+
   /// Canvas scale factor.
   final double scaleFactor;
 
@@ -255,6 +265,7 @@ class DynamicCanvasRenderKey {
           other.camera == camera &&
           _mapsEqual(other.previewElementsById, previewElementsById) &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
+          other.rendersWholeElementScene == rendersWholeElementScene &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
           other.boxSelectionConfig == boxSelectionConfig &&
@@ -282,6 +293,7 @@ class DynamicCanvasRenderKey {
       previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
     ),
     dynamicLayerStartIndex,
+    rendersWholeElementScene,
     scaleFactor,
     selectionConfig,
     boxSelectionConfig,

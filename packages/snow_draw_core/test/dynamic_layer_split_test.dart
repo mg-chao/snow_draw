@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
@@ -116,6 +117,62 @@ void main() {
       currentRect: const DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 20),
     );
     final state = _stateWith(interaction: interaction);
+    final view = DrawStateView.fromState(state);
+
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 0);
+  });
+
+  test('lifts all document elements while creating filter', () {
+    final interaction = CreatingState(
+      element: const ElementState(
+        id: 'f_new',
+        rect: DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 20),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 99,
+        data: FilterData(),
+      ),
+      startPosition: const DrawPoint(x: 10, y: 10),
+      currentRect: const DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 20),
+    );
+    final state = _stateWith(interaction: interaction);
+    final view = DrawStateView.fromState(state);
+
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 0);
+  });
+
+  test('lifts all document elements when dynamic range includes filter', () {
+    final state = _stateWith(
+      selectedIds: const {'e1'},
+      elements: const [
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'f1',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: FilterData(),
+        ),
+        ElementState(
+          id: 'e3',
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: RectangleData(),
+        ),
+      ],
+    );
     final view = DrawStateView.fromState(state);
 
     final splitIndex = resolveDynamicLayerStartIndex(view);

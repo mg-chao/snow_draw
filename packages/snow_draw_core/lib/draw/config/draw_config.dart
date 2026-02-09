@@ -44,6 +44,12 @@ abstract class ConfigDefaults {
   /// Default highlight shape.
   static const HighlightShape defaultHighlightShape = HighlightShape.rectangle;
 
+  /// Default canvas filter type.
+  static const CanvasFilterType defaultFilterType = CanvasFilterType.mosaic;
+
+  /// Default canvas filter strength.
+  static const defaultFilterStrength = 0.5;
+
   /// Default mask color.
   static const defaultMaskColor = Color(0xFF000000);
 
@@ -156,6 +162,7 @@ class DrawConfig {
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     ElementStyleConfig? serialNumberStyle,
+    ElementStyleConfig? filterStyle,
     ElementStyleConfig? highlightStyle,
     HighlightMaskConfig? highlight,
     this.grid = const GridConfig(),
@@ -169,6 +176,12 @@ class DrawConfig {
            serialNumberStyle ??
            elementStyle.copyWith(
              fontSize: ConfigDefaults.defaultSerialNumberFontSize,
+           ),
+       filterStyle =
+           filterStyle ??
+           elementStyle.copyWith(
+             filterType: ConfigDefaults.defaultFilterType,
+             filterStrength: ConfigDefaults.defaultFilterStrength,
            ),
        highlightStyle =
            highlightStyle ??
@@ -190,6 +203,7 @@ class DrawConfig {
   final ElementStyleConfig freeDrawStyle;
   final ElementStyleConfig textStyle;
   final ElementStyleConfig serialNumberStyle;
+  final ElementStyleConfig filterStyle;
   final ElementStyleConfig highlightStyle;
   final HighlightMaskConfig highlight;
   final GridConfig grid;
@@ -209,6 +223,7 @@ class DrawConfig {
     ElementStyleConfig? freeDrawStyle,
     ElementStyleConfig? textStyle,
     ElementStyleConfig? serialNumberStyle,
+    ElementStyleConfig? filterStyle,
     ElementStyleConfig? highlightStyle,
     HighlightMaskConfig? highlight,
     GridConfig? grid,
@@ -220,6 +235,10 @@ class DrawConfig {
       textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
       textStrokeWidth: 0,
       highlightShape: ConfigDefaults.defaultHighlightShape,
+    );
+    final nextFilterStyle = nextElementStyle.copyWith(
+      filterType: ConfigDefaults.defaultFilterType,
+      filterStrength: ConfigDefaults.defaultFilterStrength,
     );
     return DrawConfig(
       selection: selection ?? this.selection,
@@ -243,8 +262,11 @@ class DrawConfig {
           textStyle ??
           (elementStyle != null ? nextElementStyle : this.textStyle),
       serialNumberStyle:
-        serialNumberStyle ??
-        (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
+          serialNumberStyle ??
+          (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
+      filterStyle:
+          filterStyle ??
+          (elementStyle != null ? nextFilterStyle : this.filterStyle),
       highlightStyle:
           highlightStyle ??
           (elementStyle != null ? nextHighlightStyle : this.highlightStyle),
@@ -269,6 +291,7 @@ class DrawConfig {
           other.freeDrawStyle == freeDrawStyle &&
           other.textStyle == textStyle &&
           other.serialNumberStyle == serialNumberStyle &&
+          other.filterStyle == filterStyle &&
           other.highlightStyle == highlightStyle &&
           other.highlight == highlight &&
           other.grid == grid &&
@@ -287,6 +310,7 @@ class DrawConfig {
     freeDrawStyle,
     textStyle,
     serialNumberStyle,
+    filterStyle,
     highlightStyle,
     highlight,
     grid,
@@ -307,6 +331,7 @@ class DrawConfig {
       'freeDrawStyle: $freeDrawStyle, '
       'textStyle: $textStyle, '
       'serialNumberStyle: $serialNumberStyle, '
+      'filterStyle: $filterStyle, '
       'highlightStyle: $highlightStyle, '
       'highlight: $highlight, '
       'grid: $grid, '

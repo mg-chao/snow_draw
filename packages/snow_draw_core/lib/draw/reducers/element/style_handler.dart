@@ -34,6 +34,8 @@ DrawState handleUpdateElementsStyle(
     strokeWidth: action.strokeWidth,
     strokeStyle: action.strokeStyle,
     fillStyle: action.fillStyle,
+    filterType: action.filterType,
+    filterStrength: action.filterStrength,
     cornerRadius: action.cornerRadius,
     arrowType: action.arrowType,
     startArrowhead: action.startArrowhead,

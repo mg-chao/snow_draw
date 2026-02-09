@@ -4,6 +4,7 @@ export 'core/elements_core.dart';
 export 'registration.dart';
 // Types
 export 'types/arrow/arrow.dart';
+export 'types/filter/filter.dart';
 export 'types/free_draw/free_draw.dart';
 export 'types/highlight/highlight.dart';
 export 'types/line/line.dart';

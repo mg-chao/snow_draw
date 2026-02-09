@@ -9,6 +9,7 @@ import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_path_utils.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -28,6 +29,7 @@ import '../../draw/utils/arrow_binding_highlight.dart';
 import '../../draw/utils/binding_highlight_style.dart';
 import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'filter_scene_compositor.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
@@ -67,12 +69,19 @@ class DynamicCanvasPainter extends CustomPainter {
       ..translate(camera.position.x, camera.position.y)
       ..scale(scale, scale);
 
+    final creatingElement = renderKey.creatingElement;
+
     // Draw elements at or above the selected element to preserve z-order.
-    _drawDynamicElements(canvas: canvas, size: size, scale: scale);
+    _drawDynamicElements(
+      canvas: canvas,
+      size: size,
+      scale: scale,
+      creatingElement: creatingElement,
+    );
 
     // Draw creating element preview above the static layer.
-    final creatingElement = renderKey.creatingElement;
-    if (creatingElement != null) {
+    if (creatingElement != null &&
+        creatingElement.element.data is! FilterData) {
       final previewElement = creatingElement.element.copyWith(
         rect: creatingElement.currentRect,
       );
@@ -258,9 +267,11 @@ class DynamicCanvasPainter extends CustomPainter {
     required Canvas canvas,
     required Size size,
     required double scale,
+    required CreatingElementSnapshot? creatingElement,
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
-    if (dynamicLayerStartIndex == null) {
+    final rendersWholeScene = renderKey.rendersWholeElementScene;
+    if (dynamicLayerStartIndex == null && !rendersWholeScene) {
       return;
     }
 
@@ -276,8 +287,12 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final visibleElements = document.getElementsInRect(viewportRect)
       ..removeWhere((element) {
+        if (rendersWholeScene) {
+          return false;
+        }
         final orderIndex = document.getOrderIndex(element.id) ?? -1;
-        return orderIndex < dynamicLayerStartIndex;
+        final startIndex = dynamicLayerStartIndex ?? 0;
+        return orderIndex < startIndex;
       });
 
     final previewElements = renderKey.previewElementsById;
@@ -305,48 +320,49 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
+    final effectiveElements = <ElementState>[];
     if (previewElements.isEmpty) {
+      effectiveElements.addAll(visibleElements);
+    } else {
       for (final element in visibleElements) {
+        final preview = previewElements[element.id];
+        final effectiveElement = preview ?? element;
+        if (preview != null) {
+          final aabb = SelectionCalculator.computeElementWorldAabb(
+            effectiveElement,
+          );
+          if (!_rectsIntersect(aabb, viewportRect)) {
+            continue;
+          }
+        }
+        effectiveElements.add(effectiveElement);
+      }
+    }
+
+    if (creatingElement != null && creatingElement.element.data is FilterData) {
+      effectiveElements.add(
+        creatingElement.element.copyWith(rect: creatingElement.currentRect),
+      );
+    }
+
+    filterSceneCompositor.paintElements(
+      canvas: canvas,
+      elements: effectiveElements,
+      paintElement: (sceneCanvas, element) {
         elementRenderer.renderElement(
-          canvas: canvas,
+          canvas: sceneCanvas,
           element: element,
           scaleFactor: scale,
           registry: renderKey.elementRegistry,
           locale: renderKey.locale,
         );
         drawSerialNumberConnectorsForText(
-          canvas: canvas,
+          canvas: sceneCanvas,
           textElement: element,
           connectorsByTextId: serialConnectors,
         );
-      }
-      return;
-    }
-
-    for (final element in visibleElements) {
-      final preview = previewElements[element.id];
-      final effectiveElement = preview ?? element;
-      if (preview != null) {
-        final aabb = SelectionCalculator.computeElementWorldAabb(
-          effectiveElement,
-        );
-        if (!_rectsIntersect(aabb, viewportRect)) {
-          continue;
-        }
-      }
-      elementRenderer.renderElement(
-        canvas: canvas,
-        element: effectiveElement,
-        scaleFactor: scale,
-        registry: renderKey.elementRegistry,
-        locale: renderKey.locale,
-      );
-      drawSerialNumberConnectorsForText(
-        canvas: canvas,
-        textElement: effectiveElement,
-        connectorsByTextId: serialConnectors,
-      );
-    }
+      },
+    );
   }
 
   void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {

@@ -8,6 +8,8 @@ enum FillStyle { solid, line, crossLine }
 
 enum HighlightShape { rectangle, ellipse }
 
+enum CanvasFilterType { mosaic, gaussianBlur, grayscale, inversion }
+
 enum ArrowType { straight, curved, elbow }
 
 enum ArrowheadStyle {
@@ -34,6 +36,8 @@ class ElementStyleUpdate {
     this.strokeStyle,
     this.fillStyle,
     this.highlightShape,
+    this.filterType,
+    this.filterStrength,
     this.cornerRadius,
     this.arrowType,
     this.startArrowhead,
@@ -53,6 +57,8 @@ class ElementStyleUpdate {
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
   final HighlightShape? highlightShape;
+  final CanvasFilterType? filterType;
+  final double? filterStrength;
   final double? cornerRadius;
   final ArrowType? arrowType;
   final ArrowheadStyle? startArrowhead;
@@ -72,6 +78,8 @@ class ElementStyleUpdate {
       strokeStyle == null &&
       fillStyle == null &&
       highlightShape == null &&
+      filterType == null &&
+      filterStrength == null &&
       cornerRadius == null &&
       arrowType == null &&
       startArrowhead == null &&
@@ -91,6 +99,8 @@ class ElementStyleUpdate {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
     double? cornerRadius,
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
@@ -109,6 +119,8 @@ class ElementStyleUpdate {
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
     highlightShape: highlightShape ?? this.highlightShape,
+    filterType: filterType ?? this.filterType,
+    filterStrength: filterStrength ?? this.filterStrength,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,

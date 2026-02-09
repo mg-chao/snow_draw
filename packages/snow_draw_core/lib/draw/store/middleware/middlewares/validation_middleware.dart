@@ -183,6 +183,8 @@ ValidationResult _validateUpdateElementsStyle(
       update.strokeWidth == null &&
       update.strokeStyle == null &&
       update.fillStyle == null &&
+      update.filterType == null &&
+      update.filterStrength == null &&
       update.cornerRadius == null &&
       update.arrowType == null &&
       update.startArrowhead == null &&

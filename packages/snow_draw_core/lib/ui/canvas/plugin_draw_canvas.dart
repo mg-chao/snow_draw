@@ -16,6 +16,7 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
@@ -43,6 +44,7 @@ import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
+import 'filter_shader_manager.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
@@ -273,6 +275,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Preload GPU shaders for optimal first-frame performance.
     unawaited(GridShaderManager.instance.load());
     unawaited(RectangleShaderManager.instance.load());
+    unawaited(FilterShaderManager.instance.load());
 
     _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 
@@ -392,6 +395,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final hasHighlights = _hasHighlightElements(stateView, creatingSnapshot);
+    final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
     final hasDynamicContent =
         dynamicLayerStartIndex != null || creatingSnapshot != null;
     final highlightMaskLayer = resolveHighlightMaskLayer(
@@ -406,6 +410,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       camera: stateView.state.application.view.camera,
       previewElementsById: staticPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
+      skipBaseElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
       canvasConfig: config.canvas,
       gridConfig: config.grid,
@@ -430,6 +435,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       camera: stateView.state.application.view.camera,
       previewElementsById: dynamicPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
+      rendersWholeElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
       selectionConfig: selectionConfig,
       boxSelectionConfig: config.boxSelection,
@@ -569,6 +575,34 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
       resolveDynamicLayerStartIndex(view);
+
+  bool _dynamicOwnsWholeElementScene(DrawStateView view) {
+    final split = _resolveDynamicLayerStartIndex(view);
+    if (split != 0) {
+      return false;
+    }
+
+    final interaction = view.state.application.interaction;
+    if (interaction is CreatingState && interaction.elementData is FilterData) {
+      return true;
+    }
+
+    if (view.selectedIds.isEmpty) {
+      return false;
+    }
+    final document = view.state.domain.document;
+    final splitIndex = split ?? 0;
+    for (final element in document.elements) {
+      final orderIndex = document.getOrderIndex(element.id);
+      if (orderIndex == null || orderIndex < splitIndex) {
+        continue;
+      }
+      if (element.data is FilterData) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
