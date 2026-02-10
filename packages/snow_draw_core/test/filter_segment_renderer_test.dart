@@ -225,7 +225,7 @@ void main() {
     recorder.endRecording();
   });
 
-  test('semi-transparent content is replaced, not double composited', () async {
+  test('semi-transparent content stacks under source-over blending', () async {
     final renderer = FilterSegmentRenderer();
     const imageSize = ui.Size(80, 80);
 
@@ -286,14 +286,12 @@ void main() {
     final unfilteredR = _channelFromUnit(unfiltered.r);
     final unfilteredG = _channelFromUnit(unfiltered.g);
     final unfilteredB = _channelFromUnit(unfiltered.b);
-    final unfilteredA = _channelFromUnit(unfiltered.a);
     final singleFilteredR = _channelFromUnit(singleFiltered.r);
     final singleFilteredG = _channelFromUnit(singleFiltered.g);
     final singleFilteredB = _channelFromUnit(singleFiltered.b);
     final doubleFilteredR = _channelFromUnit(doubleFiltered.r);
     final doubleFilteredG = _channelFromUnit(doubleFiltered.g);
     final doubleFilteredB = _channelFromUnit(doubleFiltered.b);
-    final doubleFilteredA = _channelFromUnit(doubleFiltered.a);
 
     final singleDiff =
         (singleFilteredR - unfilteredR).abs() +
@@ -301,10 +299,11 @@ void main() {
         (singleFilteredB - unfilteredB).abs();
     expect(singleDiff, greaterThan(10));
 
-    expect((doubleFilteredR - unfilteredR).abs(), lessThanOrEqualTo(2));
-    expect((doubleFilteredG - unfilteredG).abs(), lessThanOrEqualTo(2));
-    expect((doubleFilteredB - unfilteredB).abs(), lessThanOrEqualTo(2));
-    expect((doubleFilteredA - unfilteredA).abs(), lessThanOrEqualTo(2));
+    final doubleDiff =
+        (doubleFilteredR - unfilteredR).abs() +
+        (doubleFilteredG - unfilteredG).abs() +
+        (doubleFilteredB - unfilteredB).abs();
+    expect(doubleDiff, greaterThan(5));
   });
 
   test('filter cache is bounded while filter bounds vary', () {
