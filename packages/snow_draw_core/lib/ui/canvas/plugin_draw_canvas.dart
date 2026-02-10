@@ -45,6 +45,7 @@ import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
 import 'filter_shader_manager.dart';
 import 'grid_shader_painter.dart';
+import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
@@ -275,6 +276,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(GridShaderManager.instance.load());
     unawaited(RectangleShaderManager.instance.load());
     unawaited(FilterShaderManager.instance.load());
+    unawaited(HighlightMaskShaderManager.instance.load());
 
     _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 
