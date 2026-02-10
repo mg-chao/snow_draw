@@ -48,7 +48,8 @@ class FilterSegmentRenderer {
     _filterCache.clear();
   }
 
-  /// Paints [elements] in z-order using segmented filter composition.
+  /// Paints [elements] in z-order using segmented filter
+  /// composition.
   void paint({
     required Canvas canvas,
     required List<ElementState> elements,
@@ -66,7 +67,9 @@ class FilterSegmentRenderer {
       return;
     }
 
-    final hasFilter = segments.any((segment) => segment is FilterSegment);
+    final hasFilter = segments.any(
+      (s) => s is FilterSegment || s is MergedFilterSegment,
+    );
     if (!hasFilter) {
       final first = segments.isEmpty ? null : segments.first;
       if (first is ElementBatchSegment) {
@@ -96,6 +99,11 @@ class FilterSegmentRenderer {
           filterElement: segment.filterElement,
           data: segment.filterData,
         );
+        continue;
+      }
+
+      if (segment is MergedFilterSegment && accumulated != null) {
+        accumulated = _applyMergedFilter(scene: accumulated, merged: segment);
       }
     }
 
@@ -130,6 +138,8 @@ class FilterSegmentRenderer {
     return recorder.endRecording();
   }
 
+  // ── Single-filter pass ──────────────────────────────────
+
   Picture _applyFilter({
     required Picture scene,
     required ElementState filterElement,
@@ -159,6 +169,119 @@ class FilterSegmentRenderer {
       ..clipPath(clipPath)
       ..drawColor(Color.fromRGBO(0, 0, 0, opacity), BlendMode.dstOut);
 
+    _paintFilteredLayer(
+      canvas: canvas,
+      scene: scene,
+      data: data,
+      layerBounds: layerBounds,
+      opacity: opacity,
+      blendMode: BlendMode.plus,
+    );
+
+    canvas.restore();
+    _diagnostics.markFilterPass();
+    return recorder.endRecording();
+  }
+
+  // ── Merged-filter pass ──────────────────────────────────
+
+  /// Applies a group of same-type filters with fewer
+  /// `PictureRecorder` allocations.
+  ///
+  /// Non-overlapping filters share a single recorder. When a filter
+  /// overlaps a previous one in the group, the accumulated picture
+  /// is finalized so the next filter sees the correct intermediate
+  /// result (important for idempotent filters like double-inversion).
+  Picture _applyMergedFilter({
+    required Picture scene,
+    required MergedFilterSegment merged,
+  }) {
+    var currentScene = scene;
+    PictureRecorder? recorder;
+    Canvas? canvas;
+    Rect coveredBounds = Rect.zero;
+
+    void finishRecorder() {
+      if (recorder == null) {
+        return;
+      }
+      currentScene = recorder!.endRecording();
+      recorder = null;
+      canvas = null;
+      coveredBounds = Rect.zero;
+    }
+
+    void ensureRecorder() {
+      if (recorder != null) {
+        return;
+      }
+      _diagnostics.markPictureRecorder();
+      recorder = PictureRecorder();
+      canvas = Canvas(recorder!)..drawPicture(currentScene);
+    }
+
+    for (final filter in merged.filters) {
+      final element = filter.filterElement;
+      final data = filter.filterData;
+      final rect = element.rect;
+      if (rect.width <= 0 || rect.height <= 0) {
+        continue;
+      }
+
+      final opacity = element.opacity.clamp(0.0, 1.0);
+      if (opacity <= 0) {
+        continue;
+      }
+
+      final clipPath = _resolveClipPath(element);
+      final layerBounds = clipPath.getBounds();
+      if (layerBounds.isEmpty) {
+        continue;
+      }
+
+      // Overlapping regions need a fresh recorder so the
+      // second filter reads the result of the first.
+      if (coveredBounds.overlaps(layerBounds)) {
+        finishRecorder();
+      }
+
+      ensureRecorder();
+
+      canvas!
+        ..save()
+        ..clipPath(clipPath)
+        ..drawColor(Color.fromRGBO(0, 0, 0, opacity), BlendMode.dstOut);
+
+      _paintFilteredLayer(
+        canvas: canvas!,
+        scene: currentScene,
+        data: data,
+        layerBounds: layerBounds,
+        opacity: opacity,
+        blendMode: BlendMode.plus,
+      );
+
+      canvas!.restore();
+      _diagnostics.markFilterPass();
+      coveredBounds = coveredBounds.isEmpty
+          ? layerBounds
+          : coveredBounds.expandToInclude(layerBounds);
+    }
+
+    finishRecorder();
+    return currentScene;
+  }
+
+  // ── Filter type dispatch ────────────────────────────────
+
+  void _paintFilteredLayer({
+    required Canvas canvas,
+    required Picture scene,
+    required FilterData data,
+    required Rect layerBounds,
+    required double opacity,
+    BlendMode blendMode = BlendMode.srcOver,
+  }) {
     switch (data.type) {
       case CanvasFilterType.mosaic:
         _paintMosaicFilter(
@@ -167,7 +290,7 @@ class FilterSegmentRenderer {
           data,
           layerBounds,
           opacity,
-          blendMode: BlendMode.plus,
+          blendMode: blendMode,
         );
       case CanvasFilterType.gaussianBlur:
         _paintBlurFilter(
@@ -176,43 +299,39 @@ class FilterSegmentRenderer {
           layerBounds,
           opacity,
           data,
-          blendMode: BlendMode.plus,
+          blendMode: blendMode,
         );
       case CanvasFilterType.grayscale:
         _paintColorMatrixFilter(
           canvas,
           scene,
-          _grayscaleMatrix,
+          _grayscaleColorFilter,
           layerBounds,
           opacity,
-          blendMode: BlendMode.plus,
+          blendMode: blendMode,
         );
       case CanvasFilterType.inversion:
         _paintColorMatrixFilter(
           canvas,
           scene,
-          _inversionMatrix,
+          _inversionColorFilter,
           layerBounds,
           opacity,
-          blendMode: BlendMode.plus,
+          blendMode: blendMode,
         );
     }
-
-    canvas.restore();
-    _diagnostics.markFilterPass();
-    return recorder.endRecording();
   }
+
+  // ── Individual filter painters ──────────────────────────
 
   void _paintMosaicFilter(
     Canvas canvas,
     Picture scene,
     FilterData data,
     Rect layerBounds,
-    double opacity,
-    {
+    double opacity, {
     BlendMode blendMode = BlendMode.srcOver,
-  }
-  ) {
+  }) {
     final shaderFilter = FilterShaderManager.instance.createMosaicFilter(
       strength: data.strength,
       regionSize: layerBounds.size,
@@ -291,26 +410,26 @@ class FilterSegmentRenderer {
   void _paintColorMatrixFilter(
     Canvas canvas,
     Picture scene,
-    List<double> matrix,
+    ColorFilter colorFilter,
     Rect layerBounds,
-    double opacity,
-    {
+    double opacity, {
     BlendMode blendMode = BlendMode.srcOver,
-  }
-  ) {
+  }) {
     _diagnostics.markSaveLayer();
     canvas
       ..saveLayer(
         layerBounds,
         _buildFilteredLayerPaint(
           opacity: opacity,
-          colorFilter: ColorFilter.matrix(matrix),
+          colorFilter: colorFilter,
           blendMode: blendMode,
         ),
       )
       ..drawPicture(scene)
       ..restore();
   }
+
+  // ── Helpers ─────────────────────────────────────────────
 
   Paint _buildFilteredLayerPaint({
     required double opacity,
@@ -391,6 +510,8 @@ class FilterSegmentRenderer {
   }
 }
 
+// ── Cache keys ──────────────────────────────────────────
+
 @immutable
 class _FilterClipCacheKey {
   const _FilterClipCacheKey({
@@ -449,48 +570,24 @@ class _FilterImageCacheKey {
       Object.hash(type, strength, bounds, sigmaX, sigmaY, shaderSupported);
 }
 
+// ── Cached color-filter constants ───────────────────────
+
 const _grayscaleMatrix = <double>[
-  0.2126,
-  0.7152,
-  0.0722,
-  0,
-  0,
-  0.2126,
-  0.7152,
-  0.0722,
-  0,
-  0,
-  0.2126,
-  0.7152,
-  0.0722,
-  0,
-  0,
-  0,
-  0,
-  0,
-  1,
-  0,
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0, //
 ];
 
 const _inversionMatrix = <double>[
-  -1,
-  0,
-  0,
-  0,
-  255,
-  0,
-  -1,
-  0,
-  0,
-  255,
-  0,
-  0,
-  -1,
-  0,
-  255,
-  0,
-  0,
-  0,
-  1,
-  0,
+  -1, 0, 0, 0, 255, //
+  0, -1, 0, 0, 255, //
+  0, 0, -1, 0, 255, //
+  0, 0, 0, 1, 0, //
 ];
+
+/// Pre-built grayscale [ColorFilter] to avoid per-frame allocation.
+final ColorFilter _grayscaleColorFilter = ColorFilter.matrix(_grayscaleMatrix);
+
+/// Pre-built inversion [ColorFilter] to avoid per-frame allocation.
+final ColorFilter _inversionColorFilter = ColorFilter.matrix(_inversionMatrix);
