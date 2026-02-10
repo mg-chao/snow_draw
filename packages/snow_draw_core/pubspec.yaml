@@ -65,6 +65,7 @@ flutter:
     - shaders/grid.frag
     - shaders/rectangle.frag
     - shaders/filter_mosaic.frag
+    - shaders/highlight_mask.frag
 
   # To add assets to your application, add an assets section, like this:
   # assets:

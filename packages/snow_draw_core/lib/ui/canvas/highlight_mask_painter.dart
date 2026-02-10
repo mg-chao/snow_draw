@@ -6,12 +6,20 @@ import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/element_style.dart';
+import 'highlight_mask_shader_manager.dart';
 
+/// Paints a dimming mask over the viewport with holes for highlights.
+///
+/// Tries the GPU-accelerated shader path first. Falls back to the
+/// `saveLayer` + `BlendMode.clear` approach when the shader is not
+/// available or the highlight count exceeds the shader limit.
 void paintHighlightMask({
   required Canvas canvas,
   required List<ElementState> highlights,
   required DrawRect viewportRect,
   required HighlightMaskConfig maskConfig,
+  double scaleFactor = 1,
+  Offset cameraPosition = Offset.zero,
 }) {
   if (maskConfig.maskOpacity <= 0) {
     return;
@@ -27,6 +35,53 @@ void paintHighlightMask({
     return;
   }
 
+  // Attempt GPU-accelerated path.
+  final shaderManager = HighlightMaskShaderManager.instance;
+  if (shaderManager.isReady) {
+    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
+
+    // The canvas is currently in world-coordinate space (translated +
+    // scaled). Undo that transform so the shader can draw in screen
+    // pixels, then restore afterwards.
+    canvas.save();
+    canvas
+      ..scale(1 / scale, 1 / scale)
+      ..translate(-cameraPosition.dx, -cameraPosition.dy);
+
+    final used = shaderManager.paintMask(
+      canvas: canvas,
+      highlights: highlights,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
+
+    canvas.restore();
+
+    if (used) {
+      return;
+    }
+  }
+
+  // CPU fallback: saveLayer + BlendMode.clear.
+  _paintHighlightMaskFallback(
+    canvas: canvas,
+    highlights: highlights,
+    viewportRect: viewportRect,
+    maskConfig: maskConfig,
+    effectiveAlpha: effectiveAlpha,
+  );
+}
+
+/// Original `saveLayer`-based mask implementation used as a fallback.
+void _paintHighlightMaskFallback({
+  required Canvas canvas,
+  required List<ElementState> highlights,
+  required DrawRect viewportRect,
+  required HighlightMaskConfig maskConfig,
+  required double effectiveAlpha,
+}) {
   final layerRect = Rect.fromLTWH(
     viewportRect.minX,
     viewportRect.minY,

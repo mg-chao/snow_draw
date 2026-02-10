@@ -103,6 +103,11 @@ class DynamicCanvasPainter extends CustomPainter {
         highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
+        scaleFactor: scale,
+        cameraPosition: Offset(
+          camera.position.x,
+          camera.position.y,
+        ),
       );
     }
 
