@@ -25,16 +25,22 @@ class FilterSegmentRenderer {
     : _segmentBuilder = segmentBuilder ?? const FilterSegmentBuilder();
 
   static const _filterImageCacheLimit = 256;
-  static const _clipPathCacheLimit = 512;
+  static const _clipInfoCacheLimit = 512;
 
   final FilterSegmentBuilder _segmentBuilder;
-  final _clipPathCache = LruCache<_FilterClipCacheKey, Path>(
-    maxEntries: _clipPathCacheLimit,
+  final _clipInfoCache = LruCache<_FilterClipCacheKey, _ClipInfo>(
+    maxEntries: _clipInfoCacheLimit,
   );
   final _filterCache = LruCache<_FilterImageCacheKey, ImageFilter>(
     maxEntries: _filterImageCacheLimit,
   );
   final _diagnostics = FilterRenderDiagnosticsCollector();
+
+  /// Reusable paint object for `saveLayer` calls.
+  ///
+  /// Avoids allocating a new [Paint] per filter pass. Properties are
+  /// reset before each use via [_resetLayerPaint].
+  final _layerPaint = Paint();
 
   /// Last completed frame diagnostics.
   FilterRenderDiagnostics get lastDiagnostics => _diagnostics.lastFrame;
@@ -47,7 +53,7 @@ class FilterSegmentRenderer {
 
   /// Clears internal caches.
   void clearCaches() {
-    _clipPathCache.clear();
+    _clipInfoCache.clear();
     _filterCache.clear();
   }
 
@@ -175,30 +181,25 @@ class FilterSegmentRenderer {
       return scene;
     }
 
-    final clipPath = _resolveClipPath(filterElement);
-    final layerBounds = clipPath.getBounds();
+    final clip = _resolveClipInfo(filterElement);
+    final layerBounds = clip.bounds;
     if (layerBounds.isEmpty) {
       return scene;
     }
 
     _diagnostics.markPictureRecorder();
     final recorder = PictureRecorder();
-    final canvas = Canvas(recorder)
-      ..drawPicture(scene)
-      ..save()
-      ..clipPath(clipPath)
-      ..drawColor(Color.fromRGBO(0, 0, 0, opacity), BlendMode.dstOut);
+    final canvas = Canvas(recorder)..drawPicture(scene);
 
-    _paintFilteredLayer(
+    _applyClippedFilter(
       canvas: canvas,
       scene: scene,
+      clip: clip,
       data: data,
       layerBounds: layerBounds,
       opacity: opacity,
-      blendMode: BlendMode.plus,
     );
 
-    canvas.restore();
     _diagnostics.markFilterPass();
     return recorder.endRecording();
   }
@@ -219,7 +220,12 @@ class FilterSegmentRenderer {
     var currentScene = scene;
     PictureRecorder? recorder;
     Canvas? canvas;
-    Rect coveredBounds = Rect.zero;
+
+    // Track individual filter bounds instead of a single expanding
+    // rect. This avoids false-positive overlaps when two distant
+    // filters are separated by a third that expanded the union rect
+    // to cover both.
+    final coveredRegions = <Rect>[];
 
     void finishRecorder() {
       if (recorder == null) {
@@ -228,7 +234,7 @@ class FilterSegmentRenderer {
       currentScene = recorder!.endRecording();
       recorder = null;
       canvas = null;
-      coveredBounds = Rect.zero;
+      coveredRegions.clear();
     }
 
     void ensureRecorder() {
@@ -253,43 +259,88 @@ class FilterSegmentRenderer {
         continue;
       }
 
-      final clipPath = _resolveClipPath(element);
-      final layerBounds = clipPath.getBounds();
+      final clip = _resolveClipInfo(element);
+      final layerBounds = clip.bounds;
       if (layerBounds.isEmpty) {
         continue;
       }
 
       // Overlapping regions need a fresh recorder so the
       // second filter reads the result of the first.
-      if (coveredBounds.overlaps(layerBounds)) {
+      if (_anyOverlaps(coveredRegions, layerBounds)) {
         finishRecorder();
       }
 
       ensureRecorder();
 
-      canvas!
-        ..save()
-        ..clipPath(clipPath)
-        ..drawColor(Color.fromRGBO(0, 0, 0, opacity), BlendMode.dstOut);
-
-      _paintFilteredLayer(
+      _applyClippedFilter(
         canvas: canvas!,
         scene: currentScene,
+        clip: clip,
         data: data,
         layerBounds: layerBounds,
         opacity: opacity,
-        blendMode: BlendMode.plus,
       );
 
-      canvas!.restore();
       _diagnostics.markFilterPass();
-      coveredBounds = coveredBounds.isEmpty
-          ? layerBounds
-          : coveredBounds.expandToInclude(layerBounds);
+      coveredRegions.add(layerBounds);
     }
 
     finishRecorder();
     return currentScene;
+  }
+
+  // ── Clipped filter application ────────────────────────
+
+  /// Applies a single filter within a clip region.
+  ///
+  /// When [opacity] is 1.0, uses `BlendMode.src` inside the
+  /// `saveLayer` to replace the clipped region in one pass instead
+  /// of the dstOut + plus two-pass compositing.
+  /// Uses `clipRect` for axis-aligned clips to avoid the more
+  /// expensive `clipPath` rasterization.
+  void _applyClippedFilter({
+    required Canvas canvas,
+    required Picture scene,
+    required _ClipInfo clip,
+    required FilterData data,
+    required Rect layerBounds,
+    required double opacity,
+  }) {
+    if (opacity >= 1.0) {
+      // Fast path: full opacity — a single saveLayer with src blend
+      // replaces the clipped region without a separate dstOut pass.
+      canvas.save();
+      clip.applyTo(canvas);
+      _paintFilteredLayer(
+        canvas: canvas,
+        scene: scene,
+        data: data,
+        layerBounds: layerBounds,
+        opacity: 1.0,
+        blendMode: BlendMode.src,
+      );
+      canvas.restore();
+      return;
+    }
+
+    // Partial opacity: punch a hole with dstOut, then composite
+    // the filtered result with plus.
+    canvas.save();
+    clip.applyTo(canvas);
+    canvas.drawColor(
+      Color.fromRGBO(0, 0, 0, opacity),
+      BlendMode.dstOut,
+    );
+    _paintFilteredLayer(
+      canvas: canvas,
+      scene: scene,
+      data: data,
+      layerBounds: layerBounds,
+      opacity: opacity,
+      blendMode: BlendMode.plus,
+    );
+    canvas.restore();
   }
 
   // ── Filter type dispatch ────────────────────────────────
@@ -352,22 +403,30 @@ class FilterSegmentRenderer {
     double opacity, {
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final shaderFilter = FilterShaderManager.instance.createMosaicFilter(
-      strength: data.strength,
-      regionSize: layerBounds.size,
-      regionOffset: layerBounds.topLeft,
+    final cacheKey = _FilterImageCacheKey(
+      type: CanvasFilterType.mosaic,
+      param0: data.strength,
+      param1: layerBounds.width,
+      param2: layerBounds.height,
+      param3: layerBounds.left,
+      param4: layerBounds.top,
     );
+    final shaderFilter = _filterCache.get(cacheKey) ??
+        FilterShaderManager.instance.createMosaicFilter(
+          strength: data.strength,
+          regionSize: layerBounds.size,
+          regionOffset: layerBounds.topLeft,
+        );
     if (shaderFilter != null) {
+      _filterCache.put(cacheKey, shaderFilter);
       _diagnostics.markSaveLayer();
+      _resetLayerPaint(
+        opacity: opacity,
+        imageFilter: shaderFilter,
+        blendMode: blendMode,
+      );
       canvas
-        ..saveLayer(
-          layerBounds,
-          _buildFilteredLayerPaint(
-            opacity: opacity,
-            imageFilter: shaderFilter,
-            blendMode: blendMode,
-          ),
-        )
+        ..saveLayer(layerBounds, _layerPaint)
         ..drawPicture(scene)
         ..restore();
       return;
@@ -402,8 +461,8 @@ class FilterSegmentRenderer {
     );
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.gaussianBlur,
-      sigmaX: sigma,
-      sigmaY: sigma,
+      param0: sigma,
+      param1: sigma,
     );
     final imageFilter = _filterCache.getOrCreate(
       cacheKey,
@@ -411,15 +470,13 @@ class FilterSegmentRenderer {
     );
 
     _diagnostics.markSaveLayer();
+    _resetLayerPaint(
+      opacity: opacity,
+      imageFilter: imageFilter,
+      blendMode: blendMode,
+    );
     canvas
-      ..saveLayer(
-        layerBounds,
-        _buildFilteredLayerPaint(
-          opacity: opacity,
-          imageFilter: imageFilter,
-          blendMode: blendMode,
-        ),
-      )
+      ..saveLayer(layerBounds, _layerPaint)
       ..drawPicture(scene)
       ..restore();
   }
@@ -433,58 +490,73 @@ class FilterSegmentRenderer {
     BlendMode blendMode = BlendMode.srcOver,
   }) {
     _diagnostics.markSaveLayer();
+    _resetLayerPaint(
+      opacity: opacity,
+      colorFilter: colorFilter,
+      blendMode: blendMode,
+    );
     canvas
-      ..saveLayer(
-        layerBounds,
-        _buildFilteredLayerPaint(
-          opacity: opacity,
-          colorFilter: colorFilter,
-          blendMode: blendMode,
-        ),
-      )
+      ..saveLayer(layerBounds, _layerPaint)
       ..drawPicture(scene)
       ..restore();
   }
 
   // ── Helpers ─────────────────────────────────────────────
 
-  Paint _buildFilteredLayerPaint({
+  /// Configures [_layerPaint] for the next `saveLayer` call.
+  ///
+  /// Resets all filter-related properties so stale values from a
+  /// previous pass don't leak through.
+  void _resetLayerPaint({
     required double opacity,
     ImageFilter? imageFilter,
     ColorFilter? colorFilter,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final paint = Paint();
-    if (imageFilter != null) {
-      paint.imageFilter = imageFilter;
-    }
-    if (colorFilter != null) {
-      paint.colorFilter = colorFilter;
-    }
-    paint.blendMode = blendMode;
-    if (opacity < 1) {
-      paint.color = Color.fromRGBO(255, 255, 255, opacity);
-    }
-    return paint;
+    _layerPaint
+      ..imageFilter = imageFilter
+      ..colorFilter = colorFilter
+      ..blendMode = blendMode
+      ..color = opacity < 1
+          ? Color.fromRGBO(255, 255, 255, opacity)
+          : const Color(0xFFFFFFFF);
   }
 
-  Path _resolveClipPath(ElementState element) {
+  /// Returns `true` when [candidate] overlaps any rect in [regions].
+  ///
+  /// Linear scan is fine here because merged filter groups are
+  /// typically small (single digits).
+  static bool _anyOverlaps(List<Rect> regions, Rect candidate) {
+    for (final r in regions) {
+      if (r.overlaps(candidate)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  _ClipInfo _resolveClipInfo(ElementState element) {
     final key = _FilterClipCacheKey(
       id: element.id,
       rect: element.rect,
       rotation: element.rotation,
     );
-    return _clipPathCache.getOrCreate(
+    return _clipInfoCache.getOrCreate(
       key,
-      () => _buildFilterClipPath(element),
+      () => _buildClipInfo(element),
     );
   }
 
-  Path _buildFilterClipPath(ElementState element) {
+  _ClipInfo _buildClipInfo(ElementState element) {
     final rect = element.rect;
+    final uiRect = Rect.fromLTWH(
+      rect.minX,
+      rect.minY,
+      rect.width,
+      rect.height,
+    );
     if (element.rotation == 0) {
-      return Path()
-        ..addRect(Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height));
+      return _ClipInfo(bounds: uiRect);
     }
 
     final sinRotation = math.sin(element.rotation);
@@ -506,12 +578,14 @@ class FilterSegmentRenderer {
     final bottomRight = rotatePoint(rect.maxX, rect.maxY);
     final bottomLeft = rotatePoint(rect.minX, rect.maxY);
 
-    return Path()
+    final path = Path()
       ..moveTo(topLeft.dx, topLeft.dy)
       ..lineTo(topRight.dx, topRight.dy)
       ..lineTo(bottomRight.dx, bottomRight.dy)
       ..lineTo(bottomLeft.dx, bottomLeft.dy)
       ..close();
+
+    return _ClipInfo(bounds: path.getBounds(), path: path);
   }
 
   double _mapStrength({
@@ -552,31 +626,65 @@ class _FilterClipCacheKey {
 
 /// Cache key for [ImageFilter] objects.
 ///
-/// Excludes spatial bounds because blur and color-matrix filters are
-/// position-independent — the same kernel applies regardless of where
-/// the `saveLayer` clips.
+/// Uses generic numeric parameters so the same key type works for blur
+/// (sigma values) and mosaic (strength, region dimensions, offset).
 @immutable
 class _FilterImageCacheKey {
   const _FilterImageCacheKey({
     required this.type,
-    required this.sigmaX,
-    required this.sigmaY,
+    this.param0 = 0,
+    this.param1 = 0,
+    this.param2 = 0,
+    this.param3 = 0,
+    this.param4 = 0,
   });
 
   final CanvasFilterType type;
-  final double sigmaX;
-  final double sigmaY;
+  final double param0;
+  final double param1;
+  final double param2;
+  final double param3;
+  final double param4;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _FilterImageCacheKey &&
           other.type == type &&
-          other.sigmaX == sigmaX &&
-          other.sigmaY == sigmaY;
+          other.param0 == param0 &&
+          other.param1 == param1 &&
+          other.param2 == param2 &&
+          other.param3 == param3 &&
+          other.param4 == param4;
 
   @override
-  int get hashCode => Object.hash(type, sigmaX, sigmaY);
+  int get hashCode =>
+      Object.hash(type, param0, param1, param2, param3, param4);
+}
+
+/// Resolved clip geometry for a filter element.
+///
+/// When [path] is `null` the clip is axis-aligned and [bounds] can be
+/// applied directly via `Canvas.clipRect`, which is cheaper than the
+/// general `clipPath` rasterization.
+@immutable
+class _ClipInfo {
+  const _ClipInfo({required this.bounds, this.path});
+
+  final Rect bounds;
+  final Path? path;
+
+  /// Whether this clip is a simple axis-aligned rectangle.
+  bool get isAxisAligned => path == null;
+
+  /// Applies the clip to [canvas] using the cheapest available method.
+  void applyTo(Canvas canvas) {
+    if (path != null) {
+      canvas.clipPath(path!);
+    } else {
+      canvas.clipRect(bounds);
+    }
+  }
 }
 
 // ── Cached color-filter constants ───────────────────────
