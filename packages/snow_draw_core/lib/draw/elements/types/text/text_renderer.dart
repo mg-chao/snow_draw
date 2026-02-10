@@ -374,6 +374,8 @@ class TextRenderer extends ElementTypeRenderer {
     if (resolvedBoxes.isEmpty) {
       return;
     }
+    final backgroundPath = Path();
+    var hasDrawableRect = false;
     for (final box in resolvedBoxes) {
       final rect = Rect.fromLTRB(
         box.left - horizontalPadding,
@@ -384,16 +386,20 @@ class TextRenderer extends ElementTypeRenderer {
       if (rect.isEmpty) {
         continue;
       }
+      hasDrawableRect = true;
       final radius = _clampCornerRadius(cornerRadius, rect);
       if (radius <= 0) {
-        canvas.drawRect(rect, paint);
+        backgroundPath.addRect(rect);
       } else {
-        canvas.drawRRect(
+        backgroundPath.addRRect(
           RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-          paint,
         );
       }
     }
+    if (!hasDrawableRect) {
+      return;
+    }
+    canvas.drawPath(backgroundPath, paint);
   }
 
   double _clampCornerRadius(double cornerRadius, Rect rect) {

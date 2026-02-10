@@ -7,13 +7,17 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
+import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'filter_scene_compositor.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+
+final ModuleLogger _staticCanvasFallbackLog = LogService.fallback.render;
 
 /// Static canvas painter.
 ///
@@ -44,6 +48,7 @@ class StaticCanvasPainter extends CustomPainter {
         ? renderKey.previewElementsById
         : const <String, ElementState>{};
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
+    final skipBaseElementScene = renderKey.skipBaseElementScene;
 
     // Draw background.
     _drawBackground(canvas, size);
@@ -71,90 +76,95 @@ class StaticCanvasPainter extends CustomPainter {
       _drawGridFallback(canvas, viewportRect, scale);
     }
 
-    // Query visible elements. Preview elements are handled below to avoid
-    // lifting them into a higher render layer.
-    final visibleElements = document.getElementsInRect(viewportRect);
-    if (creatingElementId != null) {
-      visibleElements.removeWhere((element) => element.id == creatingElementId);
-    }
-    if (dynamicLayerStartIndex != null) {
-      visibleElements.removeWhere((element) {
-        final orderIndex = document.getOrderIndex(element.id) ?? -1;
-        return orderIndex >= dynamicLayerStartIndex;
-      });
-    }
-    if (previewElements.isNotEmpty) {
-      final visibleIds = {for (final element in visibleElements) element.id};
-      for (final preview in previewElements.values) {
-        if (visibleIds.contains(preview.id)) {
-          continue;
-        }
-        final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-        if (_rectsIntersect(aabb, viewportRect)) {
-          visibleElements.add(preview);
-          visibleIds.add(preview.id);
-        }
-      }
-    }
-
-    visibleElements.sort((a, b) {
-      final indexA = document.getOrderIndex(a.id) ?? -1;
-      final indexB = document.getOrderIndex(b.id) ?? -1;
-      return indexA.compareTo(indexB);
-    });
-    final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
-    // Draw visible elements in document z-order, applying preview geometry
-    // without lifting elements to the top layer.
-    if (previewElements.isEmpty) {
-      for (final element in visibleElements) {
-        elementRenderer.renderElement(
-          canvas: canvas,
-          element: element,
-          scaleFactor: scale,
-          registry: renderKey.elementRegistry,
-          locale: renderKey.locale,
-        );
-        drawSerialNumberConnectorsForText(
-          canvas: canvas,
-          textElement: element,
-          connectorsByTextId: serialConnectors,
+    if (!skipBaseElementScene) {
+      // Query visible elements. Preview elements are handled below to avoid
+      // lifting them into a higher render layer.
+      final visibleElements = document.queryElementsInRectOrdered(viewportRect);
+      if (creatingElementId != null) {
+        visibleElements.removeWhere(
+          (element) => element.id == creatingElementId,
         );
       }
-    } else {
-      for (final element in visibleElements) {
-        final preview = previewElements[element.id];
-        final effectiveElement = preview ?? element;
-        if (preview != null) {
-          final aabb = SelectionCalculator.computeElementWorldAabb(
-            effectiveElement,
-          );
-          if (!_rectsIntersect(aabb, viewportRect)) {
+      if (dynamicLayerStartIndex != null) {
+        visibleElements.removeWhere((element) {
+          final orderIndex = document.getOrderIndex(element.id) ?? -1;
+          return orderIndex >= dynamicLayerStartIndex;
+        });
+      }
+      if (previewElements.isNotEmpty) {
+        final visibleIds = {for (final element in visibleElements) element.id};
+        for (final preview in previewElements.values) {
+          if (visibleIds.contains(preview.id)) {
             continue;
           }
+          final aabb = SelectionCalculator.computeElementWorldAabb(preview);
+          if (_rectsIntersect(aabb, viewportRect)) {
+            visibleElements.add(preview);
+            visibleIds.add(preview.id);
+          }
         }
-        elementRenderer.renderElement(
-          canvas: canvas,
-          element: effectiveElement,
-          scaleFactor: scale,
-          registry: renderKey.elementRegistry,
-          locale: renderKey.locale,
-        );
-        drawSerialNumberConnectorsForText(
-          canvas: canvas,
-          textElement: effectiveElement,
-          connectorsByTextId: serialConnectors,
-        );
+      }
+
+      final serialConnectors = resolveSerialNumberConnectorMap(stateView);
+
+      // Draw visible elements in document z-order, applying preview geometry
+      // without lifting elements to the top layer.
+      final effectiveElements = <ElementState>[];
+      if (previewElements.isEmpty) {
+        effectiveElements.addAll(visibleElements);
+      } else {
+        for (final element in visibleElements) {
+          final preview = previewElements[element.id];
+          final effectiveElement = preview ?? element;
+          if (preview != null) {
+            final aabb = SelectionCalculator.computeElementWorldAabb(
+              effectiveElement,
+            );
+            if (!_rectsIntersect(aabb, viewportRect)) {
+              continue;
+            }
+          }
+          effectiveElements.add(effectiveElement);
+        }
+      }
+
+      filterSceneCompositor.paintElements(
+        canvas: canvas,
+        elements: effectiveElements,
+        paintElement: (sceneCanvas, element) {
+          elementRenderer.renderElement(
+            canvas: sceneCanvas,
+            element: element,
+            scaleFactor: scale,
+            registry: renderKey.elementRegistry,
+            locale: renderKey.locale,
+          );
+          drawSerialNumberConnectorsForText(
+            canvas: sceneCanvas,
+            textElement: element,
+            connectorsByTextId: serialConnectors,
+          );
+        },
+      );
+      if (renderKey.performanceMonitoringEnabled) {
+        final diagnostics = filterSceneCompositor.lastDiagnostics;
+        if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
+          _staticCanvasFallbackLog.warning('Heavy static filter frame', {
+            'pictureRecorders': diagnostics.pictureRecorders,
+            'saveLayers': diagnostics.saveLayers,
+            'filterPasses': diagnostics.filterPasses,
+            'batchCount': diagnostics.batchCount,
+          });
+        }
       }
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.staticLayer) {
       paintHighlightMask(
         canvas: canvas,
-        stateView: stateView,
+        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
-        creatingElement: null,
       );
     }
 

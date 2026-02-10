@@ -6,6 +6,7 @@ import 'tool_controller.dart';
 enum ElementType {
   rectangle,
   highlight,
+  filter,
   arrow,
   line,
   freeDraw,
@@ -22,6 +23,7 @@ class StylePropertyContext {
     required this.freeDrawStyleValues,
     required this.textStyleValues,
     required this.highlightStyleValues,
+    required this.filterStyleValues,
     required this.serialNumberStyleValues,
     required this.rectangleDefaults,
     required this.arrowDefaults,
@@ -29,6 +31,7 @@ class StylePropertyContext {
     required this.freeDrawDefaults,
     required this.textDefaults,
     required this.highlightDefaults,
+    required this.filterDefaults,
     required this.serialNumberDefaults,
     required this.highlightMask,
     required this.selectedElementTypes,
@@ -41,6 +44,7 @@ class StylePropertyContext {
   final LineStyleValues freeDrawStyleValues;
   final TextStyleValues textStyleValues;
   final HighlightStyleValues highlightStyleValues;
+  final FilterStyleValues filterStyleValues;
   final SerialNumberStyleValues serialNumberStyleValues;
   final ElementStyleConfig rectangleDefaults;
   final ElementStyleConfig arrowDefaults;
@@ -48,6 +52,7 @@ class StylePropertyContext {
   final ElementStyleConfig freeDrawDefaults;
   final ElementStyleConfig textDefaults;
   final ElementStyleConfig highlightDefaults;
+  final ElementStyleConfig filterDefaults;
   final ElementStyleConfig serialNumberDefaults;
   final HighlightMaskConfig highlightMask;
   final Set<ElementType> selectedElementTypes;

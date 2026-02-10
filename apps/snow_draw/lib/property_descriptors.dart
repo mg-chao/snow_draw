@@ -98,6 +98,49 @@ class HighlightShapePropertyDescriptor
       context.highlightDefaults.highlightShape;
 }
 
+/// Property descriptor for filter type.
+class FilterTypePropertyDescriptor
+    extends PropertyDescriptor<CanvasFilterType> {
+  const FilterTypePropertyDescriptor()
+    : super(
+        id: 'filterType',
+        supportedElementTypes: const {ElementType.filter},
+      );
+
+  @override
+  MixedValue<CanvasFilterType> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.filter)) {
+      return context.filterStyleValues.filterType;
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  CanvasFilterType getDefaultValue(StylePropertyContext context) =>
+      context.filterDefaults.filterType;
+}
+
+/// Property descriptor for filter strength.
+class FilterStrengthPropertyDescriptor extends PropertyDescriptor<double> {
+  const FilterStrengthPropertyDescriptor()
+    : super(
+        id: 'filterStrength',
+        supportedElementTypes: const {ElementType.filter},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.filter)) {
+      return context.filterStyleValues.filterStrength;
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.filterDefaults.filterStrength;
+}
+
 /// Property descriptor for highlight text stroke width
 class HighlightTextStrokeWidthPropertyDescriptor
     extends PropertyDescriptor<double> {

@@ -2,6 +2,7 @@ import '../core/core.dart' show DrawContext;
 import '../core/draw_context.dart' show DrawContext;
 import 'core/element_registry.dart';
 import 'types/arrow/arrow_definition.dart';
+import 'types/filter/filter_definition.dart';
 import 'types/free_draw/free_draw_definition.dart';
 import 'types/highlight/highlight_definition.dart';
 import 'types/line/line_definition.dart';
@@ -25,6 +26,9 @@ void registerBuiltInElements(DefaultElementRegistry registry) {
   }
   if (registry.get(freeDrawDefinition.typeId) == null) {
     registry.register(freeDrawDefinition);
+  }
+  if (registry.get(filterDefinition.typeId) == null) {
+    registry.register(filterDefinition);
   }
   if (registry.get(highlightDefinition.typeId) == null) {
     registry.register(highlightDefinition);

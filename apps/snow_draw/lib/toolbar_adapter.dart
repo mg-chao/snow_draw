@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
@@ -22,7 +23,12 @@ import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';
 
-enum StyleUpdateScope { allSelectedElements, highlightsOnly, textsOnly }
+enum StyleUpdateScope {
+  allSelectedElements,
+  highlightsOnly,
+  filtersOnly,
+  textsOnly,
+}
 
 class StyleToolbarAdapter {
   StyleToolbarAdapter({required DrawStore store}) : _store = store {
@@ -35,6 +41,7 @@ class StyleToolbarAdapter {
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
     _highlightStyleValues = _resolveHighlightStyles();
+    _filterStyleValues = _resolveFilterStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
@@ -58,6 +65,7 @@ class StyleToolbarAdapter {
   List<ElementState> _selectedLines = const [];
   List<ElementState> _selectedFreeDraws = const [];
   List<ElementState> _selectedTexts = const [];
+  List<ElementState> _selectedFilters = const [];
   List<ElementState> _selectedSerialNumbers = const [];
   Map<String, _ElementStyleSnapshot> _styleSnapshot = const {};
   late RectangleStyleValues _styleValues;
@@ -66,6 +74,7 @@ class StyleToolbarAdapter {
   late LineStyleValues _freeDrawStyleValues;
   late TextStyleValues _textStyleValues;
   late HighlightStyleValues _highlightStyleValues;
+  late FilterStyleValues _filterStyleValues;
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
@@ -100,6 +109,8 @@ class StyleToolbarAdapter {
     Color? textStrokeColor,
     double? textStrokeWidth,
     HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
     int? serialNumber,
@@ -114,14 +125,19 @@ class StyleToolbarAdapter {
       StyleUpdateScope.highlightsOnly => {
         for (final element in _selectedHighlights) element.id,
       },
+      StyleUpdateScope.filtersOnly => {
+        for (final element in _selectedFilters) element.id,
+      },
       StyleUpdateScope.textsOnly => {
         for (final element in _selectedTexts) element.id,
       },
       StyleUpdateScope.allSelectedElements => {..._selectedIds},
     };
     final interaction = _store.state.application.interaction;
-    if (scope != StyleUpdateScope.highlightsOnly &&
-        interaction is TextEditingState) {
+    final updatesTextEditing =
+        scope == StyleUpdateScope.allSelectedElements ||
+        scope == StyleUpdateScope.textsOnly;
+    if (updatesTextEditing && interaction is TextEditingState) {
       ids.add(interaction.elementId);
     }
     final hasElementStyleUpdate =
@@ -142,6 +158,8 @@ class StyleToolbarAdapter {
         textStrokeColor != null ||
         textStrokeWidth != null ||
         highlightShape != null ||
+        filterType != null ||
+        filterStrength != null ||
         serialNumber != null;
     if (ids.isNotEmpty && hasElementStyleUpdate) {
       await _store.dispatch(
@@ -164,6 +182,8 @@ class StyleToolbarAdapter {
           textStrokeColor: textStrokeColor,
           textStrokeWidth: textStrokeWidth,
           highlightShape: highlightShape,
+          filterType: filterType,
+          filterStrength: filterStrength,
           serialNumber: serialNumber,
         ),
       );
@@ -187,6 +207,8 @@ class StyleToolbarAdapter {
       textStrokeColor: textStrokeColor,
       textStrokeWidth: textStrokeWidth,
       highlightShape: highlightShape,
+      filterType: filterType,
+      filterStrength: filterStrength,
       maskColor: maskColor,
       maskOpacity: maskOpacity,
       serialNumber: serialNumber,
@@ -245,6 +267,7 @@ class StyleToolbarAdapter {
       _freeDrawStyleValues = _resolveFreeDrawStyles();
       _textStyleValues = _resolveTextStyles();
       _highlightStyleValues = _resolveHighlightStyles();
+      _filterStyleValues = _resolveFilterStyles();
       _serialNumberStyleValues = _resolveSerialNumberStyles();
       _publishState();
       return;
@@ -264,6 +287,7 @@ class StyleToolbarAdapter {
     _freeDrawStyleValues = _resolveFreeDrawStyles();
     _textStyleValues = _resolveTextStyles();
     _highlightStyleValues = _resolveHighlightStyles();
+    _filterStyleValues = _resolveFilterStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
     _publishState();
   }
@@ -280,6 +304,7 @@ class StyleToolbarAdapter {
     final textStyleChanged = config.textStyle != _config.textStyle;
     final highlightStyleChanged =
         config.highlightStyle != _config.highlightStyle;
+    final filterStyleChanged = config.filterStyle != _config.filterStyle;
     final serialNumberStyleChanged =
         config.serialNumberStyle != _config.serialNumberStyle;
     final highlightMaskChanged = config.highlight != _config.highlight;
@@ -290,6 +315,7 @@ class StyleToolbarAdapter {
         !freeDrawStyleChanged &&
         !textStyleChanged &&
         !highlightStyleChanged &&
+        !filterStyleChanged &&
         !serialNumberStyleChanged &&
         !highlightMaskChanged) {
       return;
@@ -312,6 +338,9 @@ class StyleToolbarAdapter {
     if (_selectedHighlights.isEmpty && highlightStyleChanged) {
       _highlightStyleValues = _resolveHighlightStyles();
     }
+    if (_selectedFilters.isEmpty && filterStyleChanged) {
+      _filterStyleValues = _resolveFilterStyles();
+    }
     if (_selectedSerialNumbers.isEmpty && serialNumberStyleChanged) {
       _serialNumberStyleValues = _resolveSerialNumberStyles();
     }
@@ -325,6 +354,7 @@ class StyleToolbarAdapter {
           _selectedElements.isNotEmpty ||
           _selectedRectangles.isNotEmpty ||
           _selectedHighlights.isNotEmpty ||
+          _selectedFilters.isNotEmpty ||
           _selectedArrows.isNotEmpty ||
           _selectedLines.isNotEmpty ||
           _selectedFreeDraws.isNotEmpty ||
@@ -335,6 +365,7 @@ class StyleToolbarAdapter {
         _selectedElements = const [];
         _selectedRectangles = const [];
         _selectedHighlights = const [];
+        _selectedFilters = const [];
         _selectedArrows = const [];
         _selectedLines = const [];
         _selectedFreeDraws = const [];
@@ -349,6 +380,7 @@ class StyleToolbarAdapter {
     final selectedElements = <ElementState>[];
     final selectedRectangles = <ElementState>[];
     final selectedHighlights = <ElementState>[];
+    final selectedFilters = <ElementState>[];
     final selectedArrows = <ElementState>[];
     final selectedLines = <ElementState>[];
     final selectedFreeDraws = <ElementState>[];
@@ -368,6 +400,9 @@ class StyleToolbarAdapter {
       }
       if (element.data is HighlightData) {
         selectedHighlights.add(element);
+      }
+      if (element.data is FilterData) {
+        selectedFilters.add(element);
       }
       if (element.data is ArrowData) {
         selectedArrows.add(element);
@@ -402,6 +437,7 @@ class StyleToolbarAdapter {
     _selectedElements = selectedElements;
     _selectedRectangles = selectedRectangles;
     _selectedHighlights = selectedHighlights;
+    _selectedFilters = selectedFilters;
     _selectedArrows = selectedArrows;
     _selectedLines = selectedLines;
     _selectedFreeDraws = selectedFreeDraws;
@@ -1205,6 +1241,73 @@ class StyleToolbarAdapter {
     );
   }
 
+  /// Resolves filter style values for the current selection.
+  FilterStyleValues _resolveFilterStyles() {
+    final defaults = _config.filterStyle;
+    if (_selectedFilters.isEmpty) {
+      return FilterStyleValues(
+        filterType: MixedValue(value: defaults.filterType, isMixed: false),
+        filterStrength: MixedValue(
+          value: defaults.filterStrength,
+          isMixed: false,
+        ),
+      );
+    }
+
+    final first = _selectedFilters.first;
+    final firstData = first.data;
+    if (firstData is! FilterData) {
+      return FilterStyleValues(
+        filterType: MixedValue(value: defaults.filterType, isMixed: false),
+        filterStrength: MixedValue(
+          value: defaults.filterStrength,
+          isMixed: false,
+        ),
+      );
+    }
+
+    if (_selectedFilters.length == 1) {
+      return FilterStyleValues(
+        filterType: MixedValue(value: firstData.type, isMixed: false),
+        filterStrength: MixedValue(value: firstData.strength, isMixed: false),
+      );
+    }
+
+    final filterType = firstData.type;
+    final filterStrength = firstData.strength;
+
+    var filterTypeMixed = false;
+    var filterStrengthMixed = false;
+
+    for (final element in _selectedFilters.skip(1)) {
+      final data = element.data;
+      if (data is! FilterData) {
+        continue;
+      }
+      if (!filterTypeMixed && data.type != filterType) {
+        filterTypeMixed = true;
+      }
+      if (!filterStrengthMixed &&
+          !_doubleEquals(data.strength, filterStrength)) {
+        filterStrengthMixed = true;
+      }
+      if (filterTypeMixed && filterStrengthMixed) {
+        break;
+      }
+    }
+
+    return FilterStyleValues(
+      filterType: MixedValue(
+        value: filterTypeMixed ? null : filterType,
+        isMixed: filterTypeMixed,
+      ),
+      filterStrength: MixedValue(
+        value: filterStrengthMixed ? null : filterStrength,
+        isMixed: filterStrengthMixed,
+      ),
+    );
+  }
+
   /// Resolves serial number style values for the current selection.
   SerialNumberStyleValues _resolveSerialNumberStyles() {
     final defaults = _config.serialNumberStyle;
@@ -1363,6 +1466,8 @@ class StyleToolbarAdapter {
     Color? textStrokeColor,
     double? textStrokeWidth,
     HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
     int? serialNumber,
@@ -1370,55 +1475,79 @@ class StyleToolbarAdapter {
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) {
     final highlightsOnlyScope = scope == StyleUpdateScope.highlightsOnly;
+    final filtersOnlyScope = scope == StyleUpdateScope.filtersOnly;
     final textsOnlyScope = scope == StyleUpdateScope.textsOnly;
     final hasSelection = _selectedIds.isNotEmpty;
     final interaction = _store.state.application.interaction;
     final updateRectangleDefaults =
         (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             _selectedRectangles.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.rectangle);
     final updateArrowDefaults =
         (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             _selectedArrows.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.arrow);
     final updateLineDefaults =
         (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             _selectedLines.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.line);
     final updateFreeDrawDefaults =
         (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             _selectedFreeDraws.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.freeDraw);
     final updateTextDefaults =
-        !highlightsOnlyScope && _selectedTexts.isNotEmpty ||
-        (!highlightsOnlyScope && interaction is TextEditingState) ||
-        (!hasSelection && !highlightsOnlyScope && toolType == ToolType.text);
+        (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
+            _selectedTexts.isNotEmpty) ||
+        (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
+            interaction is TextEditingState) ||
+        (!hasSelection &&
+            !highlightsOnlyScope &&
+            !filtersOnlyScope &&
+            toolType == ToolType.text);
     final updateHighlightDefaults =
+        !filtersOnlyScope &&
         !textsOnlyScope &&
         (_selectedHighlights.isNotEmpty ||
             (!hasSelection && toolType == ToolType.highlight));
+    final updateFilterDefaults =
+        !highlightsOnlyScope &&
+        !textsOnlyScope &&
+        (_selectedFilters.isNotEmpty ||
+            (!hasSelection && toolType == ToolType.filter));
     final updateSerialNumberDefaults =
         (!highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             _selectedSerialNumbers.isNotEmpty) ||
         (!hasSelection &&
             !highlightsOnlyScope &&
+            !filtersOnlyScope &&
             !textsOnlyScope &&
             toolType == ToolType.serialNumber);
     final updateHighlightMask =
@@ -1430,6 +1559,7 @@ class StyleToolbarAdapter {
         !updateFreeDrawDefaults &&
         !updateTextDefaults &&
         !updateHighlightDefaults &&
+        !updateFilterDefaults &&
         !updateSerialNumberDefaults &&
         !updateHighlightMask) {
       return;
@@ -1441,6 +1571,7 @@ class StyleToolbarAdapter {
     var nextFreeDrawStyle = _config.freeDrawStyle;
     var nextTextStyle = _config.textStyle;
     var nextHighlightStyle = _config.highlightStyle;
+    var nextFilterStyle = _config.filterStyle;
     var nextSerialNumberStyle = _config.serialNumberStyle;
     var nextHighlightMask = _config.highlight;
 
@@ -1518,6 +1649,12 @@ class StyleToolbarAdapter {
         opacity: opacity,
       );
     }
+    if (updateFilterDefaults) {
+      nextFilterStyle = nextFilterStyle.copyWith(
+        filterType: filterType,
+        filterStrength: filterStrength,
+      );
+    }
     if (updateHighlightMask) {
       nextHighlightMask = nextHighlightMask.copyWith(
         maskColor: maskColor,
@@ -1544,6 +1681,7 @@ class StyleToolbarAdapter {
         nextFreeDrawStyle == _config.freeDrawStyle &&
         nextTextStyle == _config.textStyle &&
         nextHighlightStyle == _config.highlightStyle &&
+        nextFilterStyle == _config.filterStyle &&
         nextSerialNumberStyle == _config.serialNumberStyle &&
         nextHighlightMask == _config.highlight) {
       return;
@@ -1559,6 +1697,7 @@ class StyleToolbarAdapter {
             freeDrawStyle: nextFreeDrawStyle,
             textStyle: nextTextStyle,
             highlightStyle: nextHighlightStyle,
+            filterStyle: nextFilterStyle,
             serialNumberStyle: nextSerialNumberStyle,
             highlight: nextHighlightMask,
           ),
@@ -1597,6 +1736,7 @@ class StyleToolbarAdapter {
     freeDrawStyle: _config.freeDrawStyle,
     textStyle: _config.textStyle,
     highlightStyle: _config.highlightStyle,
+    filterStyle: _config.filterStyle,
     serialNumberStyle: _config.serialNumberStyle,
     styleValues: _styleValues,
     arrowStyleValues: _arrowStyleValues,
@@ -1604,6 +1744,7 @@ class StyleToolbarAdapter {
     freeDrawStyleValues: _freeDrawStyleValues,
     textStyleValues: _textStyleValues,
     highlightStyleValues: _highlightStyleValues,
+    filterStyleValues: _filterStyleValues,
     serialNumberStyleValues: _serialNumberStyleValues,
     highlightMask: _config.highlight,
     hasSelection: _selectedIds.isNotEmpty,
@@ -1613,6 +1754,7 @@ class StyleToolbarAdapter {
     hasSelectedFreeDraws: _selectedFreeDraws.isNotEmpty,
     hasSelectedTexts: _selectedTexts.isNotEmpty,
     hasSelectedHighlights: _selectedHighlights.isNotEmpty,
+    hasSelectedFilters: _selectedFilters.isNotEmpty,
     hasSelectedSerialNumbers: _selectedSerialNumbers.isNotEmpty,
   );
 
@@ -1625,6 +1767,7 @@ class _ElementStyleSnapshot {
     required this.opacity,
     this.rectangleData,
     this.highlightData,
+    this.filterData,
     this.arrowData,
     this.lineData,
     this.freeDrawData,
@@ -1635,6 +1778,7 @@ class _ElementStyleSnapshot {
   final double opacity;
   final RectangleData? rectangleData;
   final HighlightData? highlightData;
+  final FilterData? filterData;
   final ArrowData? arrowData;
   final LineData? lineData;
   final FreeDrawData? freeDrawData;
@@ -1649,6 +1793,9 @@ class _ElementStyleSnapshot {
             : null,
         highlightData: element.data is HighlightData
             ? element.data as HighlightData
+            : null,
+        filterData: element.data is FilterData
+            ? element.data as FilterData
             : null,
         arrowData: element.data is ArrowData ? element.data as ArrowData : null,
         lineData: element.data is LineData ? element.data as LineData : null,
@@ -1667,6 +1814,7 @@ class _ElementStyleSnapshot {
   ) =>
       identical(rectangleData, other.rectangleData) &&
       identical(highlightData, other.highlightData) &&
+      identical(filterData, other.filterData) &&
       identical(arrowData, other.arrowData) &&
       identical(lineData, other.lineData) &&
       identical(freeDrawData, other.freeDrawData) &&

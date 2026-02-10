@@ -38,10 +38,9 @@ void main() {
 
     paintHighlightMask(
       canvas: canvas,
-      stateView: view,
+      highlights: view.highlightMaskScene.elements,
       viewportRect: const DrawRect(maxX: 20, maxY: 20),
       maskConfig: const HighlightMaskConfig(maskOpacity: 1),
-      creatingElement: null,
     );
 
     final image = await recorder.endRecording().toImage(20, 20);
@@ -83,10 +82,9 @@ void main() {
 
       paintHighlightMask(
         canvas: canvas,
-        stateView: view,
+        highlights: view.highlightMaskScene.elements,
         viewportRect: const DrawRect(maxX: 20, maxY: 20),
         maskConfig: const HighlightMaskConfig(maskOpacity: 1),
-        creatingElement: null,
       );
 
       final image = await recorder.endRecording().toImage(20, 20);

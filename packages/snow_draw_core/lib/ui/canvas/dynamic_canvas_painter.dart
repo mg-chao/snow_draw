@@ -9,6 +9,7 @@ import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_path_utils.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -19,6 +20,7 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
+import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/edit_transform.dart';
@@ -28,10 +30,13 @@ import '../../draw/utils/arrow_binding_highlight.dart';
 import '../../draw/utils/binding_highlight_style.dart';
 import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
+import 'filter_scene_compositor.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+
+final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
 /// Dynamic canvas painter.
 ///
@@ -67,12 +72,19 @@ class DynamicCanvasPainter extends CustomPainter {
       ..translate(camera.position.x, camera.position.y)
       ..scale(scale, scale);
 
+    final creatingElement = renderKey.creatingElement;
+
     // Draw elements at or above the selected element to preserve z-order.
-    _drawDynamicElements(canvas: canvas, size: size, scale: scale);
+    _drawDynamicElements(
+      canvas: canvas,
+      size: size,
+      scale: scale,
+      creatingElement: creatingElement,
+    );
 
     // Draw creating element preview above the static layer.
-    final creatingElement = renderKey.creatingElement;
-    if (creatingElement != null) {
+    if (creatingElement != null &&
+        creatingElement.element.data is! FilterData) {
       final previewElement = creatingElement.element.copyWith(
         rect: creatingElement.currentRect,
       );
@@ -86,19 +98,11 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
-      final creatingSnapshot = renderKey.creatingElement;
-      ElementState? creatingPreview;
-      if (creatingSnapshot != null) {
-        creatingPreview = creatingSnapshot.element.copyWith(
-          rect: creatingSnapshot.currentRect,
-        );
-      }
       paintHighlightMask(
         canvas: canvas,
-        stateView: stateView,
+        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
-        creatingElement: creatingPreview,
       );
     }
 
@@ -258,9 +262,11 @@ class DynamicCanvasPainter extends CustomPainter {
     required Canvas canvas,
     required Size size,
     required double scale,
+    required CreatingElementSnapshot? creatingElement,
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
-    if (dynamicLayerStartIndex == null) {
+    final rendersWholeScene = renderKey.rendersWholeElementScene;
+    if (dynamicLayerStartIndex == null && !rendersWholeScene) {
       return;
     }
 
@@ -274,11 +280,10 @@ class DynamicCanvasPainter extends CustomPainter {
       maxY: (size.height - camera.position.y) / scale,
     );
 
-    final visibleElements = document.getElementsInRect(viewportRect)
-      ..removeWhere((element) {
-        final orderIndex = document.getOrderIndex(element.id) ?? -1;
-        return orderIndex < dynamicLayerStartIndex;
-      });
+    final visibleElements = document.queryElementsInRectOrdered(
+      viewportRect,
+      minOrderIndex: rendersWholeScene ? null : (dynamicLayerStartIndex ?? 0),
+    );
 
     final previewElements = renderKey.previewElementsById;
     if (previewElements.isNotEmpty) {
@@ -295,57 +300,62 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
-    visibleElements.sort((a, b) {
-      // Use element's zIndex for preview elements not in document,
-      // otherwise use document order index for consistency.
-      final indexA = document.getOrderIndex(a.id) ?? a.zIndex;
-      final indexB = document.getOrderIndex(b.id) ?? b.zIndex;
-      return indexA.compareTo(indexB);
-    });
-
     final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
+    final effectiveElements = <ElementState>[];
     if (previewElements.isEmpty) {
+      effectiveElements.addAll(visibleElements);
+    } else {
       for (final element in visibleElements) {
+        final preview = previewElements[element.id];
+        final effectiveElement = preview ?? element;
+        if (preview != null) {
+          final aabb = SelectionCalculator.computeElementWorldAabb(
+            effectiveElement,
+          );
+          if (!_rectsIntersect(aabb, viewportRect)) {
+            continue;
+          }
+        }
+        effectiveElements.add(effectiveElement);
+      }
+    }
+
+    if (creatingElement != null && creatingElement.element.data is FilterData) {
+      final previewFilter = creatingElement.element.copyWith(
+        rect: creatingElement.currentRect,
+      );
+      effectiveElements.add(previewFilter);
+    }
+
+    filterSceneCompositor.paintElements(
+      canvas: canvas,
+      elements: effectiveElements,
+      paintElement: (sceneCanvas, element) {
         elementRenderer.renderElement(
-          canvas: canvas,
+          canvas: sceneCanvas,
           element: element,
           scaleFactor: scale,
           registry: renderKey.elementRegistry,
           locale: renderKey.locale,
         );
         drawSerialNumberConnectorsForText(
-          canvas: canvas,
+          canvas: sceneCanvas,
           textElement: element,
           connectorsByTextId: serialConnectors,
         );
+      },
+    );
+    if (renderKey.performanceMonitoringEnabled) {
+      final diagnostics = filterSceneCompositor.lastDiagnostics;
+      if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
+        _dynamicCanvasFallbackLog.warning('Heavy dynamic filter frame', {
+          'pictureRecorders': diagnostics.pictureRecorders,
+          'saveLayers': diagnostics.saveLayers,
+          'filterPasses': diagnostics.filterPasses,
+          'batchCount': diagnostics.batchCount,
+        });
       }
-      return;
-    }
-
-    for (final element in visibleElements) {
-      final preview = previewElements[element.id];
-      final effectiveElement = preview ?? element;
-      if (preview != null) {
-        final aabb = SelectionCalculator.computeElementWorldAabb(
-          effectiveElement,
-        );
-        if (!_rectsIntersect(aabb, viewportRect)) {
-          continue;
-        }
-      }
-      elementRenderer.renderElement(
-        canvas: canvas,
-        element: effectiveElement,
-        scaleFactor: scale,
-        registry: renderKey.elementRegistry,
-        locale: renderKey.locale,
-      );
-      drawSerialNumberConnectorsForText(
-        canvas: canvas,
-        textElement: effectiveElement,
-        connectorsByTextId: serialConnectors,
-      );
     }
   }
 

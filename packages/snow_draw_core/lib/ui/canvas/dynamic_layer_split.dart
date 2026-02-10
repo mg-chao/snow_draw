@@ -1,3 +1,4 @@
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/interaction_state.dart';
@@ -16,6 +17,10 @@ int? resolveDynamicLayerStartIndex(DrawStateView view) {
 
   if (interaction is CreatingState &&
       interaction.elementData is HighlightData) {
+    return 0;
+  }
+
+  if (interaction is CreatingState && interaction.elementData is FilterData) {
     return 0;
   }
 
@@ -42,7 +47,7 @@ int? resolveDynamicLayerStartIndex(DrawStateView view) {
 
   for (var i = minIndex; i < document.elements.length; i++) {
     final element = document.elements[i];
-    if (element.data is HighlightData) {
+    if (element.data is HighlightData || element.data is FilterData) {
       return 0;
     }
   }

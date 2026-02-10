@@ -115,6 +115,10 @@ void main() {
         opacity: MixedValue(value: 1, isMixed: false),
       ),
       highlightStyleValues: highlightValues,
+      filterStyleValues: FilterStyleValues(
+        filterType: MixedValue(value: CanvasFilterType.mosaic, isMixed: false),
+        filterStrength: MixedValue(value: 0.5, isMixed: false),
+      ),
       rectangleDefaults: ElementStyleConfig(),
       arrowDefaults: ElementStyleConfig(),
       lineDefaults: ElementStyleConfig(),
@@ -125,6 +129,7 @@ void main() {
         color: Color(0xFFF5222D),
         textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
       ),
+      filterDefaults: ElementStyleConfig(),
       highlightMask: HighlightMaskConfig(maskOpacity: 0.4),
       selectedElementTypes: {ElementType.highlight},
       currentTool: ToolType.highlight,

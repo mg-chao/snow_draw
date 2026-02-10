@@ -605,13 +605,9 @@ List<ElementState> _resolveBindingTargets(
   double distance,
 ) {
   final document = state.domain.document;
-  final entries = document.spatialIndex.searchPointEntries(position, distance);
   final targets = <ElementState>[];
-  for (final entry in entries) {
-    final element = document.getElementById(entry.id);
-    if (element == null) {
-      continue;
-    }
+  final candidates = document.queryElementsAtPointTopDown(position, distance);
+  for (final element in candidates) {
     if (element.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(element)) {
       continue;
     }

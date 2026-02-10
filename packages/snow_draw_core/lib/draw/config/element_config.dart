@@ -89,6 +89,8 @@ class ElementStyleConfig {
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
     this.highlightShape = ConfigDefaults.defaultHighlightShape,
+    this.filterType = ConfigDefaults.defaultFilterType,
+    this.filterStrength = ConfigDefaults.defaultFilterStrength,
     this.cornerRadius = ConfigDefaults.defaultCornerRadius,
     this.arrowType = ConfigDefaults.defaultArrowType,
     this.startArrowhead = ConfigDefaults.defaultStartArrowhead,
@@ -103,6 +105,8 @@ class ElementStyleConfig {
        assert(zIndex >= 0, 'zIndex must be non-negative'),
        assert(serialNumber >= 0, 'serialNumber must be non-negative'),
        assert(strokeWidth >= 0, 'strokeWidth must be non-negative'),
+       assert(filterStrength >= 0, 'filterStrength must be non-negative'),
+       assert(filterStrength <= 1, 'filterStrength must be <= 1'),
        assert(cornerRadius >= 0, 'cornerRadius must be non-negative'),
        assert(fontSize >= 0, 'fontSize must be non-negative'),
        assert(textStrokeWidth >= 0, 'textStrokeWidth must be non-negative');
@@ -136,6 +140,12 @@ class ElementStyleConfig {
 
   /// Default highlight shape for highlight elements.
   final HighlightShape highlightShape;
+
+  /// Default filter type for filter elements.
+  final CanvasFilterType filterType;
+
+  /// Default filter strength for filter elements.
+  final double filterStrength;
 
   /// Default corner radius for supported elements.
   final double cornerRadius;
@@ -177,6 +187,8 @@ class ElementStyleConfig {
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
     double? cornerRadius,
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
@@ -197,6 +209,8 @@ class ElementStyleConfig {
     strokeStyle: strokeStyle ?? this.strokeStyle,
     fillStyle: fillStyle ?? this.fillStyle,
     highlightShape: highlightShape ?? this.highlightShape,
+    filterType: filterType ?? this.filterType,
+    filterStrength: filterStrength ?? this.filterStrength,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,
@@ -224,6 +238,8 @@ class ElementStyleConfig {
           other.strokeStyle == strokeStyle &&
           other.fillStyle == fillStyle &&
           other.highlightShape == highlightShape &&
+          other.filterType == filterType &&
+          other.filterStrength == filterStrength &&
           other.cornerRadius == cornerRadius &&
           other.arrowType == arrowType &&
           other.startArrowhead == startArrowhead &&
@@ -236,7 +252,7 @@ class ElementStyleConfig {
           other.textStrokeWidth == textStrokeWidth;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     opacity,
     zIndex,
     serialNumber,
@@ -246,6 +262,8 @@ class ElementStyleConfig {
     strokeStyle,
     fillStyle,
     highlightShape,
+    filterType,
+    filterStrength,
     cornerRadius,
     arrowType,
     startArrowhead,
@@ -256,7 +274,7 @@ class ElementStyleConfig {
     verticalAlign,
     textStrokeColor,
     textStrokeWidth,
-  );
+  ]);
 
   @override
   String toString() =>
@@ -270,6 +288,8 @@ class ElementStyleConfig {
       'strokeStyle: $strokeStyle, '
       'fillStyle: $fillStyle, '
       'highlightShape: $highlightShape, '
+      'filterType: $filterType, '
+      'filterStrength: $filterStrength, '
       'cornerRadius: $cornerRadius, '
       'arrowType: $arrowType, '
       'startArrowhead: $startArrowhead, '

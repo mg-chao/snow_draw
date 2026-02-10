@@ -61,8 +61,9 @@ class SpatialIndex {
 
   List<SpatialIndexEntry> searchPointEntries(
     DrawPoint point,
-    double tolerance,
-  ) {
+    double tolerance, {
+    bool descending = true,
+  }) {
     final results = _tree.search(
       RBushBox(
         minX: point.x - tolerance,
@@ -74,11 +75,18 @@ class SpatialIndex {
     final buffer = _pointSearchBuffer
       ..clear()
       ..addAll(results)
-      ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
+      ..sort(
+        descending
+            ? (a, b) => b.zIndex.compareTo(a.zIndex)
+            : (a, b) => a.zIndex.compareTo(b.zIndex),
+      );
     return buffer;
   }
 
-  List<SpatialIndexEntry> searchRectEntries(DrawRect rect) {
+  List<SpatialIndexEntry> searchRectEntries(
+    DrawRect rect, {
+    bool ascending = false,
+  }) {
     final results = _tree.search(
       RBushBox(
         minX: rect.minX,
@@ -90,7 +98,11 @@ class SpatialIndex {
     final buffer = _rectSearchBuffer
       ..clear()
       ..addAll(results)
-      ..sort((a, b) => b.zIndex.compareTo(a.zIndex));
+      ..sort(
+        ascending
+            ? (a, b) => a.zIndex.compareTo(b.zIndex)
+            : (a, b) => b.zIndex.compareTo(a.zIndex),
+      );
     return buffer;
   }
 

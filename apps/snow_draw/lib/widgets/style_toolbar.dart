@@ -83,6 +83,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
   static const double _fontSizeExtraLarge = 42;
   static final _fontFamilySystemKey = Object();
   static final _fontFamilyMixedKey = Object();
+  static final _filterTypeMixedKey = Object();
   static const _defaultColorPalette = [
     Color(0xFF1E1E1E),
     Color(0xFFF5222D),
@@ -103,6 +104,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
   Timer? _sliderUpdateTimer;
   double? _pendingCornerRadius;
   double? _pendingOpacity;
+  double? _pendingFilterStrength;
   double? _pendingMaskOpacity;
   int? _pendingSerialNumber;
   late final TextEditingController _serialNumberController;
@@ -196,6 +198,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
           tool == ToolType.rectangle || state.hasSelectedRectangles;
       final showHighlightControls =
           tool == ToolType.highlight || state.hasSelectedHighlights;
+      final showFilterControls =
+          tool == ToolType.filter || state.hasSelectedFilters;
       final showArrowControls =
           tool == ToolType.arrow || state.hasSelectedArrows;
       final showLineControls = tool == ToolType.line || state.hasSelectedLines;
@@ -207,6 +211,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final showToolbar =
           showRectangleControls ||
           showHighlightControls ||
+          showFilterControls ||
           showArrowControls ||
           showLineControls ||
           showFreeDrawControls ||
@@ -1093,6 +1098,60 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
+  Widget _buildFilterTypeSelect({required MixedValue<CanvasFilterType> value}) {
+    final theme = Theme.of(context);
+    final selected = value.value;
+    final selectedKey = value.isMixed
+        ? _filterTypeMixedKey
+        : (selected?.name ?? CanvasFilterType.mosaic.name);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(widget.strings.filterType),
+        const SizedBox(height: _sectionGap),
+        DropdownButton<Object>(
+          value: selectedKey,
+          isExpanded: true,
+          icon: const Icon(Icons.arrow_drop_down),
+          style: theme.textTheme.bodyMedium,
+          items: [
+            if (value.isMixed)
+              DropdownMenuItem<Object>(
+                value: _filterTypeMixedKey,
+                child: Text(widget.strings.mixed),
+              ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.mosaic.name,
+              child: Text(widget.strings.filterTypeMosaic),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.gaussianBlur.name,
+              child: Text(widget.strings.filterTypeGaussianBlur),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.grayscale.name,
+              child: Text(widget.strings.filterTypeGrayscale),
+            ),
+            DropdownMenuItem<Object>(
+              value: CanvasFilterType.inversion.name,
+              child: Text(widget.strings.filterTypeInversion),
+            ),
+          ],
+          onChanged: (next) {
+            if (next == null || next == _filterTypeMixedKey) {
+              return;
+            }
+            final filterType = CanvasFilterType.values.firstWhere(
+              (item) => item.name == next,
+            );
+            unawaited(_applyStyleUpdate(filterType: filterType));
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _buildLayerControls(bool hasSelection) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1420,6 +1479,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (state.hasSelectedHighlights) {
       selectedTypes.add(ElementType.highlight);
     }
+    if (state.hasSelectedFilters) {
+      selectedTypes.add(ElementType.filter);
+    }
     if (state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
@@ -1445,6 +1507,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
           selectedTypes.add(ElementType.rectangle);
         case ToolType.highlight:
           selectedTypes.add(ElementType.highlight);
+        case ToolType.filter:
+          selectedTypes.add(ElementType.filter);
         case ToolType.arrow:
           selectedTypes.add(ElementType.arrow);
         case ToolType.line:
@@ -1467,6 +1531,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
       freeDrawStyleValues: state.freeDrawStyleValues,
       textStyleValues: state.textStyleValues,
       highlightStyleValues: state.highlightStyleValues,
+      filterStyleValues: state.filterStyleValues,
       serialNumberStyleValues: state.serialNumberStyleValues,
       rectangleDefaults: state.rectangleStyle,
       arrowDefaults: state.arrowStyle,
@@ -1474,6 +1539,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
       freeDrawDefaults: state.freeDrawStyle,
       textDefaults: state.textStyle,
       highlightDefaults: state.highlightStyle,
+      filterDefaults: state.filterStyle,
       serialNumberDefaults: state.serialNumberStyle,
       highlightMask: state.highlightMask,
       selectedElementTypes: selectedTypes,
@@ -1563,6 +1629,26 @@ class _StyleToolbarState extends State<StyleToolbar> {
                 fillColorValue.a == 0) {
               return false;
             }
+          }
+        }
+      }
+
+      // Filter strength only applies to mosaic/gaussian blur.
+      if (property.id == 'filterStrength') {
+        final filterTypeProp = PropertyRegistry.instance.getProperty(
+          'filterType',
+        );
+        if (filterTypeProp != null) {
+          final filterType =
+              filterTypeProp.extractValue(context)
+                  as MixedValue<CanvasFilterType>;
+          final defaultType =
+              filterTypeProp.getDefaultValue(context) as CanvasFilterType;
+          final effectiveType = filterType.value ?? defaultType;
+          if (!filterType.isMixed &&
+              effectiveType != CanvasFilterType.mosaic &&
+              effectiveType != CanvasFilterType.gaussianBlur) {
+            return false;
           }
         }
       }
@@ -1667,6 +1753,32 @@ class _StyleToolbarState extends State<StyleToolbar> {
             scope: StyleUpdateScope.highlightsOnly,
           ),
           allowAlpha: true,
+        );
+
+      case 'filterType':
+        final value =
+            property.extractValue(context) as MixedValue<CanvasFilterType>;
+        return _buildFilterTypeSelect(value: value);
+
+      case 'filterStrength':
+        final value = property.extractValue(context) as MixedValue<double>;
+        final defaultValue = property.getDefaultValue(context) as double;
+        return _buildSliderControl(
+          label: widget.strings.filterStrength,
+          value: value,
+          defaultValue: defaultValue,
+          min: 0,
+          max: 1,
+          pendingValue: _pendingFilterStrength,
+          onChanged: (next) {
+            setState(() => _pendingFilterStrength = next);
+            _scheduleStyleUpdate(() => _applyStyleUpdate(filterStrength: next));
+          },
+          onChangeEnd: (next) async {
+            _flushStyleUpdate();
+            setState(() => _pendingFilterStrength = null);
+            await _applyStyleUpdate(filterStrength: next);
+          },
         );
 
       case 'strokeWidth':
@@ -2038,34 +2150,43 @@ class _StyleToolbarState extends State<StyleToolbar> {
     Color? textStrokeColor,
     double? textStrokeWidth,
     HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
     int? serialNumber,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
-  }) => widget.adapter.applyStyleUpdate(
-    color: color,
-    fillColor: fillColor,
-    strokeWidth: strokeWidth,
-    strokeStyle: strokeStyle,
-    fillStyle: fillStyle,
-    cornerRadius: cornerRadius,
-    arrowType: arrowType,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
-    fontSize: fontSize,
-    fontFamily: fontFamily,
-    textAlign: textAlign,
-    verticalAlign: verticalAlign,
-    opacity: opacity,
-    textStrokeColor: textStrokeColor,
-    textStrokeWidth: textStrokeWidth,
-    highlightShape: highlightShape,
-    maskColor: maskColor,
-    maskOpacity: maskOpacity,
-    serialNumber: serialNumber,
-    toolType: widget.toolController.value,
-    scope: scope,
-  );
+  }) {
+    final resolvedScope = (filterType != null || filterStrength != null)
+        ? StyleUpdateScope.filtersOnly
+        : scope;
+    return widget.adapter.applyStyleUpdate(
+      color: color,
+      fillColor: fillColor,
+      strokeWidth: strokeWidth,
+      strokeStyle: strokeStyle,
+      fillStyle: fillStyle,
+      cornerRadius: cornerRadius,
+      arrowType: arrowType,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      verticalAlign: verticalAlign,
+      opacity: opacity,
+      textStrokeColor: textStrokeColor,
+      textStrokeWidth: textStrokeWidth,
+      highlightShape: highlightShape,
+      filterType: filterType,
+      filterStrength: filterStrength,
+      maskColor: maskColor,
+      maskOpacity: maskOpacity,
+      serialNumber: serialNumber,
+      toolType: widget.toolController.value,
+      scope: resolvedScope,
+    );
+  }
 
   Future<void> _handleCopy() => widget.adapter.copySelection();
 

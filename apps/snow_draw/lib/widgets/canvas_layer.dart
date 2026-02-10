@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
@@ -51,6 +52,8 @@ class _CanvasLayerState extends State<CanvasLayer> {
           ? RectangleData.typeIdToken
           : tool == ToolType.highlight
           ? HighlightData.typeIdToken
+          : tool == ToolType.filter
+          ? FilterData.typeIdToken
           : tool == ToolType.arrow
           ? ArrowData.typeIdToken
           : tool == ToolType.line

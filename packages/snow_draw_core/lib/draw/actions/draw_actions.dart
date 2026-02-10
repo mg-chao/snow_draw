@@ -257,6 +257,8 @@ class UpdateElementsStyle extends DrawAction {
     this.strokeWidth,
     this.strokeStyle,
     this.fillStyle,
+    this.filterType,
+    this.filterStrength,
     this.cornerRadius,
     this.arrowType,
     this.startArrowhead,
@@ -278,6 +280,8 @@ class UpdateElementsStyle extends DrawAction {
   final double? strokeWidth;
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
+  final CanvasFilterType? filterType;
+  final double? filterStrength;
   final double? cornerRadius;
   final ArrowType? arrowType;
   final ArrowheadStyle? startArrowhead;

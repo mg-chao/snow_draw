@@ -43,6 +43,7 @@ import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
+import 'filter_shader_manager.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
@@ -273,6 +274,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Preload GPU shaders for optimal first-frame performance.
     unawaited(GridShaderManager.instance.load());
     unawaited(RectangleShaderManager.instance.load());
+    unawaited(FilterShaderManager.instance.load());
 
     _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 
@@ -391,7 +393,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dynamicLayerStartIndex,
     );
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final hasHighlights = _hasHighlightElements(stateView, creatingSnapshot);
+    final hasHighlights = stateView.highlightMaskScene.hasHighlights;
+    final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
     final hasDynamicContent =
         dynamicLayerStartIndex != null || creatingSnapshot != null;
     final highlightMaskLayer = resolveHighlightMaskLayer(
@@ -406,12 +409,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       camera: stateView.state.application.view.camera,
       previewElementsById: staticPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
+      skipBaseElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
       canvasConfig: config.canvas,
       gridConfig: config.grid,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
     );
 
@@ -430,6 +435,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       camera: stateView.state.application.view.camera,
       previewElementsById: dynamicPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
+      rendersWholeElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
       selectionConfig: selectionConfig,
       boxSelectionConfig: config.boxSelection,
@@ -437,6 +443,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
     );
 
@@ -570,6 +577,29 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
       resolveDynamicLayerStartIndex(view);
 
+  bool _dynamicOwnsWholeElementScene(DrawStateView view) {
+    final split = _resolveDynamicLayerStartIndex(view);
+    if (split != 0) {
+      return false;
+    }
+
+    if (view.selectedIds.isEmpty) {
+      return false;
+    }
+    final document = view.state.domain.document;
+    final splitIndex = split ?? 0;
+    for (final element in document.elements) {
+      final orderIndex = document.getOrderIndex(element.id);
+      if (orderIndex == null || orderIndex < splitIndex) {
+        continue;
+      }
+      if (element.data is HighlightData) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
     final interaction = view.state.application.interaction;
@@ -580,26 +610,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
     return null;
-  }
-
-  bool _hasHighlightElements(
-    DrawStateView view,
-    CreatingElementSnapshot? creating,
-  ) {
-    for (final element in view.state.domain.document.elements) {
-      if (element.data is HighlightData) {
-        return true;
-      }
-    }
-    for (final preview in view.previewElementsById.values) {
-      if (preview.data is HighlightData) {
-        return true;
-      }
-    }
-    if (creating?.element.data is HighlightData) {
-      return true;
-    }
-    return false;
   }
 
   /// Extract box selection bounds from state view.
@@ -1512,16 +1522,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double distance,
   ) {
     final document = state.domain.document;
-    final entries = document.spatialIndex.searchPointEntries(
-      position,
-      distance,
-    );
     final targets = <ElementState>[];
-    for (final entry in entries) {
-      final element = document.getElementById(entry.id);
-      if (element == null) {
-        continue;
-      }
+    final candidates = document.queryElementsAtPointTopDown(position, distance);
+    for (final element in candidates) {
       if (element.opacity <= 0 ||
           !ArrowBindingUtils.isBindableTarget(element)) {
         continue;

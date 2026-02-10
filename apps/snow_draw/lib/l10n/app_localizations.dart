@@ -16,6 +16,7 @@ class AppLocalizations {
   String get toolSelection => 'Selection';
   String get toolRectangle => 'Rectangle';
   String get toolHighlight => 'Highlight';
+  String get toolFilter => 'Filter';
   String get toolArrow => 'Arrow';
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';
@@ -48,6 +49,12 @@ class AppLocalizations {
   String get highlightShape => 'Highlight Shape';
   String get highlightShapeRectangle => 'Rectangle';
   String get highlightShapeEllipse => 'Ellipse';
+  String get filterType => 'Filter Type';
+  String get filterTypeMosaic => 'Mosaic';
+  String get filterTypeGaussianBlur => 'Gaussian Blur';
+  String get filterTypeGrayscale => 'Grayscale';
+  String get filterTypeInversion => 'Inversion';
+  String get filterStrength => 'Filter Strength';
   String get highlightTextStrokeWidth => 'Highlight Stroke Width';
   String get highlightTextStrokeColor => 'Highlight Stroke Color';
   String get maskColor => 'Mask Color';

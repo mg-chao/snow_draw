@@ -3,23 +3,20 @@ import 'dart:ui';
 
 import '../../draw/config/draw_config.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
-import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/element_style.dart';
 
 void paintHighlightMask({
   required Canvas canvas,
-  required DrawStateView stateView,
+  required List<ElementState> highlights,
   required DrawRect viewportRect,
   required HighlightMaskConfig maskConfig,
-  required ElementState? creatingElement,
 }) {
   if (maskConfig.maskOpacity <= 0) {
     return;
   }
 
-  final highlights = _collectHighlightElements(stateView, creatingElement);
   if (highlights.isEmpty) {
     return;
   }
@@ -86,37 +83,6 @@ void paintHighlightMask({
   }
 
   canvas.restore();
-}
-
-List<ElementState> _collectHighlightElements(
-  DrawStateView stateView,
-  ElementState? creatingElement,
-) {
-  final highlights = <ElementState>[];
-  for (final element in stateView.elements) {
-    final effective = stateView.effectiveElement(element);
-    if (effective.data is HighlightData) {
-      highlights.add(effective);
-    }
-  }
-
-  if (stateView.previewElementsById.isNotEmpty) {
-    final document = stateView.state.domain.document;
-    for (final preview in stateView.previewElementsById.values) {
-      if (document.getElementById(preview.id) != null) {
-        continue;
-      }
-      if (preview.data is HighlightData) {
-        highlights.add(preview);
-      }
-    }
-  }
-
-  if (creatingElement?.data is HighlightData) {
-    highlights.add(creatingElement!);
-  }
-
-  return highlights;
 }
 
 bool _rectsIntersect(DrawRect a, DrawRect b) =>
