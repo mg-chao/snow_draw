@@ -5,7 +5,7 @@ import 'filter_segment.dart';
 /// Builds render segments from z-ordered elements.
 ///
 /// Contiguous non-filter elements are collapsed into a single batch segment.
-/// Adjacent filters of the same [CanvasFilterType] are merged into a
+/// Adjacent filters of the same CanvasFilterType are merged into a
 /// [MergedFilterSegment] so the renderer can apply them in a single
 /// `saveLayer` pass.
 class FilterSegmentBuilder {
@@ -45,7 +45,7 @@ class FilterSegmentBuilder {
   }
 
   /// Collapses runs of adjacent [FilterSegment]s that share the same
-  /// [CanvasFilterType] into a single [MergedFilterSegment].
+  /// CanvasFilterType into a single [MergedFilterSegment].
   List<RenderSegment> _mergeAdjacentFilters(List<RenderSegment> segments) {
     if (segments.length < 2) {
       return segments;
