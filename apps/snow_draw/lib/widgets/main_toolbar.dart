@@ -88,27 +88,6 @@ class _MainToolbarState extends State<MainToolbar> {
               ),
               const SizedBox(width: _buttonGap),
               _buildToolButton(
-                tooltip: widget.strings.toolHighlight,
-                icon: Icons.highlight,
-                selected: isHighlight,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.highlight),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolFilter,
-                icon: Icons.auto_fix_high,
-                selected: isFilter,
-                onPressed: () => widget.toolController.setTool(ToolType.filter),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
                 tooltip: widget.strings.toolArrow,
                 icon: Icons.arrow_right_alt,
                 selected: isArrow,
@@ -140,6 +119,17 @@ class _MainToolbarState extends State<MainToolbar> {
               ),
               const SizedBox(width: _buttonGap),
               _buildToolButton(
+                tooltip: widget.strings.toolHighlight,
+                icon: Icons.highlight,
+                selected: isHighlight,
+                onPressed: () =>
+                    widget.toolController.setTool(ToolType.highlight),
+                selectedColor: selectedColor,
+                unselectedColor: unselectedColor,
+                selectedBackground: selectedBackground,
+              ),
+              const SizedBox(width: _buttonGap),
+              _buildToolButton(
                 tooltip: widget.strings.toolText,
                 icon: Icons.text_fields,
                 selected: isText,
@@ -155,6 +145,16 @@ class _MainToolbarState extends State<MainToolbar> {
                 selected: isSerialNumber,
                 onPressed: () =>
                     widget.toolController.setTool(ToolType.serialNumber),
+                selectedColor: selectedColor,
+                unselectedColor: unselectedColor,
+                selectedBackground: selectedBackground,
+              ),
+              const SizedBox(width: _buttonGap),
+              _buildToolButton(
+                tooltip: widget.strings.toolFilter,
+                icon: Icons.auto_fix_high,
+                selected: isFilter,
+                onPressed: () => widget.toolController.setTool(ToolType.filter),
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
                 selectedBackground: selectedBackground,

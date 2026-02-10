@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 enum ToolType {
   selection,
   rectangle,
-  highlight,
-  filter,
   arrow,
   line,
   freeDraw,
+  highlight,
   text,
   serialNumber,
+  filter,
 }
 
 class ToolController extends ValueNotifier<ToolType> {
