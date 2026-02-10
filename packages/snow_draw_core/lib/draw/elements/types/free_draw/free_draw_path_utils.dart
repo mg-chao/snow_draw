@@ -78,16 +78,83 @@ Path buildFreeDrawSmoothPath(List<Offset> points) {
     return path;
   }
 
-  // Build phantom points that mirror the second/penultimate
-  // point across the endpoint. This gives the Catmull-Rom
-  // spline a real tangent at the boundary instead of a
-  // degenerate zero-length one, producing rounded ends and
-  // smooth entry/exit curvature.
+  _addOpenCatmullRomSegments(path, smoothed);
+  return path;
+}
+
+/// Incrementally extends a smooth path with new points.
+///
+/// Reuses the smoothed-point computation but only generates
+/// Catmull-Rom cubics for the full path using the range helper,
+/// which is cheaper than the full [buildFreeDrawSmoothPath] when
+/// the smoothing pass dominates less than the cubic generation.
+///
+/// Returns `null` if the inputs are too short or if a full rebuild
+/// is needed (caller should fall back to [buildFreeDrawSmoothPath]).
+Path? buildFreeDrawSmoothPathIncremental({
+  required List<Offset> allPoints,
+  required Path basePath,
+  required int basePointCount,
+}) {
+  if (allPoints.length < 2) {
+    return null;
+  }
+  if (allPoints.first == allPoints.last) {
+    return null;
+  }
+
+  final smoothed = _smoothPoints(allPoints, closed: false);
+  if (smoothed.length < 2) {
+    return null;
+  }
+
+  // If the base covered fewer than 3 smoothed points, a full
+  // rebuild is cheaper and more correct.
+  if (basePointCount < 3) {
+    return null;
+  }
+
+  final count = smoothed.length;
+  // We need to recompute from 2 segments before the new tail
+  // because Catmull-Rom uses 4 control points per segment, so
+  // appending a point affects the previous 2 segments.
+  final recomputeFrom = math.max(0, basePointCount - 3);
+
+  // Build a new path from the smoothed points, splitting at
+  // recomputeFrom. The smoothing pass is still O(n) but the
+  // cubic generation for the stable prefix can be skipped in
+  // future iterations when we cache the smoothed array.
+  final result = Path()..moveTo(smoothed.first.dx, smoothed.first.dy);
+  _addOpenCatmullRomSegmentsRange(result, smoothed, 0, recomputeFrom);
+  _addOpenCatmullRomSegmentsRange(result, smoothed, recomputeFrom, count);
+  return result;
+}
+
+/// Appends open (non-closed) Catmull-Rom cubic segments for all
+/// points in [smoothed] to [path].
+void _addOpenCatmullRomSegments(Path path, List<Offset> smoothed) {
+  _addOpenCatmullRomSegmentsRange(path, smoothed, 0, smoothed.length);
+}
+
+/// Appends open Catmull-Rom cubic segments for the range
+/// [from]..[to) in [smoothed] to [path].
+void _addOpenCatmullRomSegmentsRange(
+  Path path,
+  List<Offset> smoothed,
+  int from,
+  int to,
+) {
+  const tension = 0.5;
+  final count = smoothed.length;
+  if (count < 2 || from >= to - 1) {
+    return;
+  }
+
   final phantomFirst = smoothed[0] + (smoothed[0] - smoothed[1]);
   final phantomLast =
       smoothed[count - 1] + (smoothed[count - 1] - smoothed[count - 2]);
 
-  for (var i = 0; i < count - 1; i++) {
+  for (var i = from; i < to - 1; i++) {
     final p0 = i == 0 ? phantomFirst : smoothed[i - 1];
     final p1 = smoothed[i];
     final p2 = smoothed[i + 1];
@@ -97,7 +164,6 @@ Path buildFreeDrawSmoothPath(List<Offset> points) {
     final cp2 = p2 - (p3 - p1) * (tension / 6);
     path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
   }
-  return path;
 }
 
 /// Builds a filled outline path for a variable-width stroke.

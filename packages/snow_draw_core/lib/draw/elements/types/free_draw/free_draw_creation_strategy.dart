@@ -17,6 +17,10 @@ import 'free_draw_data.dart';
 /// Applies real-time exponential smoothing and minimum-distance
 /// filtering during drawing. Straight-line segments are only
 /// created when the user holds Shift.
+///
+/// World-space points and bounding rect are carried in the
+/// [_FreeDrawCreationMode] to avoid the O(n) denormalize →
+/// bounds → normalize round-trip on every pointer event.
 @immutable
 class FreeDrawCreationStrategy extends CreationStrategy {
   const FreeDrawCreationStrategy();
@@ -59,7 +63,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     return CreationUpdateResult(
       data: data.copyWith(points: normalized),
       rect: rect,
-      creationMode: const _FreeDrawCreationMode(),
+      creationMode: _FreeDrawCreationMode(worldPoints: points),
     );
   }
 
@@ -90,19 +94,25 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final currentRect = creatingState.currentRect;
     final adjustedPosition = snappingMode == SnappingMode.grid
         ? gridSnapService.snapPoint(
             point: currentPosition,
             gridSize: config.grid.size,
           )
         : currentPosition;
-    final worldPoints = _resolveWorldPoints(
-      rect: currentRect,
-      normalizedPoints: elementData.points,
-    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
+
+    // Reuse world points from the creation mode when available,
+    // falling back to the expensive denormalize path only on the
+    // first update after a cold start (e.g. undo/redo replay).
+    final worldPoints =
+        mode.worldPoints ??
+        _resolveWorldPoints(
+          rect: creatingState.currentRect,
+          normalizedPoints: elementData.points,
+        );
+
     List<DrawPoint> nextPoints;
     if (maintainAspectRatio) {
       if (mode.isLineActive) {
@@ -123,7 +133,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final rect = _boundsFromPoints(nextPoints);
+    final rect = _expandBounds(creatingState.currentRect, nextPoints);
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: nextPoints,
       rect: rect,
@@ -133,7 +143,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     return CreationUpdateResult(
       data: updatedData,
       rect: rect,
-      creationMode: mode.copyWith(isLineActive: maintainAspectRatio),
+      creationMode: mode.copyWith(
+        isLineActive: maintainAspectRatio,
+        worldPoints: nextPoints,
+      ),
     );
   }
 
@@ -151,10 +164,13 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final worldPoints = _resolveWorldPoints(
-      rect: creatingState.currentRect,
-      normalizedPoints: data.points,
-    );
+    final mode = _resolveFreeDrawMode(creatingState.creationMode);
+    final worldPoints =
+        mode.worldPoints ??
+        _resolveWorldPoints(
+          rect: creatingState.currentRect,
+          normalizedPoints: data.points,
+        );
     var points = _removeAdjacentDuplicates(worldPoints);
     if (points.length < 2) {
       return CreationFinishResult(
@@ -179,6 +195,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
+    // Recompute tight bounds from scratch at finish to trim any
+    // slack accumulated from incremental expansion.
     final rect = _boundsFromPoints(points);
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: points,
@@ -207,6 +225,7 @@ List<DrawPoint> _resolveWorldPoints({
     normalizedPoints: normalizedPoints,
   );
   // Carry pressure through from the normalized points.
+  // Returns a growable list so callers can append in place.
   return List<DrawPoint>.generate(
     resolved.length,
     (i) => DrawPoint(
@@ -216,7 +235,6 @@ List<DrawPoint> _resolveWorldPoints({
           ? normalizedPoints[i].pressure
           : 0.0,
     ),
-    growable: false,
   );
 }
 
@@ -245,6 +263,39 @@ DrawRect _boundsFromPoints(List<DrawPoint> points) {
     }
   }
 
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+/// Expands [current] to include the last two points of [points].
+///
+/// During creation only the tail of the point list changes, so a
+/// full O(n) scan is unnecessary. Checking the last two covers
+/// both the newly appended point and the trailing-point update
+/// that [_appendSmoothedPoint] performs for responsiveness.
+DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
+  if (points.isEmpty) {
+    return current;
+  }
+  var minX = current.minX;
+  var maxX = current.maxX;
+  var minY = current.minY;
+  var maxY = current.maxY;
+  final start = points.length > 2 ? points.length - 2 : 0;
+  for (var i = start; i < points.length; i++) {
+    final p = points[i];
+    if (p.x < minX) {
+      minX = p.x;
+    }
+    if (p.x > maxX) {
+      maxX = p.x;
+    }
+    if (p.y < minY) {
+      minY = p.y;
+    }
+    if (p.y > maxY) {
+      maxY = p.y;
+    }
+  }
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
 
@@ -297,6 +348,9 @@ _FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
 
 /// Appends a new point with real-time exponential smoothing and
 /// minimum-distance filtering.
+///
+/// Mutates [worldPoints] in place to avoid an O(n) list copy on
+/// every pointer event. The caller must pass a growable list.
 List<DrawPoint> _appendSmoothedPoint({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
@@ -305,20 +359,19 @@ List<DrawPoint> _appendSmoothedPoint({
     return <DrawPoint>[currentPosition];
   }
 
-  final nextPoints = List<DrawPoint>.from(worldPoints);
-  if (nextPoints.length == 1) {
-    nextPoints.add(currentPosition);
-    return nextPoints;
+  if (worldPoints.length == 1) {
+    worldPoints.add(currentPosition);
+    return worldPoints;
   }
 
-  final last = nextPoints.last;
+  final last = worldPoints.last;
   final distSq = last.distanceSquared(currentPosition);
 
   // Minimum distance filter: skip points that are too close.
   if (distSq < FreeDrawCreationStrategy._minDistanceSq) {
     // Still update the trailing point for responsiveness.
-    nextPoints[nextPoints.length - 1] = currentPosition;
-    return nextPoints;
+    worldPoints[worldPoints.length - 1] = currentPosition;
+    return worldPoints;
   }
 
   // Exponential smoothing on position.
@@ -330,22 +383,21 @@ List<DrawPoint> _appendSmoothedPoint({
     timestamp: currentPosition.timestamp,
   );
 
-  nextPoints.add(smoothed);
-  return nextPoints;
+  worldPoints.add(smoothed);
+  return worldPoints;
 }
 
 List<DrawPoint> _startLineSegment({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
 }) {
-  final nextPoints = List<DrawPoint>.from(worldPoints);
-  if (nextPoints.isEmpty) {
-    nextPoints.add(currentPosition);
+  if (worldPoints.isEmpty) {
+    worldPoints.add(currentPosition);
   }
-  final anchor = nextPoints.last;
-  nextPoints.add(anchor);
-  nextPoints[nextPoints.length - 1] = currentPosition;
-  return nextPoints;
+  final anchor = worldPoints.last;
+  worldPoints.add(anchor);
+  worldPoints[worldPoints.length - 1] = currentPosition;
+  return worldPoints;
 }
 
 List<DrawPoint> _updateLineSegment({
@@ -355,23 +407,33 @@ List<DrawPoint> _updateLineSegment({
   if (worldPoints.isEmpty) {
     return <DrawPoint>[currentPosition];
   }
-  final nextPoints = List<DrawPoint>.from(worldPoints);
-  if (nextPoints.length == 1) {
-    nextPoints.add(currentPosition);
+  if (worldPoints.length == 1) {
+    worldPoints.add(currentPosition);
   } else {
-    nextPoints[nextPoints.length - 1] = currentPosition;
+    worldPoints[worldPoints.length - 1] = currentPosition;
   }
-  return nextPoints;
+  return worldPoints;
 }
 
 @immutable
 class _FreeDrawCreationMode extends CreationMode {
-  const _FreeDrawCreationMode({this.isLineActive = false});
+  const _FreeDrawCreationMode({this.isLineActive = false, this.worldPoints});
 
   final bool isLineActive;
 
-  _FreeDrawCreationMode copyWith({bool? isLineActive}) =>
-      _FreeDrawCreationMode(isLineActive: isLineActive ?? this.isLineActive);
+  /// Accumulated world-space points carried between updates.
+  ///
+  /// Avoids the O(n) denormalize round-trip on every pointer
+  /// event. Null only on cold start (e.g. undo/redo replay).
+  final List<DrawPoint>? worldPoints;
+
+  _FreeDrawCreationMode copyWith({
+    bool? isLineActive,
+    List<DrawPoint>? worldPoints,
+  }) => _FreeDrawCreationMode(
+    isLineActive: isLineActive ?? this.isLineActive,
+    worldPoints: worldPoints ?? this.worldPoints,
+  );
 
   @override
   bool operator ==(Object other) =>

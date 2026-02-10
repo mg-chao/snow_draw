@@ -12,7 +12,7 @@ import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_renderer.dart';
 import 'free_draw_data.dart';
-import 'free_draw_path_utils.dart';
+import 'free_draw_visual_cache.dart';
 
 class FreeDrawRenderer extends ElementTypeRenderer {
   const FreeDrawRenderer();
@@ -22,7 +22,6 @@ class FreeDrawRenderer extends ElementTypeRenderer {
   static final _lineShaderCache = LruCache<_LineShaderKey, Shader>(
     maxEntries: 128,
   );
-  static final _visualCache = _FreeDrawVisualCache(maxEntries: 256);
 
   @override
   void render({
@@ -48,14 +47,53 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       return;
     }
 
-    final cached = _visualCache.resolve(element: element, data: data);
+    final cached = FreeDrawVisualCache.instance.resolve(
+      element: element,
+      data: data,
+    );
     if (cached.pointCount < 2) {
       return;
     }
 
-    final shouldFill =
-        fillOpacity > 0 && _isClosed(data, rect) && cached.pointCount > 2;
+    // Try to replay a previously recorded Picture for this
+    // element. This avoids re-issuing potentially hundreds of
+    // draw calls for completed strokes.
+    final existingPicture = cached.getCachedPicture(opacity);
+    if (existingPicture != null) {
+      canvas.save();
+      if (element.rotation != 0) {
+        canvas
+          ..translate(rect.centerX, rect.centerY)
+          ..rotate(element.rotation)
+          ..translate(-rect.centerX, -rect.centerY);
+      }
+      canvas
+        ..translate(rect.minX, rect.minY)
+        ..drawPicture(existingPicture)
+        ..restore();
+      return;
+    }
 
+    // Record draw commands into a Picture for future reuse.
+    final recorder = PictureRecorder();
+    final recordCanvas = Canvas(
+      recorder,
+      Rect.fromLTWH(0, 0, rect.width, rect.height),
+    );
+
+    _renderToCanvas(
+      canvas: recordCanvas,
+      data: data,
+      rect: rect,
+      cached: cached,
+      strokeOpacity: strokeOpacity,
+      fillOpacity: fillOpacity,
+    );
+
+    final picture = recorder.endRecording();
+    cached.setCachedPicture(picture, opacity);
+
+    // Draw the just-recorded picture.
     canvas.save();
     if (element.rotation != 0) {
       canvas
@@ -63,7 +101,26 @@ class FreeDrawRenderer extends ElementTypeRenderer {
         ..rotate(element.rotation)
         ..translate(-rect.centerX, -rect.centerY);
     }
-    canvas.translate(rect.minX, rect.minY);
+    canvas
+      ..translate(rect.minX, rect.minY)
+      ..drawPicture(picture)
+      ..restore();
+  }
+
+  /// Issues the actual fill + stroke draw commands.
+  ///
+  /// Called once to record into a [PictureRecorder]; subsequent
+  /// frames replay the recorded [Picture] directly.
+  void _renderToCanvas({
+    required Canvas canvas,
+    required FreeDrawData data,
+    required DrawRect rect,
+    required FreeDrawVisualEntry cached,
+    required double strokeOpacity,
+    required double fillOpacity,
+  }) {
+    final shouldFill =
+        fillOpacity > 0 && _isClosed(data, rect) && cached.pointCount > 2;
 
     if (shouldFill) {
       final fillPath = Path()
@@ -115,7 +172,6 @@ class FreeDrawRenderer extends ElementTypeRenderer {
           canvas.drawPath(dottedPath, dotPaint);
         }
       } else if (data.strokeStyle == StrokeStyle.dashed) {
-        // Dashed strokes use the uniform-width path.
         final dashedPath = cached.strokePath;
         if (dashedPath != null) {
           final strokePaint = Paint()
@@ -128,8 +184,6 @@ class FreeDrawRenderer extends ElementTypeRenderer {
           canvas.drawPath(dashedPath, strokePaint);
         }
       } else {
-        // Solid stroke: uniform-width Catmull-Rom center-line
-        // with round caps and joins for a smooth, organic feel.
         final strokePaint = Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = data.strokeWidth
@@ -140,8 +194,6 @@ class FreeDrawRenderer extends ElementTypeRenderer {
         canvas.drawPath(cached.path, strokePaint);
       }
     }
-
-    canvas.restore();
   }
 
   bool _isClosed(FreeDrawData data, DrawRect rect) {
@@ -231,143 +283,4 @@ class _LineShaderKey {
 
   @override
   int get hashCode => Object.hash(spacing, lineWidth, angle);
-}
-
-class _FreeDrawVisualCacheEntry {
-  _FreeDrawVisualCacheEntry({
-    required this.data,
-    required this.width,
-    required this.height,
-    required this.pointCount,
-    required this.path,
-    required this.strokePath,
-    required this.dottedPath,
-  });
-
-  final FreeDrawData data;
-  final double width;
-  final double height;
-  final int pointCount;
-
-  /// Smooth center-line path (for fill and stroke).
-  final Path path;
-
-  /// Dashed stroke path (null when not dashed).
-  final Path? strokePath;
-
-  /// Dotted stroke path (null when not dotted).
-  final Path? dottedPath;
-
-  bool matches(FreeDrawData data, double width, double height) =>
-      identical(this.data, data) &&
-      this.width == width &&
-      this.height == height;
-}
-
-class _FreeDrawVisualCache {
-  _FreeDrawVisualCache({required int maxEntries})
-    : _entries = LruCache<String, _FreeDrawVisualCacheEntry>(
-        maxEntries: maxEntries,
-      );
-
-  final LruCache<String, _FreeDrawVisualCacheEntry> _entries;
-
-  _FreeDrawVisualCacheEntry resolve({
-    required ElementState element,
-    required FreeDrawData data,
-  }) {
-    final id = element.id;
-    final width = element.rect.width;
-    final height = element.rect.height;
-    final existing = _entries.get(id);
-    if (existing != null && existing.matches(data, width, height)) {
-      return existing;
-    }
-
-    final entry = _buildEntry(element: element, data: data);
-    _entries.put(id, entry);
-    return entry;
-  }
-
-  _FreeDrawVisualCacheEntry _buildEntry({
-    required ElementState element,
-    required FreeDrawData data,
-  }) {
-    final rect = element.rect;
-    final localPoints = resolveFreeDrawLocalPoints(
-      rect: rect,
-      points: data.points,
-    );
-    if (localPoints.length < 2) {
-      return _FreeDrawVisualCacheEntry(
-        data: data,
-        width: rect.width,
-        height: rect.height,
-        pointCount: localPoints.length,
-        path: Path(),
-        strokePath: null,
-        dottedPath: null,
-      );
-    }
-
-    final basePath = buildFreeDrawSmoothPath(localPoints);
-
-    Path? strokePath;
-    Path? dottedPath;
-
-    if (data.strokeWidth > 0) {
-      switch (data.strokeStyle) {
-        case StrokeStyle.solid:
-          strokePath = basePath;
-        case StrokeStyle.dashed:
-          final dashLength = data.strokeWidth * 2.0;
-          final gapLength = dashLength * 1.2;
-          strokePath = _buildDashedPath(basePath, dashLength, gapLength);
-        case StrokeStyle.dotted:
-          final dotSpacing = data.strokeWidth * 2.0;
-          final dotRadius = data.strokeWidth * 0.5;
-          dottedPath = _buildDottedPath(basePath, dotSpacing, dotRadius);
-      }
-    }
-
-    return _FreeDrawVisualCacheEntry(
-      data: data,
-      width: rect.width,
-      height: rect.height,
-      pointCount: localPoints.length,
-      path: basePath,
-      strokePath: strokePath,
-      dottedPath: dottedPath,
-    );
-  }
-}
-
-Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-  final dashed = Path();
-  for (final metric in basePath.computeMetrics()) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final next = math.min(distance + dashLength, metric.length);
-      dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-      distance = next + gapLength;
-    }
-  }
-  return dashed;
-}
-
-Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-  final dotted = Path();
-  for (final metric in basePath.computeMetrics()) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent != null) {
-        dotted.addOval(
-          Rect.fromCircle(center: tangent.position, radius: dotRadius),
-        );
-      }
-      distance += dotSpacing;
-    }
-  }
-  return dotted;
 }

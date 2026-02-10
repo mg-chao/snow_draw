@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
 import '../../core/element_renderer.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
@@ -14,15 +15,15 @@ class TextRenderer extends ElementTypeRenderer {
 
   static const double _lineFillAngle = -math.pi / 4;
   static const double _crossLineFillAngle = math.pi / 4;
-  static final _lineShaderCache = _LruCache<_LineShaderKey, ui.Shader>(
+  static final _lineShaderCache = LruCache<_LineShaderKey, ui.Shader>(
     maxEntries: 128,
   );
 
   /// Per-element cache for background text boxes (the expensive
-  /// `getBoxesForSelection` call). Keyed by element ID.
-  static final _backgroundBoxCache = _LruCache<String, _BackgroundBoxEntry>(
-    maxEntries: 256,
-  );
+  /// `getBoxesForRange` call). Keyed by text content, font properties,
+  /// and layout width so duplicate elements share cached results.
+  static final _backgroundBoxCache =
+      LruCache<_BackgroundBoxKey, List<ui.TextBox>>(maxEntries: 256);
 
   ui.Shader _buildLineShader({
     required double spacing,
@@ -165,9 +166,12 @@ class TextRenderer extends ElementTypeRenderer {
 
     if (shouldDrawBackground && backgroundPaint != null) {
       final boxes = _resolveBackgroundBoxes(
-        elementId: element.id,
         paragraph: layout.paragraph,
         text: data.text,
+        fontSize: data.fontSize,
+        fontFamily: data.fontFamily,
+        horizontalAlign: data.horizontalAlign,
+        layoutWidth: layoutWidth,
       );
       _paintTextBackground(
         canvas: canvas,
@@ -204,9 +208,10 @@ class TextRenderer extends ElementTypeRenderer {
       canvas.drawParagraph(strokeParagraph, textOffset);
     }
 
-    // Fill pass – draw the main paragraph with correct color.
+    // Fill pass – reuse the layout paragraph when the color already
+    // matches (opacity == 1.0), avoiding a redundant paragraph build.
     if (shouldDrawFill) {
-      final fillParagraph = _buildFillParagraph(
+      final fillParagraph = _resolveFillParagraph(
         data: data,
         textOpacity: textOpacity,
         layout: layout,
@@ -221,15 +226,21 @@ class TextRenderer extends ElementTypeRenderer {
   }
 
   /// Cache for fill paragraphs keyed by element-relevant properties.
-  static final _fillParagraphCache = _LruCache<_FillParagraphKey, ui.Paragraph>(
+  static final _fillParagraphCache = LruCache<_FillParagraphKey, ui.Paragraph>(
     maxEntries: 256,
   );
 
   /// Cache for stroke paragraphs.
   static final _strokeParagraphCache =
-      _LruCache<_StrokeParagraphKey, ui.Paragraph>(maxEntries: 128);
+      LruCache<_StrokeParagraphKey, ui.Paragraph>(maxEntries: 128);
 
-  ui.Paragraph _buildFillParagraph({
+  /// Returns a paragraph suitable for the fill pass.
+  ///
+  /// When the resolved fill color matches the color already baked into
+  /// the layout paragraph (common case: element opacity == 1.0), the
+  /// layout paragraph is returned directly, avoiding a redundant
+  /// `ParagraphBuilder` + `layout()` call.
+  ui.Paragraph _resolveFillParagraph({
     required TextData data,
     required double textOpacity,
     required TextLayoutMetrics layout,
@@ -237,26 +248,32 @@ class TextRenderer extends ElementTypeRenderer {
     required double minWidth,
     required double maxWidth,
   }) {
+    final fillColor = data.color.withValues(alpha: textOpacity);
+    // The layout paragraph is built with data.color (no opacity
+    // adjustment). If the resolved fill color is identical, reuse it.
+    if (fillColor == data.color) {
+      return layout.paragraph;
+    }
     final key = _FillParagraphKey(
       text: data.text.isEmpty ? ' ' : data.text,
       fontSize: data.fontSize,
       fontFamily: data.fontFamily,
       horizontalAlign: data.horizontalAlign,
-      colorValue: data.color.withValues(alpha: textOpacity).toARGB32(),
+      colorValue: fillColor.toARGB32(),
       maxWidth: _quantize(maxWidth),
       locale: locale,
     );
-    return _fillParagraphCache.getOrCreate(key, () {
-      final color = data.color.withValues(alpha: textOpacity);
-      return _buildRawParagraph(
+    return _fillParagraphCache.getOrCreate(
+      key,
+      () => _buildRawParagraph(
         text: data.text.isEmpty ? ' ' : data.text,
         data: data,
-        color: color,
+        color: fillColor,
         locale: locale,
         minWidth: minWidth,
         maxWidth: maxWidth,
-      );
-    });
+      ),
+    );
   }
 
   ui.Paragraph _buildStrokeParagraph({
@@ -381,28 +398,36 @@ class TextRenderer extends ElementTypeRenderer {
     return Offset(0, dy);
   }
 
+  /// Cache for pre-built background [Path] objects, avoiding per-frame
+  /// allocation in [_paintTextBackground].
+  static final _backgroundPathCache = LruCache<_BackgroundPathKey, Path>(
+    maxEntries: 256,
+  );
+
   List<ui.TextBox> _resolveBackgroundBoxes({
-    required String elementId,
     required ui.Paragraph paragraph,
     required String text,
+    required double fontSize,
+    required String? fontFamily,
+    required TextHorizontalAlign horizontalAlign,
+    required double layoutWidth,
   }) {
     final resolvedText = text.isEmpty ? ' ' : text;
-    final cached = _backgroundBoxCache.getOrCreate(
-      elementId,
-      _BackgroundBoxEntry.new,
+    final key = _BackgroundBoxKey(
+      text: resolvedText,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      horizontalAlign: horizontalAlign,
+      layoutWidth: _quantize(layoutWidth),
     );
-    if (cached.text == resolvedText && cached.boxes != null) {
-      return cached.boxes!;
-    }
-    final boxes = paragraph.getBoxesForRange(
-      0,
-      resolvedText.length,
-      boxHeightStyle: ui.BoxHeightStyle.strut,
+    return _backgroundBoxCache.getOrCreate(
+      key,
+      () => paragraph.getBoxesForRange(
+        0,
+        resolvedText.length,
+        boxHeightStyle: ui.BoxHeightStyle.strut,
+      ),
     );
-    cached
-      ..text = resolvedText
-      ..boxes = boxes;
-    return boxes;
   }
 
   void _paintTextBackground({
@@ -417,8 +442,35 @@ class TextRenderer extends ElementTypeRenderer {
     if (boxes.isEmpty) {
       return;
     }
-    final backgroundPath = Path();
-    var hasDrawableRect = false;
+    final pathKey = _BackgroundPathKey(
+      boxes: boxes,
+      paintOffsetDx: paintOffset.dx,
+      paintOffsetDy: paintOffset.dy,
+      horizontalPadding: horizontalPadding,
+      verticalPadding: verticalPadding,
+      cornerRadius: cornerRadius,
+    );
+    final backgroundPath = _backgroundPathCache.getOrCreate(
+      pathKey,
+      () => _buildBackgroundPath(
+        paintOffset: paintOffset,
+        horizontalPadding: horizontalPadding,
+        verticalPadding: verticalPadding,
+        cornerRadius: cornerRadius,
+        boxes: boxes,
+      ),
+    );
+    canvas.drawPath(backgroundPath, paint);
+  }
+
+  static Path _buildBackgroundPath({
+    required Offset paintOffset,
+    required double horizontalPadding,
+    required double verticalPadding,
+    required double cornerRadius,
+    required List<ui.TextBox> boxes,
+  }) {
+    final path = Path();
     for (final box in boxes) {
       final rect = Rect.fromLTRB(
         box.left - horizontalPadding,
@@ -429,23 +481,17 @@ class TextRenderer extends ElementTypeRenderer {
       if (rect.isEmpty) {
         continue;
       }
-      hasDrawableRect = true;
       final radius = _clampCornerRadius(cornerRadius, rect);
       if (radius <= 0) {
-        backgroundPath.addRect(rect);
+        path.addRect(rect);
       } else {
-        backgroundPath.addRRect(
-          RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-        );
+        path.addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
       }
     }
-    if (!hasDrawableRect) {
-      return;
-    }
-    canvas.drawPath(backgroundPath, paint);
+    return path;
   }
 
-  double _clampCornerRadius(double cornerRadius, Rect rect) {
+  static double _clampCornerRadius(double cornerRadius, Rect rect) {
     if (cornerRadius <= 0) {
       return 0;
     }
@@ -463,30 +509,82 @@ class TextRenderer extends ElementTypeRenderer {
 // Supporting types
 // ---------------------------------------------------------------------------
 
-class _BackgroundBoxEntry {
-  String? text;
-  List<ui.TextBox>? boxes;
+/// Content-based key for background box caching so duplicate elements
+/// with the same text and font properties share cached results.
+@immutable
+class _BackgroundBoxKey {
+  const _BackgroundBoxKey({
+    required this.text,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.horizontalAlign,
+    required this.layoutWidth,
+  });
+
+  final String text;
+  final double fontSize;
+  final String? fontFamily;
+  final TextHorizontalAlign horizontalAlign;
+  final double layoutWidth;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BackgroundBoxKey &&
+          other.text == text &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.horizontalAlign == horizontalAlign &&
+          other.layoutWidth == layoutWidth;
+
+  @override
+  int get hashCode =>
+      Object.hash(text, fontSize, fontFamily, horizontalAlign, layoutWidth);
 }
 
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
+/// Cache key for pre-built background [Path] objects.
+///
+/// Uses identity of the [boxes] list (which comes from the box cache)
+/// combined with the padding/offset/radius parameters that affect the
+/// final path geometry.
+@immutable
+class _BackgroundPathKey {
+  const _BackgroundPathKey({
+    required this.boxes,
+    required this.paintOffsetDx,
+    required this.paintOffsetDy,
+    required this.horizontalPadding,
+    required this.verticalPadding,
+    required this.cornerRadius,
+  });
 
-  final int maxEntries;
-  final _cache = <K, V>{};
+  final List<ui.TextBox> boxes;
+  final double paintOffsetDx;
+  final double paintOffsetDy;
+  final double horizontalPadding;
+  final double verticalPadding;
+  final double cornerRadius;
 
-  V getOrCreate(K key, V Function() builder) {
-    final existing = _cache.remove(key);
-    if (existing != null) {
-      _cache[key] = existing;
-      return existing;
-    }
-    final value = builder();
-    _cache[key] = value;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-    return value;
-  }
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BackgroundPathKey &&
+          identical(other.boxes, boxes) &&
+          other.paintOffsetDx == paintOffsetDx &&
+          other.paintOffsetDy == paintOffsetDy &&
+          other.horizontalPadding == horizontalPadding &&
+          other.verticalPadding == verticalPadding &&
+          other.cornerRadius == cornerRadius;
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(boxes),
+    paintOffsetDx,
+    paintOffsetDy,
+    horizontalPadding,
+    verticalPadding,
+    cornerRadius,
+  );
 }
 
 @immutable

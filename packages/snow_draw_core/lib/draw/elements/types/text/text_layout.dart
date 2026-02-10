@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
 
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
 import 'text_data.dart';
 
 const _fallbackText = ' ';
@@ -98,18 +99,18 @@ class PainterTextLayoutMetrics extends TextLayoutMetrics {
 // ---------------------------------------------------------------------------
 
 /// Primary layout cache keyed on text + font + width.
-final _paragraphCache = _LruCache<_LayoutCacheKey, TextLayoutMetrics>(
+final _paragraphCache = LruCache<_LayoutCacheKey, TextLayoutMetrics>(
   maxEntries: 256,
 );
 
 /// Font-metrics cache (width-independent) for better hit rates during
 /// resize operations.
-final _fontMetricsCache = _LruCache<_FontMetricsCacheKey, _FontMetrics>(
+final _fontMetricsCache = LruCache<_FontMetricsCacheKey, _FontMetrics>(
   maxEntries: 64,
 );
 
 /// Painter cache for the rare paths that need `TextPainter`.
-final _painterCache = _LruCache<_PainterCacheKey, PainterTextLayoutMetrics>(
+final _painterCache = LruCache<_PainterCacheKey, PainterTextLayoutMetrics>(
   maxEntries: 64,
 );
 
@@ -291,21 +292,19 @@ PainterTextLayoutMetrics layoutTextWithPainter({
     final lineMetrics = painter.computeLineMetrics();
     final fm = _extractFontMetrics(painter, lineMetrics);
 
-    // Build a standalone Paragraph for the base class field.
-    // TextPainter._paragraph is private, so we create our own.
-    final paragraph = _buildParagraph(
-      text: resolvedText,
-      style: resolvedStyle,
-      align: data.horizontalAlign,
+    // Reuse the paragraph from the fast layout path when possible,
+    // avoiding a redundant ParagraphBuilder + layout call.
+    final fastLayout = layoutText(
+      data: data,
+      maxWidth: safeMaxWidth,
+      minWidth: safeMinWidth,
       widthBasis: widthBasis,
       locale: locale,
-      minWidth: safeMinWidth,
-      maxWidth: safeMaxWidth,
     );
 
     return PainterTextLayoutMetrics(
       painter: painter,
-      paragraph: paragraph,
+      paragraph: fastLayout.paragraph,
       size: painter.size,
       lineHeight: fm.lineHeight,
       lineMetrics: lineMetrics,
@@ -460,31 +459,6 @@ String? _sanitizeFontFamily(String? fontFamily) {
 
 /// Fine quantization (0.1 px).
 double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-// ---------------------------------------------------------------------------
-// LRU cache
-// ---------------------------------------------------------------------------
-
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
-
-  final int maxEntries;
-  final _cache = <K, V>{};
-
-  V getOrCreate(K key, V Function() builder) {
-    final existing = _cache.remove(key);
-    if (existing != null) {
-      _cache[key] = existing;
-      return existing;
-    }
-    final value = builder();
-    _cache[key] = value;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-    return value;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Cache keys
