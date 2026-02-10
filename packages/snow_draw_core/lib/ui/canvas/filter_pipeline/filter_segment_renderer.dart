@@ -139,9 +139,7 @@ class FilterSegmentRenderer {
       }
 
       if (segment is MergedFilterSegment) {
-        pending.add(
-          _applyMergedFilter(scene: scene, merged: segment),
-        );
+        pending.add(_applyMergedFilter(scene: scene, merged: segment));
       }
     }
 
@@ -294,9 +292,8 @@ class FilterSegmentRenderer {
 
   /// Applies a single filter within a clip region.
   ///
-  /// When [opacity] is 1.0, uses `BlendMode.src` inside the
-  /// `saveLayer` to replace the clipped region in one pass instead
-  /// of the dstOut + plus two-pass compositing.
+  /// Composites the filtered scene over the clipped source region using
+  /// source-over blending.
   /// Uses `clipRect` for axis-aligned clips to avoid the more
   /// expensive `clipPath` rasterization.
   void _applyClippedFilter({
@@ -307,38 +304,14 @@ class FilterSegmentRenderer {
     required Rect layerBounds,
     required double opacity,
   }) {
-    if (opacity >= 1.0) {
-      // Fast path: full opacity — a single saveLayer with src blend
-      // replaces the clipped region without a separate dstOut pass.
-      canvas.save();
-      clip.applyTo(canvas);
-      _paintFilteredLayer(
-        canvas: canvas,
-        scene: scene,
-        data: data,
-        layerBounds: layerBounds,
-        opacity: 1,
-        blendMode: BlendMode.src,
-      );
-      canvas.restore();
-      return;
-    }
-
-    // Partial opacity: punch a hole with dstOut, then composite
-    // the filtered result with plus.
     canvas.save();
     clip.applyTo(canvas);
-    canvas.drawColor(
-      Color.fromRGBO(0, 0, 0, opacity),
-      BlendMode.dstOut,
-    );
     _paintFilteredLayer(
       canvas: canvas,
       scene: scene,
       data: data,
       layerBounds: layerBounds,
       opacity: opacity,
-      blendMode: BlendMode.plus,
     );
     canvas.restore();
   }
@@ -411,7 +384,8 @@ class FilterSegmentRenderer {
       param3: layerBounds.left,
       param4: layerBounds.top,
     );
-    final shaderFilter = _filterCache.get(cacheKey) ??
+    final shaderFilter =
+        _filterCache.get(cacheKey) ??
         FilterShaderManager.instance.createMosaicFilter(
           strength: data.strength,
           regionSize: layerBounds.size,
@@ -541,20 +515,12 @@ class FilterSegmentRenderer {
       rect: element.rect,
       rotation: element.rotation,
     );
-    return _clipInfoCache.getOrCreate(
-      key,
-      () => _buildClipInfo(element),
-    );
+    return _clipInfoCache.getOrCreate(key, () => _buildClipInfo(element));
   }
 
   _ClipInfo _buildClipInfo(ElementState element) {
     final rect = element.rect;
-    final uiRect = Rect.fromLTWH(
-      rect.minX,
-      rect.minY,
-      rect.width,
-      rect.height,
-    );
+    final uiRect = Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height);
     if (element.rotation == 0) {
       return _ClipInfo(bounds: uiRect);
     }
@@ -658,8 +624,7 @@ class _FilterImageCacheKey {
           other.param4 == param4;
 
   @override
-  int get hashCode =>
-      Object.hash(type, param0, param1, param2, param3, param4);
+  int get hashCode => Object.hash(type, param0, param1, param2, param3, param4);
 }
 
 /// Resolved clip geometry for a filter element.
