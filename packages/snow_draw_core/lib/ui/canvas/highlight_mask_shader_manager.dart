@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -13,8 +14,19 @@ final ModuleLogger _log = LogService.fallback.render;
 
 /// Maximum highlights the shader can process in a single pass.
 ///
-/// Limited by the uniform array size (8 floats per highlight).
-const int highlightMaskShaderLimit = 32;
+/// Limited by the uniform array size (9 floats per highlight).
+const highlightMaskShaderLimit = 32;
+
+/// Number of uniform floats per highlight.
+///
+/// Layout: centerX, centerY, halfWidth, halfHeight, cosRot, sinRot,
+///         inflateX, inflateY, shape.
+const _floatsPerHighlight = 9;
+
+/// Number of header uniforms before the highlight array.
+///
+/// uResolution (2) + uMaskColor (4) + uHighlightCount (1) + uBounds (4).
+const _headerFloats = 11;
 
 /// GPU-accelerated highlight mask rendering.
 ///
@@ -74,9 +86,6 @@ class HighlightMaskShaderManager {
     if (_shader == null) {
       return false;
     }
-    if (highlights.length > highlightMaskShaderLimit) {
-      return false;
-    }
 
     final shader = _shader!;
     final effectiveAlpha = (maskConfig.maskColor.a * maskConfig.maskOpacity)
@@ -89,6 +98,20 @@ class HighlightMaskShaderManager {
     final screenWidth = viewportRect.width * scale;
     final screenHeight = viewportRect.height * scale;
 
+    // Cull highlights that are entirely off-screen and collect visible
+    // ones.  This avoids sending invisible highlights to the GPU and
+    // tightens the combined AABB used for the early-out test.
+    final visible = _cullHighlights(
+      highlights: highlights,
+      viewportRect: viewportRect,
+      scale: scale,
+      cameraPosition: cameraPosition,
+    );
+
+    if (visible.length > highlightMaskShaderLimit) {
+      return false;
+    }
+
     var idx = 0;
 
     // uResolution (vec2)
@@ -96,47 +119,71 @@ class HighlightMaskShaderManager {
       ..setFloat(idx++, screenWidth)
       ..setFloat(idx++, screenHeight);
 
-    // uMaskColor (vec4) — premultiplied alpha
+    // uMaskColor (vec4) — premultiplied alpha, then uHighlightCount.
     final color = maskConfig.maskColor;
     shader
       ..setFloat(idx++, color.r * effectiveAlpha)
       ..setFloat(idx++, color.g * effectiveAlpha)
       ..setFloat(idx++, color.b * effectiveAlpha)
-      ..setFloat(idx++, effectiveAlpha);
+      ..setFloat(idx++, effectiveAlpha)
+      ..setFloat(idx++, visible.length.toDouble());
 
-    // uHighlightCount
-    shader.setFloat(idx++, highlights.length.toDouble());
-
-    // Pack each highlight into 8 floats.
-    for (final element in highlights) {
-      final data = element.data as HighlightData;
-      final rect = element.rect;
-      final inflate = data.strokeWidth / 2;
-
-      // Convert world coordinates to screen coordinates.
-      final cx = (rect.centerX + cameraPosition.dx / scale) * scale;
-      final cy = (rect.centerY + cameraPosition.dy / scale) * scale;
-      final hw = rect.width / 2 * scale;
-      final hh = rect.height / 2 * scale;
-      final inflateX = inflate * scale;
-      final inflateY = inflate * scale;
-      final shape = data.shape == HighlightShape.ellipse ? 1.0 : 0.0;
-
+    // uBounds (vec4) — combined screen-space AABB with AA margin.
+    // Computed on the Dart side so the shader can early-out for
+    // fragments that are clearly outside all highlights.
+    if (visible.isEmpty) {
       shader
-        ..setFloat(idx++, cx)
-        ..setFloat(idx++, cy)
-        ..setFloat(idx++, hw)
-        ..setFloat(idx++, hh)
-        ..setFloat(idx++, element.rotation)
-        ..setFloat(idx++, inflateX)
-        ..setFloat(idx++, inflateY)
-        ..setFloat(idx++, shape);
+        ..setFloat(idx++, 0)
+        ..setFloat(idx++, 0)
+        ..setFloat(idx++, 0)
+        ..setFloat(idx++, 0);
+    } else {
+      var bMinX = visible.first.screenMinX;
+      var bMinY = visible.first.screenMinY;
+      var bMaxX = visible.first.screenMaxX;
+      var bMaxY = visible.first.screenMaxY;
+      for (var i = 1; i < visible.length; i++) {
+        final h = visible[i];
+        if (h.screenMinX < bMinX) {
+          bMinX = h.screenMinX;
+        }
+        if (h.screenMinY < bMinY) {
+          bMinY = h.screenMinY;
+        }
+        if (h.screenMaxX > bMaxX) {
+          bMaxX = h.screenMaxX;
+        }
+        if (h.screenMaxY > bMaxY) {
+          bMaxY = h.screenMaxY;
+        }
+      }
+      shader
+        ..setFloat(idx++, bMinX)
+        ..setFloat(idx++, bMinY)
+        ..setFloat(idx++, bMaxX)
+        ..setFloat(idx++, bMaxY);
+    }
+
+    // Pack each visible highlight into 9 floats.
+    for (final h in visible) {
+      shader
+        ..setFloat(idx++, h.cx)
+        ..setFloat(idx++, h.cy)
+        ..setFloat(idx++, h.hw)
+        ..setFloat(idx++, h.hh)
+        ..setFloat(idx++, h.cosR)
+        ..setFloat(idx++, h.sinR)
+        ..setFloat(idx++, h.inflateX)
+        ..setFloat(idx++, h.inflateY)
+        ..setFloat(idx++, h.shape);
     }
 
     // Zero-fill remaining slots so the shader reads deterministic
     // values (avoids undefined behaviour on some GPU drivers).
-    final totalFloats = 7 + highlights.length * 8; // 7 header + 8 per highlight
-    final maxFloats = 7 + highlightMaskShaderLimit * 8;
+    final totalFloats =
+        _headerFloats + visible.length * _floatsPerHighlight;
+    const maxFloats =
+        _headerFloats + highlightMaskShaderLimit * _floatsPerHighlight;
     for (var i = totalFloats; i < maxFloats; i++) {
       shader.setFloat(i, 0);
     }
@@ -153,4 +200,109 @@ class HighlightMaskShaderManager {
     _shader = null;
     _program = null;
   }
+}
+
+/// Pre-computed screen-space data for a single highlight.
+class _VisibleHighlight {
+  const _VisibleHighlight({
+    required this.cx,
+    required this.cy,
+    required this.hw,
+    required this.hh,
+    required this.cosR,
+    required this.sinR,
+    required this.inflateX,
+    required this.inflateY,
+    required this.shape,
+    required this.screenMinX,
+    required this.screenMinY,
+    required this.screenMaxX,
+    required this.screenMaxY,
+  });
+
+  final double cx;
+  final double cy;
+  final double hw;
+  final double hh;
+  final double cosR;
+  final double sinR;
+  final double inflateX;
+  final double inflateY;
+  final double shape;
+
+  /// Screen-space AABB (with AA margin) for the combined bounds.
+  final double screenMinX;
+  final double screenMinY;
+  final double screenMaxX;
+  final double screenMaxY;
+}
+
+/// Culls off-screen highlights and precomputes screen-space data.
+///
+/// Precomputes cos/sin on the Dart side so the shader avoids
+/// per-fragment trigonometry.  Also computes a tight screen-space
+/// AABB per highlight for the combined early-out bounds.
+List<_VisibleHighlight> _cullHighlights({
+  required List<ElementState> highlights,
+  required DrawRect viewportRect,
+  required double scale,
+  required Offset cameraPosition,
+}) {
+  final screenW = viewportRect.width * scale;
+  final screenH = viewportRect.height * scale;
+  const aaMargin = 1.0;
+
+  final result = <_VisibleHighlight>[];
+  for (final element in highlights) {
+    final data = element.data as HighlightData;
+    final rect = element.rect;
+    final inflate = data.strokeWidth / 2;
+
+    final cx = (rect.centerX + cameraPosition.dx / scale) * scale;
+    final cy = (rect.centerY + cameraPosition.dy / scale) * scale;
+    final hw = rect.width / 2 * scale;
+    final hh = rect.height / 2 * scale;
+    final inflateX = inflate * scale;
+    final inflateY = inflate * scale;
+
+    // Compute screen-space AABB accounting for rotation.
+    final rotation = element.rotation;
+    final cosR = math.cos(-rotation);
+    final sinR = math.sin(-rotation);
+    final absCos = cosR.abs();
+    final absSin = sinR.abs();
+    final expandedHW = hw + inflateX;
+    final expandedHH = hh + inflateY;
+    final rotHW = expandedHW * absCos + expandedHH * absSin;
+    final rotHH = expandedHW * absSin + expandedHH * absCos;
+
+    final minX = cx - rotHW - aaMargin;
+    final minY = cy - rotHH - aaMargin;
+    final maxX = cx + rotHW + aaMargin;
+    final maxY = cy + rotHH + aaMargin;
+
+    // Skip highlights entirely outside the screen.
+    if (maxX < 0 || minX > screenW || maxY < 0 || minY > screenH) {
+      continue;
+    }
+
+    result.add(
+      _VisibleHighlight(
+        cx: cx,
+        cy: cy,
+        hw: hw,
+        hh: hh,
+        cosR: cosR,
+        sinR: sinR,
+        inflateX: inflateX,
+        inflateY: inflateY,
+        shape: data.shape == HighlightShape.ellipse ? 1.0 : 0.0,
+        screenMinX: minX,
+        screenMinY: minY,
+        screenMaxX: maxX,
+        screenMaxY: maxY,
+      ),
+    );
+  }
+  return result;
 }

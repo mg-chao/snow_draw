@@ -43,8 +43,8 @@ void paintHighlightMask({
     // The canvas is currently in world-coordinate space (translated +
     // scaled). Undo that transform so the shader can draw in screen
     // pixels, then restore afterwards.
-    canvas.save();
     canvas
+      ..save()
       ..scale(1 / scale, 1 / scale)
       ..translate(-cameraPosition.dx, -cameraPosition.dy);
 
