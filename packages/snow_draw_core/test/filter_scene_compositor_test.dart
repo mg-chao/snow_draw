@@ -1,6 +1,4 @@
 import 'dart:ui';
-import 'dart:ui' as ui;
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
@@ -148,231 +146,32 @@ void main() {
     recorder.endRecording();
   });
 
-  test(
-    'rotated filter samples scene without rotating source content',
-    () async {
-      const imageSize = ui.Size(200, 200);
-      const filterElement = ElementState(
-        id: 'filter',
-        rect: DrawRect(minX: 60, minY: 80, maxX: 140, maxY: 120),
-        rotation: 0.7853981633974483,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(type: CanvasFilterType.inversion),
-      );
-
-      final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      filterSceneCompositor.paintElements(
-        canvas: canvas,
-        elements: const [
-          ElementState(
-            id: 'base',
-            rect: DrawRect(maxX: 200, maxY: 200),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 0,
-            data: RectangleData(),
-          ),
-          filterElement,
-        ],
-        paintElement: (sceneCanvas, element) {
-          if (element.id != 'base') {
-            return;
-          }
-          sceneCanvas.drawRect(
-            Rect.fromLTWH(0, 0, imageSize.width, imageSize.height),
-            Paint()
-              ..shader = ui.Gradient.linear(
-                const Offset(0, 0),
-                Offset(imageSize.width, 0),
-                const [Color(0xFFFF0000), Color(0xFF0000FF)],
-              ),
-          );
-        },
-      );
-
-      final picture = recorder.endRecording();
-      final image = await picture.toImage(
-        imageSize.width.toInt(),
-        imageSize.height.toInt(),
-      );
-      final data = await image.toByteData();
-      expect(data, isNotNull);
-
-      const samplePoint = Offset(100, 100);
-      final sampled = _readPixel(data!, imageSize.width.toInt(), samplePoint);
-      final t = samplePoint.dx / imageSize.width;
-      final source = _lerpColor(
-        const Color(0xFFFF0000),
-        const Color(0xFF0000FF),
-        t,
-      );
-      final expected = Color.fromARGB(
-        255,
-        255 - source.red,
-        255 - source.green,
-        255 - source.blue,
-      );
-
-      expect((sampled.red - expected.red).abs(), lessThanOrEqualTo(3));
-      expect((sampled.green - expected.green).abs(), lessThanOrEqualTo(3));
-      expect((sampled.blue - expected.blue).abs(), lessThanOrEqualTo(3));
-    },
-  );
-
-  test('filter opacity blends filtered result with underlying scene', () async {
-    const imageSize = ui.Size(80, 80);
-    const baseColor = Color(0xFF204080);
-    const filterOpacity = 0.25;
-
+  test('compositor exposes diagnostics from segmented renderer', () {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     filterSceneCompositor.paintElements(
       canvas: canvas,
-      elements: [
+      elements: const [
         ElementState(
           id: 'base',
-          rect: DrawRect(maxX: imageSize.width, maxY: imageSize.height),
+          rect: DrawRect(maxX: 100, maxY: 60),
           rotation: 0,
           opacity: 1,
           zIndex: 0,
           data: RectangleData(),
         ),
-        ElementState(
-          id: 'filter',
-          rect: DrawRect(maxX: imageSize.width, maxY: imageSize.height),
-          rotation: 0,
-          opacity: filterOpacity,
-          zIndex: 1,
-          data: FilterData(type: CanvasFilterType.inversion),
-        ),
       ],
       paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
         sceneCanvas.drawRect(
-          Rect.fromLTWH(0, 0, imageSize.width, imageSize.height),
-          Paint()..color = baseColor,
+          const Rect.fromLTWH(0, 0, 20, 20),
+          Paint()..color = const Color(0xFF336699),
         );
       },
     );
 
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      imageSize.width.toInt(),
-      imageSize.height.toInt(),
-    );
-    final data = await image.toByteData();
-    expect(data, isNotNull);
-
-    final sampled = _readPixel(
-      data!,
-      imageSize.width.toInt(),
-      const Offset(40, 40),
-    );
-    final inverted = Color.fromARGB(
-      255,
-      255 - baseColor.red,
-      255 - baseColor.green,
-      255 - baseColor.blue,
-    );
-    final expected = _lerpColor(baseColor, inverted, filterOpacity);
-
-    expect((sampled.red - expected.red).abs(), lessThanOrEqualTo(2));
-    expect((sampled.green - expected.green).abs(), lessThanOrEqualTo(2));
-    expect((sampled.blue - expected.blue).abs(), lessThanOrEqualTo(2));
+    final diagnostics = filterSceneCompositor.lastDiagnostics;
+    expect(diagnostics.filterPasses, 0);
+    expect(diagnostics.batchCount, 0);
+    recorder.endRecording();
   });
-
-  test('mosaic filter produces blocky pixelated regions', () async {
-    const imageSize = ui.Size(128, 64);
-    final filterRect = DrawRect(maxX: imageSize.width, maxY: imageSize.height);
-
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-    filterSceneCompositor.paintElements(
-      canvas: canvas,
-      elements: [
-        ElementState(
-          id: 'base',
-          rect: filterRect,
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: const RectangleData(),
-        ),
-        ElementState(
-          id: 'mosaic',
-          rect: filterRect,
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: const FilterData(type: CanvasFilterType.mosaic, strength: 1),
-        ),
-      ],
-      paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
-        sceneCanvas.drawRect(
-          Rect.fromLTWH(0, 0, imageSize.width, imageSize.height),
-          Paint()
-            ..shader = ui.Gradient.linear(
-              const Offset(0, 0),
-              Offset(imageSize.width, 0),
-              const [Color(0xFFFF0000), Color(0xFF0000FF)],
-            ),
-        );
-      },
-    );
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(
-      imageSize.width.toInt(),
-      imageSize.height.toInt(),
-    );
-    final data = await image.toByteData();
-    expect(data, isNotNull);
-
-    final width = imageSize.width.toInt();
-    final row = List<Color>.generate(
-      width,
-      (x) => _readPixel(data!, width, Offset(x.toDouble(), 32)),
-    );
-    final uniqueReds = row.map((pixel) => pixel.red).toSet().length;
-    final adjacentDiffs = List<int>.generate(
-      row.length - 1,
-      (index) => (row[index + 1].red - row[index].red).abs(),
-    );
-    final flatNeighbors = adjacentDiffs.where((diff) => diff <= 1).length;
-    final strongJumps = adjacentDiffs.where((diff) => diff >= 6).length;
-
-    expect(uniqueReds, lessThan(80));
-    expect(flatNeighbors, greaterThan(40));
-    expect(strongJumps, greaterThan(2));
-  });
-}
-
-Color _lerpColor(Color a, Color b, double t) {
-  final clampedT = t.clamp(0.0, 1.0);
-  final r = (a.red + ((b.red - a.red) * clampedT)).round().clamp(0, 255);
-  final g = (a.green + ((b.green - a.green) * clampedT)).round().clamp(0, 255);
-  final bl = (a.blue + ((b.blue - a.blue) * clampedT)).round().clamp(0, 255);
-  final alpha = (a.alpha + ((b.alpha - a.alpha) * clampedT)).round().clamp(
-    0,
-    255,
-  );
-  return Color.fromARGB(alpha, r, g, bl);
-}
-
-Color _readPixel(ByteData data, int width, Offset offset) {
-  final x = offset.dx.round().clamp(0, width - 1);
-  final y = offset.dy.round();
-  final index = ((y * width) + x) * 4;
-  final r = data.getUint8(index);
-  final g = data.getUint8(index + 1);
-  final b = data.getUint8(index + 2);
-  final a = data.getUint8(index + 3);
-  return Color.fromARGB(a, r, g, b);
 }

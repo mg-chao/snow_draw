@@ -16,8 +16,8 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
-import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -416,6 +416,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
     );
 
@@ -442,6 +443,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: config.highlight,
       elementRegistry: elementRegistry,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
     );
 
@@ -581,11 +583,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    final interaction = view.state.application.interaction;
-    if (interaction is CreatingState && interaction.elementData is FilterData) {
-      return true;
-    }
-
     if (view.selectedIds.isEmpty) {
       return false;
     }
@@ -596,7 +593,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (orderIndex == null || orderIndex < splitIndex) {
         continue;
       }
-      if (element.data is FilterData) {
+      if (element.data is HighlightData) {
         return true;
       }
     }
@@ -1525,16 +1522,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double distance,
   ) {
     final document = state.domain.document;
-    final entries = document.spatialIndex.searchPointEntries(
-      position,
-      distance,
-    );
     final targets = <ElementState>[];
-    for (final entry in entries) {
-      final element = document.getElementById(entry.id);
-      if (element == null) {
-        continue;
-      }
+    final candidates = document.queryElementsAtPointTopDown(position, distance);
+    for (final element in candidates) {
       if (element.opacity <= 0 ||
           !ArrowBindingUtils.isBindableTarget(element)) {
         continue;

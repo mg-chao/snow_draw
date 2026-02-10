@@ -20,6 +20,7 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
+import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/edit_transform.dart';
@@ -34,6 +35,8 @@ import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+
+final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
 /// Dynamic canvas painter.
 ///
@@ -277,15 +280,10 @@ class DynamicCanvasPainter extends CustomPainter {
       maxY: (size.height - camera.position.y) / scale,
     );
 
-    final visibleElements = document.getElementsInRect(viewportRect)
-      ..removeWhere((element) {
-        if (rendersWholeScene) {
-          return false;
-        }
-        final orderIndex = document.getOrderIndex(element.id) ?? -1;
-        final startIndex = dynamicLayerStartIndex ?? 0;
-        return orderIndex < startIndex;
-      });
+    final visibleElements = document.queryElementsInRectOrdered(
+      viewportRect,
+      minOrderIndex: rendersWholeScene ? null : (dynamicLayerStartIndex ?? 0),
+    );
 
     final previewElements = renderKey.previewElementsById;
     if (previewElements.isNotEmpty) {
@@ -301,14 +299,6 @@ class DynamicCanvasPainter extends CustomPainter {
         }
       }
     }
-
-    visibleElements.sort((a, b) {
-      // Use element's zIndex for preview elements not in document,
-      // otherwise use document order index for consistency.
-      final indexA = document.getOrderIndex(a.id) ?? a.zIndex;
-      final indexB = document.getOrderIndex(b.id) ?? b.zIndex;
-      return indexA.compareTo(indexB);
-    });
 
     final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
@@ -332,9 +322,10 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     if (creatingElement != null && creatingElement.element.data is FilterData) {
-      effectiveElements.add(
-        creatingElement.element.copyWith(rect: creatingElement.currentRect),
+      final previewFilter = creatingElement.element.copyWith(
+        rect: creatingElement.currentRect,
       );
+      effectiveElements.add(previewFilter);
     }
 
     filterSceneCompositor.paintElements(
@@ -355,6 +346,17 @@ class DynamicCanvasPainter extends CustomPainter {
         );
       },
     );
+    if (renderKey.performanceMonitoringEnabled) {
+      final diagnostics = filterSceneCompositor.lastDiagnostics;
+      if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
+        _dynamicCanvasFallbackLog.warning('Heavy dynamic filter frame', {
+          'pictureRecorders': diagnostics.pictureRecorders,
+          'saveLayers': diagnostics.saveLayers,
+          'filterPasses': diagnostics.filterPasses,
+          'batchCount': diagnostics.batchCount,
+        });
+      }
+    }
   }
 
   void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {

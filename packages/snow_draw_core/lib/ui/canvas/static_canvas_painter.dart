@@ -7,6 +7,7 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
+import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
 import 'filter_scene_compositor.dart';
@@ -15,6 +16,8 @@ import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+
+final ModuleLogger _staticCanvasFallbackLog = LogService.fallback.render;
 
 /// Static canvas painter.
 ///
@@ -76,7 +79,7 @@ class StaticCanvasPainter extends CustomPainter {
     if (!skipBaseElementScene) {
       // Query visible elements. Preview elements are handled below to avoid
       // lifting them into a higher render layer.
-      final visibleElements = document.getElementsInRect(viewportRect);
+      final visibleElements = document.queryElementsInRectOrdered(viewportRect);
       if (creatingElementId != null) {
         visibleElements.removeWhere(
           (element) => element.id == creatingElementId,
@@ -102,11 +105,6 @@ class StaticCanvasPainter extends CustomPainter {
         }
       }
 
-      visibleElements.sort((a, b) {
-        final indexA = document.getOrderIndex(a.id) ?? -1;
-        final indexB = document.getOrderIndex(b.id) ?? -1;
-        return indexA.compareTo(indexB);
-      });
       final serialConnectors = resolveSerialNumberConnectorMap(stateView);
 
       // Draw visible elements in document z-order, applying preview geometry
@@ -148,6 +146,17 @@ class StaticCanvasPainter extends CustomPainter {
           );
         },
       );
+      if (renderKey.performanceMonitoringEnabled) {
+        final diagnostics = filterSceneCompositor.lastDiagnostics;
+        if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
+          _staticCanvasFallbackLog.warning('Heavy static filter frame', {
+            'pictureRecorders': diagnostics.pictureRecorders,
+            'saveLayers': diagnostics.saveLayers,
+            'filterPasses': diagnostics.filterPasses,
+            'batchCount': diagnostics.batchCount,
+          });
+        }
+      }
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.staticLayer) {

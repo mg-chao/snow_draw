@@ -123,7 +123,7 @@ void main() {
     expect(splitIndex, 0);
   });
 
-  test('lifts all document elements while creating filter', () {
+  test('creating filter lifts all document elements', () {
     final interaction = CreatingState(
       element: const ElementState(
         id: 'f_new',
@@ -143,7 +143,43 @@ void main() {
     expect(splitIndex, 0);
   });
 
-  test('lifts all document elements when dynamic range includes filter', () {
+  test('selecting filter lifts all document elements', () {
+    final state = _stateWith(
+      selectedIds: const {'f1'},
+      elements: const [
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'f1',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: FilterData(),
+        ),
+        ElementState(
+          id: 'e3',
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: RectangleData(),
+        ),
+      ],
+    );
+    final view = DrawStateView.fromState(state);
+
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 0);
+  });
+
+  test('selected range including filter lifts all document elements', () {
     final state = _stateWith(
       selectedIds: const {'e1'},
       elements: const [

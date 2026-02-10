@@ -255,15 +255,11 @@ class HitTest {
     }
 
     // 2. Check elements using spatial index (top-most first).
-    final candidates = document.spatialIndex.searchPointEntries(
+    final candidates = document.queryElementsAtPointTopDown(
       position,
       actualTolerance,
     );
-    for (final entry in candidates) {
-      final candidate = document.getElementById(entry.id);
-      if (candidate == null) {
-        continue;
-      }
+    for (final candidate in candidates) {
       if (filterTypeId != null && candidate.typeId != filterTypeId) {
         if (!_allowsSerialBoundText(
           filterTypeId: filterTypeId,

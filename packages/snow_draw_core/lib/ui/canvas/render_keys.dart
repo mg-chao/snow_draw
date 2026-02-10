@@ -59,6 +59,7 @@ class StaticCanvasRenderKey {
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
     required this.elementRegistry,
+    required this.performanceMonitoringEnabled,
     this.locale,
   });
 
@@ -95,6 +96,9 @@ class StaticCanvasRenderKey {
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
+  /// Whether runtime render diagnostics logging is enabled.
+  final bool performanceMonitoringEnabled;
+
   /// Locale used for text layout/rendering.
   final Locale? locale;
 
@@ -113,6 +117,7 @@ class StaticCanvasRenderKey {
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
           other.elementRegistry == elementRegistry &&
+          other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
 
   @override
@@ -130,6 +135,7 @@ class StaticCanvasRenderKey {
     highlightMaskLayer,
     highlightMaskConfig,
     elementRegistry,
+    performanceMonitoringEnabled,
     locale,
   );
 
@@ -181,6 +187,7 @@ class DynamicCanvasRenderKey {
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
     required this.elementRegistry,
+    required this.performanceMonitoringEnabled,
     this.locale,
   });
 
@@ -244,6 +251,9 @@ class DynamicCanvasRenderKey {
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
+  /// Whether runtime render diagnostics logging is enabled.
+  final bool performanceMonitoringEnabled;
+
   /// Locale used for text layout/rendering.
   final Locale? locale;
 
@@ -273,6 +283,7 @@ class DynamicCanvasRenderKey {
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
           other.elementRegistry == elementRegistry &&
+          other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
 
   @override
@@ -301,6 +312,7 @@ class DynamicCanvasRenderKey {
     highlightMaskLayer,
     highlightMaskConfig,
     elementRegistry,
+    performanceMonitoringEnabled,
     locale,
   ]);
 

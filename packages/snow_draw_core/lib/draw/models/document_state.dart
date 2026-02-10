@@ -51,6 +51,49 @@ class DocumentState {
     return _elementsForEntries(entries);
   }
 
+  /// Queries elements intersecting [rect], sorted by ascending z-order.
+  ///
+  /// Optional order-index bounds allow callers to constrain results to a
+  /// partial z-range without additional filtering/sorting at call sites.
+  List<ElementState> queryElementsInRectOrdered(
+    DrawRect rect, {
+    int? minOrderIndex,
+    int? maxOrderIndex,
+  }) {
+    final entries = _spatialIndex.searchRectEntries(rect, ascending: true);
+    final result = <ElementState>[];
+    for (final entry in entries) {
+      final zIndex = entry.zIndex;
+      if (minOrderIndex != null && zIndex < minOrderIndex) {
+        continue;
+      }
+      if (maxOrderIndex != null && zIndex > maxOrderIndex) {
+        continue;
+      }
+      final element = getElementById(entry.id);
+      if (element != null) {
+        result.add(element);
+      }
+    }
+    return result;
+  }
+
+  /// Queries point candidates sorted from top-most to bottom-most.
+  List<ElementState> queryElementsAtPointTopDown(
+    DrawPoint point,
+    double tolerance,
+  ) {
+    final entries = _spatialIndex.searchPointEntries(point, tolerance);
+    final result = <ElementState>[];
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        result.add(element);
+      }
+    }
+    return result;
+  }
+
   List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
     final elements = <ElementState>[];
     for (final entry in entries) {

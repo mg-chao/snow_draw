@@ -116,13 +116,13 @@ void main() {
     final creatingInteraction = CreatingState(
       element: const ElementState(
         id: 'creating',
-        rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+        rect: DrawRect(maxX: 10, maxY: 10),
         rotation: 0,
         opacity: 1,
         zIndex: 5,
         data: HighlightData(),
       ),
-      startPosition: const DrawPoint(x: 0, y: 0),
+      startPosition: DrawPoint.zero,
       currentRect: creatingRect,
     );
     final state = _buildState(
@@ -153,13 +153,13 @@ void main() {
     final creatingInteraction = CreatingState(
       element: const ElementState(
         id: 'creating_rect',
-        rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+        rect: DrawRect(maxX: 10, maxY: 10),
         rotation: 0,
         opacity: 1,
         zIndex: 5,
         data: RectangleData(),
       ),
-      startPosition: const DrawPoint(x: 0, y: 0),
+      startPosition: DrawPoint.zero,
       currentRect: const DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90),
     );
     final state = _buildState(
