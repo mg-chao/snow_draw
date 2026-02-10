@@ -25,9 +25,12 @@ class FilterSegmentRenderer {
     : _segmentBuilder = segmentBuilder ?? const FilterSegmentBuilder();
 
   static const _filterImageCacheLimit = 256;
+  static const _clipPathCacheLimit = 512;
 
   final FilterSegmentBuilder _segmentBuilder;
-  final _clipPathCache = <_FilterClipCacheKey, Path>{};
+  final _clipPathCache = LruCache<_FilterClipCacheKey, Path>(
+    maxEntries: _clipPathCacheLimit,
+  );
   final _filterCache = LruCache<_FilterImageCacheKey, ImageFilter>(
     maxEntries: _filterImageCacheLimit,
   );
@@ -81,34 +84,63 @@ class FilterSegmentRenderer {
       return;
     }
 
-    Picture? accumulated;
+    // Accumulate batch pictures and only flatten into a single
+    // scene when a filter needs to read the composited result.
+    // This avoids creating intermediate PictureRecorder merges
+    // between consecutive batches.
+    final pending = <Picture>[];
+
+    Picture flattenPending() {
+      assert(pending.isNotEmpty);
+      if (pending.length == 1) {
+        return pending.removeAt(0);
+      }
+      _diagnostics.markPictureRecorder();
+      final recorder = PictureRecorder();
+      final mergeCanvas = Canvas(recorder);
+      for (final p in pending) {
+        mergeCanvas.drawPicture(p);
+      }
+      pending.clear();
+      return recorder.endRecording();
+    }
+
     for (final segment in segments) {
       if (segment is ElementBatchSegment) {
         if (segment.elements.isEmpty) {
           continue;
         }
         _diagnostics.markBatch();
-        final batchPicture = _recordBatch(segment.elements, paintElement);
-        accumulated = _mergeScene(base: accumulated, overlay: batchPicture);
+        pending.add(_recordBatch(segment.elements, paintElement));
         continue;
       }
 
-      if (segment is FilterSegment && accumulated != null) {
-        accumulated = _applyFilter(
-          scene: accumulated,
-          filterElement: segment.filterElement,
-          data: segment.filterData,
+      if (pending.isEmpty) {
+        continue;
+      }
+
+      final scene = flattenPending();
+
+      if (segment is FilterSegment) {
+        pending.add(
+          _applyFilter(
+            scene: scene,
+            filterElement: segment.filterElement,
+            data: segment.filterData,
+          ),
         );
         continue;
       }
 
-      if (segment is MergedFilterSegment && accumulated != null) {
-        accumulated = _applyMergedFilter(scene: accumulated, merged: segment);
+      if (segment is MergedFilterSegment) {
+        pending.add(
+          _applyMergedFilter(scene: scene, merged: segment),
+        );
       }
     }
 
-    if (accumulated != null) {
-      canvas.drawPicture(accumulated);
+    for (final p in pending) {
+      canvas.drawPicture(p);
     }
     _diagnostics.endFrame();
   }
@@ -123,18 +155,6 @@ class FilterSegmentRenderer {
     for (final element in elements) {
       paintElement(batchCanvas, element);
     }
-    return recorder.endRecording();
-  }
-
-  Picture _mergeScene({required Picture? base, required Picture overlay}) {
-    if (base == null) {
-      return overlay;
-    }
-    _diagnostics.markPictureRecorder();
-    final recorder = PictureRecorder();
-    Canvas(recorder)
-      ..drawPicture(base)
-      ..drawPicture(overlay);
     return recorder.endRecording();
   }
 
@@ -382,11 +402,8 @@ class FilterSegmentRenderer {
     );
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.gaussianBlur,
-      strength: data.strength,
-      bounds: layerBounds,
       sigmaX: sigma,
       sigmaY: sigma,
-      shaderSupported: FilterShaderManager.instance.isShaderFilterSupported,
     );
     final imageFilter = _filterCache.getOrCreate(
       cacheKey,
@@ -457,13 +474,10 @@ class FilterSegmentRenderer {
       rect: element.rect,
       rotation: element.rotation,
     );
-    final cached = _clipPathCache[key];
-    if (cached != null) {
-      return cached;
-    }
-    final built = _buildFilterClipPath(element);
-    _clipPathCache[key] = built;
-    return built;
+    return _clipPathCache.getOrCreate(
+      key,
+      () => _buildFilterClipPath(element),
+    );
   }
 
   Path _buildFilterClipPath(ElementState element) {
@@ -536,38 +550,33 @@ class _FilterClipCacheKey {
   int get hashCode => Object.hash(id, rect, rotation);
 }
 
+/// Cache key for [ImageFilter] objects.
+///
+/// Excludes spatial bounds because blur and color-matrix filters are
+/// position-independent — the same kernel applies regardless of where
+/// the `saveLayer` clips.
 @immutable
 class _FilterImageCacheKey {
   const _FilterImageCacheKey({
     required this.type,
-    required this.strength,
-    required this.bounds,
     required this.sigmaX,
     required this.sigmaY,
-    required this.shaderSupported,
   });
 
   final CanvasFilterType type;
-  final double strength;
-  final Rect bounds;
   final double sigmaX;
   final double sigmaY;
-  final bool shaderSupported;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _FilterImageCacheKey &&
           other.type == type &&
-          other.strength == strength &&
-          other.bounds == bounds &&
           other.sigmaX == sigmaX &&
-          other.sigmaY == sigmaY &&
-          other.shaderSupported == shaderSupported;
+          other.sigmaY == sigmaY;
 
   @override
-  int get hashCode =>
-      Object.hash(type, strength, bounds, sigmaX, sigmaY, shaderSupported);
+  int get hashCode => Object.hash(type, sigmaX, sigmaY);
 }
 
 // ── Cached color-filter constants ───────────────────────
