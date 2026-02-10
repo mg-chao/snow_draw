@@ -7,6 +7,7 @@ import '../../../draw/elements/types/filter/filter_data.dart';
 import '../../../draw/models/element_state.dart';
 import '../../../draw/types/draw_rect.dart';
 import '../../../draw/types/element_style.dart';
+import '../../../draw/utils/lru_cache.dart';
 import '../../canvas/filter_shader_manager.dart';
 import 'filter_render_diagnostics.dart';
 import 'filter_segment.dart';
@@ -23,13 +24,23 @@ class FilterSegmentRenderer {
   FilterSegmentRenderer({FilterSegmentBuilder? segmentBuilder})
     : _segmentBuilder = segmentBuilder ?? const FilterSegmentBuilder();
 
+  static const _filterImageCacheLimit = 256;
+
   final FilterSegmentBuilder _segmentBuilder;
   final _clipPathCache = <_FilterClipCacheKey, Path>{};
-  final _filterCache = <_FilterImageCacheKey, ImageFilter>{};
+  final _filterCache = LruCache<_FilterImageCacheKey, ImageFilter>(
+    maxEntries: _filterImageCacheLimit,
+  );
   final _diagnostics = FilterRenderDiagnosticsCollector();
 
   /// Last completed frame diagnostics.
   FilterRenderDiagnostics get lastDiagnostics => _diagnostics.lastFrame;
+
+  @visibleForTesting
+  int get debugFilterCacheSize => _filterCache.length;
+
+  @visibleForTesting
+  int get debugFilterCacheLimit => _filterImageCacheLimit;
 
   /// Clears internal caches.
   void clearCaches() {
@@ -145,13 +156,28 @@ class FilterSegmentRenderer {
     final canvas = Canvas(recorder)
       ..drawPicture(scene)
       ..save()
-      ..clipPath(clipPath);
+      ..clipPath(clipPath)
+      ..drawColor(Color.fromRGBO(0, 0, 0, opacity), BlendMode.dstOut);
 
     switch (data.type) {
       case CanvasFilterType.mosaic:
-        _paintMosaicFilter(canvas, scene, data, layerBounds, opacity);
+        _paintMosaicFilter(
+          canvas,
+          scene,
+          data,
+          layerBounds,
+          opacity,
+          blendMode: BlendMode.plus,
+        );
       case CanvasFilterType.gaussianBlur:
-        _paintBlurFilter(canvas, scene, layerBounds, opacity, data);
+        _paintBlurFilter(
+          canvas,
+          scene,
+          layerBounds,
+          opacity,
+          data,
+          blendMode: BlendMode.plus,
+        );
       case CanvasFilterType.grayscale:
         _paintColorMatrixFilter(
           canvas,
@@ -159,6 +185,7 @@ class FilterSegmentRenderer {
           _grayscaleMatrix,
           layerBounds,
           opacity,
+          blendMode: BlendMode.plus,
         );
       case CanvasFilterType.inversion:
         _paintColorMatrixFilter(
@@ -167,6 +194,7 @@ class FilterSegmentRenderer {
           _inversionMatrix,
           layerBounds,
           opacity,
+          blendMode: BlendMode.plus,
         );
     }
 
@@ -181,6 +209,9 @@ class FilterSegmentRenderer {
     FilterData data,
     Rect layerBounds,
     double opacity,
+    {
+    BlendMode blendMode = BlendMode.srcOver,
+  }
   ) {
     final shaderFilter = FilterShaderManager.instance.createMosaicFilter(
       strength: data.strength,
@@ -192,7 +223,11 @@ class FilterSegmentRenderer {
       canvas
         ..saveLayer(
           layerBounds,
-          _buildFilteredLayerPaint(opacity: opacity, imageFilter: shaderFilter),
+          _buildFilteredLayerPaint(
+            opacity: opacity,
+            imageFilter: shaderFilter,
+            blendMode: blendMode,
+          ),
         )
         ..drawPicture(scene)
         ..restore();
@@ -207,6 +242,7 @@ class FilterSegmentRenderer {
       data,
       minSigma: 4,
       maxSigma: 24,
+      blendMode: blendMode,
     );
   }
 
@@ -218,6 +254,7 @@ class FilterSegmentRenderer {
     FilterData data, {
     double minSigma = 0.5,
     double maxSigma = 12,
+    BlendMode blendMode = BlendMode.srcOver,
   }) {
     final sigma = _mapStrength(
       strength: data.strength,
@@ -232,7 +269,7 @@ class FilterSegmentRenderer {
       sigmaY: sigma,
       shaderSupported: FilterShaderManager.instance.isShaderFilterSupported,
     );
-    final imageFilter = _filterCache.putIfAbsent(
+    final imageFilter = _filterCache.getOrCreate(
       cacheKey,
       () => ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
     );
@@ -241,7 +278,11 @@ class FilterSegmentRenderer {
     canvas
       ..saveLayer(
         layerBounds,
-        _buildFilteredLayerPaint(opacity: opacity, imageFilter: imageFilter),
+        _buildFilteredLayerPaint(
+          opacity: opacity,
+          imageFilter: imageFilter,
+          blendMode: blendMode,
+        ),
       )
       ..drawPicture(scene)
       ..restore();
@@ -253,6 +294,9 @@ class FilterSegmentRenderer {
     List<double> matrix,
     Rect layerBounds,
     double opacity,
+    {
+    BlendMode blendMode = BlendMode.srcOver,
+  }
   ) {
     _diagnostics.markSaveLayer();
     canvas
@@ -261,6 +305,7 @@ class FilterSegmentRenderer {
         _buildFilteredLayerPaint(
           opacity: opacity,
           colorFilter: ColorFilter.matrix(matrix),
+          blendMode: blendMode,
         ),
       )
       ..drawPicture(scene)
@@ -271,6 +316,7 @@ class FilterSegmentRenderer {
     required double opacity,
     ImageFilter? imageFilter,
     ColorFilter? colorFilter,
+    BlendMode blendMode = BlendMode.srcOver,
   }) {
     final paint = Paint();
     if (imageFilter != null) {
@@ -279,6 +325,7 @@ class FilterSegmentRenderer {
     if (colorFilter != null) {
       paint.colorFilter = colorFilter;
     }
+    paint.blendMode = blendMode;
     if (opacity < 1) {
       paint.color = Color.fromRGBO(255, 255, 255, opacity);
     }
