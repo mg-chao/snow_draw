@@ -23,6 +23,17 @@ class RectangleRenderer extends ElementTypeRenderer {
     maxEntries: 128,
   );
 
+  /// Reusable paints for CPU fallback rendering to reduce GC pressure.
+  static final _fillPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  static final _strokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  static final _dotPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+
   @override
   void render({
     required Canvas canvas,
@@ -140,11 +151,11 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     if (fillOpacity > 0) {
       if (data.fillStyle == FillStyle.solid) {
-        final paint = Paint()
-          ..style = PaintingStyle.fill
+        _fillPaint
           ..color = data.fillColor.withValues(alpha: fillOpacity)
-          ..isAntiAlias = true;
-        canvas.drawRRect(rRect, paint);
+          ..shader = null
+          ..colorFilter = null;
+        canvas.drawRRect(rRect, _fillPaint);
       } else {
         final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(
           0.5,
@@ -154,8 +165,8 @@ class RectangleRenderer extends ElementTypeRenderer {
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         const lineAngle = -math.pi / 4;
         const crossLineAngle = math.pi / 4;
-        final fillPaint = Paint()
-          ..style = PaintingStyle.fill
+        _fillPaint
+          ..color = data.fillColor.withValues(alpha: fillOpacity)
           ..shader = _lineShaderCache.getOrCreate(
             _LineShaderKey(
               spacing: spacing,
@@ -171,11 +182,10 @@ class RectangleRenderer extends ElementTypeRenderer {
           ..colorFilter = ColorFilter.mode(
             data.fillColor.withValues(alpha: fillOpacity),
             BlendMode.modulate,
-          )
-          ..isAntiAlias = true;
-        canvas.drawRRect(rRect, fillPaint);
+          );
+        canvas.drawRRect(rRect, _fillPaint);
         if (data.fillStyle == FillStyle.crossLine) {
-          fillPaint.shader = _lineShaderCache.getOrCreate(
+          _fillPaint.shader = _lineShaderCache.getOrCreate(
             _LineShaderKey(
               spacing: spacing,
               lineWidth: fillLineWidth,
@@ -187,20 +197,19 @@ class RectangleRenderer extends ElementTypeRenderer {
               angle: crossLineAngle,
             ),
           );
-          canvas.drawRRect(rRect, fillPaint);
+          canvas.drawRRect(rRect, _fillPaint);
         }
       }
     }
 
     if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      final strokePaint = Paint()
-        ..style = PaintingStyle.stroke
+      _strokePaint
         ..strokeWidth = data.strokeWidth
         ..color = data.color.withValues(alpha: strokeOpacity)
-        ..isAntiAlias = true;
+        ..strokeCap = StrokeCap.butt;
 
       if (data.strokeStyle == StrokeStyle.solid) {
-        canvas.drawRRect(rRect, strokePaint);
+        canvas.drawRRect(rRect, _strokePaint);
       } else {
         if (data.strokeStyle == StrokeStyle.dashed) {
           // Dash pattern proportional to stroke width
@@ -222,14 +231,11 @@ class RectangleRenderer extends ElementTypeRenderer {
               gapLength,
             ),
           );
-          strokePaint.strokeCap = StrokeCap.round;
-          canvas.drawPath(dashedPath, strokePaint);
+          _strokePaint.strokeCap = StrokeCap.round;
+          canvas.drawPath(dashedPath, _strokePaint);
         } else {
           // Dot pattern proportional to stroke width
-          final dotPaint = Paint()
-            ..style = PaintingStyle.fill
-            ..color = strokePaint.color
-            ..isAntiAlias = true;
+          _dotPaint.color = _strokePaint.color;
           final dotSpacing = data.strokeWidth * 2.0;
           final dotRadius = data.strokeWidth * 0.5;
           final key = _StrokePathKey(
@@ -248,7 +254,7 @@ class RectangleRenderer extends ElementTypeRenderer {
               dotRadius,
             ),
           );
-          canvas.drawPath(dottedPath, dotPaint);
+          canvas.drawPath(dottedPath, _dotPaint);
         }
       }
     }

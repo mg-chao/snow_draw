@@ -115,7 +115,7 @@ void main() {
         rotation: 0,
         opacity: 1,
         zIndex: 0,
-        data: FilterData(type: CanvasFilterType.mosaic),
+        data: FilterData(),
       ),
       ElementState(
         id: 'f2',

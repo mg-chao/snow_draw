@@ -11,16 +11,22 @@ import '../../draw/types/element_style.dart';
 /// using the shader. The shader renders the entire rectangle (fill + stroke
 /// with all patterns) in a single GPU draw call.
 ///
-/// A new shader instance is created for each paint call to ensure correct
-/// rendering when multiple rectangles are drawn in the same frame.
+/// A single [ui.FragmentShader] and [Paint] instance are reused across
+/// draw calls to avoid per-rectangle allocations. This is safe because
+/// `setFloat` overwrites uniforms in place and `Canvas.drawRect` consumes
+/// the shader state at call time.
 class RectangleShaderManager {
   RectangleShaderManager._();
 
   static final instance = RectangleShaderManager._();
 
   ui.FragmentProgram? _program;
+  ui.FragmentShader? _shader;
   var _isLoading = false;
   var _loadFailed = false;
+
+  /// Reusable paint for shader draw calls.
+  final _paint = Paint();
 
   /// Whether the shader is ready to use.
   bool get isReady => _program != null;
@@ -39,9 +45,11 @@ class RectangleShaderManager {
 
     _isLoading = true;
     try {
-      _program = await ui.FragmentProgram.fromAsset(
+      final program = await ui.FragmentProgram.fromAsset(
         'packages/snow_draw_core/shaders/rectangle.frag',
       );
+      _program = program;
+      _shader = program.fragmentShader();
     } on Exception catch (e) {
       _loadFailed = true;
       debugPrint('Failed to load rectangle shader: $e');
@@ -73,13 +81,13 @@ class RectangleShaderManager {
     required double dotRadius,
     required double aaWidth,
   }) {
-    if (_program == null) {
+    final shader = _shader;
+    if (shader == null) {
       return false;
     }
 
-    // Create a new shader instance for each rectangle to ensure correct
-    // rendering when multiple rectangles are drawn in the same frame.
-    final shader = _program!.fragmentShader();
+    // Reuse the cached shader instance — setFloat overwrites uniforms
+    // in place and Canvas.drawRect snapshots the state at call time.
     var idx = 0;
 
     // uResolution (vec2)
@@ -96,7 +104,7 @@ class RectangleShaderManager {
       // uFillStyle (float, interpreted as int in shader)
       ..setFloat(idx++, fillStyle.index.toDouble());
 
-    // uFillColor (vec4) - premultiplied alpha
+    // uFillColor (vec4) — premultiplied alpha
     final fillAlpha = fillColor.a;
     shader
       ..setFloat(idx++, fillColor.r * fillAlpha)
@@ -110,7 +118,7 @@ class RectangleShaderManager {
       // uStrokeStyle (float, interpreted as int in shader)
       ..setFloat(idx++, strokeStyle.index.toDouble());
 
-    // uStrokeColor (vec4) - premultiplied alpha
+    // uStrokeColor (vec4) — premultiplied alpha
     final strokeAlpha = strokeColor.a;
     shader
       ..setFloat(idx++, strokeColor.r * strokeAlpha)
@@ -130,13 +138,13 @@ class RectangleShaderManager {
       // uAAWidth (float)
       ..setFloat(idx++, aaWidth);
 
-    // Draw shader as a rect covering the rotated bounding box
-    final paint = Paint()..shader = shader;
+    // Reuse paint — just swap the shader reference.
+    _paint.shader = shader;
 
-    // Calculate tight bounding box for rotated rectangle
+    // Calculate tight bounding box for rotated rectangle.
     // For rotation angle θ, the bounding box dimensions are:
-    // width = |w*cos(θ)| + |h*sin(θ)|
-    // height = |w*sin(θ)| + |h*cos(θ)|
+    // width = |w·cos(θ)| + |h·sin(θ)|
+    // height = |w·sin(θ)| + |h·cos(θ)|
     final cosR = math.cos(rotation).abs();
     final sinR = math.sin(rotation).abs();
     final rotatedWidth = size.width * cosR + size.height * sinR;
@@ -148,12 +156,14 @@ class RectangleShaderManager {
       height: rotatedHeight + padding,
     );
 
-    canvas.drawRect(boundingRect, paint);
+    canvas.drawRect(boundingRect, _paint);
     return true;
   }
 
   /// Disposes of the shader resources.
   void dispose() {
+    _shader?.dispose();
+    _shader = null;
     _program = null;
   }
 }

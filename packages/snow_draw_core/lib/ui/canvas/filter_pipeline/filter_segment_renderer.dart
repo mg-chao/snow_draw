@@ -97,7 +97,7 @@ class FilterSegmentRenderer {
     final pending = <Picture>[];
 
     Picture flattenPending() {
-      assert(pending.isNotEmpty);
+      assert(pending.isNotEmpty, 'pending must not be empty');
       if (pending.length == 1) {
         return pending.removeAt(0);
       }
@@ -317,7 +317,7 @@ class FilterSegmentRenderer {
         scene: scene,
         data: data,
         layerBounds: layerBounds,
-        opacity: 1.0,
+        opacity: 1,
         blendMode: BlendMode.src,
       );
       canvas.restore();
@@ -704,7 +704,7 @@ const _inversionMatrix = <double>[
 ];
 
 /// Pre-built grayscale [ColorFilter] to avoid per-frame allocation.
-final ColorFilter _grayscaleColorFilter = ColorFilter.matrix(_grayscaleMatrix);
+const _grayscaleColorFilter = ColorFilter.matrix(_grayscaleMatrix);
 
 /// Pre-built inversion [ColorFilter] to avoid per-frame allocation.
-final ColorFilter _inversionColorFilter = ColorFilter.matrix(_inversionMatrix);
+const _inversionColorFilter = ColorFilter.matrix(_inversionMatrix);
