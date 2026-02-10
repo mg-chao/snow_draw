@@ -53,13 +53,15 @@ class ArrowRenderer extends ElementTypeRenderer {
       ..isAntiAlias = true;
 
     if (data.strokeStyle == StrokeStyle.dotted) {
-      final dottedPath = cached.dottedShaftPath;
-      if (dottedPath != null) {
+      final dotPositions = cached.dotPositions;
+      if (dotPositions != null && dotPositions.isNotEmpty) {
         final dotPaint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = strokePaint.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cached.dotRadius * 2
+          ..strokeCap = StrokeCap.round
+          ..color = data.color.withValues(alpha: strokeOpacity)
           ..isAntiAlias = true;
-        canvas.drawPath(dottedPath, dotPaint);
+        canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
       }
 
       for (final arrowheadPath in cached.arrowheadPaths) {

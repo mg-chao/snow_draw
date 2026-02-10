@@ -634,7 +634,7 @@ class ArrowGeometry {
   }
 
   static double _approximateCubicLength(_CubicSegment segment) {
-    const steps = 5;
+    const steps = 8;
     var length = 0.0;
     var previous = segment.start;
     for (var i = 1; i <= steps; i++) {
