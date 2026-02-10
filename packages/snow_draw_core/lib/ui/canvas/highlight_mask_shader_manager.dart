@@ -14,19 +14,25 @@ final ModuleLogger _log = LogService.fallback.render;
 
 /// Maximum highlights the shader can process in a single pass.
 ///
-/// Limited by the uniform array size (9 floats per highlight).
+/// Limited by the uniform array size (3 vec4s per highlight).
 const highlightMaskShaderLimit = 32;
 
-/// Number of uniform floats per highlight.
-///
-/// Layout: centerX, centerY, halfWidth, halfHeight, cosRot, sinRot,
-///         inflateX, inflateY, shape.
-const _floatsPerHighlight = 9;
+/// Number of floats per vec4 uniform.
+const _vec4Floats = 4;
 
-/// Number of header uniforms before the highlight array.
+/// Number of header uniforms before the highlight arrays.
 ///
 /// uResolution (2) + uMaskColor (4) + uHighlightCount (1) + uBounds (4).
 const _headerFloats = 11;
+
+/// Offset where uHiA[32] starts (right after the header).
+const _hiAOffset = _headerFloats;
+
+/// Offset where uHiB[32] starts (after uHiA).
+const _hiBOffset = _hiAOffset + highlightMaskShaderLimit * _vec4Floats;
+
+/// Offset where uHiC[32] starts (after uHiB).
+const _hiCOffset = _hiBOffset + highlightMaskShaderLimit * _vec4Floats;
 
 /// GPU-accelerated highlight mask rendering.
 ///
@@ -164,28 +170,59 @@ class HighlightMaskShaderManager {
         ..setFloat(idx++, bMaxY);
     }
 
-    // Pack each visible highlight into 9 floats.
-    for (final h in visible) {
+    // Pack each visible highlight into three vec4 arrays.
+    //
+    // The shader uses vec4 arrays (uHiA, uHiB, uHiC) indexed by the
+    // loop counter directly, which SkSL accepts as a constant-index-
+    // expression.  The previous float[288] layout used `i * 9 + n`
+    // which SkSL rejected.
+    for (var i = 0; i < visible.length; i++) {
+      final h = visible[i];
+      final aBase = _hiAOffset + i * _vec4Floats;
       shader
-        ..setFloat(idx++, h.cx)
-        ..setFloat(idx++, h.cy)
-        ..setFloat(idx++, h.hw)
-        ..setFloat(idx++, h.hh)
-        ..setFloat(idx++, h.cosR)
-        ..setFloat(idx++, h.sinR)
-        ..setFloat(idx++, h.inflateX)
-        ..setFloat(idx++, h.inflateY)
-        ..setFloat(idx++, h.shape);
+        ..setFloat(aBase, h.cx)
+        ..setFloat(aBase + 1, h.cy)
+        ..setFloat(aBase + 2, h.hw)
+        ..setFloat(aBase + 3, h.hh);
+
+      final bBase = _hiBOffset + i * _vec4Floats;
+      shader
+        ..setFloat(bBase, h.cosR)
+        ..setFloat(bBase + 1, h.sinR)
+        ..setFloat(bBase + 2, h.inflateX)
+        ..setFloat(bBase + 3, h.inflateY);
+
+      final cBase = _hiCOffset + i * _vec4Floats;
+      shader
+        ..setFloat(cBase, h.shape)
+        ..setFloat(cBase + 1, 0)
+        ..setFloat(cBase + 2, 0)
+        ..setFloat(cBase + 3, 0);
     }
 
     // Zero-fill remaining slots so the shader reads deterministic
     // values (avoids undefined behaviour on some GPU drivers).
-    final totalFloats =
-        _headerFloats + visible.length * _floatsPerHighlight;
-    const maxFloats =
-        _headerFloats + highlightMaskShaderLimit * _floatsPerHighlight;
-    for (var i = totalFloats; i < maxFloats; i++) {
-      shader.setFloat(i, 0);
+    for (var i = visible.length; i < highlightMaskShaderLimit; i++) {
+      final aBase = _hiAOffset + i * _vec4Floats;
+      shader
+        ..setFloat(aBase, 0)
+        ..setFloat(aBase + 1, 0)
+        ..setFloat(aBase + 2, 0)
+        ..setFloat(aBase + 3, 0);
+
+      final bBase = _hiBOffset + i * _vec4Floats;
+      shader
+        ..setFloat(bBase, 0)
+        ..setFloat(bBase + 1, 0)
+        ..setFloat(bBase + 2, 0)
+        ..setFloat(bBase + 3, 0);
+
+      final cBase = _hiCOffset + i * _vec4Floats;
+      shader
+        ..setFloat(cBase, 0)
+        ..setFloat(cBase + 1, 0)
+        ..setFloat(cBase + 2, 0)
+        ..setFloat(cBase + 3, 0);
     }
 
     final paint = Paint()..shader = shader;

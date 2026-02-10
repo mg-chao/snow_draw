@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/element_state.dart';
@@ -16,7 +17,8 @@ class ArrowVisualCacheEntry {
     required this.shaftPath,
     required this.arrowheadPaths,
     required this.combinedStrokePath,
-    required this.dottedShaftPath,
+    this.dotPositions,
+    this.dotRadius = 0,
     List<PathMetric>? pathMetrics,
   }) : _pathMetrics = pathMetrics;
 
@@ -27,7 +29,17 @@ class ArrowVisualCacheEntry {
   final Path shaftPath;
   final List<Path> arrowheadPaths;
   final Path? combinedStrokePath;
-  final Path? dottedShaftPath;
+
+  /// Pre-computed dot center positions for dotted strokes.
+  ///
+  /// Stored as a flat [Float32List] of (x, y) pairs for use with
+  /// [Canvas.drawRawPoints], which batches all dots into a single GPU
+  /// draw call instead of tessellating individual ovals.
+  final Float32List? dotPositions;
+
+  /// Radius of each dot for dotted strokes.
+  final double dotRadius;
+
   List<PathMetric>? _pathMetrics;
 
   bool matches(ArrowLikeData data, double width, double height) =>
@@ -83,7 +95,6 @@ class ArrowVisualCache {
         shaftPath: Path(),
         arrowheadPaths: const [],
         combinedStrokePath: null,
-        dottedShaftPath: null,
       );
     }
 
@@ -101,7 +112,8 @@ class ArrowVisualCache {
     final arrowheadPaths = _buildArrowheadPaths(geometry);
 
     Path? combinedStrokePath;
-    Path? dottedShaftPath;
+    Float32List? dotPositions;
+    double dotRadius = 0;
     List<PathMetric>? pathMetrics;
 
     if (data.strokeWidth > 0) {
@@ -121,12 +133,11 @@ class ArrowVisualCache {
           combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
         case StrokeStyle.dotted:
           final dotSpacing = data.strokeWidth * 2.0;
-          final dotRadius = data.strokeWidth * 0.5;
+          dotRadius = data.strokeWidth * 0.5;
           pathMetrics = shaftPath.computeMetrics().toList(growable: false);
-          dottedShaftPath = _buildDottedPath(
+          dotPositions = _buildDotPositions(
             shaftPath,
             dotSpacing,
-            dotRadius,
             metrics: pathMetrics,
           );
       }
@@ -140,7 +151,8 @@ class ArrowVisualCache {
       shaftPath: shaftPath,
       arrowheadPaths: arrowheadPaths,
       combinedStrokePath: combinedStrokePath,
-      dottedShaftPath: dottedShaftPath,
+      dotPositions: dotPositions,
+      dotRadius: dotRadius,
       pathMetrics: pathMetrics,
     );
   }
@@ -208,28 +220,49 @@ class ArrowVisualCache {
     return dashed;
   }
 
-  Path _buildDottedPath(
+  /// Builds a [Float32List] of dot center positions along the path.
+  ///
+  /// Returns (x, y) pairs suitable for [Canvas.drawRawPoints], which
+  /// batches all dots into a single GPU draw call. This replaces the
+  /// previous approach of adding individual ovals to a [Path], which
+  /// required Impeller to tessellate each oval separately.
+  Float32List _buildDotPositions(
     Path basePath,
-    double dotSpacing,
-    double dotRadius, {
+    double dotSpacing, {
     List<PathMetric>? metrics,
   }) {
-    final dotted = Path();
     final resolved =
         metrics ?? basePath.computeMetrics().toList(growable: false);
+
+    // Count dots first to pre-allocate the Float32List.
+    var dotCount = 0;
+    for (final metric in resolved) {
+      if (metric.length <= 0) {
+        continue;
+      }
+      // Number of dots: floor(length / spacing) + 1 for the start.
+      dotCount += (metric.length / dotSpacing).floor() + 1;
+    }
+
+    final positions = Float32List(dotCount * 2);
+    var idx = 0;
     for (final metric in resolved) {
       var distance = 0.0;
       while (distance < metric.length) {
         final tangent = metric.getTangentForOffset(distance);
         if (tangent != null) {
-          dotted.addOval(
-            Rect.fromCircle(center: tangent.position, radius: dotRadius),
-          );
+          positions[idx++] = tangent.position.dx;
+          positions[idx++] = tangent.position.dy;
         }
         distance += dotSpacing;
       }
     }
-    return dotted;
+
+    // Trim if we over-estimated (e.g. getTangentForOffset returned null).
+    if (idx < positions.length) {
+      return Float32List.sublistView(positions, 0, idx);
+    }
+    return positions;
   }
 }
 
