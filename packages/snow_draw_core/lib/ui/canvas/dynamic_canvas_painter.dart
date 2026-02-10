@@ -104,10 +104,7 @@ class DynamicCanvasPainter extends CustomPainter {
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
         scaleFactor: scale,
-        cameraPosition: Offset(
-          camera.position.x,
-          camera.position.y,
-        ),
+        cameraPosition: Offset(camera.position.x, camera.position.y),
       );
     }
 
@@ -699,9 +696,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     // Get text boxes for each line
     final text = data.text.isEmpty ? ' ' : data.text;
-    final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
-    final textBoxes = layout.painter.getBoxesForSelection(
-      selection,
+    final textBoxes = layout.paragraph.getBoxesForRange(
+      0,
+      text.length,
       boxHeightStyle: BoxHeightStyle.strut,
     );
 
@@ -754,6 +751,26 @@ class DynamicCanvasPainter extends CustomPainter {
     required ElementState element,
     required double scale,
   }) {
+    _drawFreeDrawOutline(
+      canvas: canvas,
+      element: element,
+      scale: scale,
+      color: renderKey.hoverSelectionConfig.render.strokeColor,
+    );
+  }
+
+  /// Draws a 1px free-draw outline that follows the actual
+  /// rendered stroke shape.
+  ///
+  /// For solid strokes the outline traces the variable-width
+  /// boundary (pressure, taper, etc.). For dashed/dotted or very
+  /// short strokes it falls back to the smooth center-line.
+  void _drawFreeDrawOutline({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+    required Color color,
+  }) {
     final data = element.data;
     if (data is! FreeDrawData) {
       return;
@@ -768,14 +785,17 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final path = buildFreeDrawSmoothPath(localPoints);
     final effectiveScale = scale == 0 ? 1.0 : scale;
+
+    // Always use the smooth center-line path for the outline.
+    final path = buildFreeDrawSmoothPath(localPoints);
+
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0 / effectiveScale
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = renderKey.hoverSelectionConfig.render.strokeColor
+      ..color = color
       ..isAntiAlias = true;
 
     canvas.save();
@@ -1276,41 +1296,12 @@ class DynamicCanvasPainter extends CustomPainter {
     required ElementState element,
     required double scale,
   }) {
-    final data = element.data;
-    if (data is! FreeDrawData) {
-      return;
-    }
-
-    final rect = element.rect;
-    final localPoints = resolveFreeDrawLocalPoints(
-      rect: rect,
-      points: data.points,
+    _drawFreeDrawOutline(
+      canvas: canvas,
+      element: element,
+      scale: scale,
+      color: renderKey.selectionConfig.render.strokeColor,
     );
-    if (localPoints.length < 2) {
-      return;
-    }
-
-    final path = buildFreeDrawSmoothPath(localPoints);
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0 / effectiveScale
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = renderKey.selectionConfig.render.strokeColor
-      ..isAntiAlias = true;
-
-    canvas.save();
-    if (element.rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(element.rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
-    canvas
-      ..translate(rect.minX, rect.minY)
-      ..drawPath(path, strokePaint)
-      ..restore();
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

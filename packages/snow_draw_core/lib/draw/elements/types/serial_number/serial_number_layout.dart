@@ -11,6 +11,7 @@ import 'serial_number_data.dart';
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
 const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
 const _serialNumberPaddingFactor = 0.26;
+const _textLayoutCacheMaxEntries = 64;
 
 @immutable
 class SerialNumberTextLayout {
@@ -27,17 +28,104 @@ class SerialNumberTextLayout {
   final Rect? visualBounds;
 }
 
+/// Cache key for text layout results.
+///
+/// Only includes fields that affect text shaping and metrics — color is
+/// excluded because it does not change layout geometry.
+@immutable
+class _TextLayoutKey {
+  const _TextLayoutKey({
+    required this.number,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.locale,
+  });
+
+  final int number;
+  final double fontSize;
+  final String? fontFamily;
+  final Locale? locale;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TextLayoutKey &&
+          other.number == number &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.locale == locale;
+
+  @override
+  int get hashCode => Object.hash(number, fontSize, fontFamily, locale);
+}
+
+/// LRU cache for [SerialNumberTextLayout] results.
+///
+/// Avoids repeated [TextPainter.layout] calls for serial numbers whose
+/// text-shaping inputs (number, fontSize, fontFamily, locale) have not
+/// changed. Color is applied as a post-layout override so it does not
+/// participate in the cache key.
+final _textLayoutCache = _LruCache<_TextLayoutKey, SerialNumberTextLayout>(
+  maxEntries: _textLayoutCacheMaxEntries,
+);
+
 SerialNumberTextLayout layoutSerialNumberText({
   required SerialNumberData data,
   Color? colorOverride,
   Locale? locale,
 }) {
+  final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
+  final key = _TextLayoutKey(
+    number: data.number,
+    fontSize: data.fontSize,
+    fontFamily: sanitizedFamily,
+    locale: locale,
+  );
+
+  final color = colorOverride ?? data.color;
+
+  // Try the cache first. If the layout geometry is cached we only need
+  // to rebuild the TextPainter when the requested color differs, which
+  // is cheap compared to a full layout pass.
+  final cached = _textLayoutCache.get(key);
+  if (cached != null) {
+    final cachedColor = cached.painter.text?.style?.color;
+    if (cachedColor == color) {
+      return cached;
+    }
+    // Geometry matches — rebuild painter with the new color only.
+    final layout = _buildLayout(
+      data: data,
+      color: color,
+      sanitizedFamily: sanitizedFamily,
+      locale: locale,
+    );
+    // Don't evict the geometry entry; just return the recolored result.
+    return layout;
+  }
+
+  final layout = _buildLayout(
+    data: data,
+    color: color,
+    sanitizedFamily: sanitizedFamily,
+    locale: locale,
+  );
+  _textLayoutCache.put(key, layout);
+  return layout;
+}
+
+SerialNumberTextLayout _buildLayout({
+  required SerialNumberData data,
+  required Color color,
+  required String? sanitizedFamily,
+  Locale? locale,
+}) {
   final text = data.number.toString();
   final style = TextStyle(
     inherit: false,
-    color: colorOverride ?? data.color,
+    color: color,
     fontSize: data.fontSize,
-    fontFamily: _sanitizeFontFamily(data.fontFamily),
+    fontFamily: sanitizedFamily,
     locale: locale,
     textBaseline: TextBaseline.alphabetic,
   );
@@ -139,4 +227,27 @@ Rect? _resolveVisualBounds(TextPainter painter, String text) {
     bottom = math.max(bottom, box.bottom);
   }
   return Rect.fromLTRB(left, top, right, bottom);
+}
+
+class _LruCache<K, V> {
+  _LruCache({required this.maxEntries});
+
+  final int maxEntries;
+  final _cache = <K, V>{};
+
+  V? get(K key) {
+    final value = _cache.remove(key);
+    if (value != null) {
+      _cache[key] = value;
+    }
+    return value;
+  }
+
+  void put(K key, V value) {
+    _cache.remove(key);
+    _cache[key] = value;
+    if (_cache.length > maxEntries) {
+      _cache.remove(_cache.keys.first);
+    }
+  }
 }

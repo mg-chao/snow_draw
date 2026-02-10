@@ -660,9 +660,7 @@ bool _segmentIntersectsAnyBounds(
   DrawPoint end,
   List<DrawRect> obstacles,
 ) =>
-    obstacles.any(
-      (obstacle) => _segmentIntersectsBounds(start, end, obstacle),
-    );
+    obstacles.any((obstacle) => _segmentIntersectsBounds(start, end, obstacle));
 
 @immutable
 final class _RouteSegment {

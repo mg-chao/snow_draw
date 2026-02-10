@@ -26,13 +26,13 @@ const _vec4Floats = 4;
 const _headerFloats = 11;
 
 /// Offset where uHiA[32] starts (right after the header).
-const _hiAOffset = _headerFloats;
+const int _hiAOffset = _headerFloats;
 
 /// Offset where uHiB[32] starts (after uHiA).
-const _hiBOffset = _hiAOffset + highlightMaskShaderLimit * _vec4Floats;
+const int _hiBOffset = _hiAOffset + highlightMaskShaderLimit * _vec4Floats;
 
 /// Offset where uHiC[32] starts (after uHiB).
-const _hiCOffset = _hiBOffset + highlightMaskShaderLimit * _vec4Floats;
+const int _hiCOffset = _hiBOffset + highlightMaskShaderLimit * _vec4Floats;
 
 /// GPU-accelerated highlight mask rendering.
 ///

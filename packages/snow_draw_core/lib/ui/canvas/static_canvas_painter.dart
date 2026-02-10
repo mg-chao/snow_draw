@@ -166,10 +166,7 @@ class StaticCanvasPainter extends CustomPainter {
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
         scaleFactor: scale,
-        cameraPosition: Offset(
-          camera.position.x,
-          camera.position.y,
-        ),
+        cameraPosition: Offset(camera.position.x, camera.position.y),
       );
     }
 

@@ -93,7 +93,15 @@ final class FreeDrawData extends ElementData
   @override
   Map<String, dynamic> toJson() => {
     'typeId': typeId.value,
-    'points': points.map((point) => {'x': point.x, 'y': point.y}).toList(),
+    'points': points
+        .map(
+          (point) => {
+            'x': point.x,
+            'y': point.y,
+            if (point.hasPressure) 'p': point.pressure,
+          },
+        )
+        .toList(),
     'color': color.toARGB32(),
     'fillColor': fillColor.toARGB32(),
     'strokeWidth': strokeWidth,
@@ -108,8 +116,9 @@ final class FreeDrawData extends ElementData
         if (entry is Map) {
           final x = (entry['x'] as num?)?.toDouble();
           final y = (entry['y'] as num?)?.toDouble();
+          final p = (entry['p'] as num?)?.toDouble() ?? 0.0;
           if (x != null && y != null) {
-            points.add(DrawPoint(x: x, y: y));
+            points.add(DrawPoint(x: x, y: y, pressure: p));
           }
         }
       }

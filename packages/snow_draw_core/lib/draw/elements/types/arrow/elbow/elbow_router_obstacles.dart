@@ -89,18 +89,14 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
         start: startObstacle.copyWith(
           maxX: math.min(startObstacle.maxX, clamped),
         ),
-        end: endObstacle.copyWith(
-          minX: math.max(endObstacle.minX, clamped),
-        ),
+        end: endObstacle.copyWith(minX: math.max(endObstacle.minX, clamped)),
       );
     }
     return (
       start: startObstacle.copyWith(
         minX: math.max(startObstacle.minX, clamped),
       ),
-      end: endObstacle.copyWith(
-        maxX: math.min(endObstacle.maxX, clamped),
-      ),
+      end: endObstacle.copyWith(maxX: math.min(endObstacle.maxX, clamped)),
     );
   }
 
@@ -109,18 +105,12 @@ bool _boundsOverlap(DrawRect a, DrawRect b) =>
       start: startObstacle.copyWith(
         maxY: math.min(startObstacle.maxY, clamped),
       ),
-      end: endObstacle.copyWith(
-        minY: math.max(endObstacle.minY, clamped),
-      ),
+      end: endObstacle.copyWith(minY: math.max(endObstacle.minY, clamped)),
     );
   }
   return (
-    start: startObstacle.copyWith(
-      minY: math.max(startObstacle.minY, clamped),
-    ),
-    end: endObstacle.copyWith(
-      maxY: math.min(endObstacle.maxY, clamped),
-    ),
+    start: startObstacle.copyWith(minY: math.max(startObstacle.minY, clamped)),
+    end: endObstacle.copyWith(maxY: math.min(endObstacle.maxY, clamped)),
   );
 }
 

@@ -13,9 +13,23 @@ import '../arrow/arrow_geometry.dart';
 import 'free_draw_data.dart';
 
 /// Creation strategy for freehand drawing.
+///
+/// Applies real-time exponential smoothing and minimum-distance
+/// filtering during drawing. Straight-line segments are only
+/// created when the user holds Shift.
 @immutable
 class FreeDrawCreationStrategy extends CreationStrategy {
   const FreeDrawCreationStrategy();
+
+  /// Minimum squared distance between consecutive points (world
+  /// units). Points closer than this are discarded to reduce noise.
+  static const _minDistanceSq = 2;
+
+  /// Exponential smoothing factor (0 = no smoothing, 1 = no change).
+  ///
+  /// A lower value lets more of the natural hand movement through,
+  /// preventing slow strokes from appearing artificially straight.
+  static const _smoothingAlpha = 0.2;
 
   @override
   CreationUpdateResult start({
@@ -60,7 +74,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
   }) {
     if (state.application.isCreating) {
-      // Free draw ignores state-derived modifiers during creation updates.
+      // Free draw ignores state-derived modifiers during creation
+      // updates.
     }
     if (createFromCenter) {
       // Free draw ignores createFromCenter.
@@ -102,7 +117,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         );
       }
     } else {
-      nextPoints = _appendFreeDrawPoint(
+      nextPoints = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
       );
@@ -179,6 +194,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   }
 }
 
+// ============================================================
+// Private helpers
+// ============================================================
+
 List<DrawPoint> _resolveWorldPoints({
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
@@ -187,9 +206,18 @@ List<DrawPoint> _resolveWorldPoints({
     rect: rect,
     normalizedPoints: normalizedPoints,
   );
-  return resolved
-      .map((point) => DrawPoint(x: point.dx, y: point.dy))
-      .toList(growable: false);
+  // Carry pressure through from the normalized points.
+  return List<DrawPoint>.generate(
+    resolved.length,
+    (i) => DrawPoint(
+      x: resolved[i].dx,
+      y: resolved[i].dy,
+      pressure: i < normalizedPoints.length
+          ? normalizedPoints[i].pressure
+          : 0.0,
+    ),
+    growable: false,
+  );
 }
 
 DrawRect _boundsFromPoints(List<DrawPoint> points) {
@@ -226,7 +254,7 @@ List<DrawPoint> _removeAdjacentDuplicates(List<DrawPoint> points) {
   }
   final filtered = <DrawPoint>[points.first];
   for (final point in points.skip(1)) {
-    if (point != filtered.last) {
+    if (point.x != filtered.last.x || point.y != filtered.last.y) {
       filtered.add(point);
     }
   }
@@ -242,12 +270,12 @@ List<DrawPoint> _closeIfNeeded(
   }
   final first = points.first;
   final last = points.last;
-  if (first == last) {
+  if (first.x == last.x && first.y == last.y) {
     return points;
   }
   if (first.distanceSquared(last) <= closeTolerance * closeTolerance) {
     final closed = List<DrawPoint>.from(points);
-    closed[closed.length - 1] = first;
+    closed[closed.length - 1] = first.copyWith(pressure: last.pressure);
     return closed;
   }
   return points;
@@ -267,18 +295,42 @@ double _pathLength(List<DrawPoint> points) {
 _FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
     mode is _FreeDrawCreationMode ? mode : const _FreeDrawCreationMode();
 
-List<DrawPoint> _appendFreeDrawPoint({
+/// Appends a new point with real-time exponential smoothing and
+/// minimum-distance filtering.
+List<DrawPoint> _appendSmoothedPoint({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
 }) {
-  final nextPoints = worldPoints.isEmpty
-      ? <DrawPoint>[currentPosition]
-      : List<DrawPoint>.from(worldPoints);
+  if (worldPoints.isEmpty) {
+    return <DrawPoint>[currentPosition];
+  }
+
+  final nextPoints = List<DrawPoint>.from(worldPoints);
   if (nextPoints.length == 1) {
     nextPoints.add(currentPosition);
-  } else if (nextPoints.last != currentPosition) {
-    nextPoints.add(currentPosition);
+    return nextPoints;
   }
+
+  final last = nextPoints.last;
+  final distSq = last.distanceSquared(currentPosition);
+
+  // Minimum distance filter: skip points that are too close.
+  if (distSq < FreeDrawCreationStrategy._minDistanceSq) {
+    // Still update the trailing point for responsiveness.
+    nextPoints[nextPoints.length - 1] = currentPosition;
+    return nextPoints;
+  }
+
+  // Exponential smoothing on position.
+  const alpha = FreeDrawCreationStrategy._smoothingAlpha;
+  final smoothed = DrawPoint(
+    x: last.x * alpha + currentPosition.x * (1 - alpha),
+    y: last.y * alpha + currentPosition.y * (1 - alpha),
+    pressure: currentPosition.pressure,
+    timestamp: currentPosition.timestamp,
+  );
+
+  nextPoints.add(smoothed);
   return nextPoints;
 }
 

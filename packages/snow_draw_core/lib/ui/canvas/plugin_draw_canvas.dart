@@ -128,6 +128,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
   TextLayoutMetrics? _editingTextLayout;
+  PainterTextLayoutMetrics? _editingPainterLayout;
   TextSelection? _lastVerticalSelection;
   double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
@@ -685,8 +686,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerDownInputEvent(
-          position: _transformPosition(event.localPosition),
+          position: _transformPosition(
+            event.localPosition,
+          ).copyWith(pressure: event.pressure),
           modifiers: _currentModifiers,
+          pressure: event.pressure,
         ),
       ),
     );
@@ -705,8 +709,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerMoveInputEvent(
-          position: _transformPosition(event.localPosition),
+          position: _transformPosition(
+            event.localPosition,
+          ).copyWith(pressure: event.pressure),
           modifiers: _currentModifiers,
+          pressure: event.pressure,
         ),
       ),
     );
@@ -2025,6 +2032,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final height = rect.height;
     if (layoutWidth <= 0 || height <= 0) {
       _editingTextLayout = null;
+      _editingPainterLayout = null;
       return null;
     }
     // RenderEditable subtracts a caret margin from maxWidth when laying out.
@@ -2049,6 +2057,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       locale: locale,
     );
     _editingTextLayout = layout;
+
+    // Painter-backed layout for caret navigation (getOffsetForCaret).
+    _editingPainterLayout = layoutTextWithPainter(
+      data: data,
+      maxWidth: layoutWidth,
+      minWidth: layoutWidth,
+      widthBasis: TextWidthBasis.parent,
+      locale: locale,
+    );
     final textHeight = layout.size.height;
     final verticalOffset = _resolveVerticalOffset(
       containerHeight: height,
@@ -2152,6 +2169,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _editingElementId = null;
     _initialSelectionApplied = false;
     _editingTextLayout = null;
+    _editingPainterLayout = null;
     _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
       _textFocusNode.unfocus();
@@ -2244,7 +2262,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double? pageOffset,
   }) {
     final controller = _textController;
-    final layout = _editingTextLayout;
+    final layout = _editingPainterLayout;
     if (controller == null || layout == null) {
       return;
     }
@@ -2373,7 +2391,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final localDx = localWorld.x - rect.minX;
     final localDy = localWorld.y - rect.minY;
     final offset = Offset(localDx, localDy - verticalOffset);
-    final position = layout.painter.getPositionForOffset(offset);
+    final position = layout.paragraph.getPositionForOffset(offset);
     final textLength = controller.text.length;
     var nextOffset = position.offset;
     if (nextOffset < 0) {

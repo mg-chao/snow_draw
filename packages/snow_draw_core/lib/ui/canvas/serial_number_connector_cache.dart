@@ -1,6 +1,9 @@
 import 'dart:ui';
 
-import '../../draw/elements/types/arrow/arrow_binding_resolver.dart' show ArrowBindingResolver;
+import 'package:meta/meta.dart';
+
+import '../../draw/elements/types/arrow/arrow_binding_resolver.dart'
+    show ArrowBindingResolver;
 import '../../draw/elements/types/serial_number/serial_number_binding.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_layout.dart';
@@ -22,6 +25,7 @@ class SerialNumberConnectorCache {
 
   var _cachedDocumentVersion = -1;
   Map<String, String> _bindingIndex = const {};
+  Map<String, Set<String>> _reverseBindingIndex = const {};
   Map<String, _CachedConnectorEntry> _connectorCache = const {};
 
   /// Resolves the connector map for rendering.
@@ -67,6 +71,7 @@ class SerialNumberConnectorCache {
   void invalidate() {
     _cachedDocumentVersion = -1;
     _bindingIndex = const {};
+    _reverseBindingIndex = const {};
     _connectorCache = const {};
   }
 
@@ -86,6 +91,7 @@ class SerialNumberConnectorCache {
 
   void _rebuildBindingIndex(DocumentState document) {
     final newIndex = <String, String>{};
+    final newReverse = <String, Set<String>>{};
     _connectorCache = {};
 
     for (final element in document.elements) {
@@ -103,9 +109,11 @@ class SerialNumberConnectorCache {
         continue;
       }
       newIndex[element.id] = textId;
+      (newReverse[textId] ??= <String>{}).add(element.id);
     }
 
     _bindingIndex = newIndex;
+    _reverseBindingIndex = newReverse;
   }
 
   Set<String> _resolveAffectedSerialIds({
@@ -121,14 +129,12 @@ class SerialNumberConnectorCache {
       // If the preview is a serial number with a binding, it's affected
       if (_bindingIndex.containsKey(previewId)) {
         affected.add(previewId);
-        continue;
       }
 
-      // If the preview is a text element bound to a serial number, find it
-      for (final entry in _bindingIndex.entries) {
-        if (entry.value == previewId) {
-          affected.add(entry.key);
-        }
+      // O(1) reverse lookup: text element → bound serial numbers
+      final boundSerials = _reverseBindingIndex[previewId];
+      if (boundSerials != null) {
+        affected.addAll(boundSerials);
       }
     }
 
@@ -223,19 +229,64 @@ class SerialNumberConnectorCache {
       return null;
     }
 
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = lineWidth
-      ..color = serialData.color.withValues(alpha: opacity)
-      ..strokeCap = StrokeCap.round
-      ..isAntiAlias = true;
+    final color = serialData.color.withValues(alpha: opacity);
+    final paint = _paintCache.getOrCreate(
+      _PaintKey(color: color, strokeWidth: lineWidth),
+      () => Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = lineWidth
+        ..color = color
+        ..strokeCap = StrokeCap.round
+        ..isAntiAlias = true,
+    );
 
     return SerialNumberTextConnector(connection: connection, paint: paint);
   }
+
+  static final _paintCache = _LruCache<_PaintKey, Paint>(maxEntries: 32);
 }
 
 class _CachedConnectorEntry {
   const _CachedConnectorEntry({required this.connector});
 
   final SerialNumberTextConnector connector;
+}
+
+@immutable
+class _PaintKey {
+  const _PaintKey({required this.color, required this.strokeWidth});
+
+  final Color color;
+  final double strokeWidth;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _PaintKey &&
+          other.color == color &&
+          other.strokeWidth == strokeWidth;
+
+  @override
+  int get hashCode => Object.hash(color, strokeWidth);
+}
+
+class _LruCache<K, V> {
+  _LruCache({required this.maxEntries});
+
+  final int maxEntries;
+  final _cache = <K, V>{};
+
+  V getOrCreate(K key, V Function() builder) {
+    final existing = _cache.remove(key);
+    if (existing != null) {
+      _cache[key] = existing;
+      return existing;
+    }
+    final value = builder();
+    _cache[key] = value;
+    if (_cache.length > maxEntries) {
+      _cache.remove(_cache.keys.first);
+    }
+    return value;
+  }
 }

@@ -103,28 +103,41 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     }
 
     if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      final strokePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = data.strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..color = data.color.withValues(alpha: strokeOpacity)
-        ..isAntiAlias = true;
+      final strokeColor = data.color.withValues(alpha: strokeOpacity);
 
       if (data.strokeStyle == StrokeStyle.dotted) {
         final dottedPath = cached.dottedPath;
         if (dottedPath != null) {
           final dotPaint = Paint()
             ..style = PaintingStyle.fill
-            ..color = strokePaint.color
+            ..color = strokeColor
             ..isAntiAlias = true;
           canvas.drawPath(dottedPath, dotPaint);
         }
-      } else {
-        final combinedPath = cached.strokePath;
-        if (combinedPath != null) {
-          canvas.drawPath(combinedPath, strokePaint);
+      } else if (data.strokeStyle == StrokeStyle.dashed) {
+        // Dashed strokes use the uniform-width path.
+        final dashedPath = cached.strokePath;
+        if (dashedPath != null) {
+          final strokePaint = Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = data.strokeWidth
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..color = strokeColor
+            ..isAntiAlias = true;
+          canvas.drawPath(dashedPath, strokePaint);
         }
+      } else {
+        // Solid stroke: uniform-width Catmull-Rom center-line
+        // with round caps and joins for a smooth, organic feel.
+        final strokePaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = data.strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = strokeColor
+          ..isAntiAlias = true;
+        canvas.drawPath(cached.path, strokePaint);
       }
     }
 
@@ -235,8 +248,14 @@ class _FreeDrawVisualCacheEntry {
   final double width;
   final double height;
   final int pointCount;
+
+  /// Smooth center-line path (for fill and stroke).
   final Path path;
+
+  /// Dashed stroke path (null when not dashed).
   final Path? strokePath;
+
+  /// Dotted stroke path (null when not dotted).
   final Path? dottedPath;
 
   bool matches(FreeDrawData data, double width, double height) =>

@@ -66,7 +66,11 @@ class ArrowGeometry {
       points.map((point) {
         final x = width == 0 ? 0.0 : (point.x - rect.minX) / width;
         final y = height == 0 ? 0.0 : (point.y - rect.minY) / height;
-        return DrawPoint(x: _clamp01(x), y: _clamp01(y));
+        return DrawPoint(
+          x: _clamp01(x),
+          y: _clamp01(y),
+          pressure: point.pressure,
+        );
       }),
     );
   }
