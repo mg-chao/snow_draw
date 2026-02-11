@@ -1,4 +1,4 @@
-part of 'elbow_editing.dart';
+﻿part of 'elbow_editing.dart';
 
 /// Internal state containers shared by the elbow edit pipeline and helpers.
 @immutable
@@ -324,7 +324,7 @@ final class _ElbowEditPipeline {
           mapped.fixedSegments.length == released.fixedSegments.length
           ? mapped
           : released;
-      final releaseCorners = ElbowPathUtils.cornerPoints(released.points);
+      final releaseCorners = ElbowGeometry.cornerPoints(released.points);
       final extraPinned = releaseCorners.length > 2
           ? releaseCorners.sublist(1, releaseCorners.length - 1).toSet()
           : const <DrawPoint>{};
@@ -398,4 +398,49 @@ ArrowBinding? _resolveBindingOverride({
     return override;
   }
   return fallback;
+}
+
+
+// ---------------------------------------------------------------------------
+// Geometry helpers (merged from elbow_edit_geometry.dart)
+// ---------------------------------------------------------------------------
+
+List<DrawPoint> _resolveLocalPoints(
+  ElementState element,
+  ArrowData data,
+) {
+  final resolved = ArrowGeometry.resolveWorldPoints(
+    rect: element.rect,
+    normalizedPoints: data.points,
+  );
+  return resolved
+      .map((point) => DrawPoint(x: point.dx, y: point.dy))
+      .toList(growable: false);
+}
+
+bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _pointsEqualExceptEndpoints(
+  List<DrawPoint> a,
+  List<DrawPoint> b,
+) {
+  if (a.length != b.length || a.length < 2) {
+    return false;
+  }
+  for (var i = 1; i < a.length - 1; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
 }

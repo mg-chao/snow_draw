@@ -1,4 +1,4 @@
-part of 'elbow_editing.dart';
+﻿part of 'elbow_editing.dart';
 
 /// Fixed-segment utilities for elbow editing.
 ///
@@ -64,11 +64,11 @@ List<ElbowFixedSegment> _reindexFixedSegments(
 }
 
 int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
-  final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final isHorizontal = ElbowGeometry.segmentIsHorizontal(
     segment.start,
     segment.end,
   );
-  final axis = ElbowPathUtils.axisValue(
+  final axis = ElbowGeometry.axisValue(
     segment.start,
     segment.end,
     axis: isHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical,
@@ -102,11 +102,11 @@ int? _selectSegmentIndex({
     if (usedIndices.contains(i)) {
       continue;
     }
-    if (ElbowPathUtils.segmentIsHorizontal(points[i - 1], points[i]) !=
+    if (ElbowGeometry.segmentIsHorizontal(points[i - 1], points[i]) !=
         isHorizontal) {
       continue;
     }
-    final candidateAxis = ElbowPathUtils.axisValue(
+    final candidateAxis = ElbowGeometry.axisValue(
       points[i - 1],
       points[i],
       axis: axis,
@@ -135,7 +135,7 @@ bool? _fixedSegmentIsHorizontal(
 ) {
   for (final segment in fixedSegments) {
     if (segment.index == index) {
-      return ElbowPathUtils.segmentIsHorizontal(segment.start, segment.end);
+      return ElbowGeometry.segmentIsHorizontal(segment.start, segment.end);
     }
   }
   return null;
@@ -149,11 +149,11 @@ bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
     if (a[i].index != b[i].index) {
       return false;
     }
-    final aHorizontal = ElbowPathUtils.segmentIsHorizontal(
+    final aHorizontal = ElbowGeometry.segmentIsHorizontal(
       a[i].start,
       a[i].end,
     );
-    final bHorizontal = ElbowPathUtils.segmentIsHorizontal(
+    final bHorizontal = ElbowGeometry.segmentIsHorizontal(
       b[i].start,
       b[i].end,
     );
@@ -161,8 +161,8 @@ bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
       return false;
     }
     final axis = aHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
-    final aAxis = ElbowPathUtils.axisValue(a[i].start, a[i].end, axis: axis);
-    final bAxis = ElbowPathUtils.axisValue(b[i].start, b[i].end, axis: axis);
+    final aAxis = ElbowGeometry.axisValue(a[i].start, a[i].end, axis: axis);
+    final bAxis = ElbowGeometry.axisValue(b[i].start, b[i].end, axis: axis);
     if ((aAxis - bAxis).abs() > ElbowConstants.dedupThreshold) {
       return false;
     }
@@ -185,7 +185,7 @@ List<DrawPoint> _applyFixedSegmentsToPoints(
     }
     final start = updated[index - 1];
     final end = updated[index];
-    final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+    final isHorizontal = ElbowGeometry.segmentIsHorizontal(
       segment.start,
       segment.end,
     );
@@ -247,12 +247,12 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
   for (final segment in fixedSegments) {
     final isActive =
         activeSegment != null && segment.index == activeSegment.index;
-    final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+    final isHorizontal = ElbowGeometry.segmentIsHorizontal(
       segment.start,
       segment.end,
     );
     final axisType = isHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
-    final axis = ElbowPathUtils.axisValue(
+    final axis = ElbowGeometry.axisValue(
       segment.start,
       segment.end,
       axis: axisType,
@@ -364,7 +364,7 @@ _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
   final a = updated[neighborIndex - 1];
   final b = updated[neighborIndex];
   final c = updated[neighborIndex + 1];
-  if (!ElbowPathUtils.segmentsCollinear(a, b, c)) {
+  if (!ElbowGeometry.segmentsCollinear(a, b, c)) {
     return _FixedSegmentPathResult(
       points: points,
       fixedSegments: fixedSegments,
@@ -435,7 +435,7 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
           final a = updatedPoints[aIndex];
           final b = updatedPoints[bIndex];
           final c = updatedPoints[cIndex];
-          if (ElbowPathUtils.segmentsCollinear(a, b, c)) {
+          if (ElbowGeometry.segmentsCollinear(a, b, c)) {
             final candidatePoints = List<DrawPoint>.from(updatedPoints)
               ..removeAt(bIndex);
             final candidateSegments = List<ElbowFixedSegment>.from(
@@ -470,7 +470,7 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
           final a = updatedPoints[aIndex];
           final b = updatedPoints[bIndex];
           final c = updatedPoints[cIndex];
-          if (ElbowPathUtils.segmentsCollinear(a, b, c)) {
+          if (ElbowGeometry.segmentsCollinear(a, b, c)) {
             final candidatePoints = List<DrawPoint>.from(updatedPoints)
               ..removeAt(bIndex);
             final candidateSegments = List<ElbowFixedSegment>.from(
@@ -575,10 +575,10 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
       final prev = updatedPoints[index - 1];
       final curr = updatedPoints[index];
       final next = updatedPoints[index + 1];
-      if (!ElbowPathUtils.segmentsCollinear(prev, curr, next)) {
+      if (!ElbowGeometry.segmentsCollinear(prev, curr, next)) {
         continue;
       }
-      final fixedHorizontal = ElbowPathUtils.segmentIsHorizontal(prev, curr);
+      final fixedHorizontal = ElbowGeometry.segmentIsHorizontal(prev, curr);
       final fixedDelta = fixedHorizontal
           ? (curr.x - prev.x)
           : (curr.y - prev.y);
@@ -595,12 +595,12 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
       final candidatePoints = List<DrawPoint>.from(updatedPoints)
         ..removeAt(index + 1);
 
-      if (!ElbowPathUtils.pointsAligned(curr, after)) {
+      if (!ElbowGeometry.pointsAligned(curr, after)) {
         final corner = fixedHorizontal
             ? DrawPoint(x: curr.x, y: after.y)
             : DrawPoint(x: after.x, y: curr.y);
-        if (!ElbowPathUtils.pointsClose(corner, curr) &&
-            !ElbowPathUtils.pointsClose(corner, after)) {
+        if (!ElbowGeometry.pointsClose(corner, curr) &&
+            !ElbowGeometry.pointsClose(corner, after)) {
           candidatePoints.insert(index + 1, corner);
         }
       }
@@ -686,7 +686,7 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   final prev = points[prevIndex];
   final mid = points[midIndex];
   final next = points[nextIndex];
-  if (!ElbowPathUtils.segmentsCollinear(prev, mid, next)) {
+  if (!ElbowGeometry.segmentsCollinear(prev, mid, next)) {
     return _FixedSegmentPathResult(
       points: points,
       fixedSegments: fixedSegments,
@@ -694,8 +694,8 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   }
 
   final axis =
-      ElbowPathUtils.axisAlignedForSegment(prev, mid) ??
-      ElbowPathUtils.axisAlignedForSegment(mid, next);
+      ElbowGeometry.axisAlignedForSegment(prev, mid) ??
+      ElbowGeometry.axisAlignedForSegment(mid, next);
   if (axis == null) {
     return _FixedSegmentPathResult(
       points: points,
@@ -764,7 +764,7 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
     points: points,
     fixedSegments: fixedSegments,
   );
-  final simplified = ElbowPathUtils.simplifyPath(points, pinned: pinned);
+  final simplified = ElbowGeometry.simplifyPath(points, pinned: pinned);
   final reindexed = _reindexFixedSegments(simplified, fixedSegments);
   return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }
@@ -790,7 +790,7 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
     points: enforcedPoints,
     fixedSegments: fixedSegments,
   );
-  final preSimplified = ElbowPathUtils.simplifyPath(
+  final preSimplified = ElbowGeometry.simplifyPath(
     enforcedPoints,
     pinned: {...prePinned, ...extraPinned},
   );
@@ -817,7 +817,7 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
     points: merged.points,
     fixedSegments: merged.fixedSegments,
   );
-  final simplified = ElbowPathUtils.simplifyPath(
+  final simplified = ElbowGeometry.simplifyPath(
     merged.points,
     pinned: {...pinned, ...extraPinned},
   );
@@ -903,4 +903,206 @@ Set<int> _fixedSegmentsWithSameHeadingAdjacency({
   }
 
   return toDrop;
+}
+
+
+// ---------------------------------------------------------------------------
+// Routing helpers (merged from elbow_edit_routing.dart)
+// ---------------------------------------------------------------------------
+
+List<DrawPoint> _routeLocalPath({
+  required ElementState element,
+  required Map<String, ElementState> elementsById,
+  required DrawPoint startLocal,
+  required DrawPoint endLocal,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
+  final routed = routeElbowArrowForElementPoints(
+    element: element,
+    startLocal: startLocal,
+    endLocal: endLocal,
+    elementsById: elementsById,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+  );
+  return routed.localPoints;
+}
+
+bool? _preferredHorizontalForRelease({
+  required ElbowFixedSegment? previous,
+  required ElbowFixedSegment? next,
+}) {
+  if (previous != null && next != null) {
+    return null;
+  }
+  if (previous != null) {
+    return ElbowGeometry.segmentIsHorizontal(
+      previous.start,
+      previous.end,
+    );
+  }
+  if (next != null) {
+    return !ElbowGeometry.segmentIsHorizontal(
+      next.start,
+      next.end,
+    );
+  }
+  return null;
+}
+
+List<DrawPoint> _routeReleasedRegion({
+  required ElementState element,
+  required Map<String, ElementState> elementsById,
+  required DrawPoint startLocal,
+  required DrawPoint endLocal,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  required ElbowFixedSegment? previousFixed,
+  required ElbowFixedSegment? nextFixed,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
+  if (startBinding != null || endBinding != null) {
+    return _routeLocalPath(
+      element: element,
+      elementsById: elementsById,
+      startLocal: startLocal,
+      endLocal: endLocal,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+      startBinding: startBinding,
+      endBinding: endBinding,
+    );
+  }
+
+  final preferHorizontal = _preferredHorizontalForRelease(
+    previous: previousFixed,
+    next: nextFixed,
+  );
+  if (preferHorizontal != null) {
+    return ElbowGeometry.directElbowPath(
+      startLocal,
+      endLocal,
+      preferHorizontal: preferHorizontal,
+      epsilon: ElbowConstants.intersectionEpsilon,
+    );
+  }
+
+  return _routeLocalPath(
+    element: element,
+    elementsById: elementsById,
+    startLocal: startLocal,
+    endLocal: endLocal,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+    startBinding: startBinding,
+    endBinding: endBinding,
+  );
+}
+
+_FixedSegmentPathResult _handleFixedSegmentRelease({
+  required ElementState element,
+  required ArrowData data,
+  required Map<String, ElementState> elementsById,
+  required List<DrawPoint> currentPoints,
+  required List<ElbowFixedSegment> previousFixed,
+  required List<ElbowFixedSegment> remainingFixed,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+}) {
+  final removedIndices = _resolveRemovedFixedIndices(
+    previousFixed,
+    remainingFixed,
+  );
+  if (removedIndices.isEmpty || currentPoints.length < 2) {
+    return _FixedSegmentPathResult(
+      points: currentPoints,
+      fixedSegments: remainingFixed,
+    );
+  }
+
+  final minRemoved =
+      removedIndices.reduce((a, b) => a < b ? a : b);
+  final maxRemoved =
+      removedIndices.reduce((a, b) => a > b ? a : b);
+
+  ElbowFixedSegment? previous;
+  ElbowFixedSegment? next;
+  for (final segment in remainingFixed) {
+    if (segment.index < minRemoved) {
+      previous = segment;
+    } else if (segment.index > maxRemoved) {
+      next ??= segment;
+    }
+  }
+
+  final startIndex = previous?.index ?? 0;
+  final endIndex =
+      next != null ? next.index - 1 : currentPoints.length - 1;
+  if (startIndex < 0 ||
+      endIndex >= currentPoints.length ||
+      startIndex >= endIndex) {
+    return _FixedSegmentPathResult(
+      points: currentPoints,
+      fixedSegments: remainingFixed,
+    );
+  }
+
+  final startPoint = currentPoints[startIndex];
+  final endPoint = currentPoints[endIndex];
+  final routed = _routeReleasedRegion(
+    element: element,
+    elementsById: elementsById,
+    startLocal: startPoint,
+    endLocal: endPoint,
+    startArrowhead: startIndex == 0
+        ? data.startArrowhead
+        : ArrowheadStyle.none,
+    endArrowhead: endIndex == currentPoints.length - 1
+        ? data.endArrowhead
+        : ArrowheadStyle.none,
+    previousFixed: previous,
+    nextFixed: next,
+    startBinding: startIndex == 0 ? startBinding : null,
+    endBinding: endIndex == currentPoints.length - 1
+        ? endBinding
+        : null,
+  );
+
+  final prefix = startIndex > 0
+      ? currentPoints.sublist(0, startIndex)
+      : const <DrawPoint>[];
+  final suffix = endIndex + 1 < currentPoints.length
+      ? currentPoints.sublist(endIndex + 1)
+      : const <DrawPoint>[];
+
+  final stitched = <DrawPoint>[
+    ...prefix,
+    ...routed,
+    ...suffix,
+  ];
+
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(stitched),
+    fixedSegments: remainingFixed,
+  );
+}
+
+Set<int> _resolveRemovedFixedIndices(
+  List<ElbowFixedSegment> previous,
+  List<ElbowFixedSegment> remaining,
+) {
+  if (previous.isEmpty) {
+    return const {};
+  }
+  final previousIndices =
+      previous.map((segment) => segment.index).toSet();
+  final remainingIndices =
+      remaining.map((segment) => segment.index).toSet();
+  return previousIndices.difference(remainingIndices);
 }

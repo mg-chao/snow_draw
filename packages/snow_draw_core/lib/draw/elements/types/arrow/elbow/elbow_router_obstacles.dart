@@ -446,84 +446,83 @@ final class _ElbowEndpointBounds {
 }
 
 /// Builds the obstacle layout for a single routed elbow path.
-@immutable
-final class _ElbowObstacleLayoutBuilder {
-  const _ElbowObstacleLayoutBuilder({required this.start, required this.end});
+///
+/// Orchestrates endpoint bounds resolution, dynamic AABB expansion,
+/// overlap splitting, spacing harmonization, and exit point computation
+/// as a flat sequence of named steps.
+_ElbowObstacleLayout _planObstacleLayout({
+  required _ResolvedEndpoint start,
+  required _ResolvedEndpoint end,
+}) {
+  // 1. Resolve heading-aware bounds for each bound endpoint.
+  final endpointBounds = _resolveEndpointBounds(start: start, end: end);
 
-  final _ResolvedEndpoint start;
-  final _ResolvedEndpoint end;
+  // 2. Prefer point-sized bounds when endpoints overlap.
+  final baseBounds = _resolveBaseBounds(
+    boundsOverlap: endpointBounds.overlaps,
+    startPoint: start.point,
+    endPoint: end.point,
+    startElbowBounds: endpointBounds.start,
+    endElbowBounds: endpointBounds.end,
+  );
 
-  _ElbowObstacleLayout resolve() {
-    // Step 2: build padded obstacle bounds and exit points for routing.
-    // 2a) Resolve heading-aware bounds for each bound endpoint.
-    final endpointBounds = _resolveEndpointBounds(start: start, end: end);
-    // 2b) Prefer point-sized bounds when endpoints overlap.
-    final baseBounds = _resolveBaseBounds(
+  // 3. Pick padding based on heading/arrowhead configuration.
+  final padding = _resolveLayoutPadding(
+    boundsOverlap: endpointBounds.overlaps,
+    start: start,
+    end: end,
+  );
+
+  // 4. Expand the bounds to build the grid routing envelope.
+  final dynamicAabbs = _generateDynamicAabbs(
+    start: baseBounds.start,
+    end: baseBounds.end,
+    startPadding: padding.start,
+    endPadding: padding.end,
+    startElementBounds: _aabbElementBounds(
       boundsOverlap: endpointBounds.overlaps,
-      startPoint: start.point,
-      endPoint: end.point,
-      startElbowBounds: endpointBounds.start,
-      endElbowBounds: endpointBounds.end,
-    );
-    // 2c) Pick padding based on heading/arrowhead configuration.
-    final padding = _resolveLayoutPadding(
+      isBound: start.isBound,
+      elbowBounds: endpointBounds.start,
+    ),
+    endElementBounds: _aabbElementBounds(
       boundsOverlap: endpointBounds.overlaps,
-      start: start,
-      end: end,
-    );
+      isBound: end.isBound,
+      elbowBounds: endpointBounds.end,
+    ),
+  );
 
-    // 2d) Expand the bounds to build the grid routing envelope.
-    final dynamicAabbs = _generateDynamicAabbs(
-      start: baseBounds.start,
-      end: baseBounds.end,
-      startPadding: padding.start,
-      endPadding: padding.end,
-      startElementBounds: _aabbElementBounds(
-        boundsOverlap: endpointBounds.overlaps,
-        isBound: start.isBound,
-        elbowBounds: endpointBounds.start,
-      ),
-      endElementBounds: _aabbElementBounds(
-        boundsOverlap: endpointBounds.overlaps,
-        isBound: end.isBound,
-        elbowBounds: endpointBounds.end,
-      ),
-    );
+  // 5. Split overlapping obstacles and harmonize exit spacing.
+  final obstacleBounds = _resolveObstacleBounds(
+    start: start,
+    end: end,
+    startBaseBounds: baseBounds.start,
+    endBaseBounds: baseBounds.end,
+    startDynamic: dynamicAabbs.start,
+    endDynamic: dynamicAabbs.end,
+  );
 
-    // 2e) Split overlapping obstacles to keep a passage open.
-    final obstacleBounds = _resolveObstacleBounds(
-      start: start,
-      end: end,
-      startBaseBounds: baseBounds.start,
-      endBaseBounds: baseBounds.end,
-      startDynamic: dynamicAabbs.start,
-      endDynamic: dynamicAabbs.end,
-    );
+  // 6. Derive shared bounds and exit points for the grid router.
+  final commonBounds = _resolveCommonBounds(
+    startObstacle: obstacleBounds.start,
+    endObstacle: obstacleBounds.end,
+  );
+  final startExit = _exitPosition(
+    bounds: obstacleBounds.start,
+    heading: start.heading,
+    point: start.point,
+  );
+  final endExit = _exitPosition(
+    bounds: obstacleBounds.end,
+    heading: end.heading,
+    point: end.point,
+  );
 
-    // 2f) Derive shared bounds and exit points for the grid router.
-    final commonBounds = _resolveCommonBounds(
-      startObstacle: obstacleBounds.start,
-      endObstacle: obstacleBounds.end,
-    );
-
-    final startExit = _exitPosition(
-      bounds: obstacleBounds.start,
-      heading: start.heading,
-      point: start.point,
-    );
-    final endExit = _exitPosition(
-      bounds: obstacleBounds.end,
-      heading: end.heading,
-      point: end.point,
-    );
-
-    return _ElbowObstacleLayout(
-      commonBounds: commonBounds,
-      startExit: startExit,
-      endExit: endExit,
-      obstacles: <DrawRect>[obstacleBounds.start, obstacleBounds.end],
-    );
-  }
+  return _ElbowObstacleLayout(
+    commonBounds: commonBounds,
+    startExit: startExit,
+    endExit: endExit,
+    obstacles: <DrawRect>[obstacleBounds.start, obstacleBounds.end],
+  );
 }
 
 _ElbowEndpointBounds _resolveEndpointBounds({
@@ -685,12 +684,12 @@ DrawRect _clampObstacleToBoundsPadding({
     return (start: startObstacle, end: endObstacle);
   }
 
-  final startSpacing = _resolveObstacleSpacing(
+  final startSpacing = ElbowSpacing.resolveObstacleSpacing(
     elementBounds: startBounds,
     obstacle: startObstacle,
     heading: start.heading,
   );
-  final endSpacing = _resolveObstacleSpacing(
+  final endSpacing = ElbowSpacing.resolveObstacleSpacing(
     elementBounds: endBounds,
     obstacle: endObstacle,
     heading: end.heading,
@@ -705,14 +704,14 @@ DrawRect _clampObstacleToBoundsPadding({
   }
 
   final minAllowedSpacing = math.max(
-    _minBindingSpacing(hasArrowhead: start.hasArrowhead),
-    _minBindingSpacing(hasArrowhead: end.hasArrowhead),
+    ElbowSpacing.minBindingSpacing(hasArrowhead: start.hasArrowhead),
+    ElbowSpacing.minBindingSpacing(hasArrowhead: end.hasArrowhead),
   );
   final resolvedSpacing = math.max(sharedSpacing, minAllowedSpacing);
 
   return (
     start: _clampBounds(
-      _applyObstacleSpacing(
+      ElbowSpacing.applyObstacleSpacing(
         obstacle: startObstacle,
         elementBounds: startBounds,
         heading: start.heading,
@@ -720,7 +719,7 @@ DrawRect _clampObstacleToBoundsPadding({
       ),
     ),
     end: _clampBounds(
-      _applyObstacleSpacing(
+      ElbowSpacing.applyObstacleSpacing(
         obstacle: endObstacle,
         elementBounds: endBounds,
         heading: end.heading,
@@ -729,45 +728,3 @@ DrawRect _clampObstacleToBoundsPadding({
     ),
   );
 }
-
-double? _resolveObstacleSpacing({
-  required DrawRect elementBounds,
-  required DrawRect obstacle,
-  required ElbowHeading heading,
-}) {
-  final spacing = switch (heading) {
-    ElbowHeading.up => elementBounds.minY - obstacle.minY,
-    ElbowHeading.right => obstacle.maxX - elementBounds.maxX,
-    ElbowHeading.down => obstacle.maxY - elementBounds.maxY,
-    ElbowHeading.left => elementBounds.minX - obstacle.minX,
-  };
-  if (!spacing.isFinite || spacing <= ElbowConstants.intersectionEpsilon) {
-    return null;
-  }
-  return spacing;
-}
-
-DrawRect _applyObstacleSpacing({
-  required DrawRect obstacle,
-  required DrawRect elementBounds,
-  required ElbowHeading heading,
-  required double spacing,
-}) => switch (heading) {
-  ElbowHeading.up => obstacle.copyWith(minY: elementBounds.minY - spacing),
-  ElbowHeading.right => obstacle.copyWith(maxX: elementBounds.maxX + spacing),
-  ElbowHeading.down => obstacle.copyWith(maxY: elementBounds.maxY + spacing),
-  ElbowHeading.left => obstacle.copyWith(minX: elementBounds.minX - spacing),
-};
-
-double _minBindingSpacing({required bool hasArrowhead}) {
-  const base = ArrowBindingUtils.elbowBindingGapBase;
-  if (!hasArrowhead) {
-    return base;
-  }
-  return base * ArrowBindingUtils.elbowArrowheadGapMultiplier;
-}
-
-_ElbowObstacleLayout _planObstacleLayout({
-  required _ResolvedEndpoint start,
-  required _ResolvedEndpoint end,
-}) => _ElbowObstacleLayoutBuilder(start: start, end: end).resolve();

@@ -1,4 +1,4 @@
-part of 'elbow_editing.dart';
+﻿part of 'elbow_editing.dart';
 
 /// Perpendicular binding enforcement for elbow editing.
 ///
@@ -220,7 +220,7 @@ _PerpendicularAdjustment? _alignEndpointSegmentLength({
   if (points.length > 2) {
     final adjacentIndex = isStart ? neighborIndex + 1 : neighborIndex - 1;
     if (adjacentIndex >= 0 && adjacentIndex < points.length) {
-      final adjacentHorizontal = ElbowPathUtils.segmentIsHorizontal(
+      final adjacentHorizontal = ElbowGeometry.segmentIsHorizontal(
         points[neighborIndex],
         points[adjacentIndex],
       );
@@ -509,7 +509,7 @@ _PerpendicularAdjustment _adjustPerpendicularStart({
   }
 
   final nextHorizontal = points.length > 2
-      ? ElbowPathUtils.segmentIsHorizontal(neighbor, points[2])
+      ? ElbowGeometry.segmentIsHorizontal(neighbor, points[2])
       : desiredHorizontal;
   final conflict = nextHorizontal == desiredHorizontal;
   final canShiftDirection =
@@ -737,7 +737,7 @@ _PerpendicularAdjustment _adjustPerpendicularEnd({
   }
 
   final prevHorizontal = points.length > 2
-      ? ElbowPathUtils.segmentIsHorizontal(points[neighborIndex - 1], neighbor)
+      ? ElbowGeometry.segmentIsHorizontal(points[neighborIndex - 1], neighbor)
       : desiredHorizontal;
   final conflict = prevHorizontal == desiredHorizontal;
   final canShiftDirection =
@@ -947,7 +947,7 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
 
   if (allowExtend && points.length > 2) {
     final adjacent = isStart ? points[2] : points[points.length - 3];
-    final adjacentHorizontal = ElbowPathUtils.segmentIsHorizontal(
+    final adjacentHorizontal = ElbowGeometry.segmentIsHorizontal(
       neighbor,
       adjacent,
     );
@@ -1123,7 +1123,7 @@ double? _resolveFixedAxisLimit({
     }
     final start = points[index - 1];
     final end = points[index];
-    final isHorizontal = ElbowPathUtils.segmentIsHorizontal(start, end);
+    final isHorizontal = ElbowGeometry.segmentIsHorizontal(start, end);
     if (isHorizontal != wantHorizontal) {
       continue;
     }

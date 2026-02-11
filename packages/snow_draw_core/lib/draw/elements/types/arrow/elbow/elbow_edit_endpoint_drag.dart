@@ -1,4 +1,4 @@
-part of 'elbow_editing.dart';
+﻿part of 'elbow_editing.dart';
 
 /// Endpoint-drag flow for elbow editing with fixed segments.
 
@@ -124,11 +124,11 @@ List<DrawPoint>? _buildFallbackPointsForActiveFixed({
     }
     return reversed.reversed.toList(growable: false);
   }
-  final fixedHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final fixedHorizontal = ElbowGeometry.segmentIsHorizontal(
     fixedSegment.start,
     fixedSegment.end,
   );
-  final axis = ElbowPathUtils.axisValue(
+  final axis = ElbowGeometry.axisValue(
     fixedSegment.start,
     fixedSegment.end,
     axis: fixedHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical,
@@ -160,7 +160,7 @@ List<DrawPoint>? _buildFallbackPointsForActiveFixed({
     points = [start, p1, p2, p3, end];
   }
 
-  final simplified = ElbowPathUtils.simplifyPath(points);
+  final simplified = ElbowGeometry.simplifyPath(points);
   if (simplified.length < 2) {
     return null;
   }
@@ -302,11 +302,11 @@ bool _fixedSegmentAxisMatches(
   ElbowFixedSegment original,
   ElbowFixedSegment updated,
 ) {
-  final originalHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final originalHorizontal = ElbowGeometry.segmentIsHorizontal(
     original.start,
     original.end,
   );
-  final updatedHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final updatedHorizontal = ElbowGeometry.segmentIsHorizontal(
     updated.start,
     updated.end,
   );
@@ -314,12 +314,12 @@ bool _fixedSegmentAxisMatches(
     return false;
   }
   final axis = originalHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
-  final originalAxis = ElbowPathUtils.axisValue(
+  final originalAxis = ElbowGeometry.axisValue(
     original.start,
     original.end,
     axis: axis,
   );
-  final updatedAxis = ElbowPathUtils.axisValue(
+  final updatedAxis = ElbowGeometry.axisValue(
     updated.start,
     updated.end,
     axis: axis,
@@ -343,7 +343,7 @@ bool _fixedSegmentAxesStable(
 }
 
 bool _segmentMatchesHeading(ElbowFixedSegment segment, ElbowHeading heading) {
-  final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final isHorizontal = ElbowGeometry.segmentIsHorizontal(
     segment.start,
     segment.end,
   );
@@ -765,7 +765,7 @@ _EndpointDragState _rerouteForDiagonalDrift({
   required _EndpointDragState state,
 }) {
   if (!context.isFullyUnbound ||
-      !ElbowPathUtils.hasDiagonalSegments(state.points)) {
+      !ElbowGeometry.hasDiagonalSegments(state.points)) {
     return state;
   }
   final baseline = _routeLocalPath(
@@ -862,15 +862,15 @@ _FixedSegmentPathResult _collapseBindingRemovedEndStub({
     );
   }
 
-  final prevHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final prevHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[prevIndex - 1],
     points[prevIndex],
   );
-  final midHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final midHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[prevIndex],
     points[midIndex],
   );
-  final lastHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final lastHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[midIndex],
     points[lastIndex],
   );
@@ -990,15 +990,15 @@ _FixedSegmentPathResult _collapseBindingRemovedStartStub({
     );
   }
 
-  final firstHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final firstHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[startIndex],
     points[midIndex],
   );
-  final middleHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final middleHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[midIndex],
     points[nextIndex],
   );
-  final outerHorizontal = ElbowPathUtils.segmentIsHorizontal(
+  final outerHorizontal = ElbowGeometry.segmentIsHorizontal(
     points[nextIndex],
     points[nextIndex + 1],
   );
@@ -1354,7 +1354,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   ElbowFixedSegment? candidate;
   if (isStart) {
     for (final segment in fixedSegments) {
-      final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+      final isHorizontal = ElbowGeometry.segmentIsHorizontal(
         segment.start,
         segment.end,
       );
@@ -1366,7 +1366,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   } else {
     for (var i = fixedSegments.length - 1; i >= 0; i--) {
       final segment = fixedSegments[i];
-      final isHorizontal = ElbowPathUtils.segmentIsHorizontal(
+      final isHorizontal = ElbowGeometry.segmentIsHorizontal(
         segment.start,
         segment.end,
       );

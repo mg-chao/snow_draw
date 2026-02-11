@@ -15,16 +15,13 @@ import '../arrow_geometry.dart';
 import 'elbow_constants.dart';
 import 'elbow_fixed_segment.dart';
 import 'elbow_geometry.dart';
-import 'elbow_path_utils.dart';
 import 'elbow_router.dart';
 import 'elbow_spacing.dart';
 
 part 'elbow_edit_endpoint_drag.dart';
 part 'elbow_edit_fixed_segments.dart';
-part 'elbow_edit_geometry.dart';
 part 'elbow_edit_perpendicular.dart';
 part 'elbow_edit_pipeline.dart';
-part 'elbow_edit_routing.dart';
 
 /// Elbow arrow editing entry points.
 /// Output of elbow edit computation (local points + fixed segment updates).
