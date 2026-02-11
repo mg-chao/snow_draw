@@ -185,7 +185,10 @@ final class _ElbowEditPipeline {
         previousStartBinding != null && startBinding == null;
     final endBindingRemoved = previousEndBinding != null && endBinding == null;
 
-    final pointsChanged = !_pointsEqual(basePoints, incomingPoints);
+    final pointsChanged = !ElbowGeometry.pointListsEqual(
+      basePoints,
+      incomingPoints,
+    );
     final fixedSegmentsChanged = !_fixedSegmentsEqual(
       previousFixedSegments,
       fixedSegments,
@@ -425,28 +428,4 @@ List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
   return resolved
       .map((point) => DrawPoint(x: point.dx, y: point.dy))
       .toList(growable: false);
-}
-
-bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool _pointsEqualExceptEndpoints(List<DrawPoint> a, List<DrawPoint> b) {
-  if (a.length != b.length || a.length < 2) {
-    return false;
-  }
-  for (var i = 1; i < a.length - 1; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

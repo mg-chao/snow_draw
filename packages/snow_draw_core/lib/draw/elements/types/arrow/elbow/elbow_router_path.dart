@@ -347,7 +347,7 @@ List<DrawPoint>? _selectBestCandidate({
     if (normalized == null) {
       continue;
     }
-    final length = _pathLength(normalized);
+    final length = ElbowGeometry.pathLength(normalized);
     if (length < bestLength) {
       bestLength = length;
       best = normalized;
@@ -446,14 +446,6 @@ List<DrawPoint>? _normalizeFallbackCandidate({
     return null;
   }
   return cleaned;
-}
-
-double _pathLength(List<DrawPoint> points) {
-  var length = 0.0;
-  for (var i = 0; i < points.length - 1; i++) {
-    length += ElbowGeometry.manhattanDistance(points[i], points[i + 1]);
-  }
-  return length;
 }
 
 List<DrawPoint> _postProcessPath({

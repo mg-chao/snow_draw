@@ -61,14 +61,13 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   return result;
 }
 
-int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) {
-  return _selectSegmentIndex(
-    points: points,
-    isHorizontal: segment.isHorizontal,
-    preferredIndex: segment.index,
-    axisValue: segment.axisValue,
-  );
-}
+int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) =>
+    _selectSegmentIndex(
+      points: points,
+      isHorizontal: segment.isHorizontal,
+      preferredIndex: segment.index,
+      axisValue: segment.axisValue,
+    );
 
 int? _selectSegmentIndex({
   required List<DrawPoint> points,
@@ -300,6 +299,27 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
   return result;
 }
 
+/// Reindexes fixed segments after a point mutation.
+///
+/// Falls back to [original] when reindexing loses a segment.
+_FixedSegmentPathResult _tryReindex(
+  List<DrawPoint> original,
+  List<ElbowFixedSegment> fixedSegments,
+  List<DrawPoint> updated,
+) {
+  final reindexed = _reindexFixedSegments(updated, fixedSegments);
+  if (reindexed.length != fixedSegments.length) {
+    return _FixedSegmentPathResult(
+      points: original,
+      fixedSegments: fixedSegments,
+    );
+  }
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(updated),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+  );
+}
+
 _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
@@ -500,18 +520,7 @@ _FixedSegmentPathResult _removeAdjacentDuplicates({
     );
   }
 
-  final reindexed = _reindexFixedSegments(cleaned, fixedSegments);
-  if (reindexed.length != fixedSegments.length) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
-  }
-
-  return _FixedSegmentPathResult(
-    points: List<DrawPoint>.unmodifiable(cleaned),
-    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-  );
+  return _tryReindex(points, fixedSegments, cleaned);
 }
 
 _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
@@ -679,18 +688,7 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   }
 
   final updated = List<DrawPoint>.from(points)..removeAt(midIndex);
-  final reindexed = _reindexFixedSegments(updated, fixedSegments);
-  if (reindexed.length != fixedSegments.length) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
-  }
-
-  return _FixedSegmentPathResult(
-    points: List<DrawPoint>.unmodifiable(updated),
-    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-  );
+  return _tryReindex(points, fixedSegments, updated);
 }
 
 Set<DrawPoint> _collectPinnedPoints({

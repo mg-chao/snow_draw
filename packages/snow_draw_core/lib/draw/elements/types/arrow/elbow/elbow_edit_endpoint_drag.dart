@@ -68,7 +68,7 @@ final class _EndpointDragState {
 List<DrawPoint> _referencePointsForEndpointDrag({
   required List<DrawPoint> basePoints,
   required List<DrawPoint> incomingPoints,
-}) => _pointsEqualExceptEndpoints(basePoints, incomingPoints)
+}) => ElbowGeometry.pointListsEqualExceptEndpoints(basePoints, incomingPoints)
     ? basePoints
     : incomingPoints;
 
@@ -343,7 +343,7 @@ _rerouteActiveSpanIfNeeded({
   final activePoint = activeIsStart ? state.points.first : state.points.last;
   final boundHeading = activeBinding == null
       ? null
-      : _resolveBoundHeading(
+      : ElbowGeometry.resolveBoundHeading(
           binding: activeBinding,
           elementsById: context.elementsById,
           point: activePoint,
@@ -391,7 +391,7 @@ _rerouteActiveSpanIfNeeded({
           if (anchorIndex > 0) ...state.points.sublist(0, anchorIndex),
           ...routed,
         ];
-  if (_pointsEqual(stitched, state.points)) {
+  if (ElbowGeometry.pointListsEqual(stitched, state.points)) {
     return (
       state: state,
       applied: false,
@@ -402,7 +402,7 @@ _rerouteActiveSpanIfNeeded({
 
   final changedStructure =
       stitched.length != state.points.length ||
-      !_pointsEqualExceptEndpoints(stitched, state.points);
+      !ElbowGeometry.pointListsEqualExceptEndpoints(stitched, state.points);
   final updatedFixed = changedStructure
       ? _reindexFixedSegments(stitched, state.fixedSegments)
       : _syncFixedSegmentsToPoints(stitched, state.fixedSegments);
@@ -531,7 +531,7 @@ _rerouteActiveSpanIfNeeded({
       : (activeStart ? state.points.first : state.points.last);
   final boundHeading = (activeBinding == null || activePoint == null)
       ? null
-      : _resolveBoundHeading(
+      : ElbowGeometry.resolveBoundHeading(
           binding: activeBinding,
           elementsById: context.elementsById,
           point: activePoint,
@@ -905,26 +905,6 @@ _FixedSegmentPathResult? _tryRemoveCollinearStubPoint({
   return null;
 }
 
-/// Reindexes fixed segments after a point removal.  Falls back to the
-/// original path when reindexing loses a segment.
-_FixedSegmentPathResult _tryReindex(
-  List<DrawPoint> original,
-  List<ElbowFixedSegment> fixedSegments,
-  List<DrawPoint> updated,
-) {
-  final reindexed = _reindexFixedSegments(updated, fixedSegments);
-  if (reindexed.length != fixedSegments.length) {
-    return _FixedSegmentPathResult(
-      points: original,
-      fixedSegments: fixedSegments,
-    );
-  }
-  return _FixedSegmentPathResult(
-    points: List<DrawPoint>.unmodifiable(updated),
-    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-  );
-}
-
 _EndpointDragState _collapseBindingRemovedStubs({
   required _EndpointDragContext context,
   required _EndpointDragState state,
@@ -1165,7 +1145,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
     return (points: points, moved: false);
   }
   final endpoint = isStart ? points.first : points.last;
-  final heading = _resolveBoundHeading(
+  final heading = ElbowGeometry.resolveBoundHeading(
     binding: binding,
     elementsById: elementsById,
     point: endpoint,
@@ -1298,32 +1278,18 @@ double? _resolveBoundLaneCoordinate({
       : right;
 }
 
-bool _runIntersectsBounds({
+/// Collects the indices of a collinear run starting at [startIndex]
+/// and walking in [direction] (+1 or -1).
+///
+/// The returned list always starts with [startIndex] and includes
+/// every consecutive point that shares the same [horizontal] axis.
+List<int> _walkRunIndices({
   required List<DrawPoint> points,
   required int startIndex,
   required int direction,
   required bool horizontal,
-  required DrawRect bounds,
 }) {
-  if (points.length < 2) {
-    return false;
-  }
-  if (startIndex < 0 || startIndex >= points.length) {
-    return false;
-  }
-  const epsilon = ElbowConstants.intersectionEpsilon;
-  final constant = horizontal ? points[startIndex].y : points[startIndex].x;
-  if (horizontal) {
-    if (constant < bounds.minY - epsilon || constant > bounds.maxY + epsilon) {
-      return false;
-    }
-  } else if (constant < bounds.minX - epsilon ||
-      constant > bounds.maxX + epsilon) {
-    return false;
-  }
-
-  var minVar = horizontal ? points[startIndex].x : points[startIndex].y;
-  var maxVar = minVar;
+  final indices = <int>[startIndex];
   var i = startIndex;
   while (true) {
     final nextIndex = i + direction;
@@ -1337,10 +1303,45 @@ bool _runIntersectsBounds({
     if (isHorizontal != horizontal) {
       break;
     }
-    final value = horizontal ? next.x : next.y;
+    indices.add(nextIndex);
+    i = nextIndex;
+  }
+  return indices;
+}
+
+bool _runIntersectsBounds({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required int direction,
+  required bool horizontal,
+  required DrawRect bounds,
+}) {
+  if (points.length < 2 || startIndex < 0 || startIndex >= points.length) {
+    return false;
+  }
+  const epsilon = ElbowConstants.intersectionEpsilon;
+  final constant = horizontal ? points[startIndex].y : points[startIndex].x;
+  if (horizontal) {
+    if (constant < bounds.minY - epsilon || constant > bounds.maxY + epsilon) {
+      return false;
+    }
+  } else if (constant < bounds.minX - epsilon ||
+      constant > bounds.maxX + epsilon) {
+    return false;
+  }
+
+  final indices = _walkRunIndices(
+    points: points,
+    startIndex: startIndex,
+    direction: direction,
+    horizontal: horizontal,
+  );
+  var minVar = horizontal ? points[startIndex].x : points[startIndex].y;
+  var maxVar = minVar;
+  for (final idx in indices) {
+    final value = horizontal ? points[idx].x : points[idx].y;
     minVar = math.min(minVar, value);
     maxVar = math.max(maxVar, value);
-    i = nextIndex;
   }
 
   if (horizontal) {
@@ -1356,10 +1357,9 @@ bool _runIntersectsBounds({
   required double target,
   required int direction,
 }) {
-  if (startIndex < 0 || startIndex >= points.length) {
-    return (points: points, moved: false);
-  }
-  if (direction != 1 && direction != -1) {
+  if (startIndex < 0 ||
+      startIndex >= points.length ||
+      (direction != 1 && direction != -1)) {
     return (points: points, moved: false);
   }
   final current = horizontal ? points[startIndex].y : points[startIndex].x;
@@ -1367,29 +1367,17 @@ bool _runIntersectsBounds({
     return (points: points, moved: false);
   }
 
+  final indices = _walkRunIndices(
+    points: points,
+    startIndex: startIndex,
+    direction: direction,
+    horizontal: horizontal,
+  );
   final updated = List<DrawPoint>.from(points);
-  updated[startIndex] = horizontal
-      ? updated[startIndex].copyWith(y: target)
-      : updated[startIndex].copyWith(x: target);
-
-  var i = startIndex;
-  while (true) {
-    final nextIndex = i + direction;
-    if (nextIndex < 0 || nextIndex >= points.length) {
-      break;
-    }
-    final curr = points[i];
-    final next = points[nextIndex];
-    final isHorizontal =
-        (curr.y - next.y).abs() <= ElbowConstants.dedupThreshold;
-    if (isHorizontal != horizontal) {
-      break;
-    }
-    updated[nextIndex] = horizontal
-        ? updated[nextIndex].copyWith(y: target)
-        : updated[nextIndex].copyWith(x: target);
-    i = nextIndex;
+  for (final idx in indices) {
+    updated[idx] = horizontal
+        ? updated[idx].copyWith(y: target)
+        : updated[idx].copyWith(x: target);
   }
-
   return (points: updated, moved: true);
 }

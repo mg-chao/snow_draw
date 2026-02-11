@@ -1,5 +1,8 @@
+import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
+import '../../../../utils/selection_calculator.dart';
+import '../arrow_binding.dart';
 import 'elbow_constants.dart';
 import 'elbow_heading.dart';
 
@@ -376,5 +379,75 @@ final class ElbowGeometry {
       }
     }
     return false;
+  }
+
+  /// Offsets [point] along [heading] by [distance].
+  static DrawPoint offsetPoint(
+    DrawPoint point,
+    ElbowHeading heading,
+    double distance,
+  ) => DrawPoint(
+    x: point.x + heading.dx * distance,
+    y: point.y + heading.dy * distance,
+  );
+
+  /// Total Manhattan path length across all segments.
+  static double pathLength(List<DrawPoint> points) {
+    var length = 0.0;
+    for (var i = 0; i < points.length - 1; i++) {
+      length += manhattanDistance(points[i], points[i + 1]);
+    }
+    return length;
+  }
+
+  /// Whether two point lists are element-wise equal.
+  static bool pointListsEqual(List<DrawPoint> a, List<DrawPoint> b) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Whether two point lists are equal except at the first and last
+  /// positions.
+  static bool pointListsEqualExceptEndpoints(
+    List<DrawPoint> a,
+    List<DrawPoint> b,
+  ) {
+    if (a.length != b.length || a.length < 2) {
+      return false;
+    }
+    for (var i = 1; i < a.length - 1; i++) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Resolves the bound heading for an arrow endpoint.
+  ///
+  /// Returns the cardinal direction the arrow should exit from the
+  /// bound element, or `null` when the binding target is missing.
+  static ElbowHeading? resolveBoundHeading({
+    required ArrowBinding binding,
+    required Map<String, ElementState> elementsById,
+    required DrawPoint point,
+  }) {
+    final element = elementsById[binding.elementId];
+    if (element == null) {
+      return null;
+    }
+    final bounds = SelectionCalculator.computeElementWorldAabb(element);
+    final anchor = ArrowBindingUtils.resolveElbowAnchorPoint(
+      binding: binding,
+      target: element,
+    );
+    return headingForPointOnBounds(bounds, anchor ?? point);
   }
 }
