@@ -57,11 +57,17 @@ class FreeDrawVisualEntry {
   double? _cachedPictureOpacity;
 
   /// Returns cached flattened points, building them on first call.
+  ///
+  /// Uses a coarser step than rendering (2× stroke width) because
+  /// hit testing only needs segment-level precision, not pixel-
+  /// level smoothness. This halves the number of native
+  /// `getTangentForOffset` calls.
   List<Offset> getOrBuildFlattened(double strokeWidth) {
     if (_flattenedPoints != null) {
       return _flattenedPoints!;
     }
-    _flattenedPoints = _flattenPath(path, math.max(1, strokeWidth).toDouble());
+    final step = math.max(2, strokeWidth * 2).toDouble();
+    _flattenedPoints = _flattenPath(path, step);
     return _flattenedPoints!;
   }
 
@@ -104,7 +110,10 @@ class FreeDrawVisualCache {
 
   static final instance = FreeDrawVisualCache._();
 
-  final _entries = LruCache<String, FreeDrawVisualEntry>(maxEntries: 256);
+  final _entries = LruCache<String, FreeDrawVisualEntry>(
+    maxEntries: 256,
+    onEvict: (entry) => entry.dispose(),
+  );
 
   /// Resolves (or builds) the visual entry for [element].
   FreeDrawVisualEntry resolve({
@@ -121,9 +130,7 @@ class FreeDrawVisualCache {
 
     // Try incremental path building when only the tail changed.
     final entry = _buildEntry(element: element, data: data, previous: existing);
-    if (existing != null) {
-      existing.dispose();
-    }
+    // The LRU's onEvict callback handles disposing the old entry.
     _entries.put(id, entry);
     return entry;
   }

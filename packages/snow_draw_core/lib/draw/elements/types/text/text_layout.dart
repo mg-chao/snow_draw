@@ -114,6 +114,16 @@ final _painterCache = LruCache<_PainterCacheKey, PainterTextLayoutMetrics>(
   maxEntries: 64,
 );
 
+/// Clears all text layout caches.
+///
+/// Call when switching documents or under memory pressure to
+/// release stale `ui.Paragraph` native resources.
+void clearTextLayoutCaches() {
+  _paragraphCache.clear();
+  _fontMetricsCache.clear();
+  _painterCache.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Public helpers
 // ---------------------------------------------------------------------------

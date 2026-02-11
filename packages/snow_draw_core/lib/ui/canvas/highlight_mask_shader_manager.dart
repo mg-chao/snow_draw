@@ -48,6 +48,12 @@ class HighlightMaskShaderManager {
   var _isLoading = false;
   var _loadFailed = false;
 
+  /// Number of highlights written in the previous frame.
+  ///
+  /// Used to zero-fill only the delta between frames instead of
+  /// all 32 slots every time.
+  var _previousHighlightCount = 0;
+
   /// Whether the shader is ready to use.
   bool get isReady => _shader != null;
 
@@ -66,6 +72,7 @@ class HighlightMaskShaderManager {
         'packages/snow_draw_core/shaders/highlight_mask.frag',
       );
       _shader = _program!.fragmentShader();
+      _zeroFillShaderSlots(_shader!);
     } on Exception catch (error, stackTrace) {
       _loadFailed = true;
       _log.warning('Failed to load highlight mask shader', {
@@ -200,9 +207,10 @@ class HighlightMaskShaderManager {
         ..setFloat(cBase + 3, 0);
     }
 
-    // Zero-fill remaining slots so the shader reads deterministic
-    // values (avoids undefined behaviour on some GPU drivers).
-    for (var i = visible.length; i < highlightMaskShaderLimit; i++) {
+    // Zero-fill only the slots that were active last frame but
+    // are no longer needed. The initial load already zeroed all
+    // 32 slots, so we only need to clean up the delta.
+    for (var i = visible.length; i < _previousHighlightCount; i++) {
       final aBase = _hiAOffset + i * _vec4Floats;
       shader
         ..setFloat(aBase, 0)
@@ -224,6 +232,7 @@ class HighlightMaskShaderManager {
         ..setFloat(cBase + 2, 0)
         ..setFloat(cBase + 3, 0);
     }
+    _previousHighlightCount = visible.length;
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Rect.fromLTWH(0, 0, screenWidth, screenHeight), paint);
@@ -236,6 +245,36 @@ class HighlightMaskShaderManager {
     _shader?.dispose();
     _shader = null;
     _program = null;
+    _previousHighlightCount = 0;
+  }
+
+  /// Writes zeros to all highlight uniform slots once at load time.
+  ///
+  /// After this, per-frame updates only need to zero-fill the delta
+  /// between the previous and current highlight count.
+  static void _zeroFillShaderSlots(ui.FragmentShader shader) {
+    for (var i = 0; i < highlightMaskShaderLimit; i++) {
+      final aBase = _hiAOffset + i * _vec4Floats;
+      shader
+        ..setFloat(aBase, 0)
+        ..setFloat(aBase + 1, 0)
+        ..setFloat(aBase + 2, 0)
+        ..setFloat(aBase + 3, 0);
+
+      final bBase = _hiBOffset + i * _vec4Floats;
+      shader
+        ..setFloat(bBase, 0)
+        ..setFloat(bBase + 1, 0)
+        ..setFloat(bBase + 2, 0)
+        ..setFloat(bBase + 3, 0);
+
+      final cBase = _hiCOffset + i * _vec4Floats;
+      shader
+        ..setFloat(cBase, 0)
+        ..setFloat(cBase + 1, 0)
+        ..setFloat(cBase + 2, 0)
+        ..setFloat(cBase + 3, 0);
+    }
   }
 }
 

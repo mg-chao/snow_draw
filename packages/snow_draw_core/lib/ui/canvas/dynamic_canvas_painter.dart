@@ -11,7 +11,7 @@ import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/free_draw/free_draw_path_utils.dart';
+import '../../draw/elements/types/free_draw/free_draw_visual_cache.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -762,9 +762,9 @@ class DynamicCanvasPainter extends CustomPainter {
   /// Draws a 1px free-draw outline that follows the actual
   /// rendered stroke shape.
   ///
-  /// For solid strokes the outline traces the variable-width
-  /// boundary (pressure, taper, etc.). For dashed/dotted or very
-  /// short strokes it falls back to the smooth center-line.
+  /// Reuses the cached smooth center-line path from
+  /// [FreeDrawVisualCache] to avoid an expensive O(n) rebuild
+  /// on every hover frame.
   void _drawFreeDrawOutline({
     required Canvas canvas,
     required ElementState element,
@@ -776,19 +776,17 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final rect = element.rect;
-    final localPoints = resolveFreeDrawLocalPoints(
-      rect: rect,
-      points: data.points,
+    final cached = FreeDrawVisualCache.instance.resolve(
+      element: element,
+      data: data,
     );
-    if (localPoints.length < 2) {
+    if (cached.pointCount < 2) {
       return;
     }
 
+    final rect = element.rect;
     final effectiveScale = scale == 0 ? 1.0 : scale;
-
-    // Always use the smooth center-line path for the outline.
-    final path = buildFreeDrawSmoothPath(localPoints);
+    final path = cached.path;
 
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke

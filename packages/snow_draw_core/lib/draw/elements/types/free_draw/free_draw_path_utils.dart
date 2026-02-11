@@ -200,30 +200,26 @@ Path buildVariableWidthOutline({
   }
 
   final count = rPoints.length;
-  var widths = _computeWidths(
+  final widths = _computeWidths(
     pressures: rPressures,
     baseWidth: baseWidth,
     count: count,
   );
-  // Apply velocity-based damping: fast strokes get slightly
-  // thinner, slow strokes stay full width. This mimics real
-  // pen behavior.
-  widths = _applyVelocityDamping(rPoints, widths, baseWidth);
-  // Taper the endpoints for a natural ink-on/ink-off feel.
-  widths = _taperEndpoints(widths, baseWidth);
-  // Smooth widths aggressively to eliminate pinching at
-  // straight-to-curve transitions.
-  widths = _smoothWidths(widths);
+  // All width transforms mutate in-place to avoid intermediate
+  // list allocations (previously ~8 copies per stroke).
+  _applyVelocityDampingInPlace(rPoints, widths);
+  _taperEndpointsInPlace(widths, baseWidth);
+  _smoothWidthsInPlace(widths);
 
   // Build left and right edge points using averaged normals.
-  final leftSide = <Offset>[];
-  final rightSide = <Offset>[];
+  final leftSide = List<Offset>.filled(count, Offset.zero);
+  final rightSide = List<Offset>.filled(count, Offset.zero);
 
   for (var i = 0; i < count; i++) {
     final normal = _smoothNormalAt(rPoints, i);
     final halfW = widths[i] / 2;
-    leftSide.add(rPoints[i] + normal * halfW);
-    rightSide.add(rPoints[i] - normal * halfW);
+    leftSide[i] = rPoints[i] + normal * halfW;
+    rightSide[i] = rPoints[i] - normal * halfW;
   }
 
   // Build the outline: left side forward, right side backward,
@@ -357,97 +353,97 @@ List<double> _computeWidths({
   return widths;
 }
 
-/// Applies velocity-based width damping.
+/// Applies velocity-based width damping in-place.
 ///
 /// Fast-moving segments get slightly thinner, mimicking how real
 /// ink thins when the pen moves quickly. This is computed from
 /// inter-point distances (since resampling is uniform, distance
 /// between consecutive points reflects relative speed).
-List<double> _applyVelocityDamping(
-  List<Offset> points,
-  List<double> widths,
-  double baseWidth,
-) {
+void _applyVelocityDampingInPlace(List<Offset> points, List<double> widths) {
   if (points.length < 3) {
-    return widths;
+    return;
   }
 
   // Compute inter-point distances.
-  final distances = List<double>.filled(points.length, 0);
-  for (var i = 1; i < points.length; i++) {
+  final count = points.length;
+  final distances = List<double>.filled(count, 0);
+  for (var i = 1; i < count; i++) {
     distances[i] = (points[i] - points[i - 1]).distance;
   }
   distances[0] = distances[1];
 
   // Find the median distance for normalization.
   final sorted = List<double>.from(distances)..sort();
-  final median = sorted[sorted.length ~/ 2];
+  final median = sorted[count ~/ 2];
   if (median < 1e-6) {
-    return widths;
+    return;
   }
 
-  final result = List<double>.from(widths);
-  for (var i = 0; i < points.length; i++) {
-    // Ratio > 1 means faster than median.
+  for (var i = 0; i < count; i++) {
     final speedRatio = distances[i] / median;
-    // Damping: fast segments shrink to 85% minimum.
     final damping = 1.0 / (1.0 + (speedRatio - 1.0).clamp(0.0, 3.0) * 0.15);
-    result[i] = widths[i] * damping.clamp(0.85, 1.0);
+    widths[i] = widths[i] * damping.clamp(0.85, 1.0);
   }
-  return result;
 }
 
-/// Tapers the first and last few points for a natural ink-on /
-/// ink-off feel.
+/// Tapers the first and last few points in-place for a natural
+/// ink-on / ink-off feel.
 ///
 /// The taper length is proportional to the stroke width so thin
 /// strokes get short tapers and thick strokes get longer ones.
-List<double> _taperEndpoints(List<double> widths, double baseWidth) {
+void _taperEndpointsInPlace(List<double> widths, double baseWidth) {
   if (widths.length < 4) {
-    return widths;
+    return;
   }
 
-  final result = List<double>.from(widths);
-  // Taper length: 3-8 samples depending on stroke width.
   final taperLen = (baseWidth * 0.8).clamp(3, 8).toInt();
   final actualTaper = math.min(taperLen, widths.length ~/ 3);
 
   for (var i = 0; i < actualTaper; i++) {
-    // Ease-in curve for start taper.
     final t = (i + 1) / (actualTaper + 1);
-    final ease = t * t * (3 - 2 * t); // smoothstep
-    result[i] = result[i] * (0.3 + 0.7 * ease);
+    final ease = t * t * (3 - 2 * t);
+    widths[i] = widths[i] * (0.3 + 0.7 * ease);
   }
   for (var i = 0; i < actualTaper; i++) {
-    // Ease-out curve for end taper.
     final idx = widths.length - 1 - i;
     final t = (i + 1) / (actualTaper + 1);
     final ease = t * t * (3 - 2 * t);
-    result[idx] = result[idx] * (0.3 + 0.7 * ease);
+    widths[idx] = widths[idx] * (0.3 + 0.7 * ease);
   }
-  return result;
 }
 
-/// Smooths a width array to prevent abrupt transitions.
+/// Smooths a width array in-place using a double-buffer.
 ///
-/// Each pass replaces interior values with a 1-2-1 weighted
-/// average of their neighbors. Endpoints are blended lightly.
-List<double> _smoothWidths(List<double> widths, {int passes = 5}) {
+/// Uses two pre-allocated buffers and swaps between them each
+/// pass, avoiding the per-pass `List.from` allocation.
+void _smoothWidthsInPlace(List<double> widths, {int passes = 5}) {
   if (widths.length < 3) {
-    return widths;
+    return;
   }
-  var w = List<double>.from(widths);
+  final n = widths.length;
+  final buf = List<double>.filled(n, 0);
+  var src = widths;
+  var dst = buf;
+
   for (var p = 0; p < passes; p++) {
-    final next = List<double>.from(w);
-    for (var i = 1; i < w.length - 1; i++) {
-      next[i] = (w[i - 1] + w[i] * 2 + w[i + 1]) * 0.25;
+    for (var i = 1; i < n - 1; i++) {
+      dst[i] = (src[i - 1] + src[i] * 2 + src[i + 1]) * 0.25;
     }
-    // Lightly smooth endpoints.
-    next[0] = w[0] * 0.75 + w[1] * 0.25;
-    next[w.length - 1] = w[w.length - 1] * 0.75 + w[w.length - 2] * 0.25;
-    w = next;
+    dst[0] = src[0] * 0.75 + src[1] * 0.25;
+    dst[n - 1] = src[n - 1] * 0.75 + src[n - 2] * 0.25;
+
+    // Swap buffers.
+    final tmp = src;
+    src = dst;
+    dst = tmp;
   }
-  return w;
+
+  // If the final result ended up in `buf`, copy back to `widths`.
+  if (!identical(src, widths)) {
+    for (var i = 0; i < n; i++) {
+      widths[i] = src[i];
+    }
+  }
 }
 
 /// Result of uniform resampling.

@@ -23,6 +23,13 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     maxEntries: 128,
   );
 
+  /// Clears the static shader cache.
+  ///
+  /// Call when switching documents or under memory pressure.
+  static void clearCaches() {
+    _lineShaderCache.clear();
+  }
+
   @override
   void render({
     required Canvas canvas,
