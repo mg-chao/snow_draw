@@ -1,4 +1,4 @@
-﻿part of 'elbow_router.dart';
+part of 'elbow_router.dart';
 
 /// Path construction and cleanup for elbow routing.
 ///
@@ -735,9 +735,6 @@ bool _pathDeviatesFromAxis({
   return false;
 }
 
-ElbowHeading _headingFromTo(DrawPoint from, DrawPoint to) =>
-    ElbowGeometry.headingForVector(to.x - from.x, to.y - from.y);
-
 ElbowHeading _segmentHeading(DrawPoint from, DrawPoint to) =>
     ElbowGeometry.headingForSegment(from, to);
 
@@ -861,10 +858,7 @@ List<DrawPoint> _ensureOrthogonalPath({
     }
 
     final preferHorizontal = result.length > 1
-        ? ElbowGeometry.segmentIsHorizontal(
-            result[result.length - 2],
-            previous,
-          )
+        ? ElbowGeometry.segmentIsHorizontal(result[result.length - 2], previous)
         : startHeading.isHorizontal;
     final mid = preferHorizontal
         ? DrawPoint(x: next.x, y: previous.y)
@@ -941,11 +935,7 @@ final class _ElbowGridAddress {
   final int row;
 }
 
-void _addBoundsToAxes(
-  Set<double> xs,
-  Set<double> ys,
-  DrawRect bounds,
-) {
+void _addBoundsToAxes(Set<double> xs, Set<double> ys, DrawRect bounds) {
   xs
     ..add(bounds.minX)
     ..add(bounds.maxX);
@@ -954,20 +944,14 @@ void _addBoundsToAxes(
     ..add(bounds.maxY);
 }
 
-void _addPointToAxes(
-  Set<double> xs,
-  Set<double> ys,
-  DrawPoint point,
-) {
+void _addPointToAxes(Set<double> xs, Set<double> ys, DrawPoint point) {
   xs.add(point.x);
   ys.add(point.y);
 }
 
-Map<double, int> _buildAxisIndex(List<double> sortedAxis) =>
-    <double, int>{
-      for (var i = 0; i < sortedAxis.length; i++)
-        sortedAxis[i]: i,
-    };
+Map<double, int> _buildAxisIndex(List<double> sortedAxis) => <double, int>{
+  for (var i = 0; i < sortedAxis.length; i++) sortedAxis[i]: i,
+};
 
 _ElbowGrid _buildGrid({
   required List<DrawRect> obstacles,
@@ -1060,9 +1044,7 @@ final class _ElbowGridRouter {
   final List<DrawRect> obstacles;
 
   List<_ElbowGridNode> findPath() {
-    final openSet = BinaryHeap<_ElbowGridNode>(
-      (node) => node.f,
-    )..push(start);
+    final openSet = BinaryHeap<_ElbowGridNode>((node) => node.f)..push(start);
 
     final bendPenalty = _BendPenalty(
       ElbowGeometry.manhattanDistance(start.pos, end.pos),
@@ -1083,7 +1065,7 @@ final class _ElbowGridRouter {
 
       final previousHeading = current.parent == null
           ? startHeading
-          : _headingFromTo(current.parent!.pos, current.pos);
+          : _segmentHeading(current.parent!.pos, current.pos);
       final isStartNode = current.addr == start.addr;
 
       for (final offset in _neighborOffsets) {
@@ -1108,14 +1090,9 @@ final class _ElbowGridRouter {
           continue;
         }
 
-        final directionChanged =
-            offset.heading != previousHeading;
-        final moveCost = ElbowGeometry.manhattanDistance(
-          current.pos,
-          next.pos,
-        );
-        final bendCost =
-            directionChanged ? bendPenalty.cubed : 0;
+        final directionChanged = offset.heading != previousHeading;
+        final moveCost = ElbowGeometry.manhattanDistance(current.pos, next.pos);
+        final bendCost = directionChanged ? bendPenalty.cubed : 0;
         final gScore = current.g + moveCost + bendCost;
 
         if (!next.visited || gScore < next.g) {
@@ -1154,11 +1131,7 @@ final class _ElbowGridRouter {
     required ElbowHeading startHeadingFlip,
     required ElbowHeading endHeadingFlip,
   }) {
-    if (_segmentIntersectsAnyBounds(
-      current.pos,
-      next.pos,
-      obstacles,
-    )) {
+    if (_segmentIntersectsAnyBounds(current.pos, next.pos, obstacles)) {
       return false;
     }
 
@@ -1212,17 +1185,14 @@ double _estimatedBendPenalty({
   required ElbowHeading endHeading,
   required double bendPenaltySquared,
 }) {
-  final sameAxis =
-      startHeading.isHorizontal == endHeading.isHorizontal;
+  final sameAxis = startHeading.isHorizontal == endHeading.isHorizontal;
   if (!sameAxis) {
     return bendPenaltySquared;
   }
 
   final alignedOnAxis = startHeading.isHorizontal
-      ? (start.y - end.y).abs() <=
-            ElbowConstants.dedupThreshold
-      : (start.x - end.x).abs() <=
-            ElbowConstants.dedupThreshold;
+      ? (start.y - end.y).abs() <= ElbowConstants.dedupThreshold
+      : (start.x - end.x).abs() <= ElbowConstants.dedupThreshold;
   return alignedOnAxis ? 0 : bendPenaltySquared;
 }
 

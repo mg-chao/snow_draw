@@ -1,4 +1,4 @@
-﻿part of 'elbow_editing.dart';
+part of 'elbow_editing.dart';
 
 /// Internal state containers shared by the elbow edit pipeline and helpers.
 @immutable
@@ -413,15 +413,11 @@ ArrowBinding? _resolveBindingOverride({
   return fallback;
 }
 
-
 // ---------------------------------------------------------------------------
 // Geometry helpers (merged from elbow_edit_geometry.dart)
 // ---------------------------------------------------------------------------
 
-List<DrawPoint> _resolveLocalPoints(
-  ElementState element,
-  ArrowData data,
-) {
+List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
   final resolved = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
@@ -443,10 +439,7 @@ bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
   return true;
 }
 
-bool _pointsEqualExceptEndpoints(
-  List<DrawPoint> a,
-  List<DrawPoint> b,
-) {
+bool _pointsEqualExceptEndpoints(List<DrawPoint> a, List<DrawPoint> b) {
   if (a.length != b.length || a.length < 2) {
     return false;
   }

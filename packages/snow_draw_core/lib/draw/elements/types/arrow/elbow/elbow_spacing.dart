@@ -59,8 +59,7 @@ final class ElbowSpacing {
       ElbowHeading.down => obstacle.maxY - elementBounds.maxY,
       ElbowHeading.left => elementBounds.minX - obstacle.minX,
     };
-    if (!spacing.isFinite ||
-        spacing <= ElbowConstants.intersectionEpsilon) {
+    if (!spacing.isFinite || spacing <= ElbowConstants.intersectionEpsilon) {
       return null;
     }
     return spacing;
@@ -73,15 +72,10 @@ final class ElbowSpacing {
     required DrawRect elementBounds,
     required ElbowHeading heading,
     required double spacing,
-  }) =>
-      switch (heading) {
-        ElbowHeading.up =>
-          obstacle.copyWith(minY: elementBounds.minY - spacing),
-        ElbowHeading.right =>
-          obstacle.copyWith(maxX: elementBounds.maxX + spacing),
-        ElbowHeading.down =>
-          obstacle.copyWith(maxY: elementBounds.maxY + spacing),
-        ElbowHeading.left =>
-          obstacle.copyWith(minX: elementBounds.minX - spacing),
-      };
+  }) => switch (heading) {
+    ElbowHeading.up => obstacle.copyWith(minY: elementBounds.minY - spacing),
+    ElbowHeading.right => obstacle.copyWith(maxX: elementBounds.maxX + spacing),
+    ElbowHeading.down => obstacle.copyWith(maxY: elementBounds.maxY + spacing),
+    ElbowHeading.left => obstacle.copyWith(minX: elementBounds.minX - spacing),
+  };
 }

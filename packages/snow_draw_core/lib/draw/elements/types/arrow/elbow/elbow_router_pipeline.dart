@@ -183,7 +183,6 @@ ElbowRouteResult _buildRouteResult({
   endPoint: endPoint,
 );
 
-
 // ---------------------------------------------------------------------------
 // Endpoint resolution (merged from elbow_router_endpoints.dart)
 // ---------------------------------------------------------------------------
@@ -257,10 +256,7 @@ ElbowHeading _resolveEndpointHeading({
   if (elementBounds == null) {
     return fallback;
   }
-  return ElbowGeometry.headingForPointOnBounds(
-    elementBounds,
-    anchor ?? point,
-  );
+  return ElbowGeometry.headingForPointOnBounds(elementBounds, anchor ?? point);
 }
 
 @immutable
@@ -290,10 +286,7 @@ final class _ResolvedEndpoints {
 }
 
 _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
-  ElbowHeading resolveHeadingFor(
-    _EndpointInfo info,
-    ElbowHeading fallback,
-  ) =>
+  ElbowHeading resolveHeadingFor(_EndpointInfo info, ElbowHeading fallback) =>
       _resolveEndpointHeading(
         elementBounds: info.elementBounds,
         point: info.point,
@@ -301,10 +294,8 @@ _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
         fallback: fallback,
       );
 
-  final hasStartArrowhead =
-      request.startArrowhead != ArrowheadStyle.none;
-  final hasEndArrowhead =
-      request.endArrowhead != ArrowheadStyle.none;
+  final hasStartArrowhead = request.startArrowhead != ArrowheadStyle.none;
+  final hasEndArrowhead = request.endArrowhead != ArrowheadStyle.none;
   final startInfo = _resolveEndpointInfo(
     point: request.start,
     binding: request.startBinding,
@@ -329,10 +320,8 @@ _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
     startPoint.x - endPoint.x,
     startPoint.y - endPoint.y,
   );
-  final startHeading =
-      resolveHeadingFor(startInfo, vectorHeading);
-  final endHeading =
-      resolveHeadingFor(endInfo, reverseVectorHeading);
+  final startHeading = resolveHeadingFor(startInfo, vectorHeading);
+  final endHeading = resolveHeadingFor(endInfo, reverseVectorHeading);
 
   return _ResolvedEndpoints(
     start: _ResolvedEndpoint(

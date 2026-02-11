@@ -919,11 +919,12 @@ _PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
   if ((anchor.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold) {
     return null;
   }
-  final slid = _slideRunForward(
+  final slid = _slideRun(
     points: points,
     startIndex: neighborIndex,
     horizontal: false,
     target: anchor.x,
+    direction: 1,
   );
   if (!slid.moved) {
     return null;
@@ -934,19 +935,6 @@ _PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
     inserted: false,
   );
 }
-
-({List<DrawPoint> points, bool moved}) _slideRunForward({
-  required List<DrawPoint> points,
-  required int startIndex,
-  required bool horizontal,
-  required double target,
-}) => _slideRun(
-  points: points,
-  startIndex: startIndex,
-  horizontal: horizontal,
-  target: target,
-  direction: 1,
-);
 
 DrawPoint _offsetPoint(
   DrawPoint point,
@@ -969,17 +957,13 @@ double? _resolveFixedAxisLimit({
   final wantHorizontal = !heading.isHorizontal;
   final ordered = isStart ? fixedSegments : fixedSegments.reversed;
   for (final segment in ordered) {
-    final index = segment.index;
-    if (index <= 0 || index >= points.length) {
+    if (segment.index <= 0 || segment.index >= points.length) {
       continue;
     }
-    final start = points[index - 1];
-    final end = points[index];
-    final isHorizontal = ElbowGeometry.segmentIsHorizontal(start, end);
-    if (isHorizontal != wantHorizontal) {
+    if (segment.isHorizontal != wantHorizontal) {
       continue;
     }
-    return isHorizontal ? (start.y + end.y) / 2 : (start.x + end.x) / 2;
+    return segment.axisValue;
   }
   return null;
 }

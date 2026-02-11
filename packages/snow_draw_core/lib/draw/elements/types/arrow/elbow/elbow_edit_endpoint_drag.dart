@@ -124,15 +124,8 @@ List<DrawPoint>? _buildFallbackPointsForActiveFixed({
     }
     return reversed.reversed.toList(growable: false);
   }
-  final fixedHorizontal = ElbowGeometry.segmentIsHorizontal(
-    fixedSegment.start,
-    fixedSegment.end,
-  );
-  final axis = ElbowGeometry.axisValue(
-    fixedSegment.start,
-    fixedSegment.end,
-    axis: fixedHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical,
-  );
+  final fixedHorizontal = fixedSegment.isHorizontal;
+  final axis = fixedSegment.axisValue;
   const padding = ElbowConstants.directionFixPadding;
 
   List<DrawPoint> points;
@@ -272,29 +265,11 @@ bool _fixedSegmentAxisMatches(
   ElbowFixedSegment original,
   ElbowFixedSegment updated,
 ) {
-  final originalHorizontal = ElbowGeometry.segmentIsHorizontal(
-    original.start,
-    original.end,
-  );
-  final updatedHorizontal = ElbowGeometry.segmentIsHorizontal(
-    updated.start,
-    updated.end,
-  );
-  if (originalHorizontal != updatedHorizontal) {
+  if (original.isHorizontal != updated.isHorizontal) {
     return false;
   }
-  final axis = originalHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
-  final originalAxis = ElbowGeometry.axisValue(
-    original.start,
-    original.end,
-    axis: axis,
-  );
-  final updatedAxis = ElbowGeometry.axisValue(
-    updated.start,
-    updated.end,
-    axis: axis,
-  );
-  return (originalAxis - updatedAxis).abs() <= ElbowConstants.dedupThreshold;
+  return (original.axisValue - updated.axisValue).abs() <=
+      ElbowConstants.dedupThreshold;
 }
 
 bool _fixedSegmentAxesStable(
@@ -313,11 +288,7 @@ bool _fixedSegmentAxesStable(
 }
 
 bool _segmentMatchesHeading(ElbowFixedSegment segment, ElbowHeading heading) {
-  final isHorizontal = ElbowGeometry.segmentIsHorizontal(
-    segment.start,
-    segment.end,
-  );
-  if (heading.isHorizontal != isHorizontal) {
+  if (heading.isHorizontal != segment.isHorizontal) {
     return true;
   }
   final dx = segment.end.x - segment.start.x;
@@ -812,32 +783,16 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
     );
   }
 
-  final _StubIndices idx;
-  if (isStart) {
-    idx = _StubIndices(
-      endpointIndex: 0,
-      midIndex: 1,
-      innerIndex: 2,
-      outerSegmentIndex: 3,
-      nearSegmentIndex1: 1,
-      nearSegmentIndex2: 2,
-    );
-  } else {
-    final last = points.length - 1;
-    idx = _StubIndices(
-      endpointIndex: last,
-      midIndex: last - 1,
-      innerIndex: last - 2,
-      outerSegmentIndex: last - 2,
-      nearSegmentIndex1: last - 1,
-      nearSegmentIndex2: last,
-    );
-  }
+  final last = points.length - 1;
+  final endpointIndex = isStart ? 0 : last;
+  final midIndex = isStart ? 1 : last - 1;
+  final innerIndex = isStart ? 2 : last - 2;
+  final outerSegmentIndex = isStart ? 3 : last - 2;
 
   // The anchor fixed segment must exist; the two stub segments must not.
   final outerFixed = _fixedSegmentIsHorizontal(
     fixedSegments,
-    idx.outerSegmentIndex,
+    outerSegmentIndex,
   );
   if (outerFixed == null) {
     return _FixedSegmentPathResult(
@@ -845,8 +800,10 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
       fixedSegments: fixedSegments,
     );
   }
-  if (_fixedSegmentIsHorizontal(fixedSegments, idx.nearSegmentIndex1) != null ||
-      _fixedSegmentIsHorizontal(fixedSegments, idx.nearSegmentIndex2) != null) {
+  final nearIndex1 = isStart ? 1 : last - 1;
+  final nearIndex2 = isStart ? 2 : last;
+  if (_fixedSegmentIsHorizontal(fixedSegments, nearIndex1) != null ||
+      _fixedSegmentIsHorizontal(fixedSegments, nearIndex2) != null) {
     return _FixedSegmentPathResult(
       points: points,
       fixedSegments: fixedSegments,
@@ -854,17 +811,17 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
   }
 
   // Resolve the three segment orientations around the stub.
-  final outerAdjacentIndex = isStart ? idx.innerIndex + 1 : idx.innerIndex - 1;
+  final outerAdjacentIndex = isStart ? innerIndex + 1 : innerIndex - 1;
   final endpointH = ElbowGeometry.segmentIsHorizontal(
-    points[isStart ? idx.endpointIndex : idx.midIndex],
-    points[isStart ? idx.midIndex : idx.endpointIndex],
+    points[isStart ? endpointIndex : midIndex],
+    points[isStart ? midIndex : endpointIndex],
   );
   final midH = ElbowGeometry.segmentIsHorizontal(
-    points[isStart ? idx.midIndex : idx.innerIndex],
-    points[isStart ? idx.innerIndex : idx.midIndex],
+    points[isStart ? midIndex : innerIndex],
+    points[isStart ? innerIndex : midIndex],
   );
   final outerH = ElbowGeometry.segmentIsHorizontal(
-    points[idx.innerIndex],
+    points[innerIndex],
     points[outerAdjacentIndex],
   );
   if (outerFixed != outerH) {
@@ -881,8 +838,8 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
     endpointH: endpointH,
     midH: midH,
     outerH: outerH,
-    innerIndex: idx.innerIndex,
-    midIndex: idx.midIndex,
+    innerIndex: innerIndex,
+    midIndex: midIndex,
     isStart: isStart,
   );
   if (collinearResult != null) {
@@ -898,8 +855,8 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
   }
 
   final updated = List<DrawPoint>.from(points);
-  final endpoint = updated[idx.endpointIndex];
-  final anchor = updated[idx.innerIndex];
+  final endpoint = updated[endpointIndex];
+  final anchor = updated[innerIndex];
   final moved = outerH
       ? anchor.copyWith(x: endpoint.x)
       : anchor.copyWith(y: endpoint.y);
@@ -911,30 +868,10 @@ _FixedSegmentPathResult _collapseBindingRemovedStub({
       fixedSegments: fixedSegments,
     );
   }
-  updated[idx.innerIndex] = moved;
-  updated.removeAt(idx.midIndex);
+  updated[innerIndex] = moved;
+  updated.removeAt(midIndex);
 
   return _tryReindex(points, fixedSegments, updated);
-}
-
-/// Index layout for the three-point stub near a binding endpoint.
-@immutable
-final class _StubIndices {
-  const _StubIndices({
-    required this.endpointIndex,
-    required this.midIndex,
-    required this.innerIndex,
-    required this.outerSegmentIndex,
-    required this.nearSegmentIndex1,
-    required this.nearSegmentIndex2,
-  });
-
-  final int endpointIndex;
-  final int midIndex;
-  final int innerIndex;
-  final int outerSegmentIndex;
-  final int nearSegmentIndex1;
-  final int nearSegmentIndex2;
 }
 
 /// Tries to remove one collinear stub point.  Returns `null` when
@@ -1241,11 +1178,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   ElbowFixedSegment? candidate;
   if (isStart) {
     for (final segment in fixedSegments) {
-      final isHorizontal = ElbowGeometry.segmentIsHorizontal(
-        segment.start,
-        segment.end,
-      );
-      if (isHorizontal == targetFixedHorizontal) {
+      if (segment.isHorizontal == targetFixedHorizontal) {
         candidate = segment;
         break;
       }
@@ -1253,11 +1186,7 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
   } else {
     for (var i = fixedSegments.length - 1; i >= 0; i--) {
       final segment = fixedSegments[i];
-      final isHorizontal = ElbowGeometry.segmentIsHorizontal(
-        segment.start,
-        segment.end,
-      );
-      if (isHorizontal == targetFixedHorizontal) {
+      if (segment.isHorizontal == targetFixedHorizontal) {
         candidate = segment;
         break;
       }

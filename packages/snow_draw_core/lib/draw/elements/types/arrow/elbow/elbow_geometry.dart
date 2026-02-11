@@ -161,9 +161,7 @@ final class ElbowGeometry {
     if (aligned != null) {
       return aligned;
     }
-    return isHorizontal(a, b)
-        ? ElbowAxis.horizontal
-        : ElbowAxis.vertical;
+    return isHorizontal(a, b) ? ElbowAxis.horizontal : ElbowAxis.vertical;
   }
 
   /// Returns true when a segment is (or should be treated as) horizontal.
@@ -185,9 +183,7 @@ final class ElbowGeometry {
     DrawPoint start,
     DrawPoint end, {
     required ElbowAxis axis,
-  }) => axis.isHorizontal
-      ? (start.y + end.y) / 2
-      : (start.x + end.x) / 2;
+  }) => axis.isHorizontal ? (start.y + end.y) / 2 : (start.x + end.x) / 2;
 
   /// Returns true when two points are nearly identical.
   static bool pointsClose(
@@ -267,16 +263,10 @@ final class ElbowGeometry {
       return points;
     }
 
-    var previousIsHorizontal = segmentIsHorizontal(
-      points[0],
-      points[1],
-    );
+    var previousIsHorizontal = segmentIsHorizontal(points[0], points[1]);
     final result = <DrawPoint>[points.first];
     for (var i = 1; i < points.length - 1; i++) {
-      final nextIsHorizontal = segmentIsHorizontal(
-        points[i],
-        points[i + 1],
-      );
+      final nextIsHorizontal = segmentIsHorizontal(points[i], points[i + 1]);
       if (previousIsHorizontal != nextIsHorizontal) {
         result.add(points[i]);
       }
@@ -320,8 +310,7 @@ final class ElbowGeometry {
         continue;
       }
       final length = manhattanDistance(cleaned.last, point);
-      if (length <= ElbowConstants.dedupThreshold &&
-          !pinned.contains(point)) {
+      if (length <= ElbowConstants.dedupThreshold && !pinned.contains(point)) {
         continue;
       }
       cleaned.add(point);
