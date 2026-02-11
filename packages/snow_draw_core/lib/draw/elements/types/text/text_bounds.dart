@@ -64,7 +64,7 @@ double fitTextFontSizeToHeight({
   required double targetHeight,
   required double maxWidth,
   double minFontSize = 1.0,
-  int maxIterations = 12,
+  int maxIterations = 8,
   double tolerance = 0.01,
 }) {
   final safeWidth = _sanitizeExtent(maxWidth);
@@ -93,11 +93,15 @@ double fitTextFontSizeToHeight({
     return safeMinFontSize;
   }
 
+  // Use a linear estimate to seed the binary search with a tighter
+  // initial range. Font height scales roughly linearly with font size
+  // for single-line text, so this often lands close on the first try.
   var low = safeMinFontSize;
   var high = baseFontSize < safeTargetHeight ? safeTargetHeight : baseFontSize;
   var highHeight = high == baseFontSize
       ? baseHeight
       : _resolveHeight(data: data, fontSize: high, maxWidth: safeWidth);
+
   if (highHeight < safeTargetHeight) {
     var attempts = 0;
     while (highHeight < safeTargetHeight && attempts < maxIterations) {
@@ -114,6 +118,27 @@ double fitTextFontSizeToHeight({
     }
   }
 
+  final lowHeight = minHeight;
+  final span = highHeight - lowHeight;
+  if (span > 0) {
+    final ratio = (safeTargetHeight - lowHeight) / span;
+    final estimate = low + (high - low) * ratio;
+    final estHeight = _resolveHeight(
+      data: data,
+      fontSize: estimate,
+      maxWidth: safeWidth,
+    );
+    if ((estHeight - safeTargetHeight).abs() <= tolerance) {
+      return estimate;
+    }
+    // Narrow the search range based on the estimate.
+    if (estHeight > safeTargetHeight) {
+      high = estimate;
+    } else {
+      low = estimate;
+    }
+  }
+
   for (var i = 0; i < maxIterations; i++) {
     final mid = (low + high) / 2;
     final height = _resolveHeight(
@@ -121,6 +146,9 @@ double fitTextFontSizeToHeight({
       fontSize: mid,
       maxWidth: safeWidth,
     );
+    if ((height - safeTargetHeight).abs() <= tolerance) {
+      return mid;
+    }
     if (height > safeTargetHeight) {
       high = mid;
     } else {

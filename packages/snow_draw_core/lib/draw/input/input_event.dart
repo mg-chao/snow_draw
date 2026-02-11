@@ -33,19 +33,27 @@ class KeyModifiers {
 
 /// Base class for input events passed from UI -> business.
 abstract class InputEvent {
-  const InputEvent({required this.position, required this.modifiers});
+  const InputEvent({
+    required this.position,
+    required this.modifiers,
+    this.pressure = 0.0,
+  });
 
   /// World coordinate position.
   final DrawPoint position;
 
   /// Modifier keys state.
   final KeyModifiers modifiers;
+
+  /// Pointer pressure in the range 0..1 (0 = unknown).
+  final double pressure;
 }
 
 class PointerDownInputEvent extends InputEvent {
   const PointerDownInputEvent({
     required super.position,
     required super.modifiers,
+    super.pressure,
   });
 
   @override
@@ -56,6 +64,7 @@ class PointerMoveInputEvent extends InputEvent {
   const PointerMoveInputEvent({
     required super.position,
     required super.modifiers,
+    super.pressure,
   });
 
   @override

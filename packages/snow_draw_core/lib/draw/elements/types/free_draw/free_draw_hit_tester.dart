@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../config/draw_config.dart';
@@ -8,7 +7,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import 'free_draw_data.dart';
-import 'free_draw_path_utils.dart';
+import 'free_draw_visual_cache.dart';
 
 class FreeDrawHitTester implements ElementHitTester {
   const FreeDrawHitTester();
@@ -27,8 +26,9 @@ class FreeDrawHitTester implements ElementHitTester {
       );
     }
 
+    final localPosition = _toLocalPosition(element, position);
+
     if (data.strokeWidth > 0) {
-      final localPosition = _toLocalPosition(element, position);
       if (_hitTestStroke(element, data, localPosition, tolerance)) {
         return true;
       }
@@ -40,19 +40,21 @@ class FreeDrawHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
     if (!_isInsideRect(rect, localPosition, 0)) {
       return false;
     }
 
-    final localPoints = resolveFreeDrawLocalPoints(
-      rect: rect,
-      points: data.points,
+    final cached = FreeDrawVisualCache.instance.resolve(
+      element: element,
+      data: data,
     );
-    if (localPoints.length < 3) {
+    if (cached.pointCount < 3) {
       return false;
     }
-    final fillPath = buildFreeDrawSmoothPath(localPoints)..close();
+
+    final fillPath = Path()
+      ..addPath(cached.path, Offset.zero)
+      ..close();
     final testPoint = Offset(
       localPosition.x - rect.minX,
       localPosition.y - rect.minY,
@@ -78,18 +80,22 @@ class FreeDrawHitTester implements ElementHitTester {
     if (first == last) {
       return true;
     }
-    const tolerance =
+    const closeTolerance =
         ConfigDefaults.handleTolerance *
         ConfigDefaults.freeDrawCloseToleranceMultiplier;
     final dx = (first.x - last.x) * rect.width;
     final dy = (first.y - last.y) * rect.height;
-    return (dx * dx + dy * dy) <= tolerance * tolerance;
+    return (dx * dx + dy * dy) <= closeTolerance * closeTolerance;
   }
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;
 }
 
+/// Hit-tests the stroke using the shared visual cache.
+///
+/// Reuses the cached smooth path and lazily-built flattened points
+/// instead of rebuilding them on every pointer event.
 bool _hitTestStroke(
   ElementState element,
   FreeDrawData data,
@@ -97,16 +103,22 @@ bool _hitTestStroke(
   double tolerance,
 ) {
   final rect = element.rect;
-  final localPoints = resolveFreeDrawLocalPoints(
-    rect: rect,
-    points: data.points,
-  );
-  if (localPoints.length < 2) {
+  final halfWidth = data.strokeWidth / 2;
+  final maxRadius = halfWidth + tolerance;
+  if (!_isInsideRect(rect, localPosition, maxRadius)) {
     return false;
   }
-  final radius = (data.strokeWidth / 2) + tolerance;
-  final boundsPadding = radius;
-  if (!_isInsideRect(rect, localPosition, boundsPadding)) {
+
+  final cached = FreeDrawVisualCache.instance.resolve(
+    element: element,
+    data: data,
+  );
+  if (cached.pointCount < 2) {
+    return false;
+  }
+
+  final flattened = cached.getOrBuildFlattened(data.strokeWidth);
+  if (flattened.length < 2) {
     return false;
   }
 
@@ -114,12 +126,7 @@ bool _hitTestStroke(
     localPosition.x - rect.minX,
     localPosition.y - rect.minY,
   );
-  final smoothedPath = buildFreeDrawSmoothPath(localPoints);
-  final flattened = _flattenPath(smoothedPath, _sampleStep(data.strokeWidth));
-  if (flattened.length < 2) {
-    return false;
-  }
-  final radiusSq = radius * radius;
+  final radiusSq = maxRadius * maxRadius;
   for (var i = 1; i < flattened.length; i++) {
     final distance = _distanceSquaredToSegment(
       testPoint,
@@ -158,40 +165,4 @@ double _distanceSquaredToSegment(Offset p, Offset a, Offset b) {
   final dx = p.dx - closest.dx;
   final dy = p.dy - closest.dy;
   return dx * dx + dy * dy;
-}
-
-double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
-
-List<Offset> _flattenPath(Path path, double step) {
-  if (step <= 0) {
-    return const <Offset>[];
-  }
-
-  const maxPoints = 512;
-  final flattened = <Offset>[];
-  for (final metric in path.computeMetrics()) {
-    final length = metric.length;
-    var distance = 0.0;
-    while (distance < length && flattened.length < maxPoints) {
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent != null) {
-        final point = tangent.position;
-        if (flattened.isEmpty || point != flattened.last) {
-          flattened.add(point);
-        }
-      }
-      distance += step;
-    }
-    if (flattened.length >= maxPoints) {
-      break;
-    }
-    final endTangent = metric.getTangentForOffset(length);
-    if (endTangent != null) {
-      final point = endTangent.position;
-      if (flattened.isEmpty || point != flattened.last) {
-        flattened.add(point);
-      }
-    }
-  }
-  return flattened;
 }

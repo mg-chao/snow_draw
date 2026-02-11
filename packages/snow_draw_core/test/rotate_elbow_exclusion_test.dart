@@ -119,14 +119,12 @@ ElementState _elbowArrowElement({
   );
 }
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-}) => ElementState(
-  id: id,
-  rect: rect,
-  rotation: 0,
-  opacity: 1,
-  zIndex: 0,
-  data: const RectangleData(),
-);
+ElementState _rectangleElement({required String id, required DrawRect rect}) =>
+    ElementState(
+      id: id,
+      rect: rect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: const RectangleData(),
+    );

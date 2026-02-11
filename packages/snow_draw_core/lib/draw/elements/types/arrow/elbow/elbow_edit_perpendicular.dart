@@ -70,10 +70,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
 
   if (endBinding != null) {
     final endNeighborIndex = math.max(2, localPoints.length - 2);
-    final hasCorner = _endpointHasCorner(
-      points: localPoints,
-      isStart: false,
-    );
+    final hasCorner = _endpointHasCorner(points: localPoints, isStart: false);
     final fixedNeighborAxis =
         _fixedSegmentIsHorizontal(updatedFixedSegments, endNeighborIndex) ??
         (hasCorner
@@ -138,10 +135,8 @@ bool _endpointHasCorner({
   final a = isStart ? points[0] : points[points.length - 3];
   final b = isStart ? points[1] : points[points.length - 2];
   final c = isStart ? points[2] : points[points.length - 1];
-  final abHorizontal =
-      (a.y - b.y).abs() <= ElbowConstants.dedupThreshold;
-  final bcHorizontal =
-      (b.y - c.y).abs() <= ElbowConstants.dedupThreshold;
+  final abHorizontal = (a.y - b.y).abs() <= ElbowConstants.dedupThreshold;
+  final bcHorizontal = (b.y - c.y).abs() <= ElbowConstants.dedupThreshold;
   return abHorizontal != bcHorizontal;
 }
 
@@ -1132,9 +1127,7 @@ double? _resolveFixedAxisLimit({
     if (isHorizontal != wantHorizontal) {
       continue;
     }
-    return isHorizontal
-        ? (start.y + end.y) / 2
-        : (start.x + end.x) / 2;
+    return isHorizontal ? (start.y + end.y) / 2 : (start.x + end.x) / 2;
   }
   return null;
 }

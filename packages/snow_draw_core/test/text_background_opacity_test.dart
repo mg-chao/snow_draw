@@ -46,12 +46,9 @@ void main() {
         widthBasis: TextWidthBasis.parent,
         styleOverride: buildTextStyle(data: data, colorOverride: data.color),
       );
-      final selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: data.text.length,
-      );
-      final boxes = fillLayout.painter.getBoxesForSelection(
-        selection,
+      final boxes = fillLayout.paragraph.getBoxesForRange(
+        0,
+        data.text.length,
         boxHeightStyle: ui.BoxHeightStyle.strut,
       );
       expect(boxes.length, greaterThanOrEqualTo(2));

@@ -47,13 +47,11 @@ class SelectionState {
   bool get isSingleSelect => selectedIds.length == 1;
   int get count => selectedIds.length;
 
-  SelectionState copyWith({
-    Set<String>? selectedIds,
-    int? selectionVersion,
-  }) => SelectionState(
-    selectedIds: selectedIds ?? this.selectedIds,
-    selectionVersion: selectionVersion ?? this.selectionVersion,
-  );
+  SelectionState copyWith({Set<String>? selectedIds, int? selectionVersion}) =>
+      SelectionState(
+        selectedIds: selectedIds ?? this.selectedIds,
+        selectionVersion: selectionVersion ?? this.selectionVersion,
+      );
 
   /// Sets single selection.
   SelectionState withSelected(String elementId) =>
