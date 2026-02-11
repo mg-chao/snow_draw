@@ -124,8 +124,10 @@ Path? buildFreeDrawSmoothPathIncremental({
   // recomputeFrom. The smoothing pass is still O(n) but the
   // cubic generation for the stable prefix can be skipped in
   // future iterations when we cache the smoothed array.
+  final _ = basePath;
+  final prefixEnd = math.min(count, recomputeFrom + 1);
   final result = Path()..moveTo(smoothed.first.dx, smoothed.first.dy);
-  _addOpenCatmullRomSegmentsRange(result, smoothed, 0, recomputeFrom);
+  _addOpenCatmullRomSegmentsRange(result, smoothed, 0, prefixEnd);
   _addOpenCatmullRomSegmentsRange(result, smoothed, recomputeFrom, count);
   return result;
 }

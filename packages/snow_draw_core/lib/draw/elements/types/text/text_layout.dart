@@ -189,10 +189,18 @@ TextLayoutMetrics layoutText({
     text: resolvedText,
     fontSize: resolvedStyle.fontSize ?? data.fontSize,
     fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
+    fontWeight: resolvedStyle.fontWeight,
+    fontStyle: resolvedStyle.fontStyle,
+    letterSpacing: resolvedStyle.letterSpacing,
+    wordSpacing: resolvedStyle.wordSpacing,
+    height: resolvedStyle.height,
+    textBaseline: resolvedStyle.textBaseline ?? TextBaseline.alphabetic,
     horizontalAlign: data.horizontalAlign,
     maxWidth: safeMaxWidth,
     minWidth: safeMinWidth,
     widthBasis: widthBasis,
+    paintKey: _TextPaintKey.fromStyle(resolvedStyle),
+    locale: locale,
     isResizing: isResizing,
   );
 
@@ -464,20 +472,28 @@ double _quantize(double value) => (value * 10).roundToDouble() / 10;
 // Cache keys
 // ---------------------------------------------------------------------------
 
-/// Minimal cache key for the fast [layoutText] path.
+/// Cache key for the fast [layoutText] path.
 ///
-/// Intentionally excludes paint-specific fields (color, stroke, shader)
-/// because `dart:ui.Paragraph` layout depends only on text geometry.
+/// Includes paint attributes because callers may draw the cached
+/// `ui.Paragraph` directly (not just consume geometry).
 @immutable
 class _LayoutCacheKey {
   _LayoutCacheKey({
     required this.text,
     required this.fontSize,
     required this.fontFamily,
+    required this.fontWeight,
+    required this.fontStyle,
+    required this.letterSpacing,
+    required this.wordSpacing,
+    required this.height,
+    required this.textBaseline,
     required this.horizontalAlign,
     required double maxWidth,
     required double minWidth,
     required this.widthBasis,
+    required this.paintKey,
+    required this.locale,
     required bool isResizing,
   }) : maxWidth = isResizing ? _quantizeCoarse(maxWidth) : _quantize(maxWidth),
        minWidth = isResizing ? _quantizeCoarse(minWidth) : _quantize(minWidth);
@@ -485,10 +501,18 @@ class _LayoutCacheKey {
   final String text;
   final double fontSize;
   final String? fontFamily;
+  final FontWeight? fontWeight;
+  final FontStyle? fontStyle;
+  final double? letterSpacing;
+  final double? wordSpacing;
+  final double? height;
+  final TextBaseline textBaseline;
   final TextHorizontalAlign horizontalAlign;
   final double maxWidth;
   final double minWidth;
   final TextWidthBasis widthBasis;
+  final _TextPaintKey paintKey;
+  final Locale? locale;
 
   static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
@@ -502,20 +526,36 @@ class _LayoutCacheKey {
           other.text == text &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
+          other.fontWeight == fontWeight &&
+          other.fontStyle == fontStyle &&
+          other.letterSpacing == letterSpacing &&
+          other.wordSpacing == wordSpacing &&
+          other.height == height &&
+          other.textBaseline == textBaseline &&
           other.horizontalAlign == horizontalAlign &&
           other.maxWidth == maxWidth &&
           other.minWidth == minWidth &&
-          other.widthBasis == widthBasis;
+          other.widthBasis == widthBasis &&
+          other.paintKey == paintKey &&
+          other.locale == locale;
 
   @override
   int get hashCode => Object.hash(
     text,
     fontSize,
     fontFamily,
+    fontWeight,
+    fontStyle,
+    letterSpacing,
+    wordSpacing,
+    height,
+    textBaseline,
     horizontalAlign,
     maxWidth,
     minWidth,
     widthBasis,
+    paintKey,
+    locale,
   );
 }
 

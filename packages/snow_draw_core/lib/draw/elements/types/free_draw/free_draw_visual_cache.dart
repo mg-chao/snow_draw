@@ -81,6 +81,13 @@ class FreeDrawVisualEntry {
     _cachedPictureOpacity = opacity;
   }
 
+  /// Releases any native cached resources held by this entry.
+  void dispose() {
+    _cachedPicture?.dispose();
+    _cachedPicture = null;
+    _cachedPictureOpacity = null;
+  }
+
   bool matches(FreeDrawData data, double width, double height) =>
       identical(this.data, data) &&
       this.width == width &&
@@ -114,6 +121,9 @@ class FreeDrawVisualCache {
 
     // Try incremental path building when only the tail changed.
     final entry = _buildEntry(element: element, data: data, previous: existing);
+    if (existing != null) {
+      existing.dispose();
+    }
     _entries.put(id, entry);
     return entry;
   }
