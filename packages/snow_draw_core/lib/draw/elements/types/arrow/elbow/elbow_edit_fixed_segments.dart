@@ -46,7 +46,12 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   }
   final result = <ElbowFixedSegment>[];
   for (final segment in fixedSegments) {
-    final index = _findSegmentIndex(points, segment);
+    final index = _selectSegmentIndex(
+      points: points,
+      isHorizontal: segment.isHorizontal,
+      preferredIndex: segment.index,
+      axisValue: segment.axisValue,
+    );
     if (index == null || !_isInteriorSegmentIndex(index, points.length)) {
       continue;
     }
@@ -60,14 +65,6 @@ List<ElbowFixedSegment> _reindexFixedSegments(
   }
   return result;
 }
-
-int? _findSegmentIndex(List<DrawPoint> points, ElbowFixedSegment segment) =>
-    _selectSegmentIndex(
-      points: points,
-      isHorizontal: segment.isHorizontal,
-      preferredIndex: segment.index,
-      axisValue: segment.axisValue,
-    );
 
 int? _selectSegmentIndex({
   required List<DrawPoint> points,
@@ -699,25 +696,20 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
   };
   final simplified = ElbowGeometry.simplifyPath(enforced, pinned: pinned);
 
-  // Reindex and merge collinear neighbors in one pass.
+  // Pick the best fixed-segment list for the simplified path.
   final reindexed = _reindexFixedSegments(simplified, fixedSegments);
   final activeFixed = reindexed.length == fixedSegments.length
       ? reindexed
       : fixedSegments;
-  final merged = _mergeFixedSegmentsWithCollinearNeighbors(
+
+  // Merge collinear neighbors (internally reindexes on every iteration).
+  return _mergeFixedSegmentsWithCollinearNeighbors(
     points: simplified,
     fixedSegments: activeFixed,
     pinned: {
       ..._collectPinnedPoints(points: simplified, fixedSegments: activeFixed),
       ...extraPinned,
     },
-  );
-
-  // Final reindex to stabilize segment indices.
-  final finalFixed = _reindexFixedSegments(merged.points, merged.fixedSegments);
-  return _FixedSegmentPathResult(
-    points: merged.points,
-    fixedSegments: finalFixed,
   );
 }
 
@@ -828,22 +820,6 @@ List<DrawPoint> _routeLocalPath({
   return routed.localPoints;
 }
 
-bool? _preferredHorizontalForRelease({
-  required ElbowFixedSegment? previous,
-  required ElbowFixedSegment? next,
-}) {
-  if (previous != null && next != null) {
-    return null;
-  }
-  if (previous != null) {
-    return previous.isHorizontal;
-  }
-  if (next != null) {
-    return !next.isHorizontal;
-  }
-  return null;
-}
-
 List<DrawPoint> _routeReleasedRegion({
   required ElementState element,
   required Map<String, ElementState> elementsById,
@@ -869,10 +845,12 @@ List<DrawPoint> _routeReleasedRegion({
     );
   }
 
-  final preferHorizontal = _preferredHorizontalForRelease(
-    previous: previousFixed,
-    next: nextFixed,
-  );
+  // Prefer the axis that continues the adjacent fixed segment's pattern.
+  final preferHorizontal = previousFixed != null && nextFixed == null
+      ? previousFixed.isHorizontal
+      : (nextFixed != null && previousFixed == null
+            ? !nextFixed.isHorizontal
+            : null);
   if (preferHorizontal != null) {
     return ElbowGeometry.directElbowPath(
       startLocal,
@@ -904,10 +882,11 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
 }) {
-  final removedIndices = _resolveRemovedFixedIndices(
-    previousFixed,
-    remainingFixed,
-  );
+  final previousIndices = previousFixed.map((segment) => segment.index).toSet();
+  final remainingIndices = remainingFixed
+      .map((segment) => segment.index)
+      .toSet();
+  final removedIndices = previousIndices.difference(remainingIndices);
   if (removedIndices.isEmpty || currentPoints.length < 2) {
     return _FixedSegmentPathResult(
       points: currentPoints,
@@ -969,16 +948,4 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
     points: List<DrawPoint>.unmodifiable(stitched),
     fixedSegments: remainingFixed,
   );
-}
-
-Set<int> _resolveRemovedFixedIndices(
-  List<ElbowFixedSegment> previous,
-  List<ElbowFixedSegment> remaining,
-) {
-  if (previous.isEmpty) {
-    return const {};
-  }
-  final previousIndices = previous.map((segment) => segment.index).toSet();
-  final remainingIndices = remaining.map((segment) => segment.index).toSet();
-  return previousIndices.difference(remainingIndices);
 }

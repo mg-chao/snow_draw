@@ -23,6 +23,36 @@ final class _EndpointDragContext {
     required this.endArrowhead,
   });
 
+  /// Derives a drag context from the shared edit context.
+  factory _EndpointDragContext.fromEditContext(_ElbowEditContext ctx) {
+    final startPointChanged =
+        ctx.basePoints.isNotEmpty &&
+        ctx.incomingPoints.isNotEmpty &&
+        ctx.basePoints.first != ctx.incomingPoints.first;
+    final endPointChanged =
+        ctx.basePoints.isNotEmpty &&
+        ctx.incomingPoints.isNotEmpty &&
+        ctx.basePoints.last != ctx.incomingPoints.last;
+    return _EndpointDragContext(
+      element: ctx.element,
+      elementsById: ctx.elementsById,
+      basePoints: ctx.basePoints,
+      incomingPoints: ctx.incomingPoints,
+      fixedSegments: ctx.fixedSegments,
+      startBinding: ctx.startBinding,
+      endBinding: ctx.endBinding,
+      startBindingRemoved: ctx.startBindingRemoved,
+      endBindingRemoved: ctx.endBindingRemoved,
+      startWasBound: ctx.previousStartBinding != null,
+      endWasBound: ctx.previousEndBinding != null,
+      startActive:
+          startPointChanged || ctx.previousStartBinding != ctx.startBinding,
+      endActive: endPointChanged || ctx.previousEndBinding != ctx.endBinding,
+      startArrowhead: ctx.data.startArrowhead,
+      endArrowhead: ctx.data.endArrowhead,
+    );
+  }
+
   final ElementState element;
   final Map<String, ElementState> elementsById;
   final List<DrawPoint> basePoints;
@@ -41,9 +71,11 @@ final class _EndpointDragContext {
 
   bool get hasBindings => startBinding != null || endBinding != null;
 
-  bool get hasBoundStart => _hasBindingTarget(startBinding, elementsById);
+  bool get hasBoundStart =>
+      startBinding != null && elementsById.containsKey(startBinding!.elementId);
 
-  bool get hasBoundEnd => _hasBindingTarget(endBinding, elementsById);
+  bool get hasBoundEnd =>
+      endBinding != null && elementsById.containsKey(endBinding!.elementId);
 
   bool get isFullyUnbound => startBinding == null && endBinding == null;
 }
@@ -64,46 +96,6 @@ final class _EndpointDragState {
     fixedSegments: fixedSegments ?? this.fixedSegments,
   );
 }
-
-List<DrawPoint> _referencePointsForEndpointDrag({
-  required List<DrawPoint> basePoints,
-  required List<DrawPoint> incomingPoints,
-}) => ElbowGeometry.pointListsEqualExceptEndpoints(basePoints, incomingPoints)
-    ? basePoints
-    : incomingPoints;
-
-_FixedSegmentPathResult _maybeAdoptBaselineRoute({
-  required List<DrawPoint> currentPoints,
-  required List<ElbowFixedSegment> fixedSegments,
-  required List<DrawPoint> baseline,
-}) {
-  final mapped = _applyFixedSegmentsToBaselineRoute(
-    baseline: baseline,
-    fixedSegments: fixedSegments,
-  );
-  if (mapped.fixedSegments.length == fixedSegments.length) {
-    return _FixedSegmentPathResult(
-      points: List<DrawPoint>.from(mapped.points),
-      fixedSegments: mapped.fixedSegments,
-    );
-  }
-  return _FixedSegmentPathResult(
-    points: currentPoints,
-    fixedSegments: fixedSegments,
-  );
-}
-
-_FixedSegmentPathResult? _mapBaselineWithActiveSegment({
-  required List<DrawPoint> baseline,
-  required List<ElbowFixedSegment> fixedSegments,
-  ElbowFixedSegment? activeSegment,
-}) => _mapFixedSegmentsToBaseline(
-  baseline: baseline,
-  fixedSegments: fixedSegments,
-  activeSegment: activeSegment,
-  enforceAxisOnPoints: true,
-  requireAll: true,
-);
 
 List<DrawPoint>? _buildFallbackPointsForActiveFixed({
   required DrawPoint start,
@@ -244,10 +236,13 @@ _FixedSegmentPathResult? _buildFallbackPathForActiveSpan({
 
 /// Step A: pick a stable reference path and apply endpoint overrides.
 _EndpointDragState _buildEndpointDragState(_EndpointDragContext context) {
-  final referencePoints = _referencePointsForEndpointDrag(
-    basePoints: context.basePoints,
-    incomingPoints: context.incomingPoints,
-  );
+  final referencePoints =
+      ElbowGeometry.pointListsEqualExceptEndpoints(
+        context.basePoints,
+        context.incomingPoints,
+      )
+      ? context.basePoints
+      : context.incomingPoints;
   final updated = List<DrawPoint>.from(referencePoints);
   updated[0] = context.incomingPoints.first;
   updated[updated.length - 1] = context.incomingPoints.last;
@@ -255,17 +250,6 @@ _EndpointDragState _buildEndpointDragState(_EndpointDragContext context) {
     points: updated,
     fixedSegments: context.fixedSegments,
   );
-}
-
-bool _fixedSegmentAxisMatches(
-  ElbowFixedSegment original,
-  ElbowFixedSegment updated,
-) {
-  if (original.isHorizontal != updated.isHorizontal) {
-    return false;
-  }
-  return (original.axisValue - updated.axisValue).abs() <=
-      ElbowConstants.dedupThreshold;
 }
 
 bool _fixedSegmentAxesStable(
@@ -276,42 +260,22 @@ bool _fixedSegmentAxesStable(
     return false;
   }
   for (var i = 0; i < original.length; i++) {
-    if (!_fixedSegmentAxisMatches(original[i], updated[i])) {
+    if (original[i].isHorizontal != updated[i].isHorizontal) {
+      return false;
+    }
+    if ((original[i].axisValue - updated[i].axisValue).abs() >
+        ElbowConstants.dedupThreshold) {
       return false;
     }
   }
   return true;
 }
 
-bool _segmentMatchesHeading(ElbowFixedSegment segment, ElbowHeading heading) {
-  if (heading.isHorizontal != segment.isHorizontal) {
-    return true;
-  }
-  final dx = segment.end.x - segment.start.x;
-  final dy = segment.end.y - segment.start.y;
-  return switch (heading) {
-    ElbowHeading.right => dx > ElbowConstants.dedupThreshold,
-    ElbowHeading.left => dx < -ElbowConstants.dedupThreshold,
-    ElbowHeading.down => dy > ElbowConstants.dedupThreshold,
-    ElbowHeading.up => dy < -ElbowConstants.dedupThreshold,
-  };
-}
-
 /// Result type for [_rerouteActiveSpanIfNeeded].
-typedef _RerouteResult =
-    ({
-      _EndpointDragState state,
-      bool applied,
-      bool reroutedStart,
-      bool reroutedEnd,
-    });
-
-_RerouteResult _noOpRerouteResult(_EndpointDragState state) => (
-  state: state,
-  applied: false,
-  reroutedStart: false,
-  reroutedEnd: false,
-);
+///
+/// [reroutedSide] is `true` when the start span was rerouted, `false`
+/// when the end span was rerouted, and `null` when nothing changed.
+typedef _RerouteResult = ({_EndpointDragState state, bool? reroutedSide});
 
 /// Tries the active-span fallback path and returns an applied result,
 /// or `null` when the fallback is not available or unstable.
@@ -332,10 +296,7 @@ _RerouteResult? _tryActiveSpanFallback({
     startBound: activeIsStart,
   );
   if (fallback == null ||
-      !_fixedSegmentAxesStable(
-        state.fixedSegments,
-        fallback.fixedSegments,
-      )) {
+      !_fixedSegmentAxesStable(state.fixedSegments, fallback.fixedSegments)) {
     return null;
   }
   return (
@@ -343,9 +304,7 @@ _RerouteResult? _tryActiveSpanFallback({
       points: List<DrawPoint>.from(fallback.points),
       fixedSegments: fallback.fixedSegments,
     ),
-    applied: true,
-    reroutedStart: activeIsStart,
-    reroutedEnd: !activeIsStart,
+    reroutedSide: activeIsStart,
   );
 }
 
@@ -354,10 +313,10 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   required _EndpointDragState state,
 }) {
   if (state.fixedSegments.isEmpty || state.points.length < 2) {
-    return _noOpRerouteResult(state);
+    return (state: state, reroutedSide: null);
   }
   if (context.startActive == context.endActive) {
-    return _noOpRerouteResult(state);
+    return (state: state, reroutedSide: null);
   }
 
   final activeIsStart = context.startActive;
@@ -366,7 +325,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
       : state.fixedSegments.last;
   final anchorIndex = activeIsStart ? activeFixed.index : activeFixed.index - 1;
   if (anchorIndex <= 0 || anchorIndex >= state.points.length) {
-    return _noOpRerouteResult(state);
+    return (state: state, reroutedSide: null);
   }
 
   final activeBinding = activeIsStart
@@ -405,7 +364,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
     endBinding: activeIsStart ? null : context.endBinding,
   );
   if (routed.length < 2) {
-    return _noOpRerouteResult(state);
+    return (state: state, reroutedSide: null);
   }
 
   final stitched = activeIsStart
@@ -419,7 +378,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
           ...routed,
         ];
   if (ElbowGeometry.pointListsEqual(stitched, state.points)) {
-    return _noOpRerouteResult(state);
+    return (state: state, reroutedSide: null);
   }
 
   final changedStructure =
@@ -437,7 +396,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
           requiredHeading: requiredHeading,
           activeIsStart: activeIsStart,
         ) ??
-        _noOpRerouteResult(state);
+        (state: state, reroutedSide: null);
   }
 
   // When axes drifted or heading flipped, try the fallback path.
@@ -447,7 +406,17 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
     final activeUpdated = activeIsStart
         ? updatedFixed.first
         : updatedFixed.last;
-    headingMatches = _segmentMatchesHeading(activeUpdated, requiredHeading);
+    final h = requiredHeading;
+    if (h.isHorizontal == activeUpdated.isHorizontal) {
+      final dx = activeUpdated.end.x - activeUpdated.start.x;
+      final dy = activeUpdated.end.y - activeUpdated.start.y;
+      headingMatches = switch (h) {
+        ElbowHeading.right => dx > ElbowConstants.dedupThreshold,
+        ElbowHeading.left => dx < -ElbowConstants.dedupThreshold,
+        ElbowHeading.down => dy > ElbowConstants.dedupThreshold,
+        ElbowHeading.up => dy < -ElbowConstants.dedupThreshold,
+      };
+    }
   }
   if (!axesStable || !headingMatches) {
     return _tryActiveSpanFallback(
@@ -456,7 +425,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
           requiredHeading: requiredHeading,
           activeIsStart: activeIsStart,
         ) ??
-        _noOpRerouteResult(state);
+        (state: state, reroutedSide: null);
   }
 
   return (
@@ -464,41 +433,30 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
       points: List<DrawPoint>.unmodifiable(stitched),
       fixedSegments: List<ElbowFixedSegment>.unmodifiable(updatedFixed),
     ),
-    applied: true,
-    reroutedStart: activeIsStart,
-    reroutedEnd: !activeIsStart,
+    reroutedSide: activeIsStart,
   );
 }
 
-/// Resolved active-segment context for baseline adoption.
-@immutable
-final class _ActiveSegmentContext {
-  const _ActiveSegmentContext({
-    required this.forceBaseline,
-    required this.activeStart,
-    required this.activeSegment,
-    required this.requiredHeading,
-  });
-
-  final bool forceBaseline;
-  final bool activeStart;
-  final ElbowFixedSegment? activeSegment;
-  final ElbowHeading? requiredHeading;
-}
-
-_ActiveSegmentContext _resolveActiveSegmentContext({
+/// Step C: adopt a bound-aware baseline route when available.
+({_EndpointDragState state, bool adoptedBaseline}) _adoptBaselineRouteIfNeeded({
   required _EndpointDragContext context,
   required _EndpointDragState state,
 }) {
-  final boundStart = context.hasBoundStart;
-  final boundEnd = context.hasBoundEnd;
+  if (!context.hasBindings) {
+    return (state: state, adoptedBaseline: false);
+  }
+  if (!context.hasBoundStart && !context.hasBoundEnd) {
+    return (state: state, adoptedBaseline: false);
+  }
+
+  // Resolve which endpoint is actively being dragged toward a bound element.
   final startActiveBound =
-      boundStart &&
+      context.hasBoundStart &&
       context.startActive &&
       context.startWasBound &&
       !context.startBindingRemoved;
   final endActiveBound =
-      boundEnd &&
+      context.hasBoundEnd &&
       context.endActive &&
       context.endWasBound &&
       !context.endBindingRemoved;
@@ -517,9 +475,7 @@ _ActiveSegmentContext _resolveActiveSegmentContext({
     final activeBinding = activeStart
         ? context.startBinding
         : context.endBinding;
-    final activePoint = activeStart
-        ? state.points.first
-        : state.points.last;
+    final activePoint = activeStart ? state.points.first : state.points.last;
     final boundHeading = activeBinding == null
         ? null
         : ElbowGeometry.resolveBoundHeading(
@@ -530,63 +486,32 @@ _ActiveSegmentContext _resolveActiveSegmentContext({
     requiredHeading = activeStart ? boundHeading : boundHeading?.opposite;
   }
 
-  return _ActiveSegmentContext(
-    forceBaseline: forceBaseline,
-    activeStart: activeStart,
-    activeSegment: activeSegment,
-    requiredHeading: requiredHeading,
-  );
-}
-
-/// Applies a fallback result to the state, returning the adopted baseline.
-({_EndpointDragState state, bool adoptedBaseline}) _adoptFallback(
-  _EndpointDragState state,
-  _FixedSegmentPathResult fallback,
-) => (
-  state: state.copyWith(
-    points: List<DrawPoint>.from(fallback.points),
-    fixedSegments: fallback.fixedSegments,
-  ),
-  adoptedBaseline: true,
-);
-
-/// Step C: adopt a bound-aware baseline route when available.
-({_EndpointDragState state, bool adoptedBaseline}) _adoptBaselineRouteIfNeeded({
-  required _EndpointDragContext context,
-  required _EndpointDragState state,
-}) {
-  if (!context.hasBindings) {
-    return (state: state, adoptedBaseline: false);
-  }
-  if (!context.hasBoundStart && !context.hasBoundEnd) {
-    return (state: state, adoptedBaseline: false);
-  }
-
-  final active = _resolveActiveSegmentContext(
-    context: context,
-    state: state,
-  );
-
   // Single fixed segment with a forced baseline: try direct fallback.
-  if (active.forceBaseline &&
+  if (forceBaseline &&
       state.fixedSegments.length == 1 &&
-      active.activeSegment != null &&
-      active.requiredHeading != null) {
+      activeSegment != null &&
+      requiredHeading != null) {
     final fallback = _buildFallbackPathForActiveFixed(
       start: state.points.first,
       end: state.points.last,
-      fixedSegment: active.activeSegment!,
-      requiredHeading: active.requiredHeading!,
-      startBound: active.activeStart,
+      fixedSegment: activeSegment,
+      requiredHeading: requiredHeading,
+      startBound: activeStart,
     );
     if (fallback != null) {
-      return _adoptFallback(state, fallback);
+      return (
+        state: state.copyWith(
+          points: List<DrawPoint>.from(fallback.points),
+          fixedSegments: fallback.fixedSegments,
+        ),
+        adoptedBaseline: true,
+      );
     }
   }
 
   if (context.fixedSegments.isNotEmpty &&
       (context.hasBoundStart != context.hasBoundEnd) &&
-      !active.forceBaseline) {
+      !forceBaseline) {
     return (state: state, adoptedBaseline: false);
   }
 
@@ -600,24 +525,30 @@ _ActiveSegmentContext _resolveActiveSegmentContext({
     startBinding: context.startBinding,
     endBinding: context.endBinding,
   );
-  final mapped = _mapBaselineWithActiveSegment(
+  final mapped = _mapFixedSegmentsToBaseline(
     baseline: baseline,
     fixedSegments: state.fixedSegments,
-    activeSegment: active.activeSegment,
+    activeSegment: activeSegment,
+    enforceAxisOnPoints: true,
+    requireAll: true,
   );
   if (mapped == null) {
-    if (active.forceBaseline &&
-        active.activeSegment != null &&
-        active.requiredHeading != null) {
+    if (forceBaseline && activeSegment != null && requiredHeading != null) {
       final fallback = _buildFallbackPathForActiveSpan(
         points: state.points,
         fixedSegments: state.fixedSegments,
-        activeSegment: active.activeSegment!,
-        requiredHeading: active.requiredHeading!,
-        startBound: active.activeStart,
+        activeSegment: activeSegment,
+        requiredHeading: requiredHeading,
+        startBound: activeStart,
       );
       if (fallback != null) {
-        return _adoptFallback(state, fallback);
+        return (
+          state: state.copyWith(
+            points: List<DrawPoint>.from(fallback.points),
+            fixedSegments: fallback.fixedSegments,
+          ),
+          adoptedBaseline: true,
+        );
       }
     }
     return (state: state, adoptedBaseline: false);
@@ -625,7 +556,7 @@ _ActiveSegmentContext _resolveActiveSegmentContext({
 
   var adoptedPoints = List<DrawPoint>.from(mapped.points);
   var adoptedFixed = mapped.fixedSegments;
-  if (active.forceBaseline) {
+  if (forceBaseline) {
     final normalized = _normalizeFixedSegmentReleasePath(
       points: adoptedPoints,
       fixedSegments: adoptedFixed,
@@ -726,13 +657,14 @@ _EndpointDragState _enforceOrthogonality({
       startArrowhead: context.startArrowhead,
       endArrowhead: context.endArrowhead,
     );
-    final adopted = _maybeAdoptBaselineRoute(
-      currentPoints: points,
-      fixedSegments: fixedSegments,
+    final mapped = _applyFixedSegmentsToBaselineRoute(
       baseline: baseline,
+      fixedSegments: fixedSegments,
     );
-    points = List<DrawPoint>.from(adopted.points);
-    fixedSegments = adopted.fixedSegments;
+    if (mapped.fixedSegments.length == fixedSegments.length) {
+      points = List<DrawPoint>.from(mapped.points);
+      fixedSegments = mapped.fixedSegments;
+    }
   }
 
   // Snap unbound endpoint neighbors to stay orthogonal.
@@ -778,167 +710,33 @@ _FixedSegmentPathResult _unchangedResult(
   List<ElbowFixedSegment> fixedSegments,
 ) => _FixedSegmentPathResult(points: points, fixedSegments: fixedSegments);
 
-/// Collapses a redundant stub near a binding endpoint.
+/// Collapses redundant stubs near binding endpoints after removal.
 ///
-/// When a binding is removed, the path may retain a short detour near
-/// the freed endpoint.  This helper identifies the three-point stub
-/// adjacent to the nearest fixed segment and removes the redundant
-/// intermediate point, keeping the path orthogonal.
-///
-/// [isStart] selects which end of the path to inspect.
-_FixedSegmentPathResult _collapseBindingRemovedStub({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-  required bool isStart,
-}) {
-  if (points.length < 4 || fixedSegments.isEmpty) {
-    return _unchangedResult(points, fixedSegments);
-  }
-
-  final last = points.length - 1;
-  final endpointIndex = isStart ? 0 : last;
-  final midIndex = isStart ? 1 : last - 1;
-  final innerIndex = isStart ? 2 : last - 2;
-  final outerSegmentIndex = isStart ? 3 : last - 2;
-
-  // The anchor fixed segment must exist; the two stub segments must not.
-  final outerFixed = _fixedSegmentIsHorizontal(
-    fixedSegments,
-    outerSegmentIndex,
-  );
-  if (outerFixed == null) {
-    return _unchangedResult(points, fixedSegments);
-  }
-  final nearIndex1 = isStart ? 1 : last - 1;
-  final nearIndex2 = isStart ? 2 : last;
-  if (_fixedSegmentIsHorizontal(fixedSegments, nearIndex1) != null ||
-      _fixedSegmentIsHorizontal(fixedSegments, nearIndex2) != null) {
-    return _unchangedResult(points, fixedSegments);
-  }
-
-  // Resolve the three segment orientations around the stub.
-  final outerAdjacentIndex = isStart ? innerIndex + 1 : innerIndex - 1;
-  final endpointH = ElbowGeometry.segmentIsHorizontal(
-    points[isStart ? endpointIndex : midIndex],
-    points[isStart ? midIndex : endpointIndex],
-  );
-  final midH = ElbowGeometry.segmentIsHorizontal(
-    points[isStart ? midIndex : innerIndex],
-    points[isStart ? innerIndex : midIndex],
-  );
-  final outerH = ElbowGeometry.segmentIsHorizontal(
-    points[innerIndex],
-    points[outerAdjacentIndex],
-  );
-  if (outerFixed != outerH) {
-    return _unchangedResult(points, fixedSegments);
-  }
-
-  // Try removing one of the two stub points when collinear.
-  final collinearResult = _tryRemoveCollinearStubPoint(
-    points: points,
-    fixedSegments: fixedSegments,
-    endpointH: endpointH,
-    midH: midH,
-    outerH: outerH,
-    innerIndex: innerIndex,
-    midIndex: midIndex,
-    isStart: isStart,
-  );
-  if (collinearResult != null) {
-    return collinearResult;
-  }
-
-  // Slide the anchor point to absorb the stub.
-  if (endpointH != outerH || endpointH == midH) {
-    return _unchangedResult(points, fixedSegments);
-  }
-
-  final updated = List<DrawPoint>.from(points);
-  final endpoint = updated[endpointIndex];
-  final anchor = updated[innerIndex];
-  final moved = outerH
-      ? anchor.copyWith(x: endpoint.x)
-      : anchor.copyWith(y: endpoint.y);
-  if (moved == anchor ||
-      ElbowGeometry.manhattanDistance(endpoint, moved) <=
-          ElbowConstants.dedupThreshold) {
-    return _unchangedResult(points, fixedSegments);
-  }
-  updated[innerIndex] = moved;
-  updated.removeAt(midIndex);
-
-  return _tryReindex(points, fixedSegments, updated);
-}
-
-/// Tries to remove one collinear stub point.  Returns `null` when
-/// neither removal pattern applies.
-_FixedSegmentPathResult? _tryRemoveCollinearStubPoint({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-  required bool endpointH,
-  required bool midH,
-  required bool outerH,
-  required int innerIndex,
-  required int midIndex,
-  required bool isStart,
-}) {
-  // Pattern 1: the two segments nearest the fixed segment are collinear.
-  final nearFixedCollinear = isStart ? midH == outerH : endpointH == midH;
-  final nearEndpointDiffers = isStart ? endpointH != midH : midH != outerH;
-
-  // Pattern 2: the two segments nearest the endpoint are collinear.
-  final nearEndpointCollinear = isStart ? endpointH == midH : midH == outerH;
-  final nearFixedDiffers = isStart ? endpointH != outerH : endpointH != midH;
-
-  if (nearFixedCollinear && nearEndpointDiffers) {
-    final removeIndex = isStart ? innerIndex : midIndex;
-    return _tryReindex(
-      points,
-      fixedSegments,
-      List<DrawPoint>.from(points)..removeAt(removeIndex),
-    );
-  }
-
-  if (nearEndpointCollinear && nearFixedDiffers) {
-    return _tryReindex(
-      points,
-      fixedSegments,
-      List<DrawPoint>.from(points)..removeAt(midIndex),
-    );
-  }
-
-  return null;
-}
-
+/// Delegates to the generic collinear-merge pass which already handles
+/// removing intermediate points that share the same heading as their
+/// neighbors, then collapses endpoint backtracks.
 _EndpointDragState _collapseBindingRemovedStubs({
   required _EndpointDragContext context,
   required _EndpointDragState state,
 }) {
-  var points = state.points;
-  var fixedSegments = state.fixedSegments;
-
-  if (context.endBindingRemoved) {
-    final collapsed = _collapseBindingRemovedStub(
-      points: points,
-      fixedSegments: fixedSegments,
-      isStart: false,
-    );
-    points = collapsed.points;
-    fixedSegments = collapsed.fixedSegments;
+  if (!context.startBindingRemoved && !context.endBindingRemoved) {
+    return state;
   }
-
-  if (context.startBindingRemoved) {
-    final collapsed = _collapseBindingRemovedStub(
-      points: points,
-      fixedSegments: fixedSegments,
-      isStart: true,
-    );
-    points = collapsed.points;
-    fixedSegments = collapsed.fixedSegments;
+  if (state.fixedSegments.isEmpty) {
+    return state;
   }
-
-  return state.copyWith(points: points, fixedSegments: fixedSegments);
+  final merged = _mergeFixedSegmentsWithCollinearNeighbors(
+    points: state.points,
+    fixedSegments: state.fixedSegments,
+    allowDirectionFlip: true,
+  );
+  if (merged.fixedSegments.length != state.fixedSegments.length) {
+    return state;
+  }
+  return state.copyWith(
+    points: merged.points,
+    fixedSegments: merged.fixedSegments,
+  );
 }
 
 List<DrawPoint> _snapUnboundNeighbor({
@@ -974,11 +772,6 @@ List<DrawPoint> _snapUnboundNeighbor({
   return updated;
 }
 
-bool _hasBindingTarget(
-  ArrowBinding? binding,
-  Map<String, ElementState> elementsById,
-) => binding != null && elementsById.containsKey(binding.elementId);
-
 _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   required _EndpointDragContext context,
 }) {
@@ -995,7 +788,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   // Step 2: reroute the active span or adopt a baseline route.
   final local = _rerouteActiveSpanIfNeeded(context: context, state: state);
   state = local.state;
-  if (!local.applied) {
+  if (local.reroutedSide == null) {
     final baseline = _adoptBaselineRouteIfNeeded(
       context: context,
       state: state,
@@ -1007,8 +800,8 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   state = _rerouteReleasedBindingSpan(
     context: context,
     state: state,
-    skipStart: local.reroutedStart,
-    skipEnd: local.reroutedEnd,
+    skipStart: local.reroutedSide == true,
+    skipEnd: local.reroutedSide == false,
   );
 
   // Step 4: enforce orthogonality (axes, drift, neighbors, tail merge).

@@ -273,37 +273,8 @@ final class _ElbowEditPipeline {
 
   ElbowEditResult _handleEndpointDragFlow(_ElbowEditContext context) {
     // Step 5: endpoint drag while fixed segments stay pinned.
-    final startPointChanged =
-        context.basePoints.isNotEmpty &&
-        context.incomingPoints.isNotEmpty &&
-        context.basePoints.first != context.incomingPoints.first;
-    final endPointChanged =
-        context.basePoints.isNotEmpty &&
-        context.incomingPoints.isNotEmpty &&
-        context.basePoints.last != context.incomingPoints.last;
-    final startBindingChanged =
-        context.previousStartBinding != context.startBinding;
-    final endBindingChanged = context.previousEndBinding != context.endBinding;
-    final startWasBound = context.previousStartBinding != null;
-    final endWasBound = context.previousEndBinding != null;
     final updated = _applyEndpointDragWithFixedSegments(
-      context: _EndpointDragContext(
-        element: context.element,
-        elementsById: context.elementsById,
-        basePoints: context.basePoints,
-        incomingPoints: context.incomingPoints,
-        fixedSegments: context.fixedSegments,
-        startBinding: context.startBinding,
-        endBinding: context.endBinding,
-        startBindingRemoved: context.startBindingRemoved,
-        endBindingRemoved: context.endBindingRemoved,
-        startWasBound: startWasBound,
-        endWasBound: endWasBound,
-        startActive: startPointChanged || startBindingChanged,
-        endActive: endPointChanged || endBindingChanged,
-        startArrowhead: context.data.startArrowhead,
-        endArrowhead: context.data.endArrowhead,
-      ),
+      context: _EndpointDragContext.fromEditContext(context),
     );
 
     var resolvedPoints = updated.points;
