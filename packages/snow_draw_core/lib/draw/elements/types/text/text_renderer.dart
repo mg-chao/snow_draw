@@ -25,6 +25,18 @@ class TextRenderer extends ElementTypeRenderer {
   static final _backgroundBoxCache =
       LruCache<_BackgroundBoxKey, List<ui.TextBox>>(maxEntries: 256);
 
+  /// Clears all static caches held by [TextRenderer].
+  ///
+  /// Call when switching documents or under memory pressure to
+  /// release stale `ui.Paragraph` and `ui.Shader` native resources.
+  static void clearCaches() {
+    _lineShaderCache.clear();
+    _backgroundBoxCache.clear();
+    _fillParagraphCache.clear();
+    _strokeParagraphCache.clear();
+    _backgroundPathCache.clear();
+  }
+
   ui.Shader _buildLineShader({
     required double spacing,
     required double lineWidth,

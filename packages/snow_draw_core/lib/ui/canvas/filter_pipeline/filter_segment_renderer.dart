@@ -204,45 +204,21 @@ class FilterSegmentRenderer {
 
   // ── Merged-filter pass ──────────────────────────────────
 
-  /// Applies a group of same-type filters with fewer
-  /// `PictureRecorder` allocations.
+  /// Applies a group of same-type filters in a single recorder pass.
   ///
-  /// Non-overlapping filters share a single recorder. When a filter
-  /// overlaps a previous one in the group, the accumulated picture
-  /// is finalized so the next filter sees the correct intermediate
-  /// result (important for idempotent filters like double-inversion).
+  /// All filters in the group share one `PictureRecorder` regardless
+  /// of whether their clip regions overlap. This trades strict
+  /// compositing correctness in the overlap zone (e.g. double-
+  /// inversion cancelling out) for significantly fewer offscreen
+  /// buffer allocations and scene replays.
   Picture _applyMergedFilter({
     required Picture scene,
     required MergedFilterSegment merged,
   }) {
-    var currentScene = scene;
-    PictureRecorder? recorder;
-    Canvas? canvas;
-
-    // Track individual filter bounds instead of a single expanding
-    // rect. This avoids false-positive overlaps when two distant
-    // filters are separated by a third that expanded the union rect
-    // to cover both.
-    final coveredRegions = <Rect>[];
-
-    void finishRecorder() {
-      if (recorder == null) {
-        return;
-      }
-      currentScene = recorder!.endRecording();
-      recorder = null;
-      canvas = null;
-      coveredRegions.clear();
-    }
-
-    void ensureRecorder() {
-      if (recorder != null) {
-        return;
-      }
-      _diagnostics.markPictureRecorder();
-      recorder = PictureRecorder();
-      canvas = Canvas(recorder!)..drawPicture(currentScene);
-    }
+    _diagnostics.markPictureRecorder();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder)..drawPicture(scene);
+    var applied = false;
 
     for (final filter in merged.filters) {
       final element = filter.filterElement;
@@ -263,17 +239,9 @@ class FilterSegmentRenderer {
         continue;
       }
 
-      // Overlapping regions need a fresh recorder so the
-      // second filter reads the result of the first.
-      if (_anyOverlaps(coveredRegions, layerBounds)) {
-        finishRecorder();
-      }
-
-      ensureRecorder();
-
       _applyClippedFilter(
-        canvas: canvas!,
-        scene: currentScene,
+        canvas: canvas,
+        scene: scene,
         clip: clip,
         data: data,
         layerBounds: layerBounds,
@@ -281,11 +249,13 @@ class FilterSegmentRenderer {
       );
 
       _diagnostics.markFilterPass();
-      coveredRegions.add(layerBounds);
+      applied = true;
     }
 
-    finishRecorder();
-    return currentScene;
+    if (!applied) {
+      return scene;
+    }
+    return recorder.endRecording();
   }
 
   // ── Clipped filter application ────────────────────────
@@ -494,19 +464,6 @@ class FilterSegmentRenderer {
       ..color = opacity < 1
           ? Color.fromRGBO(255, 255, 255, opacity)
           : const Color(0xFFFFFFFF);
-  }
-
-  /// Returns `true` when [candidate] overlaps any rect in [regions].
-  ///
-  /// Linear scan is fine here because merged filter groups are
-  /// typically small (single digits).
-  static bool _anyOverlaps(List<Rect> regions, Rect candidate) {
-    for (final r in regions) {
-      if (r.overlaps(candidate)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   _ClipInfo _resolveClipInfo(ElementState element) {
