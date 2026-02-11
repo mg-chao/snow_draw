@@ -49,6 +49,12 @@ class FreeDrawVisualEntry {
   /// reused for subsequent hit tests on the same element version.
   List<Offset>? _flattenedPoints;
 
+  /// Lazily built closed copy of [path] for fill hit testing.
+  ///
+  /// Avoids allocating and copying a new [Path] on every
+  /// `hitTest` / render call for filled free-draw shapes.
+  Path? _closedFillPath;
+
   /// Lazily recorded picture for completed strokes.
   ///
   /// Keyed by opacity so that opacity changes invalidate the
@@ -69,6 +75,20 @@ class FreeDrawVisualEntry {
     final step = math.max(2, strokeWidth * 2).toDouble();
     _flattenedPoints = _flattenPath(path, step);
     return _flattenedPoints!;
+  }
+
+  /// Returns a cached closed copy of [path] for fill hit testing.
+  ///
+  /// Built once on first access and reused for subsequent calls,
+  /// avoiding a native [Path] allocation + copy on every hit test.
+  Path getOrBuildClosedFillPath() {
+    if (_closedFillPath != null) {
+      return _closedFillPath!;
+    }
+    _closedFillPath = Path()
+      ..addPath(path, Offset.zero)
+      ..close();
+    return _closedFillPath!;
   }
 
   /// Returns a cached [Picture] for the given [opacity], or null
@@ -243,15 +263,19 @@ List<Offset> _flattenPath(Path path, double step) {
     return const <Offset>[];
   }
 
+  // Single-pass: collect metrics and total length together to
+  // avoid calling computeMetrics() twice (each call creates
+  // native path metric iterators).
+  final metrics = path.computeMetrics().toList(growable: false);
   var totalPathLength = 0.0;
-  for (final metric in path.computeMetrics()) {
+  for (final metric in metrics) {
     totalPathLength += metric.length;
   }
   final needed = (totalPathLength / step).ceil() + 1;
   final maxPoints = needed.clamp(512, 8192);
 
   final flattened = <Offset>[];
-  for (final metric in path.computeMetrics()) {
+  for (final metric in metrics) {
     final length = metric.length;
     var distance = 0.0;
     while (distance < length && flattened.length < maxPoints) {

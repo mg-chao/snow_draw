@@ -52,9 +52,7 @@ class FreeDrawHitTester implements ElementHitTester {
       return false;
     }
 
-    final fillPath = Path()
-      ..addPath(cached.path, Offset.zero)
-      ..close();
+    final fillPath = cached.getOrBuildClosedFillPath();
     final testPoint = Offset(
       localPosition.x - rect.minX,
       localPosition.y - rect.minY,

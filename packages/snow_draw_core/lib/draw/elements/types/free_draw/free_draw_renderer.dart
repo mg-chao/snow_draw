@@ -130,9 +130,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
         fillOpacity > 0 && _isClosed(data, rect) && cached.pointCount > 2;
 
     if (shouldFill) {
-      final fillPath = Path()
-        ..addPath(cached.path, Offset.zero)
-        ..close();
+      final fillPath = cached.getOrBuildClosedFillPath();
       if (data.fillStyle == FillStyle.solid) {
         final paint = Paint()
           ..style = PaintingStyle.fill
