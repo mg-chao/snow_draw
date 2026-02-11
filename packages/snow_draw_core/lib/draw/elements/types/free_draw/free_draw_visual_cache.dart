@@ -272,7 +272,7 @@ List<Offset> _flattenPath(Path path, double step) {
     totalPathLength += metric.length;
   }
   final needed = (totalPathLength / step).ceil() + 1;
-  final maxPoints = needed.clamp(512, 8192);
+  final maxPoints = needed.clamp(512, 2048);
 
   final flattened = <Offset>[];
   for (final metric in metrics) {

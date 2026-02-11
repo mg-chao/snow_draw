@@ -28,8 +28,15 @@ class FreeDrawHitTester implements ElementHitTester {
 
     final localPosition = _toLocalPosition(element, position);
 
+    // Resolve the visual cache once and share it between stroke
+    // and fill hit testing to avoid a redundant LRU lookup.
+    final cached = FreeDrawVisualCache.instance.resolve(
+      element: element,
+      data: data,
+    );
+
     if (data.strokeWidth > 0) {
-      if (_hitTestStroke(element, data, localPosition, tolerance)) {
+      if (_hitTestStroke(element, data, localPosition, tolerance, cached)) {
         return true;
       }
     }
@@ -44,10 +51,6 @@ class FreeDrawHitTester implements ElementHitTester {
       return false;
     }
 
-    final cached = FreeDrawVisualCache.instance.resolve(
-      element: element,
-      data: data,
-    );
     if (cached.pointCount < 3) {
       return false;
     }
@@ -92,13 +95,14 @@ class FreeDrawHitTester implements ElementHitTester {
 
 /// Hit-tests the stroke using the shared visual cache.
 ///
-/// Reuses the cached smooth path and lazily-built flattened points
-/// instead of rebuilding them on every pointer event.
+/// Accepts a pre-resolved [cached] entry so the caller can share
+/// the same lookup between stroke and fill testing.
 bool _hitTestStroke(
   ElementState element,
   FreeDrawData data,
   DrawPoint localPosition,
   double tolerance,
+  FreeDrawVisualEntry cached,
 ) {
   final rect = element.rect;
   final halfWidth = data.strokeWidth / 2;
@@ -107,10 +111,6 @@ bool _hitTestStroke(
     return false;
   }
 
-  final cached = FreeDrawVisualCache.instance.resolve(
-    element: element,
-    data: data,
-  );
   if (cached.pointCount < 2) {
     return false;
   }
