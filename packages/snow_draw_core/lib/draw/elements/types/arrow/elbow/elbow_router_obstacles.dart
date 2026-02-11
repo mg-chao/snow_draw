@@ -619,11 +619,11 @@ _ElbowEndpointBounds _resolveEndpointBounds({
     endObstacle = _clampBounds(split.end);
   }
 
-  startObstacle = _clampObstacleExitToBasePadding(
+  startObstacle = _clampObstacleToBoundsPadding(
     endpoint: start,
     obstacle: startObstacle,
   );
-  endObstacle = _clampObstacleExitToBasePadding(
+  endObstacle = _clampObstacleToBoundsPadding(
     endpoint: end,
     obstacle: endObstacle,
   );
@@ -648,7 +648,7 @@ DrawRect _resolveCommonBounds({
   ),
 );
 
-DrawRect _clampObstacleExitToBasePadding({
+DrawRect _clampObstacleToBoundsPadding({
   required _ResolvedEndpoint endpoint,
   required DrawRect obstacle,
 }) {
@@ -656,32 +656,18 @@ DrawRect _clampObstacleExitToBasePadding({
     return obstacle;
   }
   final bounds = endpoint.elementBounds!;
-  switch (endpoint.heading) {
-    case ElbowHeading.up:
-      final target = bounds.minY - ElbowConstants.basePadding;
-      if (obstacle.minY >= target) {
-        return obstacle;
-      }
-      return obstacle.copyWith(minY: target);
-    case ElbowHeading.right:
-      final target = bounds.maxX + ElbowConstants.basePadding;
-      if (obstacle.maxX <= target) {
-        return obstacle;
-      }
-      return obstacle.copyWith(maxX: target);
-    case ElbowHeading.down:
-      final target = bounds.maxY + ElbowConstants.basePadding;
-      if (obstacle.maxY <= target) {
-        return obstacle;
-      }
-      return obstacle.copyWith(maxY: target);
-    case ElbowHeading.left:
-      final target = bounds.minX - ElbowConstants.basePadding;
-      if (obstacle.minX >= target) {
-        return obstacle;
-      }
-      return obstacle.copyWith(minX: target);
-  }
+  const padding = ElbowConstants.basePadding;
+
+  // Clamp every side so the obstacle never extends further than
+  // basePadding from the element bounds.  This keeps the gap between
+  // routed segments and the element consistent regardless of which
+  // side the endpoint heading points to.
+  return obstacle.copyWith(
+    minY: math.max(obstacle.minY, bounds.minY - padding),
+    maxX: math.min(obstacle.maxX, bounds.maxX + padding),
+    maxY: math.min(obstacle.maxY, bounds.maxY + padding),
+    minX: math.max(obstacle.minX, bounds.minX - padding),
+  );
 }
 
 ({DrawRect start, DrawRect end}) _harmonizeObstacleExitSpacing({
