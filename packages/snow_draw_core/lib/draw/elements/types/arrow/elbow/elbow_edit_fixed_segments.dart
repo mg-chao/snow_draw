@@ -325,10 +325,7 @@ _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final updated = List<DrawPoint>.from(points);
@@ -339,20 +336,14 @@ _FixedSegmentPathResult _mergeFixedSegmentWithEndCollinear({
     (segment) => segment.index == fixedIndex,
   );
   if (fixedPos == -1) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final a = updated[neighborIndex - 1];
   final b = updated[neighborIndex];
   final c = updated[neighborIndex + 1];
   if (!ElbowGeometry.segmentsCollinear(a, b, c)) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   updated.removeAt(neighborIndex);
@@ -376,10 +367,7 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   Set<DrawPoint> pinned = const {},
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final deduped = _removeAdjacentDuplicates(
@@ -493,10 +481,7 @@ _FixedSegmentPathResult _removeAdjacentDuplicates({
   Set<DrawPoint> pinned = const {},
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final cleaned = <DrawPoint>[points.first];
@@ -514,10 +499,7 @@ _FixedSegmentPathResult _removeAdjacentDuplicates({
   }
 
   if (cleaned.length == points.length) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   return _tryReindex(points, fixedSegments, cleaned);
@@ -528,10 +510,7 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 4 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   var updatedPoints = List<DrawPoint>.from(points);
@@ -601,10 +580,7 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final pinned = _collectPinnedPoints(
@@ -612,10 +588,7 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
     fixedSegments: fixedSegments,
   );
 
-  var result = _FixedSegmentPathResult(
-    points: points,
-    fixedSegments: fixedSegments,
-  );
+  var result = _unchangedResult(points, fixedSegments);
   for (final isStart in const [true, false]) {
     result = _collapseEndpointBacktrack(
       points: result.points,
@@ -634,18 +607,12 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   required bool isStart,
 }) {
   if (points.length < 3) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final midIndex = isStart ? 1 : points.length - 2;
   if (pinned.contains(points[midIndex])) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final prevIndex = isStart ? 0 : points.length - 3;
@@ -654,20 +621,14 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   final mid = points[midIndex];
   final next = points[nextIndex];
   if (!ElbowGeometry.segmentsCollinear(prev, mid, next)) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final axis =
       ElbowGeometry.axisAlignedForSegment(prev, mid) ??
       ElbowGeometry.axisAlignedForSegment(mid, next);
   if (axis == null) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final delta1 = axis.isHorizontal ? mid.x - prev.x : mid.y - prev.y;
@@ -675,10 +636,7 @@ _FixedSegmentPathResult _collapseEndpointBacktrack({
   if (delta1.abs() <= ElbowConstants.dedupThreshold ||
       delta2.abs() <= ElbowConstants.dedupThreshold ||
       delta1 * delta2 >= 0) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final updated = List<DrawPoint>.from(points)..removeAt(midIndex);
@@ -711,10 +669,7 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
   final pinned = _collectPinnedPoints(
     points: points,
@@ -733,10 +688,7 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
   Set<DrawPoint> extraPinned = const {},
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   // Enforce fixed axes, then simplify while keeping pinned points.

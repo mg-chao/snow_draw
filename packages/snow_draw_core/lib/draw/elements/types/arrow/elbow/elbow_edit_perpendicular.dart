@@ -22,10 +22,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     );
   }
   if (startBinding == null && endBinding == null) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
+    return _unchangedResult(points, fixedSegments);
   }
 
   final space = ElementSpace(
@@ -220,7 +217,7 @@ _PerpendicularAdjustment? _alignEndpointSegmentLength({
       desiredLength <= ElbowConstants.dedupThreshold) {
     return null;
   }
-  final desiredHorizontal = heading.isHorizontal;
+  final h = heading.isHorizontal;
   final neighborIndex = isStart ? 1 : points.length - 2;
   if (points.length > 2) {
     final adjacentIndex = isStart ? neighborIndex + 1 : neighborIndex - 1;
@@ -229,7 +226,7 @@ _PerpendicularAdjustment? _alignEndpointSegmentLength({
         points[neighborIndex],
         points[adjacentIndex],
       );
-      if (adjacentHorizontal != desiredHorizontal) {
+      if (adjacentHorizontal != h) {
         return null;
       }
     }
@@ -237,14 +234,14 @@ _PerpendicularAdjustment? _alignEndpointSegmentLength({
   final endpoint = isStart ? points.first : points.last;
   final neighbor = points[neighborIndex];
   final target = ElbowGeometry.offsetPoint(endpoint, heading, desiredLength);
-  final delta = desiredHorizontal
+  final delta = h
       ? (neighbor.x - target.x).abs()
       : (neighbor.y - target.y).abs();
   if (delta <= ElbowConstants.dedupThreshold) {
     return null;
   }
   final updated = List<DrawPoint>.from(points);
-  updated[neighborIndex] = desiredHorizontal
+  updated[neighborIndex] = h
       ? neighbor.copyWith(x: target.x)
       : neighbor.copyWith(y: target.y);
   return _PerpendicularAdjustment(
@@ -282,12 +279,8 @@ _PerpendicularAdjustment? _slideEndpointCornerToPadding({
   final outer = points[outerIndex];
   final target = ElbowGeometry.offsetPoint(endpoint, heading, desiredLength);
 
-  // main = axis of heading (x for horizontal, y for vertical).
-  // cross = the perpendicular axis.
   double main(DrawPoint p) => h ? p.x : p.y;
   double cross(DrawPoint p) => h ? p.y : p.x;
-  DrawPoint withMain(DrawPoint p, double v) =>
-      h ? p.copyWith(x: v) : p.copyWith(y: v);
 
   // The three segments must alternate axes: cross, main, cross.
   if ((cross(neighbor) - cross(endpoint)).abs() >
@@ -318,14 +311,23 @@ _PerpendicularAdjustment? _slideEndpointCornerToPadding({
   }
 
   final updated = List<DrawPoint>.from(points);
-  updated[neighborIndex] = withMain(neighbor, main(target));
-  updated[cornerIndex] = withMain(corner, main(target));
+  final targetMain = main(target);
+  updated[neighborIndex] = h
+      ? neighbor.copyWith(x: targetMain)
+      : neighbor.copyWith(y: targetMain);
+  updated[cornerIndex] = h
+      ? corner.copyWith(x: targetMain)
+      : corner.copyWith(y: targetMain);
   return _PerpendicularAdjustment(
     points: updated,
     moved: true,
     inserted: false,
   );
 }
+
+/// No-op perpendicular adjustment.
+_PerpendicularAdjustment _noOpAdjustment(List<DrawPoint> points) =>
+    _PerpendicularAdjustment(points: points, moved: false, inserted: false);
 
 /// Adjusts the endpoint segment to be perpendicular to the bound element.
 ///
@@ -344,11 +346,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   bool? fixedNeighborAxis,
 }) {
   if (points.length < 2) {
-    return _PerpendicularAdjustment(
-      points: points,
-      moved: false,
-      inserted: false,
-    );
+    return _noOpAdjustment(points);
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -358,11 +356,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     point: endpoint,
   );
   if (heading == null) {
-    return _PerpendicularAdjustment(
-      points: points,
-      moved: false,
-      inserted: false,
-    );
+    return _noOpAdjustment(points);
   }
 
   final desiredHorizontal = heading.isHorizontal;
@@ -397,78 +391,24 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   final preserveNeighbor = fixedNeighborAxis != null;
   final canSlideNeighbor =
       fixedNeighborAxis != null && fixedNeighborAxis == desiredHorizontal;
-  final fixedPadding = ElbowSpacing.fixedNeighborPadding(
-    hasArrowhead: hasArrowhead,
-  );
 
   // --- Preserved-neighbor branch (fixed segment constrains neighbor). ---
   if (preserveNeighbor) {
-    if (aligned && directionOk) {
-      final cornerFixedIndex = isStart ? 2 : points.length - 3;
-      final cornerInserted =
-          _endpointHasCorner(points: points, isStart: isStart) &&
-          _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
-      return _trySlideNeighborOrNoOp(
-        points: points,
-        heading: heading,
-        desiredLength: fixedPadding,
-        cornerInserted: cornerInserted,
-        canSlide: canSlideNeighbor,
-        isStart: isStart,
-      );
-    }
-    if (!aligned && directionOk) {
-      final inserted = _insertEndpointCorner(
-        points: points,
-        heading: heading,
-        neighbor: neighbor,
-        isStart: isStart,
-      );
-      if (canSlideNeighbor) {
-        final adjusted = _slideEndpointNeighborToPadding(
-          points: inserted.points,
-          heading: heading,
-          desiredLength: fixedPadding,
-          cornerInserted: true,
-          isStart: isStart,
-        );
-        if (adjusted != null) {
-          return adjusted;
-        }
-      }
-      return inserted;
-    }
-    // End-only: try snapping to the fixed axis at the anchor point.
-    if (!isStart &&
-        !directionOk &&
-        !desiredHorizontal &&
-        fixedNeighborAxis != desiredHorizontal) {
-      final snapped = _snapEndPointToFixedAxisAtAnchor(
-        points: points,
-        neighborIndex: neighborIndex,
-        binding: binding,
-        elementsById: elementsById,
-      );
-      if (snapped != null) {
-        return snapped;
-      }
-    }
-    if (aligned) {
-      return _trySlideNeighborOrNoOp(
-        points: points,
-        heading: heading,
-        desiredLength: fixedPadding,
-        cornerInserted: false,
-        canSlide: canSlideNeighbor,
-        isStart: isStart,
-      );
-    }
-    return _insertEndpointDirectionStub(
+    return _adjustPreservedNeighbor(
       points: points,
       heading: heading,
       neighbor: neighbor,
-      allowExtend: false,
-      padding: resolvedPadding,
+      fixedSegments: fixedSegments,
+      resolvedPadding: resolvedPadding,
+      hasArrowhead: hasArrowhead,
+      aligned: aligned,
+      directionOk: directionOk,
+      canSlideNeighbor: canSlideNeighbor,
+      fixedNeighborAxis: fixedNeighborAxis,
+      desiredHorizontal: desiredHorizontal,
+      neighborIndex: neighborIndex,
+      binding: binding,
+      elementsById: elementsById,
       isStart: isStart,
     );
   }
@@ -487,7 +427,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
           desiredLength: directionPadding,
           isStart: isStart,
         ) ??
-        _PerpendicularAdjustment(points: points, moved: false, inserted: false);
+        _noOpAdjustment(points);
   }
 
   if (aligned && !directionOk) {
@@ -549,6 +489,103 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     neighbor: neighbor,
     allowExtend: true,
     padding: stubPadding,
+    isStart: isStart,
+  );
+}
+
+/// Handles perpendicular adjustment when a fixed segment constrains the
+/// neighbor point.
+_PerpendicularAdjustment _adjustPreservedNeighbor({
+  required List<DrawPoint> points,
+  required ElbowHeading heading,
+  required DrawPoint neighbor,
+  required List<ElbowFixedSegment> fixedSegments,
+  required double resolvedPadding,
+  required bool hasArrowhead,
+  required bool aligned,
+  required bool directionOk,
+  required bool canSlideNeighbor,
+  required bool? fixedNeighborAxis,
+  required bool desiredHorizontal,
+  required int neighborIndex,
+  required ArrowBinding binding,
+  required Map<String, ElementState> elementsById,
+  required bool isStart,
+}) {
+  final fixedPadding = ElbowSpacing.fixedNeighborPadding(
+    hasArrowhead: hasArrowhead,
+  );
+
+  if (aligned && directionOk) {
+    final cornerFixedIndex = isStart ? 2 : points.length - 3;
+    final cornerInserted =
+        _endpointHasCorner(points: points, isStart: isStart) &&
+        _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
+    return _trySlideNeighborOrNoOp(
+      points: points,
+      heading: heading,
+      desiredLength: fixedPadding,
+      cornerInserted: cornerInserted,
+      canSlide: canSlideNeighbor,
+      isStart: isStart,
+    );
+  }
+
+  if (!aligned && directionOk) {
+    final inserted = _insertEndpointCorner(
+      points: points,
+      heading: heading,
+      neighbor: neighbor,
+      isStart: isStart,
+    );
+    if (canSlideNeighbor) {
+      final adjusted = _slideEndpointNeighborToPadding(
+        points: inserted.points,
+        heading: heading,
+        desiredLength: fixedPadding,
+        cornerInserted: true,
+        isStart: isStart,
+      );
+      if (adjusted != null) {
+        return adjusted;
+      }
+    }
+    return inserted;
+  }
+
+  // End-only: try snapping to the fixed axis at the anchor point.
+  if (!isStart &&
+      !directionOk &&
+      !desiredHorizontal &&
+      fixedNeighborAxis != desiredHorizontal) {
+    final snapped = _snapEndPointToFixedAxisAtAnchor(
+      points: points,
+      neighborIndex: neighborIndex,
+      binding: binding,
+      elementsById: elementsById,
+    );
+    if (snapped != null) {
+      return snapped;
+    }
+  }
+
+  if (aligned) {
+    return _trySlideNeighborOrNoOp(
+      points: points,
+      heading: heading,
+      desiredLength: fixedPadding,
+      cornerInserted: false,
+      canSlide: canSlideNeighbor,
+      isStart: isStart,
+    );
+  }
+
+  return _insertEndpointDirectionStub(
+    points: points,
+    heading: heading,
+    neighbor: neighbor,
+    allowExtend: false,
+    padding: resolvedPadding,
     isStart: isStart,
   );
 }
@@ -643,8 +680,6 @@ _PerpendicularAdjustment? _slideEndpointNeighborToPadding({
   }
 
   double main(DrawPoint p) => h ? p.x : p.y;
-  DrawPoint withMain(DrawPoint p, double v) =>
-      h ? p.copyWith(x: v) : p.copyWith(y: v);
 
   final endpoint = isStart ? points.first : points.last;
   final neighbor = points[neighborIndex];
@@ -652,13 +687,14 @@ _PerpendicularAdjustment? _slideEndpointNeighborToPadding({
       ? points[neighborIndex + 1]
       : points[neighborIndex - 1];
   final target = ElbowGeometry.offsetPoint(endpoint, heading, desiredLength);
-  final updatedNeighbor = withMain(neighbor, main(target));
+  final targetMain = main(target);
+  final updatedNeighborMain = targetMain;
   final originalDelta = isStart
       ? main(reference) - main(neighbor)
       : main(neighbor) - main(reference);
   final newDelta = isStart
-      ? main(reference) - main(updatedNeighbor)
-      : main(updatedNeighbor) - main(reference);
+      ? main(reference) - updatedNeighborMain
+      : updatedNeighborMain - main(reference);
   if (originalDelta.abs() <= ElbowConstants.dedupThreshold ||
       newDelta.abs() <= ElbowConstants.dedupThreshold ||
       originalDelta.sign != newDelta.sign) {
@@ -667,19 +703,20 @@ _PerpendicularAdjustment? _slideEndpointNeighborToPadding({
   if (newDelta.abs() <= originalDelta.abs() * 0.5) {
     return null;
   }
-  if ((main(updatedNeighbor) - main(neighbor)).abs() <=
+  if ((updatedNeighborMain - main(neighbor)).abs() <=
       ElbowConstants.dedupThreshold) {
     return null;
   }
 
   final updated = List<DrawPoint>.from(points);
-  updated[neighborIndex] = updatedNeighbor;
+  updated[neighborIndex] = h
+      ? neighbor.copyWith(x: targetMain)
+      : neighbor.copyWith(y: targetMain);
   if (cornerInserted) {
     final cornerIndex = isStart ? 1 : lastIndex - 1;
-    updated[cornerIndex] = withMain(
-      updated[cornerIndex],
-      main(updatedNeighbor),
-    );
+    updated[cornerIndex] = h
+        ? updated[cornerIndex].copyWith(x: targetMain)
+        : updated[cornerIndex].copyWith(y: targetMain);
   }
   return _PerpendicularAdjustment(
     points: updated,
