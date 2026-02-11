@@ -42,6 +42,9 @@ class ArrowVisualCacheEntry {
 
   List<PathMetric>? _pathMetrics;
 
+  /// Lazily built closed copy of [shaftPath] for fill hit testing.
+  Path? _closedFillPath;
+
   bool matches(ArrowLikeData data, double width, double height) =>
       identical(this.data, data) &&
       this.width == width &&
@@ -49,6 +52,20 @@ class ArrowVisualCacheEntry {
 
   List<PathMetric> resolvePathMetrics() =>
       _pathMetrics ??= shaftPath.computeMetrics().toList(growable: false);
+
+  /// Returns a cached closed copy of [shaftPath] for fill testing.
+  ///
+  /// Built once on first access, avoiding a native [Path]
+  /// allocation + copy on every hit test for filled lines.
+  Path getOrBuildClosedFillPath() {
+    if (_closedFillPath != null) {
+      return _closedFillPath!;
+    }
+    _closedFillPath = Path()
+      ..addPath(shaftPath, Offset.zero)
+      ..close();
+    return _closedFillPath!;
+  }
 }
 
 class ArrowVisualCache {

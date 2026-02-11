@@ -1,9 +1,16 @@
 import 'package:meta/meta.dart';
 
+import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../utils/spatial_index.dart';
 import 'element_state.dart';
+
+/// Reusable buffer for [DocumentState.queryElementsAtPointTopDown].
+///
+/// Safe because hit-test queries run synchronously on the UI thread
+/// and callers consume the list before the next query.
+final _pointQueryBuffer = <ElementState>[];
 
 /// Persistent document data (lowest change frequency).
 @immutable
@@ -25,6 +32,12 @@ class DocumentState {
   });
 
   late final _spatialIndex = SpatialIndex.fromElements(elements);
+
+  /// Cached set of text element IDs bound to serial numbers.
+  ///
+  /// Avoids an O(n) scan of all elements on every hit test when
+  /// the serial-number tool is active.
+  late final Set<String> boundTextIds = _buildBoundTextIds();
 
   Map<String, ElementState> get elementMap => _elementMap;
 
@@ -79,19 +92,22 @@ class DocumentState {
   }
 
   /// Queries point candidates sorted from top-most to bottom-most.
+  ///
+  /// The returned list is a shared buffer — callers must consume
+  /// it before the next call to this method.
   List<ElementState> queryElementsAtPointTopDown(
     DrawPoint point,
     double tolerance,
   ) {
     final entries = _spatialIndex.searchPointEntries(point, tolerance);
-    final result = <ElementState>[];
+    final buffer = _pointQueryBuffer..clear();
     for (final entry in entries) {
       final element = getElementById(entry.id);
       if (element != null) {
-        result.add(element);
+        buffer.add(element);
       }
     }
-    return result;
+    return buffer;
   }
 
   List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
@@ -103,6 +119,17 @@ class DocumentState {
       }
     }
     return elements;
+  }
+
+  Set<String> _buildBoundTextIds() {
+    final ids = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is SerialNumberData && data.textElementId != null) {
+        ids.add(data.textElementId!);
+      }
+    }
+    return ids;
   }
 
   DocumentState copyWith({List<ElementState>? elements, int? elementsVersion}) {

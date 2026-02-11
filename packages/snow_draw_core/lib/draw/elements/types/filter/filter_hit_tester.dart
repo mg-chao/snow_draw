@@ -24,16 +24,10 @@ class FilterHitTester implements ElementHitTester {
 
     final rect = element.rect;
     final localPosition = _toLocalPosition(element, position);
-    final expanded = DrawRect(
-      minX: rect.minX - tolerance,
-      minY: rect.minY - tolerance,
-      maxX: rect.maxX + tolerance,
-      maxY: rect.maxY + tolerance,
-    );
-    return localPosition.x >= expanded.minX &&
-        localPosition.x <= expanded.maxX &&
-        localPosition.y >= expanded.minY &&
-        localPosition.y <= expanded.maxY;
+    return localPosition.x >= rect.minX - tolerance &&
+        localPosition.x <= rect.maxX + tolerance &&
+        localPosition.y >= rect.minY - tolerance &&
+        localPosition.y <= rect.maxY + tolerance;
   }
 
   DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {

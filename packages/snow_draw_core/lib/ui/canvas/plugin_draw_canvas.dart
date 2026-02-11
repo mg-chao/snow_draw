@@ -285,18 +285,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (!mounted) {
         return;
       }
-      _updateCursorIfChanged(
-        _resolveCursorForState(widget.store.state, _lastPointerPosition),
-      );
-      final hoverTargets = _lastPointerPosition == null
-          ? null
-          : _resolveHoverSelectionAndBinding(
-              state: widget.store.state,
-              position: _lastPointerPosition!,
-            );
-      _hoveredSelectionElementId = hoverTargets?.selectionId;
-      _hoveredBindingElementId = hoverTargets?.bindingId;
-      setState(() {});
+      final position = _lastPointerPosition;
+      if (position != null && _isPointerInside) {
+        _updateCursorAndHoverForPosition(position);
+      } else {
+        _updateCursorIfChanged(
+          _resolveCursorForState(widget.store.state, position),
+        );
+      }
     });
   }
 
@@ -327,18 +323,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           if (!mounted) {
             return;
           }
-          _updateCursorIfChanged(
-            _resolveCursorForState(widget.store.state, _lastPointerPosition),
-          );
-          final hoverTargets = _lastPointerPosition == null
-              ? null
-              : _resolveHoverSelectionAndBinding(
-                  state: widget.store.state,
-                  position: _lastPointerPosition!,
-                );
-          _hoveredSelectionElementId = hoverTargets?.selectionId;
-          _hoveredBindingElementId = hoverTargets?.bindingId;
-          setState(() {});
+          final position = _lastPointerPosition;
+          if (position != null && _isPointerInside) {
+            _updateCursorAndHoverForPosition(position);
+          } else {
+            _updateCursorIfChanged(
+              _resolveCursorForState(widget.store.state, position),
+            );
+          }
         });
 
         _stateViewBuilder = DrawStateViewBuilder(
@@ -698,8 +690,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _handlePointerMove(PointerMoveEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorForPosition(position);
-    _updateHoverSelectionForPosition(position);
+    _updateCursorAndHoverForPosition(position);
     if (_handleMiddlePanMove(event)) {
       return;
     }
@@ -817,14 +808,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerEnter(PointerEnterEvent event) {
     _isPointerInside = true;
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorForPosition(position);
-    _updateHoverSelectionForPosition(position);
+    _updateCursorAndHoverForPosition(position);
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorForPosition(position);
-    _updateHoverSelectionForPosition(position);
+    _updateCursorAndHoverForPosition(position);
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerHoverInputEvent(
@@ -894,17 +883,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _stopMiddlePan() {
     _middlePanPointerId = null;
     _lastMiddlePanPosition = null;
-    _updateCursorIfChanged(
-      _resolveCursorForState(widget.store.state, _lastPointerPosition),
-    );
-    final hoverTargets = _lastPointerPosition == null
-        ? null
-        : _resolveHoverSelectionAndBinding(
-            state: widget.store.state,
-            position: _lastPointerPosition!,
-          );
-    _hoveredSelectionElementId = hoverTargets?.selectionId;
-    _hoveredBindingElementId = hoverTargets?.bindingId;
+    final position = _lastPointerPosition;
+    if (position != null && _isPointerInside) {
+      _updateCursorAndHoverForPosition(position);
+    } else {
+      _updateCursorIfChanged(
+        _resolveCursorForState(widget.store.state, position),
+      );
+    }
   }
 
   double? _resolvePrimaryScrollDelta(PointerScrollEvent event) {
@@ -1360,31 +1346,136 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return ids;
   }
 
-  void _updateCursorForPosition(DrawPoint position) {
-    final nextCursor = _resolveCursorForState(widget.store.state, position);
+  /// Computes cursor and hover state in a single pass, sharing the
+  /// hit test result and arrow-handle lookup between both paths.
+  void _updateCursorAndHoverForPosition(DrawPoint position) {
+    final state = widget.store.state;
+
+    // --- cursor early-outs that skip the hit test entirely ---
+    if (_middlePanPointerId != null) {
+      _updateCursorIfChanged(_draggingCursor);
+      _clearHoverState();
+      return;
+    }
+    final lockedCursor = _cursorResolver.resolveLockedCursor(
+      state.application.interaction,
+    );
+    if (lockedCursor != null) {
+      _updateCursorIfChanged(lockedCursor);
+      _clearHoverState();
+      return;
+    }
+    if (!_isPointerInside) {
+      _updateCursorIfChanged(_defaultCursor);
+      _clearHoverState();
+      return;
+    }
+
+    // Shared arrow-handle lookup (used by both cursor and hover).
+    final arrowHandle = _resolveArrowPointHandleForPosition(
+      state: state,
+      position: position,
+    );
+    if (arrowHandle != null) {
+      final arrowCursor =
+          _resolveArrowHandleCursor(state: state, handle: arrowHandle) ??
+          _cursorResolver.grabCursor();
+      _updateCursorIfChanged(arrowCursor);
+      _applyHoverState(
+        selectionId: null,
+        bindingId: null,
+        arrowHandle: arrowHandle,
+      );
+      return;
+    }
+
+    // Shared hit test (computed once, used for both cursor and hover).
+    final stateView = _buildStateView(state);
+    final selectionConfig = _resolveSelectionConfigForInput(state);
+    final hitResult = draw_hit_test.hitTest.test(
+      stateView: stateView,
+      position: position,
+      config: selectionConfig,
+      registry: widget.store.context.elementRegistry,
+      filterTypeId: widget.currentToolTypeId,
+    );
+
+    // --- derive cursor from shared hitResult ---
+    MouseCursor nextCursor;
+    if (_shouldForceDefaultCursor(
+      state: state,
+      position: position,
+      stateView: stateView,
+      hitResult: hitResult,
+      selectionConfig: selectionConfig,
+    )) {
+      nextCursor = _defaultCursor;
+    } else if (_shouldShowTextCursor(
+      state: state,
+      position: position,
+      stateView: stateView,
+      hitResult: hitResult,
+      selectionConfig: selectionConfig,
+    )) {
+      nextCursor = SystemMouseCursors.text;
+    } else if (!hitResult.isHit) {
+      nextCursor = _defaultCursor;
+    } else {
+      nextCursor = _cursorResolver.resolveForHitTest(hitResult);
+    }
     _updateCursorIfChanged(nextCursor);
+
+    // --- derive hover selection from shared hitResult ---
+    String? hoverId;
+    final interaction = state.application.interaction;
+    final canHover =
+        _isPointerInside &&
+        _middlePanPointerId == null &&
+        interaction is! EditingState &&
+        interaction is! CreatingState &&
+        interaction is! BoxSelectingState &&
+        interaction is! TextEditingState;
+    if (canHover && !hitResult.isHandleHit) {
+      final elementId = hitResult.elementId;
+      if (elementId != null &&
+          !state.domain.selection.selectedIds.contains(elementId)) {
+        hoverId = elementId;
+      }
+    }
+
+    String? bindingId;
+    if (hoverId == null) {
+      bindingId = _resolveHoverBindingElementId(
+        state: state,
+        position: position,
+      );
+    }
+
+    _applyHoverState(
+      selectionId: hoverId,
+      bindingId: bindingId,
+      arrowHandle: null,
+    );
   }
 
-  void _updateHoverSelectionForPosition(DrawPoint position) {
-    final hoverTargets = _resolveHoverSelectionAndBinding(
-      state: widget.store.state,
-      position: position,
-    );
-    final nextHover = hoverTargets.selectionId;
-    final nextBindingHover = hoverTargets.bindingId;
-    final nextArrowHandle = _resolveArrowPointHandleForPosition(
-      state: widget.store.state,
-      position: position,
-    );
-    if (_hoveredSelectionElementId == nextHover &&
-        _hoveredBindingElementId == nextBindingHover &&
-        _hoveredArrowHandle == nextArrowHandle) {
+  void _clearHoverState() {
+    _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
+  }
+
+  void _applyHoverState({
+    required String? selectionId,
+    required String? bindingId,
+    required ArrowPointHandle? arrowHandle,
+  }) {
+    if (_hoveredSelectionElementId == selectionId &&
+        _hoveredBindingElementId == bindingId &&
+        _hoveredArrowHandle == arrowHandle) {
       return;
     }
     setState(() {
-      _hoveredSelectionElementId = nextHover;
-      _hoveredBindingElementId = nextBindingHover;
-      _hoveredArrowHandle = nextArrowHandle;
+      _hoveredSelectionElementId = selectionId;
+      _hoveredBindingElementId = bindingId;
+      _hoveredArrowHandle = arrowHandle;
     });
   }
 
@@ -2441,35 +2532,44 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (event is! StateChangeEvent) {
       return;
     }
-    final cursor = _resolveCursorForState(
-      widget.store.state,
-      _lastPointerPosition,
-    );
-    final hoverTargets = _lastPointerPosition == null
-        ? null
-        : _resolveHoverSelectionAndBinding(
-            state: widget.store.state,
-            position: _lastPointerPosition!,
-          );
-    final nextHover = hoverTargets?.selectionId;
-    final nextBindingHover = hoverTargets?.bindingId;
-    final nextArrowHandle = _lastPointerPosition == null
-        ? null
-        : _resolveArrowPointHandleForPosition(
-            state: widget.store.state,
-            position: _lastPointerPosition!,
-          );
+    final position = _lastPointerPosition;
+    if (position != null && _isPointerInside) {
+      // Use the combined path when a pointer position is available.
+      if (!mounted) {
+        // When not mounted we cannot call setState, so compute
+        // cursor and hover state directly.
+        _cursor = _resolveCursorForState(widget.store.state, position);
+        final hoverTargets = _resolveHoverSelectionAndBinding(
+          state: widget.store.state,
+          position: position,
+        );
+        _hoveredSelectionElementId = hoverTargets.selectionId;
+        _hoveredBindingElementId = hoverTargets.bindingId;
+        _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
+          state: widget.store.state,
+          position: position,
+        );
+        return;
+      }
+      _updateCursorAndHoverForPosition(position);
+      // Always rebuild on state changes so the canvas picks up new
+      // interaction state (e.g. creating element with appended points).
+      // _updateCursorAndHoverForPosition only calls setState when hover
+      // values change, which is not enough for live creation updates.
+      setState(() {});
+      return;
+    }
+    final cursor = _resolveCursorForState(widget.store.state, position);
     if (!mounted) {
       _cursor = cursor;
-      _hoveredSelectionElementId = nextHover;
-      _hoveredBindingElementId = nextBindingHover;
-      _hoveredArrowHandle = nextArrowHandle;
+      _hoveredSelectionElementId = null;
+      _hoveredBindingElementId = null;
+      _hoveredArrowHandle = null;
       return;
     }
     _updateCursorIfChanged(cursor);
-    _hoveredSelectionElementId = nextHover;
-    _hoveredBindingElementId = nextBindingHover;
-    _hoveredArrowHandle = nextArrowHandle;
+    _clearHoverState();
+    // Rebuild unconditionally so the canvas reflects the new state.
     setState(() {});
   }
 

@@ -192,7 +192,7 @@ class HitTest {
     final selectedIds = state.domain.selection.selectedIds;
     final document = state.domain.document;
     final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
-        ? _collectBoundTextIds(document.elements)
+        ? document.boundTextIds
         : null;
 
     // Determine corner handle offset for single arrow selections.
@@ -338,17 +338,6 @@ class HitTest {
       return false;
     }
     return boundTextIds?.contains(candidate.id) ?? false;
-  }
-
-  Set<String> _collectBoundTextIds(List<ElementState> elements) {
-    final boundTextIds = <String>{};
-    for (final element in elements) {
-      final data = element.data;
-      if (data is SerialNumberData && data.textElementId != null) {
-        boundTextIds.add(data.textElementId!);
-      }
-    }
-    return boundTextIds;
   }
 
   /// Tests whether [position] hits any selection handle.
