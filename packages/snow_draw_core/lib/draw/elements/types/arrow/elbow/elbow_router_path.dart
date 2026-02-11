@@ -515,6 +515,21 @@ List<DrawPoint> _harmonizeBoundSpacing({
   }
 
   final segments = _routeSegments(points);
+
+  // Balance a 3-segment path whose first and last segments share the same
+  // axis (e.g. [right, down, right]).  Move the middle perpendicular segment
+  // to the midpoint of the gap so the two parallel segments are even.
+  if (segments.length == 3) {
+    return _balanceThreeSegmentPath(
+      points: points,
+      segments: segments,
+      start: start,
+      end: end,
+      startBounds: startBounds,
+      endBounds: endBounds,
+    );
+  }
+
   if (segments.length < 4) {
     return points;
   }
@@ -566,6 +581,77 @@ List<DrawPoint> _harmonizeBoundSpacing({
     heading: end.heading,
     spacing: resolvedSpacing,
   );
+  return updated;
+}
+
+/// Balances a 3-segment path where the first and last segments share the
+/// same axis by centering the middle perpendicular segment in the gap.
+List<DrawPoint> _balanceThreeSegmentPath({
+  required List<DrawPoint> points,
+  required List<_RouteSegment> segments,
+  required _ResolvedEndpoint start,
+  required _ResolvedEndpoint end,
+  required DrawRect startBounds,
+  required DrawRect endBounds,
+}) {
+  final first = segments.first;
+  final last = segments.last;
+
+  // Only applies when the outer segments share the same axis.
+  if (first.heading.isHorizontal != last.heading.isHorizontal) {
+    return points;
+  }
+
+  final horizontal = first.heading.isHorizontal;
+
+  // Compute the allowed range for the middle segment along the parallel
+  // axis.  The middle segment must stay outside both element bounds.
+  final minSpacing = math.max(
+    _minBindingSpacing(hasArrowhead: start.hasArrowhead),
+    _minBindingSpacing(hasArrowhead: end.hasArrowhead),
+  );
+
+  double startLimit;
+  double endLimit;
+  if (horizontal) {
+    // Middle segment is vertical; its x position must respect both bounds.
+    startLimit = startBounds.maxX + minSpacing;
+    endLimit = endBounds.minX - minSpacing;
+    if (first.heading == ElbowHeading.left) {
+      startLimit = startBounds.minX - minSpacing;
+      endLimit = endBounds.maxX + minSpacing;
+    }
+  } else {
+    // Middle segment is horizontal; its y position must respect both bounds.
+    startLimit = startBounds.maxY + minSpacing;
+    endLimit = endBounds.minY - minSpacing;
+    if (first.heading == ElbowHeading.up) {
+      startLimit = startBounds.minY - minSpacing;
+      endLimit = endBounds.maxY + minSpacing;
+    }
+  }
+
+  // The ideal position is the midpoint between the two endpoints along the
+  // parallel axis.
+  final startVal = horizontal ? points.first.x : points.first.y;
+  final endVal = horizontal ? points.last.x : points.last.y;
+  final ideal = (startVal + endVal) / 2;
+
+  // Clamp to the allowed range.
+  final lo = math.min(startLimit, endLimit);
+  final hi = math.max(startLimit, endLimit);
+  final balanced = ideal.clamp(lo, hi);
+
+  // The middle segment spans points[1] and points[2] in a 4-point path.
+  final mid = segments[1];
+  final updated = List<DrawPoint>.from(points);
+  if (horizontal) {
+    updated[mid.index] = updated[mid.index].copyWith(x: balanced);
+    updated[mid.index + 1] = updated[mid.index + 1].copyWith(x: balanced);
+  } else {
+    updated[mid.index] = updated[mid.index].copyWith(y: balanced);
+    updated[mid.index + 1] = updated[mid.index + 1].copyWith(y: balanced);
+  }
   return updated;
 }
 
