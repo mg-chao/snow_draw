@@ -382,12 +382,25 @@ ElbowEditResult _buildResult({
   required ArrowData data,
   required List<DrawPoint> points,
   required List<ElbowFixedSegment>? fixedSegments,
-}) => ElbowEditResult(
-  localPoints: points,
-  fixedSegments: fixedSegments,
-  startIsSpecial: data.startIsSpecial,
-  endIsSpecial: data.endIsSpecial,
-);
+}) {
+  final pinned = _collectPinnedPoints(
+    points: points,
+    fixedSegments: fixedSegments ?? const [],
+  );
+  final merged = ElbowGeometry.mergeConsecutiveSameHeading(
+    points,
+    pinned: pinned,
+  );
+  final resolvedFixed = fixedSegments == null || fixedSegments.isEmpty
+      ? fixedSegments
+      : _reindexFixedSegments(merged, fixedSegments);
+  return ElbowEditResult(
+    localPoints: merged,
+    fixedSegments: resolvedFixed,
+    startIsSpecial: data.startIsSpecial,
+    endIsSpecial: data.endIsSpecial,
+  );
+}
 
 ArrowBinding? _resolveBindingOverride({
   required ArrowBinding? override,

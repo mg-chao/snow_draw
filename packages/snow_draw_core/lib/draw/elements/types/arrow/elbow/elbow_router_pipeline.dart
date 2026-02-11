@@ -178,7 +178,7 @@ ElbowRouteResult _buildRouteResult({
   required DrawPoint endPoint,
   required List<DrawPoint> points,
 }) => ElbowRouteResult(
-  points: points,
+  points: ElbowGeometry.mergeConsecutiveSameHeading(points),
   startPoint: startPoint,
   endPoint: endPoint,
 );

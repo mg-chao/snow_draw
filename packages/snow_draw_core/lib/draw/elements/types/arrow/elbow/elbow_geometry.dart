@@ -330,6 +330,49 @@ final class ElbowGeometry {
     return List<DrawPoint>.unmodifiable(cleaned);
   }
 
+  /// Merges consecutive segments that share the same heading.
+  ///
+  /// Two segments with the same heading (e.g. both Right) but at
+  /// different axis values indicate a redundant intermediate point.
+  /// Removing it collapses the pair into a single segment.
+  /// Pinned points are preserved.
+  static List<DrawPoint> mergeConsecutiveSameHeading(
+    List<DrawPoint> points, {
+    Set<DrawPoint> pinned = const <DrawPoint>{},
+  }) {
+    if (points.length < 3) {
+      return points;
+    }
+    var changed = true;
+    var current = points;
+    while (changed) {
+      changed = false;
+      final result = <DrawPoint>[current.first];
+      for (var i = 1; i < current.length - 1; i++) {
+        final prev = result.last;
+        final mid = current[i];
+        final next = current[i + 1];
+        final prevLen = manhattanDistance(prev, mid);
+        final nextLen = manhattanDistance(mid, next);
+        if (prevLen <= ElbowConstants.dedupThreshold ||
+            nextLen <= ElbowConstants.dedupThreshold) {
+          result.add(mid);
+          continue;
+        }
+        final prevH = headingForSegment(prev, mid);
+        final nextH = headingForSegment(mid, next);
+        if (prevH == nextH && !pinned.contains(mid)) {
+          changed = true;
+          continue;
+        }
+        result.add(mid);
+      }
+      result.add(current.last);
+      current = result;
+    }
+    return List<DrawPoint>.unmodifiable(current);
+  }
+
   /// Returns true when any segment is diagonal beyond the tolerance.
   static bool hasDiagonalSegments(List<DrawPoint> points) {
     if (points.length < 2) {
