@@ -607,30 +607,24 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
     );
   }
 
-  var updatedPoints = points;
-  var updatedSegments = fixedSegments;
   final pinned = _collectPinnedPoints(
     points: points,
     fixedSegments: fixedSegments,
   );
 
-  final startCollapsed = _collapseEndpointBacktrack(
-    points: updatedPoints,
-    fixedSegments: updatedSegments,
-    pinned: pinned,
-    isStart: true,
+  var result = _FixedSegmentPathResult(
+    points: points,
+    fixedSegments: fixedSegments,
   );
-  updatedPoints = startCollapsed.points;
-  updatedSegments = startCollapsed.fixedSegments;
-
-  final endCollapsed = _collapseEndpointBacktrack(
-    points: updatedPoints,
-    fixedSegments: updatedSegments,
-    pinned: pinned,
-    isStart: false,
-  );
-
-  return endCollapsed;
+  for (final isStart in const [true, false]) {
+    result = _collapseEndpointBacktrack(
+      points: result.points,
+      fixedSegments: result.fixedSegments,
+      pinned: pinned,
+      isStart: isStart,
+    );
+  }
+  return result;
 }
 
 _FixedSegmentPathResult _collapseEndpointBacktrack({
@@ -745,46 +739,34 @@ _FixedSegmentPathResult _normalizeFixedSegmentReleasePath({
     );
   }
 
-  // 1) Re-apply fixed axes before any simplification.
-  final enforcedPoints = _applyFixedSegmentsToPoints(points, fixedSegments);
-  // 2) Simplify while keeping fixed endpoints pinned.
-  final prePinned = _collectPinnedPoints(
-    points: enforcedPoints,
-    fixedSegments: fixedSegments,
-  );
-  final preSimplified = ElbowGeometry.simplifyPath(
-    enforcedPoints,
-    pinned: {...prePinned, ...extraPinned},
-  );
-  // 3) Reindex fixed segments when every segment still maps cleanly.
-  final alignedFixed = _reindexFixedSegments(preSimplified, fixedSegments);
-  final mergeFixedSegments = alignedFixed.length == fixedSegments.length
-      ? alignedFixed
-      : fixedSegments;
-  final mergePinned = {
-    ..._collectPinnedPoints(
-      points: preSimplified,
-      fixedSegments: mergeFixedSegments,
-    ),
+  // Enforce fixed axes, then simplify while keeping pinned points.
+  final enforced = _applyFixedSegmentsToPoints(points, fixedSegments);
+  final pinned = {
+    ..._collectPinnedPoints(points: enforced, fixedSegments: fixedSegments),
     ...extraPinned,
   };
-  // 4) Merge any collinear neighbors introduced by the release.
+  final simplified = ElbowGeometry.simplifyPath(enforced, pinned: pinned);
+
+  // Reindex and merge collinear neighbors in one pass.
+  final reindexed = _reindexFixedSegments(simplified, fixedSegments);
+  final activeFixed = reindexed.length == fixedSegments.length
+      ? reindexed
+      : fixedSegments;
   final merged = _mergeFixedSegmentsWithCollinearNeighbors(
-    points: preSimplified,
-    fixedSegments: mergeFixedSegments,
-    pinned: mergePinned,
+    points: simplified,
+    fixedSegments: activeFixed,
+    pinned: {
+      ..._collectPinnedPoints(points: simplified, fixedSegments: activeFixed),
+      ...extraPinned,
+    },
   );
-  // 5) Simplify again and reindex to finalize the stable path.
-  final pinned = _collectPinnedPoints(
+
+  // Final reindex to stabilize segment indices.
+  final finalFixed = _reindexFixedSegments(merged.points, merged.fixedSegments);
+  return _FixedSegmentPathResult(
     points: merged.points,
-    fixedSegments: merged.fixedSegments,
+    fixedSegments: finalFixed,
   );
-  final simplified = ElbowGeometry.simplifyPath(
-    merged.points,
-    pinned: {...pinned, ...extraPinned},
-  );
-  final reindexed = _reindexFixedSegments(simplified, merged.fixedSegments);
-  return _FixedSegmentPathResult(points: simplified, fixedSegments: reindexed);
 }
 
 ElbowEditResult _finalizeElbowEditResult({

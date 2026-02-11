@@ -124,34 +124,30 @@ List<DrawPoint>? _buildFallbackPointsForActiveFixed({
     }
     return reversed.reversed.toList(growable: false);
   }
-  final fixedHorizontal = fixedSegment.isHorizontal;
+  final h = fixedSegment.isHorizontal;
   final axis = fixedSegment.axisValue;
   const padding = ElbowConstants.directionFixPadding;
 
-  List<DrawPoint> points;
-  if (fixedHorizontal) {
-    var midX = (start.x + end.x) / 2;
-    if (requiredHeading == ElbowHeading.right && midX >= end.x) {
-      midX = end.x - padding;
-    } else if (requiredHeading == ElbowHeading.left && midX <= end.x) {
-      midX = end.x + padding;
-    }
-    final p1 = DrawPoint(x: start.x, y: axis);
-    final p2 = DrawPoint(x: midX, y: axis);
-    final p3 = DrawPoint(x: midX, y: end.y);
-    points = [start, p1, p2, p3, end];
-  } else {
-    var midY = (start.y + end.y) / 2;
-    if (requiredHeading == ElbowHeading.down && midY >= end.y) {
-      midY = end.y - padding;
-    } else if (requiredHeading == ElbowHeading.up && midY <= end.y) {
-      midY = end.y + padding;
-    }
-    final p1 = DrawPoint(x: axis, y: start.y);
-    final p2 = DrawPoint(x: axis, y: midY);
-    final p3 = DrawPoint(x: end.x, y: midY);
-    points = [start, p1, p2, p3, end];
+  // For a horizontal fixed segment the "travel" axis is X; for vertical, Y.
+  double travel(DrawPoint p) => h ? p.x : p.y;
+  double perp(DrawPoint p) => h ? p.y : p.x;
+
+  var mid = (travel(start) + travel(end)) / 2;
+  final positiveHeading = h ? ElbowHeading.right : ElbowHeading.down;
+  final negativeHeading = h ? ElbowHeading.left : ElbowHeading.up;
+  if (requiredHeading == positiveHeading && mid >= travel(end)) {
+    mid = travel(end) - padding;
+  } else if (requiredHeading == negativeHeading && mid <= travel(end)) {
+    mid = travel(end) + padding;
   }
+
+  DrawPoint pt(double travelVal, double perpVal) => h
+      ? DrawPoint(x: travelVal, y: perpVal)
+      : DrawPoint(x: perpVal, y: travelVal);
+  final p1 = pt(travel(start), axis);
+  final p2 = pt(mid, axis);
+  final p3 = pt(mid, perp(end));
+  final points = [start, p1, p2, p3, end];
 
   final simplified = ElbowGeometry.simplifyPath(points);
   if (simplified.length < 2) {
@@ -682,84 +678,70 @@ _EndpointDragState _rerouteReleasedBindingSpan({
   return state.copyWith(points: points, fixedSegments: fixedSegments);
 }
 
-/// Enforce fixed segment axes after endpoint changes.
-_EndpointDragState _applyFixedSegmentAxes(_EndpointDragState state) {
-  final updated = _applyFixedSegmentsToPoints(
-    state.points,
-    state.fixedSegments,
-  );
-  return state.copyWith(points: List<DrawPoint>.from(updated));
-}
-
-/// Re-route for diagonal drift when fully unbound.
-_EndpointDragState _rerouteForDiagonalDrift({
+/// Enforces orthogonality in a single pass: applies fixed-segment axes,
+/// re-routes diagonal drift, snaps unbound neighbors, and merges collinear
+/// tails.
+_EndpointDragState _enforceOrthogonality({
   required _EndpointDragContext context,
   required _EndpointDragState state,
 }) {
-  if (!context.isFullyUnbound ||
-      !ElbowGeometry.hasDiagonalSegments(state.points)) {
-    return state;
+  // Apply fixed segment axes.
+  var points = _applyFixedSegmentsToPoints(state.points, state.fixedSegments);
+  var fixedSegments = state.fixedSegments;
+
+  // Re-route diagonal drift for fully unbound arrows.
+  if (context.isFullyUnbound && ElbowGeometry.hasDiagonalSegments(points)) {
+    final baseline = _routeLocalPath(
+      element: context.element,
+      elementsById: context.elementsById,
+      startLocal: points.first,
+      endLocal: points.last,
+      startArrowhead: context.startArrowhead,
+      endArrowhead: context.endArrowhead,
+    );
+    final adopted = _maybeAdoptBaselineRoute(
+      currentPoints: points,
+      fixedSegments: fixedSegments,
+      baseline: baseline,
+    );
+    points = List<DrawPoint>.from(adopted.points);
+    fixedSegments = adopted.fixedSegments;
   }
-  final baseline = _routeLocalPath(
-    element: context.element,
-    elementsById: context.elementsById,
-    startLocal: state.points.first,
-    endLocal: state.points.last,
-    startArrowhead: context.startArrowhead,
-    endArrowhead: context.endArrowhead,
-  );
-  final adopted = _maybeAdoptBaselineRoute(
-    currentPoints: state.points,
-    fixedSegments: state.fixedSegments,
-    baseline: baseline,
-  );
-  return state.copyWith(
-    points: List<DrawPoint>.from(adopted.points),
-    fixedSegments: adopted.fixedSegments,
-  );
-}
 
-/// Snap unbound endpoint neighbors to stay orthogonal.
-_EndpointDragState _snapUnboundNeighbors({
-  required _EndpointDragContext context,
-  required _EndpointDragState state,
-}) {
-  var points = state.points;
+  // Snap unbound endpoint neighbors to stay orthogonal.
   if (!context.hasBoundStart) {
     points = _snapUnboundNeighbor(
       points: points,
-      fixedSegments: state.fixedSegments,
+      fixedSegments: fixedSegments,
       isStart: true,
     );
   }
   if (!context.hasBoundEnd) {
     points = _snapUnboundNeighbor(
       points: points,
-      fixedSegments: state.fixedSegments,
+      fixedSegments: fixedSegments,
       isStart: false,
     );
   }
-  return state.copyWith(points: points);
-}
 
-/// Merge a trailing collinear segment for unbound paths.
-_EndpointDragState _mergeTailIfUnbound({
-  required _EndpointDragContext context,
-  required _EndpointDragState state,
-}) {
-  if (!context.isFullyUnbound) {
-    return state;
+  // Re-apply fixed segment axes after neighbor snapping.
+  points = _applyFixedSegmentsToPoints(points, fixedSegments);
+
+  // Merge trailing collinear segment for fully unbound paths.
+  if (context.isFullyUnbound) {
+    final merged = _mergeFixedSegmentWithEndCollinear(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
+    if (merged.fixedSegments.length == fixedSegments.length) {
+      points = merged.points;
+      fixedSegments = merged.fixedSegments;
+    }
   }
-  final merged = _mergeFixedSegmentWithEndCollinear(
-    points: state.points,
-    fixedSegments: state.fixedSegments,
-  );
-  if (merged.fixedSegments.length != state.fixedSegments.length) {
-    return state;
-  }
+
   return state.copyWith(
-    points: merged.points,
-    fixedSegments: merged.fixedSegments,
+    points: List<DrawPoint>.from(points),
+    fixedSegments: fixedSegments,
   );
 }
 
@@ -983,12 +965,12 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     );
   }
 
-  // Step A: apply endpoint overrides to a stable reference path.
+  // Step 1: apply endpoint overrides to a stable reference path.
   var state = _buildEndpointDragState(context);
-  // Step B: reroute only the active span when a single endpoint changed.
+
+  // Step 2: reroute the active span or adopt a baseline route.
   final local = _rerouteActiveSpanIfNeeded(context: context, state: state);
   state = local.state;
-  // Step C: adopt a bound-aware baseline route when possible.
   if (!local.applied) {
     final baseline = _adoptBaselineRouteIfNeeded(
       context: context,
@@ -996,34 +978,28 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
     );
     state = baseline.state;
   }
-  // Step D: reroute spans freed by binding removal.
+
+  // Step 3: reroute spans freed by binding removal.
   state = _rerouteReleasedBindingSpan(
     context: context,
     state: state,
     skipStart: local.reroutedStart,
     skipEnd: local.reroutedEnd,
   );
-  // Step E: enforce fixed segment axes after endpoint changes.
-  state = _applyFixedSegmentAxes(state);
-  // Step F: for unbound arrows, re-route if a diagonal drift appears.
-  state = _rerouteForDiagonalDrift(context: context, state: state);
-  // Step G: snap neighbors to maintain orthogonality for unbound endpoints.
-  state = _snapUnboundNeighbors(context: context, state: state);
-  // Step H: re-apply fixed segments after neighbor snapping.
-  state = _applyFixedSegmentAxes(state);
-  // Step I: merge collinear tail segments for fully unbound paths.
-  state = _mergeTailIfUnbound(context: context, state: state);
 
+  // Step 4: enforce orthogonality (axes, drift, neighbors, tail merge).
+  state = _enforceOrthogonality(context: context, state: state);
+
+  // Step 5: sync fixed segments and collapse binding stubs.
   var synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   state = state.copyWith(fixedSegments: synced);
-  // Step J: drop binding stubs when a binding was removed.
   state = _collapseBindingRemovedStubs(context: context, state: state);
   synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
 
-  // Step K: enforce perpendicularity for bound endpoints in world space.
+  // Step 6: enforce perpendicularity for bound endpoints in world space.
   final perpendicular = _ensurePerpendicularBindings(
     element: context.element,
     elementsById: context.elementsById,
@@ -1156,20 +1132,11 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
 
   final targetFixedHorizontal = !heading.isHorizontal;
   ElbowFixedSegment? candidate;
-  if (isStart) {
-    for (final segment in fixedSegments) {
-      if (segment.isHorizontal == targetFixedHorizontal) {
-        candidate = segment;
-        break;
-      }
-    }
-  } else {
-    for (var i = fixedSegments.length - 1; i >= 0; i--) {
-      final segment = fixedSegments[i];
-      if (segment.isHorizontal == targetFixedHorizontal) {
-        candidate = segment;
-        break;
-      }
+  final searchOrder = isStart ? fixedSegments : fixedSegments.reversed;
+  for (final segment in searchOrder) {
+    if (segment.isHorizontal == targetFixedHorizontal) {
+      candidate = segment;
+      break;
     }
   }
   if (candidate == null) {
@@ -1185,15 +1152,11 @@ List<DrawPoint> _trimTrailingDuplicates(List<DrawPoint> points) {
     return (points: points, moved: false);
   }
 
-  final adjacentHorizontal = isStart
-      ? (points[anchorIndex - 1].y - points[anchorIndex].y).abs() <=
-            ElbowConstants.dedupThreshold
-      : (points[anchorIndex].y - points[anchorIndex + 1].y).abs() <=
-            ElbowConstants.dedupThreshold;
-  if (heading.isHorizontal && !adjacentHorizontal) {
-    return (points: points, moved: false);
-  }
-  if (!heading.isHorizontal && adjacentHorizontal) {
+  final adjA = isStart ? anchorIndex - 1 : anchorIndex;
+  final adjB = isStart ? anchorIndex : anchorIndex + 1;
+  final adjacentHorizontal =
+      (points[adjA].y - points[adjB].y).abs() <= ElbowConstants.dedupThreshold;
+  if (heading.isHorizontal != adjacentHorizontal) {
     return (points: points, moved: false);
   }
 
