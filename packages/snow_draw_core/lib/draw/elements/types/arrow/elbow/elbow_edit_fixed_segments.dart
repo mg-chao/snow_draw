@@ -407,17 +407,42 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
     fixedSegments: fixedSegments,
     pinned: pinned,
   );
-  final collapsed = allowDirectionFlip
-      ? _FixedSegmentPathResult(
-          points: deduped.points,
-          fixedSegments: deduped.fixedSegments,
-        )
-      : _collapseFixedSegmentBacktracks(
-          points: deduped.points,
-          fixedSegments: deduped.fixedSegments,
+
+  // Collapse backtracks around fixed segments (skip when direction
+  // flips are allowed, matching the original release-path behavior).
+  var updatedPoints = List<DrawPoint>.from(deduped.points);
+  var updatedSegments = List<ElbowFixedSegment>.from(deduped.fixedSegments);
+  if (!allowDirectionFlip &&
+      updatedPoints.length >= 4 &&
+      updatedSegments.isNotEmpty) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final segment in updatedSegments) {
+        if (segment.index <= 0 ||
+            segment.index + 2 >= updatedPoints.length) {
+          continue;
+        }
+        final collapsed = _tryCollapseBacktrackAt(
+          points: updatedPoints,
+          fixedSegments: updatedSegments,
+          removeIndex: segment.index + 1,
+          afterIndex: segment.index + 2,
+          isHorizontal: segment.isHorizontal,
         );
-  var updatedPoints = List<DrawPoint>.from(collapsed.points);
-  var updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
+        if (collapsed == null) {
+          continue;
+        }
+        updatedPoints = List<DrawPoint>.from(collapsed.points);
+        updatedSegments =
+            List<ElbowFixedSegment>.from(collapsed.fixedSegments);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  // Merge collinear non-fixed neighbors into adjacent fixed segments.
   var merged = true;
   while (merged) {
     merged = false;
@@ -491,47 +516,6 @@ _FixedSegmentPathResult? _tryCollapseBacktrackAt({
   return _FixedSegmentPathResult(
     points: List<DrawPoint>.unmodifiable(candidate),
     fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-  );
-}
-
-_FixedSegmentPathResult _collapseFixedSegmentBacktracks({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-}) {
-  if (points.length < 4 || fixedSegments.isEmpty) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
-  }
-  var updatedPoints = List<DrawPoint>.from(points);
-  var updatedSegments = List<ElbowFixedSegment>.from(fixedSegments);
-  var changed = true;
-  while (changed) {
-    changed = false;
-    for (final segment in updatedSegments) {
-      if (segment.index <= 0 || segment.index + 2 >= updatedPoints.length) {
-        continue;
-      }
-      final collapsed = _tryCollapseBacktrackAt(
-        points: updatedPoints,
-        fixedSegments: updatedSegments,
-        removeIndex: segment.index + 1,
-        afterIndex: segment.index + 2,
-        isHorizontal: segment.isHorizontal,
-      );
-      if (collapsed == null) {
-        continue;
-      }
-      updatedPoints = List<DrawPoint>.from(collapsed.points);
-      updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
-      changed = true;
-      break;
-    }
-  }
-  return _FixedSegmentPathResult(
-    points: List<DrawPoint>.unmodifiable(updatedPoints),
-    fixedSegments: List<ElbowFixedSegment>.unmodifiable(updatedSegments),
   );
 }
 

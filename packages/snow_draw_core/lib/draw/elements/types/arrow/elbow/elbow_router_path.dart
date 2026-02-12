@@ -34,7 +34,7 @@ List<DrawPoint>? _directPathIfClear({
   }
 
   // Ensure the direct segment respects endpoint heading constraints.
-  final segmentHeading = _segmentHeading(start, end);
+  final segmentHeading = ElbowGeometry.headingForSegment(start, end);
   if (startConstrained && segmentHeading != startHeading) {
     return null;
   }
@@ -49,8 +49,14 @@ List<DrawPoint>? _directPathIfClear({
 }
 
 bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
-  final innerBounds = _shrinkBounds(bounds, ElbowConstants.intersectionEpsilon);
-  if (!_hasArea(innerBounds)) {
+  final innerBounds = DrawRect(
+    minX: bounds.minX + ElbowConstants.intersectionEpsilon,
+    minY: bounds.minY + ElbowConstants.intersectionEpsilon,
+    maxX: bounds.maxX - ElbowConstants.intersectionEpsilon,
+    maxY: bounds.maxY - ElbowConstants.intersectionEpsilon,
+  );
+  if (innerBounds.minX >= innerBounds.maxX ||
+      innerBounds.minY >= innerBounds.maxY) {
     return false;
   }
   final dx = (start.x - end.x).abs();
@@ -87,16 +93,6 @@ bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
       math.min(start.y, end.y) <= innerBounds.maxY;
 }
 
-DrawRect _shrinkBounds(DrawRect bounds, double inset) => DrawRect(
-  minX: bounds.minX + inset,
-  minY: bounds.minY + inset,
-  maxX: bounds.maxX - inset,
-  maxY: bounds.maxY - inset,
-);
-
-bool _hasArea(DrawRect bounds) =>
-    bounds.minX < bounds.maxX && bounds.minY < bounds.maxY;
-
 double _overlapLength(double minA, double maxA, double minB, double maxB) =>
     math.min(maxA, maxB) - math.max(minA, minB);
 
@@ -109,54 +105,70 @@ List<DrawPoint> _fallbackPath({
   bool endConstrained = false,
 }) {
   final resolvedEndHeading = endHeading ?? startHeading.opposite;
+
+  // Try constrained fallback first when either endpoint is bound.
   if (startConstrained || endConstrained) {
-    final constrained = _fallbackPathConstrained(
-      start: start,
-      end: end,
-      startHeading: startHeading,
-      endHeading: resolvedEndHeading,
-      startConstrained: startConstrained,
-      endConstrained: endConstrained,
-    );
-    if (constrained != null) {
-      return constrained;
+    final candidates = <List<DrawPoint>>[
+      [start, end],
+      ElbowGeometry.directElbowPath(start, end, preferHorizontal: true),
+      ElbowGeometry.directElbowPath(start, end, preferHorizontal: false),
+    ];
+    for (final horizontal in const [true, false]) {
+      final mid = _resolveFallbackMid(
+        start: start,
+        end: end,
+        startHeading: startHeading,
+        endHeading: resolvedEndHeading,
+        startConstrained: startConstrained,
+        endConstrained: endConstrained,
+        horizontal: horizontal,
+      );
+      if (mid != null) {
+        candidates.add(
+          _buildElbowThroughMid(
+            start: start,
+            end: end,
+            horizontal: horizontal,
+            mid: mid,
+          ),
+        );
+      }
+    }
+
+    List<DrawPoint>? best;
+    var bestLength = double.infinity;
+    for (final candidate in candidates) {
+      final cleaned = ElbowGeometry.cornerPoints(
+        ElbowGeometry.removeShortSegments(candidate),
+      );
+      if (cleaned.length < 2 || ElbowGeometry.hasDiagonalSegments(cleaned)) {
+        continue;
+      }
+      if (startConstrained &&
+          ElbowGeometry.headingForSegment(cleaned.first, cleaned[1]) !=
+              startHeading) {
+        continue;
+      }
+      if (endConstrained &&
+          ElbowGeometry.headingForSegment(
+                cleaned[cleaned.length - 2],
+                cleaned.last,
+              ) !=
+              resolvedEndHeading.opposite) {
+        continue;
+      }
+      final length = ElbowGeometry.pathLength(cleaned);
+      if (length < bestLength) {
+        bestLength = length;
+        best = cleaned;
+      }
+    }
+    if (best != null) {
+      return best;
     }
   }
 
-  return _fallbackPathUnconstrained(
-    start: start,
-    end: end,
-    startHeading: startHeading,
-  );
-}
-
-List<DrawPoint> _buildElbowThroughMid({
-  required DrawPoint start,
-  required DrawPoint end,
-  required bool horizontal,
-  required double mid,
-}) {
-  if (horizontal) {
-    return [
-      start,
-      DrawPoint(x: mid, y: start.y),
-      DrawPoint(x: mid, y: end.y),
-      end,
-    ];
-  }
-  return [
-    start,
-    DrawPoint(x: start.x, y: mid),
-    DrawPoint(x: end.x, y: mid),
-    end,
-  ];
-}
-
-List<DrawPoint> _fallbackPathUnconstrained({
-  required DrawPoint start,
-  required DrawPoint end,
-  required ElbowHeading startHeading,
-}) {
+  // Unconstrained fallback.
   if (ElbowGeometry.manhattanDistance(start, end) <
       ElbowConstants.minArrowLength) {
     final midY = (start.y + end.y) / 2;
@@ -183,61 +195,26 @@ List<DrawPoint> _fallbackPathUnconstrained({
   );
 }
 
-List<DrawPoint>? _fallbackPathConstrained({
+List<DrawPoint> _buildElbowThroughMid({
   required DrawPoint start,
   required DrawPoint end,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
+  required bool horizontal,
+  required double mid,
 }) {
-  final candidates = <List<DrawPoint>>[
-    [start, end],
-    ElbowGeometry.directElbowPath(start, end, preferHorizontal: true),
-    ElbowGeometry.directElbowPath(start, end, preferHorizontal: false),
+  if (horizontal) {
+    return [
+      start,
+      DrawPoint(x: mid, y: start.y),
+      DrawPoint(x: mid, y: end.y),
+      end,
+    ];
+  }
+  return [
+    start,
+    DrawPoint(x: start.x, y: mid),
+    DrawPoint(x: end.x, y: mid),
+    end,
   ];
-  for (final horizontal in const [true, false]) {
-    final mid = _resolveFallbackMid(
-      start: start,
-      end: end,
-      startHeading: startHeading,
-      endHeading: endHeading,
-      startConstrained: startConstrained,
-      endConstrained: endConstrained,
-      horizontal: horizontal,
-    );
-    if (mid != null) {
-      candidates.add(
-        _buildElbowThroughMid(
-          start: start,
-          end: end,
-          horizontal: horizontal,
-          mid: mid,
-        ),
-      );
-    }
-  }
-
-  List<DrawPoint>? best;
-  var bestLength = double.infinity;
-  for (final candidate in candidates) {
-    final normalized = _normalizeFallbackCandidate(
-      points: candidate,
-      startHeading: startHeading,
-      endHeading: endHeading,
-      startConstrained: startConstrained,
-      endConstrained: endConstrained,
-    );
-    if (normalized == null) {
-      continue;
-    }
-    final length = ElbowGeometry.pathLength(normalized);
-    if (length < bestLength) {
-      bestLength = length;
-      best = normalized;
-    }
-  }
-  return best;
 }
 
 double? _resolveFallbackMid({
@@ -272,64 +249,16 @@ double? _resolveFallbackMid({
   if (min.isFinite && max.isFinite && min > max) {
     return null;
   }
-  final candidate = horizontal ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
-  return _clampToRange(candidate, min, max);
-}
-
-double _clampToRange(double value, double min, double max) {
-  if (min.isFinite && value < min) {
+  final candidate = horizontal
+      ? (start.x + end.x) / 2
+      : (start.y + end.y) / 2;
+  if (min.isFinite && candidate < min) {
     return min;
   }
-  if (max.isFinite && value > max) {
+  if (max.isFinite && candidate > max) {
     return max;
   }
-  return value;
-}
-
-List<DrawPoint>? _normalizeFallbackCandidate({
-  required List<DrawPoint> points,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-}) {
-  final cleaned = ElbowGeometry.cornerPoints(
-    ElbowGeometry.removeShortSegments(points),
-  );
-  if (cleaned.length < 2) {
-    return null;
-  }
-  if (ElbowGeometry.hasDiagonalSegments(cleaned)) {
-    return null;
-  }
-  if (startConstrained &&
-      _segmentHeading(cleaned.first, cleaned[1]) != startHeading) {
-    return null;
-  }
-  if (endConstrained &&
-      _segmentHeading(cleaned[cleaned.length - 2], cleaned.last) !=
-          endHeading.opposite) {
-    return null;
-  }
-  return cleaned;
-}
-
-List<DrawPoint> _postProcessPath({
-  required List<_ElbowGridNode> path,
-  required DrawPoint startPoint,
-  required DrawPoint endPoint,
-  required DrawPoint startExit,
-  required DrawPoint endExit,
-}) {
-  if (path.isEmpty) {
-    return [startPoint, endPoint];
-  }
-  final points = [
-    if (startExit != startPoint && path.first.pos != startPoint) startPoint,
-    for (final node in path) node.pos,
-    if (endExit != endPoint && path.last.pos != endPoint) endPoint,
-  ];
-  return points;
+  return candidate;
 }
 
 /// Final cleanup for routed paths: orthogonalize, prune, and clamp.
@@ -367,7 +296,17 @@ List<DrawPoint> _harmonizeBoundSpacing({
     return points;
   }
 
-  final segments = _routeSegments(points);
+  final segments = [
+    for (var i = 0; i < points.length - 1; i++)
+      if (ElbowGeometry.manhattanDistance(points[i], points[i + 1]) >
+          ElbowConstants.dedupThreshold)
+        _RouteSegment(
+          index: i,
+          start: points[i],
+          end: points[i + 1],
+          heading: ElbowGeometry.headingForSegment(points[i], points[i + 1]),
+        ),
+  ];
 
   if (segments.length == 3) {
     return _balanceThreeSegmentPath(
@@ -530,9 +469,6 @@ List<DrawPoint> _collapseRouteBacktracks({
   return updated;
 }
 
-ElbowHeading _segmentHeading(DrawPoint from, DrawPoint to) =>
-    ElbowGeometry.headingForSegment(from, to);
-
 bool _segmentIntersectsAnyBounds(
   DrawPoint start,
   DrawPoint end,
@@ -556,23 +492,6 @@ final class _RouteSegment {
 
   double get midX => (start.x + end.x) / 2;
   double get midY => (start.y + end.y) / 2;
-}
-
-List<_RouteSegment> _routeSegments(List<DrawPoint> points) {
-  if (points.length < 2) {
-    return const [];
-  }
-  return [
-    for (var i = 0; i < points.length - 1; i++)
-      if (ElbowGeometry.manhattanDistance(points[i], points[i + 1]) >
-          ElbowConstants.dedupThreshold)
-        _RouteSegment(
-          index: i,
-          start: points[i],
-          end: points[i + 1],
-          heading: ElbowGeometry.headingForSegment(points[i], points[i + 1]),
-        ),
-  ];
 }
 
 double? _segmentSpacing({
@@ -817,7 +736,10 @@ final class _ElbowGridRouter {
 
       final previousHeading = current.parent == null
           ? startHeading
-          : _segmentHeading(current.parent!.pos, current.pos);
+          : ElbowGeometry.headingForSegment(
+              current.parent!.pos,
+              current.pos,
+            );
       final isStartNode = current.addr == start.addr;
 
       for (final offset in _neighborOffsets) {

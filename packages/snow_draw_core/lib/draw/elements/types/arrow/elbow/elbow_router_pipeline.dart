@@ -154,22 +154,26 @@ final class _ElbowRoutePlan {
       obstacles: layout.obstacles,
     );
 
-    return path == null
-        ? _fallbackPath(
-            start: start.point,
-            end: end.point,
-            startHeading: start.heading,
-            endHeading: end.heading,
-            startConstrained: start.isBound,
-            endConstrained: end.isBound,
-          )
-        : _postProcessPath(
-            path: path,
-            startPoint: start.point,
-            endPoint: end.point,
-            startExit: layout.startExit,
-            endExit: layout.endExit,
-          );
+    if (path == null) {
+      return _fallbackPath(
+        start: start.point,
+        end: end.point,
+        startHeading: start.heading,
+        endHeading: end.heading,
+        startConstrained: start.isBound,
+        endConstrained: end.isBound,
+      );
+    }
+    final points = [
+      if (layout.startExit != start.point &&
+          path.first.pos != start.point)
+        start.point,
+      for (final node in path) node.pos,
+      if (layout.endExit != end.point &&
+          path.last.pos != end.point)
+        end.point,
+    ];
+    return points.isEmpty ? [start.point, end.point] : points;
   }
 }
 

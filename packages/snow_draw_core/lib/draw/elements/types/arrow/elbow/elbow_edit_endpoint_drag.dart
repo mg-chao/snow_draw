@@ -394,73 +394,34 @@ _adoptBaselineRouteIfNeeded({
     return noChange;
   }
 
-  // Try strategies in order; return the first success.
-  final result =
-      _trySingleFixedFallback(
-        state: state,
-        forceBaseline: forceBaseline,
-        activeSegment: activeSegment,
-        requiredHeading: requiredHeading,
-        activeStart: activeStart,
-      ) ??
-      _tryBaselineMapping(
-        context: context,
-        state: state,
-        activeSegment: activeSegment,
-        forceBaseline: forceBaseline,
-      ) ??
-      _tryActiveSpanBaselineFallback(
-        state: state,
-        forceBaseline: forceBaseline,
-        activeSegment: activeSegment,
-        requiredHeading: requiredHeading,
-        activeStart: activeStart,
-      );
-  if (result != null) {
-    return (state: result, adoptedBaseline: true);
+  // Strategy 1: single-fixed-segment fallback.
+  if (forceBaseline &&
+      state.fixedSegments.length == 1 &&
+      activeSegment != null &&
+      requiredHeading != null) {
+    final pts = _buildFallbackPointsForActiveFixed(
+      start: state.points.first,
+      end: state.points.last,
+      fixedSegment: activeSegment,
+      requiredHeading: requiredHeading,
+      startBound: activeStart,
+    );
+    if (pts != null) {
+      final reindexed = _reindexFixedSegments(pts, [activeSegment]);
+      if (reindexed.isNotEmpty) {
+        return (
+          state: state.copyWith(
+            points: List<DrawPoint>.from(pts),
+            fixedSegments:
+                List<ElbowFixedSegment>.unmodifiable(reindexed),
+          ),
+          adoptedBaseline: true,
+        );
+      }
+    }
   }
-  return noChange;
-}
 
-_FixedSegmentPathResult? _trySingleFixedFallback({
-  required _FixedSegmentPathResult state,
-  required bool forceBaseline,
-  required ElbowFixedSegment? activeSegment,
-  required ElbowHeading? requiredHeading,
-  required bool activeStart,
-}) {
-  if (!forceBaseline ||
-      state.fixedSegments.length != 1 ||
-      activeSegment == null ||
-      requiredHeading == null) {
-    return null;
-  }
-  final pts = _buildFallbackPointsForActiveFixed(
-    start: state.points.first,
-    end: state.points.last,
-    fixedSegment: activeSegment,
-    requiredHeading: requiredHeading,
-    startBound: activeStart,
-  );
-  if (pts == null) {
-    return null;
-  }
-  final reindexed = _reindexFixedSegments(pts, [activeSegment]);
-  if (reindexed.isEmpty) {
-    return null;
-  }
-  return state.copyWith(
-    points: List<DrawPoint>.from(pts),
-    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-  );
-}
-
-_FixedSegmentPathResult? _tryBaselineMapping({
-  required _EndpointDragContext context,
-  required _FixedSegmentPathResult state,
-  required ElbowFixedSegment? activeSegment,
-  required bool forceBaseline,
-}) {
+  // Strategy 2: map fixed segments onto a freshly routed baseline.
   final baseline = _routeLocalPath(
     element: context.element,
     elementsById: context.elementsById,
@@ -478,46 +439,44 @@ _FixedSegmentPathResult? _tryBaselineMapping({
     enforceAxisOnPoints: true,
     requireAll: true,
   );
-  if (mapped == null) {
-    return null;
+  if (mapped != null) {
+    final adopted = forceBaseline
+        ? _normalizeFixedSegmentPath(
+            points: mapped.points,
+            fixedSegments: mapped.fixedSegments,
+            enforceAxes: true,
+          )
+        : mapped;
+    return (
+      state: state.copyWith(
+        points: List<DrawPoint>.from(adopted.points),
+        fixedSegments: adopted.fixedSegments,
+      ),
+      adoptedBaseline: true,
+    );
   }
-  final adopted = forceBaseline
-      ? _normalizeFixedSegmentPath(
-          points: mapped.points,
-          fixedSegments: mapped.fixedSegments,
-          enforceAxes: true,
-        )
-      : mapped;
-  return state.copyWith(
-    points: List<DrawPoint>.from(adopted.points),
-    fixedSegments: adopted.fixedSegments,
-  );
-}
 
-_FixedSegmentPathResult? _tryActiveSpanBaselineFallback({
-  required _FixedSegmentPathResult state,
-  required bool forceBaseline,
-  required ElbowFixedSegment? activeSegment,
-  required ElbowHeading? requiredHeading,
-  required bool activeStart,
-}) {
-  if (!forceBaseline || activeSegment == null || requiredHeading == null) {
-    return null;
+  // Strategy 3: active-span fallback via the fixed segment.
+  if (forceBaseline && activeSegment != null && requiredHeading != null) {
+    final fallback = _buildFallbackPathForActiveSpan(
+      points: state.points,
+      fixedSegments: state.fixedSegments,
+      activeSegment: activeSegment,
+      requiredHeading: requiredHeading,
+      startBound: activeStart,
+    );
+    if (fallback != null) {
+      return (
+        state: state.copyWith(
+          points: List<DrawPoint>.from(fallback.points),
+          fixedSegments: fallback.fixedSegments,
+        ),
+        adoptedBaseline: true,
+      );
+    }
   }
-  final fallback = _buildFallbackPathForActiveSpan(
-    points: state.points,
-    fixedSegments: state.fixedSegments,
-    activeSegment: activeSegment,
-    requiredHeading: requiredHeading,
-    startBound: activeStart,
-  );
-  if (fallback == null) {
-    return null;
-  }
-  return state.copyWith(
-    points: List<DrawPoint>.from(fallback.points),
-    fixedSegments: fallback.fixedSegments,
-  );
+
+  return noChange;
 }
 
 _FixedSegmentPathResult _rerouteReleasedBindingSpan({
@@ -603,14 +562,31 @@ _FixedSegmentPathResult _enforceOrthogonality({
     }
   }
 
-  for (final isStart in const [true, false]) {
-    if (!(isStart ? context.hasBoundStart : context.hasBoundEnd)) {
-      points = _snapUnboundNeighbor(
-        points: points,
-        fixedSegments: fixedSegments,
-        isStart: isStart,
+  // Snap unbound neighbors to the nearest axis.
+  if (points.length > 1) {
+    final updated = List<DrawPoint>.from(points);
+    for (final isStart in const [true, false]) {
+      if (isStart ? context.hasBoundStart : context.hasBoundEnd) {
+        continue;
+      }
+      final lastIndex = updated.length - 1;
+      final ei = isStart ? 0 : lastIndex;
+      final ni = isStart ? 1 : lastIndex - 1;
+      final endpoint = updated[ei];
+      final neighbor = updated[ni];
+      final adjacentFixed = _fixedSegmentIsHorizontal(
+        fixedSegments,
+        isStart ? 2 : ni,
       );
+      final snapX =
+          adjacentFixed ??
+          ((neighbor.x - endpoint.x).abs() <=
+              (neighbor.y - endpoint.y).abs());
+      updated[ni] = snapX
+          ? neighbor.copyWith(x: endpoint.x)
+          : neighbor.copyWith(y: endpoint.y);
     }
+    points = updated;
   }
   points = _applyFixedSegmentsToPoints(points, fixedSegments);
 
@@ -627,35 +603,6 @@ _FixedSegmentPathResult _enforceOrthogonality({
     points: List<DrawPoint>.from(points),
     fixedSegments: fixedSegments,
   );
-}
-
-List<DrawPoint> _snapUnboundNeighbor({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-  required bool isStart,
-}) {
-  if (points.length <= 1) {
-    return points;
-  }
-  final lastIndex = points.length - 1;
-  final ei = isStart ? 0 : lastIndex;
-  final ni = isStart ? 1 : lastIndex - 1;
-  final endpoint = points[ei];
-  final neighbor = points[ni];
-  final adjacentFixed = _fixedSegmentIsHorizontal(
-    fixedSegments,
-    isStart ? 2 : ni,
-  );
-  // Snap to the axis perpendicular to the fixed segment, or whichever
-  // axis is closer.
-  final snapX =
-      adjacentFixed ??
-      ((neighbor.x - endpoint.x).abs() <= (neighbor.y - endpoint.y).abs());
-  final updated = List<DrawPoint>.from(points);
-  updated[ni] = snapX
-      ? neighbor.copyWith(x: endpoint.x)
-      : neighbor.copyWith(y: endpoint.y);
-  return updated;
 }
 
 _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
