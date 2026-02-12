@@ -1,10 +1,5 @@
 part of 'elbow_editing.dart';
 
-/// Perpendicular binding enforcement for elbow editing.
-///
-/// Ensures the first and last segments meet bound elements at right angles,
-/// preserving arrowhead spacing and stable fixed segments when edits occur.
-
 _FixedSegmentPathResult _ensurePerpendicularBindings({
   required ElementState element,
   required Map<String, ElementState> elementsById,
@@ -49,11 +44,24 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       continue;
     }
 
-    final neighborAxis = _resolveFixedNeighborAxis(
-      localPoints: localPoints,
-      fixedSegments: updatedFixedSegments,
-      isStart: isStart,
-    );
+    // Resolve the fixed-segment neighbor axis for this endpoint.
+    bool? neighborAxis;
+    if (isStart) {
+      neighborAxis = _fixedSegmentIsHorizontal(updatedFixedSegments, 2);
+    } else {
+      final neighborIndex = math.max(2, localPoints.length - 2);
+      neighborAxis = _fixedSegmentIsHorizontal(
+        updatedFixedSegments,
+        neighborIndex,
+      );
+      if (neighborAxis == null &&
+          _endpointHasCorner(points: localPoints, isStart: false)) {
+        neighborAxis = _fixedSegmentIsHorizontal(
+          updatedFixedSegments,
+          neighborIndex - 1,
+        );
+      }
+    }
     final arrowhead = isStart ? startArrowhead : endArrowhead;
     final padding = isStart ? baselinePadding.start : baselinePadding.end;
     final adjustment = _adjustPerpendicularEndpoint(
@@ -88,30 +96,6 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     fixedSegments: updatedFixedSegments,
     allowDirectionFlip: true,
   );
-}
-
-/// Resolves the fixed-segment neighbor axis for a given endpoint.
-///
-/// For the start endpoint, the neighbor is always at index 2.
-/// For the end endpoint, the neighbor index depends on the path length,
-/// with a fallback to the previous index when a corner is present.
-bool? _resolveFixedNeighborAxis({
-  required List<DrawPoint> localPoints,
-  required List<ElbowFixedSegment> fixedSegments,
-  required bool isStart,
-}) {
-  if (isStart) {
-    return _fixedSegmentIsHorizontal(fixedSegments, 2);
-  }
-  final neighborIndex = math.max(2, localPoints.length - 2);
-  final axis = _fixedSegmentIsHorizontal(fixedSegments, neighborIndex);
-  if (axis != null) {
-    return axis;
-  }
-  if (_endpointHasCorner(points: localPoints, isStart: false)) {
-    return _fixedSegmentIsHorizontal(fixedSegments, neighborIndex - 1);
-  }
-  return null;
 }
 
 bool _endpointHasCorner({
@@ -162,24 +146,23 @@ bool _endpointHasCorner({
     return (start: null, end: null);
   }
 
+  double? paddingFor(DrawPoint from, DrawPoint to) {
+    final length = ElbowGeometry.manhattanDistance(from, to);
+    return length.isFinite && length > ElbowConstants.dedupThreshold
+        ? length
+        : null;
+  }
+
   final startPadding = startBinding == null
       ? null
-      : _segmentPadding(routedPoints.first, routedPoints[1]);
+      : paddingFor(routedPoints.first, routedPoints[1]);
   final endPadding = endBinding == null
       ? null
-      : _segmentPadding(
+      : paddingFor(
           routedPoints[routedPoints.length - 2],
           routedPoints.last,
         );
   return (start: startPadding, end: endPadding);
-}
-
-double? _segmentPadding(DrawPoint from, DrawPoint to) {
-  final length = ElbowGeometry.manhattanDistance(from, to);
-  if (!length.isFinite || length <= ElbowConstants.dedupThreshold) {
-    return null;
-  }
-  return length;
 }
 
 double _resolveDirectionPadding(double? desired) {
@@ -191,11 +174,6 @@ double _resolveDirectionPadding(double? desired) {
   return math.max(ElbowConstants.directionFixPadding, desired);
 }
 
-/// Slides one or two points along the heading axis to match [desiredLength].
-///
-/// When [cornerIndex] is provided, both the neighbor and corner are moved
-/// (the "corner-to-padding" case). Otherwise only the neighbor is moved
-/// (the "segment-length" case).
 _PerpendicularAdjustment? _slideEndpointToPadding({
   required List<DrawPoint> points,
   required ElbowHeading heading,
@@ -291,16 +269,9 @@ _PerpendicularAdjustment? _slideEndpointToPadding({
   );
 }
 
-/// No-op perpendicular adjustment.
 _PerpendicularAdjustment _noOpAdjustment(List<DrawPoint> points) =>
     _PerpendicularAdjustment(points: points, moved: false, inserted: false);
 
-/// Adjusts the endpoint segment to be perpendicular to the bound element.
-///
-/// Handles both start and end endpoints via [isStart].  The logic
-/// resolves the bound heading, checks alignment and direction, then
-/// either slides the neighbor, inserts a corner, or adds a direction
-/// stub to enforce perpendicularity.
 _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   required List<DrawPoint> points,
   required ArrowBinding binding,
@@ -360,21 +331,73 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
 
   // --- Preserved-neighbor branch (fixed segment constrains neighbor). ---
   if (preserveNeighbor) {
-    return _adjustPreservedNeighbor(
+    final fixedPadding = ElbowSpacing.fixedNeighborPadding(
+      hasArrowhead: hasArrowhead,
+    );
+
+    _PerpendicularAdjustment? trySlide(
+      List<DrawPoint> pts, {
+      required bool cornerInserted,
+    }) {
+      if (!canSlideNeighbor) {
+        return null;
+      }
+      return _slideEndpointNeighborToPadding(
+        points: pts,
+        heading: heading,
+        desiredLength: fixedPadding,
+        cornerInserted: cornerInserted,
+        isStart: isStart,
+      );
+    }
+
+    if (aligned && directionOk) {
+      final cornerFixedIndex = isStart ? 2 : points.length - 3;
+      final cornerInserted =
+          _endpointHasCorner(points: points, isStart: isStart) &&
+          _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) !=
+              null;
+      return trySlide(points, cornerInserted: cornerInserted) ??
+          _noOpAdjustment(points);
+    }
+
+    if (!aligned && directionOk) {
+      final inserted = _insertEndpointCorner(
+        points: points,
+        heading: heading,
+        neighbor: neighbor,
+        isStart: isStart,
+      );
+      return trySlide(inserted.points, cornerInserted: true) ?? inserted;
+    }
+
+    // End-only: try snapping to the fixed axis at the anchor point.
+    if (!isStart &&
+        !directionOk &&
+        !desiredHorizontal &&
+        fixedNeighborAxis != desiredHorizontal) {
+      final snapped = _snapEndPointToFixedAxisAtAnchor(
+        points: points,
+        neighborIndex: neighborIndex,
+        binding: binding,
+        elementsById: elementsById,
+      );
+      if (snapped != null) {
+        return snapped;
+      }
+    }
+
+    if (aligned) {
+      return trySlide(points, cornerInserted: false) ??
+          _noOpAdjustment(points);
+    }
+
+    return _insertEndpointDirectionStub(
       points: points,
       heading: heading,
       neighbor: neighbor,
-      fixedSegments: fixedSegments,
-      resolvedPadding: resolvedPadding,
-      hasArrowhead: hasArrowhead,
-      aligned: aligned,
-      directionOk: directionOk,
-      canSlideNeighbor: canSlideNeighbor,
-      fixedNeighborAxis: fixedNeighborAxis,
-      desiredHorizontal: desiredHorizontal,
-      neighborIndex: neighborIndex,
-      binding: binding,
-      elementsById: elementsById,
+      allowExtend: false,
+      padding: resolvedPadding,
       isStart: isStart,
     );
   }
@@ -457,94 +480,6 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     neighbor: neighbor,
     allowExtend: true,
     padding: stubPadding,
-    isStart: isStart,
-  );
-}
-
-/// Handles perpendicular adjustment when a fixed segment constrains the
-/// neighbor point.
-_PerpendicularAdjustment _adjustPreservedNeighbor({
-  required List<DrawPoint> points,
-  required ElbowHeading heading,
-  required DrawPoint neighbor,
-  required List<ElbowFixedSegment> fixedSegments,
-  required double resolvedPadding,
-  required bool hasArrowhead,
-  required bool aligned,
-  required bool directionOk,
-  required bool canSlideNeighbor,
-  required bool? fixedNeighborAxis,
-  required bool desiredHorizontal,
-  required int neighborIndex,
-  required ArrowBinding binding,
-  required Map<String, ElementState> elementsById,
-  required bool isStart,
-}) {
-  final fixedPadding = ElbowSpacing.fixedNeighborPadding(
-    hasArrowhead: hasArrowhead,
-  );
-
-  _PerpendicularAdjustment? trySlide(
-    List<DrawPoint> pts, {
-    required bool cornerInserted,
-  }) {
-    if (!canSlideNeighbor) {
-      return null;
-    }
-    return _slideEndpointNeighborToPadding(
-      points: pts,
-      heading: heading,
-      desiredLength: fixedPadding,
-      cornerInserted: cornerInserted,
-      isStart: isStart,
-    );
-  }
-
-  if (aligned && directionOk) {
-    final cornerFixedIndex = isStart ? 2 : points.length - 3;
-    final cornerInserted =
-        _endpointHasCorner(points: points, isStart: isStart) &&
-        _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
-    return trySlide(points, cornerInserted: cornerInserted) ??
-        _noOpAdjustment(points);
-  }
-
-  if (!aligned && directionOk) {
-    final inserted = _insertEndpointCorner(
-      points: points,
-      heading: heading,
-      neighbor: neighbor,
-      isStart: isStart,
-    );
-    return trySlide(inserted.points, cornerInserted: true) ?? inserted;
-  }
-
-  // End-only: try snapping to the fixed axis at the anchor point.
-  if (!isStart &&
-      !directionOk &&
-      !desiredHorizontal &&
-      fixedNeighborAxis != desiredHorizontal) {
-    final snapped = _snapEndPointToFixedAxisAtAnchor(
-      points: points,
-      neighborIndex: neighborIndex,
-      binding: binding,
-      elementsById: elementsById,
-    );
-    if (snapped != null) {
-      return snapped;
-    }
-  }
-
-  if (aligned) {
-    return trySlide(points, cornerInserted: false) ?? _noOpAdjustment(points);
-  }
-
-  return _insertEndpointDirectionStub(
-    points: points,
-    heading: heading,
-    neighbor: neighbor,
-    allowExtend: false,
-    padding: resolvedPadding,
     isStart: isStart,
   );
 }

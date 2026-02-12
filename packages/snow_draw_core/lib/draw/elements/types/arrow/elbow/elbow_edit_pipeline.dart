@@ -1,6 +1,5 @@
 part of 'elbow_editing.dart';
 
-/// Internal state containers shared by the elbow edit pipeline and helpers.
 @immutable
 final class _FixedSegmentPathResult {
   const _FixedSegmentPathResult({
@@ -12,7 +11,6 @@ final class _FixedSegmentPathResult {
   final List<ElbowFixedSegment> fixedSegments;
 }
 
-/// Edit mode selection for the elbow edit pipeline.
 enum _ElbowEditMode {
   /// Re-route a fresh elbow when no fixed segments exist.
   routeFresh,
@@ -40,7 +38,6 @@ final class _PerpendicularAdjustment {
   final bool inserted;
 }
 
-/// Resolved inputs and flags that drive edit mode selection.
 @immutable
 final class _ElbowEditContext {
   const _ElbowEditContext({
@@ -102,7 +99,6 @@ final class _ElbowEditContext {
   Map<String, ElementState> get elementsById => lookup.toMap();
 }
 
-/// Step-by-step edit orchestration used by [computeElbowEdit].
 final class _ElbowEditPipeline {
   _ElbowEditPipeline({
     required this.element,
@@ -296,10 +292,11 @@ final class _ElbowEditPipeline {
                 : const <DrawPoint>{};
           }()
         : const <DrawPoint>{};
-    return _normalizeFixedSegmentReleasePath(
+    return _simplifyFixedSegmentPath(
       points: reconciled.points,
       fixedSegments: reconciled.fixedSegments,
       extraPinned: extraPinned,
+      enforceAxes: true,
     );
   }
 
