@@ -141,18 +141,11 @@ bool? _fixedSegmentIsHorizontal(
 }
 
 bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
-  if (a.length != b.length) {
+  if (!_fixedSegmentAxesStable(a, b)) {
     return false;
   }
   for (var i = 0; i < a.length; i++) {
     if (a[i].index != b[i].index) {
-      return false;
-    }
-    if (a[i].isHorizontal != b[i].isHorizontal) {
-      return false;
-    }
-    if ((a[i].axisValue - b[i].axisValue).abs() >
-        ElbowConstants.dedupThreshold) {
       return false;
     }
   }
@@ -302,7 +295,10 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   Set<DrawPoint> pinned = const {},
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _unchangedResult(points, fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   // Remove adjacent duplicate points before merging.
@@ -410,7 +406,10 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 4 || fixedSegments.isEmpty) {
-    return _unchangedResult(points, fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   var updatedPoints = List<DrawPoint>.from(points);
@@ -480,7 +479,10 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
   required List<ElbowFixedSegment> fixedSegments,
 }) {
   if (points.length < 3 || fixedSegments.isEmpty) {
-    return _unchangedResult(points, fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final pinned = _collectPinnedPoints(
@@ -488,7 +490,10 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
     fixedSegments: fixedSegments,
   );
 
-  var result = _unchangedResult(points, fixedSegments);
+  var result = _FixedSegmentPathResult(
+    points: points,
+    fixedSegments: fixedSegments,
+  );
   for (final isStart in const [true, false]) {
     final midIndex = isStart ? 1 : result.points.length - 2;
     if (result.points.length < 3 || pinned.contains(result.points[midIndex])) {
@@ -554,7 +559,10 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
   bool enforceAxes = false,
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
-    return _unchangedResult(points, fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
   final enforced = enforceAxes
       ? _applyFixedSegmentsToPoints(points, fixedSegments)

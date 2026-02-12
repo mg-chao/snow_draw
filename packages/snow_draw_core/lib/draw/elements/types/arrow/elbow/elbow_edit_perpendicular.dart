@@ -17,7 +17,10 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     );
   }
   if (startBinding == null && endBinding == null) {
-    return _unchangedResult(points, fixedSegments);
+    return _FixedSegmentPathResult(
+      points: points,
+      fixedSegments: fixedSegments,
+    );
   }
 
   final space = ElementSpace(
@@ -158,10 +161,7 @@ bool _endpointHasCorner({
       : paddingFor(routedPoints.first, routedPoints[1]);
   final endPadding = endBinding == null
       ? null
-      : paddingFor(
-          routedPoints[routedPoints.length - 2],
-          routedPoints.last,
-        );
+      : paddingFor(routedPoints[routedPoints.length - 2], routedPoints.last);
   return (start: startPadding, end: endPadding);
 }
 
@@ -269,9 +269,6 @@ _PerpendicularAdjustment? _slideEndpointToPadding({
   );
 }
 
-_PerpendicularAdjustment _noOpAdjustment(List<DrawPoint> points) =>
-    _PerpendicularAdjustment(points: points, moved: false, inserted: false);
-
 _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   required List<DrawPoint> points,
   required ArrowBinding binding,
@@ -282,8 +279,11 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   required bool isStart,
   bool? fixedNeighborAxis,
 }) {
+  _PerpendicularAdjustment unchanged() =>
+      _PerpendicularAdjustment(points: points, moved: false, inserted: false);
+
   if (points.length < 2) {
-    return _noOpAdjustment(points);
+    return unchanged();
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -293,7 +293,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     point: endpoint,
   );
   if (heading == null) {
-    return _noOpAdjustment(points);
+    return unchanged();
   }
 
   final desiredHorizontal = heading.isHorizontal;
@@ -355,10 +355,8 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
       final cornerFixedIndex = isStart ? 2 : points.length - 3;
       final cornerInserted =
           _endpointHasCorner(points: points, isStart: isStart) &&
-          _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) !=
-              null;
-      return trySlide(points, cornerInserted: cornerInserted) ??
-          _noOpAdjustment(points);
+          _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
+      return trySlide(points, cornerInserted: cornerInserted) ?? unchanged();
     }
 
     if (!aligned && directionOk) {
@@ -388,8 +386,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     }
 
     if (aligned) {
-      return trySlide(points, cornerInserted: false) ??
-          _noOpAdjustment(points);
+      return trySlide(points, cornerInserted: false) ?? unchanged();
     }
 
     return _insertEndpointDirectionStub(
@@ -418,7 +415,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
           isStart: isStart,
           cornerIndex: isStart ? 2 : lastIdx - 2,
         ) ??
-        _noOpAdjustment(points);
+        unchanged();
   }
 
   if (aligned && !directionOk) {
@@ -596,7 +593,11 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
   required bool isStart,
 }) {
   if (points.length < 2) {
-    return _noOpAdjustment(points);
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -660,7 +661,11 @@ _PerpendicularAdjustment _insertEndpointCorner({
   required bool isStart,
 }) {
   if (points.length < 2) {
-    return _noOpAdjustment(points);
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -672,7 +677,11 @@ _PerpendicularAdjustment _insertEndpointCorner({
           ElbowConstants.dedupThreshold ||
       ElbowGeometry.manhattanDistance(corner, neighbor) <=
           ElbowConstants.dedupThreshold) {
-    return _noOpAdjustment(points);
+    return _PerpendicularAdjustment(
+      points: points,
+      moved: false,
+      inserted: false,
+    );
   }
 
   final updated = List<DrawPoint>.from(points);
