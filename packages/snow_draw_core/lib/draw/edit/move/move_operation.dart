@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
-import '../../core/geometry/move_geometry.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
+import '../../core/geometry/move_geometry.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -21,6 +21,7 @@ import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_computed_result.dart';
+import '../core/arrow_binding_cleanup.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
 import '../core/edit_operation_helpers.dart';
@@ -279,6 +280,14 @@ class MoveOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final unboundMovedArrows = unbindArrowLikeElements(
+      transformedElements: updatedById,
+      baseElements: state.domain.document.elementMap,
+    );
+    if (unboundMovedArrows.isNotEmpty) {
+      updatedById.addAll(unboundMovedArrows);
     }
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(

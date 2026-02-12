@@ -15,6 +15,7 @@ import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../apply/edit_apply.dart';
+import '../core/arrow_binding_cleanup.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -218,6 +219,14 @@ class FreeTransformOperation extends EditOperation {
         }
       }
       updatedById[entry.key] = updated;
+    }
+
+    final unboundArrows = unbindArrowLikeElements(
+      transformedElements: updatedById,
+      baseElements: state.domain.document.elementMap,
+    );
+    if (unboundArrows.isNotEmpty) {
+      updatedById.addAll(unboundArrows);
     }
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
