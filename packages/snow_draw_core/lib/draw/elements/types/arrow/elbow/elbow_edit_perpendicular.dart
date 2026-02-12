@@ -1,4 +1,4 @@
-﻿part of 'elbow_editing.dart';
+part of 'elbow_editing.dart';
 
 _FixedSegmentPathResult _ensurePerpendicularBindings({
   required ElementState element,
@@ -24,10 +24,6 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   var updatedFixed = fixedSegments;
   var localPoints = points;
   final baselinePadding = () {
-    if (points.length < 2 ||
-        (startBinding == null && endBinding == null)) {
-      return (start: null as double?, end: null as double?);
-    }
     final routed = routeElbowArrow(
       start: space.toWorld(points.first),
       end: space.toWorld(points.last),
@@ -285,7 +281,8 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   }
 
   final desiredHorizontal = heading.isHorizontal;
-  final resolvedPadding = directionPadding == null ||
+  final resolvedPadding =
+      directionPadding == null ||
           !directionPadding.isFinite ||
           directionPadding <= ElbowConstants.dedupThreshold
       ? ElbowConstants.directionFixPadding

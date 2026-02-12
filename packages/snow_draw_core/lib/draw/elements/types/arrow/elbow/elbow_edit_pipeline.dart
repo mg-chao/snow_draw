@@ -33,22 +33,16 @@ enum _ElbowEditMode {
   applyFixedSegments,
 }
 
-@immutable
-final class _PerpendicularAdjustment {
-  const _PerpendicularAdjustment({
-    required this.points,
-    required this.moved,
-    required this.inserted,
-  });
-
-  final List<DrawPoint> points;
-  final bool moved;
-  final bool inserted;
-}
+/// Result of a perpendicular endpoint adjustment.
+typedef _PerpendicularAdjustment = ({
+  List<DrawPoint> points,
+  bool moved,
+  bool inserted,
+});
 
 @immutable
 final class _ElbowEditContext {
-  const _ElbowEditContext({
+  _ElbowEditContext({
     required this.element,
     required this.data,
     required this.lookup,
@@ -102,9 +96,40 @@ final class _ElbowEditContext {
     return _ElbowEditMode.applyFixedSegments;
   }
 
-  /// Returns a concrete map for downstream functions that require it.
-  /// Lazily computed only when needed.
-  Map<String, ElementState> get elementsById => lookup.toMap();
+  // -- Cached map (avoids repeated toMap() calls) --
+
+  late final Map<String, ElementState> elementsById = lookup.toMap();
+
+  // -- Endpoint drag helpers (replaces _EndpointDragContext) --
+
+  late final bool startActive = () {
+    final hasPoints = basePoints.isNotEmpty && incomingPoints.isNotEmpty;
+    final startPointChanged =
+        hasPoints && basePoints.first != incomingPoints.first;
+    return startPointChanged || previousStartBinding != startBinding;
+  }();
+
+  late final bool endActive = () {
+    final hasPoints = basePoints.isNotEmpty && incomingPoints.isNotEmpty;
+    final endPointChanged = hasPoints && basePoints.last != incomingPoints.last;
+    return endPointChanged || previousEndBinding != endBinding;
+  }();
+
+  bool get startWasBound => previousStartBinding != null;
+  bool get endWasBound => previousEndBinding != null;
+
+  ArrowheadStyle get startArrowhead => data.startArrowhead;
+  ArrowheadStyle get endArrowhead => data.endArrowhead;
+
+  bool get hasBindings => startBinding != null || endBinding != null;
+
+  bool get hasBoundStart =>
+      startBinding != null && elementsById.containsKey(startBinding!.elementId);
+
+  bool get hasBoundEnd =>
+      endBinding != null && elementsById.containsKey(endBinding!.elementId);
+
+  bool get isFullyUnbound => startBinding == null && endBinding == null;
 }
 
 final class _ElbowEditPipeline {
@@ -227,9 +252,7 @@ final class _ElbowEditPipeline {
   }
 
   ElbowEditResult _handleEndpointDragFlow(_ElbowEditContext context) {
-    final updated = _applyEndpointDragWithFixedSegments(
-      context: _EndpointDragContext.fromEditContext(context),
-    );
+    final updated = _applyEndpointDragWithFixedSegments(context: context);
 
     var points = updated.points;
     var fixed = updated.fixedSegments;
@@ -277,12 +300,7 @@ final class _ElbowEditPipeline {
         ? mapped
         : released;
     final extraPinned = preserveCorners
-        ? () {
-            final corners = ElbowGeometry.cornerPoints(released.points);
-            return corners.length > 2
-                ? corners.sublist(1, corners.length - 1).toSet()
-                : const <DrawPoint>{};
-          }()
+        ? _interiorCornerPoints(released.points)
         : const <DrawPoint>{};
     return _normalizeFixedSegmentPath(
       points: reconciled.points,
@@ -340,12 +358,7 @@ ArrowBinding? _resolveBindingOverride({
   required ArrowBinding? override,
   required bool overrideIsSet,
   required ArrowBinding? fallback,
-}) {
-  if (overrideIsSet || override != null) {
-    return override;
-  }
-  return fallback;
-}
+}) => overrideIsSet || override != null ? override : fallback;
 
 // ---------------------------------------------------------------------------
 // Geometry helpers (merged from elbow_edit_geometry.dart)

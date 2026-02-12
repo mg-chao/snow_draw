@@ -1,80 +1,5 @@
 part of 'elbow_editing.dart';
 
-@immutable
-final class _EndpointDragContext {
-  const _EndpointDragContext({
-    required this.element,
-    required this.elementsById,
-    required this.basePoints,
-    required this.incomingPoints,
-    required this.fixedSegments,
-    required this.startBinding,
-    required this.endBinding,
-    required this.startBindingRemoved,
-    required this.endBindingRemoved,
-    required this.startWasBound,
-    required this.endWasBound,
-    required this.startActive,
-    required this.endActive,
-    required this.startArrowhead,
-    required this.endArrowhead,
-  });
-
-  /// Derives a drag context from the shared edit context.
-  factory _EndpointDragContext.fromEditContext(_ElbowEditContext ctx) {
-    final hasPoints =
-        ctx.basePoints.isNotEmpty && ctx.incomingPoints.isNotEmpty;
-    final startPointChanged =
-        hasPoints && ctx.basePoints.first != ctx.incomingPoints.first;
-    final endPointChanged =
-        hasPoints && ctx.basePoints.last != ctx.incomingPoints.last;
-    return _EndpointDragContext(
-      element: ctx.element,
-      elementsById: ctx.elementsById,
-      basePoints: ctx.basePoints,
-      incomingPoints: ctx.incomingPoints,
-      fixedSegments: ctx.fixedSegments,
-      startBinding: ctx.startBinding,
-      endBinding: ctx.endBinding,
-      startBindingRemoved: ctx.startBindingRemoved,
-      endBindingRemoved: ctx.endBindingRemoved,
-      startWasBound: ctx.previousStartBinding != null,
-      endWasBound: ctx.previousEndBinding != null,
-      startActive:
-          startPointChanged || ctx.previousStartBinding != ctx.startBinding,
-      endActive: endPointChanged || ctx.previousEndBinding != ctx.endBinding,
-      startArrowhead: ctx.data.startArrowhead,
-      endArrowhead: ctx.data.endArrowhead,
-    );
-  }
-
-  final ElementState element;
-  final Map<String, ElementState> elementsById;
-  final List<DrawPoint> basePoints;
-  final List<DrawPoint> incomingPoints;
-  final List<ElbowFixedSegment> fixedSegments;
-  final ArrowBinding? startBinding;
-  final ArrowBinding? endBinding;
-  final bool startBindingRemoved;
-  final bool endBindingRemoved;
-  final bool startWasBound;
-  final bool endWasBound;
-  final bool startActive;
-  final bool endActive;
-  final ArrowheadStyle startArrowhead;
-  final ArrowheadStyle endArrowhead;
-
-  bool get hasBindings => startBinding != null || endBinding != null;
-
-  bool get hasBoundStart =>
-      startBinding != null && elementsById.containsKey(startBinding!.elementId);
-
-  bool get hasBoundEnd =>
-      endBinding != null && elementsById.containsKey(endBinding!.elementId);
-
-  bool get isFullyUnbound => startBinding == null && endBinding == null;
-}
-
 ElbowHeading? _resolveRequiredHeading({
   required ArrowBinding? binding,
   required Map<String, ElementState> elementsById,
@@ -239,7 +164,7 @@ _RerouteResult? _tryActiveSpanFallback({
 }
 
 _RerouteResult _rerouteActiveSpanIfNeeded({
-  required _EndpointDragContext context,
+  required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
 }) {
   if (state.fixedSegments.isEmpty || state.points.length < 2) {
@@ -347,7 +272,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
 
 ({_FixedSegmentPathResult state, bool adoptedBaseline})
 _adoptBaselineRouteIfNeeded({
-  required _EndpointDragContext context,
+  required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
 }) {
   final noChange = (state: state, adoptedBaseline: false);
@@ -412,8 +337,7 @@ _adoptBaselineRouteIfNeeded({
         return (
           state: state.copyWith(
             points: List<DrawPoint>.from(pts),
-            fixedSegments:
-                List<ElbowFixedSegment>.unmodifiable(reindexed),
+            fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
           ),
           adoptedBaseline: true,
         );
@@ -480,7 +404,7 @@ _adoptBaselineRouteIfNeeded({
 }
 
 _FixedSegmentPathResult _rerouteReleasedBindingSpan({
-  required _EndpointDragContext context,
+  required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
   bool skipStart = false,
   bool skipEnd = false,
@@ -537,7 +461,7 @@ _FixedSegmentPathResult _rerouteReleasedBindingSpan({
 }
 
 _FixedSegmentPathResult _enforceOrthogonality({
-  required _EndpointDragContext context,
+  required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
 }) {
   var points = _applyFixedSegmentsToPoints(state.points, state.fixedSegments);
@@ -580,8 +504,7 @@ _FixedSegmentPathResult _enforceOrthogonality({
       );
       final snapX =
           adjacentFixed ??
-          ((neighbor.x - endpoint.x).abs() <=
-              (neighbor.y - endpoint.y).abs());
+          ((neighbor.x - endpoint.x).abs() <= (neighbor.y - endpoint.y).abs());
       updated[ni] = snapX
           ? neighbor.copyWith(x: endpoint.x)
           : neighbor.copyWith(y: endpoint.y);
@@ -606,7 +529,7 @@ _FixedSegmentPathResult _enforceOrthogonality({
 }
 
 _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
-  required _EndpointDragContext context,
+  required _ElbowEditContext context,
 }) {
   if (context.basePoints.length < 2) {
     return _FixedSegmentPathResult(
@@ -656,9 +579,12 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   // Step 5: sync fixed segments and collapse binding stubs.
   if ((context.startBindingRemoved || context.endBindingRemoved) &&
       state.fixedSegments.isNotEmpty) {
-    final merged = _syncAndMergeFixedSegments(
+    final merged = _mergeFixedSegmentsWithCollinearNeighbors(
       points: state.points,
-      fixedSegments: state.fixedSegments,
+      fixedSegments: _syncFixedSegmentsToPoints(
+        state.points,
+        state.fixedSegments,
+      ),
       allowDirectionFlip: true,
     );
     if (merged.fixedSegments.length == state.fixedSegments.length) {
@@ -747,9 +673,9 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
           ElbowConstants.dedupThreshold) {
     localPoints.removeLast();
   }
-  return _syncAndMergeFixedSegments(
+  return _mergeFixedSegmentsWithCollinearNeighbors(
     points: localPoints,
-    fixedSegments: fixedSegments,
+    fixedSegments: _syncFixedSegmentsToPoints(localPoints, fixedSegments),
     allowDirectionFlip: true,
   );
 }

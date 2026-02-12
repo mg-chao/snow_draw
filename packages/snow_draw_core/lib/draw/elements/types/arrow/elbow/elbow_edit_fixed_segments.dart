@@ -288,21 +288,6 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
   return result;
 }
 
-/// Syncs fixed segments to current point positions, then merges collinear
-/// neighbors. Combines the two most common post-processing steps.
-_FixedSegmentPathResult _syncAndMergeFixedSegments({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-  bool allowDirectionFlip = false,
-}) {
-  final synced = _syncFixedSegmentsToPoints(points, fixedSegments);
-  return _mergeFixedSegmentsWithCollinearNeighbors(
-    points: points,
-    fixedSegments: synced,
-    allowDirectionFlip: allowDirectionFlip,
-  );
-}
-
 /// Removes adjacent near-duplicate points, reindexing fixed segments.
 ///
 /// Returns the original lists unchanged when no duplicates are found or
@@ -419,8 +404,7 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
     while (changed) {
       changed = false;
       for (final segment in updatedSegments) {
-        if (segment.index <= 0 ||
-            segment.index + 2 >= updatedPoints.length) {
+        if (segment.index <= 0 || segment.index + 2 >= updatedPoints.length) {
           continue;
         }
         final collapsed = _tryCollapseBacktrackAt(
@@ -434,8 +418,7 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
           continue;
         }
         updatedPoints = List<DrawPoint>.from(collapsed.points);
-        updatedSegments =
-            List<ElbowFixedSegment>.from(collapsed.fixedSegments);
+        updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
         changed = true;
         break;
       }
@@ -589,6 +572,14 @@ Set<DrawPoint> _collectPinnedPoints({
       ..add(points[index]);
   }
   return pinned;
+}
+
+/// Returns the interior corner points of a path (excludes endpoints).
+Set<DrawPoint> _interiorCornerPoints(List<DrawPoint> points) {
+  final corners = ElbowGeometry.cornerPoints(points);
+  return corners.length > 2
+      ? corners.sublist(1, corners.length - 1).toSet()
+      : const <DrawPoint>{};
 }
 
 /// Normalizes an elbow path with fixed segments through a standard

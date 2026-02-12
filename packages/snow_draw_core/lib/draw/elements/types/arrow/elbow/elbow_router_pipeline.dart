@@ -165,13 +165,10 @@ final class _ElbowRoutePlan {
       );
     }
     final points = [
-      if (layout.startExit != start.point &&
-          path.first.pos != start.point)
+      if (layout.startExit != start.point && path.first.pos != start.point)
         start.point,
       for (final node in path) node.pos,
-      if (layout.endExit != end.point &&
-          path.last.pos != end.point)
-        end.point,
+      if (layout.endExit != end.point && path.last.pos != end.point) end.point,
     ];
     return points.isEmpty ? [start.point, end.point] : points;
   }

@@ -249,9 +249,7 @@ double? _resolveFallbackMid({
   if (min.isFinite && max.isFinite && min > max) {
     return null;
   }
-  final candidate = horizontal
-      ? (start.x + end.x) / 2
-      : (start.y + end.y) / 2;
+  final candidate = horizontal ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
   if (min.isFinite && candidate < min) {
     return min;
   }
@@ -736,10 +734,7 @@ final class _ElbowGridRouter {
 
       final previousHeading = current.parent == null
           ? startHeading
-          : ElbowGeometry.headingForSegment(
-              current.parent!.pos,
-              current.pos,
-            );
+          : ElbowGeometry.headingForSegment(current.parent!.pos, current.pos);
       final isStartNode = current.addr == start.addr;
 
       for (final offset in _neighborOffsets) {
