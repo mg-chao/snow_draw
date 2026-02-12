@@ -751,10 +751,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
       state = merged;
     }
   }
-  final synced = _syncFixedSegmentsToPoints(
-    state.points,
-    state.fixedSegments,
-  );
+  final synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
@@ -836,6 +833,7 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   }
 
   final localPoints = worldPoints.map(space.fromWorld).toList(growable: true);
+  // Remove trailing near-duplicate points.
   while (localPoints.length > 1 &&
       ElbowGeometry.manhattanDistance(
             localPoints[localPoints.length - 1],
@@ -844,12 +842,11 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
           ElbowConstants.dedupThreshold) {
     localPoints.removeLast();
   }
-  final synced = _syncAndMergeFixedSegments(
+  return _syncAndMergeFixedSegments(
     points: localPoints,
     fixedSegments: fixedSegments,
     allowDirectionFlip: true,
   );
-  return synced;
 }
 
 ({List<DrawPoint> points, bool moved}) _slideFixedSpanForBoundEndpoint({
@@ -872,20 +869,17 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
     return (points: points, moved: false);
   }
 
+  // Find the nearest fixed segment perpendicular to the heading.
   final targetFixedHorizontal = !heading.isHorizontal;
+  final nearest = isStart ? fixedSegments.first : fixedSegments.last;
   ElbowFixedSegment? candidate;
-  final searchOrder = isStart ? fixedSegments : fixedSegments.reversed;
-  for (final segment in searchOrder) {
+  for (final segment in isStart ? fixedSegments : fixedSegments.reversed) {
     if (segment.isHorizontal == targetFixedHorizontal) {
       candidate = segment;
       break;
     }
   }
-  if (candidate == null) {
-    return (points: points, moved: false);
-  }
-  final nearest = isStart ? fixedSegments.first : fixedSegments.last;
-  if (candidate.index != nearest.index) {
+  if (candidate == null || candidate.index != nearest.index) {
     return (points: points, moved: false);
   }
 
@@ -922,14 +916,13 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
     return (points: points, moved: false);
   }
 
-  final updated = _slideRun(
+  return _slideRun(
     points: points,
     startIndex: anchorIndex,
     horizontal: heading.isHorizontal,
     target: lane,
     direction: isStart ? -1 : 1,
   );
-  return (points: updated.points, moved: updated.moved);
 }
 
 double? _resolveHorizontalLane({

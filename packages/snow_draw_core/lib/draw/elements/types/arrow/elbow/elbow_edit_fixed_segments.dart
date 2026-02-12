@@ -303,6 +303,45 @@ _FixedSegmentPathResult _syncAndMergeFixedSegments({
   );
 }
 
+/// Removes adjacent near-duplicate points, reindexing fixed segments.
+///
+/// Returns the original lists unchanged when no duplicates are found or
+/// when reindexing would lose a fixed segment.
+({List<DrawPoint> points, List<ElbowFixedSegment> fixedSegments})
+_deduplicateAdjacentPoints({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  Set<DrawPoint> pinned = const {},
+}) {
+  if (points.length < 2) {
+    return (points: points, fixedSegments: fixedSegments);
+  }
+  final cleaned = <DrawPoint>[points.first];
+  for (var i = 1; i < points.length; i++) {
+    final current = points[i];
+    if (current == cleaned.last) {
+      continue;
+    }
+    if (!pinned.contains(current) &&
+        ElbowGeometry.manhattanDistance(cleaned.last, current) <=
+            ElbowConstants.dedupThreshold) {
+      continue;
+    }
+    cleaned.add(current);
+  }
+  if (cleaned.length == points.length) {
+    return (points: points, fixedSegments: fixedSegments);
+  }
+  final reindexed = _reindexFixedSegments(cleaned, fixedSegments);
+  if (reindexed.length != fixedSegments.length) {
+    return (points: points, fixedSegments: fixedSegments);
+  }
+  return (
+    points: List<DrawPoint>.unmodifiable(cleaned),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+  );
+}
+
 _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
@@ -316,40 +355,20 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
     );
   }
 
-  // Remove adjacent duplicate points before merging.
-  var dedupedPoints = points;
-  var dedupedFixed = fixedSegments;
-  if (points.length >= 2) {
-    final cleaned = <DrawPoint>[points.first];
-    for (var i = 1; i < points.length; i++) {
-      final current = points[i];
-      if (current == cleaned.last) {
-        continue;
-      }
-      if (!pinned.contains(current) &&
-          ElbowGeometry.manhattanDistance(cleaned.last, current) <=
-              ElbowConstants.dedupThreshold) {
-        continue;
-      }
-      cleaned.add(current);
-    }
-    if (cleaned.length != points.length) {
-      final reindexed = _reindexFixedSegments(cleaned, fixedSegments);
-      if (reindexed.length == fixedSegments.length) {
-        dedupedPoints = List<DrawPoint>.unmodifiable(cleaned);
-        dedupedFixed = List<ElbowFixedSegment>.unmodifiable(reindexed);
-      }
-    }
-  }
+  final deduped = _deduplicateAdjacentPoints(
+    points: points,
+    fixedSegments: fixedSegments,
+    pinned: pinned,
+  );
 
   final collapsed = allowDirectionFlip
       ? _FixedSegmentPathResult(
-          points: dedupedPoints,
-          fixedSegments: dedupedFixed,
+          points: deduped.points,
+          fixedSegments: deduped.fixedSegments,
         )
       : _collapseFixedSegmentBacktracks(
-          points: dedupedPoints,
-          fixedSegments: dedupedFixed,
+          points: deduped.points,
+          fixedSegments: deduped.fixedSegments,
         );
   var updatedPoints = List<DrawPoint>.from(collapsed.points);
   var updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
@@ -607,7 +626,6 @@ _FixedSegmentPathResult _normalizeFixedSegmentPath({
     },
   );
 }
-
 
 ElbowEditResult _finalizeElbowEditResult({
   required ElementState element,

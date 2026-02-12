@@ -78,4 +78,29 @@ final class ElbowSpacing {
     ElbowHeading.down => obstacle.copyWith(maxY: elementBounds.maxY + spacing),
     ElbowHeading.left => obstacle.copyWith(minX: elementBounds.minX - spacing),
   };
+
+  /// Resolves a shared spacing value from two endpoint spacings.
+  ///
+  /// Takes the minimum of the two spacings and clamps it to the
+  /// minimum allowed binding spacing for either endpoint. Returns
+  /// `null` when either spacing is `null` or the result is non-finite.
+  static double? resolveSharedSpacing({
+    required double? startSpacing,
+    required double? endSpacing,
+    required bool startHasArrowhead,
+    required bool endHasArrowhead,
+  }) {
+    if (startSpacing == null || endSpacing == null) {
+      return null;
+    }
+    final shared = math.min(startSpacing, endSpacing);
+    if (!shared.isFinite) {
+      return null;
+    }
+    final minAllowed = math.max(
+      minBindingSpacing(hasArrowhead: startHasArrowhead),
+      minBindingSpacing(hasArrowhead: endHasArrowhead),
+    );
+    return math.max(shared, minAllowed);
+  }
 }

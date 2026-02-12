@@ -5,60 +5,6 @@ part of 'elbow_router.dart';
 /// Contains the direct-route checks, fallback routing, intersection tests,
 /// and post-processing that guarantees orthogonal, stable point lists.
 
-/// Axis alignment between two points using elbow tolerances.
-@immutable
-final class _AxisAlignment {
-  const _AxisAlignment({required this.alignedX, required this.alignedY});
-
-  final bool alignedX;
-  final bool alignedY;
-
-  bool get isAligned => alignedX || alignedY;
-}
-
-_AxisAlignment _resolveAxisAlignment(DrawPoint start, DrawPoint end) =>
-    _AxisAlignment(
-      alignedX: (start.x - end.x).abs() <= ElbowConstants.dedupThreshold,
-      alignedY: (start.y - end.y).abs() <= ElbowConstants.dedupThreshold,
-    );
-
-/// Checks whether endpoint headings allow a direct aligned segment.
-bool _headingsCompatibleWithAlignment({
-  required _AxisAlignment alignment,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-}) {
-  if (!alignment.isAligned) {
-    return true;
-  }
-  if (alignment.alignedX && alignment.alignedY) {
-    return false;
-  }
-  if (alignment.alignedY) {
-    return startHeading.isHorizontal && endHeading.isHorizontal;
-  }
-  return !startHeading.isHorizontal && !endHeading.isHorizontal;
-}
-
-/// Ensures a direct segment does not violate bound endpoint headings.
-bool _segmentRespectsEndpointConstraints({
-  required DrawPoint start,
-  required DrawPoint end,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-}) {
-  final segmentHeading = _segmentHeading(start, end);
-  if (startConstrained && segmentHeading != startHeading) {
-    return false;
-  }
-  if (endConstrained && segmentHeading != endHeading.opposite) {
-    return false;
-  }
-  return true;
-}
-
 /// Returns a direct 2-point route when alignment + constraints allow it.
 List<DrawPoint>? _directPathIfClear({
   required DrawPoint start,
@@ -69,26 +15,30 @@ List<DrawPoint>? _directPathIfClear({
   required bool startConstrained,
   required bool endConstrained,
 }) {
-  final alignment = _resolveAxisAlignment(start, end);
-  if (!alignment.isAligned) {
-    return null;
-  }
-  if (!_headingsCompatibleWithAlignment(
-    alignment: alignment,
-    startHeading: startHeading,
-    endHeading: endHeading,
-  )) {
+  final alignedX = (start.x - end.x).abs() <= ElbowConstants.dedupThreshold;
+  final alignedY = (start.y - end.y).abs() <= ElbowConstants.dedupThreshold;
+  if (!alignedX && !alignedY) {
     return null;
   }
 
-  if (!_segmentRespectsEndpointConstraints(
-    start: start,
-    end: end,
-    startHeading: startHeading,
-    endHeading: endHeading,
-    startConstrained: startConstrained,
-    endConstrained: endConstrained,
-  )) {
+  // Check heading compatibility with alignment.
+  if (alignedX && alignedY) {
+    return null;
+  }
+  if (alignedY) {
+    if (!startHeading.isHorizontal || !endHeading.isHorizontal) {
+      return null;
+    }
+  } else if (startHeading.isHorizontal || endHeading.isHorizontal) {
+    return null;
+  }
+
+  // Ensure the direct segment respects endpoint heading constraints.
+  final segmentHeading = _segmentHeading(start, end);
+  if (startConstrained && segmentHeading != startHeading) {
+    return null;
+  }
+  if (endConstrained && segmentHeading != endHeading.opposite) {
     return null;
   }
 
@@ -107,13 +57,42 @@ bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
   if (dx <= ElbowConstants.dedupThreshold) {
-    return _verticalSegmentIntersectsBounds(start, end, innerBounds);
+    // Vertical segment.
+    final x = (start.x + end.x) / 2;
+    if (x < innerBounds.minX || x > innerBounds.maxX) {
+      return false;
+    }
+    final segMinY = math.min(start.y, end.y);
+    final segMaxY = math.max(start.y, end.y);
+    return _overlapLength(
+          segMinY,
+          segMaxY,
+          innerBounds.minY,
+          innerBounds.maxY,
+        ) >
+        ElbowConstants.intersectionEpsilon;
   }
   if (dy <= ElbowConstants.dedupThreshold) {
-    return _horizontalSegmentIntersectsBounds(start, end, innerBounds);
+    // Horizontal segment.
+    final y = (start.y + end.y) / 2;
+    if (y < innerBounds.minY || y > innerBounds.maxY) {
+      return false;
+    }
+    final segMinX = math.min(start.x, end.x);
+    final segMaxX = math.max(start.x, end.x);
+    return _overlapLength(
+          segMinX,
+          segMaxX,
+          innerBounds.minX,
+          innerBounds.maxX,
+        ) >
+        ElbowConstants.intersectionEpsilon;
   }
-  // Diagonal segments use a conservative AABB overlap check.
-  return _segmentAabbIntersectsBounds(start, end, innerBounds);
+  // Diagonal: conservative AABB overlap.
+  return math.max(start.x, end.x) >= innerBounds.minX &&
+      math.min(start.x, end.x) <= innerBounds.maxX &&
+      math.max(start.y, end.y) >= innerBounds.minY &&
+      math.min(start.y, end.y) <= innerBounds.maxY;
 }
 
 DrawRect _shrinkBounds(DrawRect bounds, double inset) => DrawRect(
@@ -128,51 +107,6 @@ bool _hasArea(DrawRect bounds) =>
 
 double _overlapLength(double minA, double maxA, double minB, double maxB) =>
     math.min(maxA, maxB) - math.max(minA, minB);
-
-bool _verticalSegmentIntersectsBounds(
-  DrawPoint start,
-  DrawPoint end,
-  DrawRect bounds,
-) {
-  final x = (start.x + end.x) / 2;
-  if (x < bounds.minX || x > bounds.maxX) {
-    return false;
-  }
-  final segMinY = math.min(start.y, end.y);
-  final segMaxY = math.max(start.y, end.y);
-  return _overlapLength(segMinY, segMaxY, bounds.minY, bounds.maxY) >
-      ElbowConstants.intersectionEpsilon;
-}
-
-bool _horizontalSegmentIntersectsBounds(
-  DrawPoint start,
-  DrawPoint end,
-  DrawRect bounds,
-) {
-  final y = (start.y + end.y) / 2;
-  if (y < bounds.minY || y > bounds.maxY) {
-    return false;
-  }
-  final segMinX = math.min(start.x, end.x);
-  final segMaxX = math.max(start.x, end.x);
-  return _overlapLength(segMinX, segMaxX, bounds.minX, bounds.maxX) >
-      ElbowConstants.intersectionEpsilon;
-}
-
-bool _segmentAabbIntersectsBounds(
-  DrawPoint start,
-  DrawPoint end,
-  DrawRect bounds,
-) {
-  final segMinX = math.min(start.x, end.x);
-  final segMaxX = math.max(start.x, end.x);
-  final segMinY = math.min(start.y, end.y);
-  final segMaxY = math.max(start.y, end.y);
-  return segMaxX >= bounds.minX &&
-      segMinX <= bounds.maxX &&
-      segMaxY >= bounds.minY &&
-      segMinY <= bounds.maxY;
-}
 
 List<DrawPoint> _fallbackPath({
   required DrawPoint start,
@@ -265,32 +199,6 @@ List<DrawPoint>? _fallbackPathConstrained({
   required bool startConstrained,
   required bool endConstrained,
 }) {
-  final candidates = _generateFallbackCandidates(
-    start: start,
-    end: end,
-    startHeading: startHeading,
-    endHeading: endHeading,
-    startConstrained: startConstrained,
-    endConstrained: endConstrained,
-  );
-
-  return _selectBestCandidate(
-    candidates: candidates,
-    startHeading: startHeading,
-    endHeading: endHeading,
-    startConstrained: startConstrained,
-    endConstrained: endConstrained,
-  );
-}
-
-List<List<DrawPoint>> _generateFallbackCandidates({
-  required DrawPoint start,
-  required DrawPoint end,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-}) {
   final candidates = <List<DrawPoint>>[
     [start, end],
     ElbowGeometry.directElbowPath(start, end, preferHorizontal: true),
@@ -323,19 +231,8 @@ List<List<DrawPoint>> _generateFallbackCandidates({
   addMidCandidate(horizontal: true);
   addMidCandidate(horizontal: false);
 
-  return candidates;
-}
-
-List<DrawPoint>? _selectBestCandidate({
-  required List<List<DrawPoint>> candidates,
-  required ElbowHeading startHeading,
-  required ElbowHeading endHeading,
-  required bool startConstrained,
-  required bool endConstrained,
-}) {
   List<DrawPoint>? best;
   var bestLength = double.infinity;
-
   for (final candidate in candidates) {
     final normalized = _normalizeFallbackCandidate(
       points: candidate,
@@ -543,20 +440,15 @@ List<DrawPoint> _harmonizeBoundSpacing({
     bounds: endBounds,
     heading: end.heading,
   );
-  if (startSpacing == null || endSpacing == null) {
-    return points;
-  }
-
-  final sharedSpacing = math.min(startSpacing, endSpacing);
-  if (!sharedSpacing.isFinite) {
-    return points;
-  }
-
-  final minAllowedSpacing = math.max(
-    ElbowSpacing.minBindingSpacing(hasArrowhead: start.hasArrowhead),
-    ElbowSpacing.minBindingSpacing(hasArrowhead: end.hasArrowhead),
+  final resolvedSpacing = ElbowSpacing.resolveSharedSpacing(
+    startSpacing: startSpacing,
+    endSpacing: endSpacing,
+    startHasArrowhead: start.hasArrowhead,
+    endHasArrowhead: end.hasArrowhead,
   );
-  final resolvedSpacing = math.max(sharedSpacing, minAllowedSpacing);
+  if (resolvedSpacing == null) {
+    return points;
+  }
 
   final updated = List<DrawPoint>.from(points);
   _applySegmentSpacing(
@@ -647,8 +539,8 @@ List<DrawPoint> _balanceThreeSegmentPath({
   return updated;
 }
 
-// Collapse detours that return to the same axis when the straight segment is
-// clear.
+// Collapse detours that return to the same axis when the straight segment
+// is clear.
 List<DrawPoint> _collapseRouteBacktracks({
   required List<DrawPoint> points,
   required List<DrawRect> obstacles,
@@ -661,70 +553,44 @@ List<DrawPoint> _collapseRouteBacktracks({
 
   while (changed) {
     changed = false;
-    final collapsed = _tryCollapseOneBacktrack(updated, obstacles);
-    if (collapsed != null) {
-      updated = collapsed;
-      changed = true;
+    outer:
+    for (var i = 1; i < updated.length - 2; i++) {
+      for (var j = i + 2; j < updated.length - 1; j++) {
+        final a = updated[i];
+        final d = updated[j];
+        final alignedX = (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
+        final alignedY = (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
+        if (!alignedX && !alignedY) {
+          continue;
+        }
+        if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
+          continue;
+        }
+        // Check whether intermediate points deviate from the shared axis.
+        var deviates = false;
+        for (var k = i + 1; k < j; k++) {
+          final delta = alignedX
+              ? (updated[k].x - a.x).abs()
+              : (updated[k].y - a.y).abs();
+          if (delta > ElbowConstants.dedupThreshold) {
+            deviates = true;
+            break;
+          }
+        }
+        if (deviates) {
+          updated = [
+            ...updated.sublist(0, i + 1),
+            d,
+            ...updated.sublist(j + 1),
+          ];
+          changed = true;
+          break outer;
+        }
+      }
     }
   }
 
   return updated;
-}
-
-List<DrawPoint>? _tryCollapseOneBacktrack(
-  List<DrawPoint> points,
-  List<DrawRect> obstacles,
-) {
-  for (var i = 1; i < points.length - 2; i++) {
-    for (var j = i + 2; j < points.length - 1; j++) {
-      final a = points[i];
-      final d = points[j];
-      final alignedX = (a.x - d.x).abs() <= ElbowConstants.dedupThreshold;
-      final alignedY = (a.y - d.y).abs() <= ElbowConstants.dedupThreshold;
-
-      if (!alignedX && !alignedY) {
-        continue;
-      }
-      if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
-        continue;
-      }
-
-      final deviates = _pathDeviatesFromAxis(
-        points: points,
-        start: i,
-        end: j,
-        alignedX: alignedX,
-        reference: a,
-      );
-
-      if (deviates) {
-        return [...points.sublist(0, i + 1), d, ...points.sublist(j + 1)];
-      }
-    }
-  }
-  return null;
-}
-
-bool _pathDeviatesFromAxis({
-  required List<DrawPoint> points,
-  required int start,
-  required int end,
-  required bool alignedX,
-  required DrawPoint reference,
-}) {
-  for (var k = start + 1; k < end; k++) {
-    final candidate = points[k];
-    if (alignedX) {
-      if ((candidate.x - reference.x).abs() > ElbowConstants.dedupThreshold) {
-        return true;
-      }
-    } else {
-      if ((candidate.y - reference.y).abs() > ElbowConstants.dedupThreshold) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 ElbowHeading _segmentHeading(DrawPoint from, DrawPoint to) =>
@@ -915,13 +781,7 @@ final class _ElbowGridNode {
   _ElbowGridNode? parent;
 }
 
-@immutable
-final class _ElbowGridAddress {
-  const _ElbowGridAddress({required this.col, required this.row});
-
-  final int col;
-  final int row;
-}
+typedef _ElbowGridAddress = ({int col, int row});
 
 void _addBoundsToAxes(Set<double> xs, Set<double> ys, DrawRect bounds) {
   xs
@@ -983,7 +843,7 @@ _ElbowGrid _buildGrid({
       nodes.add(
         _ElbowGridNode(
           pos: DrawPoint(x: sortedX[col], y: sortedY[row]),
-          addr: _ElbowGridAddress(col: col, row: row),
+          addr: (col: col, row: row),
         ),
       );
     }
@@ -1264,18 +1124,11 @@ List<_ElbowGridNode> _reconstructPath(
   return path;
 }
 
-@immutable
-final class _ElbowNeighborOffset {
-  const _ElbowNeighborOffset(this.dx, this.dy, this.heading);
-
-  final int dx;
-  final int dy;
-  final ElbowHeading heading;
-}
+typedef _ElbowNeighborOffset = ({int dx, int dy, ElbowHeading heading});
 
 const _neighborOffsets = <_ElbowNeighborOffset>[
-  _ElbowNeighborOffset(0, -1, ElbowHeading.up),
-  _ElbowNeighborOffset(1, 0, ElbowHeading.right),
-  _ElbowNeighborOffset(0, 1, ElbowHeading.down),
-  _ElbowNeighborOffset(-1, 0, ElbowHeading.left),
+  (dx: 0, dy: -1, heading: ElbowHeading.up),
+  (dx: 1, dy: 0, heading: ElbowHeading.right),
+  (dx: 0, dy: 1, heading: ElbowHeading.down),
+  (dx: -1, dy: 0, heading: ElbowHeading.left),
 ];
