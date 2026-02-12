@@ -288,6 +288,21 @@ List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
   return result;
 }
 
+/// Syncs fixed segments to current point positions, then merges collinear
+/// neighbors. Combines the two most common post-processing steps.
+_FixedSegmentPathResult _syncAndMergeFixedSegments({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  bool allowDirectionFlip = false,
+}) {
+  final synced = _syncFixedSegmentsToPoints(points, fixedSegments);
+  return _mergeFixedSegmentsWithCollinearNeighbors(
+    points: points,
+    fixedSegments: synced,
+    allowDirectionFlip: allowDirectionFlip,
+  );
+}
+
 _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
@@ -552,11 +567,17 @@ Set<DrawPoint> _collectPinnedPoints({
   return pinned;
 }
 
-_FixedSegmentPathResult _simplifyFixedSegmentPath({
+/// Normalizes an elbow path with fixed segments through a standard
+/// sequence of transformations.
+///
+/// Steps: apply fixed axes → simplify (preserving pinned points) →
+/// reindex → merge collinear neighbors → collapse backtracks.
+_FixedSegmentPathResult _normalizeFixedSegmentPath({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
   Set<DrawPoint> extraPinned = const {},
   bool enforceAxes = false,
+  bool allowDirectionFlip = false,
 }) {
   if (points.length < 2 || fixedSegments.isEmpty) {
     return _FixedSegmentPathResult(
@@ -579,12 +600,14 @@ _FixedSegmentPathResult _simplifyFixedSegmentPath({
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: simplified,
     fixedSegments: activeFixed,
+    allowDirectionFlip: allowDirectionFlip,
     pinned: {
       ..._collectPinnedPoints(points: simplified, fixedSegments: activeFixed),
       ...extraPinned,
     },
   );
 }
+
 
 ElbowEditResult _finalizeElbowEditResult({
   required ElementState element,

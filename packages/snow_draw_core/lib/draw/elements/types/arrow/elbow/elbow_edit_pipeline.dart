@@ -284,7 +284,7 @@ final class _ElbowEditPipeline {
                 : const <DrawPoint>{};
           }()
         : const <DrawPoint>{};
-    return _simplifyFixedSegmentPath(
+    return _normalizeFixedSegmentPath(
       points: reconciled.points,
       fixedSegments: reconciled.fixedSegments,
       extraPinned: extraPinned,
@@ -296,7 +296,7 @@ final class _ElbowEditPipeline {
     final base = !context.pointsChanged && context.fixedSegmentsChanged
         ? context.basePoints
         : context.incomingPoints;
-    final simplified = _simplifyFixedSegmentPath(
+    final simplified = _normalizeFixedSegmentPath(
       points: base,
       fixedSegments: context.fixedSegments,
       enforceAxes: true,

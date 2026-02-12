@@ -186,7 +186,7 @@ _FixedSegmentPathResult? _buildFallbackPathForActiveSpan({
   if (stitched.fixedSegments.length != fixedSegments.length) {
     return null;
   }
-  final simplified = _simplifyFixedSegmentPath(
+  final simplified = _normalizeFixedSegmentPath(
     points: stitched.points,
     fixedSegments: stitched.fixedSegments,
   );
@@ -498,7 +498,7 @@ _FixedSegmentPathResult? _tryBaselineMapping({
     return null;
   }
   final adopted = forceBaseline
-      ? _simplifyFixedSegmentPath(
+      ? _normalizeFixedSegmentPath(
           points: mapped.points,
           fixedSegments: mapped.fixedSegments,
           enforceAxes: true,
@@ -630,19 +630,15 @@ _FixedSegmentPathResult _enforceOrthogonality({
   }
 
   // Snap unbound endpoint neighbors to stay orthogonal.
-  if (!context.hasBoundStart) {
-    points = _snapUnboundNeighbor(
-      points: points,
-      fixedSegments: fixedSegments,
-      isStart: true,
-    );
-  }
-  if (!context.hasBoundEnd) {
-    points = _snapUnboundNeighbor(
-      points: points,
-      fixedSegments: fixedSegments,
-      isStart: false,
-    );
+  for (final isStart in const [true, false]) {
+    final isBound = isStart ? context.hasBoundStart : context.hasBoundEnd;
+    if (!isBound) {
+      points = _snapUnboundNeighbor(
+        points: points,
+        fixedSegments: fixedSegments,
+        isStart: isStart,
+      );
+    }
   }
 
   // Re-apply fixed segment axes after neighbor snapping.
@@ -655,8 +651,7 @@ _FixedSegmentPathResult _enforceOrthogonality({
       fixedSegments: fixedSegments,
     );
     if (merged.fixedSegments.length == fixedSegments.length) {
-      points = merged.points;
-      fixedSegments = merged.fixedSegments;
+      return merged;
     }
   }
 
@@ -745,22 +740,21 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   state = _enforceOrthogonality(context: context, state: state);
 
   // Step 5: sync fixed segments and collapse binding stubs.
-  var synced = _syncFixedSegmentsToPoints(state.points, state.fixedSegments);
   if ((context.startBindingRemoved || context.endBindingRemoved) &&
-      synced.isNotEmpty) {
-    final merged = _mergeFixedSegmentsWithCollinearNeighbors(
+      state.fixedSegments.isNotEmpty) {
+    final merged = _syncAndMergeFixedSegments(
       points: state.points,
-      fixedSegments: synced,
+      fixedSegments: state.fixedSegments,
       allowDirectionFlip: true,
     );
-    if (merged.fixedSegments.length == synced.length) {
-      state = state.copyWith(
-        points: merged.points,
-        fixedSegments: merged.fixedSegments,
-      );
-      synced = merged.fixedSegments;
+    if (merged.fixedSegments.length == state.fixedSegments.length) {
+      state = merged;
     }
   }
+  final synced = _syncFixedSegmentsToPoints(
+    state.points,
+    state.fixedSegments,
+  );
   if (context.isFullyUnbound) {
     return _FixedSegmentPathResult(points: state.points, fixedSegments: synced);
   }
@@ -850,12 +844,12 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
           ElbowConstants.dedupThreshold) {
     localPoints.removeLast();
   }
-  final synced = _syncFixedSegmentsToPoints(localPoints, fixedSegments);
-  return _mergeFixedSegmentsWithCollinearNeighbors(
+  final synced = _syncAndMergeFixedSegments(
     points: localPoints,
-    fixedSegments: synced,
+    fixedSegments: fixedSegments,
     allowDirectionFlip: true,
   );
+  return synced;
 }
 
 ({List<DrawPoint> points, bool moved}) _slideFixedSpanForBoundEndpoint({
