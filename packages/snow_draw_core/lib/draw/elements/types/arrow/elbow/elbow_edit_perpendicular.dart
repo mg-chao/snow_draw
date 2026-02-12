@@ -10,25 +10,18 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   required ArrowheadStyle startArrowhead,
   required ArrowheadStyle endArrowhead,
 }) {
-  if (points.length < 2) {
+  if (points.length < 2 || (startBinding == null && endBinding == null)) {
     return _FixedSegmentPathResult(
       points: points,
       fixedSegments: fixedSegments,
     );
   }
-  if (startBinding == null && endBinding == null) {
-    return _FixedSegmentPathResult(
-      points: points,
-      fixedSegments: fixedSegments,
-    );
-  }
-
   final space = ElementSpace(
     rotation: element.rotation,
     origin: element.rect.center,
   );
   var worldPoints = points.map(space.toWorld).toList(growable: true);
-  var updatedFixedSegments = fixedSegments;
+  var updatedFixed = fixedSegments;
   var localPoints = points;
   final baselinePadding = _resolveBaselineEndpointPadding(
     element: element,
@@ -40,63 +33,49 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     endArrowhead: endArrowhead,
   );
 
-  // Process start then end binding in a single loop.
   for (final isStart in const [true, false]) {
     final binding = isStart ? startBinding : endBinding;
     if (binding == null) {
       continue;
     }
-
-    // Resolve the fixed-segment neighbor axis for this endpoint.
     bool? neighborAxis;
     if (isStart) {
-      neighborAxis = _fixedSegmentIsHorizontal(updatedFixedSegments, 2);
+      neighborAxis = _fixedSegmentIsHorizontal(updatedFixed, 2);
     } else {
-      final neighborIndex = math.max(2, localPoints.length - 2);
-      neighborAxis = _fixedSegmentIsHorizontal(
-        updatedFixedSegments,
-        neighborIndex,
-      );
-      if (neighborAxis == null &&
-          _endpointHasCorner(points: localPoints, isStart: false)) {
-        neighborAxis = _fixedSegmentIsHorizontal(
-          updatedFixedSegments,
-          neighborIndex - 1,
-        );
-      }
+      final ni = math.max(2, localPoints.length - 2);
+      neighborAxis =
+          _fixedSegmentIsHorizontal(updatedFixed, ni) ??
+          (_endpointHasCorner(points: localPoints, isStart: false)
+              ? _fixedSegmentIsHorizontal(updatedFixed, ni - 1)
+              : null);
     }
-    final arrowhead = isStart ? startArrowhead : endArrowhead;
-    final padding = isStart ? baselinePadding.start : baselinePadding.end;
     final adjustment = _adjustPerpendicularEndpoint(
       points: worldPoints,
       binding: binding,
       elementsById: elementsById,
-      directionPadding: padding,
+      directionPadding: isStart ? baselinePadding.start : baselinePadding.end,
       fixedNeighborAxis: neighborAxis,
-      hasArrowhead: arrowhead != ArrowheadStyle.none,
-      fixedSegments: updatedFixedSegments,
+      hasArrowhead:
+          (isStart ? startArrowhead : endArrowhead) != ArrowheadStyle.none,
+      fixedSegments: updatedFixed,
       isStart: isStart,
     );
     worldPoints = adjustment.points;
     if (adjustment.inserted || adjustment.moved) {
       localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
-      updatedFixedSegments = adjustment.inserted
-          ? _reindexFixedSegments(localPoints, updatedFixedSegments)
-          : _syncFixedSegmentsToPoints(localPoints, updatedFixedSegments);
+      updatedFixed = adjustment.inserted
+          ? _reindexFixedSegments(localPoints, updatedFixed)
+          : _syncFixedSegmentsToPoints(localPoints, updatedFixed);
     }
   }
 
   if (identical(localPoints, points) && worldPoints.length != points.length) {
     localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
-    updatedFixedSegments = _reindexFixedSegments(
-      localPoints,
-      updatedFixedSegments,
-    );
+    updatedFixed = _reindexFixedSegments(localPoints, updatedFixed);
   }
-
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: localPoints,
-    fixedSegments: updatedFixedSegments,
+    fixedSegments: updatedFixed,
     allowDirectionFlip: true,
   );
 }
@@ -128,12 +107,11 @@ bool _endpointHasCorner({
   if (points.length < 2 || (startBinding == null && endBinding == null)) {
     return (start: null, end: null);
   }
-
   final space = ElementSpace(
     rotation: element.rotation,
     origin: element.rect.center,
   );
-  final routedPoints = routeElbowArrow(
+  final routed = routeElbowArrow(
     start: space.toWorld(points.first),
     end: space.toWorld(points.last),
     startBinding: startBinding,
@@ -142,25 +120,19 @@ bool _endpointHasCorner({
     startArrowhead: startArrowhead,
     endArrowhead: endArrowhead,
   ).points;
-  if (routedPoints.length < 3) {
+  if (routed.length < 3) {
     return (start: null, end: null);
   }
-
-  double? segmentLength(DrawPoint a, DrawPoint b) {
+  double? len(DrawPoint a, DrawPoint b) {
     final d = ElbowGeometry.manhattanDistance(a, b);
     return d.isFinite && d > ElbowConstants.dedupThreshold ? d : null;
   }
 
   return (
-    start: startBinding == null
-        ? null
-        : segmentLength(routedPoints.first, routedPoints[1]),
+    start: startBinding == null ? null : len(routed.first, routed[1]),
     end: endBinding == null
         ? null
-        : segmentLength(
-            routedPoints[routedPoints.length - 2],
-            routedPoints.last,
-          ),
+        : len(routed[routed.length - 2], routed.last),
   );
 }
 
@@ -284,7 +256,7 @@ _PerpendicularAdjustment? _slideEndpointToPadding({
     );
   }
 
-  // Corner mode: need ≥4 points and alternating axis pattern.
+  // Corner mode: need 閳? points and alternating axis pattern.
   if (points.length < 4) {
     return null;
   }
@@ -613,7 +585,6 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
       inserted: false,
     );
   }
-
   final endpoint = isStart ? points.first : points.last;
   final stub = ElbowGeometry.offsetPoint(endpoint, heading, padding);
   final connector = heading.isHorizontal
@@ -621,28 +592,23 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
       : DrawPoint(x: neighbor.x, y: stub.y);
 
   final updated = List<DrawPoint>.from(points);
-  final neighborIndex = isStart ? 1 : updated.length - 2;
+  final ni = isStart ? 1 : updated.length - 2;
   var insertIndex = isStart ? 1 : updated.length - 1;
   var moved = false;
   var inserted = false;
 
   if (allowExtend && points.length > 2) {
     final adjacent = isStart ? points[2] : points[points.length - 3];
-    final adjacentHorizontal = ElbowGeometry.segmentIsHorizontal(
-      neighbor,
-      adjacent,
-    );
-    final connectorAligned = adjacentHorizontal
+    final adjH = ElbowGeometry.segmentIsHorizontal(neighbor, adjacent);
+    final aligned = adjH
         ? (connector.y - neighbor.y).abs() <= ElbowConstants.dedupThreshold
         : (connector.x - neighbor.x).abs() <= ElbowConstants.dedupThreshold;
-    if (connectorAligned) {
-      updated[neighborIndex] = connector;
+    if (aligned) {
+      updated[ni] = connector;
       moved = true;
     }
   }
 
-  // Start inserts stub then connector (endpoint→stub→connector→neighbor);
-  // end inserts connector then stub (neighbor→connector→stub→endpoint).
   final hasStub =
       ElbowGeometry.manhattanDistance(stub, endpoint) >
       ElbowConstants.dedupThreshold;
@@ -660,7 +626,6 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
     insertIndex++;
     inserted = true;
   }
-
   return _PerpendicularAdjustment(
     points: updated,
     moved: moved,

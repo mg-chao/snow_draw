@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
-import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../core/geometry/move_geometry.dart';
+import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -20,8 +20,8 @@ import '../../types/snap_guides.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
-import '../core/edit_computed_result.dart';
 import '../core/arrow_binding_cleanup.dart';
+import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
 import '../core/edit_operation_helpers.dart';

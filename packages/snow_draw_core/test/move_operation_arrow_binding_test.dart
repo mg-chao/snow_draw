@@ -23,9 +23,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/combined_element_lookup.dart';
 
 void main() {
-  setUp(() {
-    ArrowBindingResolver.instance.invalidate();
-  });
+  setUp(ArrowBindingResolver.instance.invalidate);
 
   test(
     'moving elbow arrow clears bindings and stops follow-up binding updates',

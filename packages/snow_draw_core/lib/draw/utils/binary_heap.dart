@@ -5,10 +5,13 @@
 class BinaryHeap<T> {
   /// Creates a heap that orders elements by the given scoring function
   /// (lowest first).
-  BinaryHeap(this._score);
+  BinaryHeap(double Function(T) score) : _score = _eraseScore(score);
 
-  final double Function(T) _score;
+  final double Function(Object?) _score;
   final List<T> _content = [];
+
+  static double Function(Object?) _eraseScore<T>(double Function(T) score) =>
+      (value) => score(value as T);
 
   /// Whether the heap contains no elements.
   bool get isEmpty => _content.isEmpty;

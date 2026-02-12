@@ -1,21 +1,27 @@
 /// Generic least-recently-used cache with optional disposal.
 ///
-/// When [onEvict] is provided it is called for every value that
+/// When an eviction callback is provided it is called for every value that
 /// leaves the cache — whether through eviction, explicit [remove],
 /// [clear], or replacement via [put].
 class LruCache<K, V> {
-  LruCache({required this.maxEntries, this.onEvict});
+  LruCache({required this.maxEntries, void Function(V value)? onEvict})
+    : _onEvict = _eraseOnEvict(onEvict);
 
   final int maxEntries;
-
-  /// Called when a value is removed from the cache for any reason.
-  ///
-  /// Use this to release native resources (e.g. `Picture.dispose()`).
-  final void Function(V value)? onEvict;
+  final void Function(Object?)? _onEvict;
 
   final _entries = <K, _LruNode<K, V>>{};
   _LruNode<K, V>? _head;
   _LruNode<K, V>? _tail;
+
+  static void Function(Object?)? _eraseOnEvict<V>(
+    void Function(V value)? onEvict,
+  ) {
+    if (onEvict == null) {
+      return null;
+    }
+    return (Object? value) => onEvict(value as V);
+  }
 
   int get length => _entries.length;
 
@@ -45,7 +51,7 @@ class LruCache<K, V> {
       existing.value = value;
       _moveToFront(existing);
       if (!identical(old, value)) {
-        onEvict?.call(old);
+        _onEvict?.call(old);
       }
       return;
     }
@@ -64,15 +70,16 @@ class LruCache<K, V> {
       return false;
     }
     _unlink(node);
-    onEvict?.call(node.value);
+    _onEvict?.call(node.value);
     return true;
   }
 
   void clear() {
+    final onEvict = _onEvict;
     if (onEvict != null) {
       var node = _head;
       while (node != null) {
-        onEvict!(node.value);
+        onEvict(node.value);
         node = node.next;
       }
     }
@@ -88,7 +95,7 @@ class LruCache<K, V> {
     }
     _entries.remove(tail.key);
     _unlink(tail);
-    onEvict?.call(tail.value);
+    _onEvict?.call(tail.value);
   }
 
   void _addToFront(_LruNode<K, V> node) {

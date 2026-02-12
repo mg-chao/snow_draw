@@ -53,42 +53,34 @@ bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
   if (!_hasArea(innerBounds)) {
     return false;
   }
-
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
   if (dx <= ElbowConstants.dedupThreshold) {
-    // Vertical segment.
     final x = (start.x + end.x) / 2;
     if (x < innerBounds.minX || x > innerBounds.maxX) {
       return false;
     }
-    final segMinY = math.min(start.y, end.y);
-    final segMaxY = math.max(start.y, end.y);
     return _overlapLength(
-          segMinY,
-          segMaxY,
+          math.min(start.y, end.y),
+          math.max(start.y, end.y),
           innerBounds.minY,
           innerBounds.maxY,
         ) >
         ElbowConstants.intersectionEpsilon;
   }
   if (dy <= ElbowConstants.dedupThreshold) {
-    // Horizontal segment.
     final y = (start.y + end.y) / 2;
     if (y < innerBounds.minY || y > innerBounds.maxY) {
       return false;
     }
-    final segMinX = math.min(start.x, end.x);
-    final segMaxX = math.max(start.x, end.x);
     return _overlapLength(
-          segMinX,
-          segMaxX,
+          math.min(start.x, end.x),
+          math.max(start.x, end.x),
           innerBounds.minX,
           innerBounds.maxX,
         ) >
         ElbowConstants.intersectionEpsilon;
   }
-  // Diagonal: conservative AABB overlap.
   return math.max(start.x, end.x) >= innerBounds.minX &&
       math.min(start.x, end.x) <= innerBounds.maxX &&
       math.max(start.y, end.y) >= innerBounds.minY &&
@@ -204,8 +196,7 @@ List<DrawPoint>? _fallbackPathConstrained({
     ElbowGeometry.directElbowPath(start, end, preferHorizontal: true),
     ElbowGeometry.directElbowPath(start, end, preferHorizontal: false),
   ];
-
-  void addMidCandidate({required bool horizontal}) {
+  for (final horizontal in const [true, false]) {
     final mid = _resolveFallbackMid(
       start: start,
       end: end,
@@ -215,21 +206,17 @@ List<DrawPoint>? _fallbackPathConstrained({
       endConstrained: endConstrained,
       horizontal: horizontal,
     );
-    if (mid == null) {
-      return;
+    if (mid != null) {
+      candidates.add(
+        _buildElbowThroughMid(
+          start: start,
+          end: end,
+          horizontal: horizontal,
+          mid: mid,
+        ),
+      );
     }
-    candidates.add(
-      _buildElbowThroughMid(
-        start: start,
-        end: end,
-        horizontal: horizontal,
-        mid: mid,
-      ),
-    );
   }
-
-  addMidCandidate(horizontal: true);
-  addMidCandidate(horizontal: false);
 
   List<DrawPoint>? best;
   var bestLength = double.infinity;
@@ -253,10 +240,6 @@ List<DrawPoint>? _fallbackPathConstrained({
   return best;
 }
 
-/// Resolves a constrained midpoint along a single axis.
-///
-/// When [horizontal] is true, constrains along X using horizontal headings;
-/// otherwise constrains along Y using vertical headings.
 double? _resolveFallbackMid({
   required DrawPoint start,
   required DrawPoint end,
@@ -270,13 +253,12 @@ double? _resolveFallbackMid({
   var min = double.negativeInfinity;
   var max = double.infinity;
 
-  void applyConstraint({
-    required bool constrained,
-    required ElbowHeading heading,
-    required double value,
-  }) {
+  for (final (constrained, heading, value) in [
+    (startConstrained, startHeading, horizontal ? start.x : start.y),
+    (endConstrained, endHeading, horizontal ? end.x : end.y),
+  ]) {
     if (!constrained || heading.isHorizontal != horizontal) {
-      return;
+      continue;
     }
     final positive = horizontal
         ? heading == ElbowHeading.right
@@ -287,22 +269,9 @@ double? _resolveFallbackMid({
       max = math.min(max, value - padding);
     }
   }
-
-  applyConstraint(
-    constrained: startConstrained,
-    heading: startHeading,
-    value: horizontal ? start.x : start.y,
-  );
-  applyConstraint(
-    constrained: endConstrained,
-    heading: endHeading,
-    value: horizontal ? end.x : end.y,
-  );
-
   if (min.isFinite && max.isFinite && min > max) {
     return null;
   }
-
   final candidate = horizontal ? (start.x + end.x) / 2 : (start.y + end.y) / 2;
   return _clampToRange(candidate, min, max);
 }
@@ -355,16 +324,11 @@ List<DrawPoint> _postProcessPath({
   if (path.isEmpty) {
     return [startPoint, endPoint];
   }
-  final points = <DrawPoint>[];
-  if (startExit != startPoint && path.first.pos != startPoint) {
-    points.add(startPoint);
-  }
-  for (final node in path) {
-    points.add(node.pos);
-  }
-  if (endExit != endPoint && points.last != endPoint) {
-    points.add(endPoint);
-  }
+  final points = [
+    if (startExit != startPoint && path.first.pos != startPoint) startPoint,
+    for (final node in path) node.pos,
+    if (endExit != endPoint && path.last.pos != endPoint) endPoint,
+  ];
   return points;
 }
 
@@ -394,20 +358,17 @@ List<DrawPoint> _harmonizeBoundSpacing({
   required _ResolvedEndpoint start,
   required _ResolvedEndpoint end,
 }) {
-  if (!start.isBound || !end.isBound) {
-    return points;
-  }
   final startBounds = start.elementBounds;
   final endBounds = end.elementBounds;
-  if (startBounds == null || endBounds == null) {
+  if (!start.isBound ||
+      !end.isBound ||
+      startBounds == null ||
+      endBounds == null) {
     return points;
   }
 
   final segments = _routeSegments(points);
 
-  // Balance a 3-segment path whose first and last segments share the same
-  // axis (e.g. [right, down, right]).  Move the middle perpendicular segment
-  // to the midpoint of the gap so the two parallel segments are even.
   if (segments.length == 3) {
     return _balanceThreeSegmentPath(
       points: points,
@@ -422,7 +383,6 @@ List<DrawPoint> _harmonizeBoundSpacing({
   if (segments.length < 4) {
     return points;
   }
-
   final startSegment = segments[1];
   final endSegment = segments[segments.length - 2];
   if (startSegment.heading.isHorizontal == start.heading.isHorizontal ||
@@ -480,56 +440,39 @@ List<DrawPoint> _balanceThreeSegmentPath({
 }) {
   final first = segments.first;
   final last = segments.last;
-
-  // Only applies when the outer segments share the same axis.
   if (first.heading.isHorizontal != last.heading.isHorizontal) {
     return points;
   }
 
-  final horizontal = first.heading.isHorizontal;
-
-  // Compute the allowed range for the middle segment along the parallel
-  // axis.  The middle segment must stay outside both element bounds.
+  final h = first.heading.isHorizontal;
   final minSpacing = math.max(
     ElbowSpacing.minBindingSpacing(hasArrowhead: start.hasArrowhead),
     ElbowSpacing.minBindingSpacing(hasArrowhead: end.hasArrowhead),
   );
 
-  double startLimit;
-  double endLimit;
-  if (horizontal) {
-    // Middle segment is vertical; its x position must respect both bounds.
-    startLimit = startBounds.maxX + minSpacing;
-    endLimit = endBounds.minX - minSpacing;
-    if (first.heading == ElbowHeading.left) {
-      startLimit = startBounds.minX - minSpacing;
-      endLimit = endBounds.maxX + minSpacing;
+  // Compute limits along the perpendicular axis.
+  final forward = h
+      ? first.heading != ElbowHeading.left
+      : first.heading != ElbowHeading.up;
+
+  double boundsLimit(DrawRect b, {required bool forStart}) {
+    if (h) {
+      return forward == forStart ? b.maxX + minSpacing : b.minX - minSpacing;
     }
-  } else {
-    // Middle segment is horizontal; its y position must respect both bounds.
-    startLimit = startBounds.maxY + minSpacing;
-    endLimit = endBounds.minY - minSpacing;
-    if (first.heading == ElbowHeading.up) {
-      startLimit = startBounds.minY - minSpacing;
-      endLimit = endBounds.maxY + minSpacing;
-    }
+    return forward == forStart ? b.maxY + minSpacing : b.minY - minSpacing;
   }
 
-  // The ideal position is the midpoint between the two endpoints along the
-  // parallel axis.
-  final startVal = horizontal ? points.first.x : points.first.y;
-  final endVal = horizontal ? points.last.x : points.last.y;
-  final ideal = (startVal + endVal) / 2;
-
-  // Clamp to the allowed range.
+  final startLimit = boundsLimit(startBounds, forStart: true);
+  final endLimit = boundsLimit(endBounds, forStart: false);
+  final startVal = h ? points.first.x : points.first.y;
+  final endVal = h ? points.last.x : points.last.y;
   final lo = math.min(startLimit, endLimit);
   final hi = math.max(startLimit, endLimit);
-  final balanced = ideal.clamp(lo, hi);
+  final balanced = ((startVal + endVal) / 2).clamp(lo, hi);
 
-  // The middle segment spans points[1] and points[2] in a 4-point path.
   final mid = segments[1];
   final updated = List<DrawPoint>.from(points);
-  if (horizontal) {
+  if (h) {
     updated[mid.index] = updated[mid.index].copyWith(x: balanced);
     updated[mid.index + 1] = updated[mid.index + 1].copyWith(x: balanced);
   } else {
@@ -539,8 +482,6 @@ List<DrawPoint> _balanceThreeSegmentPath({
   return updated;
 }
 
-// Collapse detours that return to the same axis when the straight segment
-// is clear.
 List<DrawPoint> _collapseRouteBacktracks({
   required List<DrawPoint> points,
   required List<DrawRect> obstacles,
@@ -550,11 +491,9 @@ List<DrawPoint> _collapseRouteBacktracks({
   }
   var updated = List<DrawPoint>.from(points);
   var changed = true;
-
   while (changed) {
     changed = false;
-    outer:
-    for (var i = 1; i < updated.length - 2; i++) {
+    for (var i = 1; i < updated.length - 2 && !changed; i++) {
       for (var j = i + 2; j < updated.length - 1; j++) {
         final a = updated[i];
         final d = updated[j];
@@ -566,7 +505,6 @@ List<DrawPoint> _collapseRouteBacktracks({
         if (_segmentIntersectsAnyBounds(a, d, obstacles)) {
           continue;
         }
-        // Check whether intermediate points deviate from the shared axis.
         var deviates = false;
         for (var k = i + 1; k < j; k++) {
           final delta = alignedX
@@ -584,12 +522,11 @@ List<DrawPoint> _collapseRouteBacktracks({
             ...updated.sublist(j + 1),
           ];
           changed = true;
-          break outer;
+          break;
         }
       }
     }
   }
-
   return updated;
 }
 
@@ -623,26 +560,19 @@ final class _RouteSegment {
 
 List<_RouteSegment> _routeSegments(List<DrawPoint> points) {
   if (points.length < 2) {
-    return const <_RouteSegment>[];
+    return const [];
   }
-  final segments = <_RouteSegment>[];
-  for (var i = 0; i < points.length - 1; i++) {
-    final start = points[i];
-    final end = points[i + 1];
-    if (ElbowGeometry.manhattanDistance(start, end) <=
-        ElbowConstants.dedupThreshold) {
-      continue;
-    }
-    segments.add(
-      _RouteSegment(
-        index: i,
-        start: start,
-        end: end,
-        heading: ElbowGeometry.headingForSegment(start, end),
-      ),
-    );
-  }
-  return segments;
+  return [
+    for (var i = 0; i < points.length - 1; i++)
+      if (ElbowGeometry.manhattanDistance(points[i], points[i + 1]) >
+          ElbowConstants.dedupThreshold)
+        _RouteSegment(
+          index: i,
+          start: points[i],
+          end: points[i + 1],
+          heading: ElbowGeometry.headingForSegment(points[i], points[i + 1]),
+        ),
+  ];
 }
 
 double? _segmentSpacing({
@@ -669,23 +599,24 @@ void _applySegmentSpacing({
   required ElbowHeading heading,
   required double spacing,
 }) {
-  final index = segment.index;
-  if (index < 0 || index + 1 >= points.length) {
+  final i = segment.index;
+  if (i < 0 || i + 1 >= points.length) {
     return;
   }
-  final horizontal = heading == ElbowHeading.up || heading == ElbowHeading.down;
+  final isVerticalSegment =
+      heading == ElbowHeading.up || heading == ElbowHeading.down;
   final value = switch (heading) {
     ElbowHeading.up => bounds.minY - spacing,
     ElbowHeading.right => bounds.maxX + spacing,
     ElbowHeading.down => bounds.maxY + spacing,
     ElbowHeading.left => bounds.minX - spacing,
   };
-  if (horizontal) {
-    points[index] = points[index].copyWith(y: value);
-    points[index + 1] = points[index + 1].copyWith(y: value);
+  if (isVerticalSegment) {
+    points[i] = points[i].copyWith(y: value);
+    points[i + 1] = points[i + 1].copyWith(y: value);
   } else {
-    points[index] = points[index].copyWith(x: value);
-    points[index + 1] = points[index + 1].copyWith(x: value);
+    points[i] = points[i].copyWith(x: value);
+    points[i + 1] = points[i + 1].copyWith(x: value);
   }
 }
 
@@ -693,31 +624,29 @@ List<DrawPoint> _ensureOrthogonalPath({
   required List<DrawPoint> points,
   required ElbowHeading startHeading,
 }) {
-  // Insert a midpoint when a diagonal would appear between consecutive points.
   if (points.length < 2) {
     return points;
   }
   final result = <DrawPoint>[points.first];
   for (var i = 1; i < points.length; i++) {
-    final previous = result.last;
+    final prev = result.last;
     final next = points[i];
-    final dx = (next.x - previous.x).abs();
-    final dy = (next.y - previous.y).abs();
+    final dx = (next.x - prev.x).abs();
+    final dy = (next.y - prev.y).abs();
     if (dx <= ElbowConstants.dedupThreshold ||
         dy <= ElbowConstants.dedupThreshold) {
-      if (next != previous) {
+      if (next != prev) {
         result.add(next);
       }
       continue;
     }
-
-    final preferHorizontal = result.length > 1
-        ? ElbowGeometry.segmentIsHorizontal(result[result.length - 2], previous)
+    final preferH = result.length > 1
+        ? ElbowGeometry.segmentIsHorizontal(result[result.length - 2], prev)
         : startHeading.isHorizontal;
-    final mid = preferHorizontal
-        ? DrawPoint(x: next.x, y: previous.y)
-        : DrawPoint(x: previous.x, y: next.y);
-    if (mid != previous) {
+    final mid = preferH
+        ? DrawPoint(x: next.x, y: prev.y)
+        : DrawPoint(x: prev.x, y: next.y);
+    if (mid != prev) {
       result.add(mid);
     }
     if (next != mid) {
@@ -792,11 +721,6 @@ void _addBoundsToAxes(Set<double> xs, Set<double> ys, DrawRect bounds) {
     ..add(bounds.maxY);
 }
 
-void _addPointToAxes(Set<double> xs, Set<double> ys, DrawPoint point) {
-  xs.add(point.x);
-  ys.add(point.y);
-}
-
 Map<double, int> _buildAxisIndex(List<double> sortedAxis) => <double, int>{
   for (var i = 0; i < sortedAxis.length; i++) sortedAxis[i]: i,
 };
@@ -809,27 +733,10 @@ _ElbowGrid _buildGrid({
   required ElbowHeading endHeading,
   required DrawRect bounds,
 }) {
-  final xs = <double>{};
-  final ys = <double>{};
-
-  for (final obstacle in obstacles) {
-    _addBoundsToAxes(xs, ys, obstacle);
-  }
-
-  _addPointToAxes(xs, ys, start);
-  _addPointToAxes(xs, ys, end);
-
-  _addBoundsToAxes(xs, ys, bounds);
-
-  if (startHeading.isHorizontal) {
-    ys.add(start.y);
-  } else {
-    xs.add(start.x);
-  }
-  if (endHeading.isHorizontal) {
-    ys.add(end.y);
-  } else {
-    xs.add(end.x);
+  final xs = <double>{start.x, end.x, bounds.minX, bounds.maxX};
+  final ys = <double>{start.y, end.y, bounds.minY, bounds.maxY};
+  for (final o in obstacles) {
+    _addBoundsToAxes(xs, ys, o);
   }
 
   final sortedX = xs.toList()..sort();
@@ -837,17 +744,14 @@ _ElbowGrid _buildGrid({
   final xIndex = _buildAxisIndex(sortedX);
   final yIndex = _buildAxisIndex(sortedY);
 
-  final nodes = <_ElbowGridNode>[];
-  for (var row = 0; row < sortedY.length; row++) {
-    for (var col = 0; col < sortedX.length; col++) {
-      nodes.add(
+  final nodes = [
+    for (var row = 0; row < sortedY.length; row++)
+      for (var col = 0; col < sortedX.length; col++)
         _ElbowGridNode(
           pos: DrawPoint(x: sortedX[col], y: sortedY[row]),
           addr: (col: col, row: row),
         ),
-      );
-    }
-  }
+  ];
 
   return _ElbowGrid(
     rows: sortedY.length,
@@ -1105,17 +1009,13 @@ List<_ElbowGridNode> _reconstructPath(
   _ElbowGridNode start,
 ) {
   final reversed = <_ElbowGridNode>[];
-  var node = current;
-  while (true) {
+  for (var node = current; ;) {
     reversed.add(node);
     final parent = node.parent;
     if (parent == null) {
       break;
     }
     node = parent;
-  }
-  if (reversed.isEmpty) {
-    return [start];
   }
   final path = reversed.reversed.toList(growable: true);
   if (path.first.addr != start.addr) {

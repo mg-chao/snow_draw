@@ -3,6 +3,7 @@ import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
+import '../../elements/types/line/line_data.dart';
 import '../../models/element_state.dart';
 import '../../types/element_style.dart';
 import '../../utils/combined_element_lookup.dart';
@@ -57,8 +58,6 @@ ElementState? _unbindArrowElement({
       element: element,
       data: data,
       lookup: lookup,
-      startBindingOverride: null,
-      endBindingOverride: null,
       startBindingOverrideIsSet: true,
       endBindingOverrideIsSet: true,
       finalize: true,
@@ -91,12 +90,22 @@ ElementState? _unbindArrowElement({
     return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
   }
 
-  final updatedData = data.copyWith(
-    startBinding: null,
-    endBinding: null,
-    fixedSegments: null,
-    startIsSpecial: null,
-    endIsSpecial: null,
-  );
+  final updatedData = switch (data) {
+    final ArrowData value => value.copyWith(
+      startBinding: null,
+      endBinding: null,
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
+    ),
+    final LineData value => value.copyWith(
+      startBinding: null,
+      endBinding: null,
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
+    ),
+    _ => data.copyWith(),
+  };
   return element.copyWith(data: updatedData);
 }

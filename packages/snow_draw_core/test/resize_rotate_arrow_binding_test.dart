@@ -19,12 +19,9 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  setUp(() {
-    ArrowBindingResolver.instance.invalidate();
-  });
+  setUp(ArrowBindingResolver.instance.invalidate);
 
   test('resizing arrow clears bindings and stops follow-up updates', () {
     final target = _rectangleElement(
@@ -206,7 +203,6 @@ ElementState _arrowElement({
     zIndex: 1,
     data: ArrowData(
       points: normalized,
-      arrowType: ArrowType.straight,
       startBinding: startBinding,
       endBinding: endBinding,
       startIsSpecial: startIsSpecial,

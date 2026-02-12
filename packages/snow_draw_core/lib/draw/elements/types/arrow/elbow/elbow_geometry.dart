@@ -247,17 +247,12 @@ final class ElbowGeometry {
     if (points.length < 4) {
       return points;
     }
-    final filtered = <DrawPoint>[];
-    for (var i = 0; i < points.length; i++) {
-      if (i == 0 || i == points.length - 1) {
-        filtered.add(points[i]);
-        continue;
-      }
-      if (manhattanDistance(points[i - 1], points[i]) > minLength) {
-        filtered.add(points[i]);
-      }
-    }
-    return filtered;
+    return [
+      points.first,
+      for (var i = 1; i < points.length - 1; i++)
+        if (manhattanDistance(points[i - 1], points[i]) > minLength) points[i],
+      points.last,
+    ];
   }
 
   /// Keeps only the corner points of an orthogonal polyline.
@@ -265,15 +260,14 @@ final class ElbowGeometry {
     if (points.length <= 2) {
       return points;
     }
-
-    var previousIsHorizontal = segmentIsHorizontal(points[0], points[1]);
+    var prevH = segmentIsHorizontal(points[0], points[1]);
     final result = <DrawPoint>[points.first];
     for (var i = 1; i < points.length - 1; i++) {
-      final nextIsHorizontal = segmentIsHorizontal(points[i], points[i + 1]);
-      if (previousIsHorizontal != nextIsHorizontal) {
+      final nextH = segmentIsHorizontal(points[i], points[i + 1]);
+      if (prevH != nextH) {
         result.add(points[i]);
       }
-      previousIsHorizontal = nextIsHorizontal;
+      prevH = nextH;
     }
     result.add(points.last);
     return result;
@@ -288,37 +282,29 @@ final class ElbowGeometry {
       return points;
     }
 
-    final withoutCollinear = <DrawPoint>[points.first];
+    // Remove collinear interior points (keep pinned).
+    final reduced = <DrawPoint>[points.first];
     for (var i = 1; i < points.length - 1; i++) {
-      final point = points[i];
-      if (pinned.contains(point)) {
-        withoutCollinear.add(point);
-        continue;
+      final p = points[i];
+      if (pinned.contains(p) ||
+          segmentIsHorizontal(reduced.last, p) !=
+              segmentIsHorizontal(p, points[i + 1])) {
+        reduced.add(p);
       }
-      final prev = withoutCollinear.last;
-      final next = points[i + 1];
-      final isHorizontalPrev = segmentIsHorizontal(prev, point);
-      final isHorizontalNext = segmentIsHorizontal(point, next);
-      if (isHorizontalPrev == isHorizontalNext) {
-        continue;
-      }
-      withoutCollinear.add(point);
     }
-    withoutCollinear.add(points.last);
+    reduced.add(points.last);
 
-    final cleaned = <DrawPoint>[withoutCollinear.first];
-    for (var i = 1; i < withoutCollinear.length; i++) {
-      final point = withoutCollinear[i];
-      if (point == cleaned.last) {
-        continue;
+    // Remove near-duplicate consecutive points.
+    final cleaned = <DrawPoint>[reduced.first];
+    for (var i = 1; i < reduced.length; i++) {
+      final p = reduced[i];
+      if (p != cleaned.last &&
+          (pinned.contains(p) ||
+              manhattanDistance(cleaned.last, p) >
+                  ElbowConstants.dedupThreshold)) {
+        cleaned.add(p);
       }
-      final length = manhattanDistance(cleaned.last, point);
-      if (length <= ElbowConstants.dedupThreshold && !pinned.contains(point)) {
-        continue;
-      }
-      cleaned.add(point);
     }
-
     return List<DrawPoint>.unmodifiable(cleaned);
   }
 
@@ -367,14 +353,11 @@ final class ElbowGeometry {
 
   /// Returns true when any segment is diagonal beyond the tolerance.
   static bool hasDiagonalSegments(List<DrawPoint> points) {
-    if (points.length < 2) {
-      return false;
-    }
     for (var i = 1; i < points.length; i++) {
-      final dx = (points[i].x - points[i - 1].x).abs();
-      final dy = (points[i].y - points[i - 1].y).abs();
-      if (dx > ElbowConstants.dedupThreshold &&
-          dy > ElbowConstants.dedupThreshold) {
+      if ((points[i].x - points[i - 1].x).abs() >
+              ElbowConstants.dedupThreshold &&
+          (points[i].y - points[i - 1].y).abs() >
+              ElbowConstants.dedupThreshold) {
         return true;
       }
     }

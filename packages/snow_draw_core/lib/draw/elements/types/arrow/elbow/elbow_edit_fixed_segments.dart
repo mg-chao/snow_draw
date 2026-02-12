@@ -342,6 +342,54 @@ _deduplicateAdjacentPoints({
   );
 }
 
+/// Tries to merge a single collinear non-fixed neighbor into one segment.
+///
+/// Returns `null` when no merge is possible.
+_FixedSegmentPathResult? _tryMergeCollinearNeighbor({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> segments,
+  required int segmentListIndex,
+  required Set<int> fixedIndices,
+}) {
+  final segment = segments[segmentListIndex];
+  final index = segment.index;
+  if (index <= 1 || index >= points.length) {
+    return null;
+  }
+  for (final offset in const [-1, 1]) {
+    final removeIndex = offset == -1 ? index - 1 : index;
+    final neighborIndex = offset == -1 ? index - 1 : index + 1;
+    if (removeIndex < 1 || neighborIndex >= points.length) {
+      continue;
+    }
+    if (fixedIndices.contains(neighborIndex)) {
+      continue;
+    }
+    final a = points[removeIndex - 1];
+    final b = points[removeIndex];
+    final c = points[removeIndex + 1];
+    if (!ElbowGeometry.segmentsCollinear(a, b, c)) {
+      continue;
+    }
+    final candidatePoints = List<DrawPoint>.from(points)..removeAt(removeIndex);
+    final newIndex = offset == -1 ? index - 1 : index;
+    final candidateSegments = List<ElbowFixedSegment>.from(segments);
+    candidateSegments[segmentListIndex] = segment.copyWith(
+      index: newIndex,
+      start: a,
+      end: candidatePoints[newIndex],
+    );
+    final reindexed = _reindexFixedSegments(candidatePoints, candidateSegments);
+    if (reindexed.length == segments.length) {
+      return _FixedSegmentPathResult(
+        points: candidatePoints,
+        fixedSegments: reindexed,
+      );
+    }
+  }
+  return null;
+}
+
 _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
@@ -354,13 +402,11 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
       fixedSegments: fixedSegments,
     );
   }
-
   final deduped = _deduplicateAdjacentPoints(
     points: points,
     fixedSegments: fixedSegments,
     pinned: pinned,
   );
-
   final collapsed = allowDirectionFlip
       ? _FixedSegmentPathResult(
           points: deduped.points,
@@ -373,65 +419,78 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
   var updatedPoints = List<DrawPoint>.from(collapsed.points);
   var updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
   var merged = true;
-
   while (merged) {
     merged = false;
-    final fixedIndices = updatedSegments
-        .map((segment) => segment.index)
-        .toSet();
-
+    final fixedIndices = updatedSegments.map((s) => s.index).toSet();
     for (var i = 0; i < updatedSegments.length; i++) {
-      final segment = updatedSegments[i];
-      final index = segment.index;
-      if (index <= 1 || index >= updatedPoints.length) {
-        continue;
-      }
-
-      // Try merging with the previous or next collinear non-fixed neighbor.
-      for (final offset in const [-1, 1]) {
-        final removeIndex = offset == -1 ? index - 1 : index;
-        final neighborIndex = offset == -1 ? index - 1 : index + 1;
-        if (removeIndex < 1 || neighborIndex >= updatedPoints.length) {
-          continue;
-        }
-        if (fixedIndices.contains(neighborIndex)) {
-          continue;
-        }
-        final a = updatedPoints[removeIndex - 1];
-        final b = updatedPoints[removeIndex];
-        final c = updatedPoints[removeIndex + 1];
-        if (!ElbowGeometry.segmentsCollinear(a, b, c)) {
-          continue;
-        }
-        final candidatePoints = List<DrawPoint>.from(updatedPoints)
-          ..removeAt(removeIndex);
-        final newIndex = offset == -1 ? index - 1 : index;
-        final candidateSegments = List<ElbowFixedSegment>.from(updatedSegments);
-        candidateSegments[i] = segment.copyWith(
-          index: newIndex,
-          start: a,
-          end: candidatePoints[newIndex],
-        );
-        final reindexed = _reindexFixedSegments(
-          candidatePoints,
-          candidateSegments,
-        );
-        if (reindexed.length == updatedSegments.length) {
-          updatedPoints = candidatePoints;
-          updatedSegments = reindexed;
-          merged = true;
-          break;
-        }
-      }
-      if (merged) {
+      final result = _tryMergeCollinearNeighbor(
+        points: updatedPoints,
+        segments: updatedSegments,
+        segmentListIndex: i,
+        fixedIndices: fixedIndices,
+      );
+      if (result != null) {
+        updatedPoints = List<DrawPoint>.from(result.points);
+        updatedSegments = List<ElbowFixedSegment>.from(result.fixedSegments);
+        merged = true;
         break;
       }
     }
   }
-
   return _collapseEndpointBacktracks(
     points: List<DrawPoint>.unmodifiable(updatedPoints),
     fixedSegments: List<ElbowFixedSegment>.unmodifiable(updatedSegments),
+  );
+}
+
+/// Detects a collinear backtrack at [removeIndex] and tries to collapse it.
+///
+/// Returns `null` when no valid collapse is possible.
+_FixedSegmentPathResult? _tryCollapseBacktrackAt({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment> fixedSegments,
+  required int removeIndex,
+  required int afterIndex,
+  required bool isHorizontal,
+}) {
+  if (removeIndex < 1 || removeIndex >= points.length - 1) {
+    return null;
+  }
+  final prev = points[removeIndex - 1];
+  final curr = points[removeIndex];
+  final next = points[removeIndex + 1];
+  if (!ElbowGeometry.segmentsCollinear(prev, curr, next)) {
+    return null;
+  }
+  final d1 = isHorizontal ? curr.x - prev.x : curr.y - prev.y;
+  final d2 = isHorizontal ? next.x - curr.x : next.y - curr.y;
+  if (d1.abs() <= ElbowConstants.dedupThreshold ||
+      d2.abs() <= ElbowConstants.dedupThreshold ||
+      d1 * d2 >= 0) {
+    return null;
+  }
+  final candidate = List<DrawPoint>.from(points)..removeAt(removeIndex);
+  if (afterIndex < candidate.length) {
+    final after =
+        candidate[afterIndex > removeIndex ? afterIndex - 1 : afterIndex];
+    final ref = candidate[removeIndex > 0 ? removeIndex - 1 : 0];
+    if (!ElbowGeometry.pointsAligned(ref, after)) {
+      final corner = isHorizontal
+          ? DrawPoint(x: ref.x, y: after.y)
+          : DrawPoint(x: after.x, y: ref.y);
+      if (!ElbowGeometry.pointsClose(corner, ref) &&
+          !ElbowGeometry.pointsClose(corner, after)) {
+        candidate.insert(removeIndex, corner);
+      }
+    }
+  }
+  final reindexed = _reindexFixedSegments(candidate, fixedSegments);
+  if (reindexed.length != fixedSegments.length) {
+    return null;
+  }
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(candidate),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
   );
 }
 
@@ -445,63 +504,31 @@ _FixedSegmentPathResult _collapseFixedSegmentBacktracks({
       fixedSegments: fixedSegments,
     );
   }
-
   var updatedPoints = List<DrawPoint>.from(points);
   var updatedSegments = List<ElbowFixedSegment>.from(fixedSegments);
   var changed = true;
-
   while (changed) {
     changed = false;
     for (final segment in updatedSegments) {
-      final index = segment.index;
-      if (index <= 0 || index + 2 >= updatedPoints.length) {
+      if (segment.index <= 0 || segment.index + 2 >= updatedPoints.length) {
         continue;
       }
-      final prev = updatedPoints[index - 1];
-      final curr = updatedPoints[index];
-      final next = updatedPoints[index + 1];
-      if (!ElbowGeometry.segmentsCollinear(prev, curr, next)) {
+      final collapsed = _tryCollapseBacktrackAt(
+        points: updatedPoints,
+        fixedSegments: updatedSegments,
+        removeIndex: segment.index + 1,
+        afterIndex: segment.index + 2,
+        isHorizontal: segment.isHorizontal,
+      );
+      if (collapsed == null) {
         continue;
       }
-      final fixedHorizontal = segment.isHorizontal;
-      final fixedDelta = fixedHorizontal
-          ? (curr.x - prev.x)
-          : (curr.y - prev.y);
-      final nextDelta = fixedHorizontal ? (next.x - curr.x) : (next.y - curr.y);
-      if (fixedDelta.abs() <= ElbowConstants.dedupThreshold ||
-          nextDelta.abs() <= ElbowConstants.dedupThreshold) {
-        continue;
-      }
-      if (fixedDelta * nextDelta >= 0) {
-        continue;
-      }
-      final after = updatedPoints[index + 2];
-
-      final candidatePoints = List<DrawPoint>.from(updatedPoints)
-        ..removeAt(index + 1);
-
-      if (!ElbowGeometry.pointsAligned(curr, after)) {
-        final corner = fixedHorizontal
-            ? DrawPoint(x: curr.x, y: after.y)
-            : DrawPoint(x: after.x, y: curr.y);
-        if (!ElbowGeometry.pointsClose(corner, curr) &&
-            !ElbowGeometry.pointsClose(corner, after)) {
-          candidatePoints.insert(index + 1, corner);
-        }
-      }
-
-      final reindexed = _reindexFixedSegments(candidatePoints, updatedSegments);
-      if (reindexed.length != updatedSegments.length) {
-        continue;
-      }
-
-      updatedPoints = candidatePoints;
-      updatedSegments = reindexed;
+      updatedPoints = List<DrawPoint>.from(collapsed.points);
+      updatedSegments = List<ElbowFixedSegment>.from(collapsed.fixedSegments);
       changed = true;
       break;
     }
   }
-
   return _FixedSegmentPathResult(
     points: List<DrawPoint>.unmodifiable(updatedPoints),
     fixedSegments: List<ElbowFixedSegment>.unmodifiable(updatedSegments),
@@ -518,49 +545,43 @@ _FixedSegmentPathResult _collapseEndpointBacktracks({
       fixedSegments: fixedSegments,
     );
   }
-
   final pinned = _collectPinnedPoints(
     points: points,
     fixedSegments: fixedSegments,
   );
-
   var result = _FixedSegmentPathResult(
     points: points,
     fixedSegments: fixedSegments,
   );
   for (final isStart in const [true, false]) {
-    final midIndex = isStart ? 1 : result.points.length - 2;
-    if (result.points.length < 3 || pinned.contains(result.points[midIndex])) {
+    if (result.points.length < 3) {
       continue;
     }
-    final prevIndex = isStart ? 0 : result.points.length - 3;
-    final nextIndex = isStart ? 2 : result.points.length - 1;
-    final prev = result.points[prevIndex];
-    final mid = result.points[midIndex];
-    final next = result.points[nextIndex];
-    if (!ElbowGeometry.segmentsCollinear(prev, mid, next)) {
+    final midIndex = isStart ? 1 : result.points.length - 2;
+    if (pinned.contains(result.points[midIndex])) {
       continue;
     }
     final axis =
-        ElbowGeometry.axisAlignedForSegment(prev, mid) ??
-        ElbowGeometry.axisAlignedForSegment(mid, next);
+        ElbowGeometry.axisAlignedForSegment(
+          result.points[isStart ? 0 : result.points.length - 3],
+          result.points[midIndex],
+        ) ??
+        ElbowGeometry.axisAlignedForSegment(
+          result.points[midIndex],
+          result.points[isStart ? 2 : result.points.length - 1],
+        );
     if (axis == null) {
       continue;
     }
-    final delta1 = axis.isHorizontal ? mid.x - prev.x : mid.y - prev.y;
-    final delta2 = axis.isHorizontal ? next.x - mid.x : next.y - mid.y;
-    if (delta1.abs() <= ElbowConstants.dedupThreshold ||
-        delta2.abs() <= ElbowConstants.dedupThreshold ||
-        delta1 * delta2 >= 0) {
-      continue;
-    }
-    final updated = List<DrawPoint>.from(result.points)..removeAt(midIndex);
-    final reindexed = _reindexFixedSegments(updated, result.fixedSegments);
-    if (reindexed.length == result.fixedSegments.length) {
-      result = _FixedSegmentPathResult(
-        points: List<DrawPoint>.unmodifiable(updated),
-        fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-      );
+    final collapsed = _tryCollapseBacktrackAt(
+      points: result.points,
+      fixedSegments: result.fixedSegments,
+      removeIndex: midIndex,
+      afterIndex: midIndex, // no corner insertion for endpoints
+      isHorizontal: axis.isHorizontal,
+    );
+    if (collapsed != null) {
+      result = collapsed;
     }
   }
   return result;
