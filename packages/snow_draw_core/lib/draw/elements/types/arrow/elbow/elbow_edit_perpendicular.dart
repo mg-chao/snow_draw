@@ -1,4 +1,4 @@
-part of 'elbow_editing.dart';
+﻿part of 'elbow_editing.dart';
 
 _FixedSegmentPathResult _ensurePerpendicularBindings({
   required ElementState element,
@@ -23,31 +23,29 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
   var worldPoints = points.map(space.toWorld).toList(growable: true);
   var updatedFixed = fixedSegments;
   var localPoints = points;
-  final baselinePadding = () {
-    final routed = routeElbowArrow(
-      start: space.toWorld(points.first),
-      end: space.toWorld(points.last),
-      startBinding: startBinding,
-      endBinding: endBinding,
-      elementsById: elementsById,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
-    ).points;
-    if (routed.length < 3) {
-      return (start: null as double?, end: null as double?);
-    }
-    double? len(DrawPoint a, DrawPoint b) {
-      final d = ElbowGeometry.manhattanDistance(a, b);
-      return d.isFinite && d > ElbowConstants.dedupThreshold ? d : null;
-    }
 
-    return (
-      start: startBinding == null ? null : len(routed.first, routed[1]),
-      end: endBinding == null
-          ? null
-          : len(routed[routed.length - 2], routed.last),
-    );
-  }();
+  // Route a baseline to determine ideal endpoint padding.
+  final routed = routeElbowArrow(
+    start: space.toWorld(points.first),
+    end: space.toWorld(points.last),
+    startBinding: startBinding,
+    endBinding: endBinding,
+    elementsById: elementsById,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+  ).points;
+  double? baselineLen(DrawPoint a, DrawPoint b) {
+    final d = ElbowGeometry.manhattanDistance(a, b);
+    return d.isFinite && d > ElbowConstants.dedupThreshold ? d : null;
+  }
+
+  final hasBaseline = routed.length >= 3;
+  final startPadding = hasBaseline && startBinding != null
+      ? baselineLen(routed.first, routed[1])
+      : null;
+  final endPadding = hasBaseline && endBinding != null
+      ? baselineLen(routed[routed.length - 2], routed.last)
+      : null;
 
   for (final isStart in const [true, false]) {
     final binding = isStart ? startBinding : endBinding;
@@ -69,7 +67,7 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
       points: worldPoints,
       binding: binding,
       elementsById: elementsById,
-      directionPadding: isStart ? baselinePadding.start : baselinePadding.end,
+      directionPadding: isStart ? startPadding : endPadding,
       fixedNeighborAxis: neighborAxis,
       hasArrowhead:
           (isStart ? startArrowhead : endArrowhead) != ArrowheadStyle.none,
@@ -222,7 +220,7 @@ _PerpendicularAdjustment? _slideEndpointToPadding({
     );
   }
 
-  // Corner mode: need 閳? points and alternating axis pattern.
+  // Corner mode: need ≥4 points and alternating axis pattern.
   if (points.length < 4) {
     return null;
   }
@@ -263,11 +261,8 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
   required bool isStart,
   bool? fixedNeighborAxis,
 }) {
-  _PerpendicularAdjustment unchanged() =>
-      _PerpendicularAdjustment(points: points, moved: false, inserted: false);
-
   if (points.length < 2) {
-    return unchanged();
+    return _PerpendicularAdjustment.unchanged(points);
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -277,7 +272,7 @@ _PerpendicularAdjustment _adjustPerpendicularEndpoint({
     point: endpoint,
   );
   if (heading == null) {
-    return unchanged();
+    return _PerpendicularAdjustment.unchanged(points);
   }
 
   final desiredHorizontal = heading.isHorizontal;
@@ -345,9 +340,6 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
   required ArrowBinding binding,
   required Map<String, ElementState> elementsById,
 }) {
-  _PerpendicularAdjustment unchanged() =>
-      _PerpendicularAdjustment(points: points, moved: false, inserted: false);
-
   final desiredHorizontal = heading.isHorizontal;
   final canSlideNeighbor = fixedNeighborAxis == desiredHorizontal;
   final lastIndex = points.length - 1;
@@ -378,7 +370,8 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
     final cornerInserted =
         _endpointHasCorner(points: points, isStart: isStart) &&
         _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
-    return trySlide(points, cornerInserted: cornerInserted) ?? unchanged();
+    return trySlide(points, cornerInserted: cornerInserted) ??
+        _PerpendicularAdjustment.unchanged(points);
   }
 
   if (!aligned && directionOk) {
@@ -408,7 +401,8 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
   }
 
   if (aligned) {
-    return trySlide(points, cornerInserted: false) ?? unchanged();
+    return trySlide(points, cornerInserted: false) ??
+        _PerpendicularAdjustment.unchanged(points);
   }
 
   return _insertEndpointDirectionStub(
@@ -432,25 +426,39 @@ _PerpendicularAdjustment _adjustFreeNeighbor({
   required bool directionOk,
   required bool isStart,
 }) {
-  _PerpendicularAdjustment unchanged() =>
-      _PerpendicularAdjustment(points: points, moved: false, inserted: false);
-
   final desiredHorizontal = heading.isHorizontal;
   final lastIndex = points.length - 1;
   final neighborIndex = isStart ? 1 : lastIndex - 1;
   final neighbor = points[neighborIndex];
   final endpoint = isStart ? points.first : points.last;
-  final stubPadding = _capDirectionPaddingForAxis(
-    padding: resolvedPadding,
-    endpoint: endpoint,
-    heading: heading,
-    axis: _resolveFixedAxisLimit(
-      points: points,
-      fixedSegments: fixedSegments,
-      isStart: isStart,
-      heading: heading,
-    ),
-  );
+  // Resolve the nearest fixed-segment axis perpendicular to the heading
+  // and cap the stub padding so it doesn't overshoot that axis.
+  var stubPadding = resolvedPadding;
+  if (points.length >= 2 && fixedSegments.isNotEmpty) {
+    final wantHorizontal = !heading.isHorizontal;
+    final ordered = isStart ? fixedSegments : fixedSegments.reversed;
+    for (final segment in ordered) {
+      if (segment.index <= 0 || segment.index >= points.length) {
+        continue;
+      }
+      if (segment.isHorizontal != wantHorizontal) {
+        continue;
+      }
+      final axis = segment.axisValue;
+      if (stubPadding.isFinite && stubPadding > 0 && axis.isFinite) {
+        final maxPadding = switch (heading) {
+          ElbowHeading.left => endpoint.x - axis,
+          ElbowHeading.right => axis - endpoint.x,
+          ElbowHeading.up => endpoint.y - axis,
+          ElbowHeading.down => axis - endpoint.y,
+        };
+        if (maxPadding > ElbowConstants.dedupThreshold) {
+          stubPadding = math.min(stubPadding, maxPadding);
+        }
+      }
+      break;
+    }
+  }
 
   if (aligned && directionOk) {
     return _slideEndpointToPadding(
@@ -466,7 +474,7 @@ _PerpendicularAdjustment _adjustFreeNeighbor({
           isStart: isStart,
           cornerIndex: isStart ? 2 : lastIndex - 2,
         ) ??
-        unchanged();
+        _PerpendicularAdjustment.unchanged(points);
   }
 
   if (aligned && !directionOk) {
@@ -612,11 +620,7 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
   required bool isStart,
 }) {
   if (points.length < 2) {
-    return _PerpendicularAdjustment(
-      points: points,
-      moved: false,
-      inserted: false,
-    );
+    return _PerpendicularAdjustment.unchanged(points);
   }
   final endpoint = isStart ? points.first : points.last;
   final stub = ElbowGeometry.offsetPoint(endpoint, heading, padding);
@@ -673,11 +677,7 @@ _PerpendicularAdjustment _insertEndpointCorner({
   required bool isStart,
 }) {
   if (points.length < 2) {
-    return _PerpendicularAdjustment(
-      points: points,
-      moved: false,
-      inserted: false,
-    );
+    return _PerpendicularAdjustment.unchanged(points);
   }
 
   final endpoint = isStart ? points.first : points.last;
@@ -689,11 +689,7 @@ _PerpendicularAdjustment _insertEndpointCorner({
           ElbowConstants.dedupThreshold ||
       ElbowGeometry.manhattanDistance(corner, neighbor) <=
           ElbowConstants.dedupThreshold) {
-    return _PerpendicularAdjustment(
-      points: points,
-      moved: false,
-      inserted: false,
-    );
+    return _PerpendicularAdjustment.unchanged(points);
   }
 
   final updated = List<DrawPoint>.from(points);
@@ -745,48 +741,4 @@ _PerpendicularAdjustment? _snapEndPointToFixedAxisAtAnchor({
     moved: true,
     inserted: false,
   );
-}
-
-double? _resolveFixedAxisLimit({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment> fixedSegments,
-  required bool isStart,
-  required ElbowHeading heading,
-}) {
-  if (points.length < 2 || fixedSegments.isEmpty) {
-    return null;
-  }
-  final wantHorizontal = !heading.isHorizontal;
-  final ordered = isStart ? fixedSegments : fixedSegments.reversed;
-  for (final segment in ordered) {
-    if (segment.index <= 0 || segment.index >= points.length) {
-      continue;
-    }
-    if (segment.isHorizontal != wantHorizontal) {
-      continue;
-    }
-    return segment.axisValue;
-  }
-  return null;
-}
-
-double _capDirectionPaddingForAxis({
-  required double padding,
-  required DrawPoint endpoint,
-  required ElbowHeading heading,
-  required double? axis,
-}) {
-  if (!padding.isFinite || padding <= 0 || axis == null || !axis.isFinite) {
-    return padding;
-  }
-  final maxPadding = switch (heading) {
-    ElbowHeading.left => endpoint.x - axis,
-    ElbowHeading.right => axis - endpoint.x,
-    ElbowHeading.up => endpoint.y - axis,
-    ElbowHeading.down => axis - endpoint.y,
-  };
-  if (maxPadding <= ElbowConstants.dedupThreshold) {
-    return padding;
-  }
-  return math.min(padding, maxPadding);
 }

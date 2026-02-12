@@ -33,12 +33,23 @@ enum _ElbowEditMode {
   applyFixedSegments,
 }
 
-/// Result of a perpendicular endpoint adjustment.
-typedef _PerpendicularAdjustment = ({
-  List<DrawPoint> points,
-  bool moved,
-  bool inserted,
-});
+@immutable
+final class _PerpendicularAdjustment {
+  const _PerpendicularAdjustment({
+    required this.points,
+    required this.moved,
+    required this.inserted,
+  });
+
+  /// No-op result: the points are returned unchanged.
+  const _PerpendicularAdjustment.unchanged(this.points)
+    : moved = false,
+      inserted = false;
+
+  final List<DrawPoint> points;
+  final bool moved;
+  final bool inserted;
+}
 
 @immutable
 final class _ElbowEditContext {
@@ -102,18 +113,16 @@ final class _ElbowEditContext {
 
   // -- Endpoint drag helpers (replaces _EndpointDragContext) --
 
-  late final bool startActive = () {
-    final hasPoints = basePoints.isNotEmpty && incomingPoints.isNotEmpty;
-    final startPointChanged =
-        hasPoints && basePoints.first != incomingPoints.first;
-    return startPointChanged || previousStartBinding != startBinding;
-  }();
+  late final bool _hasPoints =
+      basePoints.isNotEmpty && incomingPoints.isNotEmpty;
 
-  late final bool endActive = () {
-    final hasPoints = basePoints.isNotEmpty && incomingPoints.isNotEmpty;
-    final endPointChanged = hasPoints && basePoints.last != incomingPoints.last;
-    return endPointChanged || previousEndBinding != endBinding;
-  }();
+  late final bool startActive =
+      (_hasPoints && basePoints.first != incomingPoints.first) ||
+      previousStartBinding != startBinding;
+
+  late final bool endActive =
+      (_hasPoints && basePoints.last != incomingPoints.last) ||
+      previousEndBinding != endBinding;
 
   bool get startWasBound => previousStartBinding != null;
   bool get endWasBound => previousEndBinding != null;
