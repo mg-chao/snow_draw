@@ -65,7 +65,7 @@ void main() {
     'right side to the bottom side',
     () {
       // Scenario A: end anchored to the right side.
-      final endBindingRight = const ArrowBinding(
+      const endBindingRight = ArrowBinding(
         elementId: 'rect',
         anchor: DrawPoint(x: 1, y: 0.25),
       );
@@ -84,7 +84,7 @@ void main() {
       );
 
       // Scenario B: end anchored to the bottom side.
-      final endBindingBottom = const ArrowBinding(
+      const endBindingBottom = ArrowBinding(
         elementId: 'rect',
         anchor: DrawPoint(x: 0.75, y: 1),
       );

@@ -247,9 +247,7 @@ final class _ElbowEditPipeline {
     return _buildResult(
       data: context.data,
       points: result.points,
-      fixedSegments: result.fixedSegments.isEmpty
-          ? null
-          : List<ElbowFixedSegment>.unmodifiable(result.fixedSegments),
+      fixedSegments: result.fixedSegments,
     );
   }
 
@@ -274,10 +272,8 @@ final class _ElbowEditPipeline {
 
     return _buildResult(
       data: context.data,
-      points: List<DrawPoint>.unmodifiable(resolvedPoints),
-      fixedSegments: resolvedFixed.isEmpty
-          ? null
-          : List<ElbowFixedSegment>.unmodifiable(resolvedFixed),
+      points: resolvedPoints,
+      fixedSegments: resolvedFixed,
     );
   }
 
@@ -326,15 +322,12 @@ final class _ElbowEditPipeline {
 
   ElbowEditResult _applyFixedSegmentsFlow(_ElbowEditContext context) {
     // Step 6: apply fixed segments to updated points if needed.
-    var workingPoints = context.incomingPoints;
-    if (!context.pointsChanged && context.fixedSegmentsChanged) {
-      workingPoints = _applyFixedSegmentsToPoints(
-        context.basePoints,
-        context.fixedSegments,
-      );
-    }
-    workingPoints = _applyFixedSegmentsToPoints(
-      workingPoints,
+    // Use base points when only segments changed; incoming points otherwise.
+    final base = !context.pointsChanged && context.fixedSegmentsChanged
+        ? context.basePoints
+        : context.incomingPoints;
+    final workingPoints = _applyFixedSegmentsToPoints(
+      base,
       context.fixedSegments,
     );
 
@@ -343,14 +336,11 @@ final class _ElbowEditPipeline {
       points: workingPoints,
       fixedSegments: context.fixedSegments,
     );
-    final resultSegments = simplified.fixedSegments.isEmpty
-        ? null
-        : List<ElbowFixedSegment>.unmodifiable(simplified.fixedSegments);
 
     return _buildResult(
       data: context.data,
       points: simplified.points,
-      fixedSegments: resultSegments,
+      fixedSegments: simplified.fixedSegments,
     );
   }
 }
@@ -360,17 +350,18 @@ ElbowEditResult _buildResult({
   required List<DrawPoint> points,
   required List<ElbowFixedSegment>? fixedSegments,
 }) {
+  final hasFixed = fixedSegments != null && fixedSegments.isNotEmpty;
   final pinned = _collectPinnedPoints(
     points: points,
-    fixedSegments: fixedSegments ?? const [],
+    fixedSegments: hasFixed ? fixedSegments : const [],
   );
   final merged = ElbowGeometry.mergeConsecutiveSameHeading(
     points,
     pinned: pinned,
   );
-  final resolvedFixed = fixedSegments == null || fixedSegments.isEmpty
-      ? fixedSegments
-      : _reindexFixedSegments(merged, fixedSegments);
+  final resolvedFixed = hasFixed
+      ? _reindexFixedSegments(merged, fixedSegments)
+      : null;
   return ElbowEditResult(
     localPoints: merged,
     fixedSegments: resolvedFixed,

@@ -369,26 +369,23 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
 
   // When reindexing lost a segment, axes drifted, or heading flipped,
   // try the fallback path.
-  var needsFallback = updatedFixed.length != state.fixedSegments.length;
-  if (!needsFallback) {
-    needsFallback = !_fixedSegmentAxesStable(
-      state.fixedSegments,
-      updatedFixed,
-    );
-  }
-  if (!needsFallback && requiredHeading != null) {
-    final activeUpdated = activeIsStart
-        ? updatedFixed.first
-        : updatedFixed.last;
-    if (requiredHeading.isHorizontal == activeUpdated.isHorizontal) {
-      needsFallback = !_directionMatches(
-        activeUpdated.start,
-        activeUpdated.end,
-        requiredHeading,
-      );
-    }
-  }
-  if (needsFallback) {
+  final axesStable = updatedFixed.length == state.fixedSegments.length &&
+      _fixedSegmentAxesStable(state.fixedSegments, updatedFixed);
+  final headingFlipped = axesStable &&
+      requiredHeading != null &&
+      () {
+        final activeUpdated = activeIsStart
+            ? updatedFixed.first
+            : updatedFixed.last;
+        return requiredHeading.isHorizontal ==
+                activeUpdated.isHorizontal &&
+            !_directionMatches(
+              activeUpdated.start,
+              activeUpdated.end,
+              requiredHeading,
+            );
+      }();
+  if (!axesStable || headingFlipped) {
     return _tryActiveSpanFallback(
           state: state,
           activeFixed: activeFixed,
@@ -535,15 +532,18 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
     return (state: state, adoptedBaseline: false);
   }
 
-  var adoptedPoints = List<DrawPoint>.from(mapped.points);
-  var adoptedFixed = mapped.fixedSegments;
+  List<DrawPoint> adoptedPoints;
+  List<ElbowFixedSegment> adoptedFixed;
   if (forceBaseline) {
     final normalized = _normalizeFixedSegmentReleasePath(
-      points: adoptedPoints,
-      fixedSegments: adoptedFixed,
+      points: mapped.points,
+      fixedSegments: mapped.fixedSegments,
     );
     adoptedPoints = List<DrawPoint>.from(normalized.points);
     adoptedFixed = normalized.fixedSegments;
+  } else {
+    adoptedPoints = List<DrawPoint>.from(mapped.points);
+    adoptedFixed = mapped.fixedSegments;
   }
   return (
     state: state.copyWith(points: adoptedPoints, fixedSegments: adoptedFixed),
