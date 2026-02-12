@@ -238,41 +238,22 @@ final class _ElbowEditPipeline {
   }
 
   ElbowEditResult _handleFixedSegmentReleaseFlow(_ElbowEditContext context) {
-    // Step 4: fixed segment release (e.g. user unpins a segment).
-    final updated = _handleFixedSegmentRelease(
-      element: context.element,
-      data: context.data,
-      elementsById: context.elementsById,
+    final result = _releaseFixedSegments(
+      context,
       currentPoints: context.incomingPoints,
       previousFixed: context.previousFixedSegments,
       remainingFixed: context.fixedSegments,
-      startBinding: context.startBinding,
-      endBinding: context.endBinding,
     );
-    final mapped = _applyFixedSegmentsToBaselineRoute(
-      baseline: updated.points,
-      fixedSegments: updated.fixedSegments,
-    );
-    final reconciled =
-        mapped.fixedSegments.length == updated.fixedSegments.length
-        ? mapped
-        : updated;
-    final normalized = _normalizeFixedSegmentReleasePath(
-      points: reconciled.points,
-      fixedSegments: reconciled.fixedSegments,
-    );
-    final resultSegments = normalized.fixedSegments.isEmpty
-        ? null
-        : List<ElbowFixedSegment>.unmodifiable(normalized.fixedSegments);
     return _buildResult(
       data: context.data,
-      points: normalized.points,
-      fixedSegments: resultSegments,
+      points: result.points,
+      fixedSegments: result.fixedSegments.isEmpty
+          ? null
+          : List<ElbowFixedSegment>.unmodifiable(result.fixedSegments),
     );
   }
 
   ElbowEditResult _handleEndpointDragFlow(_ElbowEditContext context) {
-    // Step 5: endpoint drag while fixed segments stay pinned.
     final updated = _applyEndpointDragWithFixedSegments(
       context: _EndpointDragContext.fromEditContext(context),
     );
@@ -280,44 +261,66 @@ final class _ElbowEditPipeline {
     var resolvedPoints = updated.points;
     var resolvedFixed = updated.fixedSegments;
     if (resolvedFixed.length < context.fixedSegments.length) {
-      final released = _handleFixedSegmentRelease(
-        element: context.element,
-        data: context.data,
-        elementsById: context.elementsById,
+      final result = _releaseFixedSegments(
+        context,
         currentPoints: resolvedPoints,
         previousFixed: context.fixedSegments,
         remainingFixed: resolvedFixed,
-        startBinding: context.startBinding,
-        endBinding: context.endBinding,
+        preserveCorners: true,
       );
-      final mapped = _applyFixedSegmentsToBaselineRoute(
-        baseline: released.points,
-        fixedSegments: released.fixedSegments,
-      );
-      final reconciled =
-          mapped.fixedSegments.length == released.fixedSegments.length
-          ? mapped
-          : released;
-      final releaseCorners = ElbowGeometry.cornerPoints(released.points);
-      final extraPinned = releaseCorners.length > 2
-          ? releaseCorners.sublist(1, releaseCorners.length - 1).toSet()
-          : const <DrawPoint>{};
-      final normalized = _normalizeFixedSegmentReleasePath(
-        points: reconciled.points,
-        fixedSegments: reconciled.fixedSegments,
-        extraPinned: extraPinned,
-      );
-      resolvedPoints = normalized.points;
-      resolvedFixed = normalized.fixedSegments;
+      resolvedPoints = result.points;
+      resolvedFixed = result.fixedSegments;
     }
 
-    final resultSegments = resolvedFixed.isEmpty
-        ? null
-        : List<ElbowFixedSegment>.unmodifiable(resolvedFixed);
     return _buildResult(
       data: context.data,
       points: List<DrawPoint>.unmodifiable(resolvedPoints),
-      fixedSegments: resultSegments,
+      fixedSegments: resolvedFixed.isEmpty
+          ? null
+          : List<ElbowFixedSegment>.unmodifiable(resolvedFixed),
+    );
+  }
+
+  /// Shared release logic for both explicit release and lost-segment
+  /// recovery during endpoint drag.
+  _FixedSegmentPathResult _releaseFixedSegments(
+    _ElbowEditContext context, {
+    required List<DrawPoint> currentPoints,
+    required List<ElbowFixedSegment> previousFixed,
+    required List<ElbowFixedSegment> remainingFixed,
+    bool preserveCorners = false,
+  }) {
+    final released = _handleFixedSegmentRelease(
+      element: context.element,
+      data: context.data,
+      elementsById: context.elementsById,
+      currentPoints: currentPoints,
+      previousFixed: previousFixed,
+      remainingFixed: remainingFixed,
+      startBinding: context.startBinding,
+      endBinding: context.endBinding,
+    );
+    final mapped = _mapFixedSegmentsToBaseline(
+      baseline: released.points,
+      fixedSegments: released.fixedSegments,
+    );
+    final reconciled =
+        mapped != null &&
+            mapped.fixedSegments.length == released.fixedSegments.length
+        ? mapped
+        : released;
+    final extraPinned = preserveCorners
+        ? () {
+            final corners = ElbowGeometry.cornerPoints(released.points);
+            return corners.length > 2
+                ? corners.sublist(1, corners.length - 1).toSet()
+                : const <DrawPoint>{};
+          }()
+        : const <DrawPoint>{};
+    return _normalizeFixedSegmentReleasePath(
+      points: reconciled.points,
+      fixedSegments: reconciled.fixedSegments,
+      extraPinned: extraPinned,
     );
   }
 

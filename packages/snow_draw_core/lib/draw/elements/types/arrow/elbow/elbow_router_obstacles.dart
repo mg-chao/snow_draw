@@ -403,18 +403,12 @@ DrawPoint _exitPosition({
   required DrawRect bounds,
   required ElbowHeading heading,
   required DrawPoint point,
-}) {
-  switch (heading) {
-    case ElbowHeading.up:
-      return DrawPoint(x: point.x, y: bounds.minY);
-    case ElbowHeading.right:
-      return DrawPoint(x: bounds.maxX, y: point.y);
-    case ElbowHeading.down:
-      return DrawPoint(x: point.x, y: bounds.maxY);
-    case ElbowHeading.left:
-      return DrawPoint(x: bounds.minX, y: point.y);
-  }
-}
+}) => switch (heading) {
+  ElbowHeading.up => DrawPoint(x: point.x, y: bounds.minY),
+  ElbowHeading.right => DrawPoint(x: bounds.maxX, y: point.y),
+  ElbowHeading.down => DrawPoint(x: point.x, y: bounds.maxY),
+  ElbowHeading.left => DrawPoint(x: bounds.minX, y: point.y),
+};
 
 @immutable
 final class _ElbowObstacleLayout {

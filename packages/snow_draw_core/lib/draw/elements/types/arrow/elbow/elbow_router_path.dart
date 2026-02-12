@@ -807,23 +807,19 @@ void _applySegmentSpacing({
   if (index < 0 || index + 1 >= points.length) {
     return;
   }
-  switch (heading) {
-    case ElbowHeading.up:
-      final y = bounds.minY - spacing;
-      points[index] = points[index].copyWith(y: y);
-      points[index + 1] = points[index + 1].copyWith(y: y);
-    case ElbowHeading.right:
-      final x = bounds.maxX + spacing;
-      points[index] = points[index].copyWith(x: x);
-      points[index + 1] = points[index + 1].copyWith(x: x);
-    case ElbowHeading.down:
-      final y = bounds.maxY + spacing;
-      points[index] = points[index].copyWith(y: y);
-      points[index + 1] = points[index + 1].copyWith(y: y);
-    case ElbowHeading.left:
-      final x = bounds.minX - spacing;
-      points[index] = points[index].copyWith(x: x);
-      points[index + 1] = points[index + 1].copyWith(x: x);
+  final horizontal = heading == ElbowHeading.up || heading == ElbowHeading.down;
+  final value = switch (heading) {
+    ElbowHeading.up => bounds.minY - spacing,
+    ElbowHeading.right => bounds.maxX + spacing,
+    ElbowHeading.down => bounds.maxY + spacing,
+    ElbowHeading.left => bounds.minX - spacing,
+  };
+  if (horizontal) {
+    points[index] = points[index].copyWith(y: value);
+    points[index + 1] = points[index + 1].copyWith(y: value);
+  } else {
+    points[index] = points[index].copyWith(x: value);
+    points[index + 1] = points[index + 1].copyWith(x: value);
   }
 }
 

@@ -37,6 +37,27 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
   return result;
 }
 
+/// Replaces `points[startIndex..endIndex]` with [subPath] and reindexes
+/// fixed segments to the resulting point list.
+_FixedSegmentPathResult _stitchSubPath({
+  required List<DrawPoint> points,
+  required int startIndex,
+  required int endIndex,
+  required List<DrawPoint> subPath,
+  required List<ElbowFixedSegment> fixedSegments,
+}) {
+  final prefix = points.sublist(0, startIndex);
+  final suffix = endIndex + 1 < points.length
+      ? points.sublist(endIndex + 1)
+      : const <DrawPoint>[];
+  final stitched = <DrawPoint>[...prefix, ...subPath, ...suffix];
+  final reindexed = _reindexFixedSegments(stitched, fixedSegments);
+  return _FixedSegmentPathResult(
+    points: List<DrawPoint>.unmodifiable(stitched),
+    fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
+  );
+}
+
 List<ElbowFixedSegment> _reindexFixedSegments(
   List<DrawPoint> points,
   List<ElbowFixedSegment> fixedSegments,
@@ -261,16 +282,6 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
   );
 }
 
-_FixedSegmentPathResult _applyFixedSegmentsToBaselineRoute({
-  required List<DrawPoint> baseline,
-  required List<ElbowFixedSegment> fixedSegments,
-}) =>
-    _mapFixedSegmentsToBaseline(
-      baseline: baseline,
-      fixedSegments: fixedSegments,
-    ) ??
-    _FixedSegmentPathResult(points: baseline, fixedSegments: fixedSegments);
-
 List<ElbowFixedSegment> _syncFixedSegmentsToPoints(
   List<DrawPoint> points,
   List<ElbowFixedSegment> fixedSegments,
@@ -395,73 +406,44 @@ _FixedSegmentPathResult _mergeFixedSegmentsWithCollinearNeighbors({
         continue;
       }
 
-      // Merge with the previous segment if it is collinear and not fixed.
-      if (index >= 2 && !fixedIndices.contains(index - 1)) {
-        final aIndex = index - 2;
-        final bIndex = index - 1;
-        final cIndex = index;
-        if (aIndex >= 0 && cIndex < updatedPoints.length) {
-          final a = updatedPoints[aIndex];
-          final b = updatedPoints[bIndex];
-          final c = updatedPoints[cIndex];
-          if (ElbowGeometry.segmentsCollinear(a, b, c)) {
-            final candidatePoints = List<DrawPoint>.from(updatedPoints)
-              ..removeAt(bIndex);
-            final candidateSegments = List<ElbowFixedSegment>.from(
-              updatedSegments,
-            );
-            candidateSegments[i] = segment.copyWith(
-              index: index - 1,
-              start: a,
-              end: candidatePoints[index - 1],
-            );
-            final reindexed = _reindexFixedSegments(
-              candidatePoints,
-              candidateSegments,
-            );
-            if (reindexed.length == updatedSegments.length) {
-              updatedPoints = candidatePoints;
-              updatedSegments = reindexed;
-              merged = true;
-              break;
-            }
-          }
+      // Try merging with the previous or next collinear non-fixed neighbor.
+      for (final offset in const [-1, 1]) {
+        final removeIndex = offset == -1 ? index - 1 : index;
+        final neighborIndex = offset == -1 ? index - 1 : index + 1;
+        if (removeIndex < 1 || neighborIndex >= updatedPoints.length) {
+          continue;
+        }
+        if (fixedIndices.contains(neighborIndex)) {
+          continue;
+        }
+        final a = updatedPoints[removeIndex - 1];
+        final b = updatedPoints[removeIndex];
+        final c = updatedPoints[removeIndex + 1];
+        if (!ElbowGeometry.segmentsCollinear(a, b, c)) {
+          continue;
+        }
+        final candidatePoints = List<DrawPoint>.from(updatedPoints)
+          ..removeAt(removeIndex);
+        final newIndex = offset == -1 ? index - 1 : index;
+        final candidateSegments = List<ElbowFixedSegment>.from(updatedSegments);
+        candidateSegments[i] = segment.copyWith(
+          index: newIndex,
+          start: a,
+          end: candidatePoints[newIndex],
+        );
+        final reindexed = _reindexFixedSegments(
+          candidatePoints,
+          candidateSegments,
+        );
+        if (reindexed.length == updatedSegments.length) {
+          updatedPoints = candidatePoints;
+          updatedSegments = reindexed;
+          merged = true;
+          break;
         }
       }
-
-      // Merge with the next segment if it is collinear and not fixed.
-      if (index + 1 < updatedPoints.length &&
-          !fixedIndices.contains(index + 1)) {
-        final aIndex = index - 1;
-        final bIndex = index;
-        final cIndex = index + 1;
-        if (aIndex >= 0 && cIndex < updatedPoints.length) {
-          final a = updatedPoints[aIndex];
-          final b = updatedPoints[bIndex];
-          final c = updatedPoints[cIndex];
-          if (ElbowGeometry.segmentsCollinear(a, b, c)) {
-            final candidatePoints = List<DrawPoint>.from(updatedPoints)
-              ..removeAt(bIndex);
-            final candidateSegments = List<ElbowFixedSegment>.from(
-              updatedSegments,
-            );
-            candidateSegments[i] = segment.copyWith(
-              index: index,
-              start: a,
-              end: candidatePoints[index],
-            );
-            final reindexed = _reindexFixedSegments(
-              candidatePoints,
-              candidateSegments,
-            );
-            if (reindexed.length == updatedSegments.length) {
-              updatedPoints = candidatePoints;
-              updatedSegments = reindexed;
-              merged = true;
-              break;
-            }
-          }
-        }
+      if (merged) {
+        break;
       }
     }
   }
@@ -832,32 +814,22 @@ List<DrawPoint> _routeReleasedRegion({
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
 }) {
-  if (startBinding != null || endBinding != null) {
-    return _routeLocalPath(
-      element: element,
-      elementsById: elementsById,
-      startLocal: startLocal,
-      endLocal: endLocal,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
-      startBinding: startBinding,
-      endBinding: endBinding,
-    );
-  }
-
-  // Prefer the axis that continues the adjacent fixed segment's pattern.
-  final preferHorizontal = previousFixed != null && nextFixed == null
-      ? previousFixed.isHorizontal
-      : (nextFixed != null && previousFixed == null
-            ? !nextFixed.isHorizontal
-            : null);
-  if (preferHorizontal != null) {
-    return ElbowGeometry.directElbowPath(
-      startLocal,
-      endLocal,
-      preferHorizontal: preferHorizontal,
-      epsilon: ElbowConstants.intersectionEpsilon,
-    );
+  // When no bindings constrain the route, prefer the axis that continues
+  // the adjacent fixed segment's pattern via a cheap direct elbow.
+  if (startBinding == null && endBinding == null) {
+    final preferHorizontal = previousFixed != null && nextFixed == null
+        ? previousFixed.isHorizontal
+        : (nextFixed != null && previousFixed == null
+              ? !nextFixed.isHorizontal
+              : null);
+    if (preferHorizontal != null) {
+      return ElbowGeometry.directElbowPath(
+        startLocal,
+        endLocal,
+        preferHorizontal: preferHorizontal,
+        epsilon: ElbowConstants.intersectionEpsilon,
+      );
+    }
   }
 
   return _routeLocalPath(
@@ -935,17 +907,11 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
     endBinding: endIndex == currentPoints.length - 1 ? endBinding : null,
   );
 
-  final prefix = startIndex > 0
-      ? currentPoints.sublist(0, startIndex)
-      : const <DrawPoint>[];
-  final suffix = endIndex + 1 < currentPoints.length
-      ? currentPoints.sublist(endIndex + 1)
-      : const <DrawPoint>[];
-
-  final stitched = <DrawPoint>[...prefix, ...routed, ...suffix];
-
-  return _FixedSegmentPathResult(
-    points: List<DrawPoint>.unmodifiable(stitched),
+  return _stitchSubPath(
+    points: currentPoints,
+    startIndex: startIndex,
+    endIndex: endIndex,
+    subPath: routed,
     fixedSegments: remainingFixed,
   );
 }

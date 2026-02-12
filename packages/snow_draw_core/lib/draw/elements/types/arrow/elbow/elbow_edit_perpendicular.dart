@@ -75,30 +75,17 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
     }
   }
 
-  if (!identical(localPoints, points)) {
-    return _mergeFixedSegmentsWithCollinearNeighbors(
-      points: localPoints,
-      fixedSegments: updatedFixedSegments,
-      allowDirectionFlip: true,
-    );
-  }
-
-  if (worldPoints.length != points.length) {
+  if (identical(localPoints, points) && worldPoints.length != points.length) {
     localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
     updatedFixedSegments = _reindexFixedSegments(
       localPoints,
       updatedFixedSegments,
     );
-    return _mergeFixedSegmentsWithCollinearNeighbors(
-      points: localPoints,
-      fixedSegments: updatedFixedSegments,
-      allowDirectionFlip: true,
-    );
   }
 
   return _mergeFixedSegmentsWithCollinearNeighbors(
-    points: points,
-    fixedSegments: fixedSegments,
+    points: localPoints,
+    fixedSegments: updatedFixedSegments,
     allowDirectionFlip: true,
   );
 }
@@ -516,19 +503,29 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
     hasArrowhead: hasArrowhead,
   );
 
+  _PerpendicularAdjustment? trySlide(
+    List<DrawPoint> pts, {
+    required bool cornerInserted,
+  }) {
+    if (!canSlideNeighbor) {
+      return null;
+    }
+    return _slideEndpointNeighborToPadding(
+      points: pts,
+      heading: heading,
+      desiredLength: fixedPadding,
+      cornerInserted: cornerInserted,
+      isStart: isStart,
+    );
+  }
+
   if (aligned && directionOk) {
     final cornerFixedIndex = isStart ? 2 : points.length - 3;
     final cornerInserted =
         _endpointHasCorner(points: points, isStart: isStart) &&
         _fixedSegmentIsHorizontal(fixedSegments, cornerFixedIndex) != null;
-    return _trySlideNeighborOrNoOp(
-      points: points,
-      heading: heading,
-      desiredLength: fixedPadding,
-      cornerInserted: cornerInserted,
-      canSlide: canSlideNeighbor,
-      isStart: isStart,
-    );
+    return trySlide(points, cornerInserted: cornerInserted) ??
+        _noOpAdjustment(points);
   }
 
   if (!aligned && directionOk) {
@@ -538,19 +535,7 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
       neighbor: neighbor,
       isStart: isStart,
     );
-    if (canSlideNeighbor) {
-      final adjusted = _slideEndpointNeighborToPadding(
-        points: inserted.points,
-        heading: heading,
-        desiredLength: fixedPadding,
-        cornerInserted: true,
-        isStart: isStart,
-      );
-      if (adjusted != null) {
-        return adjusted;
-      }
-    }
-    return inserted;
+    return trySlide(inserted.points, cornerInserted: true) ?? inserted;
   }
 
   // End-only: try snapping to the fixed axis at the anchor point.
@@ -570,14 +555,8 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
   }
 
   if (aligned) {
-    return _trySlideNeighborOrNoOp(
-      points: points,
-      heading: heading,
-      desiredLength: fixedPadding,
-      cornerInserted: false,
-      canSlide: canSlideNeighbor,
-      isStart: isStart,
-    );
+    return trySlide(points, cornerInserted: false) ??
+        _noOpAdjustment(points);
   }
 
   return _insertEndpointDirectionStub(
@@ -587,34 +566,6 @@ _PerpendicularAdjustment _adjustPreservedNeighbor({
     allowExtend: false,
     padding: resolvedPadding,
     isStart: isStart,
-  );
-}
-
-/// Tries to slide the neighbor to the desired padding, or returns no-op.
-_PerpendicularAdjustment _trySlideNeighborOrNoOp({
-  required List<DrawPoint> points,
-  required ElbowHeading heading,
-  required double desiredLength,
-  required bool cornerInserted,
-  required bool canSlide,
-  required bool isStart,
-}) {
-  if (canSlide) {
-    final adjusted = _slideEndpointNeighborToPadding(
-      points: points,
-      heading: heading,
-      desiredLength: desiredLength,
-      cornerInserted: cornerInserted,
-      isStart: isStart,
-    );
-    if (adjusted != null) {
-      return adjusted;
-    }
-  }
-  return _PerpendicularAdjustment(
-    points: points,
-    moved: false,
-    inserted: false,
   );
 }
 
@@ -772,36 +723,22 @@ _PerpendicularAdjustment _insertEndpointDirectionStub({
     }
   }
 
-  if (isStart) {
-    if (ElbowGeometry.manhattanDistance(stub, endpoint) >
-        ElbowConstants.dedupThreshold) {
-      updated.insert(insertIndex, stub);
-      insertIndex++;
-      inserted = true;
-    }
-    if (!moved &&
-        ElbowGeometry.manhattanDistance(connector, neighbor) >
-            ElbowConstants.dedupThreshold &&
-        ElbowGeometry.manhattanDistance(connector, stub) >
-            ElbowConstants.dedupThreshold) {
-      updated.insert(insertIndex, connector);
-      inserted = true;
-    }
-  } else {
-    if (!moved &&
-        ElbowGeometry.manhattanDistance(connector, neighbor) >
-            ElbowConstants.dedupThreshold &&
-        ElbowGeometry.manhattanDistance(connector, stub) >
-            ElbowConstants.dedupThreshold) {
-      updated.insert(insertIndex, connector);
-      insertIndex++;
-      inserted = true;
-    }
-    if (ElbowGeometry.manhattanDistance(stub, endpoint) >
-        ElbowConstants.dedupThreshold) {
-      updated.insert(insertIndex, stub);
-      inserted = true;
-    }
+  // Start inserts stub then connector (endpoint→stub→connector→neighbor);
+  // end inserts connector then stub (neighbor→connector→stub→endpoint).
+  final hasStub = ElbowGeometry.manhattanDistance(stub, endpoint) >
+      ElbowConstants.dedupThreshold;
+  final hasConnector = !moved &&
+      ElbowGeometry.manhattanDistance(connector, neighbor) >
+          ElbowConstants.dedupThreshold &&
+      ElbowGeometry.manhattanDistance(connector, stub) >
+          ElbowConstants.dedupThreshold;
+  final toInsert = isStart
+      ? [if (hasStub) stub, if (hasConnector) connector]
+      : [if (hasConnector) connector, if (hasStub) stub];
+  for (final point in toInsert) {
+    updated.insert(insertIndex, point);
+    insertIndex++;
+    inserted = true;
   }
 
   return _PerpendicularAdjustment(
@@ -927,17 +864,12 @@ double _capDirectionPaddingForAxis({
   if (axis == null || !axis.isFinite) {
     return padding;
   }
-  double maxPadding;
-  switch (heading) {
-    case ElbowHeading.left:
-      maxPadding = endpoint.x - axis;
-    case ElbowHeading.right:
-      maxPadding = axis - endpoint.x;
-    case ElbowHeading.up:
-      maxPadding = endpoint.y - axis;
-    case ElbowHeading.down:
-      maxPadding = axis - endpoint.y;
-  }
+  final maxPadding = switch (heading) {
+    ElbowHeading.left => endpoint.x - axis,
+    ElbowHeading.right => axis - endpoint.x,
+    ElbowHeading.up => endpoint.y - axis,
+    ElbowHeading.down => axis - endpoint.y,
+  };
   if (maxPadding <= ElbowConstants.dedupThreshold) {
     return padding;
   }
