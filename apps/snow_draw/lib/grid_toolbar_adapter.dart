@@ -18,6 +18,7 @@ class GridToolbarAdapter {
   late final ValueNotifier<bool> _enabledNotifier;
   late final ValueNotifier<double> _sizeNotifier;
   StreamSubscription<DrawConfig>? _configSubscription;
+  var _pendingConfigUpdate = Future<void>.value();
   var _isDisposed = false;
 
   ValueListenable<bool> get enabledListenable => _enabledNotifier;
@@ -26,27 +27,14 @@ class GridToolbarAdapter {
   bool get isEnabled => _enabledNotifier.value;
   double get gridSize => _sizeNotifier.value;
 
-  Future<void> toggle() => setEnabled(enabled: !isEnabled);
+  Future<void> toggle() => _enqueueConfigUpdate(
+    () => _setEnabledInternal(enabled: !_config.grid.enabled),
+  );
 
-  Future<void> setEnabled({required bool enabled}) async {
-    if (_isDisposed) {
-      return;
-    }
-    var nextConfig = _config.copyWith(
-      grid: _config.grid.copyWith(enabled: enabled),
-    );
-    if (enabled && nextConfig.snap.enabled) {
-      nextConfig = nextConfig.copyWith(
-        snap: nextConfig.snap.copyWith(enabled: false),
-      );
-    }
-    if (nextConfig == _config) {
-      return;
-    }
-    await _store.dispatch(UpdateConfig(nextConfig));
-  }
+  Future<void> setEnabled({required bool enabled}) =>
+      _enqueueConfigUpdate(() => _setEnabledInternal(enabled: enabled));
 
-  Future<void> setGridSize(double size) async {
+  Future<void> setGridSize(double size) => _enqueueConfigUpdate(() async {
     if (_isDisposed) {
       return;
     }
@@ -59,8 +47,29 @@ class GridToolbarAdapter {
     if (nextConfig == _config) {
       return;
     }
-    await _store.dispatch(UpdateConfig(nextConfig));
-  }
+    _config = nextConfig;
+    final nextSize = nextConfig.grid.size;
+    if (_sizeNotifier.value != nextSize) {
+      _sizeNotifier.value = nextSize;
+    }
+    try {
+      await _store.dispatch(UpdateConfig(nextConfig));
+    } on Object {
+      if (_isDisposed) {
+        return;
+      }
+      _config = _store.config;
+      final rollbackEnabled = _config.grid.enabled;
+      if (_enabledNotifier.value != rollbackEnabled) {
+        _enabledNotifier.value = rollbackEnabled;
+      }
+      final rollbackSize = _config.grid.size;
+      if (_sizeNotifier.value != rollbackSize) {
+        _sizeNotifier.value = rollbackSize;
+      }
+      rethrow;
+    }
+  });
 
   void dispose() {
     if (_isDisposed) {
@@ -84,6 +93,50 @@ class GridToolbarAdapter {
     final nextSize = config.grid.size;
     if (_sizeNotifier.value != nextSize) {
       _sizeNotifier.value = nextSize;
+    }
+  }
+
+  Future<void> _enqueueConfigUpdate(Future<void> Function() update) =>
+      _pendingConfigUpdate = _pendingConfigUpdate
+          .catchError((Object _, StackTrace _) {})
+          .then((_) => update());
+
+  Future<void> _setEnabledInternal({required bool enabled}) async {
+    if (_isDisposed) {
+      return;
+    }
+    var nextConfig = _config.copyWith(
+      grid: _config.grid.copyWith(enabled: enabled),
+    );
+    if (enabled && nextConfig.snap.enabled) {
+      nextConfig = nextConfig.copyWith(
+        snap: nextConfig.snap.copyWith(enabled: false),
+      );
+    }
+    if (nextConfig == _config) {
+      return;
+    }
+    _config = nextConfig;
+    final nextEnabled = nextConfig.grid.enabled;
+    if (_enabledNotifier.value != nextEnabled) {
+      _enabledNotifier.value = nextEnabled;
+    }
+    try {
+      await _store.dispatch(UpdateConfig(nextConfig));
+    } on Object {
+      if (_isDisposed) {
+        return;
+      }
+      _config = _store.config;
+      final rollbackEnabled = _config.grid.enabled;
+      if (_enabledNotifier.value != rollbackEnabled) {
+        _enabledNotifier.value = rollbackEnabled;
+      }
+      final rollbackSize = _config.grid.size;
+      if (_sizeNotifier.value != rollbackSize) {
+        _sizeNotifier.value = rollbackSize;
+      }
+      rethrow;
     }
   }
 }

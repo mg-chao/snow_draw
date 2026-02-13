@@ -1,5 +1,6 @@
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -123,6 +124,23 @@ void main() {
       // Value should remain unchanged since the adapter is
       // disposed.
       expect(adapter.stateListenable.value, valueBefore);
+
+      store.dispose();
+    });
+
+    test('applyStyleUpdate after dispose is a no-op', () async {
+      store = createStoreWithSelection();
+      adapter = StyleToolbarAdapter(store: store);
+
+      final beforeStyle = store.config.rectangleStyle;
+      adapter.dispose();
+      await adapter.applyStyleUpdate(
+        opacity: 0.35,
+        toolType: ToolType.rectangle,
+      );
+      await pumpEventQueue();
+
+      expect(store.config.rectangleStyle, beforeStyle);
 
       store.dispose();
     });

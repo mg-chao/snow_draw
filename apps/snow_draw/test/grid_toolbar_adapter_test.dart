@@ -69,6 +69,27 @@ void main() {
     expect(values, containsAllInOrder([true, false]));
   });
 
+  test('rapid setEnabled calls honor latest value', () async {
+    final first = adapter.setEnabled(enabled: true);
+    final second = adapter.setEnabled(enabled: false);
+    await Future.wait([first, second]);
+    await pumpEventQueue();
+
+    expect(adapter.isEnabled, isFalse);
+    expect(store.config.grid.enabled, isFalse);
+  });
+
+  test('rapid toggle calls return to original value', () async {
+    final before = adapter.isEnabled;
+    final first = adapter.toggle();
+    final second = adapter.toggle();
+    await Future.wait([first, second]);
+    await pumpEventQueue();
+
+    expect(adapter.isEnabled, before);
+    expect(store.config.grid.enabled, before);
+  });
+
   test('sizeListenable notifies on change', () async {
     final values = <double>[];
     adapter.sizeListenable.addListener(

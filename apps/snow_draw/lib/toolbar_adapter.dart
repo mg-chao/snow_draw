@@ -78,6 +78,7 @@ class StyleToolbarAdapter {
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
+  var _pendingConfigUpdate = Future<void>.value();
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
 
@@ -117,9 +118,15 @@ class StyleToolbarAdapter {
     ToolType? toolType,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
   }) async {
+    if (_isDisposed) {
+      return;
+    }
     final resolvedFamily = fontFamily?.trim();
     if (resolvedFamily != null && resolvedFamily.isNotEmpty) {
       await ensureSystemFontLoaded(resolvedFamily);
+      if (_isDisposed) {
+        return;
+      }
     }
     final ids = switch (scope) {
       StyleUpdateScope.highlightsOnly => {
@@ -187,9 +194,12 @@ class StyleToolbarAdapter {
           serialNumber: serialNumber,
         ),
       );
+      if (_isDisposed) {
+        return;
+      }
     }
 
-    _updateStyleConfig(
+    await _updateStyleConfig(
       color: color,
       fillColor: fillColor,
       strokeWidth: strokeWidth,
@@ -218,6 +228,9 @@ class StyleToolbarAdapter {
   }
 
   Future<void> copySelection() async {
+    if (_isDisposed) {
+      return;
+    }
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -228,6 +241,9 @@ class StyleToolbarAdapter {
   }
 
   Future<void> deleteSelection() async {
+    if (_isDisposed) {
+      return;
+    }
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -236,6 +252,9 @@ class StyleToolbarAdapter {
   }
 
   Future<void> createSerialNumberTextElements() async {
+    if (_isDisposed) {
+      return;
+    }
     if (_selectedSerialNumbers.isEmpty) {
       return;
     }
@@ -247,6 +266,9 @@ class StyleToolbarAdapter {
   }
 
   Future<void> changeZOrder(ZIndexOperation operation) async {
+    if (_isDisposed) {
+      return;
+    }
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -1451,7 +1473,7 @@ class StyleToolbarAdapter {
     return MixedValue(value: isMixed ? null : opacity, isMixed: isMixed);
   }
 
-  void _updateStyleConfig({
+  Future<void> _updateStyleConfig({
     Color? color,
     Color? fillColor,
     double? strokeWidth,
@@ -1565,149 +1587,164 @@ class StyleToolbarAdapter {
         !updateFilterDefaults &&
         !updateSerialNumberDefaults &&
         !updateHighlightMask) {
-      return;
+      return Future<void>.value();
     }
 
-    var nextRectangleStyle = _config.rectangleStyle;
-    var nextArrowStyle = _config.arrowStyle;
-    var nextLineStyle = _config.lineStyle;
-    var nextFreeDrawStyle = _config.freeDrawStyle;
-    var nextTextStyle = _config.textStyle;
-    var nextHighlightStyle = _config.highlightStyle;
-    var nextFilterStyle = _config.filterStyle;
-    var nextSerialNumberStyle = _config.serialNumberStyle;
-    var nextHighlightMask = _config.highlight;
+    return _enqueueConfigUpdate(() async {
+      if (_isDisposed) {
+        return;
+      }
 
-    if (updateRectangleDefaults) {
-      nextRectangleStyle = nextRectangleStyle.copyWith(
-        color: color,
-        fillColor: fillColor,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        fillStyle: fillStyle,
-        cornerRadius: cornerRadius,
-        fontSize: fontSize,
-        fontFamily: fontFamily,
-        textAlign: textAlign,
-        verticalAlign: verticalAlign,
-        opacity: opacity,
-        textStrokeColor: textStrokeColor,
-        textStrokeWidth: textStrokeWidth,
-      );
-    }
-    if (updateArrowDefaults) {
-      nextArrowStyle = nextArrowStyle.copyWith(
-        color: color,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        arrowType: arrowType,
-        startArrowhead: startArrowhead,
-        endArrowhead: endArrowhead,
-        opacity: opacity,
-      );
-    }
-    if (updateLineDefaults) {
-      nextLineStyle = nextLineStyle.copyWith(
-        color: color,
-        fillColor: fillColor,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        fillStyle: fillStyle,
-        opacity: opacity,
-      );
-    }
-    if (updateFreeDrawDefaults) {
-      nextFreeDrawStyle = nextFreeDrawStyle.copyWith(
-        color: color,
-        fillColor: fillColor,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        fillStyle: fillStyle,
-        opacity: opacity,
-      );
-    }
-    if (updateTextDefaults) {
-      nextTextStyle = nextTextStyle.copyWith(
-        color: color,
-        fillColor: fillColor,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        fillStyle: fillStyle,
-        cornerRadius: cornerRadius,
-        fontSize: fontSize,
-        fontFamily: fontFamily,
-        textAlign: textAlign,
-        verticalAlign: verticalAlign,
-        opacity: opacity,
-        textStrokeColor: textStrokeColor,
-        textStrokeWidth: textStrokeWidth,
-      );
-    }
-    if (updateHighlightDefaults) {
-      nextHighlightStyle = nextHighlightStyle.copyWith(
-        color: color,
-        highlightShape: highlightShape,
-        textStrokeColor: textStrokeColor,
-        textStrokeWidth: textStrokeWidth,
-        opacity: opacity,
-      );
-    }
-    if (updateFilterDefaults) {
-      nextFilterStyle = nextFilterStyle.copyWith(
-        filterType: filterType,
-        filterStrength: filterStrength,
-      );
-    }
-    if (updateHighlightMask) {
-      nextHighlightMask = nextHighlightMask.copyWith(
-        maskColor: maskColor,
-        maskOpacity: maskOpacity,
-      );
-    }
-    if (updateSerialNumberDefaults) {
-      nextSerialNumberStyle = nextSerialNumberStyle.copyWith(
-        serialNumber: serialNumber,
-        color: color,
-        fillColor: fillColor,
-        fillStyle: fillStyle,
-        strokeWidth: strokeWidth,
-        strokeStyle: strokeStyle,
-        fontSize: fontSize,
-        fontFamily: fontFamily,
-        opacity: opacity,
-      );
-    }
+      var nextRectangleStyle = _config.rectangleStyle;
+      var nextArrowStyle = _config.arrowStyle;
+      var nextLineStyle = _config.lineStyle;
+      var nextFreeDrawStyle = _config.freeDrawStyle;
+      var nextTextStyle = _config.textStyle;
+      var nextHighlightStyle = _config.highlightStyle;
+      var nextFilterStyle = _config.filterStyle;
+      var nextSerialNumberStyle = _config.serialNumberStyle;
+      var nextHighlightMask = _config.highlight;
 
-    if (nextRectangleStyle == _config.rectangleStyle &&
-        nextArrowStyle == _config.arrowStyle &&
-        nextLineStyle == _config.lineStyle &&
-        nextFreeDrawStyle == _config.freeDrawStyle &&
-        nextTextStyle == _config.textStyle &&
-        nextHighlightStyle == _config.highlightStyle &&
-        nextFilterStyle == _config.filterStyle &&
-        nextSerialNumberStyle == _config.serialNumberStyle &&
-        nextHighlightMask == _config.highlight) {
-      return;
-    }
+      if (updateRectangleDefaults) {
+        nextRectangleStyle = nextRectangleStyle.copyWith(
+          color: color,
+          fillColor: fillColor,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          fillStyle: fillStyle,
+          cornerRadius: cornerRadius,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          textAlign: textAlign,
+          verticalAlign: verticalAlign,
+          opacity: opacity,
+          textStrokeColor: textStrokeColor,
+          textStrokeWidth: textStrokeWidth,
+        );
+      }
+      if (updateArrowDefaults) {
+        nextArrowStyle = nextArrowStyle.copyWith(
+          color: color,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          arrowType: arrowType,
+          startArrowhead: startArrowhead,
+          endArrowhead: endArrowhead,
+          opacity: opacity,
+        );
+      }
+      if (updateLineDefaults) {
+        nextLineStyle = nextLineStyle.copyWith(
+          color: color,
+          fillColor: fillColor,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          fillStyle: fillStyle,
+          opacity: opacity,
+        );
+      }
+      if (updateFreeDrawDefaults) {
+        nextFreeDrawStyle = nextFreeDrawStyle.copyWith(
+          color: color,
+          fillColor: fillColor,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          fillStyle: fillStyle,
+          opacity: opacity,
+        );
+      }
+      if (updateTextDefaults) {
+        nextTextStyle = nextTextStyle.copyWith(
+          color: color,
+          fillColor: fillColor,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          fillStyle: fillStyle,
+          cornerRadius: cornerRadius,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          textAlign: textAlign,
+          verticalAlign: verticalAlign,
+          opacity: opacity,
+          textStrokeColor: textStrokeColor,
+          textStrokeWidth: textStrokeWidth,
+        );
+      }
+      if (updateHighlightDefaults) {
+        nextHighlightStyle = nextHighlightStyle.copyWith(
+          color: color,
+          highlightShape: highlightShape,
+          textStrokeColor: textStrokeColor,
+          textStrokeWidth: textStrokeWidth,
+          opacity: opacity,
+        );
+      }
+      if (updateFilterDefaults) {
+        nextFilterStyle = nextFilterStyle.copyWith(
+          filterType: filterType,
+          filterStrength: filterStrength,
+        );
+      }
+      if (updateHighlightMask) {
+        nextHighlightMask = nextHighlightMask.copyWith(
+          maskColor: maskColor,
+          maskOpacity: maskOpacity,
+        );
+      }
+      if (updateSerialNumberDefaults) {
+        nextSerialNumberStyle = nextSerialNumberStyle.copyWith(
+          serialNumber: serialNumber,
+          color: color,
+          fillColor: fillColor,
+          fillStyle: fillStyle,
+          strokeWidth: strokeWidth,
+          strokeStyle: strokeStyle,
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          opacity: opacity,
+        );
+      }
 
-    unawaited(
-      _store.dispatch(
-        UpdateConfig(
-          _config.copyWith(
-            rectangleStyle: nextRectangleStyle,
-            arrowStyle: nextArrowStyle,
-            lineStyle: nextLineStyle,
-            freeDrawStyle: nextFreeDrawStyle,
-            textStyle: nextTextStyle,
-            highlightStyle: nextHighlightStyle,
-            filterStyle: nextFilterStyle,
-            serialNumberStyle: nextSerialNumberStyle,
-            highlight: nextHighlightMask,
-          ),
-        ),
-      ),
-    );
+      if (nextRectangleStyle == _config.rectangleStyle &&
+          nextArrowStyle == _config.arrowStyle &&
+          nextLineStyle == _config.lineStyle &&
+          nextFreeDrawStyle == _config.freeDrawStyle &&
+          nextTextStyle == _config.textStyle &&
+          nextHighlightStyle == _config.highlightStyle &&
+          nextFilterStyle == _config.filterStyle &&
+          nextSerialNumberStyle == _config.serialNumberStyle &&
+          nextHighlightMask == _config.highlight) {
+        return;
+      }
+
+      final nextConfig = _config.copyWith(
+        rectangleStyle: nextRectangleStyle,
+        arrowStyle: nextArrowStyle,
+        lineStyle: nextLineStyle,
+        freeDrawStyle: nextFreeDrawStyle,
+        textStyle: nextTextStyle,
+        highlightStyle: nextHighlightStyle,
+        filterStyle: nextFilterStyle,
+        serialNumberStyle: nextSerialNumberStyle,
+        highlight: nextHighlightMask,
+      );
+      _handleConfigChange(nextConfig);
+      try {
+        await _store.dispatch(UpdateConfig(nextConfig));
+      } on Object {
+        if (_isDisposed) {
+          return;
+        }
+        _handleConfigChange(_store.config);
+        rethrow;
+      }
+    });
   }
+
+  Future<void> _enqueueConfigUpdate(Future<void> Function() update) =>
+      _pendingConfigUpdate = _pendingConfigUpdate
+          .catchError((Object _, StackTrace _) {})
+          .then((_) => update());
 
   void _publishState() {
     if (_isDisposed) {
