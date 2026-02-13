@@ -1,5 +1,4 @@
 import '../../actions/draw_actions.dart';
-import '../../edit/core/edit_modifiers.dart';
 import '../../models/draw_state.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
@@ -44,7 +43,7 @@ class EditPlugin extends DrawInputPlugin {
       await dispatch(
         UpdateEdit(
           currentPosition: event.position,
-          modifiers: _toEditModifiers(event.modifiers),
+          modifiers: event.modifiers.toEditModifiers(),
         ),
       );
       return handled(message: 'Edit updated');
@@ -62,11 +61,4 @@ class EditPlugin extends DrawInputPlugin {
 
     return unhandled();
   }
-
-  EditModifiers _toEditModifiers(KeyModifiers modifiers) => EditModifiers(
-    maintainAspectRatio: modifiers.shift,
-    discreteAngle: modifiers.shift,
-    fromCenter: modifiers.alt,
-    snapOverride: modifiers.control,
-  );
 }

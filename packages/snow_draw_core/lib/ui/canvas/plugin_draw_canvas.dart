@@ -1479,62 +1479,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     });
   }
 
-  String? _resolveHoverSelectionElementId({
-    required DrawState state,
-    required DrawPoint position,
-  }) {
-    if (!_isPointerInside || _middlePanPointerId != null) {
-      return null;
-    }
-    final interaction = state.application.interaction;
-    if (interaction is EditingState ||
-        interaction is CreatingState ||
-        interaction is BoxSelectingState ||
-        interaction is TextEditingState) {
-      return null;
-    }
-
-    final stateView = _buildStateView(state);
-    final selectionConfig = _resolveSelectionConfigForInput(state);
-    final hitResult = draw_hit_test.hitTest.test(
-      stateView: stateView,
-      position: position,
-      config: selectionConfig,
-      registry: widget.store.context.elementRegistry,
-      filterTypeId: widget.currentToolTypeId,
-    );
-    if (hitResult.isHandleHit) {
-      return null;
-    }
-
-    final elementId = hitResult.elementId;
-    if (elementId == null) {
-      return null;
-    }
-    if (state.domain.selection.selectedIds.contains(elementId)) {
-      return null;
-    }
-    return elementId;
-  }
-
-  ({String? selectionId, String? bindingId}) _resolveHoverSelectionAndBinding({
-    required DrawState state,
-    required DrawPoint position,
-  }) {
-    final selectionId = _resolveHoverSelectionElementId(
-      state: state,
-      position: position,
-    );
-    if (selectionId != null) {
-      return (selectionId: selectionId, bindingId: null);
-    }
-    final bindingId = _resolveHoverBindingElementId(
-      state: state,
-      position: position,
-    );
-    return (selectionId: selectionId, bindingId: bindingId);
-  }
-
   String? _resolveHoverBindingElementId({
     required DrawState state,
     required DrawPoint position,
@@ -2539,12 +2483,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         // When not mounted we cannot call setState, so compute
         // cursor and hover state directly.
         _cursor = _resolveCursorForState(widget.store.state, position);
-        final hoverTargets = _resolveHoverSelectionAndBinding(
+        _hoveredSelectionElementId = null;
+        _hoveredBindingElementId = _resolveHoverBindingElementId(
           state: widget.store.state,
           position: position,
         );
-        _hoveredSelectionElementId = hoverTargets.selectionId;
-        _hoveredBindingElementId = hoverTargets.bindingId;
         _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
           state: widget.store.state,
           position: position,

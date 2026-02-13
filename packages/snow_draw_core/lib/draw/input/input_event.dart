@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../edit/core/edit_modifiers.dart';
 import '../types/draw_point.dart';
 
 /// Keyboard modifier state carried with input events.
@@ -29,6 +30,16 @@ class KeyModifiers {
 
   @override
   String toString() => 'KeyModifiers(shift: $shift, ctrl: $control, alt: $alt)';
+
+  /// Convert keyboard modifiers to edit-domain modifiers.
+  ///
+  /// Centralises the mapping so every plugin uses the same logic.
+  EditModifiers toEditModifiers() => EditModifiers(
+    maintainAspectRatio: shift,
+    discreteAngle: shift,
+    fromCenter: alt,
+    snapOverride: control,
+  );
 }
 
 /// Base class for input events passed from UI -> business.

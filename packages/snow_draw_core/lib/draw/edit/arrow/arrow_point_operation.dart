@@ -530,6 +530,9 @@ final class ArrowPointEditContext extends EditContext {
   final bool releaseFixedSegment;
   final bool deletePointOnStart;
   final BindingTargetCache _bindingTargetCache;
+
+  @override
+  bool get hasSnapshots => initialPoints.length >= 2;
 }
 
 @immutable
@@ -1183,9 +1186,6 @@ int? _mapBoundaryFixedIndex({
 
 ElbowFixedSegment? _fixedSegmentForIndex(List<DrawPoint> points, int index) {
   if (index <= 1 || index >= points.length - 1) {
-    return null;
-  }
-  if (index < 1 || index >= points.length) {
     return null;
   }
   final start = points[index - 1];

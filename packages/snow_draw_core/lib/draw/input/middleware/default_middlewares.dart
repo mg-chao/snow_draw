@@ -94,8 +94,9 @@ class ThrottleMiddleware extends InputMiddlewareBase {
     final lastTime = _lastProcessTime;
 
     if (lastTime != null && now.difference(lastTime) < duration) {
-      // Skip this event.
-      return event; // Return the original event without calling next.
+      // Skip this event — return null so the coordinator knows it was
+      // intercepted rather than processed.
+      return null;
     }
 
     _lastProcessTime = now;

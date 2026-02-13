@@ -249,12 +249,12 @@ class EditApply {
 
     // Build a temporary index for O(1) lookups when the list is
     // large enough that linear scans become expensive.
-    var hasActualChanges = false;
     if (elements.length > 64 && replacementsById.length < elements.length) {
       final indexById = <String, int>{};
       for (var i = 0; i < elements.length; i++) {
         indexById[elements[i].id] = i;
       }
+      var hasActualChanges = false;
       for (final entry in replacementsById.entries) {
         final index = indexById[entry.key];
         if (index != null && !identical(elements[index], entry.value)) {
@@ -262,13 +262,26 @@ class EditApply {
           break;
         }
       }
-    } else {
+      if (!hasActualChanges) {
+        return elements;
+      }
+      // Reuse the index to build the result in a single pass.
+      final result = List<ElementState>.of(elements, growable: false);
       for (final entry in replacementsById.entries) {
-        final index = _findElementIndex(elements, entry.key);
-        if (index != -1 && !identical(elements[index], entry.value)) {
-          hasActualChanges = true;
-          break;
+        final index = indexById[entry.key];
+        if (index != null) {
+          result[index] = entry.value;
         }
+      }
+      return result;
+    }
+
+    var hasActualChanges = false;
+    for (final entry in replacementsById.entries) {
+      final index = _findElementIndex(elements, entry.key);
+      if (index != -1 && !identical(elements[index], entry.value)) {
+        hasActualChanges = true;
+        break;
       }
     }
 
