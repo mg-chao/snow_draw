@@ -7,7 +7,7 @@ import '../grid_toolbar_adapter.dart';
 import '../l10n/app_localizations.dart';
 import '../snap_toolbar_adapter.dart';
 
-class SnapControls extends StatelessWidget {
+class SnapControls extends StatefulWidget {
   const SnapControls({
     required this.strings,
     required this.snapAdapter,
@@ -22,79 +22,7 @@ class SnapControls extends StatelessWidget {
   final ValueListenable<bool> ctrlPressedListenable;
 
   @override
-  Widget build(BuildContext context) {
-    final mergedListenable = Listenable.merge([
-      snapAdapter.enabledListenable,
-      gridAdapter.enabledListenable,
-      ctrlPressedListenable,
-    ]);
-    return AnimatedBuilder(
-      animation: mergedListenable,
-      builder: (context, _) {
-        final theme = Theme.of(context);
-        const buttonShape = RoundedRectangleBorder();
-        final iconButtonStyle = IconButton.styleFrom(
-          shape: buttonShape,
-          minimumSize: const Size(36, 36),
-          fixedSize: const Size(36, 36),
-          padding: EdgeInsets.zero,
-        );
-        final dividerColor = theme.colorScheme.outlineVariant.withValues(
-          alpha: 0.6,
-        );
-        final snapEnabled = snapAdapter.isEnabled;
-        final gridEnabled = gridAdapter.isEnabled;
-        final ctrlPressed = ctrlPressedListenable.value;
-        final snappingMode = resolveEffectiveSnappingMode(
-          gridEnabled: gridEnabled,
-          objectEnabled: snapEnabled,
-          ctrlPressed: ctrlPressed,
-        );
-        final effectiveSnapEnabled = snappingMode == SnappingMode.object;
-        final effectiveGridEnabled = snappingMode == SnappingMode.grid;
-        final snapIconColor = effectiveSnapEnabled
-            ? theme.colorScheme.primary
-            : theme.iconTheme.color ?? Colors.black;
-        final gridIconColor = effectiveGridEnabled
-            ? theme.colorScheme.primary
-            : theme.iconTheme.color ?? Colors.black;
-
-        return Material(
-          elevation: 2,
-          borderRadius: BorderRadius.circular(12),
-          color: theme.colorScheme.surface,
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Tooltip(
-                    message: '${strings.objectSnapping} (Ctrl)',
-                    child: IconButton(
-                      style: iconButtonStyle,
-                      onPressed: snapAdapter.toggle,
-                      icon: SnapIcon(color: snapIconColor, size: 20),
-                    ),
-                  ),
-                  _buildDivider(dividerColor),
-                  Tooltip(
-                    message: '${strings.gridSnapping} (Ctrl)',
-                    child: IconButton(
-                      style: iconButtonStyle,
-                      onPressed: gridAdapter.toggle,
-                      icon: Icon(Icons.grid_on, size: 20, color: gridIconColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+  State<SnapControls> createState() => _SnapControlsState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
@@ -110,6 +38,100 @@ class SnapControls extends StatelessWidget {
         ),
       );
   }
+}
+
+class _SnapControlsState extends State<SnapControls> {
+  static final ButtonStyle _iconButtonStyle = IconButton.styleFrom(
+    shape: const RoundedRectangleBorder(),
+    minimumSize: const Size(36, 36),
+    fixedSize: const Size(36, 36),
+    padding: EdgeInsets.zero,
+  );
+
+  late Listenable _mergedListenable;
+
+  @override
+  void initState() {
+    super.initState();
+    _mergedListenable = _createMergedListenable();
+  }
+
+  @override
+  void didUpdateWidget(covariant SnapControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.snapAdapter != widget.snapAdapter ||
+        oldWidget.gridAdapter != widget.gridAdapter ||
+        oldWidget.ctrlPressedListenable != widget.ctrlPressedListenable) {
+      _mergedListenable = _createMergedListenable();
+    }
+  }
+
+  Listenable _createMergedListenable() => Listenable.merge([
+    widget.snapAdapter.enabledListenable,
+    widget.gridAdapter.enabledListenable,
+    widget.ctrlPressedListenable,
+  ]);
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _mergedListenable,
+    builder: (context, _) {
+      final theme = Theme.of(context);
+      final dividerColor = theme.colorScheme.outlineVariant.withValues(
+        alpha: 0.6,
+      );
+      final snapEnabled = widget.snapAdapter.isEnabled;
+      final gridEnabled = widget.gridAdapter.isEnabled;
+      final ctrlPressed = widget.ctrlPressedListenable.value;
+      final snappingMode = resolveEffectiveSnappingMode(
+        gridEnabled: gridEnabled,
+        objectEnabled: snapEnabled,
+        ctrlPressed: ctrlPressed,
+      );
+      final effectiveSnapEnabled = snappingMode == SnappingMode.object;
+      final effectiveGridEnabled = snappingMode == SnappingMode.grid;
+      final snapIconColor = effectiveSnapEnabled
+          ? theme.colorScheme.primary
+          : theme.iconTheme.color ?? Colors.black;
+      final gridIconColor = effectiveGridEnabled
+          ? theme.colorScheme.primary
+          : theme.iconTheme.color ?? Colors.black;
+
+      return Material(
+        elevation: 2,
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: '${widget.strings.objectSnapping} (Ctrl)',
+                  child: IconButton(
+                    style: _iconButtonStyle,
+                    onPressed: widget.snapAdapter.toggle,
+                    icon: SnapIcon(color: snapIconColor, size: 20),
+                  ),
+                ),
+                _buildDivider(dividerColor),
+                Tooltip(
+                  message: '${widget.strings.gridSnapping} (Ctrl)',
+                  child: IconButton(
+                    style: _iconButtonStyle,
+                    onPressed: widget.gridAdapter.toggle,
+                    icon: Icon(Icons.grid_on, size: 20, color: gridIconColor),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   Widget _buildDivider(Color color) =>
       Container(width: 1, height: 20, color: color);
