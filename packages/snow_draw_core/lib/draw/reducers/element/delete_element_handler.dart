@@ -1,5 +1,6 @@
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
@@ -126,6 +127,9 @@ DrawState handleDuplicateElements(
           : idMap[nextData.textElementId!];
       nextData = nextData.copyWith(textElementId: mapped);
     }
+    if (nextData is ArrowLikeData) {
+      nextData = _remapArrowBindings(nextData, idMap);
+    }
     final duplicated = element.copyWith(
       id: newId,
       rect: element.rect.translate(
@@ -146,4 +150,33 @@ DrawState handleDuplicateElements(
     ),
   );
   return applySelectionChange(next, newSelectedIds);
+}
+
+/// Remaps arrow/line binding element IDs to their duplicated counterparts.
+///
+/// If a binding target was not duplicated, the binding is cleared (set to
+/// null) so the duplicated arrow does not reference the original element.
+ArrowLikeData _remapArrowBindings(
+  ArrowLikeData data,
+  Map<String, String> idMap,
+) {
+  final startBinding = data.startBinding;
+  final endBinding = data.endBinding;
+  if (startBinding == null && endBinding == null) {
+    return data;
+  }
+
+  final mappedStart = startBinding == null
+      ? null
+      : idMap.containsKey(startBinding.elementId)
+      ? startBinding.copyWith(elementId: idMap[startBinding.elementId])
+      : null;
+
+  final mappedEnd = endBinding == null
+      ? null
+      : idMap.containsKey(endBinding.elementId)
+      ? endBinding.copyWith(elementId: idMap[endBinding.elementId])
+      : null;
+
+  return data.copyWith(startBinding: mappedStart, endBinding: mappedEnd);
 }
