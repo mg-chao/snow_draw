@@ -11,6 +11,7 @@ import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
+import '../../draw/utils/lru_cache.dart';
 import 'serial_number_connection_painter.dart';
 
 /// Cached serial number connector resolver.
@@ -243,7 +244,7 @@ class SerialNumberConnectorCache {
     return SerialNumberTextConnector(connection: connection, paint: paint);
   }
 
-  static final _paintCache = _LruCache<_PaintKey, Paint>(maxEntries: 32);
+  static final _paintCache = LruCache<_PaintKey, Paint>(maxEntries: 32);
 }
 
 class _CachedConnectorEntry {
@@ -268,25 +269,4 @@ class _PaintKey {
 
   @override
   int get hashCode => Object.hash(color, strokeWidth);
-}
-
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
-
-  final int maxEntries;
-  final _cache = <K, V>{};
-
-  V getOrCreate(K key, V Function() builder) {
-    final existing = _cache.remove(key);
-    if (existing != null) {
-      _cache[key] = existing;
-      return existing;
-    }
-    final value = builder();
-    _cache[key] = value;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-    return value;
-  }
 }

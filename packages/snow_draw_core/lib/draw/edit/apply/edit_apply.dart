@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
@@ -248,30 +247,34 @@ class EditApply {
       return elements;
     }
 
+    // Build a temporary index for O(1) lookups when the list is
+    // large enough that linear scans become expensive.
     var hasActualChanges = false;
-    for (final entry in replacementsById.entries) {
-      final index = _findElementIndex(elements, entry.key);
-      if (index != -1 && !identical(elements[index], entry.value)) {
-        hasActualChanges = true;
-        break;
+    if (elements.length > 64 && replacementsById.length < elements.length) {
+      final indexById = <String, int>{};
+      for (var i = 0; i < elements.length; i++) {
+        indexById[elements[i].id] = i;
+      }
+      for (final entry in replacementsById.entries) {
+        final index = indexById[entry.key];
+        if (index != null && !identical(elements[index], entry.value)) {
+          hasActualChanges = true;
+          break;
+        }
+      }
+    } else {
+      for (final entry in replacementsById.entries) {
+        final index = _findElementIndex(elements, entry.key);
+        if (index != -1 && !identical(elements[index], entry.value)) {
+          hasActualChanges = true;
+          break;
+        }
       }
     }
 
     if (!hasActualChanges) {
       return elements;
     }
-
-    assert(() {
-      if (elements.length > 1000 && replacementsById.length < 10) {
-        developer.log(
-          'Performance hint: replacing ${replacementsById.length} '
-          'elements in a list of ${elements.length}. Consider using '
-          'indexed replacement.',
-          name: 'EditApply',
-        );
-      }
-      return true;
-    }(), 'Performance logging for element replacement');
 
     return elements
         .map((e) => replacementsById[e.id] ?? e)

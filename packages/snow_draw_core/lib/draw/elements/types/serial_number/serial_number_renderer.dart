@@ -2,11 +2,11 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart'
-    show Alignment, GradientRotation, LinearGradient;
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
+import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
@@ -16,10 +16,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
 
   static const double _lineFillAngle = -math.pi / 4;
   static const double _crossLineFillAngle = math.pi / 4;
-  static final _lineShaderCache = _LruCache<_LineShaderKey, Shader>(
-    maxEntries: 64,
-  );
-  static final _strokePathCache = _LruCache<_StrokePathKey, Path>(
+  static final _strokePathCache = LruCache<_StrokePathKey, Path>(
     maxEntries: 128,
   );
 
@@ -108,7 +105,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     );
     const lineToSpacingRatio = 4.0;
     final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-    final fillPaint = _buildLineFillPaint(
+    final fillPaint = buildLineFillPaint(
       spacing: spacing,
       lineWidth: fillLineWidth,
       angle: _lineFillAngle,
@@ -116,7 +113,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     );
     canvas.drawOval(circleRect, fillPaint);
     if (data.fillStyle == FillStyle.crossLine) {
-      final crossPaint = _buildLineFillPaint(
+      final crossPaint = buildLineFillPaint(
         spacing: spacing,
         lineWidth: fillLineWidth,
         angle: _crossLineFillAngle,
@@ -156,7 +153,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       );
       final dashedPath = _strokePathCache.getOrCreate(
         key,
-        () => _buildDashedPath(path, dashLength, gapLength),
+        () => buildDashedPath(path, dashLength, gapLength),
       );
       strokePaint.strokeCap = StrokeCap.round;
       canvas.drawPath(dashedPath, strokePaint);
@@ -173,7 +170,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     );
     final dottedPath = _strokePathCache.getOrCreate(
       key,
-      () => _buildDottedPath(path, dotSpacing, dotRadius),
+      () => buildDottedPath(path, dotSpacing, dotRadius),
     );
     final dotPaint = Paint()
       ..style = PaintingStyle.fill
@@ -203,128 +200,6 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     );
     layout.painter.paint(canvas, offset);
   }
-
-  Paint _buildLineFillPaint({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-    required Color color,
-  }) => Paint()
-    ..style = PaintingStyle.fill
-    ..shader = _lineShaderCache.getOrCreate(
-      _LineShaderKey(spacing: spacing, lineWidth: lineWidth, angle: angle),
-      () => _buildLineShader(
-        spacing: spacing,
-        lineWidth: lineWidth,
-        angle: angle,
-      ),
-    )
-    ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
-    ..isAntiAlias = true;
-
-  Shader _buildLineShader({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-  }) {
-    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
-    final cosAngle = math.cos(angle).abs();
-    final adjustedSpacing = cosAngle > 0.01
-        ? safeSpacing / cosAngle
-        : safeSpacing;
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      tileMode: TileMode.repeated,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0x00FFFFFF),
-        Color(0x00FFFFFF),
-      ],
-      stops: [0.0, lineStop, lineStop, 1.0],
-      transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
-  }
-
-  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-    final dashed = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-        distance = next + gapLength;
-      }
-    }
-    return dashed;
-  }
-
-  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-    final dotted = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          dotted.addOval(
-            Rect.fromCircle(center: tangent.position, radius: dotRadius),
-          );
-        }
-        distance += dotSpacing;
-      }
-    }
-    return dotted;
-  }
-}
-
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
-
-  final int maxEntries;
-  final _cache = <K, V>{};
-
-  V getOrCreate(K key, V Function() builder) {
-    final existing = _cache.remove(key);
-    if (existing != null) {
-      _cache[key] = existing;
-      return existing;
-    }
-    final value = builder();
-    _cache[key] = value;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-    return value;
-  }
-}
-
-@immutable
-class _LineShaderKey {
-  _LineShaderKey({
-    required double spacing,
-    required double lineWidth,
-    required this.angle,
-  }) : spacing = _quantize(spacing),
-       lineWidth = _quantize(lineWidth);
-
-  final double spacing;
-  final double lineWidth;
-  final double angle;
-
-  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LineShaderKey &&
-          other.spacing == spacing &&
-          other.lineWidth == lineWidth &&
-          other.angle == angle;
-
-  @override
-  int get hashCode => Object.hash(spacing, lineWidth, angle);
 }
 
 @immutable

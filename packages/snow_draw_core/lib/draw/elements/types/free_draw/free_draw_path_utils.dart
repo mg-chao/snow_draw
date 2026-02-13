@@ -501,48 +501,54 @@ _ResampleResult _resampleUniform({
   return _ResampleResult(points: outPoints, pressures: outPressures);
 }
 
+/// Smooths [points] using a 1-2-1 kernel with a double-buffer
+/// swap to avoid per-iteration list allocations.
 List<Offset> _smoothPoints(List<Offset> points, {required bool closed}) {
   if (points.length < 3) {
     return points;
   }
 
   const iterations = 3;
-  var working = List<Offset>.from(points);
+  final n = points.length;
+  final lastIndex = n - 1;
+
+  // Two pre-allocated buffers; swap between them each pass.
+  var src = List<Offset>.of(points);
+  var dst = List<Offset>.filled(n, Offset.zero);
 
   for (var iter = 0; iter < iterations; iter++) {
-    final next = List<Offset>.from(working);
-    final lastIndex = working.length - 1;
-
     if (closed) {
       for (var i = 0; i <= lastIndex; i++) {
-        final prev = working[(i - 1 + working.length) % working.length];
-        final curr = working[i];
-        final nextPoint = working[(i + 1) % working.length];
-        next[i] = Offset(
-          (prev.dx + curr.dx * 2 + nextPoint.dx) * 0.25,
-          (prev.dy + curr.dy * 2 + nextPoint.dy) * 0.25,
+        final prev = src[(i - 1 + n) % n];
+        final curr = src[i];
+        final next = src[(i + 1) % n];
+        dst[i] = Offset(
+          (prev.dx + curr.dx * 2 + next.dx) * 0.25,
+          (prev.dy + curr.dy * 2 + next.dy) * 0.25,
         );
       }
     } else {
-      // Smooth interior points with full 1-2-1 kernel.
-      for (var i = 1; i < lastIndex; i++) {
-        final prev = working[i - 1];
-        final curr = working[i];
-        final nextPoint = working[i + 1];
-        next[i] = Offset(
-          (prev.dx + curr.dx * 2 + nextPoint.dx) * 0.25,
-          (prev.dy + curr.dy * 2 + nextPoint.dy) * 0.25,
-        );
-      }
       // Keep endpoints pinned. The Catmull-Rom phantom points
       // handle smooth entry/exit curvature, so pulling the
       // endpoints inward would only flatten the rounded tips.
-      next[0] = working[0];
-      next[lastIndex] = working[lastIndex];
+      dst[0] = src[0];
+      dst[lastIndex] = src[lastIndex];
+      for (var i = 1; i < lastIndex; i++) {
+        final prev = src[i - 1];
+        final curr = src[i];
+        final next = src[i + 1];
+        dst[i] = Offset(
+          (prev.dx + curr.dx * 2 + next.dx) * 0.25,
+          (prev.dy + curr.dy * 2 + next.dy) * 0.25,
+        );
+      }
     }
 
-    working = next;
+    // Swap buffers.
+    final tmp = src;
+    src = dst;
+    dst = tmp;
   }
 
-  return working;
+  return src;
 }

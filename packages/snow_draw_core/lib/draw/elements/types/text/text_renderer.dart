@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
+import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
@@ -15,9 +16,6 @@ class TextRenderer extends ElementTypeRenderer {
 
   static const double _lineFillAngle = -math.pi / 4;
   static const double _crossLineFillAngle = math.pi / 4;
-  static final _lineShaderCache = LruCache<_LineShaderKey, ui.Shader>(
-    maxEntries: 128,
-  );
 
   /// Per-element cache for background text boxes (the expensive
   /// `getBoxesForRange` call). Keyed by text content, font properties,
@@ -30,37 +28,11 @@ class TextRenderer extends ElementTypeRenderer {
   /// Call when switching documents or under memory pressure to
   /// release stale `ui.Paragraph` and `ui.Shader` native resources.
   static void clearCaches() {
-    _lineShaderCache.clear();
+    clearStrokePatternCaches();
     _backgroundBoxCache.clear();
     _fillParagraphCache.clear();
     _strokeParagraphCache.clear();
     _backgroundPathCache.clear();
-  }
-
-  ui.Shader _buildLineShader({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-  }) {
-    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
-    final cosAngle = math.cos(angle).abs();
-    final adjustedSpacing = cosAngle > 0.01
-        ? safeSpacing / cosAngle
-        : safeSpacing;
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      tileMode: TileMode.repeated,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0x00FFFFFF),
-        Color(0x00FFFFFF),
-      ],
-      stops: [0.0, lineStop, lineStop, 1.0],
-      transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
   }
 
   Paint _buildLineFillPaint({
@@ -68,18 +40,12 @@ class TextRenderer extends ElementTypeRenderer {
     required double lineWidth,
     required double angle,
     required Color color,
-  }) => Paint()
-    ..style = PaintingStyle.fill
-    ..shader = _lineShaderCache.getOrCreate(
-      _LineShaderKey(spacing: spacing, lineWidth: lineWidth, angle: angle),
-      () => _buildLineShader(
-        spacing: spacing,
-        lineWidth: lineWidth,
-        angle: angle,
-      ),
-    )
-    ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
-    ..isAntiAlias = true;
+  }) => buildLineFillPaint(
+    spacing: spacing,
+    lineWidth: lineWidth,
+    angle: angle,
+    color: color,
+  );
 
   @override
   void render({
@@ -689,31 +655,4 @@ class _StrokeParagraphKey {
     maxWidth,
     locale,
   );
-}
-
-@immutable
-class _LineShaderKey {
-  _LineShaderKey({
-    required double spacing,
-    required double lineWidth,
-    required this.angle,
-  }) : spacing = _quantize(spacing),
-       lineWidth = _quantize(lineWidth);
-
-  final double spacing;
-  final double lineWidth;
-  final double angle;
-
-  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LineShaderKey &&
-          other.spacing == spacing &&
-          other.lineWidth == lineWidth &&
-          other.angle == angle;
-
-  @override
-  int get hashCode => Object.hash(spacing, lineWidth, angle);
 }

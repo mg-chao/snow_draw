@@ -2,12 +2,12 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart'
-    show Alignment, GradientRotation, LinearGradient;
 
 import '../../../../ui/canvas/rectangle_shader_manager.dart';
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/lru_cache.dart';
+import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import 'rectangle_data.dart';
 
@@ -16,11 +16,8 @@ class RectangleRenderer extends ElementTypeRenderer {
 
   // Cache expensive stroke/fill paths by size/style to avoid per-frame
   // rebuilds. Only used for CPU fallback rendering.
-  static final _strokePathCache = _LruCache<_StrokePathKey, Path>(
+  static final _strokePathCache = LruCache<_StrokePathKey, Path>(
     maxEntries: 200,
-  );
-  static final _lineShaderCache = _LruCache<_LineShaderKey, Shader>(
-    maxEntries: 128,
   );
 
   /// Reusable paints for CPU fallback rendering to reduce GC pressure.
@@ -167,13 +164,13 @@ class RectangleRenderer extends ElementTypeRenderer {
         const crossLineAngle = math.pi / 4;
         _fillPaint
           ..color = data.fillColor.withValues(alpha: fillOpacity)
-          ..shader = _lineShaderCache.getOrCreate(
-            _LineShaderKey(
+          ..shader = lineShaderCache.getOrCreate(
+            LineShaderKey(
               spacing: spacing,
               lineWidth: fillLineWidth,
               angle: lineAngle,
             ),
-            () => _buildLineShader(
+            () => buildLineShader(
               spacing: spacing,
               lineWidth: fillLineWidth,
               angle: lineAngle,
@@ -185,13 +182,13 @@ class RectangleRenderer extends ElementTypeRenderer {
           );
         canvas.drawRRect(rRect, _fillPaint);
         if (data.fillStyle == FillStyle.crossLine) {
-          _fillPaint.shader = _lineShaderCache.getOrCreate(
-            _LineShaderKey(
+          _fillPaint.shader = lineShaderCache.getOrCreate(
+            LineShaderKey(
               spacing: spacing,
               lineWidth: fillLineWidth,
               angle: crossLineAngle,
             ),
-            () => _buildLineShader(
+            () => buildLineShader(
               spacing: spacing,
               lineWidth: fillLineWidth,
               angle: crossLineAngle,
@@ -225,7 +222,7 @@ class RectangleRenderer extends ElementTypeRenderer {
           );
           final dashedPath = _strokePathCache.getOrCreate(
             key,
-            () => _buildDashedPath(
+            () => buildDashedPath(
               Path()..addRRect(rRect),
               dashLength,
               gapLength,
@@ -248,7 +245,7 @@ class RectangleRenderer extends ElementTypeRenderer {
           );
           final dottedPath = _strokePathCache.getOrCreate(
             key,
-            () => _buildDottedPath(
+            () => buildDottedPath(
               Path()..addRRect(rRect),
               dotSpacing,
               dotRadius,
@@ -262,84 +259,6 @@ class RectangleRenderer extends ElementTypeRenderer {
     canvas.restore();
   }
 
-  Shader _buildLineShader({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-  }) {
-    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
-    // For rotated gradients, scale the shader rect to ensure seamless tiling.
-    // The perpendicular spacing changes by cos(angle), so we compensate.
-    final cosAngle = math.cos(angle).abs();
-    final adjustedSpacing = cosAngle > 0.01
-        ? safeSpacing / cosAngle
-        : safeSpacing;
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      tileMode: TileMode.repeated,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0x00FFFFFF),
-        Color(0x00FFFFFF),
-      ],
-      stops: [0.0, lineStop, lineStop, 1.0],
-      transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
-  }
-
-  Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-    final dashed = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-        distance = next + gapLength;
-      }
-    }
-    return dashed;
-  }
-
-  Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-    final dotted = Path();
-    for (final metric in basePath.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          dotted.addOval(
-            Rect.fromCircle(center: tangent.position, radius: dotRadius),
-          );
-        }
-        distance += dotSpacing;
-      }
-    }
-    return dotted;
-  }
-}
-
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
-
-  final int maxEntries;
-  final _cache = <K, V>{};
-
-  V getOrCreate(K key, V Function() builder) {
-    final existing = _cache.remove(key);
-    if (existing != null) {
-      _cache[key] = existing;
-      return existing;
-    }
-    final path = builder();
-    _cache[key] = path;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-    return path;
-  }
 }
 
 @immutable
@@ -389,33 +308,4 @@ class _StrokePathKey {
     patternPrimary,
     patternSecondary,
   );
-}
-
-@immutable
-class _LineShaderKey {
-  _LineShaderKey({
-    required double spacing,
-    required double lineWidth,
-    required this.angle,
-  }) : spacing = _quantize(spacing),
-       lineWidth = _quantize(lineWidth);
-
-  final double spacing;
-  final double lineWidth;
-  final double angle;
-
-  /// Quantize to 1 decimal place to improve cache hit rate
-  /// by reducing floating-point precision variations
-  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LineShaderKey &&
-          other.spacing == spacing &&
-          other.lineWidth == lineWidth &&
-          other.angle == angle;
-
-  @override
-  int get hashCode => Object.hash(spacing, lineWidth, angle);
 }
