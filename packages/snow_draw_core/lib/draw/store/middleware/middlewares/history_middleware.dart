@@ -1,5 +1,6 @@
 import '../../../actions/draw_actions.dart';
 import '../../../actions/history_policy.dart';
+import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
 import '../../../models/interaction_state.dart';
@@ -161,8 +162,13 @@ class HistoryMiddleware extends MiddlewareBase {
     final includeSelection = context.includeSelectionInHistory;
 
     try {
+      // Reordering a single element can still mutate many peers (for example
+      // z-index reindexing), so those transitions use full snapshots.
+      final useIncremental =
+          changes != null &&
+          !(changes.orderChanged && changes.isSingleElementChange);
+
       // Take snapshot before action
-      final useIncremental = changes != null;
       final snapshotBefore = useIncremental
           ? (action.requiresPreActionSnapshot
                 ? context.snapshotBuilder.buildIncrementalSnapshotBeforeAction(
@@ -306,8 +312,29 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is DeleteElements) {
+      final removedIds = action.elementIds.toSet();
+      final modifiedIds = <String>{};
+      final beforeElements = context.initialState.domain.document.elements;
+      for (final element in beforeElements) {
+        final data = element.data;
+        if (data is! SerialNumberData) {
+          continue;
+        }
+        final boundId = data.textElementId;
+        if (boundId == null) {
+          continue;
+        }
+        if (removedIds.contains(element.id)) {
+          removedIds.add(boundId);
+          continue;
+        }
+        if (removedIds.contains(boundId)) {
+          modifiedIds.add(element.id);
+        }
+      }
       return HistoryChangeSet(
-        removedIds: action.elementIds.toSet(),
+        modifiedIds: modifiedIds,
+        removedIds: removedIds,
         orderChanged: true,
         selectionChanged: selectionChanged,
       );

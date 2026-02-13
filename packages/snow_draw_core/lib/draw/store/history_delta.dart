@@ -55,7 +55,15 @@ class HistoryDelta {
     final beforeElements = <String, ElementState>{};
     final afterElements = <String, ElementState>{};
 
-    if (changes != null && changes.isSingleElementChange) {
+    // Reordering actions can implicitly update many elements (for example
+    // z-index reindexing), so the single-element shortcut is only safe when
+    // order is unchanged.
+    final useSingleElementShortcut =
+        changes != null &&
+        changes.isSingleElementChange &&
+        !changes.orderChanged;
+
+    if (useSingleElementShortcut) {
       final id = changes.allElementIds.first;
       final beforeElement = beforeById[id];
       final afterElement = afterById[id];
@@ -179,8 +187,9 @@ class HistoryDelta {
     }
 
     if (order == null && nextElements.length != nextById.length) {
+      final knownOrderIds = targetOrder.toSet();
       for (final id in nextById.keys) {
-        if (!targetOrder.contains(id)) {
+        if (!knownOrderIds.contains(id)) {
           final element = nextById[id];
           if (element != null) {
             nextElements.add(element);
