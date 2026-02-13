@@ -15,12 +15,24 @@ dev_dependencies:
 
 melos:
   scripts:
+    analyze:
+      description: Run static analysis (read-only, suitable for CI).
+      run: melos exec -- flutter analyze
+
+    format:check:
+      description: Check formatting without modifying files.
+      run: melos exec -- dart format --set-exit-if-changed .
+
     lint:
-      description: Run all static analysis checks.
+      description: Run all static analysis checks and auto-fix.
       run: |
         melos exec -- flutter analyze
         melos exec -- dart format .
         melos exec -- dart fix --apply
+
+    test:
+      description: Run tests in all packages.
+      run: melos exec -- flutter test
 
     run:windows:
       description: Run the snow_draw app on Windows.

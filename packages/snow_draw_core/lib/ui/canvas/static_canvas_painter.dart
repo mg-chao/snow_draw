@@ -174,12 +174,27 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   /// Draw background.
+  ///
+  /// Reuses a cached [Paint] when the background color hasn't changed
+  /// to avoid a native allocation on every frame.
   void _drawBackground(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = renderKey.canvasConfig.backgroundColor;
-
+    final color = renderKey.canvasConfig.backgroundColor;
+    final paint = _resolveBackgroundPaint(color);
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+  }
+
+  static Paint? _cachedBackgroundPaint;
+  static Color? _cachedBackgroundColor;
+
+  static Paint _resolveBackgroundPaint(Color color) {
+    if (_cachedBackgroundPaint != null && _cachedBackgroundColor == color) {
+      return _cachedBackgroundPaint!;
+    }
+    _cachedBackgroundPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+    _cachedBackgroundColor = color;
+    return _cachedBackgroundPaint!;
   }
 
   /// Draws the grid using the GPU-accelerated fragment shader.

@@ -285,6 +285,7 @@ class DefaultDrawStore implements DrawStore {
     unawaited(_eventBus.dispose());
     _listenerRegistry.clear();
     _historyManager.clear();
+    context.log.dispose();
   }
 
   EditSessionId _generateEditSessionId() {

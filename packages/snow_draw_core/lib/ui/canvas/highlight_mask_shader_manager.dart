@@ -318,17 +318,21 @@ class _VisibleHighlight {
 /// Precomputes cos/sin on the Dart side so the shader avoids
 /// per-fragment trigonometry.  Also computes a tight screen-space
 /// AABB per highlight for the combined early-out bounds.
+///
+/// Reuses a module-level list to avoid allocating a new growable
+/// list on every frame.
+final _visibleHighlightBuffer = <_VisibleHighlight>[];
+
 List<_VisibleHighlight> _cullHighlights({
   required List<ElementState> highlights,
   required DrawRect viewportRect,
   required double scale,
   required Offset cameraPosition,
 }) {
+  final result = _visibleHighlightBuffer..clear();
   final screenW = viewportRect.width * scale;
   final screenH = viewportRect.height * scale;
   const aaMargin = 1.0;
-
-  final result = <_VisibleHighlight>[];
   for (final element in highlights) {
     final data = element.data as HighlightData;
     final rect = element.rect;

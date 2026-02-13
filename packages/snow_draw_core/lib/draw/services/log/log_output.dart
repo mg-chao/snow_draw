@@ -99,9 +99,19 @@ class MemoryLogCollector implements LogOutputHandler {
   @override
   void output(LogRecord record) {
     _records.add(record);
-    // Remove old records when exceeding capacity.
-    while (_records.length > maxRecords) {
-      _records.removeAt(0);
+    if (_records.length > maxRecords) {
+      _trimExcess();
+    }
+  }
+
+  /// Removes oldest records when the buffer exceeds capacity.
+  ///
+  /// Uses [removeRange] for O(1) bulk removal instead of repeated
+  /// [removeAt(0)] which is O(n) per call.
+  void _trimExcess() {
+    final excess = _records.length - maxRecords;
+    if (excess > 0) {
+      _records.removeRange(0, excess);
     }
   }
 

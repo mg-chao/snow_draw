@@ -511,6 +511,19 @@ class DynamicCanvasPainter extends CustomPainter {
         ..drawCircle(center, turnRadius, strokePaint);
     }
 
+    // Pre-build loop stroke paints outside the loop to avoid
+    // allocating a new Paint per loop-point per frame.
+    final loopStrokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor
+      ..isAntiAlias = true;
+    final loopStrokePaintHighlighted = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = highlightStroke
+      ..isAntiAlias = true;
+
     for (final handle in overlay.loopPoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
@@ -520,17 +533,16 @@ class DynamicCanvasPainter extends CustomPainter {
       final radius = handle.kind == ArrowPointKind.loopEnd
           ? loopOuterRadius
           : loopInnerRadius;
-      final strokePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..color = isHighlighted ? highlightStroke : strokeColor
-        ..isAntiAlias = true;
 
       // Inner loop point (loopStart) has filled style like bend points
       if (handle.kind == ArrowPointKind.loopStart) {
         canvas.drawCircle(center, radius, turningFillPaint);
       }
-      canvas.drawCircle(center, radius, strokePaint);
+      canvas.drawCircle(
+        center,
+        radius,
+        isHighlighted ? loopStrokePaintHighlighted : loopStrokePaint,
+      );
     }
 
     if (deletePosition != null) {

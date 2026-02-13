@@ -94,6 +94,7 @@ class LogService {
   ModuleLogger get history => module(LogModule.history);
   ModuleLogger get render => module(LogModule.render);
   ModuleLogger get service => module(LogModule.service);
+  ModuleLogger get configLog => module(LogModule.config);
   ModuleLogger get general => module(LogModule.general);
 
   /// Internal logging method.

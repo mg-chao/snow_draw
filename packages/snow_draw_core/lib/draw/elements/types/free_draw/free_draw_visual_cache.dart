@@ -253,7 +253,11 @@ List<Offset> _flattenPath(Path path, double step) {
     totalPathLength += metric.length;
   }
   final needed = (totalPathLength / step).ceil() + 1;
-  final maxPoints = needed.clamp(512, 2048);
+  // Cap at 4096 to bound memory for extremely long paths while
+  // preserving hit-test precision for typical strokes. The previous
+  // clamp(512, 2048) wasted the min bound (the list grows on demand)
+  // and was too tight on the max for complex drawings.
+  final maxPoints = needed.clamp(2, 4096);
 
   final flattened = <Offset>[];
   for (final metric in metrics) {
