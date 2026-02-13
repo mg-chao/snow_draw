@@ -68,7 +68,8 @@ abstract interface class LogOutputHandler {
 ///
 /// Keeps recent log records in memory for debugging and diagnostics.
 class MemoryLogCollector implements LogOutputHandler {
-  MemoryLogCollector({this.maxRecords = 1000});
+  MemoryLogCollector({this.maxRecords = 1000})
+    : assert(maxRecords >= 0, 'maxRecords must be non-negative');
   final int maxRecords;
   final List<LogRecord> _records = [];
 
@@ -106,8 +107,8 @@ class MemoryLogCollector implements LogOutputHandler {
 
   /// Removes oldest records when the buffer exceeds capacity.
   ///
-  /// Uses [removeRange] for O(1) bulk removal instead of repeated
-  /// [removeAt(0)] which is O(n) per call.
+  /// Uses a single [List.removeRange] call so trimming shifts list contents
+  /// once instead of repeatedly calling `removeAt(0)`.
   void _trimExcess() {
     final excess = _records.length - maxRecords;
     if (excess > 0) {
@@ -117,8 +118,12 @@ class MemoryLogCollector implements LogOutputHandler {
 
   @override
   void outputBatch(List<LogRecord> records) {
-    for (final record in records) {
-      output(record);
+    if (records.isEmpty) {
+      return;
+    }
+    _records.addAll(records);
+    if (_records.length > maxRecords) {
+      _trimExcess();
     }
   }
 
