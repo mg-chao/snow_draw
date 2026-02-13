@@ -281,19 +281,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 
-    _configSubscription = widget.store.configStream.listen((_) {
-      if (!mounted) {
-        return;
-      }
-      final position = _lastPointerPosition;
-      if (position != null && _isPointerInside) {
-        _updateCursorAndHoverForPosition(position);
-      } else {
-        _updateCursorIfChanged(
-          _resolveCursorForState(widget.store.state, position),
-        );
-      }
-    });
+    _configSubscription = widget.store.configStream.listen(_handleConfigChange);
   }
 
   @override
@@ -319,19 +307,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
         _eventSubscription = widget.store.eventStream.listen(_handleEvent);
 
-        _configSubscription = widget.store.configStream.listen((_) {
-          if (!mounted) {
-            return;
-          }
-          final position = _lastPointerPosition;
-          if (position != null && _isPointerInside) {
-            _updateCursorAndHoverForPosition(position);
-          } else {
-            _updateCursorIfChanged(
-              _resolveCursorForState(widget.store.state, position),
-            );
-          }
-        });
+        _configSubscription = widget.store.configStream.listen(
+          _handleConfigChange,
+        );
 
         _stateViewBuilder = DrawStateViewBuilder(
           editOperations: widget.store.context.editOperations,
@@ -890,6 +868,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _updateCursorIfChanged(
         _resolveCursorForState(widget.store.state, position),
       );
+      _clearHoverState();
     }
   }
 
@@ -2514,6 +2493,35 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _clearHoverState();
     // Rebuild unconditionally so the canvas reflects the new state.
     setState(() {});
+  }
+
+  void _handleConfigChange(DrawConfig _) {
+    if (!mounted) {
+      return;
+    }
+
+    final previousSelectionHoverId = _hoveredSelectionElementId;
+    final previousBindingHoverId = _hoveredBindingElementId;
+    final previousArrowHoverHandle = _hoveredArrowHandle;
+    final position = _lastPointerPosition;
+
+    if (position != null && _isPointerInside) {
+      _updateCursorAndHoverForPosition(position);
+    } else {
+      _updateCursorIfChanged(
+        _resolveCursorForState(widget.store.state, position),
+      );
+      _clearHoverState();
+    }
+
+    final hoverStateChanged =
+        previousSelectionHoverId != _hoveredSelectionElementId ||
+        previousBindingHoverId != _hoveredBindingElementId ||
+        previousArrowHoverHandle != _hoveredArrowHandle;
+
+    if (!hoverStateChanged) {
+      setState(() {});
+    }
   }
 
   void _updateCursorIfChanged(MouseCursor nextCursor) {
