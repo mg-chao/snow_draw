@@ -153,4 +153,47 @@ void main() {
     registry.notify(prev, next);
     expect(states, hasLength(1));
   });
+
+  test('empty changeTypes behaves as an unfiltered listener', () {
+    final states = <DrawState>[];
+    registry.register(states.add, changeTypes: <DrawStateChange>{});
+
+    final prev = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
+        ),
+      ),
+    );
+
+    registry.notify(prev, next);
+    expect(states, hasLength(1));
+  });
+
+  test('listener keeps a stable changeTypes snapshot at registration', () {
+    final states = <DrawState>[];
+    final mutableChangeTypes = <DrawStateChange>{DrawStateChange.selection};
+    registry.register(states.add, changeTypes: mutableChangeTypes);
+
+    mutableChangeTypes
+      ..clear()
+      ..add(DrawStateChange.view);
+
+    final prev = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
+        ),
+      ),
+    );
+
+    registry.notify(prev, next);
+    expect(states, hasLength(1));
+  });
 }

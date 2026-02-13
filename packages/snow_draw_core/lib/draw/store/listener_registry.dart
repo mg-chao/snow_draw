@@ -31,20 +31,18 @@ class ListenerRegistry {
   /// [changeTypes] optionally specifies which change types the listener cares
   /// about.
   ///
+  /// Passing `null` or an empty set listens to all state changes.
+  ///
   /// If the listener is already registered, update its changeTypes
   /// (deduped).
   VoidCallback register(
     StateChangeListener<DrawState> listener, {
     Set<DrawStateChange>? changeTypes,
   }) {
-    // If the listener already exists, update its config.
-    if (_listeners.containsKey(listener)) {
-      _listeners[listener] = _ListenerEntry(listener, changeTypes);
-    } else {
-      // New listener: add to the map (preserves insertion order).
-      final entry = _ListenerEntry(listener, changeTypes);
-      _listeners[listener] = entry;
-    }
+    final normalizedChangeTypes = _normalizeChangeTypes(changeTypes);
+
+    // Existing listeners keep their original order in the linked map.
+    _listeners[listener] = _ListenerEntry(listener, normalizedChangeTypes);
 
     return () => unregister(listener);
   }
@@ -80,7 +78,7 @@ class ListenerRegistry {
     // Use List.of() to avoid map mutation during notification.
     for (final listener in List.of(_listeners.keys)) {
       final entry = _listeners[listener];
-      if (entry != null && entry.shouldNotify(changes)) {
+      if (entry != null) {
         try {
           entry.notify(context);
         } on Object catch (error, stackTrace) {
@@ -104,40 +102,24 @@ class ListenerRegistry {
 
   /// Whether non-empty.
   bool get isNotEmpty => _listeners.isNotEmpty;
+
+  Set<DrawStateChange>? _normalizeChangeTypes(Set<DrawStateChange>? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return Set<DrawStateChange>.unmodifiable(Set<DrawStateChange>.of(value));
+  }
 }
 
 /// Listener entry.
 ///
-/// Internal class that stores a listener and its filter criteria.
+/// Internal class that stores a listener and its prebuilt notify chain.
 class _ListenerEntry {
-  _ListenerEntry(this.listener, this.changeTypes)
-    : _chain = changeTypes != null
-          ? StateChangeChain.forChanges(changeTypes)
-          : null;
+  _ListenerEntry(this.listener, Set<DrawStateChange>? changeTypes)
+    : _chain = StateChangeChain.forChanges(changeTypes);
   final StateChangeListener<DrawState> listener;
-  final Set<DrawStateChange>? changeTypes;
-  final StateChangeChain? _chain;
-
-  /// Determine whether to notify this listener.
-  ///
-  /// If changeTypes is not specified, always notify.
-  /// Otherwise, notify only if changes include the listener's interests.
-  bool shouldNotify(Set<DrawStateChange> changes) {
-    if (changeTypes == null) {
-      return true;
-    }
-    return changes.any(changeTypes!.contains);
-  }
+  final StateChangeChain _chain;
 
   /// Notify the listener.
-  ///
-  /// Use StateChangeChain when available; otherwise call the listener directly.
-  void notify(StateChangeContext context) {
-    final chain = _chain;
-    if (chain != null) {
-      chain.notify(context, listener);
-    } else {
-      listener(context.next);
-    }
-  }
+  void notify(StateChangeContext context) => _chain.notify(context, listener);
 }
