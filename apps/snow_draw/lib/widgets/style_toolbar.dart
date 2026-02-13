@@ -11,6 +11,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import '../icons/svg_icons.dart';
 import '../l10n/app_localizations.dart';
 import '../property_descriptor.dart';
+import '../property_ids.dart';
 import '../property_registry.dart';
 import '../style_toolbar_state.dart';
 import '../system_fonts.dart';
@@ -1552,109 +1553,98 @@ class _StyleToolbarState extends State<StyleToolbar> {
     StyleToolbarState state,
   ) {
     final context = _createPropertyContext(state);
-    final allProperties = PropertyRegistry.instance.getApplicableProperties(
-      context,
+    final registry = PropertyRegistry.instance;
+    final allProperties = registry.getApplicableProperties(context);
+    final fillColorProp = registry.getProperty(PropertyIds.fillColor);
+    final fillColor = fillColorProp == null
+        ? null
+        : fillColorProp.extractValue(context) as MixedValue<Color>;
+    final textStrokeWidthProp = registry.getProperty(
+      PropertyIds.textStrokeWidth,
     );
+    final textStrokeWidth = textStrokeWidthProp == null
+        ? null
+        : textStrokeWidthProp.extractValue(context) as MixedValue<double>;
+    final textStrokeDefaultWidth = textStrokeWidthProp == null
+        ? null
+        : textStrokeWidthProp.getDefaultValue(context) as double;
+    final highlightTextStrokeWidthProp = registry.getProperty(
+      PropertyIds.highlightTextStrokeWidth,
+    );
+    final highlightTextStrokeWidth = highlightTextStrokeWidthProp == null
+        ? null
+        : highlightTextStrokeWidthProp.extractValue(context)
+              as MixedValue<double>;
+    final highlightTextStrokeDefaultWidth = highlightTextStrokeWidthProp == null
+        ? null
+        : highlightTextStrokeWidthProp.getDefaultValue(context) as double;
+    final filterTypeProp = registry.getProperty(PropertyIds.filterType);
+    final filterType = filterTypeProp == null
+        ? null
+        : filterTypeProp.extractValue(context) as MixedValue<CanvasFilterType>;
+    final filterDefaultType = filterTypeProp == null
+        ? null
+        : filterTypeProp.getDefaultValue(context) as CanvasFilterType;
 
-    // Filter properties based on conditional visibility rules
     return allProperties.where((property) {
-      // Hide fillStyle if fillColor is transparent
-      if (property.id == 'fillStyle') {
-        final fillColorProp = PropertyRegistry.instance.getProperty(
-          'fillColor',
-        );
-        if (fillColorProp != null) {
-          final fillColor =
-              fillColorProp.extractValue(context) as MixedValue<Color>;
-          final fillColorValue = fillColor.value;
-          // Show fillStyle only if color is mixed or has alpha > 0
-          if (!fillColor.isMixed &&
-              fillColorValue != null &&
-              fillColorValue.a == 0) {
-            return false;
-          }
-        }
+      if (property.id == PropertyIds.fillStyle &&
+          _isTransparentColor(fillColor)) {
+        return false;
       }
 
-      // Hide textStrokeColor if textStrokeWidth is 0
-      if (property.id == 'textStrokeColor') {
-        final textStrokeWidthProp = PropertyRegistry.instance.getProperty(
-          'textStrokeWidth',
-        );
-        if (textStrokeWidthProp != null) {
-          final textStrokeWidth =
-              textStrokeWidthProp.extractValue(context) as MixedValue<double>;
-          final defaultWidth =
-              textStrokeWidthProp.getDefaultValue(context) as double;
-          // Show textStrokeColor only if width is mixed or > 0
-          if (!textStrokeWidth.isMixed &&
-              (textStrokeWidth.value ?? defaultWidth) <= 0) {
-            return false;
-          }
-        }
+      if (property.id == PropertyIds.textStrokeColor &&
+          _isStrokeColorHidden(textStrokeWidth, textStrokeDefaultWidth)) {
+        return false;
       }
 
-      // Hide highlightTextStrokeColor if highlightTextStrokeWidth is 0
-      if (property.id == 'highlightTextStrokeColor') {
-        final textStrokeWidthProp = PropertyRegistry.instance.getProperty(
-          'highlightTextStrokeWidth',
-        );
-        if (textStrokeWidthProp != null) {
-          final textStrokeWidth =
-              textStrokeWidthProp.extractValue(context) as MixedValue<double>;
-          final defaultWidth =
-              textStrokeWidthProp.getDefaultValue(context) as double;
-          if (!textStrokeWidth.isMixed &&
-              (textStrokeWidth.value ?? defaultWidth) <= 0) {
-            return false;
-          }
-        }
+      if (property.id == PropertyIds.highlightTextStrokeColor &&
+          _isStrokeColorHidden(
+            highlightTextStrokeWidth,
+            highlightTextStrokeDefaultWidth,
+          )) {
+        return false;
       }
 
-      // Hide cornerRadius for text if fillColor is transparent
-      if (property.id == 'cornerRadius') {
-        // Only apply this rule if we have text elements selected
-        if (context.selectedElementTypes.contains(ElementType.text)) {
-          final fillColorProp = PropertyRegistry.instance.getProperty(
-            'fillColor',
-          );
-          if (fillColorProp != null) {
-            final fillColor =
-                fillColorProp.extractValue(context) as MixedValue<Color>;
-            final fillColorValue = fillColor.value;
-            // For text, show cornerRadius only if fillColor is mixed or has
-            // alpha > 0
-            if (!fillColor.isMixed &&
-                fillColorValue != null &&
-                fillColorValue.a == 0) {
-              return false;
-            }
-          }
-        }
+      if (property.id == PropertyIds.cornerRadius &&
+          context.selectedElementTypes.contains(ElementType.text) &&
+          _isTransparentColor(fillColor)) {
+        return false;
       }
 
-      // Filter strength only applies to mosaic/gaussian blur.
-      if (property.id == 'filterStrength') {
-        final filterTypeProp = PropertyRegistry.instance.getProperty(
-          'filterType',
-        );
-        if (filterTypeProp != null) {
-          final filterType =
-              filterTypeProp.extractValue(context)
-                  as MixedValue<CanvasFilterType>;
-          final defaultType =
-              filterTypeProp.getDefaultValue(context) as CanvasFilterType;
-          final effectiveType = filterType.value ?? defaultType;
-          if (!filterType.isMixed &&
-              effectiveType != CanvasFilterType.mosaic &&
-              effectiveType != CanvasFilterType.gaussianBlur) {
-            return false;
-          }
-        }
+      if (property.id == PropertyIds.filterStrength &&
+          _isFilterStrengthHidden(filterType, filterDefaultType)) {
+        return false;
       }
 
       return true;
     }).toList();
+  }
+
+  bool _isTransparentColor(MixedValue<Color>? value) {
+    if (value == null || value.isMixed) {
+      return false;
+    }
+    final color = value.value;
+    return color != null && color.a == 0;
+  }
+
+  bool _isStrokeColorHidden(MixedValue<double>? width, double? defaultWidth) {
+    if (width == null || defaultWidth == null || width.isMixed) {
+      return false;
+    }
+    return (width.value ?? defaultWidth) <= 0;
+  }
+
+  bool _isFilterStrengthHidden(
+    MixedValue<CanvasFilterType>? type,
+    CanvasFilterType? defaultType,
+  ) {
+    if (type == null || defaultType == null || type.isMixed) {
+      return false;
+    }
+    final effectiveType = type.value ?? defaultType;
+    return effectiveType != CanvasFilterType.mosaic &&
+        effectiveType != CanvasFilterType.gaussianBlur;
   }
 
   /// Build the widget for a specific property
@@ -1664,7 +1654,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     StyleToolbarState state,
   ) {
     switch (property.id) {
-      case 'color':
+      case PropertyIds.color:
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
         final colors = context.hasOnlySelected({ElementType.highlight})
@@ -1679,7 +1669,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           allowAlpha: true,
         );
 
-      case 'highlightShape':
+      case PropertyIds.highlightShape:
         final value =
             property.extractValue(context) as MixedValue<HighlightShape>;
         return _buildStyleOptions<HighlightShape>(
@@ -1705,7 +1695,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           ),
         );
 
-      case 'highlightTextStrokeWidth':
+      case PropertyIds.highlightTextStrokeWidth:
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.highlightTextStrokeWidth,
@@ -1740,7 +1730,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           ),
         );
 
-      case 'highlightTextStrokeColor':
+      case PropertyIds.highlightTextStrokeColor:
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
         return _buildColorRow(
@@ -1755,12 +1745,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
           allowAlpha: true,
         );
 
-      case 'filterType':
+      case PropertyIds.filterType:
         final value =
             property.extractValue(context) as MixedValue<CanvasFilterType>;
         return _buildFilterTypeSelect(value: value);
 
-      case 'filterStrength':
+      case PropertyIds.filterStrength:
         final value = property.extractValue(context) as MixedValue<double>;
         final defaultValue = property.getDefaultValue(context) as double;
         return _buildSliderControl(
@@ -1781,7 +1771,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           },
         );
 
-      case 'strokeWidth':
+      case PropertyIds.strokeWidth:
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.strokeWidth,
@@ -1808,7 +1798,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onSelect: (value) => _applyStyleUpdate(strokeWidth: value),
         );
 
-      case 'strokeStyle':
+      case PropertyIds.strokeStyle:
         final value = property.extractValue(context) as MixedValue<StrokeStyle>;
         return _buildStyleOptions<StrokeStyle>(
           label: widget.strings.strokeStyle,
@@ -1835,7 +1825,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onSelect: (style) => _applyStyleUpdate(strokeStyle: style),
         );
 
-      case 'fillColor':
+      case PropertyIds.fillColor:
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
         return _buildColorRow(
@@ -1853,7 +1843,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           allowAlpha: true,
         );
 
-      case 'fillStyle':
+      case PropertyIds.fillStyle:
         final value = property.extractValue(context) as MixedValue<FillStyle>;
         return _buildStyleOptions<FillStyle>(
           label: widget.strings.fillStyle,
@@ -1880,7 +1870,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onSelect: (style) => _applyStyleUpdate(fillStyle: style),
         );
 
-      case 'cornerRadius':
+      case PropertyIds.cornerRadius:
         final value = property.extractValue(context) as MixedValue<double>;
         final defaultValue = property.getDefaultValue(context) as double;
         return _buildSliderControl(
@@ -1903,7 +1893,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           },
         );
 
-      case 'opacity':
+      case PropertyIds.opacity:
         final value = property.extractValue(context) as MixedValue<double>;
         final defaultValue = property.getDefaultValue(context) as double;
         return _buildSliderControl(
@@ -1924,7 +1914,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           },
         );
 
-      case 'maskColor':
+      case PropertyIds.maskColor:
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
         return _buildColorRow(
@@ -1936,7 +1926,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           allowAlpha: false,
         );
 
-      case 'maskOpacity':
+      case PropertyIds.maskOpacity:
         final value = property.extractValue(context) as MixedValue<double>;
         final defaultValue = property.getDefaultValue(context) as double;
         return _buildSliderControl(
@@ -1959,7 +1949,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           },
         );
 
-      case 'arrowType':
+      case PropertyIds.arrowType:
         final value = property.extractValue(context) as MixedValue<ArrowType>;
         return _buildStyleOptions<ArrowType>(
           label: widget.strings.arrowType,
@@ -1986,14 +1976,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onSelect: (value) => _applyStyleUpdate(arrowType: value),
         );
 
-      case 'startArrowhead':
+      case PropertyIds.startArrowhead:
         // This case is handled together with endArrowhead
         return null;
 
-      case 'endArrowhead':
+      case PropertyIds.endArrowhead:
         // Render both start and end arrowhead controls together
         final startProp = PropertyRegistry.instance.getProperty(
-          'startArrowhead',
+          PropertyIds.startArrowhead,
         );
         final endProp = property;
 
@@ -2016,7 +2006,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           endDefault: endDefault,
         );
 
-      case 'serialNumber':
+      case PropertyIds.serialNumber:
         final value = property.extractValue(context) as MixedValue<int>;
         final defaultValue = property.getDefaultValue(context) as int;
         return _buildSerialNumberControl(
@@ -2024,7 +2014,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           defaultValue: defaultValue,
         );
 
-      case 'fontSize':
+      case PropertyIds.fontSize:
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildStyleOptions<double>(
           label: widget.strings.fontSize,
@@ -2056,14 +2046,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onSelect: (size) => _applyStyleUpdate(fontSize: size),
         );
 
-      case 'fontFamily':
+      case PropertyIds.fontFamily:
         final value = property.extractValue(context) as MixedValue<String>;
         return _buildFontFamilyControl(
           value: value,
           onSelect: (family) => _applyStyleUpdate(fontFamily: family),
         );
 
-      case 'textAlign':
+      case PropertyIds.textAlign:
         final value =
             property.extractValue(context) as MixedValue<TextHorizontalAlign>;
         return _buildTextAlignmentControl(
@@ -2071,7 +2061,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           onHorizontalSelect: (align) => _applyStyleUpdate(textAlign: align),
         );
 
-      case 'textStrokeWidth':
+      case PropertyIds.textStrokeWidth:
         final value = property.extractValue(context) as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.textStrokeWidth,
@@ -2106,7 +2096,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           ),
         );
 
-      case 'textStrokeColor':
+      case PropertyIds.textStrokeColor:
         final value = property.extractValue(context) as MixedValue<Color>;
         final defaultValue = property.getDefaultValue(context) as Color;
         return _buildColorRow(
