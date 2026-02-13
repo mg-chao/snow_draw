@@ -142,13 +142,14 @@ void clearStrokePatternCaches() {
 /// Content-based key for the shared line shader cache.
 @immutable
 class LineShaderKey {
-  /// Creates a key with quantized spacing and line width.
+  /// Creates a key with quantized spacing, line width, and angle.
   LineShaderKey({
     required double spacing,
     required double lineWidth,
-    required this.angle,
+    required double angle,
   }) : spacing = _quantize(spacing),
-       lineWidth = _quantize(lineWidth);
+       lineWidth = _quantize(lineWidth),
+       angle = _quantize(angle);
 
   /// Quantized spacing value.
   final double spacing;

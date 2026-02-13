@@ -6,11 +6,43 @@ import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
 
 void main() {
   group('LineShaderKey', () {
-    test('quantizes spacing and lineWidth', () {
+    test('quantizes spacing, lineWidth, and angle', () {
       final key = LineShaderKey(spacing: 5.123, lineWidth: 2.789, angle: 0.5);
       expect(key.spacing, 5.1);
       expect(key.lineWidth, 2.8);
       expect(key.angle, 0.5);
+    });
+
+    test('quantizes angle so near-identical values match', () {
+      final a = LineShaderKey(
+        spacing: 5.0,
+        lineWidth: 2.0,
+        angle: 0.7853981633974483,
+      );
+      final b = LineShaderKey(
+        spacing: 5.0,
+        lineWidth: 2.0,
+        angle: 0.7854,
+      );
+      expect(a, equals(b));
+      expect(a.hashCode, b.hashCode);
+    });
+
+    test('cache hits for near-identical angles', () {
+      clearStrokePatternCaches();
+      final paint1 = buildLineFillPaint(
+        spacing: 8.0,
+        lineWidth: 1.5,
+        angle: 0.7853981633974483,
+        color: const Color(0xFFFF0000),
+      );
+      final paint2 = buildLineFillPaint(
+        spacing: 8.0,
+        lineWidth: 1.5,
+        angle: 0.7854,
+        color: const Color(0xFF00FF00),
+      );
+      expect(identical(paint1.shader, paint2.shader), isTrue);
     });
 
     test('equal keys match', () {
