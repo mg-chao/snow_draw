@@ -1,6 +1,7 @@
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/selection_derived_data.dart';
+import '../../services/selection_data_computer.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
@@ -60,25 +61,35 @@ EditPreview buildEditPreview({
   );
 }
 
+/// Builds a snapshot map from selected elements.
+///
+/// Each element is mapped to a lean snapshot via [toSnapshot], keyed by
+/// element id. This generic helper replaces the three near-identical
+/// `buildMoveSnapshots`, `buildResizeSnapshots`, and
+/// `buildRotateSnapshots` functions.
+Map<String, S> buildSnapshots<S>(
+  Iterable<ElementState> elements,
+  S Function(ElementState) toSnapshot,
+) => {for (final e in elements) e.id: toSnapshot(e)};
+
 Map<String, ElementMoveSnapshot> buildMoveSnapshots(
   Iterable<ElementState> elements,
-) => {
-  for (final e in elements) e.id: ElementMoveSnapshot(center: e.rect.center),
-};
+) =>
+    buildSnapshots(elements, (e) => ElementMoveSnapshot(center: e.rect.center));
 
 Map<String, ElementResizeSnapshot> buildResizeSnapshots(
   Iterable<ElementState> elements,
-) => {
-  for (final e in elements)
-    e.id: ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
-};
+) => buildSnapshots(
+  elements,
+  (e) => ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
+);
 
 Map<String, ElementRotateSnapshot> buildRotateSnapshots(
   Iterable<ElementState> elements,
-) => {
-  for (final e in elements)
-    e.id: ElementRotateSnapshot(center: e.rect.center, rotation: e.rotation),
-};
+) => buildSnapshots(
+  elements,
+  (e) => ElementRotateSnapshot(center: e.rect.center, rotation: e.rotation),
+);
 
 C requireContext<C extends EditContext>(
   EditContext context, {
@@ -137,3 +148,50 @@ List<ElementState> resolveReferenceElements(
       (element) => element.opacity > 0 && !selectedIds.contains(element.id),
     )
     .toList();
+
+/// Common context-creation data shared by standard operations.
+///
+/// Captures selection bounds, selected IDs, element snapshots, and
+/// version numbers in one call, eliminating the repeated boilerplate
+/// in [MoveOperation], [ResizeOperation], and [RotateOperation].
+class StandardContextData<S> {
+  const StandardContextData({
+    required this.startBounds,
+    required this.selectedIds,
+    required this.selectionVersion,
+    required this.elementsVersion,
+    required this.elementSnapshots,
+  });
+
+  final DrawRect startBounds;
+  final Set<String> selectedIds;
+  final int selectionVersion;
+  final int elementsVersion;
+  final Map<String, S> elementSnapshots;
+}
+
+/// Gathers the common context-creation data for standard operations.
+StandardContextData<S> gatherStandardContextData<S>({
+  required DrawState state,
+  required String operationName,
+  required S Function(ElementState) toSnapshot,
+  DrawRect? initialSelectionBounds,
+}) {
+  final selectionData = SelectionDataComputer.compute(state);
+  final startBounds = requireSelectionBounds(
+    selectionData: selectionData,
+    initialSelectionBounds: initialSelectionBounds,
+    operationName: operationName,
+  );
+  final selectedIds = {...state.domain.selection.selectedIds};
+  final elements = snapshotSelectedElements(state);
+  final snapshots = buildSnapshots(elements, toSnapshot);
+
+  return StandardContextData<S>(
+    startBounds: startBounds,
+    selectedIds: selectedIds,
+    selectionVersion: state.domain.selection.selectionVersion,
+    elementsVersion: state.domain.document.elementsVersion,
+    elementSnapshots: snapshots,
+  );
+}

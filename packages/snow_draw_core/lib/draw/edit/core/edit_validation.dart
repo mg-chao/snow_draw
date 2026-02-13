@@ -1,5 +1,6 @@
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
+import '../../types/edit_transform.dart';
 import 'edit_errors.dart';
 
 /// Shared validation rules for edit operations.
@@ -52,4 +53,22 @@ class EditValidation {
 
   static bool isValidForEdit(EditContext context) =>
       isValidContext(context) && isValidBounds(context.startBounds);
+
+  /// Whether the compute pipeline should short-circuit and return null.
+  ///
+  /// Combines the context/bounds validation with the identity-transform
+  /// check that every standard operation repeats in `computeResult`.
+  static bool shouldSkipCompute({
+    required EditContext context,
+    required EditTransform transform,
+    bool requireValidBounds = true,
+  }) {
+    if (!isValidContext(context)) {
+      return true;
+    }
+    if (requireValidBounds && !isValidBounds(context.startBounds)) {
+      return true;
+    }
+    return transform.isIdentity;
+  }
 }

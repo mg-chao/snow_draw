@@ -15,7 +15,7 @@ import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../models/interaction_state.dart';
+import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
@@ -28,15 +28,16 @@ import '../../utils/combined_element_lookup.dart';
 import '../../utils/list_equality.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
+import '../core/edit_computed_result.dart';
 import '../core/edit_errors.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
 import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
-import '../preview/edit_preview.dart';
+import '../core/standard_finish_mixin.dart';
 
-class ArrowPointOperation extends EditOperation {
+class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   const ArrowPointOperation();
 
   @override
@@ -317,86 +318,66 @@ class ArrowPointOperation extends EditOperation {
   }
 
   @override
-  DrawState finish({
+  EditComputedResult? computeResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
-  }) {
-    final typedContext = requireContext<ArrowPointEditContext>(
-      context,
-      operationName: 'ArrowPointOperation.finish',
-    );
-    final typedTransform = requireTransform<ArrowPointTransform>(
-      transform,
-      operationName: 'ArrowPointOperation.finish',
-    );
-    if (!typedTransform.hasChanges) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final points = List<DrawPoint>.from(typedTransform.points);
-    if (typedTransform.shouldDelete &&
-        typedTransform.activeIndex != null &&
-        typedTransform.activeIndex! > 0 &&
-        typedTransform.activeIndex! < points.length - 1) {
-      points.removeAt(typedTransform.activeIndex!);
-    }
-
-    if (points.length < 2) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final element = state.domain.document.getElementById(
-      typedContext.elementId,
-    );
-    if (element == null || element.data is! ArrowLikeData) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final updatedElement = _buildUpdatedElement(
-      element: element,
-      context: typedContext,
-      transform: typedTransform,
-      elementMap: state.domain.document.elementMap,
-      localPoints: points,
-      finalize: true,
-    );
-    final updatedElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
-      replacementsById: {updatedElement.id: updatedElement},
-    );
-
-    return state.copyWith(
-      domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: updatedElements),
-      ),
-      application: state.application.copyWith(interaction: const IdleState()),
-    );
-  }
+  }) => _computeArrowResult(
+    state: state,
+    context: context,
+    transform: transform,
+    applyDeletion: false,
+  );
 
   @override
-  EditPreview buildPreview({
+  EditComputedResult? computeFinishResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
+  }) => _computeArrowResult(
+    state: state,
+    context: context,
+    transform: transform,
+    applyDeletion: true,
+  );
+
+  @override
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
+    required EditContext context,
+  }) => current;
+
+  EditComputedResult? _computeArrowResult({
+    required DrawState state,
+    required EditContext context,
+    required EditTransform transform,
+    required bool applyDeletion,
   }) {
     final typedContext = requireContext<ArrowPointEditContext>(
       context,
-      operationName: 'ArrowPointOperation.buildPreview',
+      operationName: 'ArrowPointOperation.computeResult',
     );
     final typedTransform = requireTransform<ArrowPointTransform>(
       transform,
-      operationName: 'ArrowPointOperation.buildPreview',
+      operationName: 'ArrowPointOperation.computeResult',
     );
     if (!typedTransform.hasChanges) {
-      return EditPreview.none;
+      return null;
+    }
+
+    final localPoints = applyDeletion
+        ? _applyPointDeletion(typedTransform)
+        : typedTransform.points;
+    if (localPoints.length < 2) {
+      return null;
     }
 
     final element = state.domain.document.getElementById(
       typedContext.elementId,
     );
     if (element == null || element.data is! ArrowLikeData) {
-      return EditPreview.none;
+      return null;
     }
 
     final updatedElement = _buildUpdatedElement(
@@ -404,15 +385,28 @@ class ArrowPointOperation extends EditOperation {
       context: typedContext,
       transform: typedTransform,
       elementMap: state.domain.document.elementMap,
-      localPoints: typedTransform.points,
+      localPoints: localPoints,
+      finalize: applyDeletion,
     );
 
-    return buildEditPreview(
-      state: state,
-      context: typedContext,
-      previewElementsById: {updatedElement.id: updatedElement},
+    return EditComputedResult(
+      updatedElements: {updatedElement.id: updatedElement},
     );
   }
+}
+
+/// Removes the active point when [ArrowPointTransform.shouldDelete] is set.
+///
+/// Returns the original points list when no deletion is needed.
+List<DrawPoint> _applyPointDeletion(ArrowPointTransform transform) {
+  if (!transform.shouldDelete ||
+      transform.activeIndex == null ||
+      transform.activeIndex! <= 0 ||
+      transform.activeIndex! >= transform.points.length - 1) {
+    return transform.points;
+  }
+  return List<DrawPoint>.from(transform.points)
+    ..removeAt(transform.activeIndex!);
 }
 
 /// Builds the updated [ElementState] for both [finish] and [buildPreview],

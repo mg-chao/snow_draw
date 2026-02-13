@@ -15,6 +15,7 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_geometry.dart';
 import '../../types/resize_mode.dart';
 import '../../types/snap_guides.dart';
 import '../../utils/handle_calculator.dart';
@@ -98,8 +99,9 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     }
 
     final selectedIdsAtStart = {...state.domain.selection.selectedIds};
-    final elementSnapshots = buildResizeSnapshots(
+    final elementSnapshots = buildSnapshots(
       snapshotSelectedElements(state),
+      (e) => ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
     );
 
     return ResizeEditContext(
@@ -222,7 +224,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       final zoom = state.application.view.camera.zoom;
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       final snapDistance = snapConfig.distance / effectiveZoom;
-      final referenceElements = _resolveReferenceElements(
+      final referenceElements = resolveReferenceElements(
         state,
         typedContext.selectedIdsAtStart,
       );
@@ -303,9 +305,11 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     if (!typedTransform.isComplete) {
       return null;
     }
-    if (!EditValidation.isValidContext(typedContext) ||
-        (!EditValidation.isValidBounds(typedContext.startBounds) &&
-            !typedContext.isSingleSelect)) {
+    if (EditValidation.shouldSkipCompute(
+      context: typedContext,
+      transform: typedTransform,
+      requireValidBounds: !typedContext.isSingleSelect,
+    )) {
       return null;
     }
 
@@ -376,11 +380,6 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       if (moveMaxY) SnapAxisAnchor.end,
     ];
   }
-
-  List<ElementState> _resolveReferenceElements(
-    DrawState state,
-    Set<String> selectedIds,
-  ) => resolveReferenceElements(state, selectedIds);
 
   bool _isIdentityTransform(
     double scaleX,

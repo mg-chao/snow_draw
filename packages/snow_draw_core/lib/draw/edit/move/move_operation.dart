@@ -9,12 +9,12 @@ import '../../models/multi_select_lifecycle.dart';
 import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
-import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_geometry.dart';
 import '../../types/snap_guides.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
@@ -61,24 +61,20 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       params,
       operationName: 'MoveOperation.createContext',
     );
-    final startBounds = requireSelectionBounds(
-      selectionData: SelectionDataComputer.compute(state),
-      initialSelectionBounds: typedParams.initialSelectionBounds,
+    final data = gatherStandardContextData(
+      state: state,
       operationName: 'MoveOperation.createContext',
-    );
-
-    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
-    final elementSnapshots = buildMoveSnapshots(
-      snapshotSelectedElements(state),
+      toSnapshot: (e) => ElementMoveSnapshot(center: e.rect.center),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
     );
 
     return MoveEditContext(
       startPosition: position,
-      startBounds: startBounds,
-      selectedIdsAtStart: selectedIdsAtStart,
-      selectionVersion: state.domain.selection.selectionVersion,
-      elementsVersion: state.domain.document.elementsVersion,
-      elementSnapshots: elementSnapshots,
+      startBounds: data.startBounds,
+      selectedIdsAtStart: data.selectedIds,
+      selectionVersion: data.selectionVersion,
+      elementsVersion: data.elementsVersion,
+      elementSnapshots: data.elementSnapshots,
     );
   }
 
@@ -141,7 +137,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       final targetRect = baseSnapBounds.translate(
         DrawPoint(x: displacement.dx, y: displacement.dy),
       );
-      final referenceElements = _resolveReferenceElements(
+      final referenceElements = resolveReferenceElements(
         state,
         typedContext.selectedIdsAtStart,
       );
@@ -193,11 +189,10 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       transform,
       operationName: 'MoveOperation.computeResult',
     );
-    if (!EditValidation.isValidContext(typedContext) ||
-        !EditValidation.isValidBounds(typedContext.startBounds)) {
-      return null;
-    }
-    if (typedTransform.isIdentity) {
+    if (EditValidation.shouldSkipCompute(
+      context: typedContext,
+      transform: typedTransform,
+    )) {
       return null;
     }
 
@@ -229,11 +224,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     current,
     newBounds: result.multiSelectBounds!,
   );
-
-  List<ElementState> _resolveReferenceElements(
-    DrawState state,
-    Set<String> selectedIds,
-  ) => resolveReferenceElements(state, selectedIds);
 
   List<ElementState> _resolveTargetElements(
     DrawState state,

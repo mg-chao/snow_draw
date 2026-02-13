@@ -5,11 +5,11 @@ import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/multi_select_lifecycle.dart';
 import '../../models/selection_overlay_state.dart';
-import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_geometry.dart';
 import '../../types/element_style.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_compute_pipeline.dart';
@@ -55,59 +55,47 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       params,
       operationName: 'RotateOperation.createContext',
     );
-    final selectionData = SelectionDataComputer.compute(state);
-    final startBounds = requireSelectionBounds(
-      selectionData: selectionData,
-      initialSelectionBounds: typedParams.initialSelectionBounds,
+    final data = gatherStandardContextData(
+      state: state,
       operationName: 'RotateOperation.createContext',
+      toSnapshot: (e) =>
+          ElementRotateSnapshot(center: e.rect.center, rotation: e.rotation),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
     );
-
-    final selectedElements = snapshotSelectedElements(state);
-    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
-    final elementSnapshots = buildRotateSnapshots(selectedElements);
     final startAngle =
         typedParams.startRotationAngle ??
         AngleCalculator.rawAngle(
           currentPosition: position,
-          center: startBounds.center,
+          center: data.startBounds.center,
         );
     final rotationSnapAngle = typedParams.rotationSnapAngle ?? 0.0;
 
-    final isMulti = selectedIdsAtStart.length > 1;
+    final isMulti = data.selectedIds.length > 1;
     final double baseRotation;
     if (isMulti) {
-      // Multi-select uses the persistent overlay rotation stored in
-      // selection state (kept across edit operations until selection count
-      // changes).
       baseRotation =
           state.application.selectionOverlay.multiSelectOverlay?.rotation ??
           0.0;
     } else {
-      final selectedId = selectedIdsAtStart.isEmpty
+      final selectedId = data.selectedIds.isEmpty
           ? null
-          : selectedIdsAtStart.first;
-      ElementState? selectedElement;
-      if (selectedId != null) {
-        for (final element in selectedElements) {
-          if (element.id == selectedId) {
-            selectedElement = element;
-            break;
-          }
-        }
-      }
-      baseRotation = selectedElement?.rotation ?? 0.0;
+          : data.selectedIds.first;
+      final snapshot = selectedId == null
+          ? null
+          : data.elementSnapshots[selectedId];
+      baseRotation = snapshot?.rotation ?? 0.0;
     }
 
     return RotateEditContext(
       startPosition: position,
-      startBounds: startBounds,
-      selectedIdsAtStart: selectedIdsAtStart,
-      selectionVersion: state.domain.selection.selectionVersion,
-      elementsVersion: state.domain.document.elementsVersion,
+      startBounds: data.startBounds,
+      selectedIdsAtStart: data.selectedIds,
+      selectionVersion: data.selectionVersion,
+      elementsVersion: data.elementsVersion,
       startAngle: startAngle,
       baseRotation: baseRotation,
       rotationSnapAngle: rotationSnapAngle,
-      elementSnapshots: elementSnapshots,
+      elementSnapshots: data.elementSnapshots,
     );
   }
 
@@ -194,11 +182,10 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       transform,
       operationName: 'RotateOperation.computeResult',
     );
-    if (!EditValidation.isValidContext(typedContext) ||
-        !EditValidation.isValidBounds(typedContext.startBounds)) {
-      return null;
-    }
-    if (typedTransform.isIdentity) {
+    if (EditValidation.shouldSkipCompute(
+      context: typedContext,
+      transform: typedTransform,
+    )) {
       return null;
     }
 
@@ -227,12 +214,11 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
     required SelectionOverlayState current,
     required EditComputedResult result,
     required EditContext context,
-  }) =>
-      MultiSelectLifecycle.onRotateFinished(
-        current,
-        newRotation: result.multiSelectRotation!,
-        bounds: context.startBounds,
-      );
+  }) => MultiSelectLifecycle.onRotateFinished(
+    current,
+    newRotation: result.multiSelectRotation!,
+    bounds: context.startBounds,
+  );
 
   bool _isElbowArrow(ElementState element) {
     final data = element.data;
