@@ -1,13 +1,12 @@
 import '../../config/draw_config.dart';
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/geometry/resize_geometry.dart';
-import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../models/interaction_state.dart';
 import '../../models/multi_select_lifecycle.dart';
+import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
 import '../../services/selection_data_computer.dart';
@@ -22,7 +21,7 @@ import '../../utils/handle_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../../utils/transforms/edit_transform_context.dart';
 import '../apply/edit_apply.dart';
-import '../core/arrow_binding_cleanup.dart';
+import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -30,11 +29,11 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
-import '../preview/edit_preview.dart';
+import '../core/standard_finish_mixin.dart';
 import 'bounds/bounds_calculation.dart';
 import 'bounds/resize_geometry.dart';
 
-class ResizeOperation extends EditOperation {
+class ResizeOperation extends EditOperation with StandardFinishMixin {
   const ResizeOperation();
 
   @override
@@ -288,150 +287,72 @@ class ResizeOperation extends EditOperation {
   }) => ResizeTransform.incomplete(currentPosition: startPosition);
 
   @override
-  DrawState finish({
+  EditComputedResult? computeResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
   }) {
     final typedContext = requireContext<ResizeEditContext>(
       context,
-      operationName: 'ResizeOperation.finish',
+      operationName: 'ResizeOperation.computeResult',
     );
     final typedTransform = requireTransform<ResizeTransform>(
       transform,
-      operationName: 'ResizeOperation.finish',
+      operationName: 'ResizeOperation.computeResult',
     );
     if (!typedTransform.isComplete) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final newElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
-      replacementsById: result.updatedElements,
-    );
-
-    // Update multi-select overlay state after committing a resize.
-    final newOverlay = typedContext.isMultiSelect
-        ? MultiSelectLifecycle.onResizeFinished(
-            state.application.selectionOverlay,
-            newBounds: result.multiSelectBounds!,
-          )
-        : state.application.selectionOverlay;
-
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
-    );
-    final nextApplication = state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: newOverlay,
-    );
-
-    return state.copyWith(domain: nextDomain, application: nextApplication);
-  }
-
-  @override
-  EditPreview buildPreview({
-    required DrawState state,
-    required EditContext context,
-    required EditTransform transform,
-  }) {
-    final typedContext = requireContext<ResizeEditContext>(
-      context,
-      operationName: 'ResizeOperation.buildPreview',
-    );
-    final typedTransform = requireTransform<ResizeTransform>(
-      transform,
-      operationName: 'ResizeOperation.buildPreview',
-    );
-    if (!typedTransform.isComplete) {
-      return EditPreview.none;
-    }
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return EditPreview.none;
-    }
-
-    return buildEditPreview(
-      state: state,
-      context: typedContext,
-      previewElementsById: result.updatedElements,
-      multiSelectBounds: result.multiSelectBounds,
-    );
-  }
-
-  EditComputedResult? _compute({
-    required DrawState state,
-    required ResizeEditContext context,
-    required ResizeTransform transform,
-  }) {
-    if (!EditValidation.isValidContext(context) ||
-        (!EditValidation.isValidBounds(context.startBounds) &&
-            !context.isSingleSelect)) {
       return null;
     }
-    if (!transform.isComplete) {
+    if (!EditValidation.isValidContext(typedContext) ||
+        (!EditValidation.isValidBounds(typedContext.startBounds) &&
+            !typedContext.isSingleSelect)) {
       return null;
     }
 
-    final startBounds = context.startBounds;
-    final newSelectionBounds = transform.newSelectionBounds!;
-    final scaleX = transform.scaleX!;
-    final scaleY = transform.scaleY!;
-    final anchor = transform.anchor!;
+    final startBounds = typedContext.startBounds;
+    final newSelectionBounds = typedTransform.newSelectionBounds!;
+    final scaleX = typedTransform.scaleX!;
+    final scaleY = typedTransform.scaleY!;
+    final anchor = typedTransform.anchor!;
 
-    if (_isIdentityTransform(scaleX, scaleY, startBounds, newSelectionBounds)) {
+    if (_isIdentityTransform(
+      scaleX,
+      scaleY,
+      startBounds,
+      newSelectionBounds,
+    )) {
       return null;
     }
 
     final updatedById = EditApply.applyResizeToElements(
-      snapshots: context.elementSnapshots,
-      selectedIds: context.selectedIdsAtStart,
-      context: context,
+      snapshots: typedContext.elementSnapshots,
+      selectedIds: typedContext.selectedIdsAtStart,
+      context: typedContext,
       newSelectionBounds: newSelectionBounds,
       scaleX: scaleX,
       scaleY: scaleY,
       anchor: anchor,
       currentElementsById: state.domain.document.elementMap,
     );
-    if (updatedById.isEmpty) {
-      return null;
-    }
 
-    final unboundArrows = unbindArrowLikeElements(
-      transformedElements: updatedById,
-      baseElements: state.domain.document.elementMap,
-    );
-    if (unboundArrows.isNotEmpty) {
-      updatedById.addAll(unboundArrows);
-    }
-
-    final bindingUpdates = ArrowBindingResolver.instance.resolve(
-      baseElements: state.domain.document.elementMap,
-      updatedElements: updatedById,
-      changedElementIds: updatedById.keys.toSet(),
-      document: state.domain.document,
-    );
-    if (bindingUpdates.isNotEmpty) {
-      updatedById.addAll(bindingUpdates);
-    }
-
-    return EditComputedResult(
-      updatedElements: updatedById,
-      multiSelectBounds: context.isMultiSelect ? newSelectionBounds : null,
+    return EditComputePipeline.finalize(
+      state: state,
+      updatedById: updatedById,
+      multiSelectBounds:
+          typedContext.isMultiSelect ? newSelectionBounds : null,
     );
   }
+
+  @override
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
+    required EditContext context,
+  }) =>
+      MultiSelectLifecycle.onResizeFinished(
+        current,
+        newBounds: result.multiSelectBounds!,
+      );
 
   List<SnapAxisAnchor> _resolveAnchorsX(ResizeMode mode) {
     final moveMinX =

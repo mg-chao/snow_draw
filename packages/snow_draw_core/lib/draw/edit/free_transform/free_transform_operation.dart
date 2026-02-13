@@ -1,12 +1,11 @@
 import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
-import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../models/interaction_state.dart';
+import '../../models/selection_overlay_state.dart';
 import '../../models/selection_state.dart';
 import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
@@ -14,8 +13,7 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
-import '../apply/edit_apply.dart';
-import '../core/arrow_binding_cleanup.dart';
+import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -23,10 +21,11 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
-import '../preview/edit_preview.dart';
+import '../core/standard_finish_mixin.dart';
 import 'free_transform_context.dart';
 
-class FreeTransformOperation extends EditOperation {
+class FreeTransformOperation extends EditOperation
+    with StandardFinishMixin {
   const FreeTransformOperation();
 
   @override
@@ -125,84 +124,54 @@ class FreeTransformOperation extends EditOperation {
   }
 
   @override
-  DrawState finish({
+  EditComputedResult? computeResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
   }) {
     final typedContext = requireContext<FreeTransformEditContext>(
       context,
-      operationName: 'FreeTransformOperation.finish',
+      operationName: 'FreeTransformOperation.computeResult',
     );
     final typedTransform = requireTransform<CompositeTransform>(
       transform,
-      operationName: 'FreeTransformOperation.finish',
+      operationName: 'FreeTransformOperation.computeResult',
     );
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final newElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
-      replacementsById: result.updatedElements,
-    );
-
-    final newOverlay = typedContext.isMultiSelect
-        ? state.application.selectionOverlay.copyWith(
-            multiSelectOverlay: MultiSelectOverlayState(
-              bounds: result.multiSelectBounds ?? typedContext.startBounds,
-              rotation:
-                  result.multiSelectRotation ?? typedContext.selectionRotation,
-            ),
-          )
-        : state.application.selectionOverlay;
-
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
-    );
-    final nextApplication = state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: newOverlay,
-    );
-
-    return state.copyWith(domain: nextDomain, application: nextApplication);
-  }
-
-  EditComputedResult? _compute({
-    required DrawState state,
-    required FreeTransformEditContext context,
-    required CompositeTransform transform,
-  }) {
-    if (transform.isIdentity) {
+    if (typedTransform.isIdentity) {
       return null;
     }
-    if (!EditValidation.isValidContext(context)) {
+    if (!EditValidation.isValidContext(typedContext)) {
       return null;
     }
 
-    final pivot = context.startBounds.center;
-    final rotationDelta = _rotationDelta(transform);
+    final pivot = typedContext.startBounds.center;
+    final rotationDelta = _rotationDelta(typedTransform);
     final currentById = state.domain.document.elementMap;
 
     final updatedById = <String, ElementState>{};
-    for (final entry in context.elementSnapshots.entries) {
+    for (final entry in typedContext.elementSnapshots.entries) {
       final snapshot = entry.value;
       final current = currentById[entry.key];
       if (current == null) {
         continue;
       }
 
-      final newCenter = transform.applyToPoint(snapshot.center, pivot: pivot);
-      final newBounds = transform.applyToRect(snapshot.bounds, pivot: pivot);
+      final newCenter = typedTransform.applyToPoint(
+        snapshot.center,
+        pivot: pivot,
+      );
+      final newBounds = typedTransform.applyToRect(
+        snapshot.bounds,
+        pivot: pivot,
+      );
       final newRotation = snapshot.rotation + rotationDelta;
 
       var updated = current.copyWith(
-        rect: _rectFromCenter(newCenter, newBounds.width, newBounds.height),
+        rect: _rectFromCenter(
+          newCenter,
+          newBounds.width,
+          newBounds.height,
+        ),
         rotation: newRotation,
       );
       final data = updated.data;
@@ -221,65 +190,37 @@ class FreeTransformOperation extends EditOperation {
       updatedById[entry.key] = updated;
     }
 
-    final unboundArrows = unbindArrowLikeElements(
-      transformedElements: updatedById,
-      baseElements: state.domain.document.elementMap,
-    );
-    if (unboundArrows.isNotEmpty) {
-      updatedById.addAll(unboundArrows);
-    }
-
-    final bindingUpdates = ArrowBindingResolver.instance.resolve(
-      baseElements: state.domain.document.elementMap,
-      updatedElements: updatedById,
-      changedElementIds: updatedById.keys.toSet(),
-      document: state.domain.document,
-    );
-    if (bindingUpdates.isNotEmpty) {
-      updatedById.addAll(bindingUpdates);
-    }
-
-    final newSelectionBounds = transform.applyToRect(
-      context.startBounds,
+    final newSelectionBounds = typedTransform.applyToRect(
+      typedContext.startBounds,
       pivot: pivot,
     );
 
-    return EditComputedResult(
-      updatedElements: updatedById,
+    return EditComputePipeline.finalize(
+      state: state,
+      updatedById: updatedById,
       multiSelectBounds: newSelectionBounds,
-      multiSelectRotation: context.selectionRotation + rotationDelta,
+      multiSelectRotation:
+          typedContext.selectionRotation + rotationDelta,
     );
   }
 
   @override
-  EditPreview buildPreview({
-    required DrawState state,
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
     required EditContext context,
-    required EditTransform transform,
   }) {
     final typedContext = requireContext<FreeTransformEditContext>(
       context,
-      operationName: 'FreeTransformOperation.buildPreview',
+      operationName: 'FreeTransformOperation.updateOverlay',
     );
-    final typedTransform = requireTransform<CompositeTransform>(
-      transform,
-      operationName: 'FreeTransformOperation.buildPreview',
-    );
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return EditPreview.none;
-    }
-
-    return buildEditPreview(
-      state: state,
-      context: typedContext,
-      previewElementsById: result.updatedElements,
-      multiSelectBounds: result.multiSelectBounds,
-      multiSelectRotation: result.multiSelectRotation,
+    return current.copyWith(
+      multiSelectOverlay: MultiSelectOverlayState(
+        bounds:
+            result.multiSelectBounds ?? typedContext.startBounds,
+        rotation: result.multiSelectRotation ??
+            typedContext.selectionRotation,
+      ),
     );
   }
 

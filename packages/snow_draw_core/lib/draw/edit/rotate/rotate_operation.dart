@@ -1,11 +1,10 @@
 import '../../config/draw_config.dart';
-import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../models/interaction_state.dart';
 import '../../models/multi_select_lifecycle.dart';
+import '../../models/selection_overlay_state.dart';
 import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_context.dart';
@@ -13,7 +12,7 @@ import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
 import '../apply/edit_apply.dart';
-import '../core/arrow_binding_cleanup.dart';
+import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -21,10 +20,10 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
-import '../preview/edit_preview.dart';
+import '../core/standard_finish_mixin.dart';
 import 'angle_calculator.dart';
 
-class RotateOperation extends EditOperation {
+class RotateOperation extends EditOperation with StandardFinishMixin {
   const RotateOperation();
 
   @override
@@ -182,147 +181,58 @@ class RotateOperation extends EditOperation {
   }
 
   @override
-  DrawState finish({
+  EditComputedResult? computeResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
   }) {
     final typedContext = requireContext<RotateEditContext>(
       context,
-      operationName: 'RotateOperation.finish',
+      operationName: 'RotateOperation.computeResult',
     );
     final typedTransform = requireTransform<RotateTransform>(
       transform,
-      operationName: 'RotateOperation.finish',
+      operationName: 'RotateOperation.computeResult',
     );
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return state.copyWith(application: state.application.toIdle());
+    if (!EditValidation.isValidContext(typedContext) ||
+        !EditValidation.isValidBounds(typedContext.startBounds)) {
+      return null;
+    }
+    if (typedTransform.isIdentity) {
+      return null;
     }
 
-    final newElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
-      replacementsById: result.updatedElements,
+    final pivot = typedContext.startBounds.center;
+    final updatedById = EditApply.applyRotateToElements(
+      snapshots: typedContext.elementSnapshots,
+      selectedIds: typedContext.selectedIdsAtStart,
+      pivot: pivot,
+      deltaAngle: typedTransform.appliedAngle,
+      currentElementsById: state.domain.document.elementMap,
     );
 
-    // Update multi-select overlay rotation while keeping bounds stable.
-    final overlay = typedContext.isMultiSelect
-        ? MultiSelectLifecycle.onRotateFinished(
-            state.application.selectionOverlay,
-            newRotation: result.multiSelectRotation!,
-            bounds: typedContext.startBounds,
-          )
-        : state.application.selectionOverlay;
-
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
+    return EditComputePipeline.finalize(
+      state: state,
+      updatedById: updatedById,
+      multiSelectRotation:
+          typedContext.baseRotation + typedTransform.appliedAngle,
+      skipBindingUpdate: (id, element) =>
+          typedContext.selectedIdsAtStart.contains(id) &&
+          _isElbowArrow(element),
     );
-    final nextApplication = state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: overlay,
-    );
-
-    return state.copyWith(domain: nextDomain, application: nextApplication);
   }
 
   @override
-  EditPreview buildPreview({
-    required DrawState state,
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
     required EditContext context,
-    required EditTransform transform,
-  }) {
-    final typedContext = requireContext<RotateEditContext>(
-      context,
-      operationName: 'RotateOperation.buildPreview',
-    );
-    final typedTransform = requireTransform<RotateTransform>(
-      transform,
-      operationName: 'RotateOperation.buildPreview',
-    );
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return EditPreview.none;
-    }
-
-    return buildEditPreview(
-      state: state,
-      context: typedContext,
-      previewElementsById: result.updatedElements,
-      multiSelectRotation: result.multiSelectRotation,
-    );
-  }
-
-  EditComputedResult? _compute({
-    required DrawState state,
-    required RotateEditContext context,
-    required RotateTransform transform,
-  }) {
-    if (!EditValidation.isValidContext(context) ||
-        !EditValidation.isValidBounds(context.startBounds)) {
-      return null;
-    }
-    if (transform.isIdentity) {
-      return null;
-    }
-
-    final pivot = context.startBounds.center;
-    final updatedById = EditApply.applyRotateToElements(
-      snapshots: context.elementSnapshots,
-      selectedIds: context.selectedIdsAtStart,
-      pivot: pivot,
-      deltaAngle: transform.appliedAngle,
-      currentElementsById: state.domain.document.elementMap,
-    );
-    if (updatedById.isEmpty) {
-      return null;
-    }
-
-    final unboundArrows = unbindArrowLikeElements(
-      transformedElements: updatedById,
-      baseElements: state.domain.document.elementMap,
-    );
-    if (unboundArrows.isNotEmpty) {
-      updatedById.addAll(unboundArrows);
-    }
-
-    final bindingUpdates = ArrowBindingResolver.instance.resolve(
-      baseElements: state.domain.document.elementMap,
-      updatedElements: updatedById,
-      changedElementIds: updatedById.keys.toSet(),
-      document: state.domain.document,
-    );
-    if (bindingUpdates.isNotEmpty) {
-      for (final entry in bindingUpdates.entries) {
-        if (_shouldSkipBindingUpdate(
-          entry.key,
-          entry.value,
-          context.selectedIdsAtStart,
-        )) {
-          continue;
-        }
-        updatedById[entry.key] = entry.value;
-      }
-    }
-
-    return EditComputedResult(
-      updatedElements: updatedById,
-      multiSelectRotation: context.baseRotation + transform.appliedAngle,
-    );
-  }
-
-  bool _shouldSkipBindingUpdate(
-    String id,
-    ElementState element,
-    Set<String> selectedIds,
-  ) => selectedIds.contains(id) && _isElbowArrow(element);
+  }) =>
+      MultiSelectLifecycle.onRotateFinished(
+        current,
+        newRotation: result.multiSelectRotation!,
+        bounds: context.startBounds,
+      );
 
   bool _isElbowArrow(ElementState element) {
     final data = element.data;
