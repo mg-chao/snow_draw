@@ -255,27 +255,30 @@ class HitTest {
     }
 
     // 2. Check elements using spatial index (top-most first).
-    final candidates = document.queryElementsAtPointTopDown(
-      position,
-      actualTolerance,
-    );
-    for (final candidate in candidates) {
+    ElementState? hitElement;
+    document.visitElementsAtPointTopDown(position, actualTolerance, (
+      candidate,
+    ) {
       if (filterTypeId != null && candidate.typeId != filterTypeId) {
         if (!_allowsSerialBoundText(
           filterTypeId: filterTypeId,
           candidate: candidate,
           boundTextIds: boundTextIds,
         )) {
-          continue;
+          return true;
         }
       }
       final element = stateView.effectiveElement(candidate);
       if (!_testElement(element, position, registry, actualTolerance)) {
-        continue;
+        return true;
       }
+      hitElement = element;
+      return false;
+    });
+    if (hitElement != null) {
       return _storeCache(
         result: HitTestResult(
-          elementId: element.id,
+          elementId: hitElement!.id,
           cursorHint: CursorHint.move,
           target: HitTestTarget.element,
           isInSelectionPadding: isInSelectionPadding,

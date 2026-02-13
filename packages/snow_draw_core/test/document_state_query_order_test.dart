@@ -79,6 +79,83 @@ void main() {
     expect(result.map((element) => element.id), ['e2', 'e1', 'e0']);
   });
 
+  test('queryElementsAtPointTopDown keeps earlier query results stable', () {
+    final document = DocumentState(
+      elements: const [
+        ElementState(
+          id: 'left',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'right',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: RectangleData(),
+        ),
+      ],
+    );
+
+    final leftHit = document.queryElementsAtPointTopDown(
+      const DrawPoint(x: 5, y: 5),
+      0.5,
+    );
+    final rightHit = document.queryElementsAtPointTopDown(
+      const DrawPoint(x: 25, y: 5),
+      0.5,
+    );
+
+    expect(leftHit.map((element) => element.id), ['left']);
+    expect(rightHit.map((element) => element.id), ['right']);
+    expect(identical(leftHit, rightHit), isFalse);
+  });
+
+  test('queryElementsAtPointTopDown does not share result buffers '
+      'across documents', () {
+    final leftDocument = DocumentState(
+      elements: const [
+        ElementState(
+          id: 'left',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+      ],
+    );
+    final rightDocument = DocumentState(
+      elements: const [
+        ElementState(
+          id: 'right',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+      ],
+    );
+
+    final leftHit = leftDocument.queryElementsAtPointTopDown(
+      const DrawPoint(x: 5, y: 5),
+      0.5,
+    );
+    final rightHit = rightDocument.queryElementsAtPointTopDown(
+      const DrawPoint(x: 25, y: 5),
+      0.5,
+    );
+
+    expect(leftHit.map((element) => element.id), ['left']);
+    expect(rightHit.map((element) => element.id), ['right']);
+    expect(identical(leftHit, rightHit), isFalse);
+  });
+
   test('queryElementsInRectOrdered respects min and max bounds', () {
     final document = DocumentState(
       elements: const [

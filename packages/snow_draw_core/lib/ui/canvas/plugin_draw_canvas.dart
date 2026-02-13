@@ -1546,14 +1546,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   ) {
     final document = state.domain.document;
     final targets = <ElementState>[];
-    final candidates = document.queryElementsAtPointTopDown(position, distance);
-    for (final element in candidates) {
+    document.visitElementsAtPointTopDown(position, distance, (element) {
       if (element.opacity <= 0 ||
           !ArrowBindingUtils.isBindableTarget(element)) {
-        continue;
+        return true;
       }
       targets.add(element);
-    }
+      return true;
+    });
     return targets;
   }
 

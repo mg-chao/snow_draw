@@ -6,12 +6,6 @@ import '../types/draw_rect.dart';
 import '../utils/spatial_index.dart';
 import 'element_state.dart';
 
-/// Reusable buffer for [DocumentState.queryElementsAtPointTopDown].
-///
-/// Safe because hit-test queries run synchronously on the UI thread
-/// and callers consume the list before the next query.
-final _pointQueryBuffer = <ElementState>[];
-
 /// Persistent document data (lowest change frequency).
 @immutable
 class DocumentState {
@@ -52,8 +46,12 @@ class DocumentState {
       _elementMap.length + _orderIndex.length + _spatialIndex.size;
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
-    final entries = _spatialIndex.searchPointEntries(point, tolerance);
-    return _elementsForEntries(entries);
+    final result = <ElementState>[];
+    visitElementsAtPointTopDown(point, tolerance, (element) {
+      result.add(element);
+      return true;
+    });
+    return result;
   }
 
   bool hasElementAtPoint(DrawPoint point, double tolerance) =>
@@ -93,21 +91,37 @@ class DocumentState {
 
   /// Queries point candidates sorted from top-most to bottom-most.
   ///
-  /// The returned list is a shared buffer — callers must consume
-  /// it before the next call to this method.
+  /// The returned list is a fresh snapshot and remains stable even when
+  /// subsequent queries are executed.
   List<ElementState> queryElementsAtPointTopDown(
     DrawPoint point,
     double tolerance,
   ) {
+    final result = <ElementState>[];
+    visitElementsAtPointTopDown(point, tolerance, (element) {
+      result.add(element);
+      return true;
+    });
+    return result;
+  }
+
+  /// Visits point candidates from top-most to bottom-most z-order.
+  ///
+  /// Returning `false` from [visitor] stops iteration early.
+  void visitElementsAtPointTopDown(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor,
+  ) {
     final entries = _spatialIndex.searchPointEntries(point, tolerance);
-    final buffer = _pointQueryBuffer..clear();
     for (final entry in entries) {
       final element = getElementById(entry.id);
       if (element != null) {
-        buffer.add(element);
+        if (!visitor(element)) {
+          return;
+        }
       }
     }
-    return buffer;
   }
 
   List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
