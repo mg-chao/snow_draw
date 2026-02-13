@@ -5,7 +5,6 @@ import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../services/element_index_service.dart';
 import '../../types/draw_point.dart';
 import '../core/reducer_utils.dart';
 
@@ -14,10 +13,23 @@ DrawState handleDeleteElements(
   DeleteElements action,
   ElementReducerDeps _,
 ) {
-  final deleteIds = action.elementIds.toSet();
+  if (action.elementIds.isEmpty) {
+    return state;
+  }
+
+  final document = state.domain.document;
+  final deleteIds = <String>{};
+  for (final id in action.elementIds) {
+    if (document.getElementById(id) != null) {
+      deleteIds.add(id);
+    }
+  }
+  if (deleteIds.isEmpty) {
+    return state;
+  }
 
   final updatedSerials = <String, ElementState>{};
-  for (final element in state.domain.document.elements) {
+  for (final element in document.elements) {
     final data = element.data;
     if (data is! SerialNumberData) {
       continue;
@@ -37,22 +49,30 @@ DrawState handleDeleteElements(
     }
   }
 
+  var removedAny = false;
   final newElements = <ElementState>[];
-  for (final element in state.domain.document.elements) {
+  for (final element in document.elements) {
     if (deleteIds.contains(element.id)) {
+      removedAny = true;
       continue;
     }
     final updated = updatedSerials[element.id];
     newElements.add(updated ?? element);
   }
 
-  final newSelectedIds = state.domain.selection.selectedIds
-      .where((id) => !deleteIds.contains(id))
-      .toSet();
+  if (!removedAny && updatedSerials.isEmpty) {
+    return state;
+  }
+
+  final selection = state.domain.selection.selectedIds;
+  final hasSelectionRemoval = selection.any(deleteIds.contains);
+  final newSelectedIds = hasSelectionRemoval
+      ? selection.where((id) => !deleteIds.contains(id)).toSet()
+      : selection;
 
   final next = state.copyWith(
     domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
+      document: document.copyWith(elements: newElements),
     ),
   );
   return applySelectionChange(next, newSelectedIds);
@@ -76,7 +96,7 @@ DrawState handleDuplicateElements(
     return state;
   }
 
-  final index = ElementIndexService(state.domain.document.elements);
+  final index = state.domain.document.elementMap;
   final idsToDuplicate = <String>{...action.elementIds};
   for (final id in action.elementIds) {
     final element = index[id];

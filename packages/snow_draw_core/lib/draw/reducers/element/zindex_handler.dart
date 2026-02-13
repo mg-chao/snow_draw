@@ -5,17 +5,15 @@ import '../../core/dependency_interfaces.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../services/element_index_service.dart';
 
 DrawState handleChangeZIndex(
   DrawState state,
   ChangeElementZIndex action,
   ElementReducerDeps context,
 ) {
-  final target = ElementIndexService(
-    state.domain.document.elements,
-  )[action.elementId];
-  if (target == null) {
+  final elements = state.domain.document.elements;
+  final currentIndex = elements.indexWhere((e) => e.id == action.elementId);
+  if (currentIndex == -1) {
     context.log.store.warning('Z-index change failed: element not found', {
       'action': action.runtimeType.toString(),
       'elementId': action.elementId,
@@ -34,26 +32,19 @@ DrawState handleChangeZIndex(
     return state;
   }
 
-  final elements = [...state.domain.document.elements]
-    ..removeWhere((e) => e.id == target.id);
-
-  switch (action.operation) {
-    case ZIndexOperation.bringToFront:
-      elements.add(target);
-    case ZIndexOperation.sendToBack:
-      elements.insert(0, target);
-    case ZIndexOperation.bringForward:
-      final idx = min(elements.length, target.zIndex + 1);
-      elements.insert(idx, target);
-    case ZIndexOperation.sendBackward:
-      final idx = max(0, target.zIndex - 1);
-      elements.insert(idx, target);
+  final destinationIndex = _resolveSingleDestinationIndex(
+    operation: action.operation,
+    currentIndex: currentIndex,
+    length: elements.length,
+  );
+  if (destinationIndex == currentIndex) {
+    return _reindexDocumentIfNeeded(state, elements);
   }
 
-  final reindexed = <ElementState>[];
-  for (var i = 0; i < elements.length; i++) {
-    reindexed.add(elements[i].copyWith(zIndex: i));
-  }
+  final reordered = [...elements];
+  final target = reordered.removeAt(currentIndex);
+  reordered.insert(destinationIndex, target);
+  final reindexed = _reindexElements(reordered);
 
   return state.copyWith(
     domain: state.domain.copyWith(
@@ -72,7 +63,7 @@ DrawState handleChangeZIndexBatch(
   }
 
   final idSet = action.elementIds.toSet();
-  final elements = [...state.domain.document.elements];
+  final elements = state.domain.document.elements;
   final selected = elements.where((e) => idSet.contains(e.id)).toList();
   if (selected.isEmpty) {
     context.log.store.warning('Z-index change failed: elements not found', {
@@ -83,7 +74,7 @@ DrawState handleChangeZIndexBatch(
     return state;
   }
 
-  List<ElementState> reordered;
+  late final List<ElementState> reordered;
 
   switch (action.operation) {
     case ZIndexOperation.bringToFront:
@@ -118,14 +109,73 @@ DrawState handleChangeZIndexBatch(
       }
   }
 
-  final reindexed = <ElementState>[];
-  for (var i = 0; i < reordered.length; i++) {
-    reindexed.add(reordered[i].copyWith(zIndex: i));
+  if (_hasSameOrder(elements, reordered)) {
+    return _reindexDocumentIfNeeded(state, elements);
   }
 
+  final reindexed = _reindexElements(reordered);
   return state.copyWith(
     domain: state.domain.copyWith(
       document: state.domain.document.copyWith(elements: reindexed),
     ),
   );
+}
+
+int _resolveSingleDestinationIndex({
+  required ZIndexOperation operation,
+  required int currentIndex,
+  required int length,
+}) {
+  final lastIndex = length - 1;
+  return switch (operation) {
+    ZIndexOperation.bringToFront => lastIndex,
+    ZIndexOperation.sendToBack => 0,
+    ZIndexOperation.bringForward => min(lastIndex, currentIndex + 1),
+    ZIndexOperation.sendBackward => max(0, currentIndex - 1),
+  };
+}
+
+bool _hasSameOrder(List<ElementState> before, List<ElementState> after) {
+  if (identical(before, after)) {
+    return true;
+  }
+  if (before.length != after.length) {
+    return false;
+  }
+  for (var i = 0; i < before.length; i++) {
+    if (before[i].id != after[i].id) {
+      return false;
+    }
+  }
+  return true;
+}
+
+DrawState _reindexDocumentIfNeeded(
+  DrawState state,
+  List<ElementState> elements,
+) {
+  final reindexed = _reindexElements(elements);
+  if (identical(reindexed, elements)) {
+    return state;
+  }
+  return state.copyWith(
+    domain: state.domain.copyWith(
+      document: state.domain.document.copyWith(elements: reindexed),
+    ),
+  );
+}
+
+List<ElementState> _reindexElements(List<ElementState> elements) {
+  var hasAnyZIndexChange = false;
+  final reindexed = <ElementState>[];
+  for (var i = 0; i < elements.length; i++) {
+    final element = elements[i];
+    if (element.zIndex == i) {
+      reindexed.add(element);
+      continue;
+    }
+    hasAnyZIndexChange = true;
+    reindexed.add(element.copyWith(zIndex: i));
+  }
+  return hasAnyZIndexChange ? reindexed : elements;
 }
