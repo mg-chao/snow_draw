@@ -34,19 +34,22 @@ class EditComputePipeline {
       return null;
     }
 
+    // Work on a local copy so the caller's map is never mutated.
+    final merged = Map<String, ElementState>.of(updatedById);
+
     final unboundArrows = unbindArrowLikeElements(
-      transformedElements: updatedById,
+      transformedElements: merged,
       baseElements: state.domain.document.elementMap,
     );
     if (unboundArrows.isNotEmpty) {
-      updatedById.addAll(unboundArrows);
+      merged.addAll(unboundArrows);
     }
 
     final bindingUpdates =
         ArrowBindingResolver.instance.resolve(
       baseElements: state.domain.document.elementMap,
-      updatedElements: updatedById,
-      changedElementIds: updatedById.keys.toSet(),
+      updatedElements: merged,
+      changedElementIds: merged.keys.toSet(),
       document: state.domain.document,
     );
     if (bindingUpdates.isNotEmpty) {
@@ -55,12 +58,12 @@ class EditComputePipeline {
             skipBindingUpdate(entry.key, entry.value)) {
           continue;
         }
-        updatedById[entry.key] = entry.value;
+        merged[entry.key] = entry.value;
       }
     }
 
     return EditComputedResult(
-      updatedElements: updatedById,
+      updatedElements: Map.unmodifiable(merged),
       multiSelectBounds: multiSelectBounds,
       multiSelectRotation: multiSelectRotation,
     );
