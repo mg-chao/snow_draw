@@ -67,14 +67,27 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       toSnapshot: (e) => ElementMoveSnapshot(center: e.rect.center),
       initialSelectionBounds: typedParams.initialSelectionBounds,
     );
+    final selectedIdsAtStart = data.selectedIds;
+    final targetElements = _resolveTargetElements(state, selectedIdsAtStart);
+    final referenceElements = resolveReferenceElements(
+      state,
+      selectedIdsAtStart,
+    );
+    final snapBounds = _resolveSnapBounds(
+      selectedElements: targetElements,
+      fallback: data.startBounds,
+    );
 
     return MoveEditContext(
       startPosition: position,
       startBounds: data.startBounds,
-      selectedIdsAtStart: data.selectedIds,
+      selectedIdsAtStart: selectedIdsAtStart,
       selectionVersion: data.selectionVersion,
       elementsVersion: data.elementsVersion,
       elementSnapshots: data.elementSnapshots,
+      snapBoundsAtStart: snapBounds,
+      referenceElements: List<ElementState>.unmodifiable(referenceElements),
+      targetElements: List<ElementState>.unmodifiable(targetElements),
     );
   }
 
@@ -116,8 +129,9 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
         snappingMode == SnappingMode.object &&
         (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
 
+    final baseSnapBounds = typedContext.snapBounds;
+
     if (shouldGridSnap) {
-      final baseSnapBounds = _resolveSnapBounds(state, typedContext);
       final targetRect = baseSnapBounds.translate(
         DrawPoint(x: displacement.dx, y: displacement.dy),
       );
@@ -133,31 +147,26 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       final zoom = state.application.view.camera.zoom;
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       final snapDistance = snapConfig.distance / effectiveZoom;
-      final baseSnapBounds = _resolveSnapBounds(state, typedContext);
       final targetRect = baseSnapBounds.translate(
         DrawPoint(x: displacement.dx, y: displacement.dy),
       );
-      final referenceElements = resolveReferenceElements(
-        state,
-        typedContext.selectedIdsAtStart,
-      );
-      final targetElements = _resolveTargetElements(
-        state,
-        typedContext.selectedIdsAtStart,
-      );
-      final result = objectSnapService.snapMove(
-        targetRect: targetRect,
-        referenceElements: referenceElements,
-        snapDistance: snapDistance,
-        targetElements: targetElements.isEmpty ? null : targetElements,
-        targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
-      );
-      snappedDx += result.dx;
-      snappedDy += result.dy;
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
+      final referenceElements = typedContext.referenceElements;
+      if (referenceElements.isNotEmpty) {
+        final targetElements = typedContext.targetElements;
+        final result = objectSnapService.snapMove(
+          targetRect: targetRect,
+          referenceElements: referenceElements,
+          snapDistance: snapDistance,
+          targetElements: targetElements.isEmpty ? null : targetElements,
+          targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
+          enablePointSnaps: snapConfig.enablePointSnaps,
+          enableGapSnaps: snapConfig.enableGapSnaps,
+        );
+        snappedDx += result.dx;
+        snappedDy += result.dy;
+        if (snapConfig.showGuides) {
+          snapGuides = result.guides;
+        }
       }
     }
 
@@ -240,33 +249,24 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     ];
   }
 
-  DrawRect _resolveSnapBounds(DrawState state, MoveEditContext context) {
-    final selectedIds = context.selectedIdsAtStart;
-    if (selectedIds.isEmpty) {
-      return context.startBounds;
+  DrawRect _resolveSnapBounds({
+    required List<ElementState> selectedElements,
+    required DrawRect fallback,
+  }) {
+    if (selectedElements.isEmpty) {
+      return fallback;
     }
 
     var minX = double.infinity;
     var minY = double.infinity;
     var maxX = double.negativeInfinity;
     var maxY = double.negativeInfinity;
-    var hasElement = false;
-
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element == null) {
-        continue;
-      }
+    for (final element in selectedElements) {
       final aabb = SelectionCalculator.computeElementWorldAabb(element);
       minX = math.min(minX, aabb.minX);
       minY = math.min(minY, aabb.minY);
       maxX = math.max(maxX, aabb.maxX);
       maxY = math.max(maxY, aabb.maxY);
-      hasElement = true;
-    }
-
-    if (!hasElement) {
-      return context.startBounds;
     }
 
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);

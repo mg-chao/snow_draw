@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../edit/core/edit_validation.dart' show EditValidation;
+import '../models/element_state.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 import 'element_geometry.dart';
@@ -67,12 +68,30 @@ final class MoveEditContext extends EditContext {
     required super.selectionVersion,
     required super.elementsVersion,
     required this.elementSnapshots,
+    this.snapBoundsAtStart,
+    this.referenceElements = const [],
+    this.targetElements = const [],
   });
 
   /// Starting center for each element (lean snapshot).
   ///
   /// Stores only the data needed for move operations: element centers.
   final Map<String, ElementMoveSnapshot> elementSnapshots;
+
+  /// Selection bounds resolved from selected element geometry at edit start.
+  ///
+  /// This is used as the snapping base so move snapping stays deterministic
+  /// even when document geometry changes during the drag.
+  final DrawRect? snapBoundsAtStart;
+
+  /// Non-selected visible elements captured at edit start for object snapping.
+  final List<ElementState> referenceElements;
+
+  /// Selected elements captured at edit start for precise target snap points.
+  final List<ElementState> targetElements;
+
+  /// Bounds used as the snap base for this move session.
+  DrawRect get snapBounds => snapBoundsAtStart ?? startBounds;
 
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
@@ -98,6 +117,8 @@ final class ResizeEditContext extends EditContext {
     required this.rotation,
     required this.elementSnapshots,
     this.selectionPadding = 0.0,
+    this.referenceElements = const [],
+    this.forceSerialNumberAspectRatio = false,
   });
   final ResizeMode resizeMode;
   final DrawPoint handleOffset;
@@ -106,6 +127,12 @@ final class ResizeEditContext extends EditContext {
 
   /// Starting geometry for each element (lean snapshot).
   final Map<String, ElementResizeSnapshot> elementSnapshots;
+
+  /// Non-selected visible elements captured at edit start for object snapping.
+  final List<ElementState> referenceElements;
+
+  /// Whether resize should always preserve aspect ratio for this session.
+  final bool forceSerialNumberAspectRatio;
 
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;

@@ -4,6 +4,7 @@ import '../../core/geometry/resize_geometry.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
+import '../../models/element_state.dart';
 import '../../models/multi_select_lifecycle.dart';
 import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
@@ -98,6 +99,14 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     }
 
     final selectedIdsAtStart = {...state.domain.selection.selectedIds};
+    final referenceElements = resolveReferenceElements(
+      state,
+      selectedIdsAtStart,
+    );
+    final forceSerialNumberAspectRatio = _shouldLockSerialNumberAspectRatio(
+      state: state,
+      selectedIds: selectedIdsAtStart,
+    );
     final elementSnapshots = buildSnapshots(
       snapshotSelectedElements(state),
       (e) => ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
@@ -114,6 +123,8 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       rotation: rotation,
       selectionPadding: typedParams.selectionPadding ?? 0.0,
       elementSnapshots: elementSnapshots,
+      referenceElements: List<ElementState>.unmodifiable(referenceElements),
+      forceSerialNumberAspectRatio: forceSerialNumberAspectRatio,
     );
   }
 
@@ -155,12 +166,9 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       center: startBounds.center,
       isMultiSelect: selectedIdsAtStart.length > 1,
     );
-    final forceSerialNumberAspectRatio = _shouldLockSerialNumberAspectRatio(
-      state: state,
-      selectedIds: selectedIdsAtStart,
-    );
     final maintainAspectRatio =
-        modifiers.maintainAspectRatio || forceSerialNumberAspectRatio;
+        modifiers.maintainAspectRatio ||
+        typedContext.forceSerialNumberAspectRatio;
 
     final boundsResult = calculateResizeBounds(
       ResizeBoundsParams(
@@ -218,18 +226,14 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         snapMinY: anchorsY.contains(SnapAxisAnchor.start),
         snapMaxY: anchorsY.contains(SnapAxisAnchor.end),
       );
-    } else if (shouldObjectSnap) {
+    } else if (shouldObjectSnap && typedContext.referenceElements.isNotEmpty) {
       // Calculate snap distance in world space (accounting for zoom level)
       final zoom = state.application.view.camera.zoom;
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       final snapDistance = snapConfig.distance / effectiveZoom;
-      final referenceElements = resolveReferenceElements(
-        state,
-        typedContext.selectedIdsAtStart,
-      );
       final result = objectSnapService.snapResize(
         targetRect: newBounds,
-        referenceElements: referenceElements,
+        referenceElements: typedContext.referenceElements,
         snapDistance: snapDistance,
         targetAnchorsX: anchorsX,
         targetAnchorsY: anchorsY,
