@@ -3,6 +3,7 @@ import 'dart:ui' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
   group('ConfigManager freeze behavior', () {
@@ -91,6 +92,50 @@ void main() {
           ConfigDefaults.defaultSerialNumberFontSize,
         );
         expect(updated.serialNumberStyle.serialNumber, 41);
+      },
+    );
+
+    test('does not reset specialized styles on value-equal element style', () {
+      final config = DrawConfig(
+        elementStyle: const ElementStyleConfig(
+          color: Color(0xFF112233),
+          strokeWidth: 3,
+        ),
+        serialNumberStyle: const ElementStyleConfig(
+          serialNumber: 9,
+          color: Color(0xFFAA3300),
+          fontSize: 24,
+        ),
+        filterStyle: const ElementStyleConfig(
+          color: Color(0xFF334455),
+          filterType: CanvasFilterType.gaussianBlur,
+          filterStrength: 0.9,
+        ),
+        highlightStyle: const ElementStyleConfig(
+          color: Color(0xFF22AA55),
+          textStrokeColor: Color(0xFF101010),
+          textStrokeWidth: 1.5,
+          highlightShape: HighlightShape.ellipse,
+        ),
+      );
+
+      final updated = config.copyWith(
+        elementStyle: config.elementStyle.copyWith(),
+      );
+
+      expect(updated.serialNumberStyle, config.serialNumberStyle);
+      expect(updated.filterStyle, config.filterStyle);
+      expect(updated.highlightStyle, config.highlightStyle);
+    });
+
+    test(
+      'returns the same instance when copyWith has no effective changes',
+      () {
+        final config = DrawConfig();
+
+        expect(config.copyWith(), same(config));
+        expect(config.copyWith(selection: config.selection), same(config));
+        expect(config.copyWith(canvas: config.canvas), same(config));
       },
     );
   });

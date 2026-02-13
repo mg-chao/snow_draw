@@ -214,48 +214,84 @@ class DrawConfig {
     GridConfig? grid,
     SnapConfig? snap,
   }) {
+    final nextSelection = selection ?? this.selection;
+    final nextElementConfig = element ?? this.element;
+    final nextCanvas = canvas ?? this.canvas;
+    final nextBoxSelection = boxSelection ?? this.boxSelection;
     final nextElementStyle = elementStyle ?? this.elementStyle;
-    final nextHighlightStyle = _deriveHighlightStyle(nextElementStyle);
-    final nextFilterStyle = _deriveFilterStyle(nextElementStyle);
-    final nextSerialNumberStyle = _deriveSerialNumberStyle(
-      nextElementStyle,
-      serialNumber: this.serialNumberStyle.serialNumber,
-    );
+    final elementStyleChanged = nextElementStyle != this.elementStyle;
+
+    final nextRectangleStyle =
+        rectangleStyle ??
+        (elementStyleChanged ? nextElementStyle : this.rectangleStyle);
+    final nextArrowStyle =
+        arrowStyle ??
+        (elementStyleChanged ? nextElementStyle : this.arrowStyle);
+    final nextLineStyle =
+        lineStyle ?? (elementStyleChanged ? nextElementStyle : this.lineStyle);
+    final nextFreeDrawStyle =
+        freeDrawStyle ??
+        (elementStyleChanged ? nextElementStyle : this.freeDrawStyle);
+    final nextTextStyle =
+        textStyle ?? (elementStyleChanged ? nextElementStyle : this.textStyle);
+    final nextSerialNumberStyle =
+        serialNumberStyle ??
+        (elementStyleChanged
+            ? _deriveSerialNumberStyle(
+                nextElementStyle,
+                serialNumber: this.serialNumberStyle.serialNumber,
+              )
+            : this.serialNumberStyle);
+    final nextFilterStyle =
+        filterStyle ??
+        (elementStyleChanged
+            ? _deriveFilterStyle(nextElementStyle)
+            : this.filterStyle);
+    final nextHighlightStyle =
+        highlightStyle ??
+        (elementStyleChanged
+            ? _deriveHighlightStyle(nextElementStyle)
+            : this.highlightStyle);
+    final nextHighlight = highlight ?? this.highlight;
+    final nextGrid = grid ?? this.grid;
+    final nextSnap = snap ?? this.snap;
+
+    if (nextSelection == this.selection &&
+        nextElementConfig == this.element &&
+        nextCanvas == this.canvas &&
+        nextBoxSelection == this.boxSelection &&
+        nextElementStyle == this.elementStyle &&
+        nextRectangleStyle == this.rectangleStyle &&
+        nextArrowStyle == this.arrowStyle &&
+        nextLineStyle == this.lineStyle &&
+        nextFreeDrawStyle == this.freeDrawStyle &&
+        nextTextStyle == this.textStyle &&
+        nextSerialNumberStyle == this.serialNumberStyle &&
+        nextFilterStyle == this.filterStyle &&
+        nextHighlightStyle == this.highlightStyle &&
+        nextHighlight == this.highlight &&
+        nextGrid == this.grid &&
+        nextSnap == this.snap) {
+      return this;
+    }
+
     return DrawConfig(
-      selection: selection ?? this.selection,
-      element: element ?? this.element,
-      canvas: canvas ?? this.canvas,
-      boxSelection: boxSelection ?? this.boxSelection,
+      selection: nextSelection,
+      element: nextElementConfig,
+      canvas: nextCanvas,
+      boxSelection: nextBoxSelection,
       elementStyle: nextElementStyle,
-      rectangleStyle:
-          rectangleStyle ??
-          (elementStyle != null ? nextElementStyle : this.rectangleStyle),
-      arrowStyle:
-          arrowStyle ??
-          (elementStyle != null ? nextElementStyle : this.arrowStyle),
-      lineStyle:
-          lineStyle ??
-          (elementStyle != null ? nextElementStyle : this.lineStyle),
-      freeDrawStyle:
-          freeDrawStyle ??
-          (elementStyle != null ? nextElementStyle : this.freeDrawStyle),
-      textStyle:
-          textStyle ??
-          (elementStyle != null ? nextElementStyle : this.textStyle),
-      serialNumberStyle:
-          serialNumberStyle ??
-          (elementStyle != null
-              ? nextSerialNumberStyle
-              : this.serialNumberStyle),
-      filterStyle:
-          filterStyle ??
-          (elementStyle != null ? nextFilterStyle : this.filterStyle),
-      highlightStyle:
-          highlightStyle ??
-          (elementStyle != null ? nextHighlightStyle : this.highlightStyle),
-      highlight: highlight ?? this.highlight,
-      grid: grid ?? this.grid,
-      snap: snap ?? this.snap,
+      rectangleStyle: nextRectangleStyle,
+      arrowStyle: nextArrowStyle,
+      lineStyle: nextLineStyle,
+      freeDrawStyle: nextFreeDrawStyle,
+      textStyle: nextTextStyle,
+      serialNumberStyle: nextSerialNumberStyle,
+      filterStyle: nextFilterStyle,
+      highlightStyle: nextHighlightStyle,
+      highlight: nextHighlight,
+      grid: nextGrid,
+      snap: nextSnap,
     );
   }
 
