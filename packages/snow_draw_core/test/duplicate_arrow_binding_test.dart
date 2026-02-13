@@ -51,7 +51,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
+        DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
         deps,
       );
 
@@ -83,7 +83,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
+        DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
         deps,
       );
 
@@ -113,7 +113,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'rect-2', 'arrow-1']),
+        DuplicateElements(elementIds: ['rect-1', 'rect-2', 'arrow-1']),
         deps,
       );
 
@@ -145,7 +145,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['arrow-1']),
+        DuplicateElements(elementIds: ['arrow-1']),
         deps,
       );
 
@@ -168,7 +168,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'line-1']),
+        DuplicateElements(elementIds: ['rect-1', 'line-1']),
         deps,
       );
 
@@ -200,7 +200,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
+        DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
         deps,
       );
 
@@ -235,7 +235,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['serial-1']),
+        DuplicateElements(elementIds: ['serial-1']),
         deps,
       );
 
@@ -269,7 +269,7 @@ void main() {
 
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['arrow-1']),
+        DuplicateElements(elementIds: ['arrow-1']),
         deps,
       );
 
@@ -300,7 +300,7 @@ void main() {
       // Only rect-1 and arrow-1 are duplicated, not rect-outside.
       final result = handleDuplicateElements(
         state,
-        const DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
+        DuplicateElements(elementIds: ['rect-1', 'arrow-1']),
         deps,
       );
 
@@ -315,9 +315,9 @@ void main() {
         originalId: 'rect-1',
         state: state,
       );
-      // Start binding target was duplicated → remapped.
+      // Start binding target was duplicated -> remapped.
       expect(data.startBinding!.elementId, dupRect1!.id);
-      // End binding target was NOT duplicated → cleared.
+      // End binding target was NOT duplicated -> cleared.
       expect(data.endBinding, isNull);
     });
   });

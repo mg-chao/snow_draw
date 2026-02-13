@@ -39,7 +39,7 @@ void main() {
       addTearDown(store.dispose);
 
       await store.dispatch(
-        const UpdateElementsStyle(elementIds: ['styled'], opacity: 0.4),
+        UpdateElementsStyle(elementIds: ['styled'], opacity: 0.4),
       );
       expect(
         store.state.domain.document.getElementById('styled')?.opacity,
@@ -98,7 +98,7 @@ void main() {
       addTearDown(store.dispose);
 
       await store.dispatch(
-        const ChangeElementsZIndex(
+        ChangeElementsZIndex(
           elementIds: ['a', 'b'],
           operation: ZIndexOperation.bringToFront,
         ),
@@ -206,7 +206,7 @@ void main() {
         );
         addTearDown(store.dispose);
 
-        await store.dispatch(const DeleteElements(elementIds: ['serial']));
+        await store.dispatch(DeleteElements(elementIds: ['serial']));
         await store.dispatch(const Undo());
 
         final document = store.state.domain.document;
@@ -252,7 +252,7 @@ void main() {
         );
         addTearDown(store.dispose);
 
-        await store.dispatch(const DeleteElements(elementIds: ['text']));
+        await store.dispatch(DeleteElements(elementIds: ['text']));
         await store.dispatch(const Undo());
 
         final document = store.state.domain.document;
@@ -306,9 +306,7 @@ void main() {
         );
         addTearDown(store.dispose);
 
-        await store.dispatch(
-          const DeleteElements(elementIds: ['text', 'other']),
-        );
+        await store.dispatch(DeleteElements(elementIds: ['text', 'other']));
         await store.dispatch(const Undo());
 
         final document = store.state.domain.document;
