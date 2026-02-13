@@ -10,11 +10,16 @@ class PluginRegistry {
   final PluginContext _context;
   final List<InputPlugin> _plugins = [];
   final Map<String, InputPlugin> _pluginMap = {};
+  final Map<Type, List<InputPlugin>> _pluginsByEventType = {};
 
   var _isSorted = true;
+  var _eventTypeIndexDirty = false;
 
   /// Get all plugins.
-  List<InputPlugin> get plugins => List.unmodifiable(_plugins);
+  List<InputPlugin> get plugins {
+    _ensureSorted();
+    return List.unmodifiable(_plugins);
+  }
 
   /// Get plugin count.
   int get pluginCount => _plugins.length;
@@ -29,8 +34,7 @@ class PluginRegistry {
     _plugins.add(plugin);
     _pluginMap[plugin.id] = plugin;
     _isSorted = false;
-
-    _sortPlugins();
+    _eventTypeIndexDirty = true;
   }
 
   /// Register plugins in batch.
@@ -50,6 +54,7 @@ class PluginRegistry {
     await plugin.onUnload();
     _plugins.remove(plugin);
     _pluginMap.remove(pluginId);
+    _eventTypeIndexDirty = true;
   }
 
   /// Check whether a plugin is registered.
@@ -64,67 +69,49 @@ class PluginRegistry {
   Future<PluginResult?> dispatch(InputEvent event, DrawState state) async {
     _ensureSorted();
 
-    PluginResult? lastResult;
-
-    // Before hooks
-    for (final plugin in _plugins) {
-      if (await plugin.onBeforeEvent(event)) {
-        // A plugin intercepted the event.
-        return const PluginResult.handled(
+    PluginResult? finalResult;
+    try {
+      if (await _isInterceptedByBeforeHooks(event)) {
+        return finalResult = const PluginResult.handled(
           message: 'Intercepted by before hook',
         );
       }
-    }
 
-    // Main event handling
-    for (final plugin in _plugins) {
-      // Check whether the plugin supports this event type.
-      if (!plugin.supportedEventTypes.contains(event.runtimeType)) {
-        continue;
-      }
+      final pluginsForEvent = _pluginsForEventType(event.runtimeType);
+      var latestState = state;
 
-      // Check whether the plugin can handle this event.
-      if (!plugin.canHandle(event, state)) {
-        continue;
-      }
-
-      try {
-        final result = await plugin.handleEvent(event);
-        lastResult = result;
-
-        // After hook
-        await plugin.onAfterEvent(event, result);
-
-        // Stop propagation if the plugin handled the event.
-        if (result.shouldStopPropagation) {
-          break;
+      for (final plugin in pluginsForEvent) {
+        latestState = _context.state;
+        final canHandle = _safeCanHandle(
+          plugin: plugin,
+          event: event,
+          state: latestState,
+        );
+        if (!canHandle) {
+          continue;
         }
-      } on Object catch (e, stackTrace) {
-        _context.context.log.input.error(
-          'Plugin handleEvent failed',
-          e,
-          stackTrace,
-          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
-        );
-        // Continue with the next plugin.
-      }
-    }
 
-    // After hooks for all plugins
-    for (final plugin in _plugins) {
-      try {
-        await plugin.onAfterEvent(event, lastResult);
-      } on Object catch (e, stackTrace) {
-        _context.context.log.input.error(
-          'Plugin afterEvent failed',
-          e,
-          stackTrace,
-          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
-        );
+        try {
+          final result = await plugin.handleEvent(event);
+          finalResult = result;
+          if (result.shouldStopPropagation) {
+            break;
+          }
+        } on Object catch (e, stackTrace) {
+          _context.context.log.input.error(
+            'Plugin handleEvent failed',
+            e,
+            stackTrace,
+            {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+          );
+          // Continue with the next plugin.
+        }
       }
-    }
 
-    return lastResult;
+      return finalResult;
+    } finally {
+      await _runAfterHooks(event, finalResult);
+    }
   }
 
   /// Reset all plugins.
@@ -156,6 +143,8 @@ class PluginRegistry {
     }
     _plugins.clear();
     _pluginMap.clear();
+    _pluginsByEventType.clear();
+    _eventTypeIndexDirty = false;
   }
 
   /// Sort plugins by priority.
@@ -175,8 +164,78 @@ class PluginRegistry {
     }
   }
 
+  void _ensureEventTypeIndex() {
+    if (!_eventTypeIndexDirty) {
+      return;
+    }
+    _pluginsByEventType.clear();
+    for (final plugin in _plugins) {
+      for (final eventType in plugin.supportedEventTypes) {
+        (_pluginsByEventType[eventType] ??= <InputPlugin>[]).add(plugin);
+      }
+    }
+    _eventTypeIndexDirty = false;
+  }
+
+  List<InputPlugin> _pluginsForEventType(Type eventType) {
+    _ensureEventTypeIndex();
+    return _pluginsByEventType[eventType] ?? const <InputPlugin>[];
+  }
+
+  Future<bool> _isInterceptedByBeforeHooks(InputEvent event) async {
+    for (final plugin in _plugins) {
+      try {
+        if (await plugin.onBeforeEvent(event)) {
+          return true;
+        }
+      } on Object catch (e, stackTrace) {
+        _context.context.log.input.error(
+          'Plugin beforeEvent failed',
+          e,
+          stackTrace,
+          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+        );
+      }
+    }
+    return false;
+  }
+
+  bool _safeCanHandle({
+    required InputPlugin plugin,
+    required InputEvent event,
+    required DrawState state,
+  }) {
+    try {
+      return plugin.canHandle(event, state);
+    } on Object catch (e, stackTrace) {
+      _context.context.log.input.error(
+        'Plugin canHandle failed',
+        e,
+        stackTrace,
+        {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+      );
+      return false;
+    }
+  }
+
+  Future<void> _runAfterHooks(InputEvent event, PluginResult? result) async {
+    for (final plugin in _plugins) {
+      try {
+        await plugin.onAfterEvent(event, result);
+      } on Object catch (e, stackTrace) {
+        _context.context.log.input.error(
+          'Plugin afterEvent failed',
+          e,
+          stackTrace,
+          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+        );
+      }
+    }
+  }
+
   /// Get plugin statistics.
   Map<String, dynamic> getStats() {
+    _ensureSorted();
     final eventTypeCount = <Type, int>{};
     for (final plugin in _plugins) {
       for (final type in plugin.supportedEventTypes) {
