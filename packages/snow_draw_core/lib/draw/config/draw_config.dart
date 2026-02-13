@@ -173,24 +173,9 @@ class DrawConfig {
        freeDrawStyle = freeDrawStyle ?? elementStyle,
        textStyle = textStyle ?? elementStyle,
        serialNumberStyle =
-           serialNumberStyle ??
-           elementStyle.copyWith(
-             fontSize: ConfigDefaults.defaultSerialNumberFontSize,
-           ),
-       filterStyle =
-           filterStyle ??
-           elementStyle.copyWith(
-             filterType: ConfigDefaults.defaultFilterType,
-             filterStrength: ConfigDefaults.defaultFilterStrength,
-           ),
-       highlightStyle =
-           highlightStyle ??
-           elementStyle.copyWith(
-             color: ConfigDefaults.defaultHighlightColor,
-             textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
-             textStrokeWidth: 0,
-             highlightShape: ConfigDefaults.defaultHighlightShape,
-           ),
+           serialNumberStyle ?? _deriveSerialNumberStyle(elementStyle),
+       filterStyle = filterStyle ?? _deriveFilterStyle(elementStyle),
+       highlightStyle = highlightStyle ?? _deriveHighlightStyle(elementStyle),
        highlight = highlight ?? const HighlightMaskConfig();
   final SelectionConfig selection;
   final ElementConfig element;
@@ -230,15 +215,11 @@ class DrawConfig {
     SnapConfig? snap,
   }) {
     final nextElementStyle = elementStyle ?? this.elementStyle;
-    final nextHighlightStyle = nextElementStyle.copyWith(
-      color: ConfigDefaults.defaultHighlightColor,
-      textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
-      textStrokeWidth: 0,
-      highlightShape: ConfigDefaults.defaultHighlightShape,
-    );
-    final nextFilterStyle = nextElementStyle.copyWith(
-      filterType: ConfigDefaults.defaultFilterType,
-      filterStrength: ConfigDefaults.defaultFilterStrength,
+    final nextHighlightStyle = _deriveHighlightStyle(nextElementStyle);
+    final nextFilterStyle = _deriveFilterStyle(nextElementStyle);
+    final nextSerialNumberStyle = _deriveSerialNumberStyle(
+      nextElementStyle,
+      serialNumber: this.serialNumberStyle.serialNumber,
     );
     return DrawConfig(
       selection: selection ?? this.selection,
@@ -263,7 +244,9 @@ class DrawConfig {
           (elementStyle != null ? nextElementStyle : this.textStyle),
       serialNumberStyle:
           serialNumberStyle ??
-          (elementStyle != null ? nextElementStyle : this.serialNumberStyle),
+          (elementStyle != null
+              ? nextSerialNumberStyle
+              : this.serialNumberStyle),
       filterStyle:
           filterStyle ??
           (elementStyle != null ? nextFilterStyle : this.filterStyle),
@@ -275,6 +258,30 @@ class DrawConfig {
       snap: snap ?? this.snap,
     );
   }
+
+  static ElementStyleConfig _deriveSerialNumberStyle(
+    ElementStyleConfig elementStyle, {
+    int? serialNumber,
+  }) => elementStyle.copyWith(
+    serialNumber: serialNumber ?? elementStyle.serialNumber,
+    fontSize: ConfigDefaults.defaultSerialNumberFontSize,
+  );
+
+  static ElementStyleConfig _deriveFilterStyle(
+    ElementStyleConfig elementStyle,
+  ) => elementStyle.copyWith(
+    filterType: ConfigDefaults.defaultFilterType,
+    filterStrength: ConfigDefaults.defaultFilterStrength,
+  );
+
+  static ElementStyleConfig _deriveHighlightStyle(
+    ElementStyleConfig elementStyle,
+  ) => elementStyle.copyWith(
+    color: ConfigDefaults.defaultHighlightColor,
+    textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
+    textStrokeWidth: 0,
+    highlightShape: ConfigDefaults.defaultHighlightShape,
+  );
 
   @override
   bool operator ==(Object other) =>

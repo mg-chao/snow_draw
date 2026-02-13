@@ -74,14 +74,16 @@ class ConfigManager {
   /// Convenience method to update only the selection config.
   /// Returns true if updated, false if unchanged.
   bool updateSelection(SelectionConfig selection) =>
-      update(_config.copyWith(selection: selection));
+      update(_configForWrites.copyWith(selection: selection));
 
   /// Update canvas configuration.
   ///
   /// Convenience method to update only the canvas config.
   /// Returns true if updated, false if unchanged.
   bool updateCanvas(CanvasConfig canvas) =>
-      update(_config.copyWith(canvas: canvas));
+      update(_configForWrites.copyWith(canvas: canvas));
+
+  DrawConfig get _configForWrites => _pendingConfig ?? _config;
 
   /// Release resources.
   Future<void> dispose() => _controller.close();
