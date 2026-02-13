@@ -67,6 +67,20 @@ class HistoryManager {
     this.maxBranchPoints = 8,
     LogService? logService,
   }) : _log = logService?.history {
+    if (maxHistoryLength < 1) {
+      throw ArgumentError.value(
+        maxHistoryLength,
+        'maxHistoryLength',
+        'must be greater than or equal to 1',
+      );
+    }
+    if (maxBranchPoints < 0) {
+      throw ArgumentError.value(
+        maxBranchPoints,
+        'maxBranchPoints',
+        'must be greater than or equal to 0',
+      );
+    }
     _root = _HistoryNode.root(_nextNodeId++);
     _current = _root;
   }
@@ -263,29 +277,19 @@ class HistoryManager {
   ///
   /// ## Branch Point Preservation
   ///
-  /// When [maxBranchPoints] > 0, the algorithm identifies nodes with multiple
-  /// children (branch points) along the current path and ensures the most
-  /// recent [maxBranchPoints] branches are preserved.
+  /// When [maxBranchPoints] > 0, pruning can move the new root slightly
+  /// earlier to preserve nearby branch points. The move-back window is
+  /// capped to [maxBranchPoints] steps before the basic pruning boundary.
   ///
-  /// **Example:**
-  /// ``` md
-  /// Path: [root, n1, n2*, n3, n4*, n5, n6, n7, n8, current]
-  ///       (* = branch point with multiple children)
-  ///
-  /// maxHistoryLength = 6, maxBranchPoints = 2
-  /// Basic pruning would make n4 the new root (depth 6)
-  /// But n4 is a branch point, so we move back to n2 to preserve both branches
-  /// Final newRoot = n2 (preserves branches at n2 and n4)
-  /// ```
+  /// This keeps memory bounded while retaining recent branching context:
+  /// max depth <= maxHistoryLength + maxBranchPoints.
   ///
   /// ## Implementation Steps
   ///
-  /// 1. Calculate basic newRoot by counting back [maxHistoryLength] steps
-  /// 2. Find all branch points along the current path
-  /// 3. Take the most recent [maxBranchPoints] branch points
-  /// 4. Find the earliest branch point that would be pruned
-  /// 5. Move newRoot back to preserve that branch point
-  /// 6. Detach newRoot from its parent to make it the new tree root
+  /// 1. Calculate basic newRoot index from [maxHistoryLength]
+  /// 2. Scan backward up to [maxBranchPoints] steps
+  /// 3. Move newRoot to include recent branch points in that window
+  /// 4. Detach newRoot from parent to make it the new root
   void _pruneIfNeeded() {
     final path = _pathFromRoot(_current);
     final depth = path.length - 1;
@@ -293,53 +297,29 @@ class HistoryManager {
       return;
     }
 
-    // Step 1: Calculate basic newRoot (without branch preservation).
-    final stepsToMove = depth - maxHistoryLength;
-    var newRoot = _current;
-    for (var i = 0; i < stepsToMove; i++) {
-      if (newRoot.parent == null) {
-        break;
-      }
-      newRoot = newRoot.parent!;
-    }
+    final candidateIndex = depth - maxHistoryLength;
+    var resolvedIndex = candidateIndex;
 
-    // Step 2-5: Adjust newRoot to preserve recent branch points.
-    if (maxBranchPoints > 0) {
-      // Step 2: Find all branch points along the current path.
-      final branchPoints = <_HistoryNode>[];
-      for (final node in path) {
-        if (node.children.length > 1) {
-          branchPoints.add(node);
+    if (maxBranchPoints > 0 && candidateIndex > 0) {
+      final earliestAllowedIndex = candidateIndex - maxBranchPoints < 0
+          ? 0
+          : candidateIndex - maxBranchPoints;
+      var preservedBranchCount = 0;
+
+      for (
+        var index = candidateIndex - 1;
+        index >= earliestAllowedIndex && preservedBranchCount < maxBranchPoints;
+        index--
+      ) {
+        if (path[index].children.length <= 1) {
+          continue;
         }
-      }
-
-      if (branchPoints.isNotEmpty) {
-        // Build index for quick path position lookup.
-        final pathIndex = <_HistoryNode, int>{};
-        for (var i = 0; i < path.length; i++) {
-          pathIndex[path[i]] = i;
-        }
-
-        final candidateIndex = pathIndex[newRoot] ?? 0;
-        var resolvedIndex = candidateIndex;
-
-        // Step 3-4: Find the earliest branch point that would be pruned.
-        // Take the most recent maxBranchPoints branches (reversed order).
-        for (final branchPoint in branchPoints.reversed.take(maxBranchPoints)) {
-          final index = pathIndex[branchPoint];
-          if (index != null && index < resolvedIndex) {
-            // This branch point would be pruned, move newRoot back to preserve
-            // it.
-            resolvedIndex = index;
-          }
-        }
-
-        // Step 5: Update newRoot to the adjusted position.
-        newRoot = path[resolvedIndex];
+        resolvedIndex = index;
+        preservedBranchCount++;
       }
     }
 
-    // Step 6: Detach newRoot from its parent to make it the new tree root.
+    final newRoot = path[resolvedIndex];
     final oldParent = newRoot.parent;
     if (oldParent != null) {
       oldParent.children.remove(newRoot);
@@ -349,6 +329,9 @@ class HistoryManager {
         'newRootId': newRoot.id,
         'depth': depth,
         'maxHistoryLength': maxHistoryLength,
+        'maxBranchPoints': maxBranchPoints,
+        'candidateIndex': candidateIndex,
+        'resolvedIndex': resolvedIndex,
       });
     }
   }
