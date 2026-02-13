@@ -146,6 +146,8 @@ class DefaultDrawStore implements DrawStore {
     StateChangeListener<T> listener, {
     bool Function(T, T)? equals,
   }) {
+    _checkNotDisposed();
+
     // Read the current value on init, but do not notify.
     var previousValue = selector.select(state);
 

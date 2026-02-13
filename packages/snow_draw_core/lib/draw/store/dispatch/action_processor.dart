@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
@@ -61,7 +62,7 @@ class ActionProcessor {
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
   final MiddlewarePipeline _pipeline;
-  final List<_DispatchTask> _queue = [];
+  final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
 
@@ -95,7 +96,7 @@ class ActionProcessor {
     }
 
     final queued = _DispatchTask(task);
-    _queue.add(queued);
+    _queue.addLast(queued);
 
     if (!_isProcessing) {
       unawaited(_drainQueue());
@@ -108,7 +109,7 @@ class ActionProcessor {
     _isProcessing = true;
     try {
       while (_queue.isNotEmpty) {
-        final next = _queue.removeAt(0);
+        final next = _queue.removeFirst();
         await next.run();
       }
     } finally {
