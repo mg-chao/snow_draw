@@ -7,6 +7,7 @@ import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
 import '../../../../types/element_style.dart';
+import '../../../../utils/binary_heap.dart';
 import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
 import '../arrow_data.dart';
@@ -14,15 +15,12 @@ import '../arrow_geometry.dart';
 import 'elbow_constants.dart';
 import 'elbow_geometry.dart';
 import 'elbow_heading.dart';
-import 'elbow_path_utils.dart';
 import 'elbow_spacing.dart';
 
 export 'elbow_heading.dart';
 
-part 'elbow_router_endpoints.dart';
 part 'elbow_router_obstacles.dart';
 part 'elbow_router_path.dart';
-part 'elbow_router_grid.dart';
 part 'elbow_router_pipeline.dart';
 
 /// Elbow arrow routing entry points.

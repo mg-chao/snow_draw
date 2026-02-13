@@ -1,6 +1,8 @@
 import 'package:meta/meta.dart';
 
 import '../../../../types/draw_point.dart';
+import 'elbow_constants.dart';
+import 'elbow_geometry.dart';
 
 /// A fixed (pinned) segment of an elbow path whose direction and axis are
 /// preserved.
@@ -28,6 +30,24 @@ final class ElbowFixedSegment {
   final int index;
   final DrawPoint start;
   final DrawPoint end;
+
+  /// Whether this segment runs horizontally.
+  bool get isHorizontal => ElbowGeometry.segmentIsHorizontal(start, end);
+
+  /// The [ElbowAxis] of this segment.
+  ElbowAxis get axis =>
+      isHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
+
+  /// The shared coordinate along the perpendicular axis.
+  ///
+  /// For a horizontal segment this is the Y midpoint; for vertical, the X.
+  double get axisValue => ElbowGeometry.axisValue(start, end, axis: axis);
+
+  /// Manhattan length of this segment.
+  double get length => ElbowGeometry.manhattanDistance(start, end);
+
+  /// Whether this segment has meaningful length.
+  bool get isSignificant => length > ElbowConstants.dedupThreshold;
 
   ElbowFixedSegment copyWith({int? index, DrawPoint? start, DrawPoint? end}) =>
       ElbowFixedSegment(

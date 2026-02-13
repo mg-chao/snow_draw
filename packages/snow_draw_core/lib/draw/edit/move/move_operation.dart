@@ -20,6 +20,7 @@ import '../../types/snap_guides.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
+import '../core/arrow_binding_cleanup.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -279,6 +280,14 @@ class MoveOperation extends EditOperation {
     );
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    final unboundMovedArrows = unbindArrowLikeElements(
+      transformedElements: updatedById,
+      baseElements: state.domain.document.elementMap,
+    );
+    if (unboundMovedArrows.isNotEmpty) {
+      updatedById.addAll(unboundMovedArrows);
     }
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
