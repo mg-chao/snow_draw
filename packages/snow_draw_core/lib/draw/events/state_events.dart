@@ -25,10 +25,12 @@ class DocumentChangedEvent extends StateChangeEvent {
 
 @immutable
 class SelectionChangedEvent extends StateChangeEvent {
-  const SelectionChangedEvent({
-    required this.selectedIds,
+  SelectionChangedEvent({
+    required Set<String> selectedIds,
     required this.selectionVersion,
-  });
+  }) : selectedIds = selectedIds.isEmpty
+           ? const <String>{}
+           : Set<String>.unmodifiable(selectedIds);
   final Set<String> selectedIds;
   final int selectionVersion;
 

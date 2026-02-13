@@ -21,11 +21,13 @@ class ErrorEvent extends DrawEvent {
 /// Validation failure event.
 @immutable
 class ValidationFailedEvent extends DrawEvent {
-  const ValidationFailedEvent({
+  ValidationFailedEvent({
     required this.action,
     required this.reason,
-    this.details = const {},
-  });
+    Map<String, dynamic> details = const {},
+  }) : details = details.isEmpty
+           ? const <String, dynamic>{}
+           : Map<String, dynamic>.unmodifiable(details);
   final String action;
   final String reason;
   final Map<String, dynamic> details;

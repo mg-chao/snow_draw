@@ -406,9 +406,7 @@ class ActionProcessor {
         nextState.domain.selection.selectionVersion) {
       _services.eventBus.emit(
         SelectionChangedEvent(
-          selectedIds: Set<String>.unmodifiable(
-            nextState.domain.selection.selectedIds,
-          ),
+          selectedIds: nextState.domain.selection.selectedIds,
           selectionVersion: nextState.domain.selection.selectionVersion,
         ),
       );

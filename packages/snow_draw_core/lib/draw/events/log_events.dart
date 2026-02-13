@@ -26,13 +26,13 @@ abstract class LogEvent extends DrawEvent {
 /// General log event.
 @immutable
 class GeneralLogEvent extends LogEvent {
-  const GeneralLogEvent({
+  GeneralLogEvent({
     required this.level,
     required this.module,
     required this.message,
     required this.timestamp,
-    this.data,
-  });
+    Map<String, dynamic>? data,
+  }) : data = _freezeData(data);
   @override
   final Level level;
   @override
@@ -44,6 +44,16 @@ class GeneralLogEvent extends LogEvent {
 
   /// Additional data.
   final Map<String, dynamic>? data;
+
+  static Map<String, dynamic>? _freezeData(Map<String, dynamic>? data) {
+    if (data == null) {
+      return null;
+    }
+    if (data.isEmpty) {
+      return const <String, dynamic>{};
+    }
+    return Map<String, dynamic>.unmodifiable(data);
+  }
 
   @override
   String toString() =>
