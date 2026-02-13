@@ -51,15 +51,44 @@ class _SerialNumberOperationsToolbarState
   static const double _iconSize = 16;
 
   VoidCallback? _unsubscribe;
-  late final DrawStateViewBuilder _stateViewBuilder;
+  late DrawStateViewBuilder _stateViewBuilder;
 
   @override
   void initState() {
     super.initState();
-    _stateViewBuilder = DrawStateViewBuilder(
-      editOperations: widget.store.context.editOperations,
-    );
-    _unsubscribe = widget.store.listen(
+    _stateViewBuilder = _buildStateViewBuilder(widget.store);
+    _subscribe(widget.store);
+  }
+
+  @override
+  void didUpdateWidget(covariant SerialNumberOperationsToolbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.store == widget.store) {
+      return;
+    }
+    _unsubscribe?.call();
+    _stateViewBuilder = _buildStateViewBuilder(widget.store);
+    _subscribe(widget.store);
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe?.call();
+    _unsubscribe = null;
+    super.dispose();
+  }
+
+  void _handleStoreUpdate(DrawState _) {
+    if (!widget.adapter.stateListenable.value.hasSelectedSerialNumbers) {
+      return;
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _subscribe(DrawStore store) {
+    _unsubscribe = store.listen(
       _handleStoreUpdate,
       changeTypes: {
         DrawStateChange.selection,
@@ -70,17 +99,8 @@ class _SerialNumberOperationsToolbarState
     );
   }
 
-  @override
-  void dispose() {
-    _unsubscribe?.call();
-    super.dispose();
-  }
-
-  void _handleStoreUpdate(DrawState _) {
-    if (mounted) {
-      setState(() {});
-    }
-  }
+  DrawStateViewBuilder _buildStateViewBuilder(DrawStore store) =>
+      DrawStateViewBuilder(editOperations: store.context.editOperations);
 
   @override
   Widget build(BuildContext context) =>
