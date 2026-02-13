@@ -1,25 +1,5 @@
 part of 'elbow_editing.dart';
 
-ElbowHeading? _resolveRequiredHeading({
-  required ArrowBinding? binding,
-  required Map<String, ElementState> elementsById,
-  required DrawPoint point,
-  required bool isStart,
-}) {
-  if (binding == null) {
-    return null;
-  }
-  final heading = ElbowGeometry.resolveBoundHeading(
-    binding: binding,
-    elementsById: elementsById,
-    point: point,
-  );
-  if (heading == null) {
-    return null;
-  }
-  return isStart ? heading : heading.opposite;
-}
-
 List<DrawPoint>? _buildFallbackPointsForActiveFixed({
   required DrawPoint start,
   required DrawPoint end,
@@ -183,15 +163,10 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
     return (state: state, reroutedSide: null);
   }
 
-  final activeBinding = activeIsStart
-      ? context.startBinding
-      : context.endBinding;
   final activePoint = activeIsStart ? state.points.first : state.points.last;
-  final requiredHeading = _resolveRequiredHeading(
-    binding: activeBinding,
-    elementsById: context.elementsById,
-    point: activePoint,
+  final requiredHeading = context.resolveRequiredHeading(
     isStart: activeIsStart,
+    point: activePoint,
   );
 
   final startLocal = activeIsStart
@@ -200,7 +175,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   final endLocal = activeIsStart
       ? state.points[anchorIndex]
       : state.points.last;
-  final routed = _routeReleasedRegion(
+  final routed = _routeLocalPath(
     element: context.element,
     elementsById: context.elementsById,
     startLocal: startLocal,
@@ -303,13 +278,10 @@ _adoptBaselineRouteIfNeeded({
 
   ElbowHeading? requiredHeading;
   if (activeSegment != null) {
-    final binding = activeStart ? context.startBinding : context.endBinding;
     final point = activeStart ? state.points.first : state.points.last;
-    requiredHeading = _resolveRequiredHeading(
-      binding: binding,
-      elementsById: context.elementsById,
-      point: point,
+    requiredHeading = context.resolveRequiredHeading(
       isStart: activeStart,
+      point: point,
     );
   }
 
@@ -433,7 +405,7 @@ _FixedSegmentPathResult _rerouteReleasedBindingSpan({
     if (s < 0 || e >= points.length || s >= e) {
       continue;
     }
-    final routed = _routeReleasedRegion(
+    final routed = _routeLocalPath(
       element: context.element,
       elementsById: context.elementsById,
       startLocal: points[s],
@@ -598,33 +570,24 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
 
   // Step 6: enforce perpendicularity for bound endpoints in world space.
   final perpendicular = _ensurePerpendicularBindings(
-    element: context.element,
-    elementsById: context.elementsById,
+    context: context,
     points: state.points,
     fixedSegments: synced,
-    startBinding: context.startBinding,
-    endBinding: context.endBinding,
-    startArrowhead: context.startArrowhead,
-    endArrowhead: context.endArrowhead,
   );
   return _alignFixedSegmentsToBoundLanes(
-    element: context.element,
-    elementsById: context.elementsById,
+    context: context,
     points: perpendicular.points,
     fixedSegments: perpendicular.fixedSegments,
-    startBinding: context.startBinding,
-    endBinding: context.endBinding,
   );
 }
 
 _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
-  required ElementState element,
-  required Map<String, ElementState> elementsById,
+  required _ElbowEditContext context,
   required List<DrawPoint> points,
   required List<ElbowFixedSegment> fixedSegments,
-  required ArrowBinding? startBinding,
-  required ArrowBinding? endBinding,
 }) {
+  final startBinding = context.startBinding;
+  final endBinding = context.endBinding;
   if (points.length < 2 ||
       fixedSegments.isEmpty ||
       (startBinding == null && endBinding == null)) {
@@ -633,6 +596,8 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
       fixedSegments: fixedSegments,
     );
   }
+  final element = context.element;
+  final elementsById = context.elementsById;
   final space = ElementSpace(
     rotation: element.rotation,
     origin: element.rect.center,

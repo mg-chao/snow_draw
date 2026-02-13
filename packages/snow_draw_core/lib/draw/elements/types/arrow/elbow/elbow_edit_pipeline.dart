@@ -33,25 +33,19 @@ enum _ElbowEditMode {
   applyFixedSegments,
 }
 
-@immutable
-final class _PerpendicularAdjustment {
-  const _PerpendicularAdjustment({
-    required this.points,
-    required this.moved,
-    required this.inserted,
-  });
+/// Result of a perpendicular endpoint adjustment.
+///
+/// [moved] is true when existing points were shifted; [inserted] is true
+/// when new points were added to the path.
+typedef _PerpendicularAdjustment = ({
+  List<DrawPoint> points,
+  bool moved,
+  bool inserted,
+});
 
-  /// No-op result: the points are returned unchanged.
-  const _PerpendicularAdjustment.unchanged(this.points)
-    : moved = false,
-      inserted = false;
+_PerpendicularAdjustment _unchangedAdjustment(List<DrawPoint> points) =>
+    (points: points, moved: false, inserted: false);
 
-  final List<DrawPoint> points;
-  final bool moved;
-  final bool inserted;
-}
-
-@immutable
 final class _ElbowEditContext {
   _ElbowEditContext({
     required this.element,
@@ -65,11 +59,6 @@ final class _ElbowEditContext {
     required this.endBinding,
     required this.previousStartBinding,
     required this.previousEndBinding,
-    required this.bindingChanged,
-    required this.startBindingRemoved,
-    required this.endBindingRemoved,
-    required this.pointsChanged,
-    required this.fixedSegmentsChanged,
     required this.releaseRequested,
   });
 
@@ -84,14 +73,30 @@ final class _ElbowEditContext {
   final ArrowBinding? endBinding;
   final ArrowBinding? previousStartBinding;
   final ArrowBinding? previousEndBinding;
-  final bool bindingChanged;
-  final bool startBindingRemoved;
-  final bool endBindingRemoved;
-  final bool pointsChanged;
-  final bool fixedSegmentsChanged;
   final bool releaseRequested;
 
   bool get hasEnoughPoints => incomingPoints.length >= 2;
+
+  // -- Derived change flags (lazy) --
+
+  late final bool bindingChanged =
+      previousStartBinding != startBinding || previousEndBinding != endBinding;
+
+  late final bool startBindingRemoved =
+      previousStartBinding != null && startBinding == null;
+
+  late final bool endBindingRemoved =
+      previousEndBinding != null && endBinding == null;
+
+  late final bool pointsChanged = !ElbowGeometry.pointListsEqual(
+    basePoints,
+    incomingPoints,
+  );
+
+  late final bool fixedSegmentsChanged = !_fixedSegmentsEqual(
+    previousFixedSegments,
+    fixedSegments,
+  );
 
   /// Decides which edit pipeline branch to execute.
   _ElbowEditMode resolveMode() {
@@ -139,6 +144,24 @@ final class _ElbowEditContext {
       endBinding != null && elementsById.containsKey(endBinding!.elementId);
 
   bool get isFullyUnbound => startBinding == null && endBinding == null;
+
+  /// Resolves the required heading for a bound endpoint.
+  ///
+  /// Returns the heading the first segment must follow (flipped for end).
+  ElbowHeading? resolveRequiredHeading({
+    required bool isStart,
+    required DrawPoint point,
+  }) {
+    final binding = isStart ? startBinding : endBinding;
+    if (binding == null) return null;
+    final heading = ElbowGeometry.resolveBoundHeading(
+      binding: binding,
+      elementsById: elementsById,
+      point: point,
+    );
+    if (heading == null) return null;
+    return isStart ? heading : heading.opposite;
+  }
 }
 
 final class _ElbowEditPipeline {
@@ -219,17 +242,6 @@ final class _ElbowEditPipeline {
       endBinding: endBinding,
       previousStartBinding: previousData.startBinding,
       previousEndBinding: previousData.endBinding,
-      bindingChanged:
-          previousData.startBinding != startBinding ||
-          previousData.endBinding != endBinding,
-      startBindingRemoved:
-          previousData.startBinding != null && startBinding == null,
-      endBindingRemoved: previousData.endBinding != null && endBinding == null,
-      pointsChanged: !ElbowGeometry.pointListsEqual(basePoints, incomingPoints),
-      fixedSegmentsChanged: !_fixedSegmentsEqual(
-        previousFixedSegments,
-        fixedSegments,
-      ),
       releaseRequested:
           fixedSegmentsOverride != null &&
           fixedSegments.length < previousFixedSegments.length,
@@ -290,14 +302,10 @@ final class _ElbowEditPipeline {
     bool preserveCorners = false,
   }) {
     final released = _handleFixedSegmentRelease(
-      element: context.element,
-      data: context.data,
-      elementsById: context.elementsById,
+      context: context,
       currentPoints: currentPoints,
       previousFixed: previousFixed,
       remainingFixed: remainingFixed,
-      startBinding: context.startBinding,
-      endBinding: context.endBinding,
     );
     final mapped = _mapFixedSegmentsToBaseline(
       baseline: released.points,

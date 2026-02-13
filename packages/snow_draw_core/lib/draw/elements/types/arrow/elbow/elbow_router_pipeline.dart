@@ -188,17 +188,21 @@ ElbowRouteResult _buildRouteResult({
 // Endpoint resolution (merged from elbow_router_endpoints.dart)
 // ---------------------------------------------------------------------------
 
-/// Resolved binding info for a single endpoint before heading assignment.
+/// Fully resolved endpoint for elbow routing.
 @immutable
-final class _EndpointInfo {
-  const _EndpointInfo({
+final class _ResolvedEndpoint {
+  const _ResolvedEndpoint({
     required this.point,
-    required this.element,
-    required this.elementBounds,
-    required this.anchor,
+    required this.heading,
+    required this.hasArrowhead,
+    this.element,
+    this.elementBounds,
+    this.anchor,
   });
 
   final DrawPoint point;
+  final ElbowHeading heading;
+  final bool hasArrowhead;
   final ElementState? element;
   final DrawRect? elementBounds;
   final DrawPoint? anchor;
@@ -207,25 +211,35 @@ final class _EndpointInfo {
   DrawPoint get anchorOrPoint => anchor ?? point;
 }
 
-_EndpointInfo _unboundEndpointInfo(DrawPoint point) => _EndpointInfo(
-  point: point,
-  element: null,
-  elementBounds: null,
-  anchor: null,
-);
+@immutable
+final class _ResolvedEndpoints {
+  const _ResolvedEndpoints({required this.start, required this.end});
 
-_EndpointInfo _resolveEndpointInfo({
+  final _ResolvedEndpoint start;
+  final _ResolvedEndpoint end;
+}
+
+_ResolvedEndpoint _resolveEndpoint({
   required DrawPoint point,
   required ArrowBinding? binding,
   required Map<String, ElementState> elementsById,
   required bool hasArrowhead,
+  required ElbowHeading fallbackHeading,
 }) {
   if (binding == null) {
-    return _unboundEndpointInfo(point);
+    return _ResolvedEndpoint(
+      point: point,
+      heading: fallbackHeading,
+      hasArrowhead: hasArrowhead,
+    );
   }
   final element = elementsById[binding.elementId];
   if (element == null) {
-    return _unboundEndpointInfo(point);
+    return _ResolvedEndpoint(
+      point: point,
+      heading: fallbackHeading,
+      hasArrowhead: hasArrowhead,
+    );
   }
 
   final resolved =
@@ -240,100 +254,50 @@ _EndpointInfo _resolveEndpointInfo({
     target: element,
   );
   final bounds = SelectionCalculator.computeElementWorldAabb(element);
-  return _EndpointInfo(
+  final heading = ElbowGeometry.headingForPointOnBounds(
+    bounds,
+    anchor ?? resolved,
+  );
+  return _ResolvedEndpoint(
     point: resolved,
+    heading: heading,
+    hasArrowhead: hasArrowhead,
     element: element,
     elementBounds: bounds,
     anchor: anchor,
   );
 }
 
-ElbowHeading _resolveEndpointHeading({
-  required DrawRect? elementBounds,
-  required DrawPoint point,
-  required DrawPoint? anchor,
-  required ElbowHeading fallback,
-}) {
-  if (elementBounds == null) {
-    return fallback;
-  }
-  return ElbowGeometry.headingForPointOnBounds(elementBounds, anchor ?? point);
-}
-
-@immutable
-final class _ResolvedEndpoint {
-  const _ResolvedEndpoint({
-    required this.info,
-    required this.heading,
-    required this.hasArrowhead,
-  });
-
-  final _EndpointInfo info;
-  final ElbowHeading heading;
-  final bool hasArrowhead;
-
-  DrawPoint get point => info.point;
-  DrawRect? get elementBounds => info.elementBounds;
-  bool get isBound => info.isBound;
-  DrawPoint get anchorOrPoint => info.anchorOrPoint;
-}
-
-@immutable
-final class _ResolvedEndpoints {
-  const _ResolvedEndpoints({required this.start, required this.end});
-
-  final _ResolvedEndpoint start;
-  final _ResolvedEndpoint end;
-}
-
 _ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
-  ElbowHeading resolveHeadingFor(_EndpointInfo info, ElbowHeading fallback) =>
-      _resolveEndpointHeading(
-        elementBounds: info.elementBounds,
-        point: info.point,
-        anchor: info.anchor,
-        fallback: fallback,
-      );
-
   final hasStartArrowhead = request.startArrowhead != ArrowheadStyle.none;
   final hasEndArrowhead = request.endArrowhead != ArrowheadStyle.none;
-  final startInfo = _resolveEndpointInfo(
+
+  // Resolve start first (without heading) to get its point for the
+  // fallback heading vector, then resolve end, then assign headings.
+  // We need both points to compute the fallback vector heading.
+  final vectorHeading = ElbowGeometry.headingForVector(
+    request.end.x - request.start.x,
+    request.end.y - request.start.y,
+  );
+  final reverseVectorHeading = ElbowGeometry.headingForVector(
+    request.start.x - request.end.x,
+    request.start.y - request.end.y,
+  );
+
+  final start = _resolveEndpoint(
     point: request.start,
     binding: request.startBinding,
     elementsById: request.elementsById,
     hasArrowhead: hasStartArrowhead,
+    fallbackHeading: vectorHeading,
   );
-  final endInfo = _resolveEndpointInfo(
+  final end = _resolveEndpoint(
     point: request.end,
     binding: request.endBinding,
     elementsById: request.elementsById,
     hasArrowhead: hasEndArrowhead,
+    fallbackHeading: reverseVectorHeading,
   );
 
-  final startPoint = startInfo.point;
-  final endPoint = endInfo.point;
-
-  final vectorHeading = ElbowGeometry.headingForVector(
-    endPoint.x - startPoint.x,
-    endPoint.y - startPoint.y,
-  );
-  final reverseVectorHeading = ElbowGeometry.headingForVector(
-    startPoint.x - endPoint.x,
-    startPoint.y - endPoint.y,
-  );
-  final startHeading = resolveHeadingFor(startInfo, vectorHeading);
-  final endHeading = resolveHeadingFor(endInfo, reverseVectorHeading);
-
-  return _ResolvedEndpoints(
-    start: _ResolvedEndpoint(
-      info: startInfo,
-      heading: startHeading,
-      hasArrowhead: hasStartArrowhead,
-    ),
-    end: _ResolvedEndpoint(
-      info: endInfo,
-      heading: endHeading,
-      hasArrowhead: hasEndArrowhead,
-    ),
-  );
+  return _ResolvedEndpoints(start: start, end: end);
 }

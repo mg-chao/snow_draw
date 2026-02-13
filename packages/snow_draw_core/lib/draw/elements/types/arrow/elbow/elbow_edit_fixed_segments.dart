@@ -707,6 +707,11 @@ Set<int> _fixedSegmentsWithSameHeadingAdjacency({
 // Routing helpers (merged from elbow_edit_routing.dart)
 // ---------------------------------------------------------------------------
 
+/// Routes an elbow sub-path in local space.
+///
+/// When [previousFixed] or [nextFixed] are provided and no bindings
+/// constrain the route, a cheap direct elbow is preferred that continues
+/// the adjacent fixed segment's axis pattern.
 List<DrawPoint> _routeLocalPath({
   required ElementState element,
   required Map<String, ElementState> elementsById,
@@ -716,35 +721,14 @@ List<DrawPoint> _routeLocalPath({
   required ArrowheadStyle endArrowhead,
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
-}) {
-  final routed = routeElbowArrowForElementPoints(
-    element: element,
-    startLocal: startLocal,
-    endLocal: endLocal,
-    elementsById: elementsById,
-    startBinding: startBinding,
-    endBinding: endBinding,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
-  );
-  return routed.localPoints;
-}
-
-List<DrawPoint> _routeReleasedRegion({
-  required ElementState element,
-  required Map<String, ElementState> elementsById,
-  required DrawPoint startLocal,
-  required DrawPoint endLocal,
-  required ArrowheadStyle startArrowhead,
-  required ArrowheadStyle endArrowhead,
-  required ElbowFixedSegment? previousFixed,
-  required ElbowFixedSegment? nextFixed,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
+  ElbowFixedSegment? previousFixed,
+  ElbowFixedSegment? nextFixed,
 }) {
   // When no bindings constrain the route, prefer the axis that continues
   // the adjacent fixed segment's pattern via a cheap direct elbow.
-  if (startBinding == null && endBinding == null) {
+  if (startBinding == null &&
+      endBinding == null &&
+      (previousFixed != null || nextFixed != null)) {
     final preferHorizontal = previousFixed != null && nextFixed == null
         ? previousFixed.isHorizontal
         : (nextFixed != null && previousFixed == null
@@ -760,27 +744,24 @@ List<DrawPoint> _routeReleasedRegion({
     }
   }
 
-  return _routeLocalPath(
+  final routed = routeElbowArrowForElementPoints(
     element: element,
-    elementsById: elementsById,
     startLocal: startLocal,
     endLocal: endLocal,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
+    elementsById: elementsById,
     startBinding: startBinding,
     endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
   );
+  return routed.localPoints;
 }
 
 _FixedSegmentPathResult _handleFixedSegmentRelease({
-  required ElementState element,
-  required ArrowData data,
-  required Map<String, ElementState> elementsById,
+  required _ElbowEditContext context,
   required List<DrawPoint> currentPoints,
   required List<ElbowFixedSegment> previousFixed,
   required List<ElbowFixedSegment> remainingFixed,
-  required ArrowBinding? startBinding,
-  required ArrowBinding? endBinding,
 }) {
   final previousIndices = previousFixed.map((segment) => segment.index).toSet();
   final remainingIndices = remainingFixed
@@ -818,21 +799,23 @@ _FixedSegmentPathResult _handleFixedSegmentRelease({
     );
   }
 
-  final startPoint = currentPoints[startIndex];
-  final endPoint = currentPoints[endIndex];
-  final routed = _routeReleasedRegion(
-    element: element,
-    elementsById: elementsById,
-    startLocal: startPoint,
-    endLocal: endPoint,
-    startArrowhead: startIndex == 0 ? data.startArrowhead : ArrowheadStyle.none,
+  final routed = _routeLocalPath(
+    element: context.element,
+    elementsById: context.elementsById,
+    startLocal: currentPoints[startIndex],
+    endLocal: currentPoints[endIndex],
+    startArrowhead: startIndex == 0
+        ? context.startArrowhead
+        : ArrowheadStyle.none,
     endArrowhead: endIndex == currentPoints.length - 1
-        ? data.endArrowhead
+        ? context.endArrowhead
         : ArrowheadStyle.none,
     previousFixed: previous,
     nextFixed: next,
-    startBinding: startIndex == 0 ? startBinding : null,
-    endBinding: endIndex == currentPoints.length - 1 ? endBinding : null,
+    startBinding: startIndex == 0 ? context.startBinding : null,
+    endBinding: endIndex == currentPoints.length - 1
+        ? context.endBinding
+        : null,
   );
 
   return _stitchSubPath(
