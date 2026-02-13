@@ -121,9 +121,9 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
-    final resolvedFamily = fontFamily?.trim();
-    if (resolvedFamily != null && resolvedFamily.isNotEmpty) {
-      await ensureSystemFontLoaded(resolvedFamily);
+    final normalizedFontFamily = _normalizeFontFamily(fontFamily);
+    if (normalizedFontFamily != null && normalizedFontFamily.isNotEmpty) {
+      await ensureSystemFontLoaded(normalizedFontFamily);
       if (_isDisposed) {
         return;
       }
@@ -158,7 +158,7 @@ class StyleToolbarAdapter {
         startArrowhead != null ||
         endArrowhead != null ||
         fontSize != null ||
-        fontFamily != null ||
+        normalizedFontFamily != null ||
         textAlign != null ||
         verticalAlign != null ||
         opacity != null ||
@@ -182,7 +182,7 @@ class StyleToolbarAdapter {
           startArrowhead: startArrowhead,
           endArrowhead: endArrowhead,
           fontSize: fontSize,
-          fontFamily: fontFamily,
+          fontFamily: normalizedFontFamily,
           textAlign: textAlign,
           verticalAlign: verticalAlign,
           opacity: opacity,
@@ -210,7 +210,7 @@ class StyleToolbarAdapter {
       startArrowhead: startArrowhead,
       endArrowhead: endArrowhead,
       fontSize: fontSize,
-      fontFamily: fontFamily,
+      fontFamily: normalizedFontFamily,
       textAlign: textAlign,
       verticalAlign: verticalAlign,
       opacity: opacity,
@@ -1799,6 +1799,14 @@ class StyleToolbarAdapter {
   );
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
+
+  String? _normalizeFontFamily(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? '' : trimmed;
+  }
 }
 
 @immutable

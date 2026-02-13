@@ -59,6 +59,17 @@ void main() {
     expect(adapter.gridSize, GridConfig.maxSize);
   });
 
+  test('setGridSize ignores non-finite values', () async {
+    final before = adapter.gridSize;
+
+    await adapter.setGridSize(double.nan);
+    await adapter.setGridSize(double.infinity);
+    await adapter.setGridSize(double.negativeInfinity);
+
+    expect(adapter.gridSize, before);
+    expect(store.config.grid.size, before);
+  });
+
   test('enabledListenable notifies on change', () async {
     final values = <bool>[];
     adapter.enabledListenable.addListener(

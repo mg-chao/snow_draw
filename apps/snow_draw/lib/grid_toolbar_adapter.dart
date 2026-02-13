@@ -38,9 +38,10 @@ class GridToolbarAdapter {
     if (_isDisposed) {
       return;
     }
-    final clamped = size < GridConfig.minSize
-        ? GridConfig.minSize
-        : (size > GridConfig.maxSize ? GridConfig.maxSize : size);
+    if (!size.isFinite) {
+      return;
+    }
+    final clamped = size.clamp(GridConfig.minSize, GridConfig.maxSize);
     final nextConfig = _config.copyWith(
       grid: _config.grid.copyWith(size: clamped),
     );
