@@ -76,6 +76,23 @@ class ActionProcessor {
   Future<void> dispatch(DrawAction action) =>
       _enqueue(() => _processWithExplicitCancel(action));
 
+  void syncHistoryAvailability({bool emitIfChanged = false}) {
+    final canUndo = _services.historyManager.canUndo;
+    final canRedo = _services.historyManager.canRedo;
+    final changed = canUndo != _lastCanUndo || canRedo != _lastCanRedo;
+
+    _lastCanUndo = canUndo;
+    _lastCanRedo = canRedo;
+
+    if (!emitIfChanged || !changed) {
+      return;
+    }
+
+    _services.eventBus.emit(
+      HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
+    );
+  }
+
   void dispose() {
     if (_isDisposed) {
       return;
@@ -430,16 +447,7 @@ class ActionProcessor {
   }
 
   void _emitHistoryAvailabilityIfNeeded() {
-    final canUndo = _services.historyManager.canUndo;
-    final canRedo = _services.historyManager.canRedo;
-    if (canUndo == _lastCanUndo && canRedo == _lastCanRedo) {
-      return;
-    }
-    _lastCanUndo = canUndo;
-    _lastCanRedo = canRedo;
-    _services.eventBus.emit(
-      HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
-    );
+    syncHistoryAvailability(emitIfChanged: true);
   }
 
   EditCancelReason _resolveCancelReason(DrawAction action) => switch (action) {

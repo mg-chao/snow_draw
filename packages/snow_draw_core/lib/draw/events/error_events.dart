@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import 'event_bus.dart';
+import 'event_payload_freezer.dart';
 
 /// Error event.
 @immutable
@@ -25,9 +26,7 @@ class ValidationFailedEvent extends DrawEvent {
     required this.action,
     required this.reason,
     Map<String, dynamic> details = const {},
-  }) : details = details.isEmpty
-           ? const <String, dynamic>{}
-           : Map<String, dynamic>.unmodifiable(details);
+  }) : details = freezeEventPayloadMap(details);
   final String action;
   final String reason;
   final Map<String, dynamic> details;

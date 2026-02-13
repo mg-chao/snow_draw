@@ -2,6 +2,7 @@ import 'package:logger/logger.dart';
 import 'package:meta/meta.dart';
 
 import 'event_bus.dart';
+import 'event_payload_freezer.dart';
 
 /// Base class for log events.
 ///
@@ -49,10 +50,7 @@ class GeneralLogEvent extends LogEvent {
     if (data == null) {
       return null;
     }
-    if (data.isEmpty) {
-      return const <String, dynamic>{};
-    }
-    return Map<String, dynamic>.unmodifiable(data);
+    return freezeEventPayloadMap(data);
   }
 
   @override

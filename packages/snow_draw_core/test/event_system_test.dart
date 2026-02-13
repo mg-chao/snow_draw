@@ -1,9 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
+import 'package:snow_draw_core/draw/actions/draw_actions.dart';
+import 'package:snow_draw_core/draw/core/draw_context.dart';
+import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/events/error_events.dart';
 import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/events/log_events.dart';
 import 'package:snow_draw_core/draw/events/state_events.dart';
+import 'package:snow_draw_core/draw/models/document_state.dart';
+import 'package:snow_draw_core/draw/models/domain_state.dart';
+import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/models/selection_state.dart';
+import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   group('EventBus', () {
@@ -102,5 +114,207 @@ void main() {
         throwsA(isA<UnsupportedError>()),
       );
     });
+
+    test('ValidationFailedEvent deeply freezes nested details', () {
+      final nested = <String, dynamic>{
+        'path': <String>['root'],
+        'meta': <String, dynamic>{'attempt': 1},
+        'flags': <String>{'alpha'},
+      };
+      final event = ValidationFailedEvent(
+        action: 'UpdateElementsStyle',
+        reason: 'invalid',
+        details: {'payload': nested},
+      );
+
+      (nested['path'] as List<String>).add('mutated');
+      (nested['meta'] as Map<String, dynamic>)['attempt'] = 2;
+      (nested['flags'] as Set<String>).add('beta');
+
+      final payload = event.details['payload'] as Map<Object?, Object?>;
+      final frozenPath = payload['path'];
+      final frozenMeta = payload['meta'];
+      final frozenFlags = payload['flags'];
+
+      expect(frozenPath, isA<List<Object?>>());
+      expect(frozenMeta, isA<Map<Object?, Object?>>());
+      expect(frozenFlags, isA<Set<Object?>>());
+
+      final frozenPathList = frozenPath! as List<Object?>;
+      final frozenMetaMap = frozenMeta! as Map<Object?, Object?>;
+      final frozenFlagsSet = frozenFlags! as Set<Object?>;
+
+      expect(payload['path'], equals(['root']));
+      expect(frozenMetaMap['attempt'], equals(1));
+      expect(payload['flags'], equals({'alpha'}));
+
+      expect(() => frozenPathList.add('x'), throwsA(isA<UnsupportedError>()));
+      expect(
+        () => frozenMetaMap['next'] = true,
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(() => frozenFlagsSet.add('x'), throwsA(isA<UnsupportedError>()));
+    });
+
+    test('GeneralLogEvent deeply freezes nested data payloads', () {
+      final nested = <String, dynamic>{
+        'steps': <String>['init'],
+        'context': <String, dynamic>{'phase': 'boot'},
+      };
+      final event = GeneralLogEvent(
+        level: Level.info,
+        module: 'Pipeline',
+        message: 'Initialized',
+        timestamp: DateTime(2026),
+        data: {'payload': nested},
+      );
+
+      (nested['steps'] as List<String>).add('mutated');
+      (nested['context'] as Map<String, dynamic>)['phase'] = 'mutated';
+
+      final frozenData = event.data;
+      expect(frozenData, isNotNull);
+
+      final payload = frozenData!['payload'] as Map<Object?, Object?>;
+      final frozenSteps = payload['steps'];
+      final frozenContext = payload['context'];
+
+      expect(frozenSteps, isA<List<Object?>>());
+      expect(frozenContext, isA<Map<Object?, Object?>>());
+
+      final frozenStepsList = frozenSteps! as List<Object?>;
+      final frozenContextMap = frozenContext! as Map<Object?, Object?>;
+
+      expect(payload['steps'], equals(['init']));
+      expect(frozenContextMap['phase'], equals('boot'));
+
+      expect(() => frozenStepsList.add('x'), throwsA(isA<UnsupportedError>()));
+      expect(
+        () => frozenContextMap['next'] = 1,
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+
+    test('ValidationFailedEvent rejects cyclic details payloads', () {
+      final details = <String, dynamic>{};
+      details['self'] = details;
+
+      expect(
+        () => ValidationFailedEvent(
+          action: 'UpdateElementsStyle',
+          reason: 'invalid',
+          details: details,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('GeneralLogEvent rejects cyclic data payloads', () {
+      final data = <String, dynamic>{};
+      data['self'] = data;
+
+      expect(
+        () => GeneralLogEvent(
+          level: Level.info,
+          module: 'Pipeline',
+          message: 'Initialized',
+          timestamp: DateTime(2026),
+          data: data,
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('History availability events', () {
+    test('restoreHistory emits history availability '
+        'and keeps baseline synchronized', () async {
+      final source = _createStore(initialState: _stateWithOneSelectedElement());
+      addTearDown(source.dispose);
+
+      await source.dispatch(
+        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
+      );
+      expect(source.canUndo, isTrue);
+      expect(source.canRedo, isFalse);
+      final snapshot = source.exportHistory();
+
+      final target = _createStore();
+      addTearDown(target.dispose);
+
+      final events = <HistoryAvailabilityChangedEvent>[];
+      final subscription = target.eventStream
+          .where((event) => event is HistoryAvailabilityChangedEvent)
+          .cast<HistoryAvailabilityChangedEvent>()
+          .listen(events.add);
+      addTearDown(subscription.cancel);
+
+      target.restoreHistory(snapshot);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(target.canUndo, isTrue);
+      expect(target.canRedo, isFalse);
+      expect(events, hasLength(1));
+      expect(events.single.canUndo, isTrue);
+      expect(events.single.canRedo, isFalse);
+
+      events.clear();
+      await target.dispatch(const MoveCamera(dx: 4, dy: 0));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, isEmpty);
+    });
+
+    test('restoreHistoryJson emits history availability updates', () async {
+      final source = _createStore(initialState: _stateWithOneSelectedElement());
+      addTearDown(source.dispose);
+
+      await source.dispatch(
+        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
+      );
+      final snapshotJson = source.exportHistoryJson();
+
+      final target = _createStore();
+      addTearDown(target.dispose);
+
+      final events = <HistoryAvailabilityChangedEvent>[];
+      final subscription = target.eventStream
+          .where((event) => event is HistoryAvailabilityChangedEvent)
+          .cast<HistoryAvailabilityChangedEvent>()
+          .listen(events.add);
+      addTearDown(subscription.cancel);
+
+      target.restoreHistoryJson(snapshotJson);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(events, hasLength(1));
+      expect(events.single.canUndo, isTrue);
+      expect(events.single.canRedo, isFalse);
+    });
   });
 }
+
+DefaultDrawStore _createStore({DrawState? initialState}) {
+  final registry = DefaultElementRegistry();
+  registerBuiltInElements(registry);
+  final context = DrawContext.withDefaults(elementRegistry: registry);
+  return DefaultDrawStore(context: context, initialState: initialState);
+}
+
+DrawState _stateWithOneSelectedElement() => DrawState(
+  domain: DomainState(
+    document: DocumentState(
+      elements: const [
+        ElementState(
+          id: 'target',
+          rect: DrawRect(maxX: 40, maxY: 40),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: FilterData(),
+        ),
+      ],
+    ),
+    selection: const SelectionState(selectedIds: {'target'}),
+  ),
+);

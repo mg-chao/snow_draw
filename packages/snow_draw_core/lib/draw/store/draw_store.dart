@@ -247,6 +247,7 @@ class DefaultDrawStore implements DrawStore {
 
   void restoreHistory(HistoryManagerSnapshot snapshot) {
     _historyManager.restore(snapshot);
+    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
   Map<String, dynamic> exportHistoryJson() =>
@@ -266,6 +267,7 @@ class DefaultDrawStore implements DrawStore {
       },
     );
     _historyManager.restore(snapshot);
+    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
   void _checkNotDisposed() {
