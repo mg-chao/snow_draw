@@ -27,7 +27,6 @@ import '../../types/element_style.dart';
 import '../../utils/combined_element_lookup.dart';
 import '../../utils/list_equality.dart';
 import '../../utils/snapping_mode.dart';
-import '../apply/edit_apply.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_errors.dart';
 import '../core/edit_modifiers.dart';
@@ -409,7 +408,7 @@ List<DrawPoint> _applyPointDeletion(ArrowPointTransform transform) {
     ..removeAt(transform.activeIndex!);
 }
 
-/// Builds the updated [ElementState] for both [finish] and [buildPreview],
+/// Builds the updated [ElementState] for both `finish` and `buildPreview`,
 /// eliminating the duplicated elbow-edit + rect/normalize pipeline.
 ElementState _buildUpdatedElement({
   required ElementState element,

@@ -15,15 +15,11 @@ void main() {
 
     test('quantizes angle so near-identical values match', () {
       final a = LineShaderKey(
-        spacing: 5.0,
-        lineWidth: 2.0,
+        spacing: 5,
+        lineWidth: 2,
         angle: 0.7853981633974483,
       );
-      final b = LineShaderKey(
-        spacing: 5.0,
-        lineWidth: 2.0,
-        angle: 0.7854,
-      );
+      final b = LineShaderKey(spacing: 5, lineWidth: 2, angle: 0.7854);
       expect(a, equals(b));
       expect(a.hashCode, b.hashCode);
     });
@@ -31,13 +27,13 @@ void main() {
     test('cache hits for near-identical angles', () {
       clearStrokePatternCaches();
       final paint1 = buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
         angle: 0.7853981633974483,
         color: const Color(0xFFFF0000),
       );
       final paint2 = buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
         angle: 0.7854,
         color: const Color(0xFF00FF00),
@@ -47,13 +43,13 @@ void main() {
 
     test('equal keys match', () {
       final a = LineShaderKey(
-        spacing: 5.0,
-        lineWidth: 2.0,
+        spacing: 5,
+        lineWidth: 2,
         angle: -math.pi / 4,
       );
       final b = LineShaderKey(
-        spacing: 5.0,
-        lineWidth: 2.0,
+        spacing: 5,
+        lineWidth: 2,
         angle: -math.pi / 4,
       );
       expect(a, equals(b));
@@ -61,15 +57,15 @@ void main() {
     });
 
     test('different keys do not match', () {
-      final a = LineShaderKey(spacing: 5.0, lineWidth: 2.0, angle: 0.0);
-      final b = LineShaderKey(spacing: 5.0, lineWidth: 3.0, angle: 0.0);
+      final a = LineShaderKey(spacing: 5, lineWidth: 2, angle: 0);
+      final b = LineShaderKey(spacing: 5, lineWidth: 3, angle: 0);
       expect(a, isNot(equals(b)));
     });
   });
 
   group('buildDashedPath', () {
     test('returns empty path for empty input', () {
-      final result = buildDashedPath(Path(), 5.0, 3.0);
+      final result = buildDashedPath(Path(), 5, 3);
       // An empty input path produces an empty dashed path.
       final metrics = result.computeMetrics().toList();
       expect(metrics, isEmpty);
@@ -79,7 +75,7 @@ void main() {
       final base = Path()
         ..moveTo(0, 0)
         ..lineTo(100, 0);
-      final dashed = buildDashedPath(base, 10.0, 5.0);
+      final dashed = buildDashedPath(base, 10, 5);
       final metrics = dashed.computeMetrics().toList();
       // 100 / (10 + 5) = 6.67 → expect ~7 segments.
       expect(metrics.length, greaterThanOrEqualTo(6));
@@ -89,7 +85,7 @@ void main() {
 
   group('buildDottedPath', () {
     test('returns empty path for empty input', () {
-      final result = buildDottedPath(Path(), 5.0, 1.0);
+      final result = buildDottedPath(Path(), 5, 1);
       final metrics = result.computeMetrics().toList();
       expect(metrics, isEmpty);
     });
@@ -98,7 +94,7 @@ void main() {
       final base = Path()
         ..moveTo(0, 0)
         ..lineTo(100, 0);
-      final dotted = buildDottedPath(base, 10.0, 2.0);
+      final dotted = buildDottedPath(base, 10, 2);
       // Each dot is an oval added to the path, so the path
       // should have multiple contours.
       final metrics = dotted.computeMetrics().toList();
@@ -111,7 +107,7 @@ void main() {
   group('buildLineFillPaint', () {
     test('returns a paint with shader and color filter', () {
       final paint = buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
         angle: -math.pi / 4,
         color: const Color(0xFFFF0000),
@@ -125,15 +121,15 @@ void main() {
     test('caches shader for same key', () {
       clearStrokePatternCaches();
       final paint1 = buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
-        angle: 0.0,
+        angle: 0,
         color: const Color(0xFFFF0000),
       );
       final paint2 = buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
-        angle: 0.0,
+        angle: 0,
         color: const Color(0xFF00FF00),
       );
       // Same shader key → same shader instance.
@@ -144,9 +140,9 @@ void main() {
   group('clearStrokePatternCaches', () {
     test('clears the shader cache', () {
       buildLineFillPaint(
-        spacing: 8.0,
+        spacing: 8,
         lineWidth: 1.5,
-        angle: 0.0,
+        angle: 0,
         color: const Color(0xFFFF0000),
       );
       expect(lineShaderCache.length, greaterThan(0));
@@ -157,7 +153,7 @@ void main() {
 
   group('buildDotPositions', () {
     test('returns empty list for empty path', () {
-      final result = buildDotPositions(Path(), 5.0);
+      final result = buildDotPositions(Path(), 5);
       expect(result.length, 0);
     });
 
@@ -165,7 +161,7 @@ void main() {
       final base = Path()
         ..moveTo(0, 0)
         ..lineTo(100, 0);
-      final positions = buildDotPositions(base, 10.0);
+      final positions = buildDotPositions(base, 10);
       // 100 / 10 = 10 intervals → 11 dots, each is 2 floats.
       expect(positions.length, greaterThanOrEqualTo(20));
       expect(positions.length.isEven, isTrue);
@@ -178,7 +174,7 @@ void main() {
       final base = Path()
         ..moveTo(0, 0)
         ..lineTo(50, 0);
-      final positions = buildDotPositions(base, 10.0);
+      final positions = buildDotPositions(base, 10);
       // All y-values should be ~0 for a horizontal line.
       for (var i = 1; i < positions.length; i += 2) {
         expect(positions[i], closeTo(0, 0.1));

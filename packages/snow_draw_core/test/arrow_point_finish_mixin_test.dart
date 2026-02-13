@@ -10,6 +10,7 @@
 /// - Binding preservation through finish/preview
 /// - Identity transform handling
 /// - Missing element handling
+library;
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -17,7 +18,6 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
-import 'package:snow_draw_core/draw/edit/preview/edit_preview.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
@@ -352,7 +352,7 @@ void main() {
         startPosition: const DrawPoint(x: 100, y: 80),
       );
 
-      final transform = t0 as ArrowPointTransform;
+      final transform = t0;
       expect(transform.shouldDelete, isTrue);
       expect(transform.hasChanges, isTrue);
 

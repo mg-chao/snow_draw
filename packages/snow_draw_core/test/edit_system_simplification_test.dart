@@ -7,6 +7,8 @@
 ///    results.
 /// 3. Reference element resolution produces identical results when
 ///    extracted to a shared helper.
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -33,7 +35,6 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
-import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
@@ -46,13 +47,13 @@ void main() {
 
   group('EditContext.hasSnapshots', () {
     test('MoveEditContext reports true when snapshots present', () {
-      final ctx = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const ctx = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'a': ElementMoveSnapshot(center: DrawPoint(x: 5, y: 5)),
         },
       );
@@ -60,30 +61,30 @@ void main() {
     });
 
     test('MoveEditContext reports false when snapshots empty', () {
-      final ctx = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const ctx = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {},
+        elementSnapshots: {},
       );
       expect(ctx.hasSnapshots, isFalse);
     });
 
     test('ResizeEditContext reports true when snapshots present', () {
-      final ctx = ResizeEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const ctx = ResizeEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
         resizeMode: ResizeMode.bottomRight,
-        handleOffset: const DrawPoint(x: 0, y: 0),
+        handleOffset: DrawPoint.zero,
         rotation: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'a': ElementResizeSnapshot(
-            rect: DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+            rect: DrawRect(maxX: 10, maxY: 10),
             rotation: 0,
           ),
         },
@@ -92,16 +93,16 @@ void main() {
     });
 
     test('RotateEditContext reports true when snapshots present', () {
-      final ctx = RotateEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const ctx = RotateEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
         startAngle: 0,
         baseRotation: 0,
         rotationSnapAngle: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'a': ElementRotateSnapshot(
             center: DrawPoint(x: 5, y: 5),
             rotation: 0,
@@ -112,37 +113,37 @@ void main() {
     });
 
     test('EditValidation.isValidContext uses hasSnapshots', () {
-      final valid = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const valid = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'a': ElementMoveSnapshot(center: DrawPoint(x: 5, y: 5)),
         },
       );
       expect(EditValidation.isValidContext(valid), isTrue);
 
-      final noIds = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {},
+      const noIds = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'a': ElementMoveSnapshot(center: DrawPoint(x: 5, y: 5)),
         },
       );
       expect(EditValidation.isValidContext(noIds), isFalse);
 
-      final noSnaps = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
-        selectedIdsAtStart: const {'a'},
+      const noSnaps = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 10, maxY: 10),
+        selectedIdsAtStart: {'a'},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {},
+        elementSnapshots: {},
       );
       expect(EditValidation.isValidContext(noSnaps), isFalse);
     });
@@ -315,7 +316,7 @@ void main() {
     test('move: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
@@ -358,7 +359,7 @@ void main() {
     test('resize: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
@@ -405,7 +406,7 @@ void main() {
     test('rotate: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
@@ -457,19 +458,19 @@ void main() {
     test('filters out selected and invisible elements', () {
       final r1 = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 50, maxY: 50),
+        rect: const DrawRect(maxX: 50, maxY: 50),
       );
       final r2 = _rectangleElement(
         id: 'r2',
         rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
       );
-      final invisible = ElementState(
+      const invisible = ElementState(
         id: 'inv',
-        rect: const DrawRect(minX: 200, minY: 200, maxX: 250, maxY: 250),
+        rect: DrawRect(minX: 200, minY: 200, maxX: 250, maxY: 250),
         rotation: 0,
         opacity: 0,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final state = _stateWith([r1, r2, invisible], selectedIds: {'r1'});
 

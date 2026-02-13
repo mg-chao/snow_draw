@@ -12,21 +12,14 @@ void main() {
     });
 
     test('returns straight line for exactly 2 points', () {
-      final path = buildFreeDrawSmoothPath([
-        const Offset(0, 0),
-        const Offset(100, 0),
-      ]);
+      final path = buildFreeDrawSmoothPath([Offset.zero, const Offset(100, 0)]);
       final metrics = path.computeMetrics().toList();
       expect(metrics, hasLength(1));
       expect(metrics.first.length, closeTo(100, 0.1));
     });
 
     test('returns smooth path for 3+ points', () {
-      final points = [
-        const Offset(0, 0),
-        const Offset(50, 50),
-        const Offset(100, 0),
-      ];
+      final points = [Offset.zero, const Offset(50, 50), const Offset(100, 0)];
       final path = buildFreeDrawSmoothPath(points);
       final metrics = path.computeMetrics().toList();
       expect(metrics, hasLength(1));
@@ -36,10 +29,10 @@ void main() {
 
     test('handles closed path (first == last)', () {
       final points = [
-        const Offset(0, 0),
+        Offset.zero,
         const Offset(50, 50),
         const Offset(100, 0),
-        const Offset(0, 0),
+        Offset.zero,
       ];
       final path = buildFreeDrawSmoothPath(points);
       final metrics = path.computeMetrics().toList();
@@ -80,11 +73,7 @@ void main() {
     });
 
     test('returns null for closed path', () {
-      final points = [
-        const Offset(0, 0),
-        const Offset(50, 50),
-        const Offset(0, 0),
-      ];
+      final points = [Offset.zero, const Offset(50, 50), Offset.zero];
       final result = buildFreeDrawSmoothPathIncremental(
         allPoints: points,
         basePath: Path(),
@@ -95,7 +84,7 @@ void main() {
 
     test('returns null when base is too short', () {
       final points = [
-        const Offset(0, 0),
+        Offset.zero,
         const Offset(50, 50),
         const Offset(100, 0),
         const Offset(150, 50),
@@ -111,7 +100,6 @@ void main() {
 
   group('resolveFreeDrawLocalPoints', () {
     test('converts normalized points to local space', () {
-      final rect = const Rect.fromLTWH(0, 0, 200, 100);
       // Use DrawPoint and DrawRect from the actual API.
       // Since these are internal types, test via the path utils.
       // This is a smoke test to ensure the function exists.

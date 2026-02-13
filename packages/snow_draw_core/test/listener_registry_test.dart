@@ -55,10 +55,7 @@ void main() {
 
   test('notify skips listener when no relevant changes', () {
     final states = <DrawState>[];
-    registry.register(
-      states.add,
-      changeTypes: {DrawStateChange.view},
-    );
+    registry.register(states.add, changeTypes: {DrawStateChange.view});
 
     final prev = DrawState();
     final next = DrawState(
@@ -77,10 +74,7 @@ void main() {
 
   test('notify with matching changeType calls listener', () {
     final states = <DrawState>[];
-    registry.register(
-      states.add,
-      changeTypes: {DrawStateChange.selection},
-    );
+    registry.register(states.add, changeTypes: {DrawStateChange.selection});
 
     final prev = DrawState();
     final next = DrawState(
@@ -98,55 +92,50 @@ void main() {
   });
 
   test('clear removes all listeners', () {
-    registry.register((_) {});
-    registry.register((_) {});
+    registry
+      ..register((_) {})
+      ..register((_) {});
     expect(registry.count, 2);
     registry.clear();
     expect(registry.count, 0);
   });
 
-  test(
-    'throwing listener does not prevent other listeners from '
-    'being notified',
-    () {
-      final states = <DrawState>[];
+  test('throwing listener does not prevent other listeners from '
+      'being notified', () {
+    final states = <DrawState>[];
 
-      registry.register((_) => throw Exception('boom'));
-      registry.register(states.add);
+    registry
+      ..register((_) => throw Exception('boom'))
+      ..register(states.add);
 
-      final prev = DrawState();
-      final next = DrawState(
-        domain: DomainState(
-          document: DocumentState(),
-          selection: const SelectionState(
-            selectedIds: {'a'},
-            selectionVersion: 1,
-          ),
+    final prev = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
         ),
-      );
+      ),
+    );
 
-      registry.notify(prev, next);
-      expect(
-        states,
-        hasLength(1),
-        reason: 'Second listener should still be called '
-            'even when the first throws',
-      );
-    },
-  );
+    registry.notify(prev, next);
+    expect(
+      states,
+      hasLength(1),
+      reason:
+          'Second listener should still be called '
+          'even when the first throws',
+    );
+  });
 
   test('duplicate register updates changeTypes', () {
     final states = <DrawState>[];
     void listener(DrawState s) => states.add(s);
 
-    registry.register(
-      listener,
-      changeTypes: {DrawStateChange.view},
-    );
-    registry.register(
-      listener,
-      changeTypes: {DrawStateChange.selection},
-    );
+    registry
+      ..register(listener, changeTypes: {DrawStateChange.view})
+      ..register(listener, changeTypes: {DrawStateChange.selection});
 
     expect(registry.count, 1);
 

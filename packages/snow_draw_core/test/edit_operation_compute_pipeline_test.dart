@@ -5,7 +5,6 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
-import 'package:snow_draw_core/draw/edit/preview/edit_preview.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
@@ -31,7 +30,7 @@ void main() {
   // Shared helpers
   // =========================================================================
 
-  DrawState _stateWith(
+  DrawState stateWith(
     List<ElementState> elements, {
     Set<String>? selectedIds,
   }) {
@@ -52,9 +51,9 @@ void main() {
     test('finish moves element and transitions to idle', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -90,9 +89,9 @@ void main() {
     test('preview matches finish geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -126,17 +125,16 @@ void main() {
       );
 
       final previewRect = preview.previewElementsById['r1']!.rect;
-      final finishRect =
-          finished.domain.document.getElementById('r1')!.rect;
+      final finishRect = finished.domain.document.getElementById('r1')!.rect;
       expect(previewRect, equals(finishRect));
     });
 
     test('identity transform returns idle without changes', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -160,9 +158,9 @@ void main() {
     test('identity transform preview returns none', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -190,16 +188,10 @@ void main() {
       );
       final arrow = _arrowElement(
         id: 'arrow',
-        points: const [
-          DrawPoint(x: 10, y: 80),
-          DrawPoint(x: 200, y: 80),
-        ],
+        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
         startBinding: binding,
       );
-      final state = _stateWith(
-        [target, arrow],
-        selectedIds: {'arrow'},
-      );
+      final state = stateWith([target, arrow], selectedIds: {'arrow'});
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -216,8 +208,7 @@ void main() {
         state: state,
         context: ctx,
         transform: t0,
-        currentPosition:
-            arrow.center.translate(const DrawPoint(x: 50, y: 0)),
+        currentPosition: arrow.center.translate(const DrawPoint(x: 50, y: 0)),
         modifiers: const EditModifiers(),
         config: DrawConfig.defaultConfig,
       );
@@ -241,9 +232,9 @@ void main() {
     test('finish resizes element and transitions to idle', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = ResizeOperation();
       final handlePos = DrawPoint(x: element.rect.maxX, y: element.rect.maxY);
@@ -283,9 +274,9 @@ void main() {
     test('preview matches finish geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = ResizeOperation();
       final handlePos = DrawPoint(x: element.rect.maxX, y: element.rect.maxY);
@@ -323,17 +314,16 @@ void main() {
       );
 
       final previewRect = preview.previewElementsById['r1']!.rect;
-      final finishRect =
-          finished.domain.document.getElementById('r1')!.rect;
+      final finishRect = finished.domain.document.getElementById('r1')!.rect;
       expect(previewRect, equals(finishRect));
     });
 
     test('incomplete transform returns idle without changes', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = ResizeOperation();
       final ctx = op.createContext(
@@ -370,21 +360,14 @@ void main() {
       );
       final arrow = _arrowElement(
         id: 'arrow',
-        points: const [
-          DrawPoint(x: 10, y: 80),
-          DrawPoint(x: 200, y: 80),
-        ],
+        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
         startBinding: binding,
         startIsSpecial: true,
       );
-      final state = _stateWith(
-        [target, arrow],
-        selectedIds: {'arrow'},
-      );
+      final state = stateWith([target, arrow], selectedIds: {'arrow'});
 
       const op = ResizeOperation();
-      final handlePos =
-          DrawPoint(x: arrow.rect.maxX, y: arrow.rect.centerY);
+      final handlePos = DrawPoint(x: arrow.rect.maxX, y: arrow.rect.centerY);
       final ctx = op.createContext(
         state: state,
         position: handlePos,
@@ -402,8 +385,7 @@ void main() {
         state: state,
         context: ctx,
         transform: t0,
-        currentPosition:
-            handlePos.translate(const DrawPoint(x: 48, y: 0)),
+        currentPosition: handlePos.translate(const DrawPoint(x: 48, y: 0)),
         modifiers: const EditModifiers(),
         config: DrawConfig.defaultConfig,
       );
@@ -413,8 +395,7 @@ void main() {
         transform: update.transform,
       );
 
-      final resizedArrow =
-          result.domain.document.getElementById('arrow')!;
+      final resizedArrow = result.domain.document.getElementById('arrow')!;
       final data = resizedArrow.data as ArrowData;
       expect(data.startBinding, isNull);
     });
@@ -428,9 +409,9 @@ void main() {
     test('finish rotates element and transitions to idle', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = RotateOperation();
       final center = element.rect.center;
@@ -467,9 +448,9 @@ void main() {
     test('preview matches finish geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = RotateOperation();
       final center = element.rect.center;
@@ -505,8 +486,7 @@ void main() {
       );
 
       final previewEl = preview.previewElementsById['r1']!;
-      final finishEl =
-          finished.domain.document.getElementById('r1')!;
+      final finishEl = finished.domain.document.getElementById('r1')!;
       expect(previewEl.rect, equals(finishEl.rect));
       expect(previewEl.rotation, closeTo(finishEl.rotation, 0.001));
     });
@@ -514,9 +494,9 @@ void main() {
     test('identity transform returns idle without changes', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = stateWith([element]);
 
       const op = RotateOperation();
       final center = element.rect.center;
@@ -550,17 +530,11 @@ void main() {
       );
       final arrow = _arrowElement(
         id: 'arrow',
-        points: const [
-          DrawPoint(x: 10, y: 80),
-          DrawPoint(x: 200, y: 80),
-        ],
+        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
         startBinding: binding,
         startIsSpecial: true,
       );
-      final state = _stateWith(
-        [target, arrow],
-        selectedIds: {'arrow'},
-      );
+      final state = stateWith([target, arrow], selectedIds: {'arrow'});
 
       const op = RotateOperation();
       final center = arrow.rect.center;
@@ -589,8 +563,7 @@ void main() {
         transform: update.transform,
       );
 
-      final rotatedArrow =
-          result.domain.document.getElementById('arrow')!;
+      final rotatedArrow = result.domain.document.getElementById('arrow')!;
       final data = rotatedArrow.data as ArrowData;
       expect(data.startBinding, isNull);
     });
@@ -604,13 +577,13 @@ void main() {
     test('move updates multi-select overlay bounds', () {
       final r1 = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 50, maxY: 50),
+        rect: const DrawRect(maxX: 50, maxY: 50),
       );
       final r2 = _rectangleElement(
         id: 'r2',
         rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
       );
-      final state = _stateWith([r1, r2], selectedIds: {'r1', 'r2'});
+      final state = stateWith([r1, r2], selectedIds: {'r1', 'r2'});
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -637,8 +610,7 @@ void main() {
         transform: update.transform,
       );
 
-      final overlay =
-          result.application.selectionOverlay.multiSelectOverlay;
+      final overlay = result.application.selectionOverlay.multiSelectOverlay;
       expect(overlay, isNotNull);
       expect(overlay!.bounds.centerX, greaterThan(75));
     });
@@ -646,18 +618,16 @@ void main() {
     test('rotate updates multi-select overlay rotation', () {
       final r1 = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 50, maxY: 50),
+        rect: const DrawRect(maxX: 50, maxY: 50),
       );
       final r2 = _rectangleElement(
         id: 'r2',
         rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
       );
-      final state = _stateWith([r1, r2], selectedIds: {'r1', 'r2'});
+      final state = stateWith([r1, r2], selectedIds: {'r1', 'r2'});
 
       const op = RotateOperation();
       final center = const DrawRect(
-        minX: 0,
-        minY: 0,
         maxX: 150,
         maxY: 150,
       ).center;
@@ -686,8 +656,7 @@ void main() {
         transform: update.transform,
       );
 
-      final overlay =
-          result.application.selectionOverlay.multiSelectOverlay;
+      final overlay = result.application.selectionOverlay.multiSelectOverlay;
       expect(overlay, isNotNull);
       expect(overlay!.rotation.abs(), greaterThan(0.1));
     });
@@ -698,10 +667,7 @@ void main() {
 // Test helpers
 // ===========================================================================
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-}) =>
+ElementState _rectangleElement({required String id, required DrawRect rect}) =>
     ElementState(
       id: id,
       rect: rect,

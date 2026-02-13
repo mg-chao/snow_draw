@@ -1,6 +1,7 @@
 /// Tests that lock down behavior of the element editing system before
 /// refactoring to extract shared utility functions and eliminate
 /// duplicated preview/finish logic.
+library;
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +10,6 @@ import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
-import 'package:snow_draw_core/draw/edit/preview/edit_preview.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
@@ -26,7 +26,6 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
@@ -84,8 +83,7 @@ void main() {
       );
 
       final previewEl = preview.previewElementsById['a1']!;
-      final finishEl =
-          finished.domain.document.getElementById('a1')!;
+      final finishEl = finished.domain.document.getElementById('a1')!;
       expect(previewEl.rect, equals(finishEl.rect));
       final previewData = previewEl.data as ArrowData;
       final finishData = finishEl.data as ArrowData;
@@ -95,10 +93,7 @@ void main() {
     test('no-change transform returns idle', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 10, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -118,21 +113,14 @@ void main() {
         startPosition: const DrawPoint(x: 10, y: 50),
       );
 
-      final result = op.finish(
-        state: state,
-        context: ctx,
-        transform: t0,
-      );
+      final result = op.finish(state: state, context: ctx, transform: t0);
       expect(result.application.interaction, isA<IdleState>());
     });
 
     test('no-change preview returns none', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 10, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -163,10 +151,7 @@ void main() {
     test('turning point drag updates arrow rect', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 10, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -213,7 +198,7 @@ void main() {
     test('move: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
@@ -249,21 +234,19 @@ void main() {
       );
 
       final previewRect = preview.previewElementsById['r1']!.rect;
-      final finishRect =
-          finished.domain.document.getElementById('r1')!.rect;
+      final finishRect = finished.domain.document.getElementById('r1')!.rect;
       expect(previewRect, equals(finishRect));
     });
 
     test('resize: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
       const op = ResizeOperation();
-      final handlePos =
-          DrawPoint(x: element.rect.maxX, y: element.rect.maxY);
+      final handlePos = DrawPoint(x: element.rect.maxX, y: element.rect.maxY);
       final ctx = op.createContext(
         state: state,
         position: handlePos,
@@ -298,15 +281,14 @@ void main() {
       );
 
       final previewRect = preview.previewElementsById['r1']!.rect;
-      final finishRect =
-          finished.domain.document.getElementById('r1')!.rect;
+      final finishRect = finished.domain.document.getElementById('r1')!.rect;
       expect(previewRect, equals(finishRect));
     });
 
     test('rotate: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
 
@@ -344,13 +326,9 @@ void main() {
       );
 
       final previewEl = preview.previewElementsById['r1']!;
-      final finishEl =
-          finished.domain.document.getElementById('r1')!;
+      final finishEl = finished.domain.document.getElementById('r1')!;
       expect(previewEl.rect, equals(finishEl.rect));
-      expect(
-        previewEl.rotation,
-        closeTo(finishEl.rotation, 0.001),
-      );
+      expect(previewEl.rotation, closeTo(finishEl.rotation, 0.001));
     });
   });
 }
@@ -359,10 +337,7 @@ void main() {
 // Test helpers
 // ===========================================================================
 
-DrawState _stateWith(
-  List<ElementState> elements, {
-  Set<String>? selectedIds,
-}) {
+DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
   final ids = selectedIds ?? {elements.first.id};
   return DrawState(
     domain: DomainState(
@@ -372,10 +347,7 @@ DrawState _stateWith(
   );
 }
 
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-}) =>
+ElementState _rectangleElement({required String id, required DrawRect rect}) =>
     ElementState(
       id: id,
       rect: rect,

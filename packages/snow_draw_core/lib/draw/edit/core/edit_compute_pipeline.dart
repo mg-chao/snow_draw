@@ -27,8 +27,7 @@ class EditComputePipeline {
     required Map<String, ElementState> updatedById,
     DrawRect? multiSelectBounds,
     double? multiSelectRotation,
-    bool Function(String id, ElementState element)?
-        skipBindingUpdate,
+    bool Function(String id, ElementState element)? skipBindingUpdate,
   }) {
     if (updatedById.isEmpty) {
       return null;
@@ -45,8 +44,7 @@ class EditComputePipeline {
       merged.addAll(unboundArrows);
     }
 
-    final bindingUpdates =
-        ArrowBindingResolver.instance.resolve(
+    final bindingUpdates = ArrowBindingResolver.instance.resolve(
       baseElements: state.domain.document.elementMap,
       updatedElements: merged,
       changedElementIds: merged.keys.toSet(),

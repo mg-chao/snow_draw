@@ -7,10 +7,8 @@ import 'draw_store_interface.dart';
 import 'state_change_chain.dart';
 
 /// Callback invoked when a listener throws during notification.
-typedef ListenerErrorHandler = void Function(
-  Object error,
-  StackTrace stackTrace,
-);
+typedef ListenerErrorHandler =
+    void Function(Object error, StackTrace stackTrace);
 
 /// Listener registry.
 ///

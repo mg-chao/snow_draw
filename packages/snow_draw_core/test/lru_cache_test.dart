@@ -9,15 +9,13 @@ void main() {
     });
 
     test('put and get round-trip', () {
-      final cache = LruCache<String, int>(maxEntries: 4);
-      cache.put('a', 1);
+      final cache = LruCache<String, int>(maxEntries: 4)..put('a', 1);
       expect(cache.get('a'), 1);
       expect(cache.length, 1);
     });
 
     test('getOrCreate returns existing value', () {
-      final cache = LruCache<String, int>(maxEntries: 4);
-      cache.put('a', 1);
+      final cache = LruCache<String, int>(maxEntries: 4)..put('a', 1);
       var called = false;
       final result = cache.getOrCreate('a', () {
         called = true;
@@ -35,12 +33,12 @@ void main() {
     });
 
     test('evicts least-recently-used when full', () {
-      final cache = LruCache<String, int>(maxEntries: 3);
-      cache.put('a', 1);
-      cache.put('b', 2);
-      cache.put('c', 3);
-      // 'a' is the LRU entry.
-      cache.put('d', 4);
+      final cache = LruCache<String, int>(maxEntries: 3)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..put('c', 3)
+        // 'a' is the LRU entry.
+        ..put('d', 4);
       expect(cache.get('a'), isNull, reason: 'a should be evicted');
       expect(cache.get('b'), 2);
       expect(cache.get('c'), 3);
@@ -48,75 +46,60 @@ void main() {
     });
 
     test('get promotes entry so it is not evicted', () {
-      final cache = LruCache<String, int>(maxEntries: 3);
-      cache.put('a', 1);
-      cache.put('b', 2);
-      cache.put('c', 3);
-      // Touch 'a' to promote it.
-      cache.get('a');
-      // Now 'b' is the LRU.
-      cache.put('d', 4);
+      final cache = LruCache<String, int>(maxEntries: 3)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..put('c', 3)
+        // Touch 'a' to promote it.
+        ..get('a')
+        // Now 'b' is the LRU.
+        ..put('d', 4);
       expect(cache.get('a'), 1, reason: 'a was promoted');
       expect(cache.get('b'), isNull, reason: 'b should be evicted');
     });
 
     test('onEvict is called when entry is evicted', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 2,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('b', 2);
-      cache.put('c', 3);
+      LruCache<String, int>(maxEntries: 2, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..put('c', 3);
       expect(evicted, [1]);
     });
 
     test('onEvict is called on remove', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.remove('a');
+      LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', 1)
+        ..remove('a');
       expect(evicted, [1]);
     });
 
     test('onEvict is called on clear', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('b', 2);
-      cache.clear();
+      final cache = LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..clear();
       expect(evicted, containsAll([1, 2]));
       expect(cache.length, 0);
     });
 
     test('put replaces value and calls onEvict for old value', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('a', 2);
+      final cache = LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('a', 2);
       expect(cache.get('a'), 2);
       expect(evicted, [1]);
     });
 
     test('put with identical value does not call onEvict', () {
       final evicted = <int>[];
-      final value = 42;
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', value);
-      cache.put('a', value);
+      const value = 42;
+      LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', value)
+        ..put('a', value);
       expect(evicted, isEmpty);
     });
   });

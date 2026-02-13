@@ -15,9 +15,7 @@ void main() {
   setUp(() {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
-    final context = DrawContext.withDefaults(
-      elementRegistry: registry,
-    );
+    final context = DrawContext.withDefaults(elementRegistry: registry);
     store = DefaultDrawStore(context: context);
     adapter = SnapToolbarAdapter(store: store);
   });
@@ -55,8 +53,9 @@ void main() {
   });
 
   test('dispose is idempotent', () {
-    adapter.dispose();
-    adapter.dispose();
+    adapter
+      ..dispose()
+      ..dispose();
   });
 
   test('toggle after dispose is a no-op', () async {

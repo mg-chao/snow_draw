@@ -9,6 +9,8 @@
 ///
 /// Each test captures the exact output of the current code so that
 /// after refactoring we can verify nothing changed.
+library;
+
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +23,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_validation.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
@@ -36,7 +37,6 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
-import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
@@ -133,30 +133,30 @@ void main() {
 
   group('computeResult validation guard', () {
     test('MoveEditContext with empty snapshots is invalid', () {
-      final ctx = MoveEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
-        selectedIdsAtStart: const {'r1'},
+      const ctx = MoveEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 100, maxY: 100),
+        selectedIdsAtStart: {'r1'},
         selectionVersion: 0,
         elementsVersion: 0,
-        elementSnapshots: const {},
+        elementSnapshots: {},
       );
       expect(EditValidation.isValidContext(ctx), isFalse);
     });
 
     test('ResizeEditContext with empty selection is invalid', () {
-      final ctx = ResizeEditContext(
-        startPosition: const DrawPoint(x: 0, y: 0),
-        startBounds: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
-        selectedIdsAtStart: const {},
+      const ctx = ResizeEditContext(
+        startPosition: DrawPoint.zero,
+        startBounds: DrawRect(maxX: 100, maxY: 100),
+        selectedIdsAtStart: {},
         selectionVersion: 0,
         elementsVersion: 0,
         resizeMode: ResizeMode.bottomRight,
-        handleOffset: const DrawPoint(x: 0, y: 0),
+        handleOffset: DrawPoint.zero,
         rotation: 0,
-        elementSnapshots: const {
+        elementSnapshots: {
           'r1': ElementResizeSnapshot(
-            rect: DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+            rect: DrawRect(maxX: 100, maxY: 100),
             rotation: 0,
           ),
         },
@@ -187,13 +187,13 @@ void main() {
     });
 
     test('buildResizeSnapshots captures rect and rotation', () {
-      final el = ElementState(
+      const el = ElementState(
         id: 'r1',
-        rect: const DrawRect(minX: 10, minY: 20, maxX: 110, maxY: 120),
+        rect: DrawRect(minX: 10, minY: 20, maxX: 110, maxY: 120),
         rotation: 0.5,
         opacity: 1,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final snapshots = buildResizeSnapshots([el]);
       expect(snapshots, hasLength(1));
@@ -202,13 +202,13 @@ void main() {
     });
 
     test('buildRotateSnapshots captures center and rotation', () {
-      final el = ElementState(
+      const el = ElementState(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: DrawRect(maxX: 100, maxY: 100),
         rotation: 1.2,
         opacity: 1,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final snapshots = buildRotateSnapshots([el]);
       expect(snapshots, hasLength(1));
@@ -237,13 +237,13 @@ void main() {
 
     test('excludes invisible elements', () {
       final r1 = _rect('r1');
-      final invisible = ElementState(
+      const invisible = ElementState(
         id: 'inv',
-        rect: const DrawRect(minX: 200, minY: 200, maxX: 300, maxY: 300),
+        rect: DrawRect(minX: 200, minY: 200, maxX: 300, maxY: 300),
         rotation: 0,
         opacity: 0,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final state = _stateWith([r1, invisible]);
 
@@ -309,18 +309,18 @@ void main() {
           selectionPadding: 0,
         ),
       );
-      final typedCtx = ctx as ResizeEditContext;
+      final typedCtx = ctx;
       expect(typedCtx.resizeMode, equals(ResizeMode.topLeft));
     });
 
     test('RotateOperation context captures base rotation', () {
-      final el = ElementState(
+      const el = ElementState(
         id: 'r1',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+        rect: DrawRect(maxX: 100, maxY: 100),
         rotation: 0.7,
         opacity: 1,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final state = _stateWith([el]);
 
@@ -330,13 +330,13 @@ void main() {
         position: const DrawPoint(x: 110, y: 50),
         params: const RotateOperationParams(),
       );
-      final typedCtx = ctx as RotateEditContext;
+      final typedCtx = ctx;
       expect(typedCtx.baseRotation, equals(0.7));
     });
   });
 
   // =========================================================================
-  // 6. Full round-trip: update → preview → finish consistency
+  // 6. Full round-trip: update 鈫?preview 鈫?finish consistency
   // =========================================================================
 
   group('Full round-trip consistency after refactoring', () {
@@ -669,7 +669,7 @@ DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
 
 ElementState _rect(String id) => ElementState(
   id: id,
-  rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 100),
+  rect: const DrawRect(maxX: 100, maxY: 100),
   rotation: 0,
   opacity: 1,
   zIndex: 0,

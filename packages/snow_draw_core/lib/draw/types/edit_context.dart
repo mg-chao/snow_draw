@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../edit/core/edit_validation.dart' show EditValidation;
 import 'draw_point.dart';
 import 'draw_rect.dart';
 import 'element_geometry.dart';

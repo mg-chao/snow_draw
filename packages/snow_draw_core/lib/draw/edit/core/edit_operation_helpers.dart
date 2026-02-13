@@ -6,7 +6,10 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
+import '../move/move_operation.dart' show MoveOperation;
 import '../preview/edit_preview.dart';
+import '../resize/resize_operation.dart' show ResizeOperation;
+import '../rotate/rotate_operation.dart' show RotateOperation;
 import 'edit_errors.dart';
 import 'edit_operation_params.dart';
 

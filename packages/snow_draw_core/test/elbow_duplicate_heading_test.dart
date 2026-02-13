@@ -73,10 +73,7 @@ ElementState _arrowElement(
   );
 }
 
-void _expectNoDuplicateHeadings(
-  ElbowEditResult result, {
-  String? label,
-}) {
+void _expectNoDuplicateHeadings(ElbowEditResult result, {String? label}) {
   final headings = _headings(result.localPoints);
   expect(
     elbowPathIsOrthogonal(result.localPoints),
@@ -104,8 +101,7 @@ void main() {
         const DrawPoint(x: 100, y: 0),
         const DrawPoint(x: 200, y: 0),
       ];
-      final merged =
-          ElbowGeometry.mergeConsecutiveSameHeading(dupPoints);
+      final merged = ElbowGeometry.mergeConsecutiveSameHeading(dupPoints);
       expect(merged.length, 2);
       expect(merged.first, dupPoints.first);
       expect(merged.last, dupPoints.last);
@@ -136,8 +132,7 @@ void main() {
       // (0,0)->(100,0) = Right
       // (100,0)->(200,50) = diagonal, heading = Right
       // mergeConsecutiveSameHeading should remove (100,0).
-      final merged =
-          ElbowGeometry.mergeConsecutiveSameHeading(points);
+      final merged = ElbowGeometry.mergeConsecutiveSameHeading(points);
       expect(merged.length, 2);
     });
 
@@ -148,8 +143,7 @@ void main() {
         const DrawPoint(x: 100, y: 100),
         const DrawPoint(x: 200, y: 100),
       ];
-      final merged =
-          ElbowGeometry.mergeConsecutiveSameHeading(points);
+      final merged = ElbowGeometry.mergeConsecutiveSameHeading(points);
       expect(merged.length, 4);
     });
 
@@ -161,8 +155,7 @@ void main() {
         const DrawPoint(x: 100, y: 0),
         const DrawPoint(x: 200, y: 0),
       ];
-      final merged =
-          ElbowGeometry.mergeConsecutiveSameHeading(points);
+      final merged = ElbowGeometry.mergeConsecutiveSameHeading(points);
       expect(merged.length, 2);
     });
   });
@@ -170,80 +163,59 @@ void main() {
   group('fixed-down binding no duplicate headings', () {
     // The original bug scenario: path [Right, Down(fixed), Right]
     // with end bound to the right side of a rectangle.
-    const bindingRect = DrawRect(
-      minX: 80,
-      minY: 160,
-      maxX: 200,
-      maxY: 240,
-    );
+    const bindingRect = DrawRect(minX: 80, minY: 160, maxX: 200, maxY: 240);
 
     for (final fixedY in [80.0, 120.0, 150.0]) {
       for (final lastX in [140.0, 180.0, 210.0, 250.0, 300.0]) {
         for (final anchorY in [0.1, 0.2, 0.3, 0.5, 0.8]) {
-          test(
-            'fixedY=$fixedY lastX=$lastX anchorY=$anchorY',
-            () {
-              final points = <DrawPoint>[
-                DrawPoint.zero,
-                const DrawPoint(x: 120, y: 0),
-                DrawPoint(x: 120, y: fixedY),
-                DrawPoint(x: lastX, y: fixedY),
-              ];
-              final fixedSegments = <ElbowFixedSegment>[
-                ElbowFixedSegment(
-                  index: 2,
-                  start: points[1],
-                  end: points[2],
-                ),
-              ];
-              final element = _arrowElement(
-                points,
-                fixedSegments: fixedSegments,
-              );
-              final data = element.data as ArrowData;
+          test('fixedY=$fixedY lastX=$lastX anchorY=$anchorY', () {
+            final points = <DrawPoint>[
+              DrawPoint.zero,
+              const DrawPoint(x: 120, y: 0),
+              DrawPoint(x: 120, y: fixedY),
+              DrawPoint(x: lastX, y: fixedY),
+            ];
+            final fixedSegments = <ElbowFixedSegment>[
+              ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
+            ];
+            final element = _arrowElement(points, fixedSegments: fixedSegments);
+            final data = element.data as ArrowData;
 
-              final boundElement = elbowRectangleElement(
-                id: 'rect-1',
-                rect: bindingRect,
-              );
-              final binding = ArrowBinding(
-                elementId: 'rect-1',
-                anchor: DrawPoint(x: 1, y: anchorY),
-              );
-              final boundPoint =
-                  ArrowBindingUtils.resolveElbowBoundPoint(
-                    binding: binding,
-                    target: boundElement,
-                    hasArrowhead:
-                        data.endArrowhead !=
-                        ArrowheadStyle.none,
-                  ) ??
-                  points.last;
+            final boundElement = elbowRectangleElement(
+              id: 'rect-1',
+              rect: bindingRect,
+            );
+            final binding = ArrowBinding(
+              elementId: 'rect-1',
+              anchor: DrawPoint(x: 1, y: anchorY),
+            );
+            final boundPoint =
+                ArrowBindingUtils.resolveElbowBoundPoint(
+                  binding: binding,
+                  target: boundElement,
+                  hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+                ) ??
+                points.last;
 
-              final movedPoints =
-                  List<DrawPoint>.from(points);
-              movedPoints[movedPoints.length - 1] =
-                  boundPoint;
+            final movedPoints = List<DrawPoint>.from(points);
+            movedPoints[movedPoints.length - 1] = boundPoint;
 
-              final result = computeElbowEdit(
-                element: element,
-                data: data.copyWith(endBinding: binding),
-                lookup: CombinedElementLookup(
-                  base: {'rect-1': boundElement},
-                ),
-                localPointsOverride: movedPoints,
-                fixedSegmentsOverride: fixedSegments,
-                endBindingOverride: binding,
-              );
+            final result = computeElbowEdit(
+              element: element,
+              data: data.copyWith(endBinding: binding),
+              lookup: CombinedElementLookup(base: {'rect-1': boundElement}),
+              localPointsOverride: movedPoints,
+              fixedSegmentsOverride: fixedSegments,
+              endBindingOverride: binding,
+            );
 
-              _expectNoDuplicateHeadings(
-                result,
-                label:
-                    'fixedY=$fixedY lastX=$lastX '
-                    'anchorY=$anchorY',
-              );
-            },
-          );
+            _expectNoDuplicateHeadings(
+              result,
+              label:
+                  'fixedY=$fixedY lastX=$lastX '
+                  'anchorY=$anchorY',
+            );
+          });
         }
       }
     }
@@ -251,12 +223,7 @@ void main() {
 
   group('all binding sides no duplicate headings', () {
     // Test binding to all four sides of a rectangle.
-    const rect = DrawRect(
-      minX: 100,
-      minY: 100,
-      maxX: 250,
-      maxY: 200,
-    );
+    const rect = DrawRect(minX: 100, minY: 100, maxX: 250, maxY: 200);
 
     final anchors = <String, DrawPoint>{
       'right-top': const DrawPoint(x: 1, y: 0.2),
@@ -282,33 +249,18 @@ void main() {
           const DrawPoint(x: 240, y: 80),
         ];
         final fixedSegments = <ElbowFixedSegment>[
-          ElbowFixedSegment(
-            index: 2,
-            start: points[1],
-            end: points[2],
-          ),
+          ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
         ];
-        final element = _arrowElement(
-          points,
-          fixedSegments: fixedSegments,
-        );
+        final element = _arrowElement(points, fixedSegments: fixedSegments);
         final data = element.data as ArrowData;
 
-        final boundElement = elbowRectangleElement(
-          id: 'rect-1',
-          rect: rect,
-        );
-        final binding = ArrowBinding(
-          elementId: 'rect-1',
-          anchor: entry.value,
-        );
+        final boundElement = elbowRectangleElement(id: 'rect-1', rect: rect);
+        final binding = ArrowBinding(elementId: 'rect-1', anchor: entry.value);
         final boundPoint =
             ArrowBindingUtils.resolveElbowBoundPoint(
               binding: binding,
               target: boundElement,
-              hasArrowhead:
-                  data.endArrowhead !=
-                  ArrowheadStyle.none,
+              hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
             ) ??
             points.last;
 
@@ -318,18 +270,13 @@ void main() {
         final result = computeElbowEdit(
           element: element,
           data: data.copyWith(endBinding: binding),
-          lookup: CombinedElementLookup(
-            base: {'rect-1': boundElement},
-          ),
+          lookup: CombinedElementLookup(base: {'rect-1': boundElement}),
           localPointsOverride: movedPoints,
           fixedSegmentsOverride: fixedSegments,
           endBindingOverride: binding,
         );
 
-        _expectNoDuplicateHeadings(
-          result,
-          label: 'anchor=${entry.key}',
-        );
+        _expectNoDuplicateHeadings(result, label: 'anchor=${entry.key}');
       });
     }
   });

@@ -4,7 +4,6 @@ import '../../core/geometry/resize_geometry.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
-import '../../models/element_state.dart';
 import '../../models/multi_select_lifecycle.dart';
 import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';

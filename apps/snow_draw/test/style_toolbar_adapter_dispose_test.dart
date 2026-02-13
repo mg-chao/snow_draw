@@ -2,7 +2,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -51,96 +50,81 @@ void main() {
   group('StyleToolbarAdapter disposal guards', () {
     test('dispose is idempotent', () {
       store = createStoreWithSelection();
-      adapter = StyleToolbarAdapter(store: store);
-
-      adapter.dispose();
-      adapter.dispose();
+      adapter = StyleToolbarAdapter(store: store)
+        ..dispose()
+        ..dispose();
 
       store.dispose();
     });
 
-    test(
-      'config change after dispose does not throw',
-      () async {
-        store = createStoreWithSelection();
-        adapter = StyleToolbarAdapter(store: store);
+    test('config change after dispose does not throw', () async {
+      store = createStoreWithSelection();
+      adapter = StyleToolbarAdapter(store: store)..dispose();
 
-        adapter.dispose();
-
-        // Dispatch a config change after adapter disposal.
-        // This should not throw even though the adapter's
-        // stream subscription may still deliver a buffered event.
-        await store.dispatch(
-          UpdateConfig(
-            store.config.copyWith(
-              rectangleStyle: store.config.rectangleStyle.copyWith(
-                strokeWidth: 99,
-              ),
+      // Dispatch a config change after adapter disposal.
+      // This should not throw even though the adapter's
+      // stream subscription may still deliver a buffered event.
+      await store.dispatch(
+        UpdateConfig(
+          store.config.copyWith(
+            rectangleStyle: store.config.rectangleStyle.copyWith(
+              strokeWidth: 99,
             ),
           ),
-        );
+        ),
+      );
 
-        // Pump microtasks so any pending stream events are delivered.
-        await pumpEventQueue();
+      // Pump microtasks so any pending stream events are delivered.
+      await pumpEventQueue();
 
-        store.dispose();
-      },
-    );
+      store.dispose();
+    });
 
-    test(
-      'state change after dispose does not throw',
-      () async {
-        store = createStoreWithSelection();
-        adapter = StyleToolbarAdapter(store: store);
+    test('state change after dispose does not throw', () async {
+      store = createStoreWithSelection();
+      adapter = StyleToolbarAdapter(store: store)..dispose();
 
-        adapter.dispose();
+      // Dispatch a selection change after adapter disposal.
+      await store.dispatch(const ClearSelection());
+      await pumpEventQueue();
 
-        // Dispatch a selection change after adapter disposal.
-        await store.dispatch(const ClearSelection());
-        await pumpEventQueue();
+      store.dispose();
+    });
 
-        store.dispose();
-      },
-    );
+    test('stateNotifier value is not updated after dispose', () async {
+      store = createStoreWithSelection();
+      adapter = StyleToolbarAdapter(store: store);
 
-    test(
-      'stateNotifier value is not updated after dispose',
-      () async {
-        store = createStoreWithSelection();
-        adapter = StyleToolbarAdapter(store: store);
+      final valueBefore = adapter.stateListenable.value;
+      adapter.dispose();
 
-        final valueBefore = adapter.stateListenable.value;
-        adapter.dispose();
-
-        // Trigger a config change that would normally update
-        // the adapter's state.
-        await store.dispatch(
-          UpdateConfig(
-            store.config.copyWith(
-              rectangleStyle: store.config.rectangleStyle.copyWith(
-                strokeWidth: 99,
-              ),
+      // Trigger a config change that would normally update
+      // the adapter's state.
+      await store.dispatch(
+        UpdateConfig(
+          store.config.copyWith(
+            rectangleStyle: store.config.rectangleStyle.copyWith(
+              strokeWidth: 99,
             ),
           ),
-        );
-        await pumpEventQueue();
+        ),
+      );
+      await pumpEventQueue();
 
-        // The adapter should not have scheduled a frame callback,
-        // but if it did, pump it.
-        try {
-          SchedulerBinding.instance
-              .handleBeginFrame(Duration.zero);
-          SchedulerBinding.instance.handleDrawFrame();
-        } on Object {
-          // Ignore if no frame was scheduled.
-        }
+      // The adapter should not have scheduled a frame callback,
+      // but if it did, pump it.
+      try {
+        SchedulerBinding.instance.handleBeginFrame(Duration.zero);
+        SchedulerBinding.instance.handleDrawFrame();
+      } on Object {
+        // Ignore if no frame was scheduled.
+      }
 
-        // Value should remain unchanged since the adapter is
-        // disposed.
-        expect(adapter.stateListenable.value, valueBefore);
+      // Value should remain unchanged since the adapter is
+      // disposed.
+      expect(adapter.stateListenable.value, valueBefore);
 
-        store.dispose();
-      },
-    );
+      store.dispose();
+    });
   });
 }

@@ -222,11 +222,8 @@ class RectangleRenderer extends ElementTypeRenderer {
           );
           final dashedPath = _strokePathCache.getOrCreate(
             key,
-            () => buildDashedPath(
-              Path()..addRRect(rRect),
-              dashLength,
-              gapLength,
-            ),
+            () =>
+                buildDashedPath(Path()..addRRect(rRect), dashLength, gapLength),
           );
           _strokePaint.strokeCap = StrokeCap.round;
           canvas.drawPath(dashedPath, _strokePaint);
@@ -245,11 +242,8 @@ class RectangleRenderer extends ElementTypeRenderer {
           );
           final dottedPath = _strokePathCache.getOrCreate(
             key,
-            () => buildDottedPath(
-              Path()..addRRect(rRect),
-              dotSpacing,
-              dotRadius,
-            ),
+            () =>
+                buildDottedPath(Path()..addRRect(rRect), dotSpacing, dotRadius),
           );
           canvas.drawPath(dottedPath, _dotPaint);
         }
@@ -258,7 +252,6 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     canvas.restore();
   }
-
 }
 
 @immutable

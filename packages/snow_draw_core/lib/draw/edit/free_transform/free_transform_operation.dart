@@ -24,8 +24,7 @@ import '../core/edit_validation.dart';
 import '../core/standard_finish_mixin.dart';
 import 'free_transform_context.dart';
 
-class FreeTransformOperation extends EditOperation
-    with StandardFinishMixin {
+class FreeTransformOperation extends EditOperation with StandardFinishMixin {
   const FreeTransformOperation();
 
   @override
@@ -167,11 +166,7 @@ class FreeTransformOperation extends EditOperation
       final newRotation = snapshot.rotation + rotationDelta;
 
       var updated = current.copyWith(
-        rect: _rectFromCenter(
-          newCenter,
-          newBounds.width,
-          newBounds.height,
-        ),
+        rect: _rectFromCenter(newCenter, newBounds.width, newBounds.height),
         rotation: newRotation,
       );
       final data = updated.data;
@@ -199,8 +194,7 @@ class FreeTransformOperation extends EditOperation
       state: state,
       updatedById: updatedById,
       multiSelectBounds: newSelectionBounds,
-      multiSelectRotation:
-          typedContext.selectionRotation + rotationDelta,
+      multiSelectRotation: typedContext.selectionRotation + rotationDelta,
     );
   }
 
@@ -216,10 +210,8 @@ class FreeTransformOperation extends EditOperation
     );
     return current.copyWith(
       multiSelectOverlay: MultiSelectOverlayState(
-        bounds:
-            result.multiSelectBounds ?? typedContext.startBounds,
-        rotation: result.multiSelectRotation ??
-            typedContext.selectionRotation,
+        bounds: result.multiSelectBounds ?? typedContext.startBounds,
+        rotation: result.multiSelectRotation ?? typedContext.selectionRotation,
       ),
     );
   }
