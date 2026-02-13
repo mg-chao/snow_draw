@@ -18,6 +18,7 @@ class GridToolbarAdapter {
   late final ValueNotifier<bool> _enabledNotifier;
   late final ValueNotifier<double> _sizeNotifier;
   StreamSubscription<DrawConfig>? _configSubscription;
+  var _isDisposed = false;
 
   ValueListenable<bool> get enabledListenable => _enabledNotifier;
   ValueListenable<double> get sizeListenable => _sizeNotifier;
@@ -28,6 +29,9 @@ class GridToolbarAdapter {
   Future<void> toggle() => setEnabled(enabled: !isEnabled);
 
   Future<void> setEnabled({required bool enabled}) async {
+    if (_isDisposed) {
+      return;
+    }
     var nextConfig = _config.copyWith(
       grid: _config.grid.copyWith(enabled: enabled),
     );
@@ -43,6 +47,9 @@ class GridToolbarAdapter {
   }
 
   Future<void> setGridSize(double size) async {
+    if (_isDisposed) {
+      return;
+    }
     final clamped = size < GridConfig.minSize
         ? GridConfig.minSize
         : (size > GridConfig.maxSize ? GridConfig.maxSize : size);
@@ -56,13 +63,17 @@ class GridToolbarAdapter {
   }
 
   void dispose() {
+    if (_isDisposed) {
+      return;
+    }
+    _isDisposed = true;
     _enabledNotifier.dispose();
     _sizeNotifier.dispose();
     unawaited(_configSubscription?.cancel());
   }
 
   void _handleConfigChange(DrawConfig config) {
-    if (config == _config) {
+    if (_isDisposed || config == _config) {
       return;
     }
     _config = config;

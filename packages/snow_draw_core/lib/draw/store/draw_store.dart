@@ -41,7 +41,15 @@ class DefaultDrawStore implements DrawStore {
         historyManager ?? HistoryManager(logService: this.context.log);
     _stateManager = StateManager(initialState ?? DrawState());
     _configManager = this.context.configManager;
-    _listenerRegistry = ListenerRegistry();
+    _listenerRegistry = ListenerRegistry(
+      onError: (error, stackTrace) {
+        this.context.log.store.error(
+          'Listener threw during notification',
+          error,
+          stackTrace,
+        );
+      },
+    );
 
     _editSessionService = EditSessionService.fromRegistry(
       this.context.editOperations,

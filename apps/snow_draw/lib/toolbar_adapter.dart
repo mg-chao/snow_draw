@@ -257,6 +257,9 @@ class StyleToolbarAdapter {
   }
 
   void _handleStateChange(DrawState state) {
+    if (_isDisposed) {
+      return;
+    }
     final nextSelectedIds = state.domain.selection.selectedIds;
     if (!setEquals(_selectedIds, nextSelectedIds)) {
       _selectedIds = nextSelectedIds;
@@ -293,7 +296,7 @@ class StyleToolbarAdapter {
   }
 
   void _handleConfigChange(DrawConfig config) {
-    if (config == _config) {
+    if (_isDisposed || config == _config) {
       return;
     }
     final rectangleStyleChanged =

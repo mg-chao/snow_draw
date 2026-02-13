@@ -6,6 +6,12 @@ import '../models/draw_state.dart';
 import 'draw_store_interface.dart';
 import 'state_change_chain.dart';
 
+/// Callback invoked when a listener throws during notification.
+typedef ListenerErrorHandler = void Function(
+  Object error,
+  StackTrace stackTrace,
+);
+
 /// Listener registry.
 ///
 /// Manages registration, unregistration, and notification of state
@@ -15,6 +21,9 @@ import 'state_change_chain.dart';
 ///
 /// Uses a LinkedHashMap for O(1) removal, de-duplication, and ordered notify.
 class ListenerRegistry {
+  ListenerRegistry({ListenerErrorHandler? onError}) : _onError = onError;
+
+  final ListenerErrorHandler? _onError;
   final LinkedHashMap<StateChangeListener<DrawState>, _ListenerEntry>
   _listeners = LinkedHashMap();
 
@@ -74,7 +83,12 @@ class ListenerRegistry {
     for (final listener in List.of(_listeners.keys)) {
       final entry = _listeners[listener];
       if (entry != null && entry.shouldNotify(changes)) {
-        entry.notify(context);
+        try {
+          entry.notify(context);
+        } on Object catch (error, stackTrace) {
+          // Continue notifying remaining listeners even when one throws.
+          _onError?.call(error, stackTrace);
+        }
       }
     }
   }

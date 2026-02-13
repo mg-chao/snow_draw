@@ -16,6 +16,7 @@ class SnapToolbarAdapter {
   late DrawConfig _config;
   late final ValueNotifier<bool> _enabledNotifier;
   StreamSubscription<DrawConfig>? _configSubscription;
+  var _isDisposed = false;
 
   ValueListenable<bool> get enabledListenable => _enabledNotifier;
 
@@ -24,6 +25,9 @@ class SnapToolbarAdapter {
   Future<void> toggle() => setEnabled(enabled: !isEnabled);
 
   Future<void> setEnabled({required bool enabled}) async {
+    if (_isDisposed) {
+      return;
+    }
     var nextConfig = _config.copyWith(
       snap: _config.snap.copyWith(enabled: enabled),
     );
@@ -39,12 +43,16 @@ class SnapToolbarAdapter {
   }
 
   void dispose() {
+    if (_isDisposed) {
+      return;
+    }
+    _isDisposed = true;
     _enabledNotifier.dispose();
     unawaited(_configSubscription?.cancel());
   }
 
   void _handleConfigChange(DrawConfig config) {
-    if (config == _config) {
+    if (_isDisposed || config == _config) {
       return;
     }
     _config = config;
