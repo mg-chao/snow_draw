@@ -45,6 +45,12 @@ abstract class EditContext {
 
   bool get isSingleSelect => selectedIdsAtStart.length == 1;
   bool get isMultiSelect => selectedIdsAtStart.length > 1;
+
+  /// Whether this context carries non-empty element snapshots.
+  ///
+  /// Subclasses override to check their specific snapshot map. This
+  /// eliminates the need for a type-switch in [EditValidation].
+  bool get hasSnapshots => false;
 }
 
 /// Context for move operations.
@@ -66,6 +72,9 @@ final class MoveEditContext extends EditContext {
   ///
   /// Stores only the data needed for move operations: element centers.
   final Map<String, ElementMoveSnapshot> elementSnapshots;
+
+  @override
+  bool get hasSnapshots => elementSnapshots.isNotEmpty;
 
   /// Get the starting center for an element.
   DrawPoint? getStartCenter(String id) => elementSnapshots[id]?.center;
@@ -96,6 +105,9 @@ final class ResizeEditContext extends EditContext {
 
   /// Starting geometry for each element (lean snapshot).
   final Map<String, ElementResizeSnapshot> elementSnapshots;
+
+  @override
+  bool get hasSnapshots => elementSnapshots.isNotEmpty;
 
   bool get hasRotation => rotation != 0.0;
 
@@ -133,6 +145,9 @@ final class RotateEditContext extends EditContext {
 
   /// Starting rotation info for each element (lean snapshot).
   final Map<String, ElementRotateSnapshot> elementSnapshots;
+
+  @override
+  bool get hasSnapshots => elementSnapshots.isNotEmpty;
 
   /// Get the starting rotation for an element.
   ElementRotateSnapshot? getStartRotation(String id) => elementSnapshots[id];

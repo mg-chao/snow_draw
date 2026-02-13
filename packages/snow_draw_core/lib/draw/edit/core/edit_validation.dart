@@ -1,6 +1,5 @@
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
-import '../free_transform/free_transform_context.dart';
 import 'edit_errors.dart';
 
 /// Shared validation rules for edit operations.
@@ -24,14 +23,7 @@ class EditValidation {
         operationName: operationName,
       );
     }
-    final hasSnapshots = switch (context) {
-      final MoveEditContext c => c.elementSnapshots.isNotEmpty,
-      final ResizeEditContext c => c.elementSnapshots.isNotEmpty,
-      final RotateEditContext c => c.elementSnapshots.isNotEmpty,
-      final FreeTransformEditContext c => c.elementSnapshots.isNotEmpty,
-      _ => false,
-    };
-    if (!hasSnapshots) {
+    if (!context.hasSnapshots) {
       throw EditMissingDataError(
         dataName: 'elementSnapshots',
         operationName: operationName,
@@ -52,18 +44,8 @@ class EditValidation {
     }
   }
 
-  static bool isValidContext(EditContext context) {
-    if (context.selectedIdsAtStart.isEmpty) {
-      return false;
-    }
-    return switch (context) {
-      final MoveEditContext c => c.elementSnapshots.isNotEmpty,
-      final ResizeEditContext c => c.elementSnapshots.isNotEmpty,
-      final RotateEditContext c => c.elementSnapshots.isNotEmpty,
-      final FreeTransformEditContext c => c.elementSnapshots.isNotEmpty,
-      _ => false,
-    };
-  }
+  static bool isValidContext(EditContext context) =>
+      context.selectedIdsAtStart.isNotEmpty && context.hasSnapshots;
 
   static bool isValidBounds(DrawRect bounds) =>
       bounds.width > 0 && bounds.height > 0;

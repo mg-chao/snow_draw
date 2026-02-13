@@ -216,8 +216,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     return EditComputePipeline.finalize(
       state: state,
       updatedById: updatedById,
-      multiSelectBounds:
-          typedContext.isMultiSelect ? translatedBounds : null,
+      multiSelectBounds: typedContext.isMultiSelect ? translatedBounds : null,
     );
   }
 
@@ -226,20 +225,15 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     required SelectionOverlayState current,
     required EditComputedResult result,
     required EditContext context,
-  }) =>
-      MultiSelectLifecycle.onMoveFinished(
-        current,
-        newBounds: result.multiSelectBounds!,
-      );
+  }) => MultiSelectLifecycle.onMoveFinished(
+    current,
+    newBounds: result.multiSelectBounds!,
+  );
 
   List<ElementState> _resolveReferenceElements(
     DrawState state,
     Set<String> selectedIds,
-  ) => state.domain.document.elements
-      .where(
-        (element) => element.opacity > 0 && !selectedIds.contains(element.id),
-      )
-      .toList();
+  ) => resolveReferenceElements(state, selectedIds);
 
   List<ElementState> _resolveTargetElements(
     DrawState state,

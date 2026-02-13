@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/list_equality.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
@@ -207,7 +208,7 @@ final class ArrowData extends ElementData
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ArrowData &&
-          _pointsEqual(other.points, points) &&
+          pointListEquals(other.points, points) &&
           other.color == color &&
           other.strokeWidth == strokeWidth &&
           other.strokeStyle == strokeStyle &&
@@ -216,7 +217,7 @@ final class ArrowData extends ElementData
           other.endArrowhead == endArrowhead &&
           other.startBinding == startBinding &&
           other.endBinding == endBinding &&
-          _fixedSegmentsEqual(other.fixedSegments, fixedSegments) &&
+          fixedSegmentListEquals(other.fixedSegments, fixedSegments) &&
           other.startIsSpecial == startIsSpecial &&
           other.endIsSpecial == endIsSpecial;
 
@@ -235,39 +236,6 @@ final class ArrowData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
-
-  static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _fixedSegmentsEqual(
-    List<ElbowFixedSegment>? a,
-    List<ElbowFixedSegment>? b,
-  ) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a == null || b == null) {
-      return a == null && b == null;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   static ArrowBinding? _decodeBinding(Object? raw) {
     if (raw is Map<String, dynamic>) {

@@ -25,6 +25,7 @@ import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
 import '../../utils/combined_element_lookup.dart';
+import '../../utils/list_equality.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_errors.dart';
@@ -74,7 +75,13 @@ class ArrowPointOperation extends EditOperation {
       );
     }
     final data = element.data as ArrowLikeData;
-    final points = _resolveWorldPoints(element, data);
+    final resolved = ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final points = resolved
+        .map((point) => DrawPoint(x: point.dx, y: point.dy))
+        .toList(growable: false);
     if (points.length < 2) {
       throw const EditMissingDataError(
         dataName: 'arrow points',
@@ -346,84 +353,13 @@ class ArrowPointOperation extends EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
-    final data = element.data as ArrowLikeData;
-    final arrowData = data is ArrowData ? data : null;
-    final dataWithBindings = data.copyWith(
-      startBinding: typedTransform.startBinding,
-      endBinding: typedTransform.endBinding,
-    );
-    // Transform local-space points to world space, then back to local space
-    // with the new rect center. This preserves world-space positions while
-    // keeping the same rotation angle.
-    final result = data.arrowType == ArrowType.elbow && arrowData != null
-        ? () {
-            final fixedSegments =
-                typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
-            final elbowData = arrowData.copyWith(
-              startBinding: typedTransform.startBinding,
-              endBinding: typedTransform.endBinding,
-            );
-            final updated = computeElbowEdit(
-              element: element,
-              data: elbowData,
-              lookup: CombinedElementLookup(
-                base: state.domain.document.elementMap,
-              ),
-              localPointsOverride: points,
-              fixedSegmentsOverride: fixedSegments,
-              startBindingOverride: typedTransform.startBinding,
-              endBindingOverride: typedTransform.endBinding,
-              startBindingOverrideIsSet: true,
-              endBindingOverrideIsSet: true,
-              finalize: true,
-            );
-            final rectAndPoints = computeArrowRectAndPoints(
-              localPoints: updated.localPoints,
-              oldRect: typedContext.elementRect,
-              rotation: typedContext.rotation,
-              arrowType: data.arrowType,
-              strokeWidth: data.strokeWidth,
-            );
-            final transformedFixedSegments = transformFixedSegments(
-              segments: updated.fixedSegments,
-              oldRect: typedContext.elementRect,
-              newRect: rectAndPoints.rect,
-              rotation: typedContext.rotation,
-            );
-            return (rectAndPoints, transformedFixedSegments, updated);
-          }()
-        : (
-            computeArrowRectAndPoints(
-              localPoints: points,
-              oldRect: typedContext.elementRect,
-              rotation: typedContext.rotation,
-              arrowType: data.arrowType,
-              strokeWidth: data.strokeWidth,
-            ),
-            null,
-            null,
-          );
-
-    final rectAndPoints = result.$1;
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: rectAndPoints.localPoints,
-      rect: rectAndPoints.rect,
-    );
-
-    final updatedData =
-        data.arrowType == ArrowType.elbow &&
-            arrowData != null &&
-            result.$3 != null
-        ? dataWithBindings.copyWith(
-            points: normalized,
-            fixedSegments: result.$2,
-            startIsSpecial: result.$3!.startIsSpecial,
-            endIsSpecial: result.$3!.endIsSpecial,
-          )
-        : dataWithBindings.copyWith(points: normalized);
-    final updatedElement = element.copyWith(
-      rect: rectAndPoints.rect,
-      data: updatedData,
+    final updatedElement = _buildUpdatedElement(
+      element: element,
+      context: typedContext,
+      transform: typedTransform,
+      elementMap: state.domain.document.elementMap,
+      localPoints: points,
+      finalize: true,
     );
     final updatedElements = EditApply.replaceElementsById(
       elements: state.domain.document.elements,
@@ -463,77 +399,12 @@ class ArrowPointOperation extends EditOperation {
       return EditPreview.none;
     }
 
-    final data = element.data as ArrowLikeData;
-    final arrowData = data is ArrowData ? data : null;
-    final dataWithBindings = data.copyWith(
-      startBinding: typedTransform.startBinding,
-      endBinding: typedTransform.endBinding,
-    );
-
-    // Transform local-space points to world space, then back to local space
-    // with the new rect center. This preserves world-space positions while
-    // keeping the same rotation angle.
-    final result = data.arrowType == ArrowType.elbow && arrowData != null
-        ? () {
-            final fixedSegments =
-                typedTransform.fixedSegments ?? const <ElbowFixedSegment>[];
-            final updated = computeElbowEdit(
-              element: element,
-              data: arrowData,
-              lookup: CombinedElementLookup(
-                base: state.domain.document.elementMap,
-              ),
-              localPointsOverride: typedTransform.points,
-              fixedSegmentsOverride: fixedSegments,
-              startBindingOverride: typedTransform.startBinding,
-              endBindingOverride: typedTransform.endBinding,
-              startBindingOverrideIsSet: true,
-              endBindingOverrideIsSet: true,
-            );
-            final rectAndPoints = computeArrowRectAndPoints(
-              localPoints: updated.localPoints,
-              oldRect: typedContext.elementRect,
-              rotation: typedContext.rotation,
-              arrowType: data.arrowType,
-              strokeWidth: data.strokeWidth,
-            );
-            final transformedFixedSegments = transformFixedSegments(
-              segments: updated.fixedSegments,
-              oldRect: typedContext.elementRect,
-              newRect: rectAndPoints.rect,
-              rotation: typedContext.rotation,
-            );
-            return (rectAndPoints, transformedFixedSegments, updated);
-          }()
-        : (
-            computeArrowRectAndPoints(
-              localPoints: typedTransform.points,
-              oldRect: typedContext.elementRect,
-              rotation: typedContext.rotation,
-              arrowType: data.arrowType,
-              strokeWidth: data.strokeWidth,
-            ),
-            null,
-            null,
-          );
-
-    final rectAndPoints = result.$1;
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: rectAndPoints.localPoints,
-      rect: rectAndPoints.rect,
-    );
-
-    final updatedData = data.arrowType == ArrowType.elbow && result.$3 != null
-        ? dataWithBindings.copyWith(
-            points: normalized,
-            fixedSegments: result.$2,
-            startIsSpecial: result.$3!.startIsSpecial,
-            endIsSpecial: result.$3!.endIsSpecial,
-          )
-        : dataWithBindings.copyWith(points: normalized);
-    final updatedElement = element.copyWith(
-      rect: rectAndPoints.rect,
-      data: updatedData,
+    final updatedElement = _buildUpdatedElement(
+      element: element,
+      context: typedContext,
+      transform: typedTransform,
+      elementMap: state.domain.document.elementMap,
+      localPoints: typedTransform.points,
     );
 
     return buildEditPreview(
@@ -542,6 +413,94 @@ class ArrowPointOperation extends EditOperation {
       previewElementsById: {updatedElement.id: updatedElement},
     );
   }
+}
+
+/// Builds the updated [ElementState] for both [finish] and [buildPreview],
+/// eliminating the duplicated elbow-edit + rect/normalize pipeline.
+ElementState _buildUpdatedElement({
+  required ElementState element,
+  required ArrowPointEditContext context,
+  required ArrowPointTransform transform,
+  required Map<String, ElementState> elementMap,
+  required List<DrawPoint> localPoints,
+  bool finalize = false,
+}) {
+  final data = element.data as ArrowLikeData;
+  final arrowData = data is ArrowData ? data : null;
+  final dataWithBindings = data.copyWith(
+    startBinding: transform.startBinding,
+    endBinding: transform.endBinding,
+  );
+
+  // Transform local-space points to world space, then back to local space
+  // with the new rect center. This preserves world-space positions while
+  // keeping the same rotation angle.
+  final result = data.arrowType == ArrowType.elbow && arrowData != null
+      ? () {
+          final fixedSegments =
+              transform.fixedSegments ?? const <ElbowFixedSegment>[];
+          final elbowData = arrowData.copyWith(
+            startBinding: transform.startBinding,
+            endBinding: transform.endBinding,
+          );
+          final updated = computeElbowEdit(
+            element: element,
+            data: elbowData,
+            lookup: CombinedElementLookup(base: elementMap),
+            localPointsOverride: localPoints,
+            fixedSegmentsOverride: fixedSegments,
+            startBindingOverride: transform.startBinding,
+            endBindingOverride: transform.endBinding,
+            startBindingOverrideIsSet: true,
+            endBindingOverrideIsSet: true,
+            finalize: finalize,
+          );
+          final rectAndPoints = computeArrowRectAndPoints(
+            localPoints: updated.localPoints,
+            oldRect: context.elementRect,
+            rotation: context.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          );
+          final transformedFixedSegments = transformFixedSegments(
+            segments: updated.fixedSegments,
+            oldRect: context.elementRect,
+            newRect: rectAndPoints.rect,
+            rotation: context.rotation,
+          );
+          return (rectAndPoints, transformedFixedSegments, updated);
+        }()
+      : (
+          computeArrowRectAndPoints(
+            localPoints: localPoints,
+            oldRect: context.elementRect,
+            rotation: context.rotation,
+            arrowType: data.arrowType,
+            strokeWidth: data.strokeWidth,
+          ),
+          null,
+          null,
+        );
+
+  final rectAndPoints = result.$1;
+  final normalized = ArrowGeometry.normalizePoints(
+    worldPoints: rectAndPoints.localPoints,
+    rect: rectAndPoints.rect,
+  );
+
+  final updatedData =
+      data.arrowType == ArrowType.elbow &&
+          arrowData != null &&
+          result.$3 != null
+      ? dataWithBindings.copyWith(
+          points: normalized,
+          fixedSegments: result.$2,
+          startIsSpecial: result.$3!.startIsSpecial,
+          endIsSpecial: result.$3!.endIsSpecial,
+        )
+      : dataWithBindings.copyWith(points: normalized);
+
+  return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
 }
 
 @immutable
@@ -679,8 +638,8 @@ _ArrowPointComputation _compute({
         final fixedSegmentsResult = boundary.fixedSegments.isEmpty
             ? null
             : List<ElbowFixedSegment>.unmodifiable(boundary.fixedSegments);
-        final pointsChanged = !_pointsEqual(basePoints, boundary.points);
-        final segmentsChanged = !_fixedSegmentsEqual(
+        final pointsChanged = !pointListEquals(basePoints, boundary.points);
+        final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
           baseFixedSegments,
           fixedSegmentsResult,
         );
@@ -746,8 +705,8 @@ _ArrowPointComputation _compute({
       final fixedSegmentsResult = nextFixedSegments.isEmpty
           ? null
           : List<ElbowFixedSegment>.unmodifiable(nextFixedSegments);
-      final pointsChanged = !_pointsEqual(basePoints, updatedPoints);
-      final segmentsChanged = !_fixedSegmentsEqual(
+      final pointsChanged = !pointListEquals(basePoints, updatedPoints);
+      final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
         baseFixedSegments,
         fixedSegmentsResult,
       );
@@ -902,7 +861,8 @@ _ArrowPointComputation _compute({
     }
   }
 
-  final hasChanges = !_pointsEqual(basePoints, updatedPoints) || nextDidInsert;
+  final hasChanges =
+      !pointListEquals(basePoints, updatedPoints) || nextDidInsert;
   final bindingChanged =
       nextStartBinding != startBinding || nextEndBinding != endBinding;
 
@@ -916,16 +876,6 @@ _ArrowPointComputation _compute({
     endBinding: nextEndBinding,
     fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,
   );
-}
-
-List<DrawPoint> _resolveWorldPoints(ElementState element, ArrowLikeData data) {
-  final resolved = ArrowGeometry.resolveWorldPoints(
-    rect: element.rect,
-    normalizedPoints: data.points,
-  );
-  return resolved
-      .map((point) => DrawPoint(x: point.dx, y: point.dy))
-      .toList(growable: false);
 }
 
 List<ElementState> _resolveBindingTargets(
@@ -1252,54 +1202,4 @@ ElbowFixedSegment? _fixedSegmentForIndex(List<DrawPoint> points, int index) {
     return null;
   }
   return ElbowFixedSegment(index: index, start: start, end: end);
-}
-
-bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool _isHorizontal(DrawPoint a, DrawPoint b) =>
-    (a.y - b.y).abs() <= (a.x - b.x).abs();
-
-bool _fixedSegmentsEqual(
-  List<ElbowFixedSegment>? a,
-  List<ElbowFixedSegment>? b,
-) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return a == null && b == null;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i].index != b[i].index) {
-      return false;
-    }
-    final aHorizontal = _isHorizontal(a[i].start, a[i].end);
-    final bHorizontal = _isHorizontal(b[i].start, b[i].end);
-    if (aHorizontal != bHorizontal) {
-      return false;
-    }
-    final aAxis = aHorizontal
-        ? (a[i].start.y + a[i].end.y) / 2
-        : (a[i].start.x + a[i].end.x) / 2;
-    final bAxis = bHorizontal
-        ? (b[i].start.y + b[i].end.y) / 2
-        : (b[i].start.x + b[i].end.x) / 2;
-    if ((aAxis - bAxis).abs() > 1) {
-      return false;
-    }
-  }
-  return true;
 }

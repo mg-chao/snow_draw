@@ -124,3 +124,16 @@ P requireParams<P extends EditOperationParams>(
   }
   return params;
 }
+
+/// Returns visible elements that are not in [selectedIds].
+///
+/// Shared by move and resize operations for object-snap reference
+/// resolution, eliminating the duplicated private helpers.
+List<ElementState> resolveReferenceElements(
+  DrawState state,
+  Set<String> selectedIds,
+) => state.domain.document.elements
+    .where(
+      (element) => element.opacity > 0 && !selectedIds.contains(element.id),
+    )
+    .toList();

@@ -315,12 +315,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     final scaleY = typedTransform.scaleY!;
     final anchor = typedTransform.anchor!;
 
-    if (_isIdentityTransform(
-      scaleX,
-      scaleY,
-      startBounds,
-      newSelectionBounds,
-    )) {
+    if (_isIdentityTransform(scaleX, scaleY, startBounds, newSelectionBounds)) {
       return null;
     }
 
@@ -338,8 +333,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     return EditComputePipeline.finalize(
       state: state,
       updatedById: updatedById,
-      multiSelectBounds:
-          typedContext.isMultiSelect ? newSelectionBounds : null,
+      multiSelectBounds: typedContext.isMultiSelect ? newSelectionBounds : null,
     );
   }
 
@@ -348,11 +342,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     required SelectionOverlayState current,
     required EditComputedResult result,
     required EditContext context,
-  }) =>
-      MultiSelectLifecycle.onResizeFinished(
-        current,
-        newBounds: result.multiSelectBounds!,
-      );
+  }) => MultiSelectLifecycle.onResizeFinished(
+    current,
+    newBounds: result.multiSelectBounds!,
+  );
 
   List<SnapAxisAnchor> _resolveAnchorsX(ResizeMode mode) {
     final moveMinX =
@@ -387,11 +380,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
   List<ElementState> _resolveReferenceElements(
     DrawState state,
     Set<String> selectedIds,
-  ) => state.domain.document.elements
-      .where(
-        (element) => element.opacity > 0 && !selectedIds.contains(element.id),
-      )
-      .toList();
+  ) => resolveReferenceElements(state, selectedIds);
 
   bool _isIdentityTransform(
     double scaleX,

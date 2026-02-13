@@ -18,6 +18,7 @@ import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
 import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
+import '../../utils/list_equality.dart';
 
 /// Single-source-of-truth geometry application for editing.
 ///
@@ -226,7 +227,8 @@ class EditApply {
             oldRect: startElement.rect,
             newRect: resized.rect,
           );
-          if (scaled != null && !_fixedSegmentsEqual(fixedSegments, scaled)) {
+          if (scaled != null &&
+              !fixedSegmentListEquals(fixedSegments, scaled)) {
             data = data.copyWith(fixedSegments: scaled);
             resized = resized.copyWith(data: data);
           }
@@ -420,19 +422,4 @@ DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {
     x: newRect.minX + nx * newWidth,
     y: newRect.minY + ny * newHeight,
   );
-}
-
-bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/list_equality.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
@@ -135,7 +136,7 @@ final class FreeDrawData extends ElementData
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is FreeDrawData &&
-          _pointsEqual(other.points, points) &&
+          pointListEquals(other.points, points) &&
           other.color == color &&
           other.fillColor == fillColor &&
           other.fillStyle == fillStyle &&
@@ -151,16 +152,4 @@ final class FreeDrawData extends ElementData
     strokeWidth,
     strokeStyle,
   );
-
-  static bool _pointsEqual(List<DrawPoint> a, List<DrawPoint> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }
