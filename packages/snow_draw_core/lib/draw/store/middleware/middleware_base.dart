@@ -32,7 +32,7 @@ typedef NextFunction =
 abstract interface class Middleware {
   /// Execute this middleware.
   ///
-  /// Call [next] to pass control to the next middleware.
+  /// Call [next] exactly once to pass control to the next middleware.
   /// Don't call [next] to short-circuit the pipeline.
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next);
 

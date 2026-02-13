@@ -11,10 +11,10 @@ import 'middleware_context.dart';
 /// - Basic error handling
 @immutable
 class MiddlewarePipeline {
-  const MiddlewarePipeline({
-    required this.middlewares,
+  MiddlewarePipeline({
+    required List<Middleware> middlewares,
     this.errorHandler = const ErrorHandler(),
-  });
+  }) : middlewares = List<Middleware>.unmodifiable(middlewares);
   final List<Middleware> middlewares;
   final ErrorHandler errorHandler;
 
@@ -26,46 +26,122 @@ class MiddlewarePipeline {
       DispatchContext context,
       int index,
     ) async {
-      if (context.shouldStop || context.hasError) {
-        return context;
-      }
+      var currentContext = context;
+      var currentIndex = index;
 
-      if (index >= middlewares.length) {
-        return context;
-      }
+      while (true) {
+        if (currentContext.shouldStop || currentContext.hasError) {
+          return currentContext;
+        }
 
-      final middleware = middlewares[index];
-      if (!middleware.shouldExecute(context)) {
-        return executeNext(context, index + 1);
-      }
+        if (currentIndex >= middlewares.length) {
+          return currentContext;
+        }
 
-      try {
-        return await middleware.invoke(
-          context,
-          (nextContext) => executeNext(nextContext, index + 1),
-        );
-      } on Object catch (error, stackTrace) {
-        switch (errorHandler.handle(error, stackTrace)) {
-          case RecoveryAction.skip:
-            final skipped = context.withMetadata(
-              'skipped_${middleware.name}',
-              true,
+        final middleware = middlewares[currentIndex];
+
+        bool shouldExecute;
+        try {
+          shouldExecute = middleware.shouldExecute(currentContext);
+        } on Object catch (error, stackTrace) {
+          final recovered = _recoverFromError(
+            context: currentContext,
+            middleware: middleware,
+            error: error,
+            stackTrace: stackTrace,
+          );
+          if (recovered.shouldStop || recovered.hasError) {
+            return recovered;
+          }
+          currentContext = recovered;
+          currentIndex += 1;
+          continue;
+        }
+
+        if (!shouldExecute) {
+          currentIndex += 1;
+          continue;
+        }
+
+        var nextCalled = false;
+        var middlewareCompleted = false;
+        Future<DispatchContext>? nextFuture;
+        Future<DispatchContext> guardedNext(DispatchContext nextContext) {
+          if (middlewareCompleted) {
+            throw StateError(
+              'Middleware "${middleware.name}" called next() after completion',
             );
-            return executeNext(skipped, index + 1);
-          case RecoveryAction.stop:
-            return context.withError(
-              error,
-              stackTrace,
-              source: middleware.name,
+          }
+          if (nextCalled) {
+            throw StateError(
+              'Middleware "${middleware.name}" called next() more than once',
             );
-          case RecoveryAction.propagate:
-            Error.throwWithStackTrace(error, stackTrace);
+          }
+          nextCalled = true;
+          nextFuture = executeNext(nextContext, currentIndex + 1);
+          return nextFuture!;
+        }
+
+        try {
+          final result = await middleware.invoke(currentContext, guardedNext);
+          middlewareCompleted = true;
+          return result;
+        } on Object catch (error, stackTrace) {
+          middlewareCompleted = true;
+          switch (errorHandler.handle(error, stackTrace)) {
+            case RecoveryAction.skip:
+              if (nextCalled) {
+                final downstreamFuture = nextFuture;
+                final downstreamContext = downstreamFuture == null
+                    ? currentContext
+                    : await downstreamFuture;
+                return _markSkipped(
+                  context: downstreamContext,
+                  middleware: middleware,
+                );
+              }
+              currentContext = _markSkipped(
+                context: currentContext,
+                middleware: middleware,
+              );
+              currentIndex += 1;
+              continue;
+            case RecoveryAction.stop:
+              return currentContext.withError(
+                error,
+                stackTrace,
+                source: middleware.name,
+              );
+            case RecoveryAction.propagate:
+              Error.throwWithStackTrace(error, stackTrace);
+          }
         }
       }
     }
 
     return executeNext(initialContext, 0);
   }
+
+  DispatchContext _recoverFromError({
+    required DispatchContext context,
+    required Middleware middleware,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    switch (errorHandler.handle(error, stackTrace)) {
+      case RecoveryAction.skip:
+        return _markSkipped(context: context, middleware: middleware);
+      case RecoveryAction.stop:
+        return context.withError(error, stackTrace, source: middleware.name);
+      case RecoveryAction.propagate:
+        Error.throwWithStackTrace(error, stackTrace);
+    }
+  }
+
+  DispatchContext _markSkipped({
+    required DispatchContext context,
+    required Middleware middleware,
+  }) => context.withMetadata('skipped_${middleware.name}', true);
 
   /// Create a new pipeline with an additional middleware.
   MiddlewarePipeline addMiddleware(Middleware middleware) => MiddlewarePipeline(
@@ -82,8 +158,15 @@ class MiddlewarePipeline {
 
   /// Create a new pipeline with middlewares sorted by priority.
   MiddlewarePipeline sortByPriority() {
-    final sorted = [...middlewares]
-      ..sort((a, b) => b.priority.compareTo(a.priority));
+    final indexedMiddlewares = middlewares.indexed.toList()
+      ..sort((left, right) {
+        final byPriority = right.$2.priority.compareTo(left.$2.priority);
+        if (byPriority != 0) {
+          return byPriority;
+        }
+        return left.$1.compareTo(right.$1);
+      });
+    final sorted = [for (final entry in indexedMiddlewares) entry.$2];
     return MiddlewarePipeline(middlewares: sorted, errorHandler: errorHandler);
   }
 
