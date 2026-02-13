@@ -248,6 +248,10 @@ class HistoryMiddleware extends MiddlewareBase {
   }
 
   HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) {
+    if (action is FinishTextEdit) {
+      return _metadataFromFinishTextEdit(context, action);
+    }
+
     if (action is FinishEdit) {
       return action.metadata ?? _metadataFromEdit(context);
     }
@@ -261,6 +265,49 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     return null;
+  }
+
+  HistoryMetadata _metadataFromFinishTextEdit(
+    DispatchContext context,
+    FinishTextEdit action,
+  ) {
+    final resolved = _resolveFinishTextEditPayload(context, action);
+    final trimmed = resolved.text.trim();
+    final isDelete = trimmed.isEmpty && !resolved.isNew;
+    final isCreate = resolved.isNew;
+
+    return HistoryMetadata(
+      description: isDelete
+          ? 'Delete text'
+          : isCreate
+          ? 'Create text'
+          : 'Edit text',
+      recordType: isDelete
+          ? HistoryRecordType.delete
+          : isCreate
+          ? HistoryRecordType.create
+          : HistoryRecordType.edit,
+    );
+  }
+
+  ({String elementId, bool isNew, String text}) _resolveFinishTextEditPayload(
+    DispatchContext context,
+    FinishTextEdit action,
+  ) {
+    final interaction = context.initialState.application.interaction;
+    if (interaction is TextEditingState) {
+      return (
+        elementId: interaction.elementId,
+        isNew: interaction.isNew,
+        text: action.text,
+      );
+    }
+
+    return (
+      elementId: action.elementId,
+      isNew: action.isNew,
+      text: action.text,
+    );
   }
 
   HistoryMetadata? _metadataFromEdit(DispatchContext context) {
@@ -353,26 +400,27 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is FinishTextEdit) {
-      final trimmed = action.text.trim();
+      final resolved = _resolveFinishTextEditPayload(context, action);
+      final trimmed = resolved.text.trim();
       if (trimmed.isEmpty) {
-        if (action.isNew) {
+        if (resolved.isNew) {
           return null;
         }
         return HistoryChangeSet(
-          removedIds: {action.elementId},
+          removedIds: {resolved.elementId},
           orderChanged: true,
           selectionChanged: selectionChanged,
         );
       }
-      if (action.isNew) {
+      if (resolved.isNew) {
         return HistoryChangeSet(
-          addedIds: {action.elementId},
+          addedIds: {resolved.elementId},
           orderChanged: true,
           selectionChanged: selectionChanged,
         );
       }
       return HistoryChangeSet(
-        modifiedIds: {action.elementId},
+        modifiedIds: {resolved.elementId},
         selectionChanged: selectionChanged,
       );
     }
