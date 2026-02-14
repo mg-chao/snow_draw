@@ -23,7 +23,6 @@ import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
-import '../../draw/events/state_events.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
 import '../../draw/models/draw_state.dart';
@@ -116,8 +115,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
+  static const Set<DrawStateChange> _stateChangeTypes = {
+    DrawStateChange.document,
+    DrawStateChange.selection,
+    DrawStateChange.view,
+    DrawStateChange.interaction,
+  };
 
-  StreamSubscription<StateChangeEvent>? _eventSubscription;
+  VoidCallback? _stateUnsubscribe;
   StreamSubscription<DrawConfig>? _configSubscription;
   final _focusNode = FocusNode();
   late final FocusNode _textFocusNode;
@@ -278,8 +283,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(FilterShaderManager.instance.load());
     unawaited(HighlightMaskShaderManager.instance.load());
 
-    _eventSubscription = widget.store.onEvent<StateChangeEvent>(
-      _handleStateChangeEvent,
+    _stateUnsubscribe = widget.store.listen(
+      _handleStateChange,
+      changeTypes: _stateChangeTypes,
     );
 
     _configSubscription = widget.store.configStream.listen(_handleConfigChange);
@@ -300,14 +306,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       unawaited(_pluginCoordinator.dispose());
 
       if (oldWidget.store != widget.store) {
-        // Unsubscribe from old store events
-        unawaited(_eventSubscription?.cancel());
+        _stateUnsubscribe?.call();
+        _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
         _cachedState = null;
         _cachedStateView = null;
 
-        _eventSubscription = widget.store.onEvent<StateChangeEvent>(
-          _handleStateChangeEvent,
+        _stateUnsubscribe = widget.store.listen(
+          _handleStateChange,
+          changeTypes: _stateChangeTypes,
         );
 
         _configSubscription = widget.store.configStream.listen(
@@ -336,7 +343,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   @override
   void dispose() {
-    unawaited(_eventSubscription?.cancel());
+    _stateUnsubscribe?.call();
+    _stateUnsubscribe = null;
     unawaited(_configSubscription?.cancel());
     _focusNode.dispose();
     _textController?.dispose();
@@ -2447,24 +2455,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
-  void _handleStateChangeEvent(StateChangeEvent event) {
-    if (event is HistoryAvailabilityChangedEvent) {
-      return;
-    }
+  void _handleStateChange(DrawState state) {
     final position = _lastPointerPosition;
     if (position != null && _isPointerInside) {
       // Use the combined path when a pointer position is available.
       if (!mounted) {
         // When not mounted we cannot call setState, so compute
         // cursor and hover state directly.
-        _cursor = _resolveCursorForState(widget.store.state, position);
+        _cursor = _resolveCursorForState(state, position);
         _hoveredSelectionElementId = null;
         _hoveredBindingElementId = _resolveHoverBindingElementId(
-          state: widget.store.state,
+          state: state,
           position: position,
         );
         _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
-          state: widget.store.state,
+          state: state,
           position: position,
         );
         return;
@@ -2479,7 +2484,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
-    final cursor = _resolveCursorForState(widget.store.state, position);
+    final cursor = _resolveCursorForState(state, position);
     if (!mounted) {
       _cursor = cursor;
       _hoveredSelectionElementId = null;
