@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
@@ -7,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/events/error_events.dart';
 import 'package:snow_draw_core/draw/events/event_bus.dart';
+import 'package:snow_draw_core/draw/events/event_payload_freezer.dart';
 import 'package:snow_draw_core/draw/events/log_events.dart';
 import 'package:snow_draw_core/draw/events/state_events.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
@@ -179,6 +182,25 @@ void main() {
       await secondSub.cancel();
       await bus.dispose();
     });
+
+    test('streamOf remains broadcast after dispose', () async {
+      final bus = EventBus();
+      await bus.dispose();
+
+      final stream = bus.streamOf<DocumentChangedEvent>();
+      expect(stream.isBroadcast, isTrue);
+
+      final firstDone = Completer<void>();
+      final firstSub = stream.listen((_) {}, onDone: firstDone.complete);
+      await firstDone.future;
+
+      final secondDone = Completer<void>();
+      final secondSub = stream.listen((_) {}, onDone: secondDone.complete);
+      await secondDone.future;
+
+      await firstSub.cancel();
+      await secondSub.cancel();
+    });
   });
 
   group('Event payload immutability', () {
@@ -344,6 +366,29 @@ void main() {
           data: data,
         ),
         throwsArgumentError,
+      );
+    });
+
+    test('freezeEventPayloadMap preserves shared nested references', () {
+      final sharedList = <String>['alpha'];
+      final sharedMap = <String, dynamic>{'items': sharedList};
+      final payload = <String, dynamic>{
+        'first': sharedMap,
+        'second': sharedMap,
+      };
+
+      final frozen = freezeEventPayloadMap(payload);
+      final first = frozen['first'] as Map<Object?, Object?>;
+      final second = frozen['second'] as Map<Object?, Object?>;
+      final firstItems = first['items'];
+      final secondItems = second['items'];
+
+      expect(identical(first, second), isTrue);
+      expect(identical(firstItems, secondItems), isTrue);
+      expect(firstItems, equals(['alpha']));
+      expect(
+        () => (firstItems! as List<Object?>).add('beta'),
+        throwsUnsupportedError,
       );
     });
   });
