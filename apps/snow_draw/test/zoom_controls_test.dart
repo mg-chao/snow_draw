@@ -131,6 +131,42 @@ void main() {
     await tester.pump();
     expect(find.text('100%'), findsOneWidget);
   });
+
+  testWidgets('reset zoom stays enabled when rounded zoom is not 100%', (
+    tester,
+  ) async {
+    final store = _createStore(zoom: 1.009);
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(store.dispose);
+
+    await _pumpZoomControls(tester, store: store, strings: strings);
+
+    expect(find.text('101%'), findsOneWidget);
+    final resetButton = _textButtonForTooltip(tester, strings.resetZoom);
+    expect(resetButton.onPressed, isNotNull);
+  });
+
+  testWidgets('zoom label updates for subtle zoom changes from the store', (
+    tester,
+  ) async {
+    final store = _createStore(zoom: 1);
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(store.dispose);
+
+    await _pumpZoomControls(tester, store: store, strings: strings);
+    expect(find.text('100%'), findsOneWidget);
+
+    await store.dispatch(
+      const ZoomCamera(scale: 1.009, center: DrawPoint(x: 400, y: 300)),
+    );
+    await tester.pump();
+
+    expect(find.text('101%'), findsOneWidget);
+    final resetButton = _textButtonForTooltip(tester, strings.resetZoom);
+    expect(resetButton.onPressed, isNotNull);
+  });
 }
 
 Future<void> _pumpZoomControls(

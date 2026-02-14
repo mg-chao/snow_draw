@@ -35,7 +35,6 @@ class ZoomControls extends StatefulWidget {
 }
 
 class _ZoomControlsState extends State<ZoomControls> {
-  static const _zoomCompareTolerance = 0.01;
   static const _zoomBoundaryTolerance = 0.0001;
   static const _buttonShape = RoundedRectangleBorder();
   static final ButtonStyle _iconButtonStyle = IconButton.styleFrom(
@@ -75,7 +74,6 @@ class _ZoomControlsState extends State<ZoomControls> {
     _unsubscribe = store.select<double>(
       SimpleSelector<DrawState, double>(
         (state) => state.application.view.camera.zoom,
-        equals: _zoomEquals,
       ),
       _handleZoomChange,
     );
@@ -93,10 +91,10 @@ class _ZoomControlsState extends State<ZoomControls> {
     final dividerColor = theme.colorScheme.outlineVariant.withValues(
       alpha: 0.6,
     );
-    final zoomPercent = (_cameraZoom * 100).round();
+    final zoomPercent = _zoomPercent(_cameraZoom);
     final canZoomOut = !_isAtMinZoom(_cameraZoom);
     final canZoomIn = !_isAtMaxZoom(_cameraZoom);
-    final canResetZoom = !_zoomEquals(_cameraZoom, 1);
+    final canResetZoom = zoomPercent != 100;
 
     return Material(
       elevation: 2,
@@ -154,7 +152,7 @@ class _ZoomControlsState extends State<ZoomControls> {
   Future<void> _dispatchZoom(double targetZoom) async {
     final current = _cameraZoom;
     final next = _snapZoom(targetZoom);
-    if (_zoomEquals(current, next)) {
+    if (_isDispatchNoop(current, next)) {
       return;
     }
     final ratio = next / current;
@@ -166,16 +164,10 @@ class _ZoomControlsState extends State<ZoomControls> {
   DrawPoint get _viewportCenter =>
       DrawPoint(x: widget.size.width / 2, y: widget.size.height / 2);
 
-  bool _doubleEquals(
-    double a,
-    double b, {
-    double tolerance = _zoomCompareTolerance,
-  }) => (a - b).abs() <= tolerance;
+  int _zoomPercent(double zoom) => (zoom * 100).round();
 
-  bool _zoomEquals(double a, double b) =>
-      _doubleEquals(a, b) && _isZoomBoundary(a) == _isZoomBoundary(b);
-
-  bool _isZoomBoundary(double zoom) => _isAtMinZoom(zoom) || _isAtMaxZoom(zoom);
+  bool _doubleEquals(double a, double b, {required double tolerance}) =>
+      (a - b).abs() <= tolerance;
 
   bool _isAtMinZoom(double zoom) => _doubleEquals(
     zoom,
@@ -189,30 +181,42 @@ class _ZoomControlsState extends State<ZoomControls> {
     tolerance: _zoomBoundaryTolerance,
   );
 
+  bool _isDispatchNoop(double current, double next) =>
+      _doubleEquals(current, next, tolerance: _zoomBoundaryTolerance);
+
   double _snapZoom(double zoom) {
     final clamped = CameraState.clampZoom(zoom);
-    if (_doubleEquals(clamped, CameraState.minZoom)) {
+    if (_doubleEquals(
+      clamped,
+      CameraState.minZoom,
+      tolerance: _zoomBoundaryTolerance,
+    )) {
       return CameraState.minZoom;
     }
-    if (_doubleEquals(clamped, CameraState.maxZoom)) {
+    if (_doubleEquals(
+      clamped,
+      CameraState.maxZoom,
+      tolerance: _zoomBoundaryTolerance,
+    )) {
       return CameraState.maxZoom;
     }
     return clamped;
   }
 
   void _handleZoomChange(double zoom) {
-    if (_zoomEquals(_cameraZoom, zoom)) {
+    final previous = _cameraZoom;
+    _cameraZoom = zoom;
+    if (!_shouldRebuild(previous, zoom) || !mounted) {
       return;
     }
-    if (!mounted) {
-      _cameraZoom = zoom;
-      return;
-    }
-    setState(() {
-      _cameraZoom = zoom;
-    });
+    setState(() {});
   }
 
   Widget _buildDivider(Color color) =>
       Container(width: 1, height: 20, color: color);
+
+  bool _shouldRebuild(double previousZoom, double nextZoom) =>
+      _zoomPercent(previousZoom) != _zoomPercent(nextZoom) ||
+      _isAtMinZoom(previousZoom) != _isAtMinZoom(nextZoom) ||
+      _isAtMaxZoom(previousZoom) != _isAtMaxZoom(nextZoom);
 }
