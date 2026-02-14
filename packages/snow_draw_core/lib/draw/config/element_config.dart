@@ -91,6 +91,8 @@ class ElementConfig {
 /// Default element style configuration.
 @immutable
 class ElementStyleConfig {
+  static const _fontFamilyUnchanged = Object();
+
   const ElementStyleConfig({
     this.opacity = ConfigDefaults.defaultOpacity,
     this.zIndex = 1,
@@ -206,7 +208,7 @@ class ElementStyleConfig {
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
     double? fontSize,
-    String? fontFamily,
+    Object? fontFamily = _fontFamilyUnchanged,
     TextHorizontalAlign? textAlign,
     TextVerticalAlign? verticalAlign,
     Color? textStrokeColor,
@@ -228,9 +230,19 @@ class ElementStyleConfig {
     final nextStartArrowhead = startArrowhead ?? this.startArrowhead;
     final nextEndArrowhead = endArrowhead ?? this.endArrowhead;
     final nextFontSize = fontSize ?? this.fontSize;
-    final nextFontFamily = fontFamily == null
+    // Sentinel-based detection keeps nullable semantics: omitted keeps current,
+    // while an explicit `fontFamily: null` clears the override.
+    if (!identical(fontFamily, _fontFamilyUnchanged) &&
+        fontFamily is! String?) {
+      throw ArgumentError.value(
+        fontFamily,
+        'fontFamily',
+        'must be a String, null, or omitted',
+      );
+    }
+    final nextFontFamily = identical(fontFamily, _fontFamilyUnchanged)
         ? this.fontFamily
-        : (fontFamily.trim().isEmpty ? null : fontFamily);
+        : _normalizeFontFamily(fontFamily as String?);
     final nextTextAlign = textAlign ?? this.textAlign;
     final nextVerticalAlign = verticalAlign ?? this.verticalAlign;
     final nextTextStrokeColor = textStrokeColor ?? this.textStrokeColor;
@@ -283,6 +295,13 @@ class ElementStyleConfig {
       textStrokeColor: nextTextStrokeColor,
       textStrokeWidth: nextTextStrokeWidth,
     );
+  }
+
+  static String? _normalizeFontFamily(String? fontFamily) {
+    if (fontFamily == null) {
+      return null;
+    }
+    return fontFamily.trim().isEmpty ? null : fontFamily;
   }
 
   @override

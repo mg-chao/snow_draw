@@ -98,6 +98,24 @@ void main() {
       },
     );
 
+    test('element style can explicitly clear font family with null', () {
+      const style = ElementStyleConfig(fontFamily: 'Roboto');
+
+      final cleared = style.copyWith(fontFamily: null);
+
+      expect(cleared, isNot(same(style)));
+      expect(cleared.fontFamily, isNull);
+    });
+
+    test('element style rejects invalid font family copyWith values', () {
+      const style = ElementStyleConfig(fontFamily: 'Roboto');
+
+      expect(
+        () => style.copyWith(fontFamily: 42),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
     test('draw config remains stable when nested copyWith is a no-op', () {
       final config = DrawConfig();
 
