@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -72,6 +74,29 @@ void main() {
     });
 
     test(
+      'fails when middleware completes before downstream next settles',
+      () async {
+        final counter = _InvocationCounter();
+        final pipeline = MiddlewarePipeline(
+          middlewares: [
+            const _DetachedNextMiddleware(),
+            _DelayedCountingMiddleware(
+              counter: counter,
+              delay: const Duration(milliseconds: 1),
+            ),
+          ],
+        );
+
+        final result = await pipeline.execute(_createInitialContext());
+
+        expect(counter.value, 1);
+        expect(result.hasError, isTrue);
+        expect(result.error, isA<StateError>());
+        expect(result.errorSource, 'DetachedNext');
+      },
+    );
+
+    test(
       'does not re-run downstream middleware when skipping after next',
       () async {
         final counter = _InvocationCounter();
@@ -88,6 +113,26 @@ void main() {
         expect(result.hasError, isFalse);
         expect(result.getMetadata<bool>('fromThrowAfterNext'), isTrue);
         expect(result.getMetadata<bool>('skipped_ThrowAfterNext'), isTrue);
+      },
+    );
+
+    test(
+      'preserves downstream context when middleware stops after next',
+      () async {
+        final pipeline = MiddlewarePipeline(
+          middlewares: const [
+            _StateErrorAfterNextMiddleware(),
+            _FlagMetadataMiddleware('downstreamReached'),
+          ],
+        );
+
+        final result = await pipeline.execute(_createInitialContext());
+
+        expect(result.hasError, isTrue);
+        expect(result.error, isA<StateError>());
+        expect(result.errorSource, 'StateErrorAfterNext');
+        expect(result.getMetadata<bool>('stateErrorAfterNext'), isTrue);
+        expect(result.getMetadata<bool>('downstreamReached'), isTrue);
       },
     );
   });
@@ -186,6 +231,58 @@ class _ThrowAfterNextMiddleware extends MiddlewareBase {
   ) async {
     await next(context.withMetadata('fromThrowAfterNext', true));
     throw const FormatException('Bad invoke after next');
+  }
+}
+
+class _StateErrorAfterNextMiddleware extends MiddlewareBase {
+  const _StateErrorAfterNextMiddleware();
+
+  @override
+  String get name => 'StateErrorAfterNext';
+
+  @override
+  Future<DispatchContext> invoke(
+    DispatchContext context,
+    NextFunction next,
+  ) async {
+    await next(context.withMetadata('stateErrorAfterNext', true));
+    throw StateError('Bad invoke after next');
+  }
+}
+
+class _DetachedNextMiddleware extends MiddlewareBase {
+  const _DetachedNextMiddleware();
+
+  @override
+  String get name => 'DetachedNext';
+
+  @override
+  Future<DispatchContext> invoke(
+    DispatchContext context,
+    NextFunction next,
+  ) async {
+    unawaited(next(context.withMetadata('detachedNextCalled', true)));
+    return context;
+  }
+}
+
+class _DelayedCountingMiddleware extends MiddlewareBase {
+  const _DelayedCountingMiddleware({
+    required this.counter,
+    required this.delay,
+  });
+
+  final _InvocationCounter counter;
+  final Duration delay;
+
+  @override
+  Future<DispatchContext> invoke(
+    DispatchContext context,
+    NextFunction next,
+  ) async {
+    counter.value += 1;
+    await Future<void>.delayed(delay);
+    return next(context.withMetadata('downstreamReached', true));
   }
 }
 

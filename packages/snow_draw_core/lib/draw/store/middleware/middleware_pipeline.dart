@@ -65,6 +65,8 @@ class MiddlewarePipeline {
 
         var nextCalled = false;
         var middlewareCompleted = false;
+        var nextSettled = false;
+        DispatchContext? nextInputContext;
         Future<DispatchContext>? nextFuture;
         Future<DispatchContext> guardedNext(DispatchContext nextContext) {
           if (middlewareCompleted) {
@@ -78,23 +80,45 @@ class MiddlewarePipeline {
             );
           }
           nextCalled = true;
-          nextFuture = executeNext(nextContext, currentIndex + 1);
+          nextInputContext = nextContext;
+          nextFuture = executeNext(
+            nextContext,
+            currentIndex + 1,
+          ).whenComplete(() => nextSettled = true);
           return nextFuture!;
         }
 
         try {
           final result = await middleware.invoke(currentContext, guardedNext);
           middlewareCompleted = true;
+          if (nextCalled && !nextSettled) {
+            final downstreamContext = await _resolveDownstreamContext(
+              fallbackContext: nextInputContext ?? currentContext,
+              middleware: middleware,
+              downstreamFuture: nextFuture,
+            );
+            final detachedNextError = StateError(
+              'Middleware "${middleware.name}" completed before next() '
+              'finished. Return or await next() to keep pipeline order.',
+            );
+            return _recoverFromError(
+              context: downstreamContext,
+              middleware: middleware,
+              error: detachedNextError,
+              stackTrace: StackTrace.current,
+            );
+          }
           return result;
         } on Object catch (error, stackTrace) {
           middlewareCompleted = true;
           switch (errorHandler.handle(error, stackTrace)) {
             case RecoveryAction.skip:
               if (nextCalled) {
-                final downstreamFuture = nextFuture;
-                final downstreamContext = downstreamFuture == null
-                    ? currentContext
-                    : await downstreamFuture;
+                final downstreamContext = await _resolveDownstreamContext(
+                  fallbackContext: nextInputContext ?? currentContext,
+                  middleware: middleware,
+                  downstreamFuture: nextFuture,
+                );
                 return _markSkipped(
                   context: downstreamContext,
                   middleware: middleware,
@@ -107,7 +131,14 @@ class MiddlewarePipeline {
               currentIndex += 1;
               continue;
             case RecoveryAction.stop:
-              return currentContext.withError(
+              final contextForStop = nextCalled
+                  ? await _resolveDownstreamContext(
+                      fallbackContext: nextInputContext ?? currentContext,
+                      middleware: middleware,
+                      downstreamFuture: nextFuture,
+                    )
+                  : currentContext;
+              return contextForStop.withError(
                 error,
                 stackTrace,
                 source: middleware.name,
@@ -120,6 +151,27 @@ class MiddlewarePipeline {
     }
 
     return executeNext(initialContext, 0);
+  }
+
+  Future<DispatchContext> _resolveDownstreamContext({
+    required DispatchContext fallbackContext,
+    required Middleware middleware,
+    required Future<DispatchContext>? downstreamFuture,
+  }) async {
+    if (downstreamFuture == null) {
+      return fallbackContext;
+    }
+
+    try {
+      return await downstreamFuture;
+    } on Object catch (error, stackTrace) {
+      return _recoverFromError(
+        context: fallbackContext,
+        middleware: middleware,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   DispatchContext _recoverFromError({
