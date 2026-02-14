@@ -86,6 +86,36 @@ void main() {
       ['shared', 'trailing'],
     );
   });
+
+  test('revision increments when registry contents change', () {
+    final startRevision = PropertyRegistry.instance.revision;
+    const descriptor = _TestPropertyDescriptor(
+      id: 'revision-prop',
+      supportedElementTypes: {ElementType.rectangle},
+      defaultValue: 1,
+    );
+
+    PropertyRegistry.instance.register(descriptor);
+    expect(PropertyRegistry.instance.revision, startRevision + 1);
+
+    PropertyRegistry.instance.clear();
+    expect(PropertyRegistry.instance.revision, startRevision + 2);
+  });
+
+  test('re-registering the same descriptor instance keeps revision stable', () {
+    final startRevision = PropertyRegistry.instance.revision;
+    const descriptor = _TestPropertyDescriptor(
+      id: 'stable-revision',
+      supportedElementTypes: {ElementType.rectangle},
+      defaultValue: 1,
+    );
+
+    PropertyRegistry.instance.register(descriptor);
+    expect(PropertyRegistry.instance.revision, startRevision + 1);
+
+    PropertyRegistry.instance.register(descriptor);
+    expect(PropertyRegistry.instance.revision, startRevision + 1);
+  });
 }
 
 class _TestPropertyDescriptor extends PropertyDescriptor<int> {

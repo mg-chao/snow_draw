@@ -9,14 +9,27 @@ class PropertyRegistry {
 
   static final instance = PropertyRegistry._();
 
-  final Map<String, PropertyDescriptor<dynamic>> _propertiesById = {};
+  final _propertiesById = <String, PropertyDescriptor<dynamic>>{};
+  var _revision = 0;
+
+  /// Monotonic counter for registry mutations.
+  ///
+  /// Consumers can use this to invalidate cached property evaluations when
+  /// descriptors are added, replaced, or removed.
+  int get revision => _revision;
 
   /// Register a property descriptor.
   ///
   /// If a descriptor with the same [PropertyDescriptor.id] already exists,
   /// it is replaced in place to keep ordering stable and IDs unique.
-  void register(PropertyDescriptor<dynamic> descriptor) =>
-      _propertiesById[descriptor.id] = descriptor;
+  void register(PropertyDescriptor<dynamic> descriptor) {
+    final previous = _propertiesById[descriptor.id];
+    if (identical(previous, descriptor)) {
+      return;
+    }
+    _propertiesById[descriptor.id] = descriptor;
+    _revision += 1;
+  }
 
   /// Get all properties that are applicable for the given context
   List<PropertyDescriptor<dynamic>> getApplicableProperties(
@@ -30,7 +43,11 @@ class PropertyRegistry {
 
   /// Clear all registered properties (useful for testing)
   void clear() {
+    if (_propertiesById.isEmpty) {
+      return;
+    }
     _propertiesById.clear();
+    _revision += 1;
   }
 
   /// Get all registered properties

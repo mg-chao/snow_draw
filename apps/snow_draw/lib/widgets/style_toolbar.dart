@@ -112,6 +112,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
   late final FocusNode _serialNumberFocusNode;
   List<String> _systemFontFamilies = const [];
   var _fontLoadRequested = false;
+  StyleToolbarState? _cachedPropertyState;
+  ToolType? _cachedPropertyTool;
+  int? _cachedPropertyRegistryRevision;
+  StylePropertyContext? _cachedPropertyContext;
+  List<_EvaluatedProperty<dynamic>> _cachedProperties = const [];
 
   @override
   void initState() {
@@ -142,6 +147,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.toolController != widget.toolController ||
         oldWidget.adapter != widget.adapter) {
+      _clearPropertyEvaluationCache();
       _mergedListenable = Listenable.merge([
         widget.toolController,
         widget.adapter.stateListenable,
@@ -230,6 +236,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
       if (!showToolbar) {
         return const SizedBox.shrink();
       }
+      final propertyEvaluation = _resolvePropertyEvaluation(state, tool);
+      final propertyWidgets = _buildPropertyWidgets(
+        propertyEvaluation.context,
+        propertyEvaluation.properties,
+      );
 
       return Material(
         elevation: 3,
@@ -254,42 +265,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    // This is the new children array content to replace
-                    // lines 276-914
                     children: [
-                      // Build property controls using the property-centric
-                      // approach
-                      ...() {
-                        final propertyContext = _createPropertyContext(state);
-                        final applicableProperties = _getApplicableProperties(
-                          propertyContext,
-                        );
-                        final propertiesById = {
-                          for (final property in applicableProperties)
-                            property.id: property,
-                        };
-                        final widgets = <Widget>[];
-
-                        for (var i = 0; i < applicableProperties.length; i++) {
-                          final property = applicableProperties[i];
-                          final widget = _buildPropertyWidget(
-                            property,
-                            propertyContext,
-                            propertiesById,
-                          );
-
-                          if (widget != null) {
-                            if (widgets.isNotEmpty) {
-                              widgets.add(
-                                const SizedBox(height: _sectionSpacing),
-                              );
-                            }
-                            widgets.add(widget);
-                          }
-                        }
-
-                        return widgets;
-                      }(),
+                      ...propertyWidgets,
                       if (hasSelection) ...[
                         const SizedBox(height: _sectionSpacing),
                         _buildLayerControls(hasSelection),
@@ -1475,6 +1452,69 @@ class _StyleToolbarState extends State<StyleToolbar> {
     }
   }
 
+  void _clearPropertyEvaluationCache() {
+    _cachedPropertyState = null;
+    _cachedPropertyTool = null;
+    _cachedPropertyRegistryRevision = null;
+    _cachedPropertyContext = null;
+    _cachedProperties = const [];
+  }
+
+  _PropertyEvaluationResult _resolvePropertyEvaluation(
+    StyleToolbarState state,
+    ToolType tool,
+  ) {
+    final registryRevision = PropertyRegistry.instance.revision;
+    final cachedContext = _cachedPropertyContext;
+    if (_cachedPropertyState == state &&
+        _cachedPropertyTool == tool &&
+        _cachedPropertyRegistryRevision == registryRevision &&
+        cachedContext != null) {
+      return _PropertyEvaluationResult(
+        context: cachedContext,
+        properties: _cachedProperties,
+      );
+    }
+
+    final context = _createPropertyContext(state);
+    final properties = _getApplicableProperties(context);
+    _cachedPropertyState = state;
+    _cachedPropertyTool = tool;
+    _cachedPropertyRegistryRevision = registryRevision;
+    _cachedPropertyContext = context;
+    _cachedProperties = properties;
+    return _PropertyEvaluationResult(context: context, properties: properties);
+  }
+
+  List<Widget> _buildPropertyWidgets(
+    StylePropertyContext propertyContext,
+    List<_EvaluatedProperty<dynamic>> properties,
+  ) {
+    if (properties.isEmpty) {
+      return const [];
+    }
+
+    final propertiesById = {
+      for (final property in properties) property.id: property,
+    };
+    final widgets = <Widget>[];
+    for (final property in properties) {
+      final resolved = _buildPropertyWidget(
+        property,
+        propertyContext,
+        propertiesById,
+      );
+      if (resolved == null) {
+        continue;
+      }
+      if (widgets.isNotEmpty) {
+        widgets.add(const SizedBox(height: _sectionSpacing));
+      }
+      widgets.add(resolved);
+    }
+    return widgets;
+  }
+
   /// Create a StylePropertyContext from the current state
   StylePropertyContext _createPropertyContext(StyleToolbarState state) {
     final selectedTypes = <ElementType>{};
@@ -2276,6 +2316,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Future<void> _handleZOrder(ZIndexOperation operation) =>
       widget.adapter.changeZOrder(operation);
+}
+
+@immutable
+class _PropertyEvaluationResult {
+  const _PropertyEvaluationResult({
+    required this.context,
+    required this.properties,
+  });
+
+  final StylePropertyContext context;
+  final List<_EvaluatedProperty<dynamic>> properties;
 }
 
 @immutable
