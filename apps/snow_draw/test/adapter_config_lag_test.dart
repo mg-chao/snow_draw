@@ -116,6 +116,23 @@ class _LaggingConfigStore implements DrawStore {
   Stream<DrawEvent> get eventStream => _eventController.stream;
 
   @override
+  Stream<T> eventStreamOf<T extends DrawEvent>() =>
+      eventStream.where((event) => event is T).cast<T>();
+
+  @override
+  StreamSubscription<T> onEvent<T extends DrawEvent>(
+    void Function(T event) handler, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => eventStreamOf<T>().listen(
+    handler,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
   Future<void> call(DrawAction action) => dispatch(action);
 
   @override

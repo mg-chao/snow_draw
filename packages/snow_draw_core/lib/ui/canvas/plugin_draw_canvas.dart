@@ -23,7 +23,6 @@ import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
-import '../../draw/events/event_bus.dart';
 import '../../draw/events/state_events.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
@@ -118,7 +117,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
 
-  StreamSubscription<DrawEvent>? _eventSubscription;
+  StreamSubscription<StateChangeEvent>? _eventSubscription;
   StreamSubscription<DrawConfig>? _configSubscription;
   final _focusNode = FocusNode();
   late final FocusNode _textFocusNode;
@@ -279,7 +278,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(FilterShaderManager.instance.load());
     unawaited(HighlightMaskShaderManager.instance.load());
 
-    _eventSubscription = widget.store.eventStream.listen(_handleEvent);
+    _eventSubscription = widget.store.onEvent<StateChangeEvent>(
+      _handleStateChangeEvent,
+    );
 
     _configSubscription = widget.store.configStream.listen(_handleConfigChange);
   }
@@ -305,7 +306,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cachedState = null;
         _cachedStateView = null;
 
-        _eventSubscription = widget.store.eventStream.listen(_handleEvent);
+        _eventSubscription = widget.store.onEvent<StateChangeEvent>(
+          _handleStateChangeEvent,
+        );
 
         _configSubscription = widget.store.configStream.listen(
           _handleConfigChange,
@@ -2444,11 +2447,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
-  void _handleEvent(DrawEvent event) {
+  void _handleStateChangeEvent(StateChangeEvent event) {
     if (event is HistoryAvailabilityChangedEvent) {
-      return;
-    }
-    if (event is! StateChangeEvent) {
       return;
     }
     final position = _lastPointerPosition;

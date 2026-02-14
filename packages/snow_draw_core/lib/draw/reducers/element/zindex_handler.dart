@@ -19,19 +19,16 @@ DrawState handleChangeZIndex(
       'elementId': action.elementId,
       'operation': action.operation.name,
     });
-    final eventBus = context.eventBus;
-    if (eventBus != null && eventBus.hasListeners) {
-      eventBus.emit(
-        ValidationFailedEvent(
-          action: action.runtimeType.toString(),
-          reason: 'Element not found',
-          details: {
-            'elementId': action.elementId,
-            'operation': action.operation.name,
-          },
-        ),
-      );
-    }
+    context.eventBus?.emitLazy(
+      () => ValidationFailedEvent(
+        action: action.runtimeType.toString(),
+        reason: 'Element not found',
+        details: {
+          'elementId': action.elementId,
+          'operation': action.operation.name,
+        },
+      ),
+    );
     return state;
   }
 

@@ -192,7 +192,22 @@ class _RecordingEventBus extends EventBus {
   bool get hasListeners => _hasListeners;
 
   @override
+  bool hasListenersFor<T extends DrawEvent>() => _hasListeners;
+
+  @override
   void emit(DrawEvent event) {
+    if (!_hasListeners) {
+      return;
+    }
     emittedEvents.add(event);
+  }
+
+  @override
+  bool emitLazy<T extends DrawEvent>(T Function() eventFactory) {
+    if (!_hasListeners) {
+      return false;
+    }
+    emittedEvents.add(eventFactory());
+    return true;
   }
 }

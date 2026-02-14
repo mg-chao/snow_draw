@@ -57,6 +57,60 @@ void main() {
         returnsNormally,
       );
     });
+
+    test('tracks listener compatibility by event type', () async {
+      final bus = EventBus();
+
+      final stateSub = bus.on<StateChangeEvent>((_) {});
+
+      expect(bus.hasListenersFor<DocumentChangedEvent>(), isTrue);
+      expect(bus.hasListenersFor<HistoryAvailabilityChangedEvent>(), isTrue);
+      expect(bus.hasListenersFor<ValidationFailedEvent>(), isFalse);
+
+      await stateSub.cancel();
+
+      expect(bus.hasListenersFor<DocumentChangedEvent>(), isFalse);
+
+      final rawSub = bus.stream.listen((_) {});
+
+      expect(bus.hasListenersFor<ValidationFailedEvent>(), isTrue);
+
+      await rawSub.cancel();
+      await bus.dispose();
+    });
+
+    test('emitLazy only builds events for compatible listeners', () async {
+      final bus = EventBus();
+      final received = <DocumentChangedEvent>[];
+      final docSub = bus.on<DocumentChangedEvent>(received.add);
+
+      var builtValidation = false;
+      final validationDispatched = bus.emitLazy<ValidationFailedEvent>(() {
+        builtValidation = true;
+        return ValidationFailedEvent(
+          action: 'CreateElement',
+          reason: 'invalid',
+        );
+      });
+      expect(validationDispatched, isFalse);
+      expect(builtValidation, isFalse);
+
+      var builtDocument = false;
+      final documentDispatched = bus.emitLazy<DocumentChangedEvent>(() {
+        builtDocument = true;
+        return const DocumentChangedEvent(elementsVersion: 3, elementCount: 2);
+      });
+      expect(documentDispatched, isTrue);
+      expect(builtDocument, isTrue);
+
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, hasLength(1));
+      expect(received.single.elementsVersion, equals(3));
+
+      await docSub.cancel();
+      await bus.dispose();
+    });
   });
 
   group('Event payload immutability', () {
@@ -290,6 +344,35 @@ void main() {
       expect(events, hasLength(1));
       expect(events.single.canUndo, isTrue);
       expect(events.single.canRedo, isFalse);
+    });
+  });
+
+  group('DrawStore typed event subscriptions', () {
+    test('store exposes typed event streams and subscriptions', () async {
+      final store = _createStore(initialState: _stateWithOneSelectedElement());
+      addTearDown(store.dispose);
+
+      final documentEvents = <DocumentChangedEvent>[];
+      final historyEvents = <HistoryAvailabilityChangedEvent>[];
+      final documentSub = store.onEvent<DocumentChangedEvent>(
+        documentEvents.add,
+      );
+      final historySub = store
+          .eventStreamOf<HistoryAvailabilityChangedEvent>()
+          .listen(historyEvents.add);
+
+      addTearDown(() async {
+        await documentSub.cancel();
+        await historySub.cancel();
+      });
+
+      await store.dispatch(
+        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(documentEvents, hasLength(1));
+      expect(historyEvents, hasLength(1));
     });
   });
 }

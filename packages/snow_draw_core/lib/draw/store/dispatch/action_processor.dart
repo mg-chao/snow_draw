@@ -84,12 +84,12 @@ class ActionProcessor {
     _lastCanUndo = canUndo;
     _lastCanRedo = canRedo;
 
-    if (!emitIfChanged || !changed || !_services.eventBus.hasListeners) {
+    if (!emitIfChanged || !changed) {
       return;
     }
 
-    _services.eventBus.emit(
-      HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
+    _services.eventBus.emitLazy(
+      () => HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
     );
   }
 
@@ -330,17 +330,15 @@ class ActionProcessor {
           'traceId': traceId,
         });
 
-    if (_services.eventBus.hasListeners) {
-      _services.eventBus.emit(
-        ErrorEvent(
-          message:
-              'Dispatch ${action.runtimeType} failed '
-              '(traceId: $traceId, source: $source)',
-          error: error,
-          stackTrace: stackTrace,
-        ),
-      );
-    }
+    _services.eventBus.emitLazy(
+      () => ErrorEvent(
+        message:
+            'Dispatch ${action.runtimeType} failed '
+            '(traceId: $traceId, source: $source)',
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
   }
 
   void _emitEditSessionEvents({
@@ -348,16 +346,12 @@ class ActionProcessor {
     required DrawState nextState,
     required DrawAction action,
   }) {
-    if (!_services.eventBus.hasListeners) {
-      return;
-    }
-
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
     if (prevInteraction is! EditingState && nextInteraction is EditingState) {
-      _services.eventBus.emit(
-        EditSessionStartedEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionStartedEvent(
           sessionId: nextInteraction.sessionId,
           operationId: nextInteraction.operationId,
         ),
@@ -367,8 +361,8 @@ class ActionProcessor {
 
     if (prevInteraction is EditingState && nextInteraction is EditingState) {
       if (prevInteraction.sessionId == nextInteraction.sessionId) {
-        _services.eventBus.emit(
-          EditSessionUpdatedEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionUpdatedEvent(
             sessionId: nextInteraction.sessionId,
             operationId: nextInteraction.operationId,
           ),
@@ -376,15 +370,15 @@ class ActionProcessor {
         return;
       }
 
-      _services.eventBus.emit(
-        EditSessionCancelledEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionCancelledEvent(
           sessionId: prevInteraction.sessionId,
           operationId: prevInteraction.operationId,
           reason: EditCancelReason.newEditStarted,
         ),
       );
-      _services.eventBus.emit(
-        EditSessionStartedEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionStartedEvent(
           sessionId: nextInteraction.sessionId,
           operationId: nextInteraction.operationId,
         ),
@@ -394,15 +388,15 @@ class ActionProcessor {
 
     if (prevInteraction is EditingState && nextInteraction is! EditingState) {
       if (action is FinishEdit) {
-        _services.eventBus.emit(
-          EditSessionFinishedEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionFinishedEvent(
             sessionId: prevInteraction.sessionId,
             operationId: prevInteraction.operationId,
           ),
         );
       } else {
-        _services.eventBus.emit(
-          EditSessionCancelledEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionCancelledEvent(
             sessionId: prevInteraction.sessionId,
             operationId: prevInteraction.operationId,
             reason: _resolveCancelReason(action),
@@ -416,42 +410,38 @@ class ActionProcessor {
     required DrawState previousState,
     required DrawState nextState,
   }) {
-    final hasEventListeners = _services.eventBus.hasListeners;
-
-    if (hasEventListeners &&
-        previousState.domain.document.elementsVersion !=
-            nextState.domain.document.elementsVersion) {
-      _services.eventBus.emit(
-        DocumentChangedEvent(
+    if (previousState.domain.document.elementsVersion !=
+        nextState.domain.document.elementsVersion) {
+      _services.eventBus.emitLazy(
+        () => DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
           elementCount: nextState.domain.document.elements.length,
         ),
       );
     }
 
-    if (hasEventListeners &&
-        previousState.domain.selection.selectionVersion !=
-            nextState.domain.selection.selectionVersion) {
-      _services.eventBus.emit(
-        SelectionChangedEvent(
+    if (previousState.domain.selection.selectionVersion !=
+        nextState.domain.selection.selectionVersion) {
+      _services.eventBus.emitLazy(
+        () => SelectionChangedEvent(
           selectedIds: nextState.domain.selection.selectedIds,
           selectionVersion: nextState.domain.selection.selectionVersion,
         ),
       );
     }
 
-    if (hasEventListeners &&
-        previousState.application.view != nextState.application.view) {
-      _services.eventBus.emit(
-        ViewChangedEvent(camera: nextState.application.view.camera),
+    if (previousState.application.view != nextState.application.view) {
+      _services.eventBus.emitLazy(
+        () => ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
-    if (hasEventListeners &&
-        previousState.application.interaction !=
-            nextState.application.interaction) {
-      _services.eventBus.emit(
-        InteractionChangedEvent(interaction: nextState.application.interaction),
+    if (previousState.application.interaction !=
+        nextState.application.interaction) {
+      _services.eventBus.emitLazy(
+        () => InteractionChangedEvent(
+          interaction: nextState.application.interaction,
+        ),
       );
     }
 

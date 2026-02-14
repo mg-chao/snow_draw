@@ -53,10 +53,9 @@ class _HistoryControlsState extends State<HistoryControls> {
   }
 
   void _subscribe(DefaultDrawStore store) {
-    _eventSubscription = store.eventStream
-        .where((event) => event is HistoryAvailabilityChangedEvent)
-        .cast<HistoryAvailabilityChangedEvent>()
-        .listen(_handleEvent);
+    _eventSubscription = store.onEvent<HistoryAvailabilityChangedEvent>(
+      _handleEvent,
+    );
   }
 
   void _syncAvailability() {

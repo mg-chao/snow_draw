@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../actions/draw_actions.dart';
@@ -26,6 +28,17 @@ abstract interface class DrawStore implements StateProvider {
   DrawConfig get config;
   Stream<DrawConfig> get configStream;
   Stream<DrawEvent> get eventStream;
+
+  /// Returns a typed event stream for [T].
+  Stream<T> eventStreamOf<T extends DrawEvent>();
+
+  /// Registers a typed event listener for [T].
+  StreamSubscription<T> onEvent<T extends DrawEvent>(
+    void Function(T event) handler, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  });
   Future<void> call(DrawAction action);
 
   Future<void> dispatch(DrawAction action);

@@ -125,6 +125,22 @@ class DefaultDrawStore implements DrawStore {
   @override
   Stream<DrawEvent> get eventStream => _eventBus.stream;
 
+  @override
+  Stream<T> eventStreamOf<T extends DrawEvent>() => _eventBus.streamOf<T>();
+
+  @override
+  StreamSubscription<T> onEvent<T extends DrawEvent>(
+    void Function(T event) handler, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _eventBus.on<T>(
+    handler,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
   /// Edit diagnostic event stream.
   Stream<EditSessionEvent> get editEvents => _editEventController.stream;
 
