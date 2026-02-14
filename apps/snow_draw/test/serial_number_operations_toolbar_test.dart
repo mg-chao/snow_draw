@@ -184,6 +184,126 @@ void main() {
     expect(afterMove.left, closeTo(beforeMove.left! + 18, 0.001));
     expect(afterMove.top, closeTo(beforeMove.top! + 22, 0.001));
   });
+
+  testWidgets('serial number controls never decrement below zero', (
+    tester,
+  ) async {
+    const elementId = 'serial-zero';
+    final store = _createStore(
+      elementId: elementId,
+      rect: const DrawRect(minX: 40, minY: 30, maxX: 90, maxY: 90),
+      cameraPosition: DrawPoint.zero,
+      serialNumber: 0,
+    );
+    final adapter = StyleToolbarAdapter(store: store);
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(adapter.dispose);
+    addTearDown(store.dispose);
+
+    await _pumpToolbar(
+      tester,
+      strings: strings,
+      store: store,
+      adapter: adapter,
+    );
+
+    expect(_serialNumberFor(store, elementId), 0);
+
+    await tester.tap(find.byTooltip(strings.decrease));
+    await tester.pumpAndSettle();
+    expect(_serialNumberFor(store, elementId), 0);
+
+    await tester.tap(find.byTooltip(strings.increase));
+    await tester.pumpAndSettle();
+    expect(_serialNumberFor(store, elementId), 1);
+
+    await tester.tap(find.byTooltip(strings.decrease));
+    await tester.pumpAndSettle();
+    expect(_serialNumberFor(store, elementId), 0);
+
+    await tester.tap(find.byTooltip(strings.decrease));
+    await tester.pumpAndSettle();
+    expect(_serialNumberFor(store, elementId), 0);
+  });
+
+  testWidgets(
+    'create text operation binds a text element and hides the toolbar',
+    (tester) async {
+      const elementId = 'serial-create-text';
+      final store = _createStore(
+        elementId: elementId,
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 100, maxY: 100),
+        cameraPosition: DrawPoint.zero,
+      );
+      final adapter = StyleToolbarAdapter(store: store);
+      final strings = AppLocalizations(const Locale('en'));
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await _pumpToolbar(
+        tester,
+        strings: strings,
+        store: store,
+        adapter: adapter,
+      );
+
+      expect(find.byType(Positioned), findsOneWidget);
+
+      await tester.tap(find.byTooltip(strings.createText));
+      await tester.pumpAndSettle();
+
+      final serialElement = store.state.domain.document.getElementById(
+        elementId,
+      );
+      final serialData = serialElement?.data as SerialNumberData?;
+      final boundTextId = serialData?.textElementId;
+
+      expect(boundTextId, isNotNull);
+      expect(
+        store.state.domain.document.getElementById(boundTextId!),
+        isNotNull,
+      );
+      expect(find.byType(Positioned), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'style updates without geometry changes keep toolbar position stable',
+    (tester) async {
+      const elementId = 'serial-position-stable';
+      final store = _createStore(
+        elementId: elementId,
+        rect: const DrawRect(minX: 50, minY: 40, maxX: 110, maxY: 100),
+        cameraPosition: DrawPoint.zero,
+      );
+      final adapter = StyleToolbarAdapter(store: store);
+      final strings = AppLocalizations(const Locale('en'));
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await _pumpToolbar(
+        tester,
+        strings: strings,
+        store: store,
+        adapter: adapter,
+      );
+
+      final before = _toolbarPosition(tester);
+
+      await store.dispatch(
+        UpdateElementsStyle(elementIds: [elementId], opacity: 0.5),
+      );
+      await tester.pump();
+
+      final after = _toolbarPosition(tester);
+      expect(after.left, closeTo(before.left!, 0.001));
+      expect(after.top, closeTo(before.top!, 0.001));
+      expect(_serialNumberFor(store, elementId), 3);
+    },
+  );
 }
 
 Future<void> _pumpToolbar(
@@ -240,6 +360,7 @@ DefaultDrawStore _createStore({
   required String elementId,
   required DrawRect rect,
   required DrawPoint cameraPosition,
+  int serialNumber = 3,
 }) {
   final registry = DefaultElementRegistry();
   registerBuiltInElements(registry);
@@ -251,7 +372,7 @@ DefaultDrawStore _createStore({
     rotation: 0,
     opacity: 1,
     zIndex: 0,
-    data: const SerialNumberData(number: 3),
+    data: SerialNumberData(number: serialNumber),
   );
 
   final initialState = DrawState(
@@ -265,4 +386,13 @@ DefaultDrawStore _createStore({
   );
 
   return DefaultDrawStore(context: context, initialState: initialState);
+}
+
+int _serialNumberFor(DefaultDrawStore store, String elementId) {
+  final element = store.state.domain.document.getElementById(elementId);
+  final data = element?.data;
+  if (data is! SerialNumberData) {
+    throw StateError('Serial number element "$elementId" not found.');
+  }
+  return data.number;
 }

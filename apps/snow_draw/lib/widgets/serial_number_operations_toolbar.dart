@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/services/draw_state_view_builder.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
+import 'package:snow_draw_core/draw/store/selector.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
@@ -45,22 +46,28 @@ class SerialNumberOperationsToolbar extends StatefulWidget {
 class _SerialNumberOperationsToolbarState
     extends State<SerialNumberOperationsToolbar> {
   static const double _toolbarRadius = 12;
-  static const double _buttonGapSmall = 0;
-  static const double _buttonGapLarge = 0;
   static const double _buttonSize = 28;
   static const double _iconSize = 16;
   static const double _viewportPadding = 8;
   static const double _toolbarHeight = _buttonSize;
-  static const double _toolbarWidth =
-      (_buttonSize * 3) + _buttonGapSmall + _buttonGapLarge;
+  static const double _toolbarWidth = _buttonSize * 3;
+  static final ButtonStyle _iconButtonStyle = IconButton.styleFrom(
+    shape: const RoundedRectangleBorder(),
+    minimumSize: const Size(_buttonSize, _buttonSize),
+    fixedSize: const Size(_buttonSize, _buttonSize),
+    padding: EdgeInsets.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
 
   VoidCallback? _unsubscribe;
   late DrawStateViewBuilder _stateViewBuilder;
+  late _ToolbarProjection _projection;
 
   @override
   void initState() {
     super.initState();
     _stateViewBuilder = _buildStateViewBuilder(widget.store);
+    _projection = _selectProjection(widget.store.state);
     _subscribe(widget.store);
   }
 
@@ -72,6 +79,7 @@ class _SerialNumberOperationsToolbarState
     }
     _unsubscribe?.call();
     _stateViewBuilder = _buildStateViewBuilder(widget.store);
+    _projection = _selectProjection(widget.store.state);
     _subscribe(widget.store);
   }
 
@@ -82,18 +90,10 @@ class _SerialNumberOperationsToolbarState
     super.dispose();
   }
 
-  void _handleStoreUpdate(DrawState _) {
-    if (!widget.adapter.stateListenable.value.hasSelectedSerialNumbers) {
-      return;
-    }
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   void _subscribe(DrawStore store) {
-    _unsubscribe = store.listen(
-      _handleStoreUpdate,
+    _unsubscribe = store.select<_ToolbarProjection>(
+      SimpleSelector<DrawState, _ToolbarProjection>(_selectProjection),
+      _handleProjectionChange,
       changeTypes: {
         DrawStateChange.selection,
         DrawStateChange.document,
@@ -106,6 +106,32 @@ class _SerialNumberOperationsToolbarState
   DrawStateViewBuilder _buildStateViewBuilder(DrawStore store) =>
       DrawStateViewBuilder(editOperations: store.context.editOperations);
 
+  _ToolbarProjection _selectProjection(DrawState state) {
+    final selection = state.domain.selection;
+    if (!selection.hasSelection || selection.selectedIds.length != 1) {
+      return _ToolbarProjection.empty;
+    }
+
+    final selectionBounds = _resolveSelectionBounds(state);
+    if (selectionBounds == null) {
+      return _ToolbarProjection.empty;
+    }
+
+    final camera = state.application.view.camera;
+    final zoom = camera.zoom == 0 ? 1.0 : camera.zoom;
+    final screenBounds = _toScreenRect(selectionBounds, camera.position, zoom);
+    return _ToolbarProjection(screenBounds: screenBounds);
+  }
+
+  void _handleProjectionChange(_ToolbarProjection nextProjection) {
+    _projection = nextProjection;
+    if (!widget.adapter.stateListenable.value.hasSelectedSerialNumbers ||
+        !mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) =>
       ValueListenableBuilder<StyleToolbarState>(
@@ -115,24 +141,10 @@ class _SerialNumberOperationsToolbarState
             return const SizedBox.shrink();
           }
 
-          final state = widget.store.state;
-          final selection = state.domain.selection;
-          if (!selection.hasSelection || selection.selectedIds.length != 1) {
+          final screenBounds = _projection.screenBounds;
+          if (screenBounds == null) {
             return const SizedBox.shrink();
           }
-
-          final selectionBounds = _resolveSelectionBounds(state);
-          if (selectionBounds == null) {
-            return const SizedBox.shrink();
-          }
-
-          final camera = state.application.view.camera;
-          final zoom = camera.zoom == 0 ? 1.0 : camera.zoom;
-          final screenBounds = _toScreenRect(
-            selectionBounds,
-            camera.position,
-            zoom,
-          );
 
           final selectionConfig = widget.store.config.selection;
           final extraPadding =
@@ -167,33 +179,28 @@ class _SerialNumberOperationsToolbarState
                 borderRadius: BorderRadius.circular(_toolbarRadius),
                 color: Colors.white,
                 clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: EdgeInsets.zero,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildIconButton(
-                        icon: Icons.remove_rounded,
-                        tooltip: widget.strings.decrease,
-                        onPressed: canDecrement
-                            ? () => _commitSerialNumberValue(resolvedValue - 1)
-                            : null,
-                      ),
-                      const SizedBox(width: _buttonGapSmall),
-                      _buildIconButton(
-                        icon: Icons.add_rounded,
-                        tooltip: widget.strings.increase,
-                        onPressed: () =>
-                            _commitSerialNumberValue(resolvedValue + 1),
-                      ),
-                      const SizedBox(width: _buttonGapLarge),
-                      _buildIconButton(
-                        icon: Icons.text_fields,
-                        tooltip: widget.strings.createText,
-                        onPressed: _handleCreateSerialNumberText,
-                      ),
-                    ],
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildIconButton(
+                      icon: Icons.remove_rounded,
+                      tooltip: widget.strings.decrease,
+                      onPressed: canDecrement
+                          ? () => _commitSerialNumberValue(resolvedValue - 1)
+                          : null,
+                    ),
+                    _buildIconButton(
+                      icon: Icons.add_rounded,
+                      tooltip: widget.strings.increase,
+                      onPressed: () =>
+                          _commitSerialNumberValue(resolvedValue + 1),
+                    ),
+                    _buildIconButton(
+                      icon: Icons.text_fields,
+                      tooltip: widget.strings.createText,
+                      onPressed: _handleCreateSerialNumberText,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -207,26 +214,20 @@ class _SerialNumberOperationsToolbarState
     required VoidCallback? onPressed,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final isEnabled = onPressed != null;
-    final iconColor = isEnabled
-        ? scheme.onSurface
-        : scheme.onSurfaceVariant.withValues(alpha: 0.5);
 
     return Tooltip(
       message: tooltip,
-      child: SizedBox(
-        width: _buttonSize,
-        height: _buttonSize,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            customBorder: const RoundedRectangleBorder(),
-            child: Center(
-              child: Icon(icon, size: _iconSize, color: iconColor),
-            ),
-          ),
+      child: IconButton(
+        style: _iconButtonStyle.copyWith(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return scheme.onSurfaceVariant.withValues(alpha: 0.5);
+            }
+            return scheme.onSurface;
+          }),
         ),
+        onPressed: onPressed,
+        icon: Icon(icon, size: _iconSize),
       ),
     );
   }
@@ -338,4 +339,21 @@ class _SerialNumberOperationsToolbarState
 
     return belowTop;
   }
+}
+
+@immutable
+class _ToolbarProjection {
+  const _ToolbarProjection({required this.screenBounds});
+
+  final Rect? screenBounds;
+
+  static const empty = _ToolbarProjection(screenBounds: null);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ToolbarProjection && other.screenBounds == screenBounds;
+
+  @override
+  int get hashCode => screenBounds.hashCode;
 }
