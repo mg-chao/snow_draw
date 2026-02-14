@@ -58,9 +58,14 @@ class _HistoryControlsState extends State<HistoryControls> {
 
   void _attachToStore(DefaultDrawStore store) {
     unawaited(_eventSubscription?.cancel());
-    _eventSubscription = store.onEvent<HistoryAvailabilityChangedEvent>(
-      _handleEvent,
-    );
+    _eventSubscription = store.onEvent<HistoryAvailabilityChangedEvent>((
+      event,
+    ) {
+      if (!identical(store, widget.store)) {
+        return;
+      }
+      _updateAvailability(event.canUndo, event.canRedo);
+    });
     _updateAvailability(store.canUndo, store.canRedo);
   }
 
@@ -108,10 +113,6 @@ class _HistoryControlsState extends State<HistoryControls> {
   Future<void> _handleUndo() => widget.store.dispatch(const Undo());
 
   Future<void> _handleRedo() => widget.store.dispatch(const Redo());
-
-  void _handleEvent(HistoryAvailabilityChangedEvent event) {
-    _updateAvailability(event.canUndo, event.canRedo);
-  }
 
   void _updateAvailability(bool nextUndo, bool nextRedo) {
     if (nextUndo == _canUndo && nextRedo == _canRedo) {
