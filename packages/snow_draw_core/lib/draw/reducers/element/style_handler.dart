@@ -51,85 +51,39 @@ DrawState handleUpdateElementsStyle(
     serialNumber: action.serialNumber,
   );
 
-  final elements = <ElementState>[];
+  final document = state.domain.document;
+  final elementsById = document.elementMap;
   final selectedIds = state.domain.selection.selectedIds;
   final shouldTrackOverlayRefresh = selectedIds.length > 1;
   var domainChanged = false;
   var interactionChanged = false;
   var selectedGeometryChanged = false;
   TextEditingState? nextTextEdit;
+  List<ElementState>? nextElements;
 
-  for (final element in state.domain.document.elements) {
-    if (!ids.contains(element.id)) {
-      elements.add(element);
+  for (final id in ids) {
+    final orderIndex = document.getOrderIndex(id);
+    if (orderIndex == null) {
       continue;
     }
-
-    var next = element;
-    final data = element.data;
-
-    if (!styleUpdate.isEmpty && data is ElementStyleUpdatableData) {
-      final updatedData = (data as ElementStyleUpdatableData).withStyleUpdate(
-        styleUpdate,
-      );
-      if (updatedData != data) {
-        next = next.copyWith(data: updatedData);
-        if (data is TextData &&
-            updatedData is TextData &&
-            _shouldRelayoutText(styleUpdate)) {
-          final nextRect = _resolveTextRect(
-            origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
-            currentRect: next.rect,
-            data: updatedData,
-            autoResize: updatedData.autoResize,
-            allowShrinkHeight: true,
-          );
-          if (nextRect != next.rect) {
-            if (shouldTrackOverlayRefresh && selectedIds.contains(element.id)) {
-              selectedGeometryChanged = true;
-            }
-            next = next.copyWith(rect: nextRect);
-          }
-        } else if (data is SerialNumberData &&
-            updatedData is SerialNumberData &&
-            _shouldRelayoutSerialNumber(styleUpdate)) {
-          final nextRect = resolveSerialNumberRect(
-            origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
-            data: updatedData,
-          );
-          if (nextRect != next.rect) {
-            if (shouldTrackOverlayRefresh && selectedIds.contains(element.id)) {
-              selectedGeometryChanged = true;
-            }
-            next = next.copyWith(rect: nextRect);
-          }
-        } else if (data is ArrowData &&
-            updatedData is ArrowData &&
-            _shouldRecalculateArrowRect(data, updatedData)) {
-          final result = _resolveArrowRectAndData(
-            element: next,
-            data: updatedData,
-            previousArrowType: data.arrowType,
-            elementsById: state.domain.document.elementMap,
-          );
-          if (result.rect != next.rect &&
-              shouldTrackOverlayRefresh &&
-              selectedIds.contains(element.id)) {
-            selectedGeometryChanged = true;
-          }
-          next = next.copyWith(rect: result.rect, data: result.data);
-        }
-        domainChanged = true;
-      }
+    final element = document.elements[orderIndex];
+    final update = _resolveElementStyleUpdate(
+      element: element,
+      styleUpdate: styleUpdate,
+      opacity: action.opacity,
+      trackGeometryChange:
+          shouldTrackOverlayRefresh && selectedIds.contains(id),
+      elementsById: elementsById,
+    );
+    if (update == null) {
+      continue;
     }
-
-    final opacity = action.opacity;
-    if (opacity != null && opacity != element.opacity) {
-      next = next.copyWith(opacity: opacity);
-      domainChanged = true;
+    domainChanged = true;
+    nextElements ??= [...document.elements];
+    nextElements[orderIndex] = update.element;
+    if (update.geometryChanged) {
+      selectedGeometryChanged = true;
     }
-
-    elements.add(next);
   }
 
   final interaction = state.application.interaction;
@@ -146,9 +100,10 @@ DrawState handleUpdateElementsStyle(
     return state;
   }
 
-  final nextDomain = domainChanged
+  final updatedElements = nextElements;
+  final nextDomain = domainChanged && updatedElements != null
       ? state.domain.copyWith(
-          document: state.domain.document.copyWith(elements: elements),
+          document: document.copyWith(elements: updatedElements),
         )
       : state.domain;
   final nextApplication = interactionChanged
@@ -169,6 +124,79 @@ DrawState handleUpdateElementsStyle(
     selectedIds,
     forceRefreshOverlay: true,
   );
+}
+
+({ElementState element, bool geometryChanged})? _resolveElementStyleUpdate({
+  required ElementState element,
+  required ElementStyleUpdate styleUpdate,
+  required double? opacity,
+  required bool trackGeometryChange,
+  required Map<String, ElementState> elementsById,
+}) {
+  var next = element;
+  var changed = false;
+  var geometryChanged = false;
+  final data = element.data;
+
+  if (!styleUpdate.isEmpty && data is ElementStyleUpdatableData) {
+    final updatedData = (data as ElementStyleUpdatableData).withStyleUpdate(
+      styleUpdate,
+    );
+    if (updatedData != data) {
+      next = next.copyWith(data: updatedData);
+      changed = true;
+      if (data is TextData &&
+          updatedData is TextData &&
+          _shouldRelayoutText(styleUpdate)) {
+        final nextRect = _resolveTextRect(
+          origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
+          currentRect: next.rect,
+          data: updatedData,
+          autoResize: updatedData.autoResize,
+          allowShrinkHeight: true,
+        );
+        if (nextRect != next.rect) {
+          geometryChanged = trackGeometryChange;
+          next = next.copyWith(rect: nextRect);
+        }
+      } else if (data is SerialNumberData &&
+          updatedData is SerialNumberData &&
+          _shouldRelayoutSerialNumber(styleUpdate)) {
+        final nextRect = resolveSerialNumberRect(
+          origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
+          data: updatedData,
+        );
+        if (nextRect != next.rect) {
+          geometryChanged = trackGeometryChange;
+          next = next.copyWith(rect: nextRect);
+        }
+      } else if (data is ArrowData &&
+          updatedData is ArrowData &&
+          _shouldRecalculateArrowRect(data, updatedData)) {
+        final result = _resolveArrowRectAndData(
+          element: next,
+          data: updatedData,
+          previousArrowType: data.arrowType,
+          elementsById: elementsById,
+        );
+        if (result.rect != next.rect && trackGeometryChange) {
+          geometryChanged = true;
+        }
+        next = next.copyWith(rect: result.rect, data: result.data);
+      }
+    }
+  }
+
+  if (opacity != null && opacity != element.opacity) {
+    next = next.copyWith(opacity: opacity);
+    changed = true;
+  }
+
+  if (!changed) {
+    return null;
+  }
+
+  return (element: next, geometryChanged: geometryChanged);
 }
 
 TextEditingState? _applyTextEditingStyleUpdate(

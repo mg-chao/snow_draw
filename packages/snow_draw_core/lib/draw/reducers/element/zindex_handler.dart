@@ -64,8 +64,8 @@ DrawState handleChangeZIndexBatch(
 
   final idSet = action.elementIds.toSet();
   final elements = state.domain.document.elements;
-  final selected = elements.where((e) => idSet.contains(e.id)).toList();
-  if (selected.isEmpty) {
+  final hasSelected = elements.any((element) => idSet.contains(element.id));
+  if (!hasSelected) {
     context.log.store.warning('Z-index change failed: elements not found', {
       'action': action.runtimeType.toString(),
       'elementIds': action.elementIds,
@@ -78,15 +78,11 @@ DrawState handleChangeZIndexBatch(
 
   switch (action.operation) {
     case ZIndexOperation.bringToFront:
-      reordered = [
-        ...elements.where((e) => !idSet.contains(e.id)),
-        ...elements.where((e) => idSet.contains(e.id)),
-      ];
+      final partition = _partitionElementsBySelection(elements, idSet);
+      reordered = [...partition.unselected, ...partition.selected];
     case ZIndexOperation.sendToBack:
-      reordered = [
-        ...elements.where((e) => idSet.contains(e.id)),
-        ...elements.where((e) => !idSet.contains(e.id)),
-      ];
+      final partition = _partitionElementsBySelection(elements, idSet);
+      reordered = [...partition.selected, ...partition.unselected];
     case ZIndexOperation.bringForward:
       reordered = [...elements];
       for (var i = reordered.length - 2; i >= 0; i--) {
@@ -119,6 +115,20 @@ DrawState handleChangeZIndexBatch(
       document: state.domain.document.copyWith(elements: reindexed),
     ),
   );
+}
+
+({List<ElementState> selected, List<ElementState> unselected})
+_partitionElementsBySelection(List<ElementState> elements, Set<String> idSet) {
+  final selected = <ElementState>[];
+  final unselected = <ElementState>[];
+  for (final element in elements) {
+    if (idSet.contains(element.id)) {
+      selected.add(element);
+    } else {
+      unselected.add(element);
+    }
+  }
+  return (selected: selected, unselected: unselected);
 }
 
 int _resolveSingleDestinationIndex({
