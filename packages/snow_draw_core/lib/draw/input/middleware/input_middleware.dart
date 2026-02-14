@@ -203,10 +203,24 @@ class InputPipeline {
 
         nextCalled = true;
         nextInputEvent = nextEvent;
-        final downstreamFuture = executeNext(
-          nextEvent,
-          middlewareIndex + 1,
-        ).whenComplete(() => nextSettled = true);
+        final downstreamCompleter = Completer<InputEvent?>();
+        unawaited(() async {
+          try {
+            final downstreamEvent = await Future<InputEvent?>.microtask(
+              () => executeNext(nextEvent, middlewareIndex + 1),
+            );
+            if (!downstreamCompleter.isCompleted) {
+              downstreamCompleter.complete(downstreamEvent);
+            }
+          } on Object catch (error, stackTrace) {
+            if (!downstreamCompleter.isCompleted) {
+              downstreamCompleter.completeError(error, stackTrace);
+            }
+          }
+        }());
+        final downstreamFuture = downstreamCompleter.future.whenComplete(
+          () => nextSettled = true,
+        );
         nextFuture = downstreamFuture;
 
         return _ObservedFuture<InputEvent?>(

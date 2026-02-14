@@ -99,12 +99,29 @@ class MiddlewarePipeline {
         }
         nextCalled = true;
         nextInputContext = nextContext;
-        final downstreamFuture = _executeFromIndex(
-          context: nextContext,
-          index: currentIndex + 1,
-          pipelineMiddlewares: pipelineMiddlewares,
-          middlewareCount: middlewareCount,
-        ).whenComplete(() => nextSettled = true);
+        final downstreamCompleter = Completer<DispatchContext>();
+        unawaited(() async {
+          try {
+            final downstreamContext = await Future<DispatchContext>.microtask(
+              () => _executeFromIndex(
+                context: nextContext,
+                index: currentIndex + 1,
+                pipelineMiddlewares: pipelineMiddlewares,
+                middlewareCount: middlewareCount,
+              ),
+            );
+            if (!downstreamCompleter.isCompleted) {
+              downstreamCompleter.complete(downstreamContext);
+            }
+          } on Object catch (error, stackTrace) {
+            if (!downstreamCompleter.isCompleted) {
+              downstreamCompleter.completeError(error, stackTrace);
+            }
+          }
+        }());
+        final downstreamFuture = downstreamCompleter.future.whenComplete(
+          () => nextSettled = true,
+        );
         nextFuture = downstreamFuture;
         return _ObservedFuture<DispatchContext>(
           downstreamFuture,

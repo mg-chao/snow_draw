@@ -238,6 +238,19 @@ void main() {
 
       expect(sorted, same(pipeline));
     });
+
+    test('handles deep middleware chains without stack overflow', () async {
+      final pipeline = MiddlewarePipeline(
+        middlewares: List<Middleware>.generate(
+          1800,
+          (_) => const _PassThroughMiddleware(),
+        ),
+      );
+
+      final result = await pipeline.execute(_createInitialContext());
+
+      expect(result.hasError, isFalse);
+    });
   });
 }
 
@@ -409,6 +422,14 @@ class _PriorityMiddleware extends MiddlewareBase {
 
   @override
   final int priority;
+
+  @override
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
+      next(context);
+}
+
+class _PassThroughMiddleware extends MiddlewareBase {
+  const _PassThroughMiddleware();
 
   @override
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>

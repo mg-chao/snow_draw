@@ -60,6 +60,19 @@ void main() {
 
       expect(result, isNull);
     });
+
+    test('handles deep middleware chains without stack overflow', () async {
+      final pipeline = InputPipeline(
+        middlewares: List<InputMiddleware>.generate(
+          1800,
+          (_) => const _PassThroughMiddleware(),
+        ),
+      );
+
+      final result = await pipeline.execute(_event, _context());
+
+      expect(result, same(_event));
+    });
   });
 }
 
@@ -131,6 +144,17 @@ class _GateMiddleware extends InputMiddlewareBase {
     await gate.future;
     return next(event);
   }
+}
+
+class _PassThroughMiddleware extends InputMiddlewareBase {
+  const _PassThroughMiddleware() : super(name: 'PassThrough');
+
+  @override
+  Future<InputEvent?> process(
+    InputEvent event,
+    MiddlewareContext context,
+    NextMiddleware next,
+  ) => next(event);
 }
 
 class _InvocationCounter {
