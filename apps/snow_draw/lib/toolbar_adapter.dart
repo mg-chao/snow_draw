@@ -19,6 +19,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
+import 'config_update_queue.dart';
 import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';
@@ -71,7 +72,6 @@ class StyleToolbarAdapter {
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
-  var _pendingConfigUpdate = Future<void>.value();
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
 
@@ -1730,9 +1730,7 @@ class StyleToolbarAdapter {
   }
 
   Future<void> _enqueueConfigUpdate(Future<void> Function() update) =>
-      _pendingConfigUpdate = _pendingConfigUpdate
-          .catchError((Object _, StackTrace _) {})
-          .then((_) => update());
+      ConfigUpdateQueue.enqueue(_store, update);
 
   void _publishState() {
     if (_isDisposed) {

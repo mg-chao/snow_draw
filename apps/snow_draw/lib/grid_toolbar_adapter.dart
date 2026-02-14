@@ -5,6 +5,8 @@ import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 
+import 'config_update_queue.dart';
+
 class GridToolbarAdapter {
   GridToolbarAdapter({required DrawStore store}) : _store = store {
     _config = _store.config;
@@ -18,7 +20,6 @@ class GridToolbarAdapter {
   late final ValueNotifier<bool> _enabledNotifier;
   late final ValueNotifier<double> _sizeNotifier;
   StreamSubscription<DrawConfig>? _configSubscription;
-  var _pendingConfigUpdate = Future<void>.value();
   var _isDisposed = false;
 
   ValueListenable<bool> get enabledListenable => _enabledNotifier;
@@ -100,9 +101,7 @@ class GridToolbarAdapter {
   }
 
   Future<void> _enqueueConfigUpdate(Future<void> Function() update) =>
-      _pendingConfigUpdate = _pendingConfigUpdate
-          .catchError((Object _, StackTrace _) {})
-          .then((_) => update());
+      ConfigUpdateQueue.enqueue(_store, update);
 
   Future<void> _setEnabledInternal({required bool enabled}) async {
     if (_isDisposed) {
