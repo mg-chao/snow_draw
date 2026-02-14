@@ -82,6 +82,21 @@ class ObjectSnapService {
     SnapAxisAnchor.end,
   ];
 
+  /// Normalized local offsets for element snap points.
+  ///
+  /// Values are scaled by half width/height to derive the final local offset.
+  static const List<DrawPoint> _normalizedElementSnapOffsets = [
+    DrawPoint(x: -1, y: -1),
+    DrawPoint(x: 1, y: -1),
+    DrawPoint(x: 1, y: 1),
+    DrawPoint(x: -1, y: 1),
+    DrawPoint(x: 0, y: -1),
+    DrawPoint(x: 1, y: 0),
+    DrawPoint(x: 0, y: 1),
+    DrawPoint(x: -1, y: 0),
+    DrawPoint.zero,
+  ];
+
   // ---------------------------------------------------------------------------
   // Candidate selection constants
   // ---------------------------------------------------------------------------
@@ -251,7 +266,10 @@ class ObjectSnapService {
     bool enablePointSnaps = true,
     bool enableGapSnaps = true,
   }) {
-    if (snapDistance <= 0 || referenceElements.isEmpty) {
+    if (snapDistance <= 0 ||
+        referenceElements.isEmpty ||
+        (!enablePointSnaps && !enableGapSnaps) ||
+        (targetAnchorsX.isEmpty && targetAnchorsY.isEmpty)) {
       return const SnapResult();
     }
 
@@ -441,12 +459,16 @@ class ObjectSnapService {
     required List<SnapAxisAnchor> targetAnchors,
     required double snapDistance,
   }) {
+    final allowedTargetAnchors = Set<SnapAxisAnchor>.of(targetAnchors);
+    if (allowedTargetAnchors.isEmpty) {
+      return const [];
+    }
     final candidates = <_AxisCandidate>[];
     for (final targetPoint in targetPoints) {
       final targetAnchor = axis == SnapAxis.x
           ? targetPoint.anchorX
           : targetPoint.anchorY;
-      if (!targetAnchors.contains(targetAnchor)) {
+      if (!allowedTargetAnchors.contains(targetAnchor)) {
         continue;
       }
       final targetKind = _resolvePointKind(targetPoint);
@@ -506,6 +528,12 @@ class ObjectSnapService {
     required double snapDistance,
   }) {
     final candidates = <_AxisCandidate>[];
+    final allowStart = targetAnchors.contains(SnapAxisAnchor.start);
+    final allowCenter = targetAnchors.contains(SnapAxisAnchor.center);
+    final allowEnd = targetAnchors.contains(SnapAxisAnchor.end);
+    if (!allowStart && !allowCenter && !allowEnd) {
+      return candidates;
+    }
     final filtered = _resolveGapReferenceRects(
       axis: axis,
       targetRect: targetRect,
@@ -546,8 +574,7 @@ class ObjectSnapService {
     );
 
     for (final segment in segments) {
-      final centerAnchorAllowed = targetAnchors.contains(SnapAxisAnchor.center);
-      if (centerAnchorAllowed) {
+      if (allowCenter) {
         final desiredCenter =
             (_axisMax(segment.before, axis) + _axisMin(segment.after, axis)) /
             2;
@@ -579,7 +606,9 @@ class ObjectSnapService {
           candidates: candidates,
           axis: axis,
           targetRect: targetRect,
-          targetAnchors: targetAnchors,
+          allowStart: allowStart,
+          allowCenter: allowCenter,
+          allowEnd: allowEnd,
           desiredStart: desiredStart,
           desiredEnd: desiredStart + targetSize,
           snapDistance: snapDistance,
@@ -596,7 +625,9 @@ class ObjectSnapService {
           candidates: candidates,
           axis: axis,
           targetRect: targetRect,
-          targetAnchors: targetAnchors,
+          allowStart: allowStart,
+          allowCenter: allowCenter,
+          allowEnd: allowEnd,
           desiredStart: desiredEnd - targetSize,
           desiredEnd: desiredEnd,
           snapDistance: snapDistance,
@@ -713,7 +744,9 @@ class ObjectSnapService {
     required List<_AxisCandidate> candidates,
     required SnapAxis axis,
     required DrawRect targetRect,
-    required List<SnapAxisAnchor> targetAnchors,
+    required bool allowStart,
+    required bool allowCenter,
+    required bool allowEnd,
     required double desiredStart,
     required double desiredEnd,
     required double snapDistance,
@@ -722,7 +755,7 @@ class ObjectSnapService {
     required int gapFrequency,
     required _GapSide gapSide,
   }) {
-    if (targetAnchors.contains(SnapAxisAnchor.start)) {
+    if (allowStart) {
       final offset = desiredStart - _axisMin(targetRect, axis);
       if (offset.abs() <= snapDistance) {
         candidates.add(
@@ -739,7 +772,7 @@ class ObjectSnapService {
       }
     }
 
-    if (targetAnchors.contains(SnapAxisAnchor.end)) {
+    if (allowEnd) {
       final offset = desiredEnd - _axisMax(targetRect, axis);
       if (offset.abs() <= snapDistance) {
         candidates.add(
@@ -756,7 +789,7 @@ class ObjectSnapService {
       }
     }
 
-    if (targetAnchors.contains(SnapAxisAnchor.center)) {
+    if (allowCenter) {
       final desiredCenter = (desiredStart + desiredEnd) / 2;
       final offset = desiredCenter - _axisCenter(targetRect, axis);
       if (offset.abs() <= snapDistance) {
@@ -1573,22 +1606,10 @@ class ObjectSnapService {
       final aabb = offset == DrawPoint.zero
           ? baseAabb
           : baseAabb.translate(offset);
-      final localOffsets = <DrawPoint>[
-        DrawPoint(x: -halfWidth, y: -halfHeight),
-        DrawPoint(x: halfWidth, y: -halfHeight),
-        DrawPoint(x: halfWidth, y: halfHeight),
-        DrawPoint(x: -halfWidth, y: halfHeight),
-        DrawPoint(x: 0, y: -halfHeight),
-        DrawPoint(x: halfWidth, y: 0),
-        DrawPoint(x: 0, y: halfHeight),
-        DrawPoint(x: -halfWidth, y: 0),
-        DrawPoint.zero,
-      ];
-
-      for (final local in localOffsets) {
+      for (final normalizedOffset in _normalizedElementSnapOffsets) {
         final unrotated = DrawPoint(
-          x: center.x + local.x,
-          y: center.y + local.y,
+          x: center.x + normalizedOffset.x * halfWidth,
+          y: center.y + normalizedOffset.y * halfHeight,
         );
         final worldPoint = rotation == 0 ? unrotated : space.toWorld(unrotated);
         final anchorX = _resolveAxisAnchor(

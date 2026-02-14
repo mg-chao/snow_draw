@@ -47,7 +47,9 @@ class LogService {
              level: Level.trace,
            ) {
     if (outputs != null) {
-      _outputs.addAll(outputs);
+      for (final output in outputs) {
+        addOutput(output);
+      }
     }
   }
   LogConfig _config;
@@ -69,12 +71,15 @@ class LogService {
 
   /// Add an output handler.
   void addOutput(LogOutputHandler output) {
+    if (_outputs.any((existing) => identical(existing, output))) {
+      return;
+    }
     _outputs.add(output);
   }
 
   /// Remove an output handler.
   void removeOutput(LogOutputHandler output) {
-    _outputs.remove(output);
+    _outputs.removeWhere((existing) => identical(existing, output));
   }
 
   /// Get a module logger.
@@ -195,7 +200,8 @@ class LogService {
       stackTrace: stackTrace,
     );
 
-    for (final output in _outputs) {
+    final outputs = List<LogOutputHandler>.from(_outputs);
+    for (final output in outputs) {
       try {
         output.output(record);
       } on Object catch (_) {
@@ -206,7 +212,8 @@ class LogService {
 
   /// Close the logging service.
   void dispose() {
-    for (final output in _outputs) {
+    final outputs = List<LogOutputHandler>.from(_outputs);
+    for (final output in outputs) {
       try {
         output.close();
       } on Object catch (_) {

@@ -6,9 +6,9 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   group('ElementIndexService', () {
-    ElementState _element(String id) => ElementState(
+    ElementState element(String id) => ElementState(
       id: id,
-      rect: const DrawRect(minX: 0, minY: 0, maxX: 10, maxY: 10),
+      rect: const DrawRect(maxX: 10, maxY: 10),
       rotation: 0,
       opacity: 1,
       zIndex: 0,
@@ -16,11 +16,7 @@ void main() {
     );
 
     test('byId builds map from element list', () {
-      final elements = [
-        _element('a'),
-        _element('b'),
-        _element('c'),
-      ];
+      final elements = [element('a'), element('b'), element('c')];
       final index = ElementIndexService(elements);
 
       expect(index.byId.length, 3);
@@ -30,7 +26,7 @@ void main() {
     });
 
     test('operator [] returns element by id', () {
-      final elements = [_element('x')];
+      final elements = [element('x')];
       final index = ElementIndexService(elements);
 
       expect(index['x']?.id, 'x');
@@ -38,7 +34,7 @@ void main() {
     });
 
     test('containsId returns correct result', () {
-      final elements = [_element('a')];
+      final elements = [element('a')];
       final index = ElementIndexService(elements);
 
       expect(index.containsId('a'), isTrue);
@@ -46,7 +42,7 @@ void main() {
     });
 
     test('byId is cached on repeated access', () {
-      final elements = [_element('a')];
+      final elements = [element('a')];
       final index = ElementIndexService(elements);
 
       final first = index.byId;
@@ -56,13 +52,21 @@ void main() {
     });
 
     test('byId returns unmodifiable map', () {
-      final elements = [_element('a')];
+      final elements = [element('a')];
       final index = ElementIndexService(elements);
 
-      expect(
-        () => index.byId['new'] = _element('x'),
-        throwsUnsupportedError,
-      );
+      expect(() => index.byId['new'] = element('x'), throwsUnsupportedError);
+    });
+
+    test('uses constructor snapshot even if source list mutates later', () {
+      final sourceElements = <ElementState>[element('a')];
+      final index = ElementIndexService(sourceElements);
+
+      sourceElements.add(element('b'));
+
+      expect(index.containsId('a'), isTrue);
+      expect(index.containsId('b'), isFalse);
+      expect(index.byId.length, 1);
     });
 
     test('empty element list produces empty index', () {
@@ -74,26 +78,21 @@ void main() {
     });
 
     test('last element wins when duplicate ids exist', () {
-      final a1 = ElementState(
+      const a1 = ElementState(
         id: 'dup',
-        rect: const DrawRect(minX: 0, minY: 0, maxX: 1, maxY: 1),
+        rect: DrawRect(maxX: 1, maxY: 1),
         rotation: 0,
         opacity: 1,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
-      final a2 = ElementState(
+      const a2 = ElementState(
         id: 'dup',
-        rect: const DrawRect(
-          minX: 0,
-          minY: 0,
-          maxX: 99,
-          maxY: 99,
-        ),
+        rect: DrawRect(maxX: 99, maxY: 99),
         rotation: 0,
         opacity: 1,
         zIndex: 0,
-        data: const RectangleData(),
+        data: RectangleData(),
       );
       final index = ElementIndexService([a1, a2]);
 

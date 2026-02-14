@@ -41,16 +41,12 @@ void main() {
 
     test('log respects config shouldLog', () {
       final collector = MemoryLogCollector();
-      final service = LogService(
-        config: const LogConfig(
-          minLevel: Level.warning,
-          enabled: true,
-        ),
-        outputs: [collector],
-      );
-
-      service.log(Level.debug, LogModule.store, 'debug msg');
-      service.log(Level.warning, LogModule.store, 'warning msg');
+      LogService(
+          config: const LogConfig(minLevel: Level.warning),
+          outputs: [collector],
+        )
+        ..log(Level.debug, LogModule.store, 'debug msg')
+        ..log(Level.warning, LogModule.store, 'warning msg');
 
       expect(collector.records.length, 1);
       expect(collector.records.first.message, 'warning msg');
@@ -58,60 +54,69 @@ void main() {
 
     test('log suppressed when config disabled', () {
       final collector = MemoryLogCollector();
-      final service = LogService(
-        config: const LogConfig(enabled: false),
+      LogService(
+        config: LogConfig.silent,
         outputs: [collector],
-      );
-
-      service.log(Level.error, LogModule.store, 'should not appear');
+      ).log(Level.error, LogModule.store, 'should not appear');
 
       expect(collector.records, isEmpty);
     });
 
     test('log suppressed for disabled modules', () {
       final collector = MemoryLogCollector();
-      final service = LogService(
-        config: const LogConfig(
-          disabledModules: {LogModule.store},
-        ),
-        outputs: [collector],
-      );
-
-      service.log(Level.error, LogModule.store, 'suppressed');
-      service.log(Level.error, LogModule.edit, 'visible');
+      LogService(
+          config: const LogConfig(disabledModules: {LogModule.store}),
+          outputs: [collector],
+        )
+        ..log(Level.error, LogModule.store, 'suppressed')
+        ..log(Level.error, LogModule.edit, 'visible');
 
       expect(collector.records.length, 1);
       expect(collector.records.first.message, 'visible');
     });
 
     test('addOutput and removeOutput work', () {
-      final service = LogService(
-        config: const LogConfig(enabled: true),
-      );
+      final service = LogService(config: const LogConfig());
       final collector = MemoryLogCollector();
 
-      service.addOutput(collector);
-      service.log(Level.info, LogModule.general, 'after add');
+      service
+        ..addOutput(collector)
+        ..log(Level.info, LogModule.general, 'after add');
       expect(collector.records.length, 1);
 
-      service.removeOutput(collector);
-      service.log(Level.info, LogModule.general, 'after remove');
+      service
+        ..removeOutput(collector)
+        ..log(Level.info, LogModule.general, 'after remove');
       expect(collector.records.length, 1);
+    });
+
+    test('addOutput ignores duplicate handlers', () {
+      final collector = MemoryLogCollector();
+      LogService(config: const LogConfig())
+        ..addOutput(collector)
+        ..addOutput(collector)
+        ..log(Level.info, LogModule.general, 'single delivery');
+
+      expect(collector.records.length, 1);
+    });
+
+    test('removeOutput removes duplicate handler instances', () {
+      final collector = MemoryLogCollector();
+      LogService(config: const LogConfig(), outputs: [collector, collector])
+        ..removeOutput(collector)
+        ..log(Level.info, LogModule.general, 'should be removed');
+
+      expect(collector.records, isEmpty);
     });
 
     test('dispose closes output handlers and clears cache', () {
       final collector = MemoryLogCollector();
-      final service = LogService(
-        config: LogConfig.test,
-        outputs: [collector],
-      );
-      service.module(LogModule.store); // populate cache
-
-      service.dispose();
-
-      // After dispose, outputs list is cleared.
-      // Logging should not crash but also should not reach collector.
-      service.log(Level.error, LogModule.store, 'after dispose');
+      // After dispose, outputs list is cleared. Logging should not crash but
+      // also should not reach collector.
+      LogService(config: LogConfig.test, outputs: [collector])
+        ..module(LogModule.store) // populate cache
+        ..dispose()
+        ..log(Level.error, LogModule.store, 'after dispose');
       expect(collector.records, isEmpty);
     });
   });
@@ -119,10 +124,7 @@ void main() {
   group('ModuleLogger', () {
     test('isEnabled reflects config', () {
       final service = LogService(
-        config: const LogConfig(
-          enabled: true,
-          minLevel: Level.trace,
-        ),
+        config: const LogConfig(minLevel: Level.trace),
       );
       final logger = service.store;
 
@@ -131,10 +133,7 @@ void main() {
 
     test('isLevelEnabled checks specific level', () {
       final service = LogService(
-        config: const LogConfig(
-          enabled: true,
-          minLevel: Level.warning,
-        ),
+        config: const LogConfig(minLevel: Level.warning),
       );
       final logger = service.store;
 
@@ -146,7 +145,7 @@ void main() {
     test('timedSync measures and logs duration', () {
       final collector = MemoryLogCollector();
       final service = LogService(
-        config: const LogConfig(enabled: true),
+        config: const LogConfig(),
         outputs: [collector],
       );
       final logger = service.store;
@@ -161,7 +160,7 @@ void main() {
     test('timedSync logs error on failure', () {
       final collector = MemoryLogCollector();
       final service = LogService(
-        config: const LogConfig(enabled: true),
+        config: const LogConfig(),
         outputs: [collector],
       );
       final logger = service.store;
@@ -178,10 +177,9 @@ void main() {
   group('NoOpLogService', () {
     test('does not output anything', () {
       final collector = MemoryLogCollector();
-      final service = NoOpLogService();
-      service.addOutput(collector);
-
-      service.log(Level.error, LogModule.store, 'should be silent');
+      NoOpLogService()
+        ..addOutput(collector)
+        ..log(Level.error, LogModule.store, 'should be silent');
 
       expect(collector.records, isEmpty);
     });
