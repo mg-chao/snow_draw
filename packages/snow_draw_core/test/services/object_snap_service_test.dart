@@ -79,5 +79,59 @@ void main() {
         isTrue,
       );
     });
+
+    test('supports X-only snapping when Y anchors are empty', () {
+      const service = ObjectSnapService();
+      final result = service.snapRect(
+        targetRect: const DrawRect(maxX: 10, maxY: 10),
+        referenceElements: [
+          element('ref', const DrawRect(minX: 15, maxX: 25, maxY: 10)),
+        ],
+        snapDistance: 6,
+        targetAnchorsX: const [SnapAxisAnchor.end],
+        targetAnchorsY: const [],
+        enableGapSnaps: false,
+      );
+
+      expect(result.hasSnap, isTrue);
+      expect(result.dx, 5);
+      expect(result.dy, 0);
+      expect(result.guides, isNotEmpty);
+      expect(
+        result.guides.every((guide) => guide.axis == SnapGuideAxis.vertical),
+        isTrue,
+      );
+      expect(
+        result.guides.any((guide) => guide.axis == SnapGuideAxis.horizontal),
+        isFalse,
+      );
+    });
+
+    test('supports Y-only snapping when X anchors are empty', () {
+      const service = ObjectSnapService();
+      final result = service.snapRect(
+        targetRect: const DrawRect(maxX: 10, maxY: 10),
+        referenceElements: [
+          element('ref', const DrawRect(minY: 15, maxY: 25, maxX: 10)),
+        ],
+        snapDistance: 6,
+        targetAnchorsX: const [],
+        targetAnchorsY: const [SnapAxisAnchor.end],
+        enableGapSnaps: false,
+      );
+
+      expect(result.hasSnap, isTrue);
+      expect(result.dx, 0);
+      expect(result.dy, 5);
+      expect(result.guides, isNotEmpty);
+      expect(
+        result.guides.every((guide) => guide.axis == SnapGuideAxis.horizontal),
+        isTrue,
+      );
+      expect(
+        result.guides.any((guide) => guide.axis == SnapGuideAxis.vertical),
+        isFalse,
+      );
+    });
   });
 }

@@ -272,6 +272,8 @@ class ObjectSnapService {
         (targetAnchorsX.isEmpty && targetAnchorsY.isEmpty)) {
       return const SnapResult();
     }
+    final hasAnchorsX = targetAnchorsX.isNotEmpty;
+    final hasAnchorsY = targetAnchorsY.isNotEmpty;
 
     final referenceRects = [
       for (final element in referenceElements)
@@ -287,58 +289,58 @@ class ObjectSnapService {
           )
         : null;
 
-    final candidatesX = <_AxisCandidate>[
-      if (enablePointSnaps)
-        ..._buildPointCandidates(
-          axis: SnapAxis.x,
-          targetRect: targetRect,
-          referenceRects: referenceRects,
-          targetPoints: targetPoints,
-          referencePoints: referencePoints,
-          targetAnchors: targetAnchorsX,
-          snapDistance: snapDistance,
-        ),
-      if (enableGapSnaps)
-        ..._buildGapCandidates(
-          axis: SnapAxis.x,
-          targetRect: targetRect,
-          referenceRects: referenceRects,
-          targetAnchors: targetAnchorsX,
-          snapDistance: snapDistance,
-        ),
-    ];
+    final candidatesX = hasAnchorsX
+        ? <_AxisCandidate>[
+            if (enablePointSnaps)
+              ..._buildPointCandidates(
+                axis: SnapAxis.x,
+                targetRect: targetRect,
+                referenceRects: referenceRects,
+                targetPoints: targetPoints,
+                referencePoints: referencePoints,
+                targetAnchors: targetAnchorsX,
+                snapDistance: snapDistance,
+              ),
+            if (enableGapSnaps)
+              ..._buildGapCandidates(
+                axis: SnapAxis.x,
+                targetRect: targetRect,
+                referenceRects: referenceRects,
+                targetAnchors: targetAnchorsX,
+                snapDistance: snapDistance,
+              ),
+          ]
+        : const <_AxisCandidate>[];
 
-    final candidatesY = <_AxisCandidate>[
-      if (enablePointSnaps)
-        ..._buildPointCandidates(
-          axis: SnapAxis.y,
-          targetRect: targetRect,
-          referenceRects: referenceRects,
-          targetPoints: targetPoints,
-          referencePoints: referencePoints,
-          targetAnchors: targetAnchorsY,
-          snapDistance: snapDistance,
-        ),
-      if (enableGapSnaps)
-        ..._buildGapCandidates(
-          axis: SnapAxis.y,
-          targetRect: targetRect,
-          referenceRects: referenceRects,
-          targetAnchors: targetAnchorsY,
-          snapDistance: snapDistance,
-        ),
-    ];
+    final candidatesY = hasAnchorsY
+        ? <_AxisCandidate>[
+            if (enablePointSnaps)
+              ..._buildPointCandidates(
+                axis: SnapAxis.y,
+                targetRect: targetRect,
+                referenceRects: referenceRects,
+                targetPoints: targetPoints,
+                referencePoints: referencePoints,
+                targetAnchors: targetAnchorsY,
+                snapDistance: snapDistance,
+              ),
+            if (enableGapSnaps)
+              ..._buildGapCandidates(
+                axis: SnapAxis.y,
+                targetRect: targetRect,
+                referenceRects: referenceRects,
+                targetAnchors: targetAnchorsY,
+                snapDistance: snapDistance,
+              ),
+          ]
+        : const <_AxisCandidate>[];
 
-    final xCandidate = _selectBestCandidate(
-      candidatesX,
-      targetRect,
-      snapDistance,
-    );
-    final yCandidate = _selectBestCandidate(
-      candidatesY,
-      targetRect,
-      snapDistance,
-    );
+    final xCandidate = hasAnchorsX
+        ? _selectBestCandidate(candidatesX, targetRect, snapDistance)
+        : null;
+    final yCandidate = hasAnchorsY
+        ? _selectBestCandidate(candidatesY, targetRect, snapDistance)
+        : null;
 
     final dx = xCandidate?.offset ?? 0;
     final dy = yCandidate?.offset ?? 0;
