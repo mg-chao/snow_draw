@@ -239,12 +239,59 @@ class EditApply {
     return result;
   }
 
+  /// Returns a list where elements with matching ids are replaced.
+  ///
+  /// The original order is preserved. When [resolveIndex] is provided, it is
+  /// used as an O(1) id-to-index lookup fast path.
   static List<ElementState> replaceElementsById({
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
+    // Optional fast path for O(1) id-to-index lookup.
+    // Unresolved ids fall back to a linear scan.
+    int? Function(String id)? resolveIndex,
   }) {
     if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
+    }
+
+    if (resolveIndex != null) {
+      List<ElementState>? result;
+      final unresolved = <String, ElementState>{};
+      for (final entry in replacementsById.entries) {
+        final index = resolveIndex(entry.key);
+        if (index == null || index < 0 || index >= elements.length) {
+          unresolved[entry.key] = entry.value;
+          continue;
+        }
+        if (elements[index].id != entry.key) {
+          unresolved[entry.key] = entry.value;
+          continue;
+        }
+
+        final replacement = entry.value;
+        final current = (result ?? elements)[index];
+        if (replacement == current) {
+          continue;
+        }
+
+        result ??= List<ElementState>.of(elements, growable: false);
+        result[index] = replacement;
+      }
+
+      if (unresolved.isNotEmpty) {
+        for (var i = 0; i < elements.length; i++) {
+          final current = (result ?? elements)[i];
+          final replacement = unresolved[current.id];
+          if (replacement == null || replacement == current) {
+            continue;
+          }
+
+          result ??= List<ElementState>.of(elements, growable: false);
+          result[i] = replacement;
+        }
+      }
+
+      return result ?? elements;
     }
 
     List<ElementState>? result;

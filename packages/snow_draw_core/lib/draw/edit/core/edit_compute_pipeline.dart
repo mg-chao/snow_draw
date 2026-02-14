@@ -33,15 +33,26 @@ class EditComputePipeline {
       return null;
     }
 
-    // Work on a local copy so the caller's map is never mutated.
-    final merged = Map<String, ElementState>.of(updatedById);
+    var merged = updatedById;
+    Map<String, ElementState>? mutableMerged;
+
+    Map<String, ElementState> ensureMutableMerged() {
+      final existing = mutableMerged;
+      if (existing != null) {
+        return existing;
+      }
+      final created = Map<String, ElementState>.of(merged);
+      mutableMerged = created;
+      merged = created;
+      return created;
+    }
 
     final unboundArrows = unbindArrowLikeElements(
       transformedElements: merged,
       baseElements: state.domain.document.elementMap,
     );
     if (unboundArrows.isNotEmpty) {
-      merged.addAll(unboundArrows);
+      ensureMutableMerged().addAll(unboundArrows);
     }
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
@@ -56,7 +67,7 @@ class EditComputePipeline {
             skipBindingUpdate(entry.key, entry.value)) {
           continue;
         }
-        merged[entry.key] = entry.value;
+        ensureMutableMerged()[entry.key] = entry.value;
       }
     }
 

@@ -68,9 +68,11 @@ mixin StandardFinishMixin on EditOperation {
       return state.copyWith(application: state.application.toIdle());
     }
 
+    final document = state.domain.document;
     final newElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
+      elements: document.elements,
       replacementsById: result.updatedElements,
+      resolveIndex: document.getOrderIndex,
     );
 
     final overlay = context.isMultiSelect

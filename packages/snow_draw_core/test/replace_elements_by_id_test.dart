@@ -151,5 +151,48 @@ void main() {
       expect(identical(result[50], large[50]), isTrue);
       expect(result[123].rect.minX, 999);
     });
+
+    test('supports resolveIndex hook for sparse replacements', () {
+      final replacement = elements[2].copyWith(
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 30, maxY: 30),
+      );
+      var lookupCalls = 0;
+
+      final result = EditApply.replaceElementsById(
+        elements: elements,
+        replacementsById: {'e2': replacement, 'ghost': _element('ghost')},
+        resolveIndex: (id) {
+          lookupCalls++;
+          return switch (id) {
+            'e0' => 0,
+            'e1' => 1,
+            'e2' => 2,
+            'e3' => 3,
+            'e4' => 4,
+            _ => null,
+          };
+        },
+      );
+
+      expect(lookupCalls, 2);
+      expect(result.length, elements.length);
+      expect(identical(result[2], replacement), isTrue);
+      expect(result.map((e) => e.id).toList(), ['e0', 'e1', 'e2', 'e3', 'e4']);
+    });
+
+    test('falls back to linear scan when resolveIndex mismatches', () {
+      final replacement = elements[2].copyWith(
+        rect: const DrawRect(minX: 99, minY: 99, maxX: 109, maxY: 109),
+      );
+
+      final result = EditApply.replaceElementsById(
+        elements: elements,
+        replacementsById: {'e2': replacement},
+        resolveIndex: (id) => 0,
+      );
+
+      expect(identical(result, elements), isFalse);
+      expect(identical(result[2], replacement), isTrue);
+    });
   });
 }

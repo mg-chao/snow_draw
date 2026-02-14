@@ -88,6 +88,27 @@ void main() {
       expect(result!.updatedElements['r1']!.rect.minX, 10);
     });
 
+    test(
+      'keeps caller map untouched when no post-processing updates are needed',
+      () {
+        final r1 = rect0(id: 'r1');
+        final state = stateWith([r1]);
+        final moved = r1.copyWith(
+          rect: const DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110),
+        );
+        final callerMap = <String, ElementState>{'r1': moved};
+
+        final result = EditComputePipeline.finalize(
+          state: state,
+          updatedById: callerMap,
+        );
+
+        expect(result, isNotNull);
+        expect(identical(callerMap['r1'], moved), isTrue);
+        expect(identical(result!.updatedElements['r1'], moved), isTrue);
+      },
+    );
+
     test('does not mutate the caller map keys', () {
       final target = rect0(
         id: 'target',
@@ -104,7 +125,7 @@ void main() {
       );
       final state = stateWith([target, arrow]);
 
-      // Move the target — the resolver would add 'boundArrow' to the
+      // Move the target - the resolver would add 'boundArrow' to the
       // result. The caller's map must not gain that extra key.
       final movedTarget = target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
@@ -134,7 +155,7 @@ void main() {
       );
       final state = stateWith([target, arrow]);
 
-      // Move the arrow — unbinding should not overwrite the caller's
+      // Move the arrow - unbinding should not overwrite the caller's
       // value.
       final movedArrow = arrow.copyWith(
         rect: const DrawRect(minX: 60, minY: 79, maxX: 250, maxY: 81),
@@ -210,7 +231,7 @@ void main() {
       );
       final state = stateWith([target, arrow]);
 
-      // Move the target — the resolver would normally update the
+      // Move the target - the resolver would normally update the
       // bound arrow. The skip predicate should prevent that.
       final movedTarget = target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
@@ -243,7 +264,7 @@ void main() {
       );
       final state = stateWith([target, arrow]);
 
-      // Move the target — the resolver should update the bound arrow.
+      // Move the target - the resolver should update the bound arrow.
       final movedTarget = target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
       );
