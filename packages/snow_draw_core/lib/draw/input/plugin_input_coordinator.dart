@@ -11,6 +11,8 @@ import 'plugin_registry.dart';
 /// Core of the input architecture, combining middleware pipeline and plugin
 /// registry.
 class PluginInputCoordinator {
+  static const _processingFailureReason = 'Input processing failed';
+
   PluginInputCoordinator({
     required PluginContext pluginContext,
     List<InputMiddleware>? middlewares,
@@ -68,7 +70,14 @@ class PluginInputCoordinator {
           final result = await _processEvent(queuedEvent.event);
           queuedEvent.complete(result);
         } on Object catch (error, stackTrace) {
-          queuedEvent.completeError(error, stackTrace);
+          _logProcessingError(
+            event: queuedEvent.event,
+            error: error,
+            stackTrace: stackTrace,
+          );
+          queuedEvent.complete(
+            const PluginResult.unhandled(reason: _processingFailureReason),
+          );
         }
       }
     } finally {
@@ -101,6 +110,23 @@ class PluginInputCoordinator {
 
     // 2. Dispatch to plugins.
     return _registry.dispatch(processedEvent, state);
+  }
+
+  void _logProcessingError({
+    required InputEvent event,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    try {
+      _pluginContext.context.log.input.error(
+        'Input event processing failed',
+        error,
+        stackTrace,
+        {'event': event.runtimeType.toString()},
+      );
+    } on Object {
+      // Ignore logging failures so input handling still degrades safely.
+    }
   }
 
   /// Reset all plugin state.
@@ -150,12 +176,5 @@ class _QueuedInputEvent {
       return;
     }
     completer.complete(result);
-  }
-
-  void completeError(Object error, StackTrace stackTrace) {
-    if (completer.isCompleted) {
-      return;
-    }
-    completer.completeError(error, stackTrace);
   }
 }

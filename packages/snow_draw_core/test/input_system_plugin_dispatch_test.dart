@@ -103,6 +103,108 @@ void main() {
     });
   });
 
+  group('PluginRegistry registerAll transactional behavior', () {
+    test(
+      'rolls back loaded plugins when a later plugin fails during onLoad',
+      () async {
+        final context = _createPluginContext();
+        final registry = PluginRegistry(context: context);
+
+        final okPlugin = _LifecyclePlugin(id: 'ok');
+        final failingPlugin = _LifecyclePlugin(id: 'failing', failOnLoad: true);
+
+        await expectLater(
+          registry.registerAll([okPlugin, failingPlugin]),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(okPlugin.loadCount, 1);
+        expect(okPlugin.unloadCount, 1);
+        expect(failingPlugin.loadCount, 1);
+        expect(failingPlugin.unloadCount, 1);
+        expect(registry.pluginCount, 0);
+        expect(registry.isRegistered('ok'), isFalse);
+        expect(registry.isRegistered('failing'), isFalse);
+      },
+    );
+
+    test(
+      'rethrows the original onLoad error when rollback logging also fails',
+      () async {
+        final state = DrawState();
+        final context = PluginContext(
+          stateProvider: () => state,
+          contextProvider: () => throw StateError('context unavailable'),
+          selectionConfigProvider: () => DrawConfig.defaultConfig.selection,
+          dispatcher: (_) async {},
+        );
+        final registry = PluginRegistry(context: context);
+        final failingPlugin = _LifecyclePlugin(
+          id: 'failing',
+          failOnLoad: true,
+          failOnUnload: true,
+        );
+
+        await expectLater(
+          registry.registerAll([failingPlugin]),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.toString(),
+              'toString',
+              contains('onLoad failed for failing'),
+            ),
+          ),
+        );
+
+        expect(failingPlugin.loadCount, 1);
+        expect(failingPlugin.unloadCount, 1);
+        expect(registry.pluginCount, 0);
+        expect(registry.isRegistered('failing'), isFalse);
+      },
+    );
+
+    test(
+      'fails fast on duplicate ids in one batch without loading any plugin',
+      () async {
+        final context = _createPluginContext();
+        final registry = PluginRegistry(context: context);
+
+        final first = _LifecyclePlugin(id: 'duplicate');
+        final second = _LifecyclePlugin(id: 'duplicate');
+
+        await expectLater(
+          registry.registerAll([first, second]),
+          throwsA(isA<StateError>()),
+        );
+
+        expect(first.loadCount, 0);
+        expect(second.loadCount, 0);
+        expect(registry.pluginCount, 0);
+      },
+    );
+
+    test('fails fast when batch contains an already-registered id', () async {
+      final context = _createPluginContext();
+      final registry = PluginRegistry(context: context);
+
+      final existing = _LifecyclePlugin(id: 'existing');
+      await registry.register(existing);
+      final duplicate = _LifecyclePlugin(id: 'existing');
+      final another = _LifecyclePlugin(id: 'another');
+
+      await expectLater(
+        registry.registerAll([duplicate, another]),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(duplicate.loadCount, 0);
+      expect(another.loadCount, 0);
+      expect(registry.pluginCount, 1);
+      expect(registry.isRegistered('existing'), isTrue);
+      expect(registry.isRegistered('another'), isFalse);
+    });
+  });
+
   group('PluginInputCoordinator ordering', () {
     test(
       'serializes event handling to avoid overlapping plugin execution',
@@ -123,6 +225,50 @@ void main() {
 
         expect(probe.hadOverlap, isFalse);
         expect(probe.timeline, ['start:1', 'end:1', 'start:2', 'end:2']);
+
+        await coordinator.dispose();
+      },
+    );
+  });
+
+  group('PluginInputCoordinator error containment', () {
+    test(
+      'returns unhandled when processing throws and still handles later events',
+      () async {
+        var shouldThrowState = true;
+        final stableState = DrawState();
+        final drawContext = DrawContext.withDefaults();
+        final context = PluginContext(
+          stateProvider: () {
+            if (shouldThrowState) {
+              throw StateError('state unavailable');
+            }
+            return stableState;
+          },
+          contextProvider: () => drawContext,
+          selectionConfigProvider: () => DrawConfig.defaultConfig.selection,
+          dispatcher: (_) async {},
+        );
+
+        final coordinator = PluginInputCoordinator(pluginContext: context);
+        await coordinator.registry.register(
+          _TestPlugin(
+            id: 'handler',
+            priority: 0,
+            onHandle: (_) async => const PluginResult.handled(message: 'ok'),
+          ),
+        );
+
+        final firstResult = await coordinator.handleEvent(_pointerDown(x: 1));
+        expect(
+          firstResult,
+          const PluginResult.unhandled(reason: 'Input processing failed'),
+        );
+
+        shouldThrowState = false;
+
+        final secondResult = await coordinator.handleEvent(_pointerDown(x: 2));
+        expect(secondResult, const PluginResult.handled(message: 'ok'));
 
         await coordinator.dispose();
       },
@@ -215,4 +361,46 @@ class _ProbeSequentialPlugin extends InputPluginBase {
     timeline.add('end:$label');
     return const PluginResult.handled(message: 'probe handled');
   }
+}
+
+class _LifecyclePlugin extends InputPluginBase {
+  _LifecyclePlugin({
+    required super.id,
+    this.failOnLoad = false,
+    this.failOnUnload = false,
+  }) : super(
+         name: 'Lifecycle($id)',
+         priority: 0,
+         supportedEventTypes: const {PointerDownInputEvent},
+       );
+
+  final bool failOnLoad;
+  final bool failOnUnload;
+  var loadCount = 0;
+  var unloadCount = 0;
+
+  @override
+  Future<void> onLoad(PluginContext context) async {
+    await super.onLoad(context);
+    loadCount += 1;
+    if (failOnLoad) {
+      throw StateError('onLoad failed for $id');
+    }
+  }
+
+  @override
+  Future<void> onUnload() async {
+    unloadCount += 1;
+    if (failOnUnload) {
+      throw StateError('onUnload failed for $id');
+    }
+    await super.onUnload();
+  }
+
+  @override
+  bool canHandle(InputEvent event, DrawState state) => true;
+
+  @override
+  Future<PluginResult> handleEvent(InputEvent event) async =>
+      const PluginResult.unhandled();
 }

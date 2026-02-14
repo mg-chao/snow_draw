@@ -39,9 +39,30 @@ class PluginRegistry {
 
   /// Register plugins in batch.
   Future<void> registerAll(List<InputPlugin> plugins) async {
-    for (final plugin in plugins) {
-      await register(plugin);
+    if (plugins.isEmpty) {
+      return;
     }
+
+    _validateBatchPluginIds(plugins);
+
+    final loadedPlugins = <InputPlugin>[];
+    for (final plugin in plugins) {
+      try {
+        await plugin.onLoad(_context);
+        loadedPlugins.add(plugin);
+      } on Object {
+        await _rollbackPlugin(plugin);
+        await _rollbackLoadedPlugins(loadedPlugins);
+        rethrow;
+      }
+    }
+
+    _plugins.addAll(plugins);
+    for (final plugin in plugins) {
+      _pluginMap[plugin.id] = plugin;
+    }
+    _isSorted = false;
+    _eventTypeIndexDirty = true;
   }
 
   /// Unregister a plugin.
@@ -180,6 +201,51 @@ class PluginRegistry {
   List<InputPlugin> _pluginsForEventType(Type eventType) {
     _ensureEventTypeIndex();
     return _pluginsByEventType[eventType] ?? const <InputPlugin>[];
+  }
+
+  void _validateBatchPluginIds(List<InputPlugin> plugins) {
+    final batchIds = <String>{};
+    for (final plugin in plugins) {
+      if (_pluginMap.containsKey(plugin.id)) {
+        throw StateError('Plugin with id "${plugin.id}" is already registered');
+      }
+      if (!batchIds.add(plugin.id)) {
+        throw StateError(
+          'Duplicate plugin id "${plugin.id}" in batch registration',
+        );
+      }
+    }
+  }
+
+  Future<void> _rollbackLoadedPlugins(List<InputPlugin> loadedPlugins) async {
+    for (final plugin in loadedPlugins.reversed) {
+      await _rollbackPlugin(plugin);
+    }
+  }
+
+  Future<void> _rollbackPlugin(InputPlugin plugin) async {
+    try {
+      await plugin.onUnload();
+    } on Object catch (e, stackTrace) {
+      _logRollbackError(plugin: plugin, error: e, stackTrace: stackTrace);
+    }
+  }
+
+  void _logRollbackError({
+    required InputPlugin plugin,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    try {
+      _context.context.log.input.error(
+        'Plugin rollback unload failed',
+        error,
+        stackTrace,
+        {'plugin': plugin.name},
+      );
+    } on Object {
+      // Ignore logging failures so batch rollback remains best-effort.
+    }
   }
 
   Future<bool> _isInterceptedByBeforeHooks(InputEvent event) async {
