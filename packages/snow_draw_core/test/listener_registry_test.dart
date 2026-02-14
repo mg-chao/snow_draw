@@ -129,6 +129,59 @@ void main() {
     );
   });
 
+  test('listener unregistered before its turn is skipped in '
+      'unfiltered notify path', () {
+    var calls = 0;
+
+    late StateChangeListener<DrawState> removableListener;
+    removableListener = (_) => calls += 1;
+
+    registry
+      ..register((_) => registry.unregister(removableListener))
+      ..register(removableListener);
+
+    final previous = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
+        ),
+      ),
+    );
+
+    registry.notify(previous, next);
+    expect(calls, 0);
+  });
+
+  test('listener unregistered before its turn is skipped in filtered '
+      'notify path', () {
+    var calls = 0;
+
+    late StateChangeListener<DrawState> removableListener;
+    removableListener = (_) => calls += 1;
+
+    registry
+      ..register((_) => registry.unregister(removableListener))
+      ..register(removableListener)
+      ..register((_) {}, changeTypes: {DrawStateChange.selection});
+
+    final previous = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
+        ),
+      ),
+    );
+
+    registry.notify(previous, next);
+    expect(calls, 0);
+  });
+
   test('duplicate register updates changeTypes', () {
     final states = <DrawState>[];
     void listener(DrawState s) => states.add(s);
@@ -153,6 +206,56 @@ void main() {
     registry.notify(prev, next);
     expect(states, hasLength(1));
   });
+
+  test(
+    'duplicate register can switch a listener from filtered to unfiltered',
+    () {
+      var calls = 0;
+      void listener(DrawState _) => calls += 1;
+
+      registry
+        ..register(listener, changeTypes: {DrawStateChange.selection})
+        ..register(listener);
+
+      final previous = DrawState();
+      final moved = DrawState(
+        application: previous.application.copyWith(
+          view: previous.application.view.copyWith(
+            camera: previous.application.view.camera.translated(12, 0),
+          ),
+        ),
+      );
+
+      registry.notify(previous, moved);
+      expect(calls, 1);
+    },
+  );
+
+  test(
+    'mixed filtered and unfiltered listeners preserve notification rules',
+    () {
+      final filteredStates = <DrawState>[];
+      final unfilteredStates = <DrawState>[];
+
+      registry
+        ..register(filteredStates.add, changeTypes: {DrawStateChange.selection})
+        ..register(unfilteredStates.add);
+
+      final previous = DrawState();
+      final moved = DrawState(
+        application: previous.application.copyWith(
+          view: previous.application.view.copyWith(
+            camera: previous.application.view.camera.translated(10, 0),
+          ),
+        ),
+      );
+
+      registry.notify(previous, moved);
+
+      expect(filteredStates, isEmpty);
+      expect(unfilteredStates, hasLength(1));
+    },
+  );
 
   test('empty changeTypes behaves as an unfiltered listener', () {
     final states = <DrawState>[];

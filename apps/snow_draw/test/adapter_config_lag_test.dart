@@ -164,6 +164,7 @@ class _LaggingConfigStore implements DrawStore {
     StateSelector<DrawState, T> selector,
     StateChangeListener<T> listener, {
     bool Function(T, T)? equals,
+    Set<DrawStateChange>? changeTypes,
   }) {
     var previous = selector.select(_state);
     return listen((state) {
@@ -173,7 +174,7 @@ class _LaggingConfigStore implements DrawStore {
         previous = next;
         listener(next);
       }
-    });
+    }, changeTypes: changeTypes);
   }
 
   Future<void> flushConfigEvents() async {

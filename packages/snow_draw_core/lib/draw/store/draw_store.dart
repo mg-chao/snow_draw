@@ -163,6 +163,7 @@ class DefaultDrawStore implements DrawStore {
     StateSelector<DrawState, T> selector,
     StateChangeListener<T> listener, {
     bool Function(T, T)? equals,
+    Set<DrawStateChange>? changeTypes,
   }) {
     _checkNotDisposed();
 
@@ -179,7 +180,7 @@ class DefaultDrawStore implements DrawStore {
         previousValue = newValue;
         listener(newValue);
       }
-    });
+    }, changeTypes: changeTypes);
   }
 
   void beginBatch() {
