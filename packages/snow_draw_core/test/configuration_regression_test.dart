@@ -67,6 +67,62 @@ void main() {
     });
   });
 
+  group('ConfigManager lifecycle behavior', () {
+    test('ignores updates after dispose', () async {
+      final manager = ConfigManager(DrawConfig());
+      final baseConfig = manager.current;
+
+      await manager.dispose();
+
+      final nextConfig = baseConfig.copyWith(
+        canvas: baseConfig.canvas.copyWith(
+          backgroundColor: const Color(0xFF112233),
+        ),
+      );
+      final nextSelection = baseConfig.selection.copyWith(
+        padding: baseConfig.selection.padding + 7,
+      );
+      final nextCanvas = baseConfig.canvas.copyWith(
+        backgroundColor: const Color(0xFF445566),
+      );
+
+      expect(manager.update(nextConfig), isFalse);
+      expect(manager.updateSelection(nextSelection), isFalse);
+      expect(manager.updateCanvas(nextCanvas), isFalse);
+      expect(manager.current, same(baseConfig));
+    });
+
+    test('dispose clears frozen state and drops pending updates', () async {
+      final manager = ConfigManager(DrawConfig());
+      final emitted = <DrawConfig>[];
+      final subscription = manager.stream.listen(emitted.add);
+      addTearDown(() async {
+        await subscription.cancel();
+      });
+
+      final baseSelection = manager.current.selection;
+      final nextSelection = baseSelection.copyWith(
+        padding: baseSelection.padding + 10,
+      );
+
+      manager.freeze();
+      expect(manager.updateSelection(nextSelection), isFalse);
+
+      await manager.dispose();
+      expect(manager.unfreeze, returnsNormally);
+      expect(manager.current.selection, baseSelection);
+      await Future<void>.delayed(Duration.zero);
+      expect(emitted, isEmpty);
+    });
+
+    test('dispose is idempotent', () async {
+      final manager = ConfigManager(DrawConfig());
+
+      await manager.dispose();
+      await manager.dispose();
+    });
+  });
+
   group('DrawConfig copyWith behavior', () {
     test(
       'keeps serial number defaults specialized when element style changes',
