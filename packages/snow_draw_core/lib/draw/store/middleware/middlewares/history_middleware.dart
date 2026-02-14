@@ -342,8 +342,12 @@ class HistoryMiddleware extends MiddlewareBase {
     if (action is FinishEdit) {
       final affected = metadata?.affectedElementIds ?? const <String>{};
       if (affected.isNotEmpty) {
-        return HistoryChangeSet(
+        final expandedAffectedIds = _expandModifiedIdsForArrowBindings(
+          elements: context.initialState.domain.document.elements,
           modifiedIds: affected,
+        );
+        return HistoryChangeSet(
+          modifiedIds: expandedAffectedIds,
           selectionChanged: selectionChanged,
         );
       }
@@ -377,7 +381,7 @@ class HistoryMiddleware extends MiddlewareBase {
             modifiedIds.add(element.id);
           }
         }
-        if (_isArrowBindingAffected(data: data, removedIds: removedIds)) {
+        if (_isArrowBoundToAny(data: data, targetIds: removedIds)) {
           modifiedIds.add(element.id);
         }
       }
@@ -470,6 +474,22 @@ class HistoryMiddleware extends MiddlewareBase {
     return action is ChangeElementZIndex;
   }
 
+  Set<String> _expandModifiedIdsForArrowBindings({
+    required Iterable<ElementState> elements,
+    required Set<String> modifiedIds,
+  }) {
+    final expandedIds = <String>{...modifiedIds};
+    for (final element in elements) {
+      if (expandedIds.contains(element.id)) {
+        continue;
+      }
+      if (_isArrowBoundToAny(data: element.data, targetIds: modifiedIds)) {
+        expandedIds.add(element.id);
+      }
+    }
+    return expandedIds;
+  }
+
   Set<String> _addedElementIds({
     required Iterable<ElementState> before,
     required Iterable<ElementState> after,
@@ -510,17 +530,17 @@ class HistoryMiddleware extends MiddlewareBase {
     }
   }
 
-  bool _isArrowBindingAffected({
+  bool _isArrowBoundToAny({
     required Object data,
-    required Set<String> removedIds,
+    required Set<String> targetIds,
   }) {
     if (data is! ArrowLikeData) {
       return false;
     }
     final startTarget = data.startBinding?.elementId;
     final endTarget = data.endBinding?.elementId;
-    return (startTarget != null && removedIds.contains(startTarget)) ||
-        (endTarget != null && removedIds.contains(endTarget));
+    return (startTarget != null && targetIds.contains(startTarget)) ||
+        (endTarget != null && targetIds.contains(endTarget));
   }
 
   Set<String> _serialIdsBoundToText({
