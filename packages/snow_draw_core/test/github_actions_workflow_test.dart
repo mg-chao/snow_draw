@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   late String releaseWorkflow;
   late String deployPagesWorkflow;
+  late String ciWorkflow;
 
   setUpAll(() {
     releaseWorkflow = _readWorkflow('release.yml');
     deployPagesWorkflow = _readWorkflow('deploy-pages.yml');
+    ciWorkflow = _readWorkflow('ci.yml');
   });
 
   group('release workflow baseline behavior', () {
@@ -141,6 +143,40 @@ void main() {
     test('uses stable Flutter channel for deterministic deployments', () {
       expect(deployPagesWorkflow, contains('channel: stable'));
       expect(deployPagesWorkflow, isNot(contains('channel: beta')));
+    });
+  });
+
+  group('ci workflow baseline behavior', () {
+    test('runs on pull requests and pushes to main', () {
+      expect(ciWorkflow, contains('pull_request:'));
+      expect(ciWorkflow, contains('push:'));
+      expect(ciWorkflow, contains('branches:'));
+      expect(ciWorkflow, contains('- main'));
+    });
+
+    test('cancels superseded runs to save CI resources', () {
+      expect(ciWorkflow, contains('concurrency:'));
+      expect(ciWorkflow, contains('cancel-in-progress: true'));
+    });
+
+    test('uses stable Flutter channel with caching enabled', () {
+      expect(ciWorkflow, contains('subosito/flutter-action@v2'));
+      expect(ciWorkflow, contains('channel: stable'));
+      expect(ciWorkflow, contains('cache: true'));
+    });
+
+    test('runs quality gates that match the release workflow', () {
+      expect(ciWorkflow, contains('dart run melos bootstrap'));
+      expect(ciWorkflow, contains('dart run melos run analyze'));
+      expect(ciWorkflow, contains('dart run melos run format:check'));
+      expect(ciWorkflow, contains('dart run melos run test'));
+    });
+
+    test('applies timeout limits to all ci workflow jobs', () {
+      expect(
+        _extractJobBlock(ciWorkflow, 'quality-gate'),
+        contains('timeout-minutes:'),
+      );
     });
   });
 
