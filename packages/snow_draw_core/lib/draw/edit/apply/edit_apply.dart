@@ -243,64 +243,23 @@ class EditApply {
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
   }) {
-    if (replacementsById.isEmpty) {
+    if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
     }
 
-    // Build a temporary index for O(1) lookups when the list is
-    // large enough that linear scans become expensive.
-    if (elements.length > 64 && replacementsById.length < elements.length) {
-      final indexById = <String, int>{};
-      for (var i = 0; i < elements.length; i++) {
-        indexById[elements[i].id] = i;
-      }
-      var hasActualChanges = false;
-      for (final entry in replacementsById.entries) {
-        final index = indexById[entry.key];
-        if (index != null && !identical(elements[index], entry.value)) {
-          hasActualChanges = true;
-          break;
-        }
-      }
-      if (!hasActualChanges) {
-        return elements;
-      }
-      // Reuse the index to build the result in a single pass.
-      final result = List<ElementState>.of(elements, growable: false);
-      for (final entry in replacementsById.entries) {
-        final index = indexById[entry.key];
-        if (index != null) {
-          result[index] = entry.value;
-        }
-      }
-      return result;
-    }
-
-    var hasActualChanges = false;
-    for (final entry in replacementsById.entries) {
-      final index = _findElementIndex(elements, entry.key);
-      if (index != -1 && !identical(elements[index], entry.value)) {
-        hasActualChanges = true;
-        break;
-      }
-    }
-
-    if (!hasActualChanges) {
-      return elements;
-    }
-
-    return elements
-        .map((e) => replacementsById[e.id] ?? e)
-        .toList(growable: false);
-  }
-
-  static int _findElementIndex(List<ElementState> elements, String id) {
+    List<ElementState>? result;
     for (var i = 0; i < elements.length; i++) {
-      if (elements[i].id == id) {
-        return i;
+      final current = elements[i];
+      final replacement = replacementsById[current.id];
+      if (replacement == null || replacement == current) {
+        continue;
       }
+
+      result ??= List<ElementState>.of(elements, growable: false);
+      result[i] = replacement;
     }
-    return -1;
+
+    return result ?? elements;
   }
 }
 

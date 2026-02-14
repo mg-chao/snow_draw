@@ -113,5 +113,43 @@ void main() {
       );
       expect(identical(result, large), isTrue);
     });
+
+    test('treats value-equal replacement as no-op', () {
+      final equalButNewInstance = elements[2].copyWith();
+      expect(identical(equalButNewInstance, elements[2]), isFalse);
+      expect(equalButNewInstance, equals(elements[2]));
+
+      final result = EditApply.replaceElementsById(
+        elements: elements,
+        replacementsById: {'e2': equalButNewInstance},
+      );
+
+      expect(identical(result, elements), isTrue);
+      expect(identical(result[2], elements[2]), isTrue);
+    });
+
+    test('large list with full replacement map keeps equal elements '
+        'and applies only real changes', () {
+      final large = List.generate(200, (i) => _element('el$i'));
+      final replacements = <String, ElementState>{};
+      for (var i = 0; i < large.length; i++) {
+        replacements['el$i'] = large[i].copyWith();
+      }
+      final changed = large[123].copyWith(
+        rect: const DrawRect(minX: 999, minY: 999, maxX: 1000, maxY: 1000),
+      );
+      replacements['el123'] = changed;
+
+      final result = EditApply.replaceElementsById(
+        elements: large,
+        replacementsById: replacements,
+      );
+
+      expect(identical(result, large), isFalse);
+      expect(result.length, large.length);
+      expect(identical(result[123], changed), isTrue);
+      expect(identical(result[50], large[50]), isTrue);
+      expect(result[123].rect.minX, 999);
+    });
   });
 }

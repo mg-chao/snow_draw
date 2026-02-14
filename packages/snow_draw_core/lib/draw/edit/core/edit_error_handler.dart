@@ -39,13 +39,18 @@ class EditErrorHandler {
     return null;
   }
 
-  static DrawState computeNextState(DrawState state, ErrorStatePolicy policy) =>
-      switch (policy) {
-        ErrorStatePolicy.toIdle => state.copyWith(
-          application: state.application.toIdle(),
-        ),
-        ErrorStatePolicy.keepState => state,
-      };
+  static DrawState computeNextState(DrawState state, ErrorStatePolicy policy) {
+    if (policy == ErrorStatePolicy.keepState) {
+      return state;
+    }
+
+    final nextApplication = state.application.toIdle();
+    if (identical(nextApplication, state.application)) {
+      return state;
+    }
+
+    return state.copyWith(application: nextApplication);
+  }
 
   static EditOutcome createFailure({
     required DrawState state,
