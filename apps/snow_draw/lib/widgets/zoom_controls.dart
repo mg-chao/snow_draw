@@ -94,6 +94,9 @@ class _ZoomControlsState extends State<ZoomControls> {
       alpha: 0.6,
     );
     final zoomPercent = (_cameraZoom * 100).round();
+    final canZoomOut = !_isAtMinZoom(_cameraZoom);
+    final canZoomIn = !_isAtMaxZoom(_cameraZoom);
+    final canResetZoom = !_zoomEquals(_cameraZoom, 1);
 
     return Material(
       elevation: 2,
@@ -110,7 +113,7 @@ class _ZoomControlsState extends State<ZoomControls> {
                 message: widget.strings.zoomOut,
                 child: IconButton(
                   style: iconButtonStyle,
-                  onPressed: () => _handleZoom(0.9),
+                  onPressed: canZoomOut ? () => _handleZoom(0.9) : null,
                   icon: const Icon(Icons.remove, size: 20),
                 ),
               ),
@@ -119,7 +122,7 @@ class _ZoomControlsState extends State<ZoomControls> {
                 message: widget.strings.resetZoom,
                 child: TextButton(
                   style: textButtonStyle,
-                  onPressed: () => _handleZoomTo(1),
+                  onPressed: canResetZoom ? () => _handleZoomTo(1) : null,
                   child: Text(
                     '$zoomPercent%',
                     style: theme.textTheme.labelMedium?.copyWith(
@@ -133,7 +136,7 @@ class _ZoomControlsState extends State<ZoomControls> {
                 message: widget.strings.zoomIn,
                 child: IconButton(
                   style: iconButtonStyle,
-                  onPressed: () => _handleZoom(1.1),
+                  onPressed: canZoomIn ? () => _handleZoom(1.1) : null,
                   icon: const Icon(Icons.add, size: 20),
                 ),
               ),
@@ -185,17 +188,19 @@ class _ZoomControlsState extends State<ZoomControls> {
   bool _zoomEquals(double a, double b) =>
       _doubleEquals(a, b) && _isZoomBoundary(a) == _isZoomBoundary(b);
 
-  bool _isZoomBoundary(double zoom) =>
-      _doubleEquals(
-        zoom,
-        CameraState.minZoom,
-        tolerance: _zoomBoundaryTolerance,
-      ) ||
-      _doubleEquals(
-        zoom,
-        CameraState.maxZoom,
-        tolerance: _zoomBoundaryTolerance,
-      );
+  bool _isZoomBoundary(double zoom) => _isAtMinZoom(zoom) || _isAtMaxZoom(zoom);
+
+  bool _isAtMinZoom(double zoom) => _doubleEquals(
+    zoom,
+    CameraState.minZoom,
+    tolerance: _zoomBoundaryTolerance,
+  );
+
+  bool _isAtMaxZoom(double zoom) => _doubleEquals(
+    zoom,
+    CameraState.maxZoom,
+    tolerance: _zoomBoundaryTolerance,
+  );
 
   double _snapZoom(double zoom) {
     final clamped = CameraState.clampZoom(zoom);

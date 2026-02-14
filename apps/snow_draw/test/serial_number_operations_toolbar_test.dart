@@ -23,6 +23,92 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('toolbar remains visible near horizontal viewport edges', (
+    tester,
+  ) async {
+    _setSurfaceSize(tester, const Size(320, 240));
+
+    final store = _createStore(
+      elementId: 'serial-edge-horizontal',
+      rect: const DrawRect(minX: 280, minY: 40, maxX: 320, maxY: 80),
+      cameraPosition: DrawPoint.zero,
+    );
+    final adapter = StyleToolbarAdapter(store: store);
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(adapter.dispose);
+    addTearDown(store.dispose);
+
+    await _pumpToolbar(
+      tester,
+      strings: strings,
+      store: store,
+      adapter: adapter,
+    );
+
+    final toolbarRect = _toolbarRect(tester);
+    expect(toolbarRect.left, greaterThanOrEqualTo(0));
+    expect(toolbarRect.right, lessThanOrEqualTo(320));
+  });
+
+  testWidgets(
+    'toolbar renders above the selection when there is no space below',
+    (tester) async {
+      _setSurfaceSize(tester, const Size(320, 240));
+
+      final store = _createStore(
+        elementId: 'serial-edge-vertical',
+        rect: const DrawRect(minX: 60, minY: 200, maxX: 120, maxY: 220),
+        cameraPosition: DrawPoint.zero,
+      );
+      final adapter = StyleToolbarAdapter(store: store);
+      final strings = AppLocalizations(const Locale('en'));
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await _pumpToolbar(
+        tester,
+        strings: strings,
+        store: store,
+        adapter: adapter,
+      );
+
+      final toolbarRect = _toolbarRect(tester);
+      expect(toolbarRect.bottom, lessThanOrEqualTo(240));
+      expect(toolbarRect.top, lessThan(200));
+    },
+  );
+
+  testWidgets(
+    'toolbar stays within viewport when selection is below the visible area',
+    (tester) async {
+      _setSurfaceSize(tester, const Size(320, 240));
+
+      final store = _createStore(
+        elementId: 'serial-offscreen-bottom',
+        rect: const DrawRect(minX: 80, minY: 300, maxX: 140, maxY: 340),
+        cameraPosition: DrawPoint.zero,
+      );
+      final adapter = StyleToolbarAdapter(store: store);
+      final strings = AppLocalizations(const Locale('en'));
+
+      addTearDown(adapter.dispose);
+      addTearDown(store.dispose);
+
+      await _pumpToolbar(
+        tester,
+        strings: strings,
+        store: store,
+        adapter: adapter,
+      );
+
+      final toolbarRect = _toolbarRect(tester);
+      expect(toolbarRect.top, greaterThanOrEqualTo(0));
+      expect(toolbarRect.bottom, lessThanOrEqualTo(240));
+    },
+  );
+
   testWidgets('toolbar follows camera updates from the current store', (
     tester,
   ) async {
@@ -129,6 +215,26 @@ Future<void> _pumpToolbar(
 
 Positioned _toolbarPosition(WidgetTester tester) =>
     tester.widget<Positioned>(find.byType(Positioned));
+
+Rect _toolbarRect(WidgetTester tester) {
+  final materialFinder = find.descendant(
+    of: find.byKey(const ValueKey('serial-toolbar')),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is Material && widget.elevation == 3,
+    ),
+  );
+  expect(materialFinder, findsOneWidget);
+  final topLeft = tester.getTopLeft(materialFinder);
+  final bottomRight = tester.getBottomRight(materialFinder);
+  return Rect.fromPoints(topLeft, bottomRight);
+}
+
+void _setSurfaceSize(WidgetTester tester, Size size) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = size;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
 
 DefaultDrawStore _createStore({
   required String elementId,

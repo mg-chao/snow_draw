@@ -49,6 +49,10 @@ class _SerialNumberOperationsToolbarState
   static const double _buttonGapLarge = 0;
   static const double _buttonSize = 28;
   static const double _iconSize = 16;
+  static const double _viewportPadding = 8;
+  static const double _toolbarHeight = _buttonSize;
+  static const double _toolbarWidth =
+      (_buttonSize * 3) + _buttonGapSmall + _buttonGapLarge;
 
   VoidCallback? _unsubscribe;
   late DrawStateViewBuilder _stateViewBuilder;
@@ -136,9 +140,17 @@ class _SerialNumberOperationsToolbarState
               selectionConfig.render.controlPointSize / 2;
           final desiredTop =
               screenBounds.bottom + extraPadding + widget.verticalGap;
-
-          final left = screenBounds.center.dx;
-          final top = desiredTop;
+          final viewportSize = MediaQuery.sizeOf(context);
+          final left = _clampHorizontalCenter(
+            screenBounds.center.dx,
+            viewportSize.width,
+          );
+          final top = _resolveTopPosition(
+            desiredTop: desiredTop,
+            selectionTop: screenBounds.top,
+            viewportHeight: viewportSize.height,
+            extraPadding: extraPadding,
+          );
 
           final value = styleState.serialNumberStyleValues.number;
           final defaultValue = styleState.serialNumberStyle.serialNumber;
@@ -289,4 +301,41 @@ class _SerialNumberOperationsToolbarState
         world.maxX * scale + camera.x,
         world.maxY * scale + camera.y,
       );
+
+  double _clampHorizontalCenter(double centerX, double viewportWidth) {
+    const halfWidth = _toolbarWidth / 2;
+    const minCenter = halfWidth + _viewportPadding;
+    final maxCenter = viewportWidth - halfWidth - _viewportPadding;
+
+    if (minCenter >= maxCenter) {
+      return viewportWidth / 2;
+    }
+
+    return centerX.clamp(minCenter, maxCenter);
+  }
+
+  double _resolveTopPosition({
+    required double desiredTop,
+    required double selectionTop,
+    required double viewportHeight,
+    required double extraPadding,
+  }) {
+    const minTop = _viewportPadding;
+    final maxTop = math.max(
+      minTop,
+      viewportHeight - _toolbarHeight - _viewportPadding,
+    );
+    final belowTop = desiredTop.clamp(minTop, maxTop);
+    if (desiredTop <= maxTop) {
+      return belowTop;
+    }
+
+    final aboveTop =
+        selectionTop - extraPadding - widget.verticalGap - _toolbarHeight;
+    if (aboveTop >= minTop) {
+      return aboveTop.clamp(minTop, maxTop);
+    }
+
+    return belowTop;
+  }
 }
