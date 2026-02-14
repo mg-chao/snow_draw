@@ -33,6 +33,7 @@ class _MainToolbarState extends State<MainToolbar> {
   static const double _buttonRadius = 12;
   static const double _buttonGap = 2;
   static const double _dividerGap = 8;
+  static const double _iconSize = 18;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -40,21 +41,13 @@ class _MainToolbarState extends State<MainToolbar> {
     builder: (context, _) {
       final theme = Theme.of(context);
       final tool = widget.toolController.value;
-      final isSelection = tool == ToolType.selection;
-      final isRectangle = tool == ToolType.rectangle;
-      final isHighlight = tool == ToolType.highlight;
-      final isFilter = tool == ToolType.filter;
-      final isArrow = tool == ToolType.arrow;
-      final isLine = tool == ToolType.line;
-      final isFreeDraw = tool == ToolType.freeDraw;
-      final isText = tool == ToolType.text;
-      final isSerialNumber = tool == ToolType.serialNumber;
       final selectedColor = theme.colorScheme.primary;
       final unselectedColor = theme.iconTheme.color ?? Colors.black;
       final selectedBackground = selectedColor.withValues(alpha: 0.12);
       final dividerColor = theme.colorScheme.outlineVariant.withValues(
         alpha: 0.6,
       );
+      final tools = _resolveToolItems(widget.strings);
 
       return Material(
         elevation: 3,
@@ -66,99 +59,23 @@ class _MainToolbarState extends State<MainToolbar> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildToolButton(
-                tooltip: widget.strings.toolSelection,
-                icon: Icons.near_me_outlined,
-                selected: isSelection,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.selection),
+                item: tools.first,
+                currentTool: tool,
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
                 selectedBackground: selectedBackground,
               ),
               _buildDivider(dividerColor),
-              _buildToolButton(
-                tooltip: widget.strings.toolRectangle,
-                icon: Icons.rectangle_outlined,
-                selected: isRectangle,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.rectangle),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolArrow,
-                icon: Icons.arrow_right_alt,
-                selected: isArrow,
-                onPressed: () => widget.toolController.setTool(ToolType.arrow),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolLine,
-                icon: Icons.show_chart,
-                selected: isLine,
-                onPressed: () => widget.toolController.setTool(ToolType.line),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolFreeDraw,
-                icon: Icons.brush_outlined,
-                selected: isFreeDraw,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.freeDraw),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolHighlight,
-                icon: Icons.highlight,
-                selected: isHighlight,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.highlight),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolText,
-                icon: Icons.text_fields,
-                selected: isText,
-                onPressed: () => widget.toolController.setTool(ToolType.text),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolSerialNumber,
-                icon: Icons.looks_one_outlined,
-                selected: isSerialNumber,
-                onPressed: () =>
-                    widget.toolController.setTool(ToolType.serialNumber),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
-              const SizedBox(width: _buttonGap),
-              _buildToolButton(
-                tooltip: widget.strings.toolFilter,
-                icon: Icons.auto_fix_high,
-                selected: isFilter,
-                onPressed: () => widget.toolController.setTool(ToolType.filter),
-                selectedColor: selectedColor,
-                unselectedColor: unselectedColor,
-                selectedBackground: selectedBackground,
-              ),
+              for (var i = 1; i < tools.length; i++) ...[
+                if (i > 1) const SizedBox(width: _buttonGap),
+                _buildToolButton(
+                  item: tools[i],
+                  currentTool: tool,
+                  selectedColor: selectedColor,
+                  unselectedColor: unselectedColor,
+                  selectedBackground: selectedBackground,
+                ),
+              ],
             ],
           ),
         ),
@@ -166,32 +83,94 @@ class _MainToolbarState extends State<MainToolbar> {
     },
   );
 
+  List<_ToolItem> _resolveToolItems(AppLocalizations strings) => [
+    _ToolItem(
+      type: ToolType.selection,
+      tooltip: strings.toolSelection,
+      icon: Icons.near_me_outlined,
+    ),
+    _ToolItem(
+      type: ToolType.rectangle,
+      tooltip: strings.toolRectangle,
+      icon: Icons.rectangle_outlined,
+    ),
+    _ToolItem(
+      type: ToolType.arrow,
+      tooltip: strings.toolArrow,
+      icon: Icons.arrow_right_alt,
+    ),
+    _ToolItem(
+      type: ToolType.line,
+      tooltip: strings.toolLine,
+      icon: Icons.show_chart,
+    ),
+    _ToolItem(
+      type: ToolType.freeDraw,
+      tooltip: strings.toolFreeDraw,
+      icon: Icons.brush_outlined,
+    ),
+    _ToolItem(
+      type: ToolType.highlight,
+      tooltip: strings.toolHighlight,
+      icon: Icons.highlight,
+    ),
+    _ToolItem(
+      type: ToolType.text,
+      tooltip: strings.toolText,
+      icon: Icons.text_fields,
+    ),
+    _ToolItem(
+      type: ToolType.serialNumber,
+      tooltip: strings.toolSerialNumber,
+      icon: Icons.looks_one_outlined,
+    ),
+    _ToolItem(
+      type: ToolType.filter,
+      tooltip: strings.toolFilter,
+      icon: Icons.auto_fix_high,
+    ),
+  ];
+
   Widget _buildToolButton({
-    required String tooltip,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onPressed,
+    required _ToolItem item,
+    required ToolType currentTool,
     required Color selectedColor,
     required Color unselectedColor,
     required Color selectedBackground,
-  }) => IconButton(
-    tooltip: tooltip,
-    onPressed: onPressed,
-    icon: Icon(icon),
-    style: IconButton.styleFrom(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(_buttonRadius),
+  }) {
+    final selected = currentTool == item.type;
+    return IconButton(
+      tooltip: item.tooltip,
+      onPressed: () => widget.toolController.setTool(item.type),
+      icon: Icon(item.icon, size: _iconSize),
+      style: IconButton.styleFrom(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(_buttonRadius),
+        ),
+        minimumSize: const Size(_buttonSize, _buttonSize),
+        fixedSize: const Size(_buttonSize, _buttonSize),
+        padding: EdgeInsets.zero,
+        foregroundColor: selected ? selectedColor : unselectedColor,
+        backgroundColor: selected ? selectedBackground : Colors.transparent,
       ),
-      minimumSize: const Size(_buttonSize, _buttonSize),
-      fixedSize: const Size(_buttonSize, _buttonSize),
-      padding: EdgeInsets.zero,
-      foregroundColor: selected ? selectedColor : unselectedColor,
-      backgroundColor: selected ? selectedBackground : Colors.transparent,
-    ),
-  );
+    );
+  }
 
   Widget _buildDivider(Color color) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: _dividerGap),
     child: Container(width: 1, height: 20, color: color),
   );
+}
+
+@immutable
+class _ToolItem {
+  const _ToolItem({
+    required this.type,
+    required this.tooltip,
+    required this.icon,
+  });
+
+  final ToolType type;
+  final String tooltip;
+  final IconData icon;
 }

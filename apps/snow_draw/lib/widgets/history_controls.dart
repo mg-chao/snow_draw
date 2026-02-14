@@ -31,6 +31,13 @@ class HistoryControls extends StatefulWidget {
 }
 
 class _HistoryControlsState extends State<HistoryControls> {
+  static final ButtonStyle _iconButtonStyle = IconButton.styleFrom(
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    minimumSize: const Size(36, 36),
+    fixedSize: const Size(36, 36),
+    padding: EdgeInsets.zero,
+  );
+
   StreamSubscription<HistoryAvailabilityChangedEvent>? _eventSubscription;
   var _canUndo = false;
   var _canRedo = false;
@@ -38,28 +45,23 @@ class _HistoryControlsState extends State<HistoryControls> {
   @override
   void initState() {
     super.initState();
-    _syncAvailability();
-    _subscribe(widget.store);
+    _attachToStore(widget.store);
   }
 
   @override
   void didUpdateWidget(HistoryControls oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.store != widget.store) {
-      unawaited(_eventSubscription?.cancel());
-      _syncAvailability();
-      _subscribe(widget.store);
+      _attachToStore(widget.store);
     }
   }
 
-  void _subscribe(DefaultDrawStore store) {
+  void _attachToStore(DefaultDrawStore store) {
+    unawaited(_eventSubscription?.cancel());
     _eventSubscription = store.onEvent<HistoryAvailabilityChangedEvent>(
       _handleEvent,
     );
-  }
-
-  void _syncAvailability() {
-    _updateAvailability(widget.store.canUndo, widget.store.canRedo);
+    _updateAvailability(store.canUndo, store.canRedo);
   }
 
   @override
@@ -71,12 +73,6 @@ class _HistoryControlsState extends State<HistoryControls> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final buttonStyle = IconButton.styleFrom(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      minimumSize: const Size(36, 36),
-      fixedSize: const Size(36, 36),
-      padding: EdgeInsets.zero,
-    );
 
     return Material(
       elevation: 2,
@@ -90,7 +86,7 @@ class _HistoryControlsState extends State<HistoryControls> {
             Tooltip(
               message: widget.strings.undo,
               child: IconButton(
-                style: buttonStyle,
+                style: _iconButtonStyle,
                 onPressed: _canUndo ? _handleUndo : null,
                 icon: const Icon(Icons.undo, size: 20),
               ),
@@ -98,7 +94,7 @@ class _HistoryControlsState extends State<HistoryControls> {
             Tooltip(
               message: widget.strings.redo,
               child: IconButton(
-                style: buttonStyle,
+                style: _iconButtonStyle,
                 onPressed: _canRedo ? _handleRedo : null,
                 icon: const Icon(Icons.redo, size: 20),
               ),
