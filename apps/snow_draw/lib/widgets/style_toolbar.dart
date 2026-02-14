@@ -1556,76 +1556,68 @@ class _StyleToolbarState extends State<StyleToolbar> {
   List<_EvaluatedProperty<dynamic>> _getApplicableProperties(
     StylePropertyContext context,
   ) {
-    final allProperties = PropertyRegistry.instance
-        .getApplicableProperties(context)
-        .map((descriptor) => _evaluateProperty(context, descriptor))
-        .toList();
-    final propertiesById = {
-      for (final property in allProperties) property.id: property,
-    };
-    final fillColor = _readProperty<Color>(
-      propertiesById,
-      PropertyIds.fillColor,
+    final descriptors = PropertyRegistry.instance.getApplicableProperties(
+      context,
     );
+    if (descriptors.isEmpty) {
+      return const [];
+    }
+
+    final descriptorsById = {
+      for (final descriptor in descriptors) descriptor.id: descriptor,
+    };
+    final evaluatedById = <String, _EvaluatedProperty<dynamic>>{};
+
+    _EvaluatedProperty<dynamic>? evaluateById(String propertyId) {
+      final cached = evaluatedById[propertyId];
+      if (cached != null) {
+        return cached;
+      }
+      final descriptor = descriptorsById[propertyId];
+      if (descriptor == null) {
+        return null;
+      }
+      final evaluated = _evaluateProperty(context, descriptor);
+      evaluatedById[propertyId] = evaluated;
+      return evaluated;
+    }
+
+    final fillColor = _readProperty<Color>(evaluateById(PropertyIds.fillColor));
     final textStroke = _readProperty<double>(
-      propertiesById,
-      PropertyIds.textStrokeWidth,
+      evaluateById(PropertyIds.textStrokeWidth),
     );
     final highlightTextStroke = _readProperty<double>(
-      propertiesById,
-      PropertyIds.highlightTextStrokeWidth,
+      evaluateById(PropertyIds.highlightTextStrokeWidth),
     );
     final filterType = _readProperty<CanvasFilterType>(
-      propertiesById,
-      PropertyIds.filterType,
+      evaluateById(PropertyIds.filterType),
     );
-    final visibility = _PropertyVisibilitySnapshot(
-      fillColor: fillColor.value,
-      textStrokeWidth: textStroke.value,
-      textStrokeDefaultWidth: textStroke.defaultValue,
-      highlightTextStrokeWidth: highlightTextStroke.value,
-      highlightTextStrokeDefaultWidth: highlightTextStroke.defaultValue,
-      filterType: filterType.value,
-      filterDefaultType: filterType.defaultValue,
-    );
+    final hiddenPropertyIds = <String>{
+      if (_isTransparentColor(fillColor.value)) PropertyIds.fillStyle,
+      if (_isStrokeColorHidden(textStroke.value, textStroke.defaultValue))
+        PropertyIds.textStrokeColor,
+      if (_isStrokeColorHidden(
+        highlightTextStroke.value,
+        highlightTextStroke.defaultValue,
+      ))
+        PropertyIds.highlightTextStrokeColor,
+      if (_isCornerRadiusHidden(context, fillColor.value))
+        PropertyIds.cornerRadius,
+      if (_isFilterStrengthHidden(filterType.value, filterType.defaultValue))
+        PropertyIds.filterStrength,
+    };
 
-    return allProperties.where((property) {
-      if (property.id == PropertyIds.fillStyle &&
-          _isTransparentColor(visibility.fillColor)) {
-        return false;
+    final visibleProperties = <_EvaluatedProperty<dynamic>>[];
+    for (final descriptor in descriptors) {
+      if (hiddenPropertyIds.contains(descriptor.id)) {
+        continue;
       }
-
-      if (property.id == PropertyIds.textStrokeColor &&
-          _isStrokeColorHidden(
-            visibility.textStrokeWidth,
-            visibility.textStrokeDefaultWidth,
-          )) {
-        return false;
+      final evaluated = evaluateById(descriptor.id);
+      if (evaluated != null) {
+        visibleProperties.add(evaluated);
       }
-
-      if (property.id == PropertyIds.highlightTextStrokeColor &&
-          _isStrokeColorHidden(
-            visibility.highlightTextStrokeWidth,
-            visibility.highlightTextStrokeDefaultWidth,
-          )) {
-        return false;
-      }
-
-      if (property.id == PropertyIds.cornerRadius &&
-          _isCornerRadiusHidden(context, visibility.fillColor)) {
-        return false;
-      }
-
-      if (property.id == PropertyIds.filterStrength &&
-          _isFilterStrengthHidden(
-            visibility.filterType,
-            visibility.filterDefaultType,
-          )) {
-        return false;
-      }
-
-      return true;
-    }).toList();
+    }
+    return visibleProperties;
   }
 
   _EvaluatedProperty<dynamic> _evaluateProperty(
@@ -1638,10 +1630,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
   );
 
   _ResolvedPropertyValue<T> _readProperty<T>(
-    Map<String, _EvaluatedProperty<dynamic>> propertiesById,
-    String propertyId,
+    _EvaluatedProperty<dynamic>? property,
   ) {
-    final property = propertiesById[propertyId];
     if (property == null) {
       return _ResolvedPropertyValue<T>();
     }
@@ -2245,27 +2235,6 @@ class _ResolvedPropertyValue<T> {
 
   final MixedValue<T>? value;
   final T? defaultValue;
-}
-
-@immutable
-class _PropertyVisibilitySnapshot {
-  const _PropertyVisibilitySnapshot({
-    required this.fillColor,
-    required this.textStrokeWidth,
-    required this.textStrokeDefaultWidth,
-    required this.highlightTextStrokeWidth,
-    required this.highlightTextStrokeDefaultWidth,
-    required this.filterType,
-    required this.filterDefaultType,
-  });
-
-  final MixedValue<Color>? fillColor;
-  final MixedValue<double>? textStrokeWidth;
-  final double? textStrokeDefaultWidth;
-  final MixedValue<double>? highlightTextStrokeWidth;
-  final double? highlightTextStrokeDefaultWidth;
-  final MixedValue<CanvasFilterType>? filterType;
-  final CanvasFilterType? filterDefaultType;
 }
 
 @immutable
