@@ -30,11 +30,11 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v4
 
-      - name: Install Melos
-        run: dart pub global activate melos
+      - name: Install workspace dependencies
+        run: dart pub get
 
       - name: Bootstrap workspace
-        run: melos bootstrap
+        run: dart run melos bootstrap
 
       - name: Build Web app
         run: |
@@ -48,7 +48,7 @@ jobs:
           flutter build web --release --base-href "$base_href"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: apps/snow_draw/build/web
 

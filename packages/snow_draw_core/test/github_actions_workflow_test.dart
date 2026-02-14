@@ -1,0 +1,143 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late String releaseWorkflow;
+  late String deployPagesWorkflow;
+
+  setUpAll(() {
+    releaseWorkflow = _readWorkflow('release.yml');
+    deployPagesWorkflow = _readWorkflow('deploy-pages.yml');
+  });
+
+  group('release workflow baseline behavior', () {
+    test('still builds windows and web artifacts from semantic tags', () {
+      expect(releaseWorkflow, contains('tags:'));
+      expect(releaseWorkflow, contains("- 'v*.*.*'"));
+      expect(releaseWorkflow, contains('workflow_dispatch:'));
+      expect(releaseWorkflow, contains('flutter build windows --release'));
+      expect(releaseWorkflow, contains('flutter build web --release'));
+      expect(releaseWorkflow, contains('snow_draw-windows-x64.zip'));
+      expect(releaseWorkflow, contains('snow_draw-web.tar.gz'));
+    });
+
+    test('still creates a draft GitHub release with both assets', () {
+      expect(releaseWorkflow, contains('softprops/action-gh-release@v1'));
+      expect(releaseWorkflow, contains('draft: true'));
+      expect(releaseWorkflow, contains('name: Download Windows artifact'));
+      expect(releaseWorkflow, contains('name: Download Web artifact'));
+    });
+  });
+
+  group('release workflow hardening', () {
+    test('validates manual version input before creating release', () {
+      expect(releaseWorkflow, contains('name: Validate version format'));
+      expect(releaseWorkflow, contains('Invalid version'));
+      expect(releaseWorkflow, contains(r'^v[0-9]+\.[0-9]+\.[0-9]+'));
+      expect(releaseWorkflow, contains(r'(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?'));
+      expect(
+        releaseWorkflow,
+        contains(r'(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?'),
+      );
+    });
+
+    test('uses repository-derived GitHub Pages URL in release notes', () {
+      expect(releaseWorkflow, contains('const pagesUrl ='));
+      expect(releaseWorkflow, contains('context.repo.owner'));
+      expect(releaseWorkflow, contains('context.repo.repo'));
+      expect(
+        releaseWorkflow,
+        isNot(contains('https://mg-chao.github.io/snow_draw/')),
+      );
+    });
+
+    test('fails fast when expected build artifacts are missing', () {
+      final strictUploadCount = _countMatches(
+        releaseWorkflow,
+        'if-no-files-found: error',
+      );
+      expect(strictUploadCount, greaterThanOrEqualTo(2));
+    });
+
+    test('uses workspace-local melos commands', () {
+      final bootstrapCount = _countMatches(
+        releaseWorkflow,
+        'dart run melos bootstrap',
+      );
+      expect(bootstrapCount, greaterThanOrEqualTo(2));
+      expect(
+        releaseWorkflow,
+        isNot(contains('dart pub global activate melos')),
+      );
+    });
+  });
+
+  group('deploy pages workflow optimization', () {
+    test('uses current pages artifact action version', () {
+      expect(deployPagesWorkflow, contains('actions/upload-pages-artifact@v4'));
+    });
+
+    test('uses workspace-local melos commands', () {
+      expect(deployPagesWorkflow, contains('dart run melos bootstrap'));
+      expect(
+        deployPagesWorkflow,
+        isNot(contains('dart pub global activate melos')),
+      );
+    });
+  });
+}
+
+String _readWorkflow(String workflowFileName) {
+  final repoRoot = _findRepoRoot();
+  final workflowFile = File(
+    _joinPath([repoRoot.path, '.github', 'workflows', workflowFileName]),
+  );
+
+  if (!workflowFile.existsSync()) {
+    throw StateError('Workflow file not found: ${workflowFile.path}');
+  }
+
+  return workflowFile.readAsStringSync();
+}
+
+Directory _findRepoRoot() {
+  var directory = Directory.current;
+
+  while (true) {
+    final releaseWorkflow = File(
+      _joinPath([directory.path, '.github', 'workflows', 'release.yml']),
+    );
+
+    if (releaseWorkflow.existsSync()) {
+      return directory;
+    }
+
+    final parent = directory.parent;
+    if (parent.path == directory.path) {
+      throw StateError(
+        'Unable to locate repository root from ${Directory.current.path}.',
+      );
+    }
+
+    directory = parent;
+  }
+}
+
+String _joinPath(List<String> segments) =>
+    segments.join(Platform.pathSeparator);
+
+int _countMatches(String text, String needle) {
+  var count = 0;
+  var start = 0;
+
+  while (true) {
+    final matchIndex = text.indexOf(needle, start);
+    if (matchIndex == -1) {
+      return count;
+    }
+
+    count += 1;
+    start = matchIndex + needle.length;
+  }
+}
