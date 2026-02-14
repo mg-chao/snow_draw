@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../services/element_index_service.dart';
 import '../../services/selection_geometry_resolver.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
@@ -50,10 +49,10 @@ SelectionPreview? buildSelectionPreview({
   }
 
   final selectedIds = context.selectedIdsAtStart;
-  final index = ElementIndexService(state.domain.document.elements);
+  final elementMap = state.domain.document.elementMap;
   final selectedElements = <ElementState>[];
   for (final id in selectedIds) {
-    final element = previewElementsById[id] ?? index[id];
+    final element = previewElementsById[id] ?? elementMap[id];
     if (element != null) {
       selectedElements.add(element);
     }

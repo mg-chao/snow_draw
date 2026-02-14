@@ -1,8 +1,10 @@
 import '../../../actions/draw_actions.dart';
 import '../../../actions/history_policy.dart';
+import '../../../elements/types/arrow/arrow_like_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
+import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../history_change_set.dart';
 import '../../snapshot.dart';
@@ -359,23 +361,25 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is DeleteElements) {
-      final removedIds = action.elementIds.toSet();
-      final modifiedIds = <String>{};
       final beforeElements = context.initialState.domain.document.elements;
+      final removedIds = action.elementIds.toSet();
+      _expandDeleteIdsForBoundSerialText(
+        elements: beforeElements,
+        removedIds: removedIds,
+      );
+      final modifiedIds = <String>{};
       for (final element in beforeElements) {
-        final data = element.data;
-        if (data is! SerialNumberData) {
-          continue;
-        }
-        final boundId = data.textElementId;
-        if (boundId == null) {
-          continue;
-        }
         if (removedIds.contains(element.id)) {
-          removedIds.add(boundId);
           continue;
         }
-        if (removedIds.contains(boundId)) {
+        final data = element.data;
+        if (data is SerialNumberData) {
+          final boundId = data.textElementId;
+          if (boundId != null && removedIds.contains(boundId)) {
+            modifiedIds.add(element.id);
+          }
+        }
+        if (_isArrowBindingAffected(data: data, removedIds: removedIds)) {
           modifiedIds.add(element.id);
         }
       }
@@ -438,5 +442,44 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     return null;
+  }
+
+  void _expandDeleteIdsForBoundSerialText({
+    required Iterable<ElementState> elements,
+    required Set<String> removedIds,
+  }) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final element in elements) {
+        if (!removedIds.contains(element.id)) {
+          continue;
+        }
+        final data = element.data;
+        if (data is! SerialNumberData) {
+          continue;
+        }
+        final boundId = data.textElementId;
+        if (boundId == null) {
+          continue;
+        }
+        if (removedIds.add(boundId)) {
+          changed = true;
+        }
+      }
+    }
+  }
+
+  bool _isArrowBindingAffected({
+    required Object data,
+    required Set<String> removedIds,
+  }) {
+    if (data is! ArrowLikeData) {
+      return false;
+    }
+    final startTarget = data.startBinding?.elementId;
+    final endTarget = data.endBinding?.elementId;
+    return (startTarget != null && removedIds.contains(startTarget)) ||
+        (endTarget != null && removedIds.contains(endTarget));
   }
 }

@@ -31,7 +31,7 @@ class DocumentState {
   ///
   /// Avoids an O(n) scan of all elements on every hit test when
   /// the serial-number tool is active.
-  late final Set<String> boundTextIds = _buildBoundTextIds();
+  late final boundTextIds = Set<String>.unmodifiable(_buildBoundTextIds());
 
   Map<String, ElementState> get elementMap => _elementMap;
 

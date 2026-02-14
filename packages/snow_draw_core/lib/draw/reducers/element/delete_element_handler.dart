@@ -28,24 +28,32 @@ DrawState handleDeleteElements(
     return state;
   }
 
-  final updatedSerials = <String, ElementState>{};
+  _expandDeleteIdsForBoundSerialText(
+    elements: document.elements,
+    deleteIds: deleteIds,
+  );
+
+  final updatedElements = <String, ElementState>{};
   for (final element in document.elements) {
-    final data = element.data;
-    if (data is! SerialNumberData) {
-      continue;
-    }
-    final boundId = data.textElementId;
-    if (boundId == null) {
-      continue;
-    }
     if (deleteIds.contains(element.id)) {
-      deleteIds.add(boundId);
       continue;
     }
-    if (deleteIds.contains(boundId)) {
-      updatedSerials[element.id] = element.copyWith(
-        data: data.copyWith(textElementId: null),
-      );
+
+    final serialUpdate = _resolveSerialUnbindUpdate(
+      element: element,
+      deleteIds: deleteIds,
+    );
+    if (serialUpdate != null) {
+      updatedElements[element.id] = serialUpdate;
+      continue;
+    }
+
+    final arrowUpdate = _resolveArrowUnbindUpdate(
+      element: element,
+      deleteIds: deleteIds,
+    );
+    if (arrowUpdate != null) {
+      updatedElements[element.id] = arrowUpdate;
     }
   }
 
@@ -56,11 +64,11 @@ DrawState handleDeleteElements(
       removedAny = true;
       continue;
     }
-    final updated = updatedSerials[element.id];
+    final updated = updatedElements[element.id];
     newElements.add(updated ?? element);
   }
 
-  if (!removedAny && updatedSerials.isEmpty) {
+  if (!removedAny && updatedElements.isEmpty) {
     return state;
   }
 
@@ -76,6 +84,75 @@ DrawState handleDeleteElements(
     ),
   );
   return applySelectionChange(next, newSelectedIds);
+}
+
+void _expandDeleteIdsForBoundSerialText({
+  required Iterable<ElementState> elements,
+  required Set<String> deleteIds,
+}) {
+  var changed = true;
+  while (changed) {
+    changed = false;
+    for (final element in elements) {
+      if (!deleteIds.contains(element.id)) {
+        continue;
+      }
+      final data = element.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final boundId = data.textElementId;
+      if (boundId == null) {
+        continue;
+      }
+      if (deleteIds.add(boundId)) {
+        changed = true;
+      }
+    }
+  }
+}
+
+ElementState? _resolveSerialUnbindUpdate({
+  required ElementState element,
+  required Set<String> deleteIds,
+}) {
+  final data = element.data;
+  if (data is! SerialNumberData) {
+    return null;
+  }
+  final boundId = data.textElementId;
+  if (boundId == null || !deleteIds.contains(boundId)) {
+    return null;
+  }
+  return element.copyWith(data: data.copyWith(textElementId: null));
+}
+
+ElementState? _resolveArrowUnbindUpdate({
+  required ElementState element,
+  required Set<String> deleteIds,
+}) {
+  final data = element.data;
+  if (data is! ArrowLikeData) {
+    return null;
+  }
+
+  final startBinding = data.startBinding;
+  final endBinding = data.endBinding;
+  final clearStart =
+      startBinding != null && deleteIds.contains(startBinding.elementId);
+  final clearEnd =
+      endBinding != null && deleteIds.contains(endBinding.elementId);
+  if (!clearStart && !clearEnd) {
+    return null;
+  }
+
+  final nextData = data.copyWith(
+    startBinding: clearStart ? null : startBinding,
+    endBinding: clearEnd ? null : endBinding,
+    startIsSpecial: clearStart ? null : data.startIsSpecial,
+    endIsSpecial: clearEnd ? null : data.endIsSpecial,
+  );
+  return element.copyWith(data: nextData);
 }
 
 DrawState handleDuplicateElements(
@@ -97,8 +174,9 @@ DrawState handleDuplicateElements(
   }
 
   final index = state.domain.document.elementMap;
-  final idsToDuplicate = <String>{...action.elementIds};
-  for (final id in action.elementIds) {
+  final selectedIds = action.elementIds.toSet();
+  final idsToDuplicate = <String>{...selectedIds};
+  for (final id in selectedIds) {
     final element = index[id];
     final data = element?.data;
     if (data is SerialNumberData) {
@@ -158,7 +236,7 @@ DrawState handleDuplicateElements(
       data: nextData,
     );
     newElements.add(duplicated);
-    if (action.elementIds.contains(element.id)) {
+    if (selectedIds.contains(element.id)) {
       newSelectedIds.add(newId);
     }
   }

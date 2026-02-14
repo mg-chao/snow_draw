@@ -3,6 +3,8 @@ import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
@@ -12,6 +14,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -319,6 +322,65 @@ void main() {
         expect(other, isNotNull);
         expect(serial!.data, isA<SerialNumberData>());
         expect((serial.data as SerialNumberData).textElementId, 'text');
+      },
+    );
+
+    test(
+      'undo restores arrow binding when deleting a bound target element',
+      () async {
+        final store = _createStore(
+          initialState: DrawState(
+            domain: DomainState(
+              document: DocumentState(
+                elements: const [
+                  ElementState(
+                    id: 'target',
+                    rect: DrawRect(maxX: 50, maxY: 50),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 0,
+                    data: FilterData(),
+                  ),
+                  ElementState(
+                    id: 'arrow',
+                    rect: DrawRect(minX: 60, maxX: 120, maxY: 40),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 1,
+                    data: ArrowData(
+                      startBinding: ArrowBinding(
+                        elementId: 'target',
+                        anchor: DrawPoint(x: 0.5, y: 0.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              selection: const SelectionState(selectedIds: {'target'}),
+            ),
+          ),
+        );
+        addTearDown(store.dispose);
+
+        await store.dispatch(DeleteElements(elementIds: ['target']));
+
+        final afterDeleteArrow = store.state.domain.document.getElementById(
+          'arrow',
+        );
+        expect(afterDeleteArrow, isNotNull);
+        expect(afterDeleteArrow!.data, isA<ArrowData>());
+        expect((afterDeleteArrow.data as ArrowData).startBinding, isNull);
+
+        await store.dispatch(const Undo());
+
+        final restoredArrow = store.state.domain.document.getElementById(
+          'arrow',
+        );
+        expect(restoredArrow, isNotNull);
+        final restoredData = restoredArrow!.data as ArrowData;
+        expect(restoredData.startBinding, isNotNull);
+        expect(restoredData.startBinding!.elementId, 'target');
+        expect(store.state.domain.document.getElementById('target'), isNotNull);
       },
     );
   });
