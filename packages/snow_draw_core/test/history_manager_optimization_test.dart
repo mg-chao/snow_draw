@@ -52,6 +52,61 @@ void main() {
       expect(() => HistoryManager(maxHistoryLength: 0), throwsArgumentError);
       expect(() => HistoryManager(maxBranchPoints: -1), throwsArgumentError);
     });
+
+    test('restore normalizes stale nextNodeId before recording', () {
+      final manager = HistoryManager(maxHistoryLength: 10, maxBranchPoints: 2);
+      var state = _stateAt(0);
+
+      void recordTo(int step) {
+        final next = _stateAt(step);
+        expect(
+          manager.record(
+            _snapshot(state),
+            _snapshot(next),
+            metadata: HistoryMetadata(
+              description: 'step-$step',
+              recordType: HistoryRecordType.edit,
+            ),
+          ),
+          isTrue,
+        );
+        state = next;
+      }
+
+      recordTo(1);
+
+      final snapshotJson = manager.snapshot().toJson()..['nextNodeId'] = 1;
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final restoredSnapshot = HistoryManagerSnapshot.fromJson(
+        snapshotJson,
+        elementRegistry: registry,
+      );
+
+      final restored = HistoryManager(maxHistoryLength: 10, maxBranchPoints: 2)
+        ..restore(restoredSnapshot);
+      final nextState = _stateAt(2);
+      expect(
+        restored.record(
+          _snapshot(state),
+          _snapshot(nextState),
+          metadata: HistoryMetadata(
+            description: 'step-2',
+            recordType: HistoryRecordType.edit,
+          ),
+        ),
+        isTrue,
+      );
+
+      final nodeIds = _nodesFromSnapshot(
+        restored.snapshot().toJson(),
+      ).map((node) => node['id'] as int).toList();
+      expect(
+        nodeIds.toSet().length,
+        nodeIds.length,
+        reason: 'History node ids should stay unique after restore+record',
+      );
+    });
   });
 
   group('History root normalization', () {
@@ -228,6 +283,10 @@ Map<String, dynamic> _nodeById(Map<String, dynamic> snapshotJson, int nodeId) {
       .cast<Map<String, dynamic>>();
   return nodes.singleWhere((node) => node['id'] == nodeId);
 }
+
+List<Map<String, dynamic>> _nodesFromSnapshot(
+  Map<String, dynamic> snapshotJson,
+) => (snapshotJson['nodes'] as List<dynamic>).cast<Map<String, dynamic>>();
 
 int _stateStep(DrawState state) =>
     state.domain.document.elements.single.rect.minX.round();

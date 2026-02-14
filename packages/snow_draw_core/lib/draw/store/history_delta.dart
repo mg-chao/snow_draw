@@ -59,27 +59,19 @@ class HistoryDelta {
     final afterElements = <String, ElementState>{};
 
     // Reordering actions can implicitly update many elements (for example
-    // z-index reindexing), so the single-element shortcut is only safe when
+    // z-index reindexing), so targeted element diffing is only safe when
     // order is unchanged.
-    final useSingleElementShortcut =
-        changes != null &&
-        changes.isSingleElementChange &&
-        !changes.orderChanged;
+    final useTargetedElementDiff =
+        changes != null && changes.hasElementChanges && !changes.orderChanged;
 
-    if (useSingleElementShortcut) {
-      final id = changes.allElementIds.first;
-      final beforeElement = beforeById[id];
-      final afterElement = afterById[id];
-      if (beforeElement != null && afterElement == null) {
-        beforeElements[id] = beforeElement;
-      } else if (beforeElement == null && afterElement != null) {
-        afterElements[id] = afterElement;
-      } else if (beforeElement != null &&
-          afterElement != null &&
-          beforeElement != afterElement) {
-        beforeElements[id] = beforeElement;
-        afterElements[id] = afterElement;
-      }
+    if (useTargetedElementDiff) {
+      _collectChangedElementsById(
+        beforeById: beforeById,
+        afterById: afterById,
+        changedIds: changes.allElementIds,
+        beforeElements: beforeElements,
+        afterElements: afterElements,
+      );
     } else {
       for (final entry in beforeById.entries) {
         final afterElement = afterById[entry.key];
@@ -218,6 +210,34 @@ class HistoryDelta {
         selectionOverlay: SelectionOverlayState.empty,
       ),
     );
+  }
+}
+
+void _collectChangedElementsById({
+  required Map<String, ElementState> beforeById,
+  required Map<String, ElementState> afterById,
+  required Set<String> changedIds,
+  required Map<String, ElementState> beforeElements,
+  required Map<String, ElementState> afterElements,
+}) {
+  for (final id in changedIds) {
+    final beforeElement = beforeById[id];
+    final afterElement = afterById[id];
+
+    if (beforeElement != null && afterElement != null) {
+      if (beforeElement != afterElement) {
+        beforeElements[id] = beforeElement;
+        afterElements[id] = afterElement;
+      }
+      continue;
+    }
+
+    if (beforeElement != null) {
+      beforeElements[id] = beforeElement;
+    }
+    if (afterElement != null) {
+      afterElements[id] = afterElement;
+    }
   }
 }
 

@@ -218,7 +218,10 @@ class HistoryManager {
     _root = clone.root;
     _normalizeRootPayload();
     _current = clone.byId[snapshot._currentId] ?? _root;
-    _nextNodeId = snapshot._nextNodeId;
+    _nextNodeId = _resolveNextNodeId(
+      requestedNextNodeId: snapshot._nextNodeId,
+      minNextNodeId: _maxNodeId(_root) + 1,
+    );
   }
 
   /// Returns the path from root to the given node.
@@ -531,9 +534,13 @@ class _HistorySnapshotCodec {
 
     final rootId = json['rootId'] as int? ?? 0;
     final currentId = json['currentId'] as int? ?? rootId;
-    final nextNodeId =
-        json['nextNodeId'] as int? ??
-        (byId.isEmpty ? 1 : (byId.keys.reduce((a, b) => a > b ? a : b) + 1));
+    final maxNodeId = byId.isEmpty
+        ? rootId
+        : byId.keys.reduce((a, b) => a > b ? a : b);
+    final nextNodeId = _resolveNextNodeId(
+      requestedNextNodeId: json['nextNodeId'] as int?,
+      minNextNodeId: maxNodeId + 1,
+    );
 
     final root = (byId[rootId] ?? _HistoryNode.root(rootId))
       ..parent = null
@@ -775,3 +782,28 @@ class _HistorySnapshotCodec {
 }
 
 final _historySnapshotCodec = _HistorySnapshotCodec();
+
+int _resolveNextNodeId({
+  required int? requestedNextNodeId,
+  required int minNextNodeId,
+}) {
+  final fallback = minNextNodeId < 0 ? 0 : minNextNodeId;
+  final resolved = requestedNextNodeId ?? fallback;
+  if (resolved < fallback) {
+    return fallback;
+  }
+  return resolved;
+}
+
+int _maxNodeId(_HistoryNode root) {
+  var maxId = root.id;
+  final stack = <_HistoryNode>[root];
+  while (stack.isNotEmpty) {
+    final node = stack.removeLast();
+    if (node.id > maxId) {
+      maxId = node.id;
+    }
+    stack.addAll(node.children);
+  }
+  return maxId;
+}
