@@ -17,11 +17,18 @@ class HighlightMaskConfig {
   /// Mask opacity multiplier applied to [maskColor].
   final double maskOpacity;
 
-  HighlightMaskConfig copyWith({Color? maskColor, double? maskOpacity}) =>
-      HighlightMaskConfig(
-        maskColor: maskColor ?? this.maskColor,
-        maskOpacity: maskOpacity ?? this.maskOpacity,
-      );
+  HighlightMaskConfig copyWith({Color? maskColor, double? maskOpacity}) {
+    final nextMaskColor = maskColor ?? this.maskColor;
+    final nextMaskOpacity = maskOpacity ?? this.maskOpacity;
+    if (nextMaskColor == this.maskColor &&
+        nextMaskOpacity == this.maskOpacity) {
+      return this;
+    }
+    return HighlightMaskConfig(
+      maskColor: nextMaskColor,
+      maskOpacity: nextMaskOpacity,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

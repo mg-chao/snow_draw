@@ -8,8 +8,13 @@ class CanvasConfig {
   /// Background color of the canvas.
   final Color backgroundColor;
 
-  CanvasConfig copyWith({Color? backgroundColor}) =>
-      CanvasConfig(backgroundColor: backgroundColor ?? this.backgroundColor);
+  CanvasConfig copyWith({Color? backgroundColor}) {
+    final nextBackgroundColor = backgroundColor ?? this.backgroundColor;
+    if (nextBackgroundColor == this.backgroundColor) {
+      return this;
+    }
+    return CanvasConfig(backgroundColor: nextBackgroundColor);
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -54,12 +59,24 @@ class BoxSelectionConfig {
     double? fillOpacity,
     Color? strokeColor,
     double? strokeWidth,
-  }) => BoxSelectionConfig(
-    fillColor: fillColor ?? this.fillColor,
-    fillOpacity: fillOpacity ?? this.fillOpacity,
-    strokeColor: strokeColor ?? this.strokeColor,
-    strokeWidth: strokeWidth ?? this.strokeWidth,
-  );
+  }) {
+    final nextFillColor = fillColor ?? this.fillColor;
+    final nextFillOpacity = fillOpacity ?? this.fillOpacity;
+    final nextStrokeColor = strokeColor ?? this.strokeColor;
+    final nextStrokeWidth = strokeWidth ?? this.strokeWidth;
+    if (nextFillColor == this.fillColor &&
+        nextFillOpacity == this.fillOpacity &&
+        nextStrokeColor == this.strokeColor &&
+        nextStrokeWidth == this.strokeWidth) {
+      return this;
+    }
+    return BoxSelectionConfig(
+      fillColor: nextFillColor,
+      fillOpacity: nextFillOpacity,
+      strokeColor: nextStrokeColor,
+      strokeWidth: nextStrokeWidth,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>
