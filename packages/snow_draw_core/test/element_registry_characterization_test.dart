@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_definition.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_definition.dart';
@@ -80,6 +81,46 @@ void main() {
       expect(cloned.get(rectangleDefinition.typeId), isNotNull);
       expect(cloned.get(lineDefinition.typeId), isNull);
       expect(registry.get(arrowDefinition.typeId), isNull);
+    });
+
+    test(
+      'typed lookup with mismatched generic does not throw and returns null',
+      () {
+        final registry = DefaultElementRegistry();
+        registerBuiltInElements(registry);
+
+        const mismatched = ElementTypeId<LineData>('rectangle');
+
+        expect(() => registry.getDefinition(mismatched), returnsNormally);
+        expect(registry.getDefinition(mismatched), isNull);
+      },
+    );
+
+    test('supports honors generic type when value matches another element', () {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+
+      const mismatched = ElementTypeId<LineData>('rectangle');
+
+      expect(registry.supports(mismatched), isFalse);
+    });
+
+    test('require throws StateError for mismatched generic lookups', () {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+
+      const mismatched = ElementTypeId<LineData>('rectangle');
+
+      expect(
+        () => registry.require(mismatched),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('not registered'),
+          ),
+        ),
+      );
     });
   });
 }

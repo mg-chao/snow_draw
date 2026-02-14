@@ -27,12 +27,12 @@ class DefaultElementRegistry implements ElementRegistry {
   }
 
   ElementDefinition<T>? get<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _definitionsByTypeValue[typeId.value] as ElementDefinition<T>?;
+      _getTypedDefinition(typeId.value);
 
   @override
   ElementDefinition<T>? getDefinition<T extends ElementData>(
     ElementTypeId<T> typeId,
-  ) => _definitionsByTypeValue[typeId.value] as ElementDefinition<T>?;
+  ) => _getTypedDefinition(typeId.value);
 
   @override
   ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
@@ -40,18 +40,18 @@ class DefaultElementRegistry implements ElementRegistry {
 
   @override
   bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _definitionsByTypeValue.containsKey(typeId.value);
+      _getTypedDefinition<T>(typeId.value) != null;
 
   @override
   bool supportsTypeValue(String typeValue) =>
       _definitionsByTypeValue.containsKey(typeValue);
 
   ElementDefinition<T> require<T extends ElementData>(ElementTypeId<T> typeId) {
-    final definition = _definitionsByTypeValue[typeId.value];
+    final definition = _getTypedDefinition<T>(typeId.value);
     if (definition == null) {
       throw StateError('Element type "${typeId.value}" is not registered');
     }
-    return definition as ElementDefinition<T>;
+    return definition;
   }
 
   ElementTypeRenderer getRenderer<T extends ElementData>(
@@ -81,5 +81,15 @@ class DefaultElementRegistry implements ElementRegistry {
       cloned._definitionsByTypeValue[definition.typeId.value] = definition;
     }
     return cloned;
+  }
+
+  ElementDefinition<T>? _getTypedDefinition<T extends ElementData>(
+    String typeValue,
+  ) {
+    final definition = _definitionsByTypeValue[typeValue];
+    if (definition is ElementDefinition<T>) {
+      return definition;
+    }
+    return null;
   }
 }

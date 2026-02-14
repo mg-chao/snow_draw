@@ -181,6 +181,7 @@ class HitTest {
       config: config,
       tolerance: actualTolerance,
       filterTypeId: filterTypeId,
+      registry: registry,
       positionX: quantizedX,
       positionY: quantizedY,
     );
@@ -247,6 +248,7 @@ class HitTest {
             config: config,
             tolerance: actualTolerance,
             filterTypeId: filterTypeId,
+            registry: registry,
             positionX: quantizedX,
             positionY: quantizedY,
           );
@@ -287,6 +289,7 @@ class HitTest {
         config: config,
         tolerance: actualTolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: quantizedX,
         positionY: quantizedY,
       );
@@ -309,6 +312,7 @@ class HitTest {
           config: config,
           tolerance: actualTolerance,
           filterTypeId: filterTypeId,
+          registry: registry,
           positionX: quantizedX,
           positionY: quantizedY,
         );
@@ -324,6 +328,7 @@ class HitTest {
       config: config,
       tolerance: actualTolerance,
       filterTypeId: filterTypeId,
+      registry: registry,
       positionX: quantizedX,
       positionY: quantizedY,
     );
@@ -567,6 +572,7 @@ class HitTest {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) {
@@ -576,6 +582,7 @@ class HitTest {
         config: config,
         tolerance: tolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: positionX,
         positionY: positionY,
         result: result,
@@ -773,6 +780,7 @@ class _HitTestCacheEntry {
     required this.config,
     required this.tolerance,
     required this.filterTypeId,
+    required this.registry,
     required this.positionX,
     required this.positionY,
     required this.result,
@@ -782,6 +790,7 @@ class _HitTestCacheEntry {
   final SelectionConfig config;
   final double tolerance;
   final ElementTypeId<ElementData>? filterTypeId;
+  final ElementRegistry registry;
   final int positionX;
   final int positionY;
   final HitTestResult result;
@@ -791,6 +800,7 @@ class _HitTestCacheEntry {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) =>
@@ -799,6 +809,7 @@ class _HitTestCacheEntry {
       this.positionY == positionY &&
       this.tolerance == tolerance &&
       this.filterTypeId == filterTypeId &&
+      identical(this.registry, registry) &&
       this.config == config;
 }
 
@@ -810,6 +821,7 @@ class _HitTestCache {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) {
@@ -820,6 +832,7 @@ class _HitTestCache {
         config: config,
         tolerance: tolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: positionX,
         positionY: positionY,
       )) {
