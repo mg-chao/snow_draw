@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: "Release version (e.g., v1.0.0)"
         required: true
         type: string
 
@@ -19,7 +19,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install workspace dependencies
+        run: dart pub get
+
+      - name: Bootstrap workspace
+        run: dart run melos bootstrap
+
+      - name: Run static analysis
+        run: dart run melos run analyze
+
+      - name: Run formatting checks
+        run: dart run melos run format:check
+
+      - name: Run test suite
+        run: dart run melos run test
+
   build-windows:
+    needs: quality-gate
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -28,7 +57,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: beta
+          channel: stable
           cache: true
       - run: flutter --version
 
@@ -57,6 +86,7 @@ jobs:
           retention-days: 14
 
   build-web:
+    needs: quality-gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -65,7 +95,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: beta
+          channel: stable
           cache: true
 
       - name: Install workspace dependencies
@@ -93,11 +123,16 @@ jobs:
           retention-days: 14
 
   create-release:
-    needs: [build-windows, build-web]
+    needs: [quality-gate, build-windows, build-web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -123,6 +158,26 @@ jobs:
           if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
             echo "Invalid version '$version'. Expected vMAJOR.MINOR.PATCH with optional pre-release and build metadata suffixes."
             exit 1
+          fi
+
+      - name: Validate tag availability
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          git fetch --tags --force
+          if git show-ref --verify --quiet "refs/tags/$version"; then
+            echo "Tag '$version' already exists. Please provide a new version."
+            exit 1
+          fi
+
+      - name: Derive release channel
+        id: release_channel
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate Release Notes
@@ -180,7 +235,7 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Release ${{ steps.get_version.outputs.version }}
           draft: true
-          prerelease: false
+          prerelease: ${{ steps.release_channel.outputs.prerelease }}
           files: |
             snow_draw-windows-x64.zip
             snow_draw-web.tar.gz

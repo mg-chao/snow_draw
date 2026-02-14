@@ -71,6 +71,58 @@ void main() {
         isNot(contains('dart pub global activate melos')),
       );
     });
+
+    test('uses stable Flutter channel for deterministic CI builds', () {
+      final stableChannelCount = _countMatches(
+        releaseWorkflow,
+        'channel: stable',
+      );
+      expect(stableChannelCount, greaterThanOrEqualTo(3));
+      expect(releaseWorkflow, isNot(contains('channel: beta')));
+    });
+
+    test('runs quality gates before platform-specific build jobs', () {
+      expect(releaseWorkflow, contains('quality-gate:'));
+      expect(
+        releaseWorkflow,
+        contains('needs: [quality-gate, build-windows, build-web]'),
+      );
+      final qualityGateDependencyCount = _countMatches(
+        releaseWorkflow,
+        'needs: quality-gate',
+      );
+      expect(qualityGateDependencyCount, greaterThanOrEqualTo(2));
+      expect(releaseWorkflow, contains('dart run melos run analyze'));
+      expect(releaseWorkflow, contains('dart run melos run format:check'));
+      expect(releaseWorkflow, contains('dart run melos run test'));
+    });
+
+    test('derives prerelease flag from version string', () {
+      expect(releaseWorkflow, contains('name: Derive release channel'));
+      expect(releaseWorkflow, contains('prerelease=true'));
+      expect(releaseWorkflow, contains('prerelease=false'));
+      expect(
+        releaseWorkflow,
+        contains(
+          r'prerelease: ${{ steps.release_channel.outputs.prerelease }}',
+        ),
+      );
+    });
+
+    test('prevents manual releases from overwriting existing tags', () {
+      expect(releaseWorkflow, contains('name: Validate tag availability'));
+      expect(
+        releaseWorkflow,
+        contains("if: github.event_name == 'workflow_dispatch'"),
+      );
+      expect(releaseWorkflow, contains('git fetch --tags --force'));
+      expect(
+        releaseWorkflow,
+        contains(r'git show-ref --verify --quiet "refs/tags/$version"'),
+      );
+      expect(releaseWorkflow, contains('already exists'));
+      expect(releaseWorkflow, contains('fetch-depth: 0'));
+    });
   });
 
   group('deploy pages workflow optimization', () {
@@ -84,6 +136,11 @@ void main() {
         deployPagesWorkflow,
         isNot(contains('dart pub global activate melos')),
       );
+    });
+
+    test('uses stable Flutter channel for deterministic deployments', () {
+      expect(deployPagesWorkflow, contains('channel: stable'));
+      expect(deployPagesWorkflow, isNot(contains('channel: beta')));
     });
   });
 }
