@@ -13,6 +13,7 @@ import 'plugin_registry.dart';
 class PluginInputCoordinator {
   static const _processingFailureReason = 'Input processing failed';
   static const _coalescedEventMessage = 'Event coalesced by coordinator';
+  static const _pressureCoalescingTolerance = 1e-4;
 
   PluginInputCoordinator({
     required PluginContext pluginContext,
@@ -89,7 +90,18 @@ class PluginInputCoordinator {
   bool _canCoalesce(InputEvent previousEvent, InputEvent nextEvent) =>
       previousEvent.runtimeType == nextEvent.runtimeType &&
       _isCoalescibleEvent(previousEvent) &&
-      previousEvent.modifiers == nextEvent.modifiers;
+      previousEvent.modifiers == nextEvent.modifiers &&
+      _isPressureCompatible(previousEvent, nextEvent);
+
+  bool _isPressureCompatible(InputEvent previousEvent, InputEvent nextEvent) {
+    final previousPressure = previousEvent.pressure;
+    final nextPressure = nextEvent.pressure;
+    if (previousPressure == 0 || nextPressure == 0) {
+      return previousPressure == nextPressure;
+    }
+    return (previousPressure - nextPressure).abs() <=
+        _pressureCoalescingTolerance;
+  }
 
   bool _isCoalescibleEvent(InputEvent event) =>
       event is PointerMoveInputEvent || event is PointerHoverInputEvent;

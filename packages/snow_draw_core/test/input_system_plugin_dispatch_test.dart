@@ -469,6 +469,106 @@ void main() {
         await coordinator.dispose();
       },
     );
+
+    test(
+      'does not coalesce pointer move events when pressure differs',
+      () async {
+        final context = _createPluginContext();
+        final coordinator = PluginInputCoordinator(pluginContext: context);
+        final firstEventGate = Completer<void>();
+        final plugin = _CoalescingProbePlugin(
+          pauseOnFirstEvent: firstEventGate,
+        );
+
+        await coordinator.registry.register(plugin);
+
+        final firstFuture = coordinator.handleEvent(
+          _pointerMove(x: 1, pressure: 0.2),
+        );
+        await plugin.firstEventStarted.future;
+
+        final secondFuture = coordinator.handleEvent(
+          _pointerMove(x: 2, pressure: 0.5),
+        );
+        final thirdFuture = coordinator.handleEvent(
+          _pointerMove(x: 3, pressure: 0.8),
+        );
+
+        firstEventGate.complete();
+
+        expect(
+          await firstFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await secondFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await thirdFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+
+        final processedMoves = plugin.events.whereType<PointerMoveInputEvent>();
+        expect(processedMoves, hasLength(3));
+        expect(processedMoves.map((event) => event.pressure).toList(), [
+          0.2,
+          0.5,
+          0.8,
+        ]);
+        expect(coordinator.getStats()['coalescedEvents'], 0);
+
+        await coordinator.dispose();
+      },
+    );
+
+    test(
+      'does not coalesce when one pointer move has unknown pressure',
+      () async {
+        final context = _createPluginContext();
+        final coordinator = PluginInputCoordinator(pluginContext: context);
+        final firstEventGate = Completer<void>();
+        final plugin = _CoalescingProbePlugin(
+          pauseOnFirstEvent: firstEventGate,
+        );
+
+        await coordinator.registry.register(plugin);
+
+        final firstFuture = coordinator.handleEvent(_pointerMove(x: 1));
+        await plugin.firstEventStarted.future;
+
+        final secondFuture = coordinator.handleEvent(_pointerMove(x: 2));
+        final thirdFuture = coordinator.handleEvent(
+          _pointerMove(x: 3, pressure: 0.00005),
+        );
+
+        firstEventGate.complete();
+
+        expect(
+          await firstFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await secondFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await thirdFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+
+        final processedMoves = plugin.events.whereType<PointerMoveInputEvent>();
+        expect(processedMoves, hasLength(3));
+        expect(processedMoves.map((event) => event.pressure).toList(), [
+          0,
+          0,
+          0.00005,
+        ]);
+        expect(coordinator.getStats()['coalescedEvents'], 0);
+
+        await coordinator.dispose();
+      },
+    );
   });
 
   group('PluginInputCoordinator error containment', () {
@@ -537,9 +637,11 @@ PointerMoveInputEvent _pointerMove({
   double x = 10,
   double y = 20,
   KeyModifiers modifiers = KeyModifiers.none,
+  double pressure = 0.0,
 }) => PointerMoveInputEvent(
-  position: DrawPoint(x: x, y: y),
+  position: DrawPoint(x: x, y: y, pressure: pressure),
   modifiers: modifiers,
+  pressure: pressure,
 );
 
 class _TestPlugin extends InputPluginBase {
