@@ -265,27 +265,32 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         ? element!.data as ArrowLikeData
         : null;
     final zoom = state.application.view.camera.zoom;
-    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-    final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
-    final bindingSearchDistance =
-        ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
-    final allowNewBinding =
-        snapConfig.enableArrowBinding &&
-        !modifiers.snapOverride &&
-        snappingMode != SnappingMode.grid;
-    final bindingSearchPoint = _toWorldPosition(
-      typedContext.elementRect,
-      typedContext.rotation,
-      localPosition.translate(typedContext.dragOffset),
-    );
-    final bindingTargets = element == null || bindingDistance <= 0
-        ? const <ElementState>[]
-        : _resolveBindingTargetsCached(
-            state: state,
-            context: typedContext,
-            position: bindingSearchPoint,
-            distance: bindingSearchDistance,
-          );
+    var bindingDistance = 0.0;
+    var allowNewBinding = false;
+    var bindingTargets = const <ElementState>[];
+    if (_requiresBindingLookup(typedContext)) {
+      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+      bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
+      allowNewBinding =
+          snapConfig.enableArrowBinding &&
+          !modifiers.snapOverride &&
+          snappingMode != SnappingMode.grid;
+      if (element != null && bindingDistance > 0) {
+        final bindingSearchDistance =
+            ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
+        final bindingSearchPoint = _toWorldPosition(
+          typedContext.elementRect,
+          typedContext.rotation,
+          localPosition.translate(typedContext.dragOffset),
+        );
+        bindingTargets = _resolveBindingTargetsCached(
+          state: state,
+          context: typedContext,
+          position: bindingSearchPoint,
+          distance: bindingSearchDistance,
+        );
+      }
+    }
     final result = _compute(
       context: typedContext,
       currentPosition: localPosition,
@@ -873,6 +878,16 @@ _ArrowPointComputation _compute({
     fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,
   );
 }
+
+bool _requiresBindingLookup(ArrowPointEditContext context) =>
+    switch (context.pointKind) {
+      ArrowPointKind.loopStart => true,
+      ArrowPointKind.loopEnd => true,
+      ArrowPointKind.turning =>
+        context.pointIndex == 0 ||
+            context.pointIndex == context.initialPoints.length - 1,
+      ArrowPointKind.addable => false,
+    };
 
 List<ElementState> _resolveBindingTargets(
   DrawState state,
