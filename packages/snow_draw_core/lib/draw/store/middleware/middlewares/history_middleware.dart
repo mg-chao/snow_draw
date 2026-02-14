@@ -412,7 +412,7 @@ class HistoryMiddleware extends MiddlewareBase {
         if (resolved.isNew) {
           return null;
         }
-        final modifiedIds = _serialIdsBoundToText(
+        final modifiedIds = _dependentIdsBoundToDeletedText(
           elements: context.initialState.domain.document.elements,
           textElementId: resolved.elementId,
         );
@@ -543,7 +543,7 @@ class HistoryMiddleware extends MiddlewareBase {
         (endTarget != null && targetIds.contains(endTarget));
   }
 
-  Set<String> _serialIdsBoundToText({
+  Set<String> _dependentIdsBoundToDeletedText({
     required Iterable<ElementState> elements,
     required String textElementId,
   }) {
@@ -552,8 +552,24 @@ class HistoryMiddleware extends MiddlewareBase {
       final data = element.data;
       if (data is SerialNumberData && data.textElementId == textElementId) {
         ids.add(element.id);
+        continue;
+      }
+      if (_isArrowBoundToTargetId(data: data, targetId: textElementId)) {
+        ids.add(element.id);
       }
     }
     return ids;
+  }
+
+  bool _isArrowBoundToTargetId({
+    required Object data,
+    required String targetId,
+  }) {
+    if (data is! ArrowLikeData) {
+      return false;
+    }
+    final startTarget = data.startBinding?.elementId;
+    final endTarget = data.endBinding?.elementId;
+    return startTarget == targetId || endTarget == targetId;
   }
 }
