@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -90,23 +92,33 @@ void _expandDeleteIdsForBoundSerialText({
   required Iterable<ElementState> elements,
   required Set<String> deleteIds,
 }) {
-  var changed = true;
-  while (changed) {
-    changed = false;
-    for (final element in elements) {
-      if (!deleteIds.contains(element.id)) {
-        continue;
-      }
-      final data = element.data;
-      if (data is! SerialNumberData) {
-        continue;
-      }
-      final boundId = data.textElementId;
-      if (boundId == null) {
-        continue;
-      }
+  if (deleteIds.isEmpty) {
+    return;
+  }
+
+  final serialBindings = <String, List<String>>{};
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! SerialNumberData) {
+      continue;
+    }
+    final boundId = data.textElementId;
+    if (boundId == null) {
+      continue;
+    }
+    serialBindings.putIfAbsent(element.id, () => <String>[]).add(boundId);
+  }
+
+  final pending = ListQueue<String>.from(deleteIds);
+  while (pending.isNotEmpty) {
+    final id = pending.removeFirst();
+    final boundIds = serialBindings[id];
+    if (boundIds == null) {
+      continue;
+    }
+    for (final boundId in boundIds) {
       if (deleteIds.add(boundId)) {
-        changed = true;
+        pending.add(boundId);
       }
     }
   }
@@ -264,17 +276,25 @@ ArrowLikeData _remapArrowBindings(
     return data;
   }
 
-  final mappedStart = startBinding == null
+  final mappedStartId = startBinding == null
       ? null
-      : idMap.containsKey(startBinding.elementId)
-      ? startBinding.copyWith(elementId: idMap[startBinding.elementId])
-      : null;
+      : idMap[startBinding.elementId];
+  final mappedEndId = endBinding == null ? null : idMap[endBinding.elementId];
 
-  final mappedEnd = endBinding == null
+  final mappedStart = startBinding == null || mappedStartId == null
       ? null
-      : idMap.containsKey(endBinding.elementId)
-      ? endBinding.copyWith(elementId: idMap[endBinding.elementId])
-      : null;
+      : startBinding.copyWith(elementId: mappedStartId);
+  final mappedEnd = endBinding == null || mappedEndId == null
+      ? null
+      : endBinding.copyWith(elementId: mappedEndId);
 
-  return data.copyWith(startBinding: mappedStart, endBinding: mappedEnd);
+  final clearStartSpecial = startBinding != null && mappedStart == null;
+  final clearEndSpecial = endBinding != null && mappedEnd == null;
+
+  return data.copyWith(
+    startBinding: mappedStart,
+    endBinding: mappedEnd,
+    startIsSpecial: clearStartSpecial ? null : data.startIsSpecial,
+    endIsSpecial: clearEndSpecial ? null : data.endIsSpecial,
+  );
 }

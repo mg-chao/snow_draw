@@ -144,6 +144,45 @@ void main() {
         expect(next.domain.document.getElementById(sharedTextId), isNull);
       },
     );
+
+    test('delete expansion preserves transitive serial->text references', () {
+      final state = _stateWithElements(const [
+        ElementState(
+          id: 'serial-a',
+          rect: DrawRect(maxX: 30, maxY: 30),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: SerialNumberData(textElementId: 'serial-b'),
+        ),
+        ElementState(
+          id: 'serial-b',
+          rect: DrawRect(minX: 40, maxX: 70, maxY: 30),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: SerialNumberData(textElementId: 'text-c'),
+        ),
+        ElementState(
+          id: 'text-c',
+          rect: DrawRect(minY: 40, maxX: 50, maxY: 70),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: TextData(text: 'leaf'),
+        ),
+      ]);
+
+      final next = handleDeleteElements(
+        state,
+        DeleteElements(elementIds: ['serial-a']),
+        deps,
+      );
+
+      expect(next.domain.document.getElementById('serial-a'), isNull);
+      expect(next.domain.document.getElementById('serial-b'), isNull);
+      expect(next.domain.document.getElementById('text-c'), isNull);
+    });
   });
 }
 

@@ -161,6 +161,44 @@ void main() {
       expect(data.startBinding, isNull);
     });
 
+    test(
+      'clears special endpoint flags when duplicated binding target is missing',
+      () {
+        final rectOutside = _rect('rect-outside');
+        const arrow = ElementState(
+          id: 'arrow-1',
+          rect: DrawRect(minX: 50, minY: 50, maxX: 150, maxY: 150),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: ArrowData(
+            startBinding: ArrowBinding(
+              elementId: 'rect-outside',
+              anchor: DrawPoint(x: 0.5, y: 0.5),
+            ),
+            startIsSpecial: true,
+          ),
+        );
+        final state = _stateWith([rectOutside, arrow]);
+
+        final result = handleDuplicateElements(
+          state,
+          DuplicateElements(elementIds: ['arrow-1']),
+          deps,
+        );
+
+        final duplicatedArrow = _findDuplicated(
+          result,
+          originalId: 'arrow-1',
+          state: state,
+        );
+        expect(duplicatedArrow, isNotNull);
+        final data = duplicatedArrow!.data as ArrowData;
+        expect(data.startBinding, isNull);
+        expect(data.startIsSpecial, isNull);
+      },
+    );
+
     test('line bindings are also remapped', () {
       final rect = _rect('rect-1');
       final line = _lineBoundTo(id: 'line-1', startTargetId: 'rect-1');
@@ -182,6 +220,44 @@ void main() {
       expect(data.startBinding, isNotNull);
       expect(data.startBinding!.elementId, isNot('rect-1'));
     });
+
+    test(
+      'line special endpoint flags are cleared when target is not duplicated',
+      () {
+        final rectOutside = _rect('rect-outside');
+        const line = ElementState(
+          id: 'line-1',
+          rect: DrawRect(minX: 50, minY: 50, maxX: 150, maxY: 150),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: LineData(
+            endBinding: ArrowBinding(
+              elementId: 'rect-outside',
+              anchor: DrawPoint(x: 0.5, y: 0.5),
+            ),
+            endIsSpecial: true,
+          ),
+        );
+        final state = _stateWith([rectOutside, line]);
+
+        final result = handleDuplicateElements(
+          state,
+          DuplicateElements(elementIds: ['line-1']),
+          deps,
+        );
+
+        final duplicatedLine = _findDuplicated(
+          result,
+          originalId: 'line-1',
+          state: state,
+        );
+        expect(duplicatedLine, isNotNull);
+        final data = duplicatedLine!.data as LineData;
+        expect(data.endBinding, isNull);
+        expect(data.endIsSpecial, isNull);
+      },
+    );
 
     test('anchor is preserved during binding remapping', () {
       final rect = _rect('rect-1');
