@@ -110,16 +110,19 @@ class DrawContext implements InteractionReducerDeps {
     LogService? logService,
     EventBus? eventBus,
   }) {
-    // Create a new ConfigManager if config is provided without a configManager.
-    // This avoids mutating the original context's ConfigManager.
+    final hasEquivalentConfig =
+        config != null && config == this.configManager.current;
     final resolvedConfigManager =
         configManager ??
-        (config != null ? ConfigManager(config) : this.configManager);
+        (config == null || hasEquivalentConfig
+            ? this.configManager
+            : ConfigManager(config));
     return DrawContext(
       elementRegistry: elementRegistry ?? this.elementRegistry,
       editOperations: editOperations ?? this.editOperations,
       idGenerator: idGenerator ?? this.idGenerator,
       editIntentMapper: editIntentMapper ?? this.editIntentMapper,
+      config: config,
       configManager: resolvedConfigManager,
       editConfigProvider: editConfigProvider ?? this.editConfigProvider,
       logService: logService ?? log,
