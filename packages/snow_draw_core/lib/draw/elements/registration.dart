@@ -1,5 +1,6 @@
-import '../core/core.dart' show DrawContext;
 import '../core/draw_context.dart' show DrawContext;
+import 'core/element_data.dart';
+import 'core/element_definition.dart';
 import 'core/element_registry.dart';
 import 'types/arrow/arrow_definition.dart';
 import 'types/filter/filter_definition.dart';
@@ -15,28 +16,22 @@ import 'types/text/text_definition.dart';
 /// Call this when constructing a [DrawContext] to populate its
 /// `elementRegistry`.
 void registerBuiltInElements(DefaultElementRegistry registry) {
-  if (registry.get(rectangleDefinition.typeId) == null) {
-    registry.register(rectangleDefinition);
+  _registerIfMissing(registry, rectangleDefinition);
+  _registerIfMissing(registry, arrowDefinition);
+  _registerIfMissing(registry, lineDefinition);
+  _registerIfMissing(registry, freeDrawDefinition);
+  _registerIfMissing(registry, filterDefinition);
+  _registerIfMissing(registry, highlightDefinition);
+  _registerIfMissing(registry, textDefinition);
+  _registerIfMissing(registry, serialNumberDefinition);
+}
+
+void _registerIfMissing<T extends ElementData>(
+  DefaultElementRegistry registry,
+  ElementDefinition<T> definition,
+) {
+  if (registry.supportsTypeValue(definition.typeId.value)) {
+    return;
   }
-  if (registry.get(arrowDefinition.typeId) == null) {
-    registry.register(arrowDefinition);
-  }
-  if (registry.get(lineDefinition.typeId) == null) {
-    registry.register(lineDefinition);
-  }
-  if (registry.get(freeDrawDefinition.typeId) == null) {
-    registry.register(freeDrawDefinition);
-  }
-  if (registry.get(filterDefinition.typeId) == null) {
-    registry.register(filterDefinition);
-  }
-  if (registry.get(highlightDefinition.typeId) == null) {
-    registry.register(highlightDefinition);
-  }
-  if (registry.get(textDefinition.typeId) == null) {
-    registry.register(textDefinition);
-  }
-  if (registry.get(serialNumberDefinition.typeId) == null) {
-    registry.register(serialNumberDefinition);
-  }
+  registry.register(definition);
 }

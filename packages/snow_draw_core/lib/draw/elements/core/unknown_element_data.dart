@@ -9,13 +9,14 @@ class UnknownElementData extends ElementData {
   UnknownElementData({
     required this.originalType,
     required Map<String, dynamic> rawData,
-  }) : rawData = _deepFreezeMap(rawData);
+  }) : _typeId = ElementTypeId<ElementData>(originalType),
+       rawData = _deepFreezeMap(rawData);
   final String originalType;
+  final ElementTypeId<ElementData> _typeId;
   final Map<String, dynamic> rawData;
 
   @override
-  ElementTypeId<ElementData> get typeId =>
-      ElementTypeId<ElementData>(originalType);
+  ElementTypeId<ElementData> get typeId => _typeId;
 
   @override
   Map<String, dynamic> toJson() => _deepCloneMap(rawData);

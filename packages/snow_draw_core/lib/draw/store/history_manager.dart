@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
-import '../elements/core/element_type_id.dart';
 import '../elements/core/unknown_element_data.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
@@ -651,8 +650,7 @@ class _HistorySnapshotCodec {
         ? rawData
         : const <String, dynamic>{};
 
-    final typeId = ElementTypeId<ElementData>(type);
-    final definition = elementRegistry.getDefinition(typeId);
+    final definition = elementRegistry.getDefinitionByValue(type);
 
     ElementData data;
 
