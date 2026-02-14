@@ -12,7 +12,6 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/middleware/default_middlewares.dart';
 import 'package:snow_draw_core/draw/input/middleware/input_middleware.dart';
@@ -250,7 +249,7 @@ void main() {
 
   group('InputPipeline', () {
     test('empty pipeline returns event unchanged', () async {
-      const pipeline = InputPipeline(middlewares: []);
+      final pipeline = InputPipeline(middlewares: const []);
       const event = PointerDownInputEvent(
         position: DrawPoint(x: 5, y: 5),
         modifiers: KeyModifiers.none,
@@ -262,8 +261,10 @@ void main() {
     });
 
     test('validation middleware rejects NaN positions', () async {
-      const pipeline = InputPipeline(middlewares: [ValidationMiddleware()]);
-      final event = PointerDownInputEvent(
+      final pipeline = InputPipeline(
+        middlewares: const [ValidationMiddleware()],
+      );
+      const event = PointerDownInputEvent(
         position: DrawPoint(x: double.nan, y: 10),
         modifiers: KeyModifiers.none,
       );
@@ -274,8 +275,10 @@ void main() {
     });
 
     test('validation middleware rejects infinite positions', () async {
-      const pipeline = InputPipeline(middlewares: [ValidationMiddleware()]);
-      final event = PointerDownInputEvent(
+      final pipeline = InputPipeline(
+        middlewares: const [ValidationMiddleware()],
+      );
+      const event = PointerDownInputEvent(
         position: DrawPoint(x: double.infinity, y: 10),
         modifiers: KeyModifiers.none,
       );
@@ -286,7 +289,9 @@ void main() {
     });
 
     test('validation middleware passes valid positions', () async {
-      const pipeline = InputPipeline(middlewares: [ValidationMiddleware()]);
+      final pipeline = InputPipeline(
+        middlewares: const [ValidationMiddleware()],
+      );
       const event = PointerDownInputEvent(
         position: DrawPoint(x: 100, y: 200),
         modifiers: KeyModifiers.none,
@@ -304,9 +309,9 @@ void main() {
 
   group('KeyModifiers', () {
     test('equality', () {
-      const a = KeyModifiers(shift: true, control: false, alt: true);
-      const b = KeyModifiers(shift: true, control: false, alt: true);
-      const c = KeyModifiers(shift: false, control: false, alt: true);
+      const a = KeyModifiers(shift: true, alt: true);
+      const b = KeyModifiers(shift: true, alt: true);
+      const c = KeyModifiers(alt: true);
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
       expect(a, isNot(equals(c)));
