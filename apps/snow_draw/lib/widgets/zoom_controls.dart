@@ -37,6 +37,19 @@ class ZoomControls extends StatefulWidget {
 class _ZoomControlsState extends State<ZoomControls> {
   static const _zoomCompareTolerance = 0.01;
   static const _zoomBoundaryTolerance = 0.0001;
+  static const _buttonShape = RoundedRectangleBorder();
+  static final ButtonStyle _iconButtonStyle = IconButton.styleFrom(
+    shape: _buttonShape,
+    minimumSize: const Size(36, 36),
+    fixedSize: const Size(36, 36),
+    padding: EdgeInsets.zero,
+  );
+  static final ButtonStyle _textButtonStyle = TextButton.styleFrom(
+    shape: _buttonShape,
+    minimumSize: const Size(52, 36),
+    fixedSize: const Size(52, 36),
+    padding: EdgeInsets.zero,
+  );
 
   VoidCallback? _unsubscribe;
   var _cameraZoom = 1.0;
@@ -77,19 +90,6 @@ class _ZoomControlsState extends State<ZoomControls> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const buttonShape = RoundedRectangleBorder();
-    final iconButtonStyle = IconButton.styleFrom(
-      shape: buttonShape,
-      minimumSize: const Size(36, 36),
-      fixedSize: const Size(36, 36),
-      padding: EdgeInsets.zero,
-    );
-    final textButtonStyle = TextButton.styleFrom(
-      shape: buttonShape,
-      minimumSize: const Size(52, 36),
-      fixedSize: const Size(52, 36),
-      padding: EdgeInsets.zero,
-    );
     final dividerColor = theme.colorScheme.outlineVariant.withValues(
       alpha: 0.6,
     );
@@ -112,7 +112,7 @@ class _ZoomControlsState extends State<ZoomControls> {
               Tooltip(
                 message: widget.strings.zoomOut,
                 child: IconButton(
-                  style: iconButtonStyle,
+                  style: _iconButtonStyle,
                   onPressed: canZoomOut ? () => _handleZoom(0.9) : null,
                   icon: const Icon(Icons.remove, size: 20),
                 ),
@@ -121,7 +121,7 @@ class _ZoomControlsState extends State<ZoomControls> {
               Tooltip(
                 message: widget.strings.resetZoom,
                 child: TextButton(
-                  style: textButtonStyle,
+                  style: _textButtonStyle,
                   onPressed: canResetZoom ? () => _handleZoomTo(1) : null,
                   child: Text(
                     '$zoomPercent%',
@@ -135,7 +135,7 @@ class _ZoomControlsState extends State<ZoomControls> {
               Tooltip(
                 message: widget.strings.zoomIn,
                 child: IconButton(
-                  style: iconButtonStyle,
+                  style: _iconButtonStyle,
                   onPressed: canZoomIn ? () => _handleZoom(1.1) : null,
                   icon: const Icon(Icons.add, size: 20),
                 ),
@@ -147,37 +147,24 @@ class _ZoomControlsState extends State<ZoomControls> {
     );
   }
 
-  Future<void> _handleZoomTo(double targetZoom) async {
+  Future<void> _handleZoomTo(double targetZoom) => _dispatchZoom(targetZoom);
+
+  Future<void> _handleZoom(double scale) => _dispatchZoom(_cameraZoom * scale);
+
+  Future<void> _dispatchZoom(double targetZoom) async {
+    final current = _cameraZoom;
     final next = _snapZoom(targetZoom);
-
-    final current = _cameraZoom;
-    if (_zoomEquals(current, next)) {
-      return;
-    }
-
-    final ratio = next / current;
-    await widget.store.dispatch(
-      ZoomCamera(
-        scale: ratio,
-        center: DrawPoint(x: widget.size.width / 2, y: widget.size.height / 2),
-      ),
-    );
-  }
-
-  Future<void> _handleZoom(double scale) async {
-    final current = _cameraZoom;
-    final next = _snapZoom(current * scale);
     if (_zoomEquals(current, next)) {
       return;
     }
     final ratio = next / current;
     await widget.store.dispatch(
-      ZoomCamera(
-        scale: ratio,
-        center: DrawPoint(x: widget.size.width / 2, y: widget.size.height / 2),
-      ),
+      ZoomCamera(scale: ratio, center: _viewportCenter),
     );
   }
+
+  DrawPoint get _viewportCenter =>
+      DrawPoint(x: widget.size.width / 2, y: widget.size.height / 2);
 
   bool _doubleEquals(
     double a,
@@ -214,6 +201,9 @@ class _ZoomControlsState extends State<ZoomControls> {
   }
 
   void _handleZoomChange(double zoom) {
+    if (_zoomEquals(_cameraZoom, zoom)) {
+      return;
+    }
     if (!mounted) {
       _cameraZoom = zoom;
       return;

@@ -18,6 +18,7 @@ import 'package:snow_draw_core/ui/canvas/draw_canvas.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  const canvasLayerKey = ValueKey('canvas-layer');
 
   late DefaultDrawStore store;
   late ToolController toolController;
@@ -40,6 +41,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: CanvasLayer(
+            key: canvasLayerKey,
             size: const Size(800, 600),
             store: store,
             toolController: toolController,
@@ -81,5 +83,41 @@ void main() {
       await tester.pump();
       expect(currentToolTypeId(tester), entry.value);
     }
+  });
+
+  testWidgets('canvas layer listens to a replaced tool controller', (
+    tester,
+  ) async {
+    await pumpCanvasLayer(tester);
+
+    toolController.setTool(ToolType.rectangle);
+    await tester.pump();
+    expect(currentToolTypeId(tester), RectangleData.typeIdToken);
+
+    final replacementController = ToolController();
+    addTearDown(replacementController.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CanvasLayer(
+            key: canvasLayerKey,
+            size: const Size(800, 600),
+            store: store,
+            toolController: replacementController,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(currentToolTypeId(tester), isNull);
+
+    toolController.setTool(ToolType.filter);
+    await tester.pump();
+    expect(currentToolTypeId(tester), isNull);
+
+    replacementController.setTool(ToolType.filter);
+    await tester.pump();
+    expect(currentToolTypeId(tester), FilterData.typeIdToken);
   });
 }

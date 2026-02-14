@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/l10n/app_localizations.dart';
 import 'package:snow_draw/widgets/zoom_controls.dart';
+import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -10,6 +11,7 @@ import 'package:snow_draw_core/draw/models/camera_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/view_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -83,6 +85,51 @@ void main() {
 
     final resetButton = _textButtonForTooltip(tester, strings.resetZoom);
     expect(resetButton.onPressed, isNotNull);
+  });
+
+  testWidgets('zoom controls unsubscribe from a replaced store', (
+    tester,
+  ) async {
+    final strings = AppLocalizations(const Locale('en'));
+    final storeA = _createStore(zoom: 1);
+    final storeB = _createStore(zoom: 2);
+
+    addTearDown(storeA.dispose);
+    addTearDown(storeB.dispose);
+
+    Future<void> pumpWithStore(DefaultDrawStore store) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ZoomControls(
+              key: const ValueKey('zoom-controls'),
+              strings: strings,
+              store: store,
+              size: const Size(800, 600),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await pumpWithStore(storeA);
+    expect(find.text('100%'), findsOneWidget);
+
+    await pumpWithStore(storeB);
+    expect(find.text('200%'), findsOneWidget);
+
+    await storeA.dispatch(
+      const ZoomCamera(scale: 1.5, center: DrawPoint(x: 400, y: 300)),
+    );
+    await tester.pump();
+    expect(find.text('200%'), findsOneWidget);
+
+    await storeB.dispatch(
+      const ZoomCamera(scale: 0.5, center: DrawPoint(x: 400, y: 300)),
+    );
+    await tester.pump();
+    expect(find.text('100%'), findsOneWidget);
   });
 }
 

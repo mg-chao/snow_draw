@@ -42,4 +42,42 @@ void main() {
       expect(controller.value, entry.value);
     }
   });
+
+  testWidgets('main toolbar switches to an updated tool controller', (
+    tester,
+  ) async {
+    final initialController = ToolController();
+    final replacementController = ToolController();
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(initialController.dispose);
+    addTearDown(replacementController.dispose);
+
+    Future<void> pumpWithController(ToolController controller) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MainToolbar(
+              key: const ValueKey('main-toolbar'),
+              strings: strings,
+              toolController: controller,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    await pumpWithController(initialController);
+    await tester.tap(find.byTooltip(strings.toolRectangle));
+    await tester.pump();
+    expect(initialController.value, ToolType.rectangle);
+
+    await pumpWithController(replacementController);
+    await tester.tap(find.byTooltip(strings.toolArrow));
+    await tester.pump();
+
+    expect(replacementController.value, ToolType.arrow);
+    expect(initialController.value, ToolType.rectangle);
+  });
 }
