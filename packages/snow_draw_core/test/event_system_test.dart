@@ -111,6 +111,74 @@ void main() {
       await docSub.cancel();
       await bus.dispose();
     });
+
+    test(
+      'emitLazy supports DrawEvent-typed factories for concrete listeners',
+      () async {
+        final bus = EventBus();
+        final received = <ValidationFailedEvent>[];
+        final validationSub = bus.on<ValidationFailedEvent>(received.add);
+
+        DrawEvent createEvent() =>
+            ValidationFailedEvent(action: 'CreateElement', reason: 'invalid');
+
+        final dispatched = bus.emitLazy<DrawEvent>(createEvent);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(dispatched, isTrue);
+        expect(received, hasLength(1));
+        expect(received.single.reason, equals('invalid'));
+
+        await validationSub.cancel();
+        await bus.dispose();
+      },
+    );
+
+    test(
+      'emitLazy supports supertype factories for subtype listeners',
+      () async {
+        final bus = EventBus();
+        final received = <DocumentChangedEvent>[];
+        final documentSub = bus.on<DocumentChangedEvent>(received.add);
+
+        StateChangeEvent createEvent() =>
+            const DocumentChangedEvent(elementsVersion: 4, elementCount: 2);
+
+        final dispatched = bus.emitLazy<StateChangeEvent>(createEvent);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(dispatched, isTrue);
+        expect(received, hasLength(1));
+        expect(received.single.elementsVersion, equals(4));
+
+        await documentSub.cancel();
+        await bus.dispose();
+      },
+    );
+
+    test('streamOf remains reusable after listener churn', () async {
+      final bus = EventBus();
+      final stream = bus.streamOf<DocumentChangedEvent>();
+      final received = <int>[];
+
+      final firstSub = stream.listen(
+        (event) => received.add(event.elementsVersion),
+      );
+      bus.emit(const DocumentChangedEvent(elementsVersion: 1, elementCount: 1));
+      await Future<void>.delayed(Duration.zero);
+      await firstSub.cancel();
+
+      final secondSub = stream.listen(
+        (event) => received.add(event.elementsVersion),
+      );
+      bus.emit(const DocumentChangedEvent(elementsVersion: 2, elementCount: 1));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, equals([1, 2]));
+
+      await secondSub.cancel();
+      await bus.dispose();
+    });
   });
 
   group('Event payload immutability', () {
