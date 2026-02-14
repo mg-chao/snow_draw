@@ -1594,16 +1594,18 @@ class StyleToolbarAdapter {
       if (_isDisposed) {
         return;
       }
+      final currentConfig = _store.config;
+      _config = currentConfig;
 
-      var nextRectangleStyle = _config.rectangleStyle;
-      var nextArrowStyle = _config.arrowStyle;
-      var nextLineStyle = _config.lineStyle;
-      var nextFreeDrawStyle = _config.freeDrawStyle;
-      var nextTextStyle = _config.textStyle;
-      var nextHighlightStyle = _config.highlightStyle;
-      var nextFilterStyle = _config.filterStyle;
-      var nextSerialNumberStyle = _config.serialNumberStyle;
-      var nextHighlightMask = _config.highlight;
+      var nextRectangleStyle = currentConfig.rectangleStyle;
+      var nextArrowStyle = currentConfig.arrowStyle;
+      var nextLineStyle = currentConfig.lineStyle;
+      var nextFreeDrawStyle = currentConfig.freeDrawStyle;
+      var nextTextStyle = currentConfig.textStyle;
+      var nextHighlightStyle = currentConfig.highlightStyle;
+      var nextFilterStyle = currentConfig.filterStyle;
+      var nextSerialNumberStyle = currentConfig.serialNumberStyle;
+      var nextHighlightMask = currentConfig.highlight;
 
       if (updateRectangleDefaults) {
         nextRectangleStyle = nextRectangleStyle.copyWith(
@@ -1705,19 +1707,19 @@ class StyleToolbarAdapter {
         );
       }
 
-      if (nextRectangleStyle == _config.rectangleStyle &&
-          nextArrowStyle == _config.arrowStyle &&
-          nextLineStyle == _config.lineStyle &&
-          nextFreeDrawStyle == _config.freeDrawStyle &&
-          nextTextStyle == _config.textStyle &&
-          nextHighlightStyle == _config.highlightStyle &&
-          nextFilterStyle == _config.filterStyle &&
-          nextSerialNumberStyle == _config.serialNumberStyle &&
-          nextHighlightMask == _config.highlight) {
+      if (nextRectangleStyle == currentConfig.rectangleStyle &&
+          nextArrowStyle == currentConfig.arrowStyle &&
+          nextLineStyle == currentConfig.lineStyle &&
+          nextFreeDrawStyle == currentConfig.freeDrawStyle &&
+          nextTextStyle == currentConfig.textStyle &&
+          nextHighlightStyle == currentConfig.highlightStyle &&
+          nextFilterStyle == currentConfig.filterStyle &&
+          nextSerialNumberStyle == currentConfig.serialNumberStyle &&
+          nextHighlightMask == currentConfig.highlight) {
         return;
       }
 
-      final nextConfig = _config.copyWith(
+      final nextConfig = currentConfig.copyWith(
         rectangleStyle: nextRectangleStyle,
         arrowStyle: nextArrowStyle,
         lineStyle: nextLineStyle,

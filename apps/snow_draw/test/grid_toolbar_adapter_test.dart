@@ -70,6 +70,32 @@ void main() {
     expect(store.config.grid.size, before);
   });
 
+  test('toggle uses latest store config when stream delivery lags', () async {
+    final externalConfig = store.config.copyWith(
+      grid: store.config.grid.copyWith(enabled: true),
+    );
+    await store.dispatch(UpdateConfig(externalConfig));
+
+    await adapter.toggle();
+
+    expect(store.config.grid.enabled, isFalse);
+  });
+
+  test(
+    'setGridSize preserves newer external config fields before stream sync',
+    () async {
+      final externalConfig = store.config.copyWith(
+        snap: store.config.snap.copyWith(enabled: true),
+      );
+      await store.dispatch(UpdateConfig(externalConfig));
+
+      await adapter.setGridSize(36);
+
+      expect(store.config.grid.size, 36);
+      expect(store.config.snap.enabled, isTrue);
+    },
+  );
+
   test('enabledListenable notifies on change', () async {
     final values = <bool>[];
     adapter.enabledListenable.addListener(

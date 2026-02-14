@@ -28,7 +28,7 @@ class GridToolbarAdapter {
   double get gridSize => _sizeNotifier.value;
 
   Future<void> toggle() => _enqueueConfigUpdate(
-    () => _setEnabledInternal(enabled: !_config.grid.enabled),
+    () => _setEnabledInternal(enabled: !_store.config.grid.enabled),
   );
 
   Future<void> setEnabled({required bool enabled}) =>
@@ -41,11 +41,13 @@ class GridToolbarAdapter {
     if (!size.isFinite) {
       return;
     }
+    final currentConfig = _store.config;
+    _config = currentConfig;
     final clamped = size.clamp(GridConfig.minSize, GridConfig.maxSize);
-    final nextConfig = _config.copyWith(
-      grid: _config.grid.copyWith(size: clamped),
+    final nextConfig = currentConfig.copyWith(
+      grid: currentConfig.grid.copyWith(size: clamped),
     );
-    if (nextConfig == _config) {
+    if (nextConfig == currentConfig) {
       return;
     }
     _config = nextConfig;
@@ -106,15 +108,17 @@ class GridToolbarAdapter {
     if (_isDisposed) {
       return;
     }
-    var nextConfig = _config.copyWith(
-      grid: _config.grid.copyWith(enabled: enabled),
+    final currentConfig = _store.config;
+    _config = currentConfig;
+    var nextConfig = currentConfig.copyWith(
+      grid: currentConfig.grid.copyWith(enabled: enabled),
     );
     if (enabled && nextConfig.snap.enabled) {
       nextConfig = nextConfig.copyWith(
         snap: nextConfig.snap.copyWith(enabled: false),
       );
     }
-    if (nextConfig == _config) {
+    if (nextConfig == currentConfig) {
       return;
     }
     _config = nextConfig;

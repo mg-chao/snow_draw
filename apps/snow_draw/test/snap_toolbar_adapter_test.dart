@@ -52,6 +52,32 @@ void main() {
     expect(values, containsAllInOrder([true, false]));
   });
 
+  test('toggle uses latest store config when stream delivery lags', () async {
+    final externalConfig = store.config.copyWith(
+      snap: store.config.snap.copyWith(enabled: true),
+    );
+    await store.dispatch(UpdateConfig(externalConfig));
+
+    await adapter.toggle();
+
+    expect(store.config.snap.enabled, isFalse);
+  });
+
+  test(
+    'setEnabled preserves newer external config fields before stream sync',
+    () async {
+      final externalConfig = store.config.copyWith(
+        grid: store.config.grid.copyWith(size: 44),
+      );
+      await store.dispatch(UpdateConfig(externalConfig));
+
+      await adapter.setEnabled(enabled: true);
+
+      expect(store.config.snap.enabled, isTrue);
+      expect(store.config.grid.size, 44);
+    },
+  );
+
   test('rapid setEnabled calls honor latest value', () async {
     final first = adapter.setEnabled(enabled: true);
     final second = adapter.setEnabled(enabled: false);

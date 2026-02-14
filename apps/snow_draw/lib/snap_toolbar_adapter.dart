@@ -24,7 +24,7 @@ class SnapToolbarAdapter {
   bool get isEnabled => _enabledNotifier.value;
 
   Future<void> toggle() => _enqueueConfigUpdate(
-    () => _setEnabledInternal(enabled: !_config.snap.enabled),
+    () => _setEnabledInternal(enabled: !_store.config.snap.enabled),
   );
 
   Future<void> setEnabled({required bool enabled}) =>
@@ -60,15 +60,17 @@ class SnapToolbarAdapter {
     if (_isDisposed) {
       return;
     }
-    var nextConfig = _config.copyWith(
-      snap: _config.snap.copyWith(enabled: enabled),
+    final currentConfig = _store.config;
+    _config = currentConfig;
+    var nextConfig = currentConfig.copyWith(
+      snap: currentConfig.snap.copyWith(enabled: enabled),
     );
     if (enabled && nextConfig.grid.enabled) {
       nextConfig = nextConfig.copyWith(
         grid: nextConfig.grid.copyWith(enabled: false),
       );
     }
-    if (nextConfig == _config) {
+    if (nextConfig == currentConfig) {
       return;
     }
     _config = nextConfig;
