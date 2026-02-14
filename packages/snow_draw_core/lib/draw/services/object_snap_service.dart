@@ -277,14 +277,20 @@ class ObjectSnapService {
     final hasAnchorsX = effectiveTargetAnchorsX.isNotEmpty;
     final hasAnchorsY = effectiveTargetAnchorsY.isNotEmpty;
 
-    final referenceRects = [
-      for (final element in referenceElements)
-        SelectionCalculator.computeElementWorldAabb(element),
-    ];
-    final referencePoints = enablePointSnaps
-        ? _buildElementSnapPoints(referenceElements)
+    final usePointToPointSnaps =
+        enablePointSnaps && targetElements != null && targetElements.isNotEmpty;
+    final needsReferenceRects = enableGapSnaps || !usePointToPointSnaps;
+    final referenceAabbs = _buildElementAabbs(referenceElements);
+    final referenceRects = needsReferenceRects
+        ? referenceAabbs
+        : const <DrawRect>[];
+    final referencePoints = usePointToPointSnaps
+        ? _buildElementSnapPoints(
+            referenceElements,
+            elementAabbs: referenceAabbs,
+          )
         : null;
-    final targetPoints = enablePointSnaps && targetElements != null
+    final targetPoints = usePointToPointSnaps
         ? _buildElementSnapPoints(
             targetElements,
             offset: targetOffset ?? DrawPoint.zero,
@@ -1590,23 +1596,36 @@ class ObjectSnapService {
 
   static bool _isExact(double offset) => offset.abs() <= _epsilon;
 
+  static List<DrawRect> _buildElementAabbs(List<ElementState> elements) => [
+    for (final element in elements)
+      SelectionCalculator.computeElementWorldAabb(element),
+  ];
+
   static List<_SnapPoint> _buildElementSnapPoints(
     List<ElementState> elements, {
     DrawPoint offset = DrawPoint.zero,
+    List<DrawRect>? elementAabbs,
   }) {
     if (elements.isEmpty) {
       return const [];
     }
+    assert(
+      elementAabbs == null || elementAabbs.length == elements.length,
+      'elementAabbs length must match elements length',
+    );
 
     final points = <_SnapPoint>[];
-    for (final element in elements) {
+    for (var index = 0; index < elements.length; index++) {
+      final element = elements[index];
       final rect = element.rect;
       final rotation = element.rotation;
       final center = rect.center.translate(offset);
       final space = ElementSpace(rotation: rotation, origin: center);
       final halfWidth = rect.width / 2;
       final halfHeight = rect.height / 2;
-      final baseAabb = SelectionCalculator.computeElementWorldAabb(element);
+      final baseAabb =
+          elementAabbs?[index] ??
+          SelectionCalculator.computeElementWorldAabb(element);
       final aabb = offset == DrawPoint.zero
           ? baseAabb
           : baseAabb.translate(offset);
