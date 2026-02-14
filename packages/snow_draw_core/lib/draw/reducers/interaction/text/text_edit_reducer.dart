@@ -92,6 +92,9 @@ class TextEditReducer {
     if (interaction is! TextEditingState) {
       return state;
     }
+    if (action.text == interaction.draftData.text) {
+      return state;
+    }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
     final nextRect = _resolveTextRect(
@@ -178,22 +181,33 @@ class TextEditReducer {
       return nextState.copyWith(application: nextState.application.toIdle());
     }
 
-    final elements = <ElementState>[];
-    for (final element in state.domain.document.elements) {
-      if (element.id != interaction.elementId) {
-        elements.add(element);
+    final elements = state.domain.document.elements;
+    List<ElementState>? nextElements;
+    for (var index = 0; index < elements.length; index++) {
+      final currentElement = elements[index];
+      if (currentElement.id != interaction.elementId) {
         continue;
       }
-      elements.add(element.copyWith(rect: nextRect, data: nextData));
+      if (currentElement.rect == nextRect && currentElement.data == nextData) {
+        continue;
+      }
+      nextElements ??= [...elements];
+      nextElements[index] = currentElement.copyWith(
+        rect: nextRect,
+        data: nextData,
+      );
     }
 
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: elements),
-    );
-    final nextState = applySelectionChange(
-      state.copyWith(domain: nextDomain),
-      const {},
-    );
+    var nextBaseState = state;
+    if (nextElements != null) {
+      nextBaseState = state.copyWith(
+        domain: state.domain.copyWith(
+          document: state.domain.document.copyWith(elements: nextElements),
+        ),
+      );
+    }
+
+    final nextState = applySelectionChange(nextBaseState, const {});
     return nextState.copyWith(application: nextState.application.toIdle());
   }
 

@@ -4,6 +4,7 @@ import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
@@ -15,6 +16,23 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   group('FinishTextEdit history consistency', () {
+    test('UpdateTextEdit ignores repeated text payloads', () async {
+      final store = _createStore(
+        initialState: _stateWithActiveTextEdit(
+          elementId: 'text-1',
+          initialText: 'before',
+          draftText: 'before',
+        ),
+      );
+      addTearDown(store.dispose);
+
+      final before = store.state;
+
+      await store.dispatch(const UpdateTextEdit(text: 'before'));
+
+      expect(store.state, same(before));
+    });
+
     test(
       'undo restores text content when action payload matches session',
       () async {
@@ -125,6 +143,36 @@ void main() {
         expect(_textOf(store, 'text-1'), 'before');
       },
     );
+
+    test(
+      'finishing unchanged text keeps the document snapshot intact',
+      () async {
+        final alignedRect = _autoResizeTextRect('before');
+        final store = _createStore(
+          initialState: _stateWithActiveTextEdit(
+            elementId: 'text-1',
+            initialText: 'before',
+            draftText: 'before',
+            rect: alignedRect,
+          ),
+        );
+        addTearDown(store.dispose);
+
+        final before = store.state;
+
+        await store.dispatch(
+          const FinishTextEdit(
+            elementId: 'text-1',
+            text: 'before',
+            isNew: false,
+          ),
+        );
+
+        expect(store.state.application.isIdle, isTrue);
+        expect(store.state.domain.selection.selectedIds, isEmpty);
+        expect(store.state.domain.document, same(before.domain.document));
+      },
+    );
   });
 }
 
@@ -139,15 +187,16 @@ DrawState _stateWithActiveTextEdit({
   required String elementId,
   required String initialText,
   required String draftText,
+  DrawRect? rect,
 }) {
-  const rect = DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 60);
+  final resolvedRect = rect ?? _autoResizeTextRect(initialText);
   final initial = DrawState(
     domain: DomainState(
       document: DocumentState(
         elements: [
           ElementState(
             id: elementId,
-            rect: rect,
+            rect: resolvedRect,
             rotation: 0,
             opacity: 1,
             zIndex: 0,
@@ -162,7 +211,7 @@ DrawState _stateWithActiveTextEdit({
   final interaction = TextEditingState(
     elementId: elementId,
     draftData: TextData(text: draftText),
-    rect: rect,
+    rect: resolvedRect,
     isNew: false,
     opacity: 1,
     rotation: 0,
@@ -204,3 +253,25 @@ String _textOf(DefaultDrawStore store, String elementId) {
 
 bool _elementExists(DefaultDrawStore store, String elementId) =>
     store.state.domain.document.getElementById(elementId) != null;
+
+DrawRect _autoResizeTextRect(
+  String text, {
+  double originX = 10,
+  double originY = 10,
+}) {
+  final data = TextData(text: text);
+  final layout = layoutText(data: data, maxWidth: double.infinity);
+  final horizontalPadding = resolveTextLayoutHorizontalPadding(
+    layout.lineHeight,
+  );
+  final width = layout.size.width + horizontalPadding * 2;
+  final height = layout.size.height > layout.lineHeight
+      ? layout.size.height
+      : layout.lineHeight;
+  return DrawRect(
+    minX: originX,
+    minY: originY,
+    maxX: originX + width,
+    maxY: originY + height,
+  );
+}
