@@ -12,6 +12,7 @@ import 'plugin_registry.dart';
 /// registry.
 class PluginInputCoordinator {
   static const _processingFailureReason = 'Input processing failed';
+  static const _coalescedEventMessage = 'Event coalesced by coordinator';
 
   PluginInputCoordinator({
     required PluginContext pluginContext,
@@ -27,6 +28,7 @@ class PluginInputCoordinator {
   Completer<void>? _drainCompleter;
   var _isDraining = false;
   var _isDisposed = false;
+  var _coalescedEventCount = 0;
 
   /// Get the plugin registry.
   PluginRegistry get registry => _registry;
@@ -48,12 +50,48 @@ class PluginInputCoordinator {
     }
 
     final queuedEvent = _QueuedInputEvent(event);
-    _queue.addLast(queuedEvent);
+    _enqueueEvent(queuedEvent);
     if (!_isDraining) {
       unawaited(_drainQueue());
     }
     return queuedEvent.completer.future;
   }
+
+  void _enqueueEvent(_QueuedInputEvent queuedEvent) {
+    if (_tryCoalesceQueuedEvent(queuedEvent)) {
+      return;
+    }
+    _queue.addLast(queuedEvent);
+  }
+
+  bool _tryCoalesceQueuedEvent(_QueuedInputEvent incomingEvent) {
+    if (!_isDraining || _queue.isEmpty) {
+      return false;
+    }
+    final incomingInputEvent = incomingEvent.event;
+    if (!_isCoalescibleEvent(incomingInputEvent)) {
+      return false;
+    }
+    final lastQueuedEvent = _queue.last;
+    if (!_canCoalesce(lastQueuedEvent.event, incomingInputEvent)) {
+      return false;
+    }
+
+    _queue.removeLast();
+    lastQueuedEvent.complete(
+      const PluginResult.consumed(message: _coalescedEventMessage),
+    );
+    _coalescedEventCount += 1;
+    _queue.addLast(incomingEvent);
+    return true;
+  }
+
+  bool _canCoalesce(InputEvent previousEvent, InputEvent nextEvent) =>
+      previousEvent.runtimeType == nextEvent.runtimeType &&
+      _isCoalescibleEvent(previousEvent);
+
+  bool _isCoalescibleEvent(InputEvent event) =>
+      event is PointerMoveInputEvent || event is PointerHoverInputEvent;
 
   Future<void> _drainQueue() async {
     if (_isDraining) {
@@ -161,6 +199,7 @@ class PluginInputCoordinator {
     'middlewares': _pipeline.middlewares.map((m) => m.name).toList(),
     'queuedEvents': _queue.length,
     'isDraining': _isDraining,
+    'coalescedEvents': _coalescedEventCount,
     ..._registry.getStats(),
   };
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -231,6 +233,95 @@ void main() {
     );
   });
 
+  group('PluginInputCoordinator event coalescing', () {
+    test(
+      'coalesces queued pointer move events while processing is busy',
+      () async {
+        final context = _createPluginContext();
+        final coordinator = PluginInputCoordinator(pluginContext: context);
+        final firstEventGate = Completer<void>();
+        final plugin = _CoalescingProbePlugin(
+          pauseOnFirstEvent: firstEventGate,
+        );
+
+        await coordinator.registry.register(plugin);
+
+        final firstFuture = coordinator.handleEvent(_pointerMove(x: 1));
+        await plugin.firstEventStarted.future;
+
+        final secondFuture = coordinator.handleEvent(_pointerMove(x: 2));
+        final thirdFuture = coordinator.handleEvent(_pointerMove(x: 3));
+
+        expect(
+          await secondFuture,
+          const PluginResult.consumed(
+            message: 'Event coalesced by coordinator',
+          ),
+        );
+
+        firstEventGate.complete();
+
+        expect(
+          await firstFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await thirdFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(plugin.events, hasLength(2));
+
+        final processedXs = plugin.events
+            .whereType<PointerMoveInputEvent>()
+            .map((event) => event.position.x)
+            .toList();
+        expect(processedXs, [1, 3]);
+        expect(coordinator.getStats()['coalescedEvents'], 1);
+
+        await coordinator.dispose();
+      },
+    );
+
+    test('does not coalesce across different event types', () async {
+      final context = _createPluginContext();
+      final coordinator = PluginInputCoordinator(pluginContext: context);
+      final firstEventGate = Completer<void>();
+      final plugin = _CoalescingProbePlugin(pauseOnFirstEvent: firstEventGate);
+
+      await coordinator.registry.register(plugin);
+
+      final firstFuture = coordinator.handleEvent(_pointerMove(x: 1));
+      await plugin.firstEventStarted.future;
+
+      final secondFuture = coordinator.handleEvent(_pointerDown(x: 2));
+      final thirdFuture = coordinator.handleEvent(_pointerMove(x: 3));
+
+      firstEventGate.complete();
+
+      expect(
+        await firstFuture,
+        const PluginResult.handled(message: 'coalescing probe handled'),
+      );
+      expect(
+        await secondFuture,
+        const PluginResult.handled(message: 'coalescing probe handled'),
+      );
+      expect(
+        await thirdFuture,
+        const PluginResult.handled(message: 'coalescing probe handled'),
+      );
+
+      expect(plugin.events.map((event) => event.runtimeType).toList(), [
+        PointerMoveInputEvent,
+        PointerDownInputEvent,
+        PointerMoveInputEvent,
+      ]);
+      expect(coordinator.getStats()['coalescedEvents'], 0);
+
+      await coordinator.dispose();
+    });
+  });
+
   group('PluginInputCoordinator error containment', () {
     test(
       'returns unhandled when processing throws and still handles later events',
@@ -289,6 +380,12 @@ PluginContext _createPluginContext() {
 
 PointerDownInputEvent _pointerDown({double x = 10, double y = 20}) =>
     PointerDownInputEvent(
+      position: DrawPoint(x: x, y: y),
+      modifiers: KeyModifiers.none,
+    );
+
+PointerMoveInputEvent _pointerMove({double x = 10, double y = 20}) =>
+    PointerMoveInputEvent(
       position: DrawPoint(x: x, y: y),
       modifiers: KeyModifiers.none,
     );
@@ -403,4 +500,38 @@ class _LifecyclePlugin extends InputPluginBase {
   @override
   Future<PluginResult> handleEvent(InputEvent event) async =>
       const PluginResult.unhandled();
+}
+
+class _CoalescingProbePlugin extends InputPluginBase {
+  _CoalescingProbePlugin({required this.pauseOnFirstEvent})
+    : super(
+        id: 'coalescing-probe',
+        name: 'CoalescingProbe',
+        priority: 0,
+        supportedEventTypes: const {
+          PointerMoveInputEvent,
+          PointerDownInputEvent,
+        },
+      );
+
+  final Completer<void> pauseOnFirstEvent;
+  final firstEventStarted = Completer<void>();
+  final events = <InputEvent>[];
+  var _hasPaused = false;
+
+  @override
+  bool canHandle(InputEvent event, DrawState state) => true;
+
+  @override
+  Future<PluginResult> handleEvent(InputEvent event) async {
+    events.add(event);
+    if (!firstEventStarted.isCompleted) {
+      firstEventStarted.complete();
+    }
+    if (!_hasPaused) {
+      _hasPaused = true;
+      await pauseOnFirstEvent.future;
+    }
+    return const PluginResult.handled(message: 'coalescing probe handled');
+  }
 }
