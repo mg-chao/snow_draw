@@ -93,13 +93,14 @@ class CreateElementReducer {
       data: data,
       startPosition: startPosition,
     );
+    final nextZIndex = resolveNextZIndex(state.domain.document.elements);
 
     final newElement = ElementState(
       id: elementId,
       rect: initialRect,
       rotation: 0,
       opacity: styleDefaults.opacity,
-      zIndex: state.domain.document.elements.length,
+      zIndex: nextZIndex,
       data: startResult.data,
     );
 
@@ -175,9 +176,13 @@ class CreateElementReducer {
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
     );
-    final updatedElement = interaction.element.copyWith(
-      data: updateResult.data,
-    );
+    if (_isCreationStateUnchanged(interaction, updateResult)) {
+      return state;
+    }
+    final baseElement = interaction.element;
+    final updatedElement = updateResult.data == interaction.elementData
+        ? baseElement
+        : baseElement.copyWith(data: updateResult.data);
     final nextInteraction = interaction.copyWith(
       element: updatedElement,
       currentRect: updateResult.rect,
@@ -213,7 +218,7 @@ class CreateElementReducer {
     final updatedElement = interaction.element.copyWith(
       rect: finishResult.rect,
       data: finishResult.data,
-      zIndex: state.domain.document.elements.length,
+      zIndex: resolveNextZIndex(state.domain.document.elements),
     );
     final newElements = [...state.domain.document.elements, updatedElement];
 
@@ -268,9 +273,13 @@ class CreateElementReducer {
     if (updateResult == null) {
       return state;
     }
-    final updatedElement = interaction.element.copyWith(
-      data: updateResult.data,
-    );
+    if (_isCreationStateUnchanged(interaction, updateResult)) {
+      return state;
+    }
+    final baseElement = interaction.element;
+    final updatedElement = updateResult.data == interaction.elementData
+        ? baseElement
+        : baseElement.copyWith(data: updateResult.data);
     final nextInteraction = interaction.copyWith(
       element: updatedElement,
       currentRect: updateResult.rect,
@@ -288,5 +297,29 @@ class CreateElementReducer {
   ) {
     final definition = context.elementRegistry.getDefinition(typeId);
     return definition?.creationStrategy ?? const RectCreationStrategy();
+  }
+
+  bool _isCreationStateUnchanged(
+    CreatingState interaction,
+    CreationUpdateResult updateResult,
+  ) =>
+      interaction.elementData == updateResult.data &&
+      interaction.currentRect == updateResult.rect &&
+      interaction.creationMode == updateResult.creationMode &&
+      _listEquals(interaction.snapGuides, updateResult.snapGuides);
+
+  bool _listEquals<T>(List<T> a, List<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) {
+        return false;
+      }
+    }
+    return true;
   }
 }

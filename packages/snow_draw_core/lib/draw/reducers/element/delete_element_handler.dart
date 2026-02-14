@@ -227,6 +227,7 @@ DrawState handleDuplicateElements(
 
   final newElements = <ElementState>[];
   final newSelectedIds = <String>{};
+  var nextZIndex = resolveNextZIndex(state.domain.document.elements);
 
   for (final element in elementsToDuplicate) {
     final newId = idMap[element.id]!;
@@ -245,8 +246,10 @@ DrawState handleDuplicateElements(
       rect: element.rect.translate(
         DrawPoint(x: action.offsetX, y: action.offsetY),
       ),
+      zIndex: nextZIndex,
       data: nextData,
     );
+    nextZIndex++;
     newElements.add(duplicated);
     if (selectedIds.contains(element.id)) {
       newSelectedIds.add(newId);

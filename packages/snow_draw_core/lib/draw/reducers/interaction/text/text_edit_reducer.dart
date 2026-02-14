@@ -173,7 +173,7 @@ class TextEditReducer {
         rect: nextRect,
         rotation: 0,
         opacity: interaction.opacity,
-        zIndex: state.domain.document.elements.length,
+        zIndex: resolveNextZIndex(state.domain.document.elements),
         data: nextData,
       );
       final nextElements = [...state.domain.document.elements, element];
