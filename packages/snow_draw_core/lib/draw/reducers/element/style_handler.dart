@@ -17,6 +17,7 @@ import '../../models/interaction_state.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
+import '../core/reducer_utils.dart';
 
 DrawState handleUpdateElementsStyle(
   DrawState state,
@@ -51,8 +52,11 @@ DrawState handleUpdateElementsStyle(
   );
 
   final elements = <ElementState>[];
+  final selectedIds = state.domain.selection.selectedIds;
+  final shouldTrackOverlayRefresh = selectedIds.length > 1;
   var domainChanged = false;
   var interactionChanged = false;
+  var selectedGeometryChanged = false;
   TextEditingState? nextTextEdit;
 
   for (final element in state.domain.document.elements) {
@@ -81,6 +85,9 @@ DrawState handleUpdateElementsStyle(
             allowShrinkHeight: true,
           );
           if (nextRect != next.rect) {
+            if (shouldTrackOverlayRefresh && selectedIds.contains(element.id)) {
+              selectedGeometryChanged = true;
+            }
             next = next.copyWith(rect: nextRect);
           }
         } else if (data is SerialNumberData &&
@@ -91,6 +98,9 @@ DrawState handleUpdateElementsStyle(
             data: updatedData,
           );
           if (nextRect != next.rect) {
+            if (shouldTrackOverlayRefresh && selectedIds.contains(element.id)) {
+              selectedGeometryChanged = true;
+            }
             next = next.copyWith(rect: nextRect);
           }
         } else if (data is ArrowData &&
@@ -102,6 +112,11 @@ DrawState handleUpdateElementsStyle(
             previousArrowType: data.arrowType,
             elementsById: state.domain.document.elementMap,
           );
+          if (result.rect != next.rect &&
+              shouldTrackOverlayRefresh &&
+              selectedIds.contains(element.id)) {
+            selectedGeometryChanged = true;
+          }
           next = next.copyWith(rect: result.rect, data: result.data);
         }
         domainChanged = true;
@@ -140,7 +155,20 @@ DrawState handleUpdateElementsStyle(
       ? state.application.copyWith(interaction: nextTextEdit)
       : state.application;
 
-  return state.copyWith(domain: nextDomain, application: nextApplication);
+  final nextState = state.copyWith(
+    domain: nextDomain,
+    application: nextApplication,
+  );
+
+  if (!selectedGeometryChanged) {
+    return nextState;
+  }
+
+  return applySelectionChange(
+    nextState,
+    selectedIds,
+    forceRefreshOverlay: true,
+  );
 }
 
 TextEditingState? _applyTextEditingStyleUpdate(

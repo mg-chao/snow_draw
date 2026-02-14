@@ -37,10 +37,19 @@ int resolveNextZIndex(Iterable<ElementState> elements) {
 ///
 /// Handles the single-select vs. multi-select cache/bounds behavior
 /// consistently.
-DrawState applySelectionChange(DrawState state, Set<String> selectedIds) {
+DrawState applySelectionChange(
+  DrawState state,
+  Set<String> selectedIds, {
+  bool forceRefreshOverlay = false,
+}) {
+  final selectionUnchanged = _setEquals(
+    state.domain.selection.selectedIds,
+    selectedIds,
+  );
+
   // No-op when the selected set doesn't change. This avoids rebuilding the
   // selection state and accidentally wiping multi-select overlay state.
-  if (_setEquals(state.domain.selection.selectedIds, selectedIds)) {
+  if (selectionUnchanged && !forceRefreshOverlay) {
     return state;
   }
 
@@ -64,12 +73,25 @@ DrawState applySelectionChange(DrawState state, Set<String> selectedIds) {
   );
   final overlayBounds = geometry.isMultiSelect ? geometry.bounds : null;
 
-  final nextSelection = state.domain.selection.withSelectedIds(selectedIds);
-  final nextOverlay = MultiSelectLifecycle.onSelectionChanged(
-    state.application.selectionOverlay,
-    selectedIds,
-    newOverlayBounds: overlayBounds,
-  );
+  final nextSelection = selectionUnchanged
+      ? state.domain.selection
+      : state.domain.selection.withSelectedIds(selectedIds);
+  final nextOverlay =
+      selectionUnchanged && forceRefreshOverlay && overlayBounds != null
+      ? MultiSelectLifecycle.onMoveFinished(
+          state.application.selectionOverlay,
+          newBounds: overlayBounds,
+        )
+      : MultiSelectLifecycle.onSelectionChanged(
+          state.application.selectionOverlay,
+          selectedIds,
+          newOverlayBounds: overlayBounds,
+        );
+
+  if (identical(nextSelection, state.domain.selection) &&
+      nextOverlay == state.application.selectionOverlay) {
+    return state;
+  }
 
   return state.copyWith(
     domain: state.domain.copyWith(selection: nextSelection),
