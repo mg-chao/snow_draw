@@ -143,6 +143,43 @@ void main() {
       expect(deployPagesWorkflow, isNot(contains('channel: beta')));
     });
   });
+
+  group('workflow execution optimization', () {
+    test('avoids redundant dart pub get calls when melos bootstrap runs', () {
+      expect(releaseWorkflow, isNot(contains('dart pub get')));
+      expect(deployPagesWorkflow, isNot(contains('dart pub get')));
+    });
+
+    test('applies timeout limits to all release workflow jobs', () {
+      expect(
+        _extractJobBlock(releaseWorkflow, 'quality-gate'),
+        contains('timeout-minutes:'),
+      );
+      expect(
+        _extractJobBlock(releaseWorkflow, 'build-windows'),
+        contains('timeout-minutes:'),
+      );
+      expect(
+        _extractJobBlock(releaseWorkflow, 'build-web'),
+        contains('timeout-minutes:'),
+      );
+      expect(
+        _extractJobBlock(releaseWorkflow, 'create-release'),
+        contains('timeout-minutes:'),
+      );
+    });
+
+    test('applies timeout limits to deploy pages workflow jobs', () {
+      expect(
+        _extractJobBlock(deployPagesWorkflow, 'build'),
+        contains('timeout-minutes:'),
+      );
+      expect(
+        _extractJobBlock(deployPagesWorkflow, 'deploy'),
+        contains('timeout-minutes:'),
+      );
+    });
+  });
 }
 
 String _readWorkflow(String workflowFileName) {
@@ -183,6 +220,30 @@ Directory _findRepoRoot() {
 
 String _joinPath(List<String> segments) =>
     segments.join(Platform.pathSeparator);
+
+String _extractJobBlock(String workflow, String jobName) {
+  final jobHeader = RegExp(
+    '^  ${RegExp.escape(jobName)}:\\s*\$',
+    multiLine: true,
+  );
+  final jobHeaderMatch = jobHeader.firstMatch(workflow);
+  if (jobHeaderMatch == null) {
+    throw StateError('Job not found: $jobName');
+  }
+
+  final blockStart = jobHeaderMatch.end;
+  final nextJobHeader = RegExp(r'^  [A-Za-z0-9_-]+:\s*$', multiLine: true);
+  var blockEnd = workflow.length;
+
+  for (final match in nextJobHeader.allMatches(workflow, blockStart)) {
+    if (match.start > blockStart) {
+      blockEnd = match.start;
+      break;
+    }
+  }
+
+  return workflow.substring(blockStart, blockEnd);
+}
 
 int _countMatches(String text, String needle) {
   var count = 0;
