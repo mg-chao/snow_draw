@@ -264,6 +264,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
                         final applicableProperties = _getApplicableProperties(
                           propertyContext,
                         );
+                        final propertiesById = {
+                          for (final property in applicableProperties)
+                            property.id: property,
+                        };
                         final widgets = <Widget>[];
 
                         for (var i = 0; i < applicableProperties.length; i++) {
@@ -271,6 +275,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           final widget = _buildPropertyWidget(
                             property,
                             propertyContext,
+                            propertiesById,
                           );
 
                           if (widget != null) {
@@ -1548,29 +1553,30 @@ class _StyleToolbarState extends State<StyleToolbar> {
   }
 
   /// Get the list of properties that should be shown for the current context
-  List<PropertyDescriptor<dynamic>> _getApplicableProperties(
+  List<_EvaluatedProperty<dynamic>> _getApplicableProperties(
     StylePropertyContext context,
   ) {
-    final registry = PropertyRegistry.instance;
-    final allProperties = registry.getApplicableProperties(context);
+    final allProperties = PropertyRegistry.instance
+        .getApplicableProperties(context)
+        .map((descriptor) => _evaluateProperty(context, descriptor))
+        .toList();
+    final propertiesById = {
+      for (final property in allProperties) property.id: property,
+    };
     final fillColor = _readProperty<Color>(
-      registry,
-      context,
+      propertiesById,
       PropertyIds.fillColor,
     );
     final textStroke = _readProperty<double>(
-      registry,
-      context,
+      propertiesById,
       PropertyIds.textStrokeWidth,
     );
     final highlightTextStroke = _readProperty<double>(
-      registry,
-      context,
+      propertiesById,
       PropertyIds.highlightTextStrokeWidth,
     );
     final filterType = _readProperty<CanvasFilterType>(
-      registry,
-      context,
+      propertiesById,
       PropertyIds.filterType,
     );
     final visibility = _PropertyVisibilitySnapshot(
@@ -1622,18 +1628,26 @@ class _StyleToolbarState extends State<StyleToolbar> {
     }).toList();
   }
 
-  _ResolvedPropertyValue<T> _readProperty<T>(
-    PropertyRegistry registry,
+  _EvaluatedProperty<dynamic> _evaluateProperty(
     StylePropertyContext context,
+    PropertyDescriptor<dynamic> descriptor,
+  ) => _EvaluatedProperty<dynamic>(
+    descriptor: descriptor,
+    value: descriptor.extractValue(context),
+    defaultValue: descriptor.getDefaultValue(context),
+  );
+
+  _ResolvedPropertyValue<T> _readProperty<T>(
+    Map<String, _EvaluatedProperty<dynamic>> propertiesById,
     String propertyId,
   ) {
-    final property = registry.getProperty(propertyId);
+    final property = propertiesById[propertyId];
     if (property == null) {
       return _ResolvedPropertyValue<T>();
     }
     return _ResolvedPropertyValue<T>(
-      value: property.extractValue(context) as MixedValue<T>,
-      defaultValue: property.getDefaultValue(context) as T,
+      value: property.value as MixedValue<T>,
+      defaultValue: property.defaultValue as T,
     );
   }
 
@@ -1682,13 +1696,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   /// Build the widget for a specific property
   Widget? _buildPropertyWidget(
-    PropertyDescriptor<dynamic> property,
+    _EvaluatedProperty<dynamic> property,
     StylePropertyContext context,
+    Map<String, _EvaluatedProperty<dynamic>> propertiesById,
   ) {
     switch (property.id) {
       case PropertyIds.color:
-        final value = property.extractValue(context) as MixedValue<Color>;
-        final defaultValue = property.getDefaultValue(context) as Color;
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
         final colors = context.hasOnlySelected({ElementType.highlight})
             ? _highlightColorPalette
             : _defaultColorPalette;
@@ -1702,8 +1717,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.highlightShape:
-        final value =
-            property.extractValue(context) as MixedValue<HighlightShape>;
+        final value = property.value as MixedValue<HighlightShape>;
         return _buildStyleOptions<HighlightShape>(
           label: widget.strings.highlightShape,
           mixed: value.isMixed,
@@ -1728,7 +1742,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.highlightTextStrokeWidth:
-        final value = property.extractValue(context) as MixedValue<double>;
+        final value = property.value as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.highlightTextStrokeWidth,
           mixed: value.isMixed,
@@ -1763,8 +1777,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.highlightTextStrokeColor:
-        final value = property.extractValue(context) as MixedValue<Color>;
-        final defaultValue = property.getDefaultValue(context) as Color;
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
         return _buildColorRow(
           label: widget.strings.highlightTextStrokeColor,
           colors: _defaultColorPalette,
@@ -1778,13 +1792,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.filterType:
-        final value =
-            property.extractValue(context) as MixedValue<CanvasFilterType>;
+        final value = property.value as MixedValue<CanvasFilterType>;
         return _buildFilterTypeSelect(value: value);
 
       case PropertyIds.filterStrength:
-        final value = property.extractValue(context) as MixedValue<double>;
-        final defaultValue = property.getDefaultValue(context) as double;
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
         return _buildSliderControl(
           label: widget.strings.filterStrength,
           value: value,
@@ -1804,7 +1817,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.strokeWidth:
-        final value = property.extractValue(context) as MixedValue<double>;
+        final value = property.value as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.strokeWidth,
           mixed: value.isMixed,
@@ -1831,7 +1844,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.strokeStyle:
-        final value = property.extractValue(context) as MixedValue<StrokeStyle>;
+        final value = property.value as MixedValue<StrokeStyle>;
         return _buildStyleOptions<StrokeStyle>(
           label: widget.strings.strokeStyle,
           mixed: value.isMixed,
@@ -1858,8 +1871,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.fillColor:
-        final value = property.extractValue(context) as MixedValue<Color>;
-        final defaultValue = property.getDefaultValue(context) as Color;
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
         return _buildColorRow(
           label: widget.strings.fillColor,
           colors: const [
@@ -1876,7 +1889,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.fillStyle:
-        final value = property.extractValue(context) as MixedValue<FillStyle>;
+        final value = property.value as MixedValue<FillStyle>;
         return _buildStyleOptions<FillStyle>(
           label: widget.strings.fillStyle,
           mixed: value.isMixed,
@@ -1903,8 +1916,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.cornerRadius:
-        final value = property.extractValue(context) as MixedValue<double>;
-        final defaultValue = property.getDefaultValue(context) as double;
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
         return _buildSliderControl(
           label: widget.strings.cornerRadius,
           value: value,
@@ -1926,8 +1939,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.opacity:
-        final value = property.extractValue(context) as MixedValue<double>;
-        final defaultValue = property.getDefaultValue(context) as double;
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
         return _buildSliderControl(
           label: widget.strings.opacity,
           value: value,
@@ -1947,8 +1960,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.maskColor:
-        final value = property.extractValue(context) as MixedValue<Color>;
-        final defaultValue = property.getDefaultValue(context) as Color;
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
         return _buildColorRow(
           label: widget.strings.maskColor,
           colors: _defaultColorPalette,
@@ -1959,8 +1972,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.maskOpacity:
-        final value = property.extractValue(context) as MixedValue<double>;
-        final defaultValue = property.getDefaultValue(context) as double;
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
         return _buildSliderControl(
           label: widget.strings.maskOpacity,
           value: value,
@@ -1982,7 +1995,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.arrowType:
-        final value = property.extractValue(context) as MixedValue<ArrowType>;
+        final value = property.value as MixedValue<ArrowType>;
         return _buildStyleOptions<ArrowType>(
           label: widget.strings.arrowType,
           mixed: value.isMixed,
@@ -2014,22 +2027,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
       case PropertyIds.endArrowhead:
         // Render both start and end arrowhead controls together
-        final startProp = PropertyRegistry.instance.getProperty(
-          PropertyIds.startArrowhead,
-        );
-        final endProp = property;
+        final startProp = propertiesById[PropertyIds.startArrowhead];
 
         if (startProp == null) {
           return null;
         }
 
-        final startValue =
-            startProp.extractValue(context) as MixedValue<ArrowheadStyle>;
-        final endValue =
-            endProp.extractValue(context) as MixedValue<ArrowheadStyle>;
-        final startDefault =
-            startProp.getDefaultValue(context) as ArrowheadStyle;
-        final endDefault = endProp.getDefaultValue(context) as ArrowheadStyle;
+        final startValue = startProp.value as MixedValue<ArrowheadStyle>;
+        final endValue = property.value as MixedValue<ArrowheadStyle>;
+        final startDefault = startProp.defaultValue as ArrowheadStyle;
+        final endDefault = property.defaultValue as ArrowheadStyle;
 
         return _buildArrowheadControls(
           startArrowhead: startValue,
@@ -2039,15 +2046,15 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.serialNumber:
-        final value = property.extractValue(context) as MixedValue<int>;
-        final defaultValue = property.getDefaultValue(context) as int;
+        final value = property.value as MixedValue<int>;
+        final defaultValue = property.defaultValue as int;
         return _buildSerialNumberControl(
           value: value,
           defaultValue: defaultValue,
         );
 
       case PropertyIds.fontSize:
-        final value = property.extractValue(context) as MixedValue<double>;
+        final value = property.value as MixedValue<double>;
         return _buildStyleOptions<double>(
           label: widget.strings.fontSize,
           mixed: value.isMixed,
@@ -2079,22 +2086,21 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.fontFamily:
-        final value = property.extractValue(context) as MixedValue<String>;
+        final value = property.value as MixedValue<String>;
         return _buildFontFamilyControl(
           value: value,
           onSelect: (family) => _applyStyleUpdate(fontFamily: family),
         );
 
       case PropertyIds.textAlign:
-        final value =
-            property.extractValue(context) as MixedValue<TextHorizontalAlign>;
+        final value = property.value as MixedValue<TextHorizontalAlign>;
         return _buildTextAlignmentControl(
           horizontalAlign: value,
           onHorizontalSelect: (align) => _applyStyleUpdate(textAlign: align),
         );
 
       case PropertyIds.textStrokeWidth:
-        final value = property.extractValue(context) as MixedValue<double>;
+        final value = property.value as MixedValue<double>;
         return _buildNumericOptions(
           label: widget.strings.textStrokeWidth,
           mixed: value.isMixed,
@@ -2129,8 +2135,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         );
 
       case PropertyIds.textStrokeColor:
-        final value = property.extractValue(context) as MixedValue<Color>;
-        final defaultValue = property.getDefaultValue(context) as Color;
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
         return _buildColorRow(
           label: widget.strings.textStrokeColor,
           colors: const [
@@ -2216,6 +2222,21 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Future<void> _handleZOrder(ZIndexOperation operation) =>
       widget.adapter.changeZOrder(operation);
+}
+
+@immutable
+class _EvaluatedProperty<T> {
+  const _EvaluatedProperty({
+    required this.descriptor,
+    required this.value,
+    required this.defaultValue,
+  });
+
+  final PropertyDescriptor<T> descriptor;
+  final MixedValue<T> value;
+  final T defaultValue;
+
+  String get id => descriptor.id;
 }
 
 @immutable
