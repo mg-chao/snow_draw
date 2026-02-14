@@ -1567,8 +1567,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
       for (final descriptor in descriptors) descriptor.id: descriptor,
     };
     final evaluatedById = <String, _EvaluatedProperty<dynamic>>{};
+    final incompatiblePropertyIds = <String>{};
 
     _EvaluatedProperty<dynamic>? evaluateById(String propertyId) {
+      if (incompatiblePropertyIds.contains(propertyId)) {
+        return null;
+      }
       final cached = evaluatedById[propertyId];
       if (cached != null) {
         return cached;
@@ -1578,6 +1582,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
         return null;
       }
       final evaluated = _evaluateProperty(context, descriptor);
+      if (!_isPropertyTypeCompatible(evaluated)) {
+        incompatiblePropertyIds.add(propertyId);
+        return null;
+      }
       evaluatedById[propertyId] = evaluated;
       return evaluated;
     }
@@ -1632,14 +1640,70 @@ class _StyleToolbarState extends State<StyleToolbar> {
   _ResolvedPropertyValue<T> _readProperty<T>(
     _EvaluatedProperty<dynamic>? property,
   ) {
-    if (property == null) {
+    if (property == null || property.value is! MixedValue<T>) {
       return _ResolvedPropertyValue<T>();
     }
+    final defaultValue = property.defaultValue;
     return _ResolvedPropertyValue<T>(
       value: property.value as MixedValue<T>,
-      defaultValue: property.defaultValue as T,
+      defaultValue: defaultValue is T ? defaultValue : null,
     );
   }
+
+  bool _isPropertyTypeCompatible(_EvaluatedProperty<dynamic> property) {
+    switch (property.id) {
+      case PropertyIds.color:
+      case PropertyIds.fillColor:
+      case PropertyIds.textStrokeColor:
+      case PropertyIds.highlightTextStrokeColor:
+      case PropertyIds.maskColor:
+        return _matchesPropertyType<Color>(property);
+
+      case PropertyIds.strokeWidth:
+      case PropertyIds.filterStrength:
+      case PropertyIds.highlightTextStrokeWidth:
+      case PropertyIds.textStrokeWidth:
+      case PropertyIds.cornerRadius:
+      case PropertyIds.opacity:
+      case PropertyIds.maskOpacity:
+      case PropertyIds.fontSize:
+        return _matchesPropertyType<double>(property);
+
+      case PropertyIds.fillStyle:
+        return _matchesPropertyType<FillStyle>(property);
+
+      case PropertyIds.strokeStyle:
+        return _matchesPropertyType<StrokeStyle>(property);
+
+      case PropertyIds.highlightShape:
+        return _matchesPropertyType<HighlightShape>(property);
+
+      case PropertyIds.filterType:
+        return _matchesPropertyType<CanvasFilterType>(property);
+
+      case PropertyIds.arrowType:
+        return _matchesPropertyType<ArrowType>(property);
+
+      case PropertyIds.startArrowhead:
+      case PropertyIds.endArrowhead:
+        return _matchesPropertyType<ArrowheadStyle>(property);
+
+      case PropertyIds.serialNumber:
+        return _matchesPropertyType<int>(property);
+
+      case PropertyIds.fontFamily:
+        return _matchesPropertyType<String>(property);
+
+      case PropertyIds.textAlign:
+        return _matchesPropertyType<TextHorizontalAlign>(property);
+
+      default:
+        return true;
+    }
+  }
+
+  bool _matchesPropertyType<T>(_EvaluatedProperty<dynamic> property) =>
+      property.value is MixedValue<T> && property.defaultValue is T;
 
   bool _isTransparentColor(MixedValue<Color>? value) {
     if (value == null || value.isMixed) {

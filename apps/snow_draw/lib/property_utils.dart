@@ -15,33 +15,46 @@ class PropertyUtils {
       return MixedValue<T>(value: null, isMixed: true);
     }
 
-    // If any value is mixed, result is mixed
-    if (values.any((v) => v.isMixed)) {
-      return MixedValue<T>(value: null, isMixed: true);
-    }
+    T? firstValue;
+    var hasFirstValue = false;
+    var hasNullValue = false;
 
-    // Get first non-null value
-    final firstValue = values.first.value;
-    if (firstValue == null) {
-      if (!treatNullAsValue) {
+    for (final candidate in values) {
+      if (candidate.isMixed) {
         return MixedValue<T>(value: null, isMixed: true);
       }
-      for (final value in values.skip(1)) {
-        if (value.value != null) {
+
+      final value = candidate.value;
+      if (value == null) {
+        if (!treatNullAsValue || hasFirstValue) {
           return MixedValue<T>(value: null, isMixed: true);
         }
+        hasNullValue = true;
+        continue;
       }
-      return MixedValue<T>(value: null, isMixed: false);
-    }
 
-    // Check if all values equal the first
-    for (final value in values.skip(1)) {
-      if (value.value == null || !equals(firstValue, value.value as T)) {
+      if (hasNullValue) {
+        return MixedValue<T>(value: null, isMixed: true);
+      }
+
+      if (!hasFirstValue) {
+        firstValue = value;
+        hasFirstValue = true;
+        continue;
+      }
+
+      if (!equals(firstValue as T, value)) {
         return MixedValue<T>(value: null, isMixed: true);
       }
     }
 
-    return MixedValue(value: firstValue, isMixed: false);
+    if (!hasFirstValue) {
+      return treatNullAsValue
+          ? MixedValue<T>(value: null, isMixed: false)
+          : MixedValue<T>(value: null, isMixed: true);
+    }
+
+    return MixedValue<T>(value: firstValue, isMixed: false);
   }
 
   /// Compare two doubles with tolerance
