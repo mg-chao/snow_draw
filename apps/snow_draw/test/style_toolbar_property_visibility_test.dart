@@ -9,7 +9,15 @@ import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
+import 'package:snow_draw_core/draw/models/document_state.dart';
+import 'package:snow_draw_core/draw/models/domain_state.dart';
+import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   testWidgets(
@@ -70,11 +78,25 @@ void main() {
       expect(find.text('Highlight Stroke Color'), findsNothing);
     },
   );
+
+  testWidgets(
+    'mixed text and rectangle selection keeps corner radius visible',
+    (tester) async {
+      await _pumpToolbar(
+        tester,
+        toolType: ToolType.selection,
+        initialState: _buildMixedTextAndRectangleSelectionState(),
+      );
+
+      expect(find.text('Corner Radius'), findsOneWidget);
+    },
+  );
 }
 
 Future<void> _pumpToolbar(
   WidgetTester tester, {
   required ToolType toolType,
+  DrawState? initialState,
   Future<void> Function(DefaultDrawStore store)? configure,
 }) async {
   initializePropertyRegistry();
@@ -82,7 +104,7 @@ Future<void> _pumpToolbar(
   final registry = DefaultElementRegistry();
   registerBuiltInElements(registry);
   final context = DrawContext.withDefaults(elementRegistry: registry);
-  final store = DefaultDrawStore(context: context);
+  final store = DefaultDrawStore(context: context, initialState: initialState);
   if (configure != null) {
     await configure(store);
   }
@@ -110,4 +132,33 @@ Future<void> _pumpToolbar(
   );
 
   await tester.pumpAndSettle();
+}
+
+DrawState _buildMixedTextAndRectangleSelectionState() {
+  const rectangle = ElementState(
+    id: 'rectangle-1',
+    rect: DrawRect(maxX: 120, maxY: 80),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: RectangleData(),
+  );
+  const text = ElementState(
+    id: 'text-1',
+    rect: DrawRect(minX: 140, maxX: 280, maxY: 80),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 1,
+    data: TextData(),
+  );
+
+  return DrawState(
+    domain: DomainState(
+      document: DocumentState(elements: const [rectangle, text]),
+      selection: const SelectionState(
+        selectedIds: {'rectangle-1', 'text-1'},
+        selectionVersion: 1,
+      ),
+    ),
+  );
 }

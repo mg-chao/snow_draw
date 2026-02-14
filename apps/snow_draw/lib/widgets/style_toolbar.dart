@@ -262,7 +262,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                       ...() {
                         final propertyContext = _createPropertyContext(state);
                         final applicableProperties = _getApplicableProperties(
-                          state,
+                          propertyContext,
                         );
                         final widgets = <Widget>[];
 
@@ -271,7 +271,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
                           final widget = _buildPropertyWidget(
                             property,
                             propertyContext,
-                            state,
                           );
 
                           if (widget != null) {
@@ -1550,74 +1549,92 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   /// Get the list of properties that should be shown for the current context
   List<PropertyDescriptor<dynamic>> _getApplicableProperties(
-    StyleToolbarState state,
+    StylePropertyContext context,
   ) {
-    final context = _createPropertyContext(state);
     final registry = PropertyRegistry.instance;
     final allProperties = registry.getApplicableProperties(context);
-    final fillColorProp = registry.getProperty(PropertyIds.fillColor);
-    final fillColor = fillColorProp == null
-        ? null
-        : fillColorProp.extractValue(context) as MixedValue<Color>;
-    final textStrokeWidthProp = registry.getProperty(
+    final fillColor = _readProperty<Color>(
+      registry,
+      context,
+      PropertyIds.fillColor,
+    );
+    final textStroke = _readProperty<double>(
+      registry,
+      context,
       PropertyIds.textStrokeWidth,
     );
-    final textStrokeWidth = textStrokeWidthProp == null
-        ? null
-        : textStrokeWidthProp.extractValue(context) as MixedValue<double>;
-    final textStrokeDefaultWidth = textStrokeWidthProp == null
-        ? null
-        : textStrokeWidthProp.getDefaultValue(context) as double;
-    final highlightTextStrokeWidthProp = registry.getProperty(
+    final highlightTextStroke = _readProperty<double>(
+      registry,
+      context,
       PropertyIds.highlightTextStrokeWidth,
     );
-    final highlightTextStrokeWidth = highlightTextStrokeWidthProp == null
-        ? null
-        : highlightTextStrokeWidthProp.extractValue(context)
-              as MixedValue<double>;
-    final highlightTextStrokeDefaultWidth = highlightTextStrokeWidthProp == null
-        ? null
-        : highlightTextStrokeWidthProp.getDefaultValue(context) as double;
-    final filterTypeProp = registry.getProperty(PropertyIds.filterType);
-    final filterType = filterTypeProp == null
-        ? null
-        : filterTypeProp.extractValue(context) as MixedValue<CanvasFilterType>;
-    final filterDefaultType = filterTypeProp == null
-        ? null
-        : filterTypeProp.getDefaultValue(context) as CanvasFilterType;
+    final filterType = _readProperty<CanvasFilterType>(
+      registry,
+      context,
+      PropertyIds.filterType,
+    );
+    final visibility = _PropertyVisibilitySnapshot(
+      fillColor: fillColor.value,
+      textStrokeWidth: textStroke.value,
+      textStrokeDefaultWidth: textStroke.defaultValue,
+      highlightTextStrokeWidth: highlightTextStroke.value,
+      highlightTextStrokeDefaultWidth: highlightTextStroke.defaultValue,
+      filterType: filterType.value,
+      filterDefaultType: filterType.defaultValue,
+    );
 
     return allProperties.where((property) {
       if (property.id == PropertyIds.fillStyle &&
-          _isTransparentColor(fillColor)) {
+          _isTransparentColor(visibility.fillColor)) {
         return false;
       }
 
       if (property.id == PropertyIds.textStrokeColor &&
-          _isStrokeColorHidden(textStrokeWidth, textStrokeDefaultWidth)) {
+          _isStrokeColorHidden(
+            visibility.textStrokeWidth,
+            visibility.textStrokeDefaultWidth,
+          )) {
         return false;
       }
 
       if (property.id == PropertyIds.highlightTextStrokeColor &&
           _isStrokeColorHidden(
-            highlightTextStrokeWidth,
-            highlightTextStrokeDefaultWidth,
+            visibility.highlightTextStrokeWidth,
+            visibility.highlightTextStrokeDefaultWidth,
           )) {
         return false;
       }
 
       if (property.id == PropertyIds.cornerRadius &&
-          context.selectedElementTypes.contains(ElementType.text) &&
-          _isTransparentColor(fillColor)) {
+          _isCornerRadiusHidden(context, visibility.fillColor)) {
         return false;
       }
 
       if (property.id == PropertyIds.filterStrength &&
-          _isFilterStrengthHidden(filterType, filterDefaultType)) {
+          _isFilterStrengthHidden(
+            visibility.filterType,
+            visibility.filterDefaultType,
+          )) {
         return false;
       }
 
       return true;
     }).toList();
+  }
+
+  _ResolvedPropertyValue<T> _readProperty<T>(
+    PropertyRegistry registry,
+    StylePropertyContext context,
+    String propertyId,
+  ) {
+    final property = registry.getProperty(propertyId);
+    if (property == null) {
+      return _ResolvedPropertyValue<T>();
+    }
+    return _ResolvedPropertyValue<T>(
+      value: property.extractValue(context) as MixedValue<T>,
+      defaultValue: property.getDefaultValue(context) as T,
+    );
   }
 
   bool _isTransparentColor(MixedValue<Color>? value) {
@@ -1633,6 +1650,22 @@ class _StyleToolbarState extends State<StyleToolbar> {
       return false;
     }
     return (width.value ?? defaultWidth) <= 0;
+  }
+
+  bool _isCornerRadiusHidden(
+    StylePropertyContext context,
+    MixedValue<Color>? fillColor,
+  ) {
+    if (!_isTransparentColor(fillColor)) {
+      return false;
+    }
+    final includesText = context.selectedElementTypes.contains(
+      ElementType.text,
+    );
+    final includesRectangle = context.selectedElementTypes.contains(
+      ElementType.rectangle,
+    );
+    return includesText && !includesRectangle;
   }
 
   bool _isFilterStrengthHidden(
@@ -1651,7 +1684,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
   Widget? _buildPropertyWidget(
     PropertyDescriptor<dynamic> property,
     StylePropertyContext context,
-    StyleToolbarState state,
   ) {
     switch (property.id) {
       case PropertyIds.color:
@@ -2184,6 +2216,35 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Future<void> _handleZOrder(ZIndexOperation operation) =>
       widget.adapter.changeZOrder(operation);
+}
+
+@immutable
+class _ResolvedPropertyValue<T> {
+  const _ResolvedPropertyValue({this.value, this.defaultValue});
+
+  final MixedValue<T>? value;
+  final T? defaultValue;
+}
+
+@immutable
+class _PropertyVisibilitySnapshot {
+  const _PropertyVisibilitySnapshot({
+    required this.fillColor,
+    required this.textStrokeWidth,
+    required this.textStrokeDefaultWidth,
+    required this.highlightTextStrokeWidth,
+    required this.highlightTextStrokeDefaultWidth,
+    required this.filterType,
+    required this.filterDefaultType,
+  });
+
+  final MixedValue<Color>? fillColor;
+  final MixedValue<double>? textStrokeWidth;
+  final double? textStrokeDefaultWidth;
+  final MixedValue<double>? highlightTextStrokeWidth;
+  final double? highlightTextStrokeDefaultWidth;
+  final MixedValue<CanvasFilterType>? filterType;
+  final CanvasFilterType? filterDefaultType;
 }
 
 @immutable
