@@ -89,16 +89,20 @@ class PluginRegistry {
   /// Runs plugins by priority until one returns handled.
   Future<PluginResult?> dispatch(InputEvent event, DrawState state) async {
     _ensureSorted();
+    final pluginsForEvent = _pluginsForEventType(event.runtimeType);
 
     PluginResult? finalResult;
     try {
-      if (await _isInterceptedByBeforeHooks(event)) {
+      if (pluginsForEvent.isEmpty) {
+        return null;
+      }
+
+      if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
         return finalResult = const PluginResult.handled(
           message: 'Intercepted by before hook',
         );
       }
 
-      final pluginsForEvent = _pluginsForEventType(event.runtimeType);
       var latestState = state;
 
       for (final plugin in pluginsForEvent) {
@@ -131,7 +135,7 @@ class PluginRegistry {
 
       return finalResult;
     } finally {
-      await _runAfterHooks(event, finalResult);
+      await _runAfterHooks(event, finalResult, pluginsForEvent);
     }
   }
 
@@ -248,8 +252,11 @@ class PluginRegistry {
     }
   }
 
-  Future<bool> _isInterceptedByBeforeHooks(InputEvent event) async {
-    for (final plugin in _plugins) {
+  Future<bool> _isInterceptedByBeforeHooks(
+    InputEvent event,
+    List<InputPlugin> pluginsForEvent,
+  ) async {
+    for (final plugin in pluginsForEvent) {
       try {
         if (await plugin.onBeforeEvent(event)) {
           return true;
@@ -284,8 +291,12 @@ class PluginRegistry {
     }
   }
 
-  Future<void> _runAfterHooks(InputEvent event, PluginResult? result) async {
-    for (final plugin in _plugins) {
+  Future<void> _runAfterHooks(
+    InputEvent event,
+    PluginResult? result,
+    List<InputPlugin> pluginsForEvent,
+  ) async {
+    for (final plugin in pluginsForEvent) {
       try {
         await plugin.onAfterEvent(event, result);
       } on Object catch (e, stackTrace) {
