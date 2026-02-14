@@ -35,14 +35,7 @@ class StyleToolbarAdapter {
     _config = _store.config;
     _selectedIds = _store.state.domain.selection.selectedIds;
     _refreshSelectedElements();
-    _styleValues = _resolveRectangleStyles();
-    _arrowStyleValues = _resolveArrowStyles();
-    _lineStyleValues = _resolveLineStyles();
-    _freeDrawStyleValues = _resolveFreeDrawStyles();
-    _textStyleValues = _resolveTextStyles();
-    _highlightStyleValues = _resolveHighlightStyles();
-    _filterStyleValues = _resolveFilterStyles();
-    _serialNumberStyleValues = _resolveSerialNumberStyles();
+    _resolveSelectedStyleValues();
     _stateNotifier = ValueNotifier<StyleToolbarState>(_buildState());
     _stateUnsubscribe = _store.listen(
       _handleStateChange,
@@ -286,14 +279,7 @@ class StyleToolbarAdapter {
     if (!setEquals(_selectedIds, nextSelectedIds)) {
       _selectedIds = nextSelectedIds;
       _refreshSelectedElements();
-      _styleValues = _resolveRectangleStyles();
-      _arrowStyleValues = _resolveArrowStyles();
-      _lineStyleValues = _resolveLineStyles();
-      _freeDrawStyleValues = _resolveFreeDrawStyles();
-      _textStyleValues = _resolveTextStyles();
-      _highlightStyleValues = _resolveHighlightStyles();
-      _filterStyleValues = _resolveFilterStyles();
-      _serialNumberStyleValues = _resolveSerialNumberStyles();
+      _resolveSelectedStyleValues();
       _publishState();
       return;
     }
@@ -306,6 +292,11 @@ class StyleToolbarAdapter {
     if (!elementsChanged) {
       return;
     }
+    _resolveSelectedStyleValues();
+    _publishState();
+  }
+
+  void _resolveSelectedStyleValues() {
     _styleValues = _resolveRectangleStyles();
     _arrowStyleValues = _resolveArrowStyles();
     _lineStyleValues = _resolveLineStyles();
@@ -314,7 +305,6 @@ class StyleToolbarAdapter {
     _highlightStyleValues = _resolveHighlightStyles();
     _filterStyleValues = _resolveFilterStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
-    _publishState();
   }
 
   void _handleConfigChange(DrawConfig config) {
@@ -420,29 +410,25 @@ class StyleToolbarAdapter {
         continue;
       }
       selectedElements.add(element);
-      if (element.data is RectangleData) {
-        selectedRectangles.add(element);
-      }
-      if (element.data is HighlightData) {
-        selectedHighlights.add(element);
-      }
-      if (element.data is FilterData) {
-        selectedFilters.add(element);
-      }
-      if (element.data is ArrowData) {
-        selectedArrows.add(element);
-      }
-      if (element.data is LineData) {
-        selectedLines.add(element);
-      }
-      if (element.data is FreeDrawData) {
-        selectedFreeDraws.add(element);
-      }
-      if (element.data is TextData) {
-        selectedTexts.add(element);
-      }
-      if (element.data is SerialNumberData) {
-        selectedSerialNumbers.add(element);
+      switch (element.data) {
+        case RectangleData _:
+          selectedRectangles.add(element);
+        case HighlightData _:
+          selectedHighlights.add(element);
+        case FilterData _:
+          selectedFilters.add(element);
+        case ArrowData _:
+          selectedArrows.add(element);
+        case LineData _:
+          selectedLines.add(element);
+        case FreeDrawData _:
+          selectedFreeDraws.add(element);
+        case TextData _:
+          selectedTexts.add(element);
+        case SerialNumberData _:
+          selectedSerialNumbers.add(element);
+        default:
+          break;
       }
       final snapshot = _ElementStyleSnapshot.fromElement(element);
       nextSnapshot[id] = snapshot;
@@ -1815,60 +1801,22 @@ class StyleToolbarAdapter {
 class _ElementStyleSnapshot {
   const _ElementStyleSnapshot({
     required this.opacity,
-    this.rectangleData,
-    this.highlightData,
-    this.filterData,
-    this.arrowData,
-    this.lineData,
-    this.freeDrawData,
-    this.textData,
-    this.serialNumberData,
+    required this.dataIdentity,
   });
 
   final double opacity;
-  final RectangleData? rectangleData;
-  final HighlightData? highlightData;
-  final FilterData? filterData;
-  final ArrowData? arrowData;
-  final LineData? lineData;
-  final FreeDrawData? freeDrawData;
-  final TextData? textData;
-  final SerialNumberData? serialNumberData;
+  final Object dataIdentity;
 
   factory _ElementStyleSnapshot.fromElement(ElementState element) =>
       _ElementStyleSnapshot(
         opacity: element.opacity,
-        rectangleData: element.data is RectangleData
-            ? element.data as RectangleData
-            : null,
-        highlightData: element.data is HighlightData
-            ? element.data as HighlightData
-            : null,
-        filterData: element.data is FilterData
-            ? element.data as FilterData
-            : null,
-        arrowData: element.data is ArrowData ? element.data as ArrowData : null,
-        lineData: element.data is LineData ? element.data as LineData : null,
-        freeDrawData: element.data is FreeDrawData
-            ? element.data as FreeDrawData
-            : null,
-        textData: element.data is TextData ? element.data as TextData : null,
-        serialNumberData: element.data is SerialNumberData
-            ? element.data as SerialNumberData
-            : null,
+        dataIdentity: element.data,
       );
 
   bool matches(
     _ElementStyleSnapshot other,
     bool Function(double, double) equals,
   ) =>
-      identical(rectangleData, other.rectangleData) &&
-      identical(highlightData, other.highlightData) &&
-      identical(filterData, other.filterData) &&
-      identical(arrowData, other.arrowData) &&
-      identical(lineData, other.lineData) &&
-      identical(freeDrawData, other.freeDrawData) &&
-      identical(textData, other.textData) &&
-      identical(serialNumberData, other.serialNumberData) &&
+      identical(dataIdentity, other.dataIdentity) &&
       equals(opacity, other.opacity);
 }
