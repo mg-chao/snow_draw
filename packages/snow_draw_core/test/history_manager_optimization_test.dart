@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/history/history_metadata.dart';
 import 'package:snow_draw_core/draw/history/recordable.dart';
@@ -49,6 +51,112 @@ void main() {
     test('constructor rejects invalid pruning configuration', () {
       expect(() => HistoryManager(maxHistoryLength: 0), throwsArgumentError);
       expect(() => HistoryManager(maxBranchPoints: -1), throwsArgumentError);
+    });
+  });
+
+  group('History root normalization', () {
+    test('pruned root omits unreachable payload in exported snapshots', () {
+      final manager = HistoryManager(maxHistoryLength: 1, maxBranchPoints: 0);
+      var state = _stateAt(0);
+
+      void recordTo(int step) {
+        final next = _stateAt(step);
+        expect(
+          manager.record(
+            _snapshot(state),
+            _snapshot(next),
+            metadata: HistoryMetadata(
+              description: 'step-$step',
+              recordType: HistoryRecordType.edit,
+            ),
+          ),
+          isTrue,
+        );
+        state = next;
+      }
+
+      recordTo(1);
+      recordTo(2);
+
+      final snapshotJson = manager.snapshot().toJson();
+      final rootNode = _nodeById(snapshotJson, snapshotJson['rootId'] as int);
+      expect(rootNode.containsKey('delta'), isFalse);
+      expect(rootNode.containsKey('metadata'), isFalse);
+
+      final undone = manager.undo(state);
+      expect(undone, isNotNull);
+      state = undone!;
+      expect(_stateStep(state), equals(1));
+
+      final redone = manager.redo(state);
+      expect(redone, isNotNull);
+      state = redone!;
+      expect(_stateStep(state), equals(2));
+    });
+
+    test('restore strips legacy root payload without changing traversal', () {
+      final manager = HistoryManager(maxHistoryLength: 4, maxBranchPoints: 0);
+      var state = _stateAt(0);
+
+      void recordTo(int step) {
+        final next = _stateAt(step);
+        expect(
+          manager.record(
+            _snapshot(state),
+            _snapshot(next),
+            metadata: HistoryMetadata(
+              description: 'step-$step',
+              recordType: HistoryRecordType.edit,
+            ),
+          ),
+          isTrue,
+        );
+        state = next;
+      }
+
+      recordTo(1);
+      recordTo(2);
+
+      final snapshotJson = manager.snapshot().toJson();
+      final rootId = snapshotJson['rootId'] as int;
+      final nodes = (snapshotJson['nodes'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
+      final rootNode = nodes.singleWhere((node) => node['id'] == rootId);
+      final nodeWithPayload = nodes.firstWhere(
+        (node) => node['id'] != rootId && node.containsKey('delta'),
+      );
+
+      rootNode['delta'] = Map<String, dynamic>.from(
+        nodeWithPayload['delta'] as Map<String, dynamic>,
+      );
+      rootNode['metadata'] = Map<String, dynamic>.from(
+        nodeWithPayload['metadata'] as Map<String, dynamic>,
+      );
+
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final restoredSnapshot = HistoryManagerSnapshot.fromJson(
+        snapshotJson,
+        elementRegistry: registry,
+      );
+
+      final restored = HistoryManager(maxHistoryLength: 4, maxBranchPoints: 0)
+        ..restore(restoredSnapshot);
+
+      final normalizedJson = restored.snapshot().toJson();
+      final normalizedRoot = _nodeById(
+        normalizedJson,
+        normalizedJson['rootId'] as int,
+      );
+      expect(normalizedRoot.containsKey('delta'), isFalse);
+      expect(normalizedRoot.containsKey('metadata'), isFalse);
+
+      var replay = state;
+      replay = restored.undo(replay)!;
+      expect(_stateStep(replay), equals(1));
+
+      replay = restored.redo(replay)!;
+      expect(_stateStep(replay), equals(2));
     });
   });
 
@@ -114,3 +222,12 @@ DrawState _stateAt(int step) {
     ),
   );
 }
+
+Map<String, dynamic> _nodeById(Map<String, dynamic> snapshotJson, int nodeId) {
+  final nodes = (snapshotJson['nodes'] as List<dynamic>)
+      .cast<Map<String, dynamic>>();
+  return nodes.singleWhere((node) => node['id'] == nodeId);
+}
+
+int _stateStep(DrawState state) =>
+    state.domain.document.elements.single.rect.minX.round();

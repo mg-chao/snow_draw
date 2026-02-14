@@ -82,6 +82,7 @@ class HistoryManager {
       );
     }
     _root = _HistoryNode.root(_nextNodeId++);
+    _normalizeRootPayload();
     _current = _root;
   }
   final int maxHistoryLength;
@@ -204,6 +205,7 @@ class HistoryManager {
     });
     _nextNodeId = 0;
     _root = _HistoryNode.root(_nextNodeId++);
+    _normalizeRootPayload();
     _current = _root;
   }
 
@@ -215,6 +217,7 @@ class HistoryManager {
   void restore(HistoryManagerSnapshot snapshot) {
     final clone = _cloneTree(snapshot._root);
     _root = clone.root;
+    _normalizeRootPayload();
     _current = clone.byId[snapshot._currentId] ?? _root;
     _nextNodeId = snapshot._nextNodeId;
   }
@@ -323,8 +326,8 @@ class HistoryManager {
     final oldParent = newRoot.parent;
     if (oldParent != null) {
       oldParent.children.remove(newRoot);
-      newRoot.parent = null;
       _root = newRoot;
+      _normalizeRootPayload();
       _log?.debug('History pruned', {
         'newRootId': newRoot.id,
         'depth': depth,
@@ -334,6 +337,13 @@ class HistoryManager {
         'resolvedIndex': resolvedIndex,
       });
     }
+  }
+
+  void _normalizeRootPayload() {
+    _root
+      ..parent = null
+      ..delta = null
+      ..metadata = null;
   }
 }
 
@@ -526,7 +536,10 @@ class _HistorySnapshotCodec {
         json['nextNodeId'] as int? ??
         (byId.isEmpty ? 1 : (byId.keys.reduce((a, b) => a > b ? a : b) + 1));
 
-    final root = byId[rootId] ?? _HistoryNode.root(rootId);
+    final root = (byId[rootId] ?? _HistoryNode.root(rootId))
+      ..parent = null
+      ..delta = null
+      ..metadata = null;
     return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
