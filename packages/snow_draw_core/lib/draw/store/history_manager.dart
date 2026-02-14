@@ -551,6 +551,7 @@ class _HistorySnapshotCodec {
       'selectionBefore': _selectionToJson(delta.selectionBefore!),
     if (delta.selectionAfter != null)
       'selectionAfter': _selectionToJson(delta.selectionAfter!),
+    if (delta.reindexZIndices) 'reindexZIndices': true,
   };
 
   HistoryDelta _deltaFromJson(
@@ -608,6 +609,7 @@ class _HistorySnapshotCodec {
       selectionAfter: selectionAfterJson == null
           ? null
           : _selectionFromJson(selectionAfterJson),
+      reindexZIndices: json['reindexZIndices'] as bool? ?? false,
     );
   }
 

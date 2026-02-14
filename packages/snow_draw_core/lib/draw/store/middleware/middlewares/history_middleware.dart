@@ -355,10 +355,22 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is ChangeElementZIndex) {
+      final reordered = _didElementOrderChange(context);
       return HistoryChangeSet(
         modifiedIds: {action.elementId},
         orderChanged: true,
         selectionChanged: selectionChanged,
+        reindexZIndices: reordered,
+      );
+    }
+
+    if (action is ChangeElementsZIndex) {
+      final reordered = _didElementOrderChange(context);
+      return HistoryChangeSet(
+        modifiedIds: action.elementIds.toSet(),
+        orderChanged: true,
+        selectionChanged: selectionChanged,
+        reindexZIndices: reordered,
       );
     }
 
@@ -466,12 +478,25 @@ class HistoryMiddleware extends MiddlewareBase {
     required DrawAction action,
     required HistoryChangeSet changes,
   }) {
-    if (!changes.orderChanged || !changes.isSingleElementChange) {
-      return false;
+    if ((action is ChangeElementZIndex || action is ChangeElementsZIndex) &&
+        !changes.reindexZIndices) {
+      return true;
     }
-    // Single-element z-index moves can reindex many unaffected peers. Until we
-    // model that fan-out in the change set, keep full snapshots for safety.
-    return action is ChangeElementZIndex;
+    return false;
+  }
+
+  bool _didElementOrderChange(DispatchContext context) {
+    final before = context.initialState.domain.document.elements;
+    final after = context.currentState.domain.document.elements;
+    if (before.length != after.length) {
+      return true;
+    }
+    for (var index = 0; index < before.length; index++) {
+      if (before[index].id != after[index].id) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _expandModifiedIdsForArrowBindings({

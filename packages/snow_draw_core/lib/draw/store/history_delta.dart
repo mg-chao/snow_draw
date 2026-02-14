@@ -18,6 +18,7 @@ class HistoryDelta {
     required this.orderAfter,
     required this.selectionBefore,
     required this.selectionAfter,
+    required this.reindexZIndices,
   });
 
   factory HistoryDelta.fromData({
@@ -27,6 +28,7 @@ class HistoryDelta {
     List<String>? orderAfter,
     SelectionState? selectionBefore,
     SelectionState? selectionAfter,
+    bool reindexZIndices = false,
   }) => HistoryDelta._(
     beforeElements: Map<String, ElementState>.unmodifiable(beforeElements),
     afterElements: Map<String, ElementState>.unmodifiable(afterElements),
@@ -42,6 +44,7 @@ class HistoryDelta {
     selectionAfter: selectionAfter == null
         ? null
         : _copySelection(selectionAfter),
+    reindexZIndices: reindexZIndices,
   );
 
   factory HistoryDelta.fromSnapshots(
@@ -130,6 +133,7 @@ class HistoryDelta {
       orderAfter: orderAfter,
       selectionBefore: selectionBefore,
       selectionAfter: selectionAfter,
+      reindexZIndices: changes?.reindexZIndices ?? false,
     );
   }
   final Map<String, ElementState> beforeElements;
@@ -138,6 +142,7 @@ class HistoryDelta {
   final List<String>? orderAfter;
   final SelectionState? selectionBefore;
   final SelectionState? selectionAfter;
+  final bool reindexZIndices;
 
   bool get selectionChanged =>
       selectionBefore != null &&
@@ -199,10 +204,13 @@ class HistoryDelta {
     }
 
     final selection = forward ? selectionAfter : selectionBefore;
+    final resolvedElements = reindexZIndices
+        ? _reindexElements(nextElements)
+        : nextElements;
 
     return state.copyWith(
       domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: nextElements),
+        document: state.domain.document.copyWith(elements: resolvedElements),
         selection: selection ?? state.domain.selection,
       ),
       application: state.application.copyWith(
@@ -211,6 +219,21 @@ class HistoryDelta {
       ),
     );
   }
+}
+
+List<ElementState> _reindexElements(List<ElementState> elements) {
+  var changed = false;
+  final reindexed = <ElementState>[];
+  for (var index = 0; index < elements.length; index++) {
+    final element = elements[index];
+    if (element.zIndex == index) {
+      reindexed.add(element);
+      continue;
+    }
+    changed = true;
+    reindexed.add(element.copyWith(zIndex: index));
+  }
+  return changed ? reindexed : elements;
 }
 
 SelectionState _copySelection(SelectionState selection) => SelectionState(
