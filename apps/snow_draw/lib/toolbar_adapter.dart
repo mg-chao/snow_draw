@@ -176,6 +176,7 @@ class StyleToolbarAdapter {
         return;
       }
     }
+    _syncSelectionSnapshotFromStore();
     final ids = switch (scope) {
       StyleUpdateScope.highlightsOnly => {
         for (final element in _selectedHighlights) element.id,
@@ -291,6 +292,7 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    _syncSelectionSnapshotFromStore();
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -304,6 +306,7 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    _syncSelectionSnapshotFromStore();
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -315,6 +318,7 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    _syncSelectionSnapshotFromStore();
     if (_selectedSerialNumbers.isEmpty) {
       return;
     }
@@ -329,6 +333,7 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    _syncSelectionSnapshotFromStore();
     final ids = _selectedIds.toList();
     if (ids.isEmpty) {
       return;
@@ -372,6 +377,21 @@ class StyleToolbarAdapter {
     _highlightStyleValues = _resolveHighlightStyles();
     _filterStyleValues = _resolveFilterStyles();
     _serialNumberStyleValues = _resolveSerialNumberStyles();
+  }
+
+  void _syncSelectionSnapshotFromStore() {
+    if (_isDisposed) {
+      return;
+    }
+    final nextSelectedIds = _store.state.domain.selection.selectedIds;
+    final selectionChanged = !setEquals(_selectedIds, nextSelectedIds);
+    if (selectionChanged) {
+      _selectedIds = nextSelectedIds;
+    }
+    final elementsChanged = _refreshSelectedElements();
+    if (selectionChanged || elementsChanged) {
+      _resolveSelectedStyleValues();
+    }
   }
 
   void _handleConfigChange(DrawConfig config) {
