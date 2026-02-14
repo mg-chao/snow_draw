@@ -17,6 +17,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MiddlewarePipeline', () {
+    test('returns initial context when pipeline has no middleware', () async {
+      final pipeline = MiddlewarePipeline(middlewares: const []);
+      final initialContext = _createInitialContext();
+
+      final result = await pipeline.execute(initialContext);
+
+      expect(result, same(initialContext));
+    });
+
     test('creates a defensive copy of middleware list', () {
       final source = <Middleware>[const _FlagMetadataMiddleware('first')];
       final pipeline = MiddlewarePipeline(middlewares: source);
@@ -55,6 +64,46 @@ void main() {
       expect(result.getMetadata<bool>('skipped_ThrowShouldExecute'), isTrue);
       expect(result.getMetadata<bool>('afterShouldExecuteError'), isTrue);
     });
+
+    test(
+      'does not execute middleware when context is already stopped',
+      () async {
+        final counter = _InvocationCounter();
+        final pipeline = MiddlewarePipeline(
+          middlewares: [_CountingMiddleware(counter: counter)],
+        );
+        final stoppedContext = _createInitialContext().withStop(
+          'already stopped',
+        );
+
+        final result = await pipeline.execute(stoppedContext);
+
+        expect(counter.value, 0);
+        expect(result, same(stoppedContext));
+      },
+    );
+
+    test(
+      'does not execute middleware when context already has error',
+      () async {
+        final counter = _InvocationCounter();
+        final pipeline = MiddlewarePipeline(
+          middlewares: [_CountingMiddleware(counter: counter)],
+        );
+        final stackTrace = StackTrace.current;
+        final failedContext = _createInitialContext().withError(
+          StateError('existing failure'),
+          stackTrace,
+          source: 'preExisting',
+        );
+
+        final result = await pipeline.execute(failedContext);
+
+        expect(counter.value, 0);
+        expect(result, same(failedContext));
+        expect(result.errorSource, 'preExisting');
+      },
+    );
 
     test('prevents invoking next more than once', () async {
       final counter = _InvocationCounter();
@@ -154,6 +203,41 @@ void main() {
         expect(result.getMetadata<bool>('downstreamReached'), isTrue);
       },
     );
+
+    test(
+      'sortByPriority keeps descending priority and stable tie ordering',
+      () {
+        final pipeline = MiddlewarePipeline(
+          middlewares: const [
+            _PriorityMiddleware(name: 'low', priority: -10),
+            _PriorityMiddleware(name: 'high', priority: 100),
+            _PriorityMiddleware(name: 'midA', priority: 50),
+            _PriorityMiddleware(name: 'midB', priority: 50),
+          ],
+        );
+
+        final sorted = pipeline.sortByPriority();
+
+        expect(
+          sorted.middlewares.map((middleware) => middleware.name),
+          equals(['high', 'midA', 'midB', 'low']),
+        );
+      },
+    );
+
+    test('sortByPriority returns same pipeline when already sorted', () {
+      final pipeline = MiddlewarePipeline(
+        middlewares: const [
+          _PriorityMiddleware(name: 'high', priority: 100),
+          _PriorityMiddleware(name: 'mid', priority: 10),
+          _PriorityMiddleware(name: 'low', priority: -5),
+        ],
+      );
+
+      final sorted = pipeline.sortByPriority();
+
+      expect(sorted, same(pipeline));
+    });
   });
 }
 
@@ -315,6 +399,20 @@ class _CountingMiddleware extends MiddlewareBase {
     counter.value += 1;
     return next(context);
   }
+}
+
+class _PriorityMiddleware extends MiddlewareBase {
+  const _PriorityMiddleware({required this.name, required this.priority});
+
+  @override
+  final String name;
+
+  @override
+  final int priority;
+
+  @override
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
+      next(context);
 }
 
 class _InvocationCounter {
