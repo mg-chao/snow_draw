@@ -7,6 +7,7 @@ import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_operation_id.dart';
+import '../../types/snap_guides.dart';
 import '../edit_operation_registry_interface.dart';
 import 'edit_error_handler.dart';
 import 'edit_errors.dart';
@@ -54,7 +55,8 @@ class EditSessionService {
       );
     }
 
-    if (!_hasOperation(operationId)) {
+    final operation = editOperations.getOperation(operationId);
+    if (operation == null) {
       return (
         state: state,
         failureReason: EditFailureReason.unknownOperationId,
@@ -70,6 +72,7 @@ class EditSessionService {
       log: _log,
       operation: () => _performStart(
         state: state,
+        operation: operation,
         operationId: operationId,
         position: position,
         params: params,
@@ -147,6 +150,7 @@ class EditSessionService {
 
   EditOutcome _performStart({
     required DrawState state,
+    required EditOperationBase operation,
     required EditOperationId operationId,
     required DrawPoint position,
     required EditOperationParams params,
@@ -156,6 +160,7 @@ class EditSessionService {
     // themselves in createContext() since they need more than just bounds
     // (rotation, center, etc.). This avoids redundant O(n) computation.
     final session = _createSession(
+      operation: operation,
       operationId: operationId,
       state: state,
       position: position,
@@ -204,6 +209,20 @@ class EditSessionService {
       config: configProvider(),
     );
 
+    final transformUnchanged =
+        updated.transform == editingState.currentTransform;
+    final guidesUnchanged = _snapGuideListsEqual(
+      updated.snapGuides,
+      editingState.snapGuides,
+    );
+    if (transformUnchanged && guidesUnchanged) {
+      return (
+        state: state,
+        failureReason: null,
+        operationId: editingState.operationId,
+      );
+    }
+
     return (
       state: state.copyWith(
         application: state.application.copyWith(
@@ -248,24 +267,14 @@ class EditSessionService {
     );
   }
 
-  bool _hasOperation(EditOperationId operationId) =>
-      editOperations.getOperation(operationId) != null;
-
   EditingState _createSession({
+    required EditOperationBase operation,
     required EditOperationId operationId,
     required DrawState state,
     required DrawPoint position,
     required EditOperationParams params,
     required EditSessionId sessionId,
   }) {
-    final operation = editOperations.getOperation(operationId);
-    if (operation == null) {
-      _log?.error('Edit session create failed', null, null, {
-        'operationId': operationId,
-        'reason': 'unknown_operation',
-      });
-      throw ArgumentError('Unknown operation: $operationId');
-    }
     _log?.info('Edit session created', {
       'operationId': operationId,
       'params': params.runtimeType.toString(),
@@ -367,5 +376,20 @@ class EditSessionService {
         operationId: editingState.operationId,
       );
     }
+  }
+
+  bool _snapGuideListsEqual(List<SnapGuide> a, List<SnapGuide> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) {
+        return false;
+      }
+    }
+    return true;
   }
 }
