@@ -21,14 +21,21 @@ class PendingStateReducer {
   };
 
   DrawState _setDragPending(DrawState state, SetDragPending action) =>
-      state.copyWith(
-        application: state.application.copyWith(
-          interaction: DragPendingState(
-            pointerDownPosition: action.pointerDownPosition,
-            intent: action.intent,
+      switch (state.application.interaction) {
+        final DragPendingState interaction
+            when interaction.pointerDownPosition ==
+                    action.pointerDownPosition &&
+                interaction.intent == action.intent =>
+          state,
+        _ => state.copyWith(
+          application: state.application.copyWith(
+            interaction: DragPendingState(
+              pointerDownPosition: action.pointerDownPosition,
+              intent: action.intent,
+            ),
           ),
         ),
-      );
+      };
 
   DrawState _clearDragPending(DrawState state) {
     final interaction = state.application.interaction;

@@ -195,7 +195,7 @@ class CreateElementReducer {
   ) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
-      return state.copyWith(application: state.application.toIdle());
+      return state;
     }
 
     final strategy = _resolveCreationStrategy(
@@ -230,7 +230,7 @@ class CreateElementReducer {
   DrawState _cancelCreateElement(DrawState state) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
-      return state.copyWith(application: state.application.toIdle());
+      return state;
     }
 
     final clearedState = applySelectionChange(state, const {});
