@@ -164,11 +164,9 @@ class HistoryMiddleware extends MiddlewareBase {
     final includeSelection = context.includeSelectionInHistory;
 
     try {
-      // Reordering a single element can still mutate many peers (for example
-      // z-index reindexing), so those transitions use full snapshots.
       final useIncremental =
           changes != null &&
-          !(changes.orderChanged && changes.isSingleElementChange);
+          !_requiresPersistentSnapshots(action: action, changes: changes);
 
       // Take snapshot before action
       final snapshotBefore = useIncremental
@@ -410,7 +408,12 @@ class HistoryMiddleware extends MiddlewareBase {
         if (resolved.isNew) {
           return null;
         }
+        final modifiedIds = _serialIdsBoundToText(
+          elements: context.initialState.domain.document.elements,
+          textElementId: resolved.elementId,
+        );
         return HistoryChangeSet(
+          modifiedIds: modifiedIds,
           removedIds: {resolved.elementId},
           orderChanged: true,
           selectionChanged: selectionChanged,
@@ -430,7 +433,18 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is DuplicateElements) {
-      return null;
+      final addedIds = _addedElementIds(
+        before: context.initialState.domain.document.elements,
+        after: context.currentState.domain.document.elements,
+      );
+      if (addedIds.isEmpty) {
+        return null;
+      }
+      return HistoryChangeSet(
+        addedIds: addedIds,
+        orderChanged: true,
+        selectionChanged: selectionChanged,
+      );
     }
 
     final affected = metadata?.affectedElementIds ?? const <String>{};
@@ -442,6 +456,32 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     return null;
+  }
+
+  bool _requiresPersistentSnapshots({
+    required DrawAction action,
+    required HistoryChangeSet changes,
+  }) {
+    if (!changes.orderChanged || !changes.isSingleElementChange) {
+      return false;
+    }
+    // Single-element z-index moves can reindex many unaffected peers. Until we
+    // model that fan-out in the change set, keep full snapshots for safety.
+    return action is ChangeElementZIndex;
+  }
+
+  Set<String> _addedElementIds({
+    required Iterable<ElementState> before,
+    required Iterable<ElementState> after,
+  }) {
+    final beforeIds = <String>{for (final element in before) element.id};
+    final addedIds = <String>{};
+    for (final element in after) {
+      if (!beforeIds.contains(element.id)) {
+        addedIds.add(element.id);
+      }
+    }
+    return addedIds;
   }
 
   void _expandDeleteIdsForBoundSerialText({
@@ -481,5 +521,19 @@ class HistoryMiddleware extends MiddlewareBase {
     final endTarget = data.endBinding?.elementId;
     return (startTarget != null && removedIds.contains(startTarget)) ||
         (endTarget != null && removedIds.contains(endTarget));
+  }
+
+  Set<String> _serialIdsBoundToText({
+    required Iterable<ElementState> elements,
+    required String textElementId,
+  }) {
+    final ids = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is SerialNumberData && data.textElementId == textElementId) {
+        ids.add(element.id);
+      }
+    }
+    return ids;
   }
 }
