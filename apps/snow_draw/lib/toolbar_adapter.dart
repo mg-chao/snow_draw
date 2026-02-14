@@ -72,6 +72,7 @@ class StyleToolbarAdapter {
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _isDisposed = false;
   var _updateScheduled = false;
+  var _pendingStyleUpdate = Future<void>.value();
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
 
@@ -86,6 +87,60 @@ class StyleToolbarAdapter {
   }
 
   Future<void> applyStyleUpdate({
+    Color? color,
+    Color? fillColor,
+    double? strokeWidth,
+    StrokeStyle? strokeStyle,
+    FillStyle? fillStyle,
+    double? cornerRadius,
+    ArrowType? arrowType,
+    ArrowheadStyle? startArrowhead,
+    ArrowheadStyle? endArrowhead,
+    double? fontSize,
+    String? fontFamily,
+    TextHorizontalAlign? textAlign,
+    TextVerticalAlign? verticalAlign,
+    double? opacity,
+    Color? textStrokeColor,
+    double? textStrokeWidth,
+    HighlightShape? highlightShape,
+    CanvasFilterType? filterType,
+    double? filterStrength,
+    Color? maskColor,
+    double? maskOpacity,
+    int? serialNumber,
+    ToolType? toolType,
+    StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
+  }) => _enqueueStyleUpdate(
+    () => _applyStyleUpdateInternal(
+      color: color,
+      fillColor: fillColor,
+      strokeWidth: strokeWidth,
+      strokeStyle: strokeStyle,
+      fillStyle: fillStyle,
+      cornerRadius: cornerRadius,
+      arrowType: arrowType,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textAlign: textAlign,
+      verticalAlign: verticalAlign,
+      opacity: opacity,
+      textStrokeColor: textStrokeColor,
+      textStrokeWidth: textStrokeWidth,
+      highlightShape: highlightShape,
+      filterType: filterType,
+      filterStrength: filterStrength,
+      maskColor: maskColor,
+      maskOpacity: maskOpacity,
+      serialNumber: serialNumber,
+      toolType: toolType,
+      scope: scope,
+    ),
+  );
+
+  Future<void> _applyStyleUpdateInternal({
     Color? color,
     Color? fillColor,
     double? strokeWidth,
@@ -219,6 +274,11 @@ class StyleToolbarAdapter {
       scope: scope,
     );
   }
+
+  Future<void> _enqueueStyleUpdate(Future<void> Function() update) =>
+      _pendingStyleUpdate = _pendingStyleUpdate
+          .catchError((Object _, StackTrace _) {})
+          .then((_) => update());
 
   Future<void> copySelection() async {
     if (_isDisposed) {
