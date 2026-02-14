@@ -164,12 +164,15 @@ DrawState handleDuplicateElements(
     context.log.store.warning('Duplicate failed: empty selection', {
       'action': action.runtimeType.toString(),
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
-        action: action.runtimeType.toString(),
-        reason: 'No element ids provided',
-      ),
-    );
+    final eventBus = context.eventBus;
+    if (eventBus != null && eventBus.hasListeners) {
+      eventBus.emit(
+        ValidationFailedEvent(
+          action: action.runtimeType.toString(),
+          reason: 'No element ids provided',
+        ),
+      );
+    }
     return state;
   }
 
@@ -198,13 +201,16 @@ DrawState handleDuplicateElements(
       'action': action.runtimeType.toString(),
       'elementIds': action.elementIds.join(','),
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
-        action: action.runtimeType.toString(),
-        reason: 'No valid elements to duplicate',
-        details: {'elementIds': action.elementIds.toList()},
-      ),
-    );
+    final eventBus = context.eventBus;
+    if (eventBus != null && eventBus.hasListeners) {
+      eventBus.emit(
+        ValidationFailedEvent(
+          action: action.runtimeType.toString(),
+          reason: 'No valid elements to duplicate',
+          details: {'elementIds': action.elementIds.toList()},
+        ),
+      );
+    }
     return state;
   }
 

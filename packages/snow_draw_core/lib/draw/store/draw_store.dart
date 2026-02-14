@@ -30,7 +30,8 @@ class DefaultDrawStore implements DrawStore {
     SnapshotBuilder snapshotBuilder = const SnapshotBuilder(),
     MiddlewarePipeline? pipeline,
     EventBus? eventBus,
-  }) : _eventBus = eventBus ?? context.eventBus ?? EventBus(),
+  }) : _ownsEventBus = eventBus == null && context.eventBus == null,
+       _eventBus = eventBus ?? context.eventBus ?? EventBus(),
        _snapshotBuilder = snapshotBuilder,
        _editEventController = StreamController<EditSessionEvent>.broadcast() {
     this.context = context.eventBus == _eventBus
@@ -87,6 +88,7 @@ class DefaultDrawStore implements DrawStore {
   late final EditSessionService _editSessionService;
   final StreamController<EditSessionEvent> _editEventController;
   final SnapshotBuilder _snapshotBuilder;
+  final bool _ownsEventBus;
   final EventBus _eventBus;
   final bool includeSelectionInHistory;
 
@@ -286,7 +288,9 @@ class DefaultDrawStore implements DrawStore {
 
     unawaited(_configManager.dispose());
     unawaited(_editEventController.close());
-    unawaited(_eventBus.dispose());
+    if (_ownsEventBus) {
+      unawaited(_eventBus.dispose());
+    }
     _listenerRegistry.clear();
     _historyManager.clear();
     context.log.dispose();

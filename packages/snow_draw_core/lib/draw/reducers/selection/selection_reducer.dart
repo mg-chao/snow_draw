@@ -26,13 +26,16 @@ DrawState _handleSelectElement(
       'action': action.runtimeType.toString(),
       'elementId': action.elementId,
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
-        action: action.runtimeType.toString(),
-        reason: 'Element not found',
-        details: {'elementId': action.elementId},
-      ),
-    );
+    final eventBus = context.eventBus;
+    if (eventBus != null && eventBus.hasListeners) {
+      eventBus.emit(
+        ValidationFailedEvent(
+          action: action.runtimeType.toString(),
+          reason: 'Element not found',
+          details: {'elementId': action.elementId},
+        ),
+      );
+    }
     return state;
   }
 

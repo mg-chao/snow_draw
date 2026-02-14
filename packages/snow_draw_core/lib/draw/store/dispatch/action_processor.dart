@@ -84,7 +84,7 @@ class ActionProcessor {
     _lastCanUndo = canUndo;
     _lastCanRedo = canRedo;
 
-    if (!emitIfChanged || !changed) {
+    if (!emitIfChanged || !changed || !_services.eventBus.hasListeners) {
       return;
     }
 
@@ -330,15 +330,17 @@ class ActionProcessor {
           'traceId': traceId,
         });
 
-    _services.eventBus.emit(
-      ErrorEvent(
-        message:
-            'Dispatch ${action.runtimeType} failed '
-            '(traceId: $traceId, source: $source)',
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    );
+    if (_services.eventBus.hasListeners) {
+      _services.eventBus.emit(
+        ErrorEvent(
+          message:
+              'Dispatch ${action.runtimeType} failed '
+              '(traceId: $traceId, source: $source)',
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+    }
   }
 
   void _emitEditSessionEvents({
@@ -346,6 +348,10 @@ class ActionProcessor {
     required DrawState nextState,
     required DrawAction action,
   }) {
+    if (!_services.eventBus.hasListeners) {
+      return;
+    }
+
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
@@ -410,8 +416,11 @@ class ActionProcessor {
     required DrawState previousState,
     required DrawState nextState,
   }) {
-    if (previousState.domain.document.elementsVersion !=
-        nextState.domain.document.elementsVersion) {
+    final hasEventListeners = _services.eventBus.hasListeners;
+
+    if (hasEventListeners &&
+        previousState.domain.document.elementsVersion !=
+            nextState.domain.document.elementsVersion) {
       _services.eventBus.emit(
         DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
@@ -420,8 +429,9 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.domain.selection.selectionVersion !=
-        nextState.domain.selection.selectionVersion) {
+    if (hasEventListeners &&
+        previousState.domain.selection.selectionVersion !=
+            nextState.domain.selection.selectionVersion) {
       _services.eventBus.emit(
         SelectionChangedEvent(
           selectedIds: nextState.domain.selection.selectedIds,
@@ -430,14 +440,16 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.application.view != nextState.application.view) {
+    if (hasEventListeners &&
+        previousState.application.view != nextState.application.view) {
       _services.eventBus.emit(
         ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
-    if (previousState.application.interaction !=
-        nextState.application.interaction) {
+    if (hasEventListeners &&
+        previousState.application.interaction !=
+            nextState.application.interaction) {
       _services.eventBus.emit(
         InteractionChangedEvent(interaction: nextState.application.interaction),
       );
