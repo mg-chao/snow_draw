@@ -182,6 +182,84 @@ void main() {
     expect(calls, 0);
   });
 
+  test(
+    'listener filter update during notify is honored for later listeners',
+    () {
+      var targetCalls = 0;
+      void target(DrawState _) => targetCalls += 1;
+
+      var filterUpdated = false;
+      registry
+        ..register((_) {
+          if (filterUpdated) {
+            return;
+          }
+          filterUpdated = true;
+          registry.register(target, changeTypes: {DrawStateChange.view});
+        })
+        ..register(target, changeTypes: {DrawStateChange.selection});
+
+      final previous = DrawState();
+      final selectionChanged = DrawState(
+        domain: DomainState(
+          document: DocumentState(),
+          selection: const SelectionState(
+            selectedIds: {'a'},
+            selectionVersion: 1,
+          ),
+        ),
+      );
+
+      registry.notify(previous, selectionChanged);
+      expect(targetCalls, 0);
+
+      final viewChanged = DrawState(
+        application: previous.application.copyWith(
+          view: previous.application.view.copyWith(
+            camera: previous.application.view.camera.translated(10, 0),
+          ),
+        ),
+      );
+      registry.notify(previous, viewChanged);
+      expect(targetCalls, 1);
+    },
+  );
+
+  test('listener re-registered during notify is deferred until next cycle', () {
+    var targetCalls = 0;
+    void target(DrawState _) => targetCalls += 1;
+
+    var reRegistered = false;
+    registry
+      ..register((_) {
+        if (reRegistered) {
+          return;
+        }
+        reRegistered = true;
+        registry
+          ..unregister(target)
+          ..register(target);
+      })
+      ..register(target);
+
+    final previous = DrawState();
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 1,
+        ),
+      ),
+    );
+
+    registry.notify(previous, next);
+    expect(targetCalls, 0);
+
+    registry.notify(previous, next);
+    expect(targetCalls, 1);
+  });
+
   test('duplicate register updates changeTypes', () {
     final states = <DrawState>[];
     void listener(DrawState s) => states.add(s);
