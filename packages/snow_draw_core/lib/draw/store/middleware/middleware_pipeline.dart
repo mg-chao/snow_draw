@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:meta/meta.dart';
 
 import 'error_handling.dart';
@@ -66,6 +68,7 @@ class MiddlewarePipeline {
         var nextCalled = false;
         var middlewareCompleted = false;
         var nextSettled = false;
+        var nextObserved = false;
         DispatchContext? nextInputContext;
         Future<DispatchContext>? nextFuture;
         Future<DispatchContext> guardedNext(DispatchContext nextContext) {
@@ -81,26 +84,36 @@ class MiddlewarePipeline {
           }
           nextCalled = true;
           nextInputContext = nextContext;
-          nextFuture = executeNext(
+          final downstreamFuture = executeNext(
             nextContext,
             currentIndex + 1,
           ).whenComplete(() => nextSettled = true);
-          return nextFuture!;
+          nextFuture = downstreamFuture;
+          return _ObservedFuture<DispatchContext>(
+            downstreamFuture,
+            onObserved: () => nextObserved = true,
+          );
         }
 
         try {
           final result = await middleware.invoke(currentContext, guardedNext);
           middlewareCompleted = true;
-          if (nextCalled && !nextSettled) {
+          if (nextCalled && (!nextObserved || !nextSettled)) {
             final downstreamContext = await _resolveDownstreamContext(
               fallbackContext: nextInputContext ?? currentContext,
               middleware: middleware,
               downstreamFuture: nextFuture,
             );
-            final detachedNextError = StateError(
-              'Middleware "${middleware.name}" completed before next() '
-              'finished. Return or await next() to keep pipeline order.',
-            );
+            final detachedNextError = !nextObserved
+                ? StateError(
+                    'Middleware "${middleware.name}" called next() without '
+                    'awaiting or returning it. Return or await next() to '
+                    'keep pipeline order.',
+                  )
+                : StateError(
+                    'Middleware "${middleware.name}" completed before next() '
+                    'finished. Return or await next() to keep pipeline order.',
+                  );
             return _recoverFromError(
               context: downstreamContext,
               middleware: middleware,
@@ -230,4 +243,54 @@ class MiddlewarePipeline {
 
   /// Check if pipeline is not empty.
   bool get isNotEmpty => middlewares.isNotEmpty;
+}
+
+class _ObservedFuture<T> implements Future<T> {
+  _ObservedFuture(this._delegate, {required void Function() onObserved})
+    : _onObserved = onObserved;
+
+  final Future<T> _delegate;
+  final void Function() _onObserved;
+  var _didObserve = false;
+
+  void _markObserved() {
+    if (_didObserve) {
+      return;
+    }
+    _didObserve = true;
+    _onObserved();
+  }
+
+  @override
+  Stream<T> asStream() {
+    _markObserved();
+    return _delegate.asStream();
+  }
+
+  @override
+  Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
+    _markObserved();
+    return _delegate.catchError(onError, test: test);
+  }
+
+  @override
+  Future<R> then<R>(
+    FutureOr<R> Function(T value) onValue, {
+    Function? onError,
+  }) {
+    _markObserved();
+    return _delegate.then<R>(onValue, onError: onError);
+  }
+
+  @override
+  Future<T> timeout(Duration timeLimit, {FutureOr<T> Function()? onTimeout}) {
+    _markObserved();
+    return _delegate.timeout(timeLimit, onTimeout: onTimeout);
+  }
+
+  @override
+  Future<T> whenComplete(FutureOr<void> Function() action) {
+    _markObserved();
+    return _delegate.whenComplete(action);
+  }
 }

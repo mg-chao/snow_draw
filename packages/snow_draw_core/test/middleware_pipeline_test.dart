@@ -97,6 +97,25 @@ void main() {
     );
 
     test(
+      'fails detached next even when downstream settles immediately',
+      () async {
+        final pipeline = MiddlewarePipeline(
+          middlewares: const [
+            _DetachedNextMiddleware(),
+            _FlagMetadataMiddleware('downstreamReached'),
+          ],
+        );
+
+        final result = await pipeline.execute(_createInitialContext());
+
+        expect(result.hasError, isTrue);
+        expect(result.error, isA<StateError>());
+        expect(result.errorSource, 'DetachedNext');
+        expect(result.getMetadata<bool>('downstreamReached'), isTrue);
+      },
+    );
+
+    test(
       'does not re-run downstream middleware when skipping after next',
       () async {
         final counter = _InvocationCounter();
