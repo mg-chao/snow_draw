@@ -86,19 +86,22 @@ class ListenerRegistry {
       return;
     }
 
+    // Fast path for the common case: no listeners use change filters.
+    if (_filteredListenerCount == 0) {
+      if (!_hasTrackedChanges(previous, next)) {
+        return;
+      }
+      final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
+      _notifyAllUnfiltered(entriesSnapshot, next);
+      return;
+    }
+
     final changeMask = _computeChangeMask(previous, next);
     if (changeMask == 0) {
       return;
     }
 
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-
-    // Fast path for the common case: no listeners use change filters.
-    if (_filteredListenerCount == 0) {
-      _notifyAllUnfiltered(entriesSnapshot, next);
-      return;
-    }
-
     _notifyWithFilters(entriesSnapshot, next, changeMask);
   }
 
@@ -197,20 +200,63 @@ class _ListenerEntry {
 int _computeChangeMask(DrawState previous, DrawState next) {
   var mask = 0;
 
-  if (previous.domain.document != next.domain.document) {
+  if (_documentChanged(previous, next)) {
     mask |= _documentChangeMask;
   }
-  if (previous.domain.selection != next.domain.selection) {
+  if (_selectionChanged(previous, next)) {
     mask |= _selectionChangeMask;
   }
-  if (previous.application.view != next.application.view) {
+  if (_viewChanged(previous, next)) {
     mask |= _viewChangeMask;
   }
-  if (previous.application.interaction != next.application.interaction) {
+  if (_interactionChanged(previous, next)) {
     mask |= _interactionChangeMask;
   }
 
   return mask;
+}
+
+bool _hasTrackedChanges(DrawState previous, DrawState next) =>
+    _documentChanged(previous, next) ||
+    _selectionChanged(previous, next) ||
+    _viewChanged(previous, next) ||
+    _interactionChanged(previous, next);
+
+bool _documentChanged(DrawState previous, DrawState next) {
+  final previousDocument = previous.domain.document;
+  final nextDocument = next.domain.document;
+  if (identical(previousDocument, nextDocument)) {
+    return false;
+  }
+  if (previousDocument.elementsVersion != nextDocument.elementsVersion) {
+    return true;
+  }
+  return previousDocument != nextDocument;
+}
+
+bool _selectionChanged(DrawState previous, DrawState next) {
+  final previousSelection = previous.domain.selection;
+  final nextSelection = next.domain.selection;
+  if (identical(previousSelection, nextSelection)) {
+    return false;
+  }
+  if (previousSelection.selectionVersion != nextSelection.selectionVersion) {
+    return true;
+  }
+  return previousSelection != nextSelection;
+}
+
+bool _viewChanged(DrawState previous, DrawState next) {
+  final previousView = previous.application.view;
+  final nextView = next.application.view;
+  return !identical(previousView, nextView) && previousView != nextView;
+}
+
+bool _interactionChanged(DrawState previous, DrawState next) {
+  final previousInteraction = previous.application.interaction;
+  final nextInteraction = next.application.interaction;
+  return !identical(previousInteraction, nextInteraction) &&
+      previousInteraction != nextInteraction;
 }
 
 int _maskForChange(DrawStateChange change) => switch (change) {

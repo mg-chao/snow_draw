@@ -1,10 +1,15 @@
+import 'dart:collection';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/listener_registry.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   late ListenerRegistry registry;
@@ -377,4 +382,145 @@ void main() {
     registry.notify(prev, next);
     expect(states, hasLength(1));
   });
+
+  test(
+    'unfiltered notifications short-circuit once a tracked change is found',
+    () {
+      final previousSelectedIds = _CountingSet<String>({'a'});
+      final nextSelectedIds = _CountingSet<String>({'a'});
+      final states = <DrawState>[];
+
+      registry.register(states.add);
+
+      final previous = DrawState(
+        domain: DomainState(
+          document: DocumentState(),
+          selection: SelectionState(selectedIds: previousSelectedIds),
+        ),
+      );
+      final next = DrawState(
+        domain: DomainState(
+          document: DocumentState(elementsVersion: 1),
+          selection: SelectionState(selectedIds: nextSelectedIds),
+        ),
+      );
+
+      registry.notify(previous, next);
+
+      expect(states, hasLength(1));
+      expect(previousSelectedIds.iterationCount, 0);
+      expect(nextSelectedIds.containsCount, 0);
+    },
+  );
+
+  test(
+    'selection listeners still detect changed ids when versions are stale',
+    () {
+      final states = <DrawState>[];
+      registry.register(states.add, changeTypes: {DrawStateChange.selection});
+
+      final previous = DrawState(
+        domain: DomainState(
+          document: DocumentState(),
+          selection: const SelectionState(
+            selectedIds: {'a'},
+            selectionVersion: 7,
+          ),
+        ),
+      );
+      final next = DrawState(
+        domain: DomainState(
+          document: DocumentState(),
+          selection: const SelectionState(
+            selectedIds: {'b'},
+            selectionVersion: 7,
+          ),
+        ),
+      );
+
+      registry.notify(previous, next);
+      expect(states, hasLength(1));
+    },
+  );
+
+  test(
+    'document listeners still detect changed elements when versions are stale',
+    () {
+      final states = <DrawState>[];
+      registry.register(states.add, changeTypes: {DrawStateChange.document});
+
+      final previous = DrawState(
+        domain: DomainState(
+          document: DocumentState(
+            elements: const [
+              ElementState(
+                id: 'a',
+                rect: DrawRect(maxX: 10, maxY: 10),
+                rotation: 0,
+                opacity: 1,
+                zIndex: 0,
+                data: RectangleData(),
+              ),
+            ],
+            elementsVersion: 5,
+          ),
+        ),
+      );
+      final next = DrawState(
+        domain: DomainState(
+          document: DocumentState(
+            elements: const [
+              ElementState(
+                id: 'b',
+                rect: DrawRect(maxX: 10, maxY: 10),
+                rotation: 0,
+                opacity: 1,
+                zIndex: 0,
+                data: RectangleData(),
+              ),
+            ],
+            elementsVersion: 5,
+          ),
+        ),
+      );
+
+      registry.notify(previous, next);
+      expect(states, hasLength(1));
+    },
+  );
+}
+
+class _CountingSet<E> extends SetBase<E> {
+  _CountingSet(Iterable<E> values) : _delegate = values.toSet();
+
+  final Set<E> _delegate;
+  var iterationCount = 0;
+  var containsCount = 0;
+
+  @override
+  bool add(E value) => _delegate.add(value);
+
+  @override
+  bool contains(Object? element) {
+    containsCount += 1;
+    return _delegate.contains(element);
+  }
+
+  @override
+  E? lookup(Object? element) => _delegate.lookup(element);
+
+  @override
+  bool remove(Object? value) => _delegate.remove(value);
+
+  @override
+  Iterator<E> get iterator {
+    iterationCount += 1;
+    return _delegate.iterator;
+  }
+
+  @override
+  int get length => _delegate.length;
+
+  @override
+  Set<E> toSet() => _delegate.toSet();
 }
