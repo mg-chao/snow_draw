@@ -123,11 +123,14 @@ class PluginRegistry {
             break;
           }
         } on Object catch (e, stackTrace) {
-          _context.context.log.input.error(
-            'Plugin handleEvent failed',
-            e,
-            stackTrace,
-            {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+          _safeLogInputError(
+            message: 'Plugin handleEvent failed',
+            error: e,
+            stackTrace: stackTrace,
+            metadata: {
+              'plugin': plugin.name,
+              'event': event.runtimeType.toString(),
+            },
           );
           // Continue with the next plugin.
         }
@@ -145,9 +148,12 @@ class PluginRegistry {
       try {
         plugin.reset();
       } on Object catch (e, stackTrace) {
-        _context.context.log.input.error('Plugin reset failed', e, stackTrace, {
-          'plugin': plugin.name,
-        });
+        _safeLogInputError(
+          message: 'Plugin reset failed',
+          error: e,
+          stackTrace: stackTrace,
+          metadata: {'plugin': plugin.name},
+        );
       }
     }
   }
@@ -158,11 +164,11 @@ class PluginRegistry {
       try {
         await plugin.onUnload();
       } on Object catch (e, stackTrace) {
-        _context.context.log.input.error(
-          'Plugin unload failed',
-          e,
-          stackTrace,
-          {'plugin': plugin.name},
+        _safeLogInputError(
+          message: 'Plugin unload failed',
+          error: e,
+          stackTrace: stackTrace,
+          metadata: {'plugin': plugin.name},
         );
       }
     }
@@ -239,18 +245,12 @@ class PluginRegistry {
     required InputPlugin plugin,
     required Object error,
     required StackTrace stackTrace,
-  }) {
-    try {
-      _context.context.log.input.error(
-        'Plugin rollback unload failed',
-        error,
-        stackTrace,
-        {'plugin': plugin.name},
-      );
-    } on Object {
-      // Ignore logging failures so batch rollback remains best-effort.
-    }
-  }
+  }) => _safeLogInputError(
+    message: 'Plugin rollback unload failed',
+    error: error,
+    stackTrace: stackTrace,
+    metadata: {'plugin': plugin.name},
+  );
 
   Future<bool> _isInterceptedByBeforeHooks(
     InputEvent event,
@@ -262,11 +262,14 @@ class PluginRegistry {
           return true;
         }
       } on Object catch (e, stackTrace) {
-        _context.context.log.input.error(
-          'Plugin beforeEvent failed',
-          e,
-          stackTrace,
-          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+        _safeLogInputError(
+          message: 'Plugin beforeEvent failed',
+          error: e,
+          stackTrace: stackTrace,
+          metadata: {
+            'plugin': plugin.name,
+            'event': event.runtimeType.toString(),
+          },
         );
       }
     }
@@ -281,11 +284,14 @@ class PluginRegistry {
     try {
       return plugin.canHandle(event, state);
     } on Object catch (e, stackTrace) {
-      _context.context.log.input.error(
-        'Plugin canHandle failed',
-        e,
-        stackTrace,
-        {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+      _safeLogInputError(
+        message: 'Plugin canHandle failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: {
+          'plugin': plugin.name,
+          'event': event.runtimeType.toString(),
+        },
       );
       return false;
     }
@@ -300,13 +306,29 @@ class PluginRegistry {
       try {
         await plugin.onAfterEvent(event, result);
       } on Object catch (e, stackTrace) {
-        _context.context.log.input.error(
-          'Plugin afterEvent failed',
-          e,
-          stackTrace,
-          {'plugin': plugin.name, 'event': event.runtimeType.toString()},
+        _safeLogInputError(
+          message: 'Plugin afterEvent failed',
+          error: e,
+          stackTrace: stackTrace,
+          metadata: {
+            'plugin': plugin.name,
+            'event': event.runtimeType.toString(),
+          },
         );
       }
+    }
+  }
+
+  void _safeLogInputError({
+    required String message,
+    required Object error,
+    required StackTrace stackTrace,
+    Map<String, dynamic>? metadata,
+  }) {
+    try {
+      _context.context.log.input.error(message, error, stackTrace, metadata);
+    } on Object {
+      // Ignore logging failures so input dispatch remains resilient.
     }
   }
 

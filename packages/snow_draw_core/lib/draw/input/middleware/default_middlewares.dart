@@ -1,4 +1,4 @@
-﻿import '../../services/log/log_service.dart';
+import '../../services/log/log_service.dart';
 import '../input_event.dart';
 import 'input_middleware.dart';
 
@@ -76,7 +76,7 @@ class ThrottleMiddleware extends InputMiddlewareBase {
     : _throttledEventTypes = throttledEventTypes ?? {PointerMoveInputEvent},
       super(name: 'Throttle');
   final Duration duration;
-  DateTime? _lastProcessTime;
+  final Map<Type, DateTime> _lastProcessTimes = {};
   final Set<Type> _throttledEventTypes;
 
   @override
@@ -90,16 +90,17 @@ class ThrottleMiddleware extends InputMiddlewareBase {
       return next(event);
     }
 
+    final eventType = event.runtimeType;
     final now = DateTime.now();
-    final lastTime = _lastProcessTime;
+    final lastTime = _lastProcessTimes[eventType];
 
     if (lastTime != null && now.difference(lastTime) < duration) {
-      // Skip this event — return null so the coordinator knows it was
+      // Skip this event - return null so the coordinator knows it was
       // intercepted rather than processed.
       return null;
     }
 
-    _lastProcessTime = now;
+    _lastProcessTimes[eventType] = now;
     return next(event);
   }
 }

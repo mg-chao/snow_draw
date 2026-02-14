@@ -104,6 +104,44 @@ void main() {
       expect(fallbackHandled, 1);
     });
 
+    test(
+      'continues dispatch when before-hook logging context is unavailable',
+      () async {
+        final state = DrawState();
+        final context = PluginContext(
+          stateProvider: () => state,
+          contextProvider: () => throw StateError('context unavailable'),
+          selectionConfigProvider: () => DrawConfig.defaultConfig.selection,
+          dispatcher: (_) async {},
+        );
+        final registry = PluginRegistry(context: context);
+        var fallbackHandled = 0;
+
+        final throwing = _TestPlugin(
+          id: 'throwing',
+          priority: 0,
+          onBefore: (_) async => throw StateError('before failed'),
+          canHandle: (_, _) => false,
+          onHandle: (_) async => const PluginResult.unhandled(),
+        );
+        final fallback = _TestPlugin(
+          id: 'fallback',
+          priority: 10,
+          onHandle: (_) async {
+            fallbackHandled += 1;
+            return const PluginResult.handled(message: 'fallback handled');
+          },
+        );
+
+        await registry.registerAll([throwing, fallback]);
+
+        final result = await registry.dispatch(_pointerDown(), state);
+
+        expect(result, const PluginResult.handled(message: 'fallback handled'));
+        expect(fallbackHandled, 1);
+      },
+    );
+
     test('ignores onBeforeEvent interception from plugins '
         'that do not support the event type', () async {
       final context = _createPluginContext();
@@ -383,6 +421,54 @@ void main() {
 
       await coordinator.dispose();
     });
+
+    test(
+      'does not coalesce pointer move events when modifiers differ',
+      () async {
+        final context = _createPluginContext();
+        final coordinator = PluginInputCoordinator(pluginContext: context);
+        final firstEventGate = Completer<void>();
+        final plugin = _CoalescingProbePlugin(
+          pauseOnFirstEvent: firstEventGate,
+        );
+
+        await coordinator.registry.register(plugin);
+
+        final firstFuture = coordinator.handleEvent(_pointerMove(x: 1));
+        await plugin.firstEventStarted.future;
+
+        final secondFuture = coordinator.handleEvent(_pointerMove(x: 2));
+        final thirdFuture = coordinator.handleEvent(
+          _pointerMove(x: 3, modifiers: const KeyModifiers(shift: true)),
+        );
+
+        firstEventGate.complete();
+
+        expect(
+          await firstFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await secondFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+        expect(
+          await thirdFuture,
+          const PluginResult.handled(message: 'coalescing probe handled'),
+        );
+
+        final processedMoves = plugin.events.whereType<PointerMoveInputEvent>();
+        expect(processedMoves, hasLength(3));
+        expect(processedMoves.map((event) => event.modifiers).toList(), const [
+          KeyModifiers.none,
+          KeyModifiers.none,
+          KeyModifiers(shift: true),
+        ]);
+        expect(coordinator.getStats()['coalescedEvents'], 0);
+
+        await coordinator.dispose();
+      },
+    );
   });
 
   group('PluginInputCoordinator error containment', () {
@@ -447,11 +533,14 @@ PointerDownInputEvent _pointerDown({double x = 10, double y = 20}) =>
       modifiers: KeyModifiers.none,
     );
 
-PointerMoveInputEvent _pointerMove({double x = 10, double y = 20}) =>
-    PointerMoveInputEvent(
-      position: DrawPoint(x: x, y: y),
-      modifiers: KeyModifiers.none,
-    );
+PointerMoveInputEvent _pointerMove({
+  double x = 10,
+  double y = 20,
+  KeyModifiers modifiers = KeyModifiers.none,
+}) => PointerMoveInputEvent(
+  position: DrawPoint(x: x, y: y),
+  modifiers: modifiers,
+);
 
 class _TestPlugin extends InputPluginBase {
   _TestPlugin({

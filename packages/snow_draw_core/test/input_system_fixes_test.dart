@@ -122,6 +122,38 @@ void main() {
 
       expect(nextCalled, isTrue);
     });
+
+    test('tracks throttle windows per event type', () async {
+      final middleware = ThrottleMiddleware(
+        duration: const Duration(seconds: 1),
+        throttledEventTypes: {PointerMoveInputEvent, PointerHoverInputEvent},
+      );
+      final context = MiddlewareContext(state: DrawState());
+      const moveEvent = PointerMoveInputEvent(
+        position: DrawPoint(x: 10, y: 20),
+        modifiers: KeyModifiers.none,
+      );
+      const hoverEvent = PointerHoverInputEvent(
+        position: DrawPoint(x: 30, y: 40),
+        modifiers: KeyModifiers.none,
+      );
+
+      var moveCalls = 0;
+      var hoverCalls = 0;
+
+      await middleware.process(moveEvent, context, (e) async {
+        moveCalls += 1;
+        return e;
+      });
+
+      await middleware.process(hoverEvent, context, (e) async {
+        hoverCalls += 1;
+        return e;
+      });
+
+      expect(moveCalls, 1);
+      expect(hoverCalls, 1);
+    });
   });
 
   // =========================================================================

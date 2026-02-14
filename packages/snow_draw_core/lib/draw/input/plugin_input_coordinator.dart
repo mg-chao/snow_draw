@@ -88,7 +88,8 @@ class PluginInputCoordinator {
 
   bool _canCoalesce(InputEvent previousEvent, InputEvent nextEvent) =>
       previousEvent.runtimeType == nextEvent.runtimeType &&
-      _isCoalescibleEvent(previousEvent);
+      _isCoalescibleEvent(previousEvent) &&
+      previousEvent.modifiers == nextEvent.modifiers;
 
   bool _isCoalescibleEvent(InputEvent event) =>
       event is PointerMoveInputEvent || event is PointerHoverInputEvent;
