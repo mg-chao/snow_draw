@@ -1,5 +1,6 @@
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 
 /// Serializes config writes per [DrawStore] to avoid cross-adapter races.
@@ -19,15 +20,24 @@ class ConfigUpdateQueue {
   /// Updates execute sequentially for a given [store] so each write can build
   /// from the latest committed config snapshot.
   static Future<void> enqueue(DrawStore store, Future<void> Function() update) {
-    final queue = _queues[store] ??= _StoreQueue();
+    final queue = _queues[store] ??= _StoreQueue(
+      log: store.context.log.configLog,
+    );
     return queue.enqueue(update);
   }
 }
 
 class _StoreQueue {
+  _StoreQueue({required ModuleLogger log}) : _log = log;
+
+  final ModuleLogger _log;
   var _pending = Future<void>.value();
 
-  Future<void> enqueue(Future<void> Function() update) => _pending = _pending
-      .catchError((Object _, StackTrace _) {})
-      .then((_) => update());
+  Future<void> enqueue(Future<void> Function() update) {
+    final next = _pending.then((_) => update());
+    _pending = next.catchError((Object error, StackTrace stackTrace) {
+      _log.error('Queued config update failed', error, stackTrace);
+    });
+    return next;
+  }
 }

@@ -275,10 +275,17 @@ class StyleToolbarAdapter {
     );
   }
 
-  Future<void> _enqueueStyleUpdate(Future<void> Function() update) =>
-      _pendingStyleUpdate = _pendingStyleUpdate
-          .catchError((Object _, StackTrace _) {})
-          .then((_) => update());
+  Future<void> _enqueueStyleUpdate(Future<void> Function() update) {
+    final next = _pendingStyleUpdate.then((_) => update());
+    _pendingStyleUpdate = next.catchError((Object error, StackTrace st) {
+      _store.context.log.configLog.error(
+        'Queued style update failed',
+        error,
+        st,
+      );
+    });
+    return next;
+  }
 
   Future<void> copySelection() async {
     if (_isDisposed) {
