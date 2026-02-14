@@ -272,8 +272,10 @@ class ObjectSnapService {
         (targetAnchorsX.isEmpty && targetAnchorsY.isEmpty)) {
       return const SnapResult();
     }
-    final hasAnchorsX = targetAnchorsX.isNotEmpty;
-    final hasAnchorsY = targetAnchorsY.isNotEmpty;
+    final effectiveTargetAnchorsX = _deduplicateAnchors(targetAnchorsX);
+    final effectiveTargetAnchorsY = _deduplicateAnchors(targetAnchorsY);
+    final hasAnchorsX = effectiveTargetAnchorsX.isNotEmpty;
+    final hasAnchorsY = effectiveTargetAnchorsY.isNotEmpty;
 
     final referenceRects = [
       for (final element in referenceElements)
@@ -298,7 +300,7 @@ class ObjectSnapService {
                 referenceRects: referenceRects,
                 targetPoints: targetPoints,
                 referencePoints: referencePoints,
-                targetAnchors: targetAnchorsX,
+                targetAnchors: effectiveTargetAnchorsX,
                 snapDistance: snapDistance,
               ),
             if (enableGapSnaps)
@@ -306,7 +308,7 @@ class ObjectSnapService {
                 axis: SnapAxis.x,
                 targetRect: targetRect,
                 referenceRects: referenceRects,
-                targetAnchors: targetAnchorsX,
+                targetAnchors: effectiveTargetAnchorsX,
                 snapDistance: snapDistance,
               ),
           ]
@@ -321,7 +323,7 @@ class ObjectSnapService {
                 referenceRects: referenceRects,
                 targetPoints: targetPoints,
                 referencePoints: referencePoints,
-                targetAnchors: targetAnchorsY,
+                targetAnchors: effectiveTargetAnchorsY,
                 snapDistance: snapDistance,
               ),
             if (enableGapSnaps)
@@ -329,7 +331,7 @@ class ObjectSnapService {
                 axis: SnapAxis.y,
                 targetRect: targetRect,
                 referenceRects: referenceRects,
-                targetAnchors: targetAnchorsY,
+                targetAnchors: effectiveTargetAnchorsY,
                 snapDistance: snapDistance,
               ),
           ]
@@ -1637,6 +1639,29 @@ class ObjectSnapService {
       }
     }
     return points;
+  }
+
+  static List<SnapAxisAnchor> _deduplicateAnchors(
+    List<SnapAxisAnchor> anchors,
+  ) {
+    if (anchors.length < 2) {
+      return anchors;
+    }
+
+    final seen = <SnapAxisAnchor>{};
+    List<SnapAxisAnchor>? deduplicated;
+    for (var index = 0; index < anchors.length; index++) {
+      final anchor = anchors[index];
+      final isNew = seen.add(anchor);
+      if (isNew) {
+        deduplicated?.add(anchor);
+        continue;
+      }
+
+      deduplicated ??= List<SnapAxisAnchor>.of(anchors.take(index));
+    }
+
+    return deduplicated ?? anchors;
   }
 
   static SnapAxisAnchor _resolveAxisAnchor(

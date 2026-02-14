@@ -133,5 +133,37 @@ void main() {
         isFalse,
       );
     });
+
+    test('duplicate target anchors do not change snap outcome', () {
+      const service = ObjectSnapService();
+      final references = [
+        element('ref', const DrawRect(minX: 15, maxX: 25, maxY: 10)),
+      ];
+
+      final unique = service.snapRect(
+        targetRect: const DrawRect(maxX: 10, maxY: 10),
+        referenceElements: references,
+        snapDistance: 6,
+        targetAnchorsX: const [SnapAxisAnchor.end],
+        targetAnchorsY: const [],
+        enableGapSnaps: false,
+      );
+      final duplicated = service.snapRect(
+        targetRect: const DrawRect(maxX: 10, maxY: 10),
+        referenceElements: references,
+        snapDistance: 6,
+        targetAnchorsX: const [
+          SnapAxisAnchor.end,
+          SnapAxisAnchor.end,
+          SnapAxisAnchor.end,
+        ],
+        targetAnchorsY: const [],
+        enableGapSnaps: false,
+      );
+
+      expect(duplicated.dx, unique.dx);
+      expect(duplicated.dy, unique.dy);
+      expect(duplicated.guides, unique.guides);
+    });
   });
 }

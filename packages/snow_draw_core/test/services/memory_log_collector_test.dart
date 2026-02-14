@@ -65,6 +65,15 @@ void main() {
       expect(recent.length, 2);
     });
 
+    test('getRecent returns empty for non-positive counts', () {
+      final collector = MemoryLogCollector(maxRecords: 10)
+        ..output(record('a'))
+        ..output(record('b'));
+
+      expect(collector.getRecent(0), isEmpty);
+      expect(collector.getRecent(-1), isEmpty);
+    });
+
     test('filterByLevel filters correctly', () {
       final collector = MemoryLogCollector(maxRecords: 10)
         ..output(
@@ -152,6 +161,14 @@ void main() {
 
       expect(collector.records.length, 2);
       expect(collector.records.map((r) => r.message), ['c', 'd']);
+    });
+
+    test('outputBatch keeps collector empty when maxRecords is zero', () {
+      final collector = MemoryLogCollector(maxRecords: 0)
+        ..output(record('seed'))
+        ..outputBatch([record('a'), record('b'), record('c')]);
+
+      expect(collector.records, isEmpty);
     });
   });
 }

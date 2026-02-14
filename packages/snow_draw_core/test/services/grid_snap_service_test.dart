@@ -28,6 +28,14 @@ void main() {
       expect(snapped, const DrawPoint(x: 10, y: 30));
     });
 
+    test('snapPoint reuses instance when point is already aligned', () {
+      const aligned = DrawPoint(x: 20, y: -40);
+
+      final snapped = service.snapPoint(point: aligned, gridSize: 10);
+
+      expect(snapped, same(aligned));
+    });
+
     test('snapRect only snaps requested edges', () {
       final snapped = service.snapRect(
         rect: const DrawRect(minX: 12, minY: 13, maxX: 38, maxY: 39),
@@ -38,6 +46,32 @@ void main() {
 
       expect(snapped, const DrawRect(minX: 10, minY: 13, maxX: 40, maxY: 39));
     });
+
+    test('snapRect reuses instance when no edges are requested', () {
+      const rect = DrawRect(minX: 12, minY: 13, maxX: 38, maxY: 39);
+
+      final snapped = service.snapRect(rect: rect, gridSize: 10);
+
+      expect(snapped, same(rect));
+    });
+
+    test(
+      'snapRect reuses instance when requested edges are already aligned',
+      () {
+        const alignedRect = DrawRect(minX: 10, minY: 20, maxX: 40, maxY: 80);
+
+        final snapped = service.snapRect(
+          rect: alignedRect,
+          gridSize: 10,
+          snapMinX: true,
+          snapMaxX: true,
+          snapMinY: true,
+          snapMaxY: true,
+        );
+
+        expect(snapped, same(alignedRect));
+      },
+    );
 
     test('non-finite numbers do not throw and preserve non-finite values', () {
       expect(() => service.snapValue(double.nan, 10), returnsNormally);

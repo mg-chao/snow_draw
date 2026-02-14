@@ -78,6 +78,9 @@ class MemoryLogCollector implements LogOutputHandler {
 
   /// Get the most recent n records.
   List<LogRecord> getRecent(int count) {
+    if (count <= 0 || _records.isEmpty) {
+      return const [];
+    }
     if (count >= _records.length) {
       return records;
     }
@@ -121,6 +124,18 @@ class MemoryLogCollector implements LogOutputHandler {
     if (records.isEmpty) {
       return;
     }
+    if (maxRecords == 0) {
+      _records.clear();
+      return;
+    }
+    if (records.length >= maxRecords) {
+      final start = records.length - maxRecords;
+      _records
+        ..clear()
+        ..addAll(records.sublist(start));
+      return;
+    }
+
     _records.addAll(records);
     if (_records.length > maxRecords) {
       _trimExcess();
