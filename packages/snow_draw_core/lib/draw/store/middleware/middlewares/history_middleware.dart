@@ -100,7 +100,7 @@ class HistoryMiddleware extends MiddlewareBase {
 
     // Handle clear history
     if (action is ClearHistory) {
-      context.drawContext.log.history.info('History clear requested', {
+      context.drawContext.log.history.trace('History clear requested', {
         'traceId': context.traceId,
       });
       context.historyManager.clear();
@@ -117,7 +117,7 @@ class HistoryMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) {
-    context.drawContext.log.history.info('History undo requested', {
+    context.drawContext.log.history.trace('History undo requested', {
       'traceId': context.traceId,
     });
     if (!context.historyManager.canUndo) {
@@ -139,7 +139,7 @@ class HistoryMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) {
-    context.drawContext.log.history.info('History redo requested', {
+    context.drawContext.log.history.trace('History redo requested', {
       'traceId': context.traceId,
     });
     if (!context.historyManager.canRedo) {
@@ -162,9 +162,11 @@ class HistoryMiddleware extends MiddlewareBase {
     final metadata = _buildMetadata(context, action);
     final changes = _buildChangeSet(context, action, metadata);
     final includeSelection = context.includeSelectionInHistory;
+    final coalescing = action.historyCoalescing;
 
     try {
       final useIncremental =
+          coalescing == null &&
           changes != null &&
           !_requiresPersistentSnapshots(action: action, changes: changes);
 
@@ -210,11 +212,14 @@ class HistoryMiddleware extends MiddlewareBase {
         snapshotAfter,
         metadata: metadata,
         changes: changes,
+        coalescing: coalescing,
+        currentState: context.initialState,
       );
-      log.debug('History record evaluated', {
+      log.trace('History record evaluated', {
         'action': action.runtimeType.toString(),
         'recorded': recorded,
         'description': metadata?.description,
+        'coalescingKey': coalescing?.key,
         'traceId': context.traceId,
       });
     } on Object catch (error, stackTrace) {
@@ -444,6 +449,13 @@ class HistoryMiddleware extends MiddlewareBase {
       }
       return HistoryChangeSet(
         modifiedIds: {resolved.elementId},
+        selectionChanged: selectionChanged,
+      );
+    }
+
+    if (action is UpdateGlobalElements) {
+      return HistoryChangeSet(
+        globalElementsChanged: true,
         selectionChanged: selectionChanged,
       );
     }

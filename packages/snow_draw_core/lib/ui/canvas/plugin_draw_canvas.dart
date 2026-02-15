@@ -11,6 +11,7 @@ import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
 import '../../draw/elements/core/element_type_id.dart';
+import '../../draw/elements/text_rendering_cache_invalidation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
 import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
@@ -48,6 +49,7 @@ import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
+import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -59,6 +61,7 @@ class PluginDrawCanvas extends StatefulWidget {
     super.key,
     this.scaleFactor = 1.0,
     this.currentToolTypeId,
+    this.isSelectionToolActive = true,
     this.middlewares,
     this.customPlugins,
     this.enableDebugLogging = false,
@@ -68,6 +71,7 @@ class PluginDrawCanvas extends StatefulWidget {
   final double scaleFactor;
   final DrawStore store;
   final ElementTypeId<ElementData>? currentToolTypeId;
+  final bool isSelectionToolActive;
 
   /// Custom middleware (optional).
   final List<InputMiddleware>? middlewares;
@@ -95,6 +99,12 @@ class PluginDrawCanvas extends StatefulWidget {
         DiagnosticsProperty<ElementTypeId<ElementData>?>(
           'currentToolTypeId',
           currentToolTypeId,
+        ),
+      )
+      ..add(
+        DiagnosticsProperty<bool>(
+          'isSelectionToolActive',
+          isSelectionToolActive,
         ),
       )
       ..add(IterableProperty<InputMiddleware>('middlewares', middlewares))
@@ -157,6 +167,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late DrawStateViewBuilder _stateViewBuilder;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
+  var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
 
   CoordinateService get _coords {
     _updateCoordinateServiceIfNeeded();
@@ -244,6 +255,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Register standard plugins.
     final standardPlugins = pluginFactory.createStandardPlugins(
       currentToolTypeId: widget.currentToolTypeId,
+      isSelectionToolActive: widget.isSelectionToolActive,
     );
 
     for (final plugin in standardPlugins) {
@@ -289,6 +301,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
 
     _configSubscription = widget.store.configStream.listen(_handleConfigChange);
+    textRenderingCacheRevisionListenable.addListener(
+      _handleTextRenderingCacheInvalidation,
+    );
+    PaintingBinding.instance.systemFonts.addListener(_handleSystemFontsChange);
+    _updateCursorIfChanged(
+      _resolveCursorForState(widget.store.state, _lastPointerPosition),
+    );
   }
 
   @override
@@ -299,7 +318,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         oldWidget.store != widget.store ||
         oldWidget.middlewares != widget.middlewares ||
         oldWidget.customPlugins != widget.customPlugins;
-    final toolChanged = oldWidget.currentToolTypeId != widget.currentToolTypeId;
+    final toolChanged =
+        oldWidget.currentToolTypeId != widget.currentToolTypeId ||
+        oldWidget.isSelectionToolActive != widget.isSelectionToolActive;
 
     if (shouldRecreateCoordinator) {
       // Dispose old coordinator
@@ -332,7 +353,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (toolChanged) {
       unawaited(_resetInteractionForToolChange());
       if (!shouldRecreateCoordinator) {
-        _updateToolPlugins(widget.currentToolTypeId);
+        _updateToolPlugins(
+          toolTypeId: widget.currentToolTypeId,
+          isSelectionToolActive: widget.isSelectionToolActive,
+        );
       }
     }
 
@@ -346,6 +370,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _stateUnsubscribe?.call();
     _stateUnsubscribe = null;
     unawaited(_configSubscription?.cancel());
+    textRenderingCacheRevisionListenable.removeListener(
+      _handleTextRenderingCacheInvalidation,
+    );
+    PaintingBinding.instance.systemFonts.removeListener(
+      _handleSystemFontsChange,
+    );
     _focusNode.dispose();
     _textController?.dispose();
     _textFocusNode.dispose();
@@ -378,18 +408,28 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
+    final globalElements = stateView.globalElements;
+    final highlightMask = globalElements.highlightMask;
+    final watermark = globalElements.watermark;
     final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
     final hasDynamicContent =
         dynamicLayerStartIndex != null || creatingSnapshot != null;
     final highlightMaskLayer = resolveHighlightMaskLayer(
       hasHighlights: hasHighlights,
       hasDynamicContent: hasDynamicContent,
-      config: config.highlight,
+      config: highlightMask,
     );
+    final watermarkLayer = resolveWatermarkLayer(
+      hasDynamicContent: hasDynamicContent,
+      config: watermark,
+    );
+    final textRenderingCacheRevision =
+        textRenderingCacheRevisionListenable.value;
 
     // Build precise render keys for each canvas layer.
     final staticRenderKey = StaticCanvasRenderKey(
       documentVersion: stateView.state.domain.document.elementsVersion,
+      textRenderingCacheRevision: textRenderingCacheRevision,
       camera: stateView.state.application.view.camera,
       previewElementsById: staticPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
@@ -398,7 +438,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       canvasConfig: config.canvas,
       gridConfig: config.grid,
       highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: config.highlight,
+      highlightMaskConfig: highlightMask,
+      watermarkLayer: watermarkLayer,
+      watermarkConfig: watermark,
       elementRegistry: elementRegistry,
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
@@ -416,6 +458,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hoverSelectionConfig: _resolveHoverSelectionConfig(),
       snapGuides: stateView.snapGuides,
       documentVersion: stateView.state.domain.document.elementsVersion,
+      textRenderingCacheRevision: textRenderingCacheRevision,
       camera: stateView.state.application.view.camera,
       previewElementsById: dynamicPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
@@ -425,7 +468,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       boxSelectionConfig: config.boxSelection,
       snapConfig: config.snap,
       highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: config.highlight,
+      highlightMaskConfig: highlightMask,
+      watermarkLayer: watermarkLayer,
+      watermarkConfig: watermark,
       elementRegistry: elementRegistry,
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
@@ -782,7 +827,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         toolTypeId == ArrowData.typeIdToken ||
         toolTypeId == LineData.typeIdToken ||
         toolTypeId == FreeDrawData.typeIdToken ||
-        toolTypeId == null) {
+        (toolTypeId == null && widget.isSelectionToolActive)) {
       _adjustStrokeWidth(event);
       return;
     }
@@ -1354,7 +1399,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _clearHoverState();
     }
     if (!_isPointerInside) {
-      _updateCursorIfChanged(_defaultCursor);
+      _updateCursorIfChanged(_idleCursorForCurrentTool);
+      return _clearHoverState();
+    }
+    if (_isElementInteractionDisabledForCurrentTool) {
+      _updateCursorIfChanged(_idleCursorForCurrentTool);
       return _clearHoverState();
     }
 
@@ -1395,7 +1444,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hitResult: hitResult,
       selectionConfig: selectionConfig,
     )) {
-      nextCursor = _defaultCursor;
+      nextCursor = _idleCursorForCurrentTool;
     } else if (_shouldShowTextCursor(
       state: state,
       position: position,
@@ -1405,7 +1454,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     )) {
       nextCursor = SystemMouseCursors.text;
     } else if (!hitResult.isHit) {
-      nextCursor = _defaultCursor;
+      nextCursor = _idleCursorForCurrentTool;
     } else {
       nextCursor = _cursorResolver.resolveForHitTest(hitResult);
     }
@@ -1778,7 +1827,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return true;
     }
 
-    final isSelectionToolActive = widget.currentToolTypeId == null;
+    final isSelectionToolActive =
+        widget.currentToolTypeId == null && widget.isSelectionToolActive;
     final isSerialToolActive =
         widget.currentToolTypeId == SerialNumberData.typeIdToken;
     final isSelectionLikeToolActive =
@@ -1973,7 +2023,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     if (!_isPointerInside || position == null) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
+    }
+    if (_isElementInteractionDisabledForCurrentTool) {
+      return _idleCursorForCurrentTool;
     }
 
     final arrowHandle = _resolveArrowPointHandleForPosition(
@@ -2001,7 +2054,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hitResult: hitResult,
       selectionConfig: selectionConfig,
     )) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
     if (_shouldShowTextCursor(
       state: state,
@@ -2013,12 +2066,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return SystemMouseCursors.text;
     }
     if (!hitResult.isHit) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
     return _cursorResolver.resolveForHitTest(hitResult);
   }
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
+
+  bool get _isElementInteractionDisabledForCurrentTool =>
+      widget.currentToolTypeId == null && !widget.isSelectionToolActive;
+
+  MouseCursor get _idleCursorForCurrentTool =>
+      _isElementInteractionDisabledForCurrentTool
+      ? SystemMouseCursors.basic
+      : _defaultCursor;
 
   DrawStateView _buildStateView(DrawState state) {
     final cachedState = _cachedState;
@@ -2520,6 +2581,38 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
   }
 
+  void _handleTextRenderingCacheInvalidation() {
+    if (!mounted) {
+      return;
+    }
+    unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
+    setState(() {});
+  }
+
+  void _handleSystemFontsChange() {
+    invalidateTextRenderingCaches();
+  }
+
+  Future<void> _refreshAutoResizeTextLayoutsAfterFontLoad() async {
+    if (_isRefreshingAutoResizeTextLayoutsAfterFontLoad) {
+      return;
+    }
+    _isRefreshingAutoResizeTextLayoutsAfterFontLoad = true;
+    try {
+      await widget.store.dispatch(
+        const RefreshAutoResizeTextLayoutsAfterFontLoad(),
+      );
+    } on Object catch (error, stackTrace) {
+      widget.store.context.log.render.error(
+        'Failed to refresh auto-resize text layouts after font load',
+        error,
+        stackTrace,
+      );
+    } finally {
+      _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
+    }
+  }
+
   void _updateCursorIfChanged(MouseCursor nextCursor) {
     if (_cursor == nextCursor) {
       return;
@@ -2530,18 +2623,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
   }
 
-  void _updateToolPlugins(ElementTypeId<ElementData>? toolTypeId) {
+  void _updateToolPlugins({
+    required ElementTypeId<ElementData>? toolTypeId,
+    required bool isSelectionToolActive,
+  }) {
     final createPlugin = _pluginCoordinator.registry.getPlugin('create');
     if (createPlugin is CreatePlugin) {
       createPlugin.currentToolTypeId = toolTypeId;
     }
     final textPlugin = _pluginCoordinator.registry.getPlugin('text_tool');
     if (textPlugin is TextToolPlugin) {
-      textPlugin.currentToolTypeId = toolTypeId;
+      textPlugin
+        ..currentToolTypeId = toolTypeId
+        ..isSelectionToolActive = isSelectionToolActive;
     }
     final selectPlugin = _pluginCoordinator.registry.getPlugin('select');
     if (selectPlugin is SelectPlugin) {
-      selectPlugin.currentToolTypeId = toolTypeId;
+      selectPlugin
+        ..currentToolTypeId = toolTypeId
+        ..isSelectionToolActive = isSelectionToolActive;
     }
   }
 

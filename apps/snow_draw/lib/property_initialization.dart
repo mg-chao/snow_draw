@@ -38,5 +38,13 @@ void initializePropertyRegistry() {
     ..register(const CornerRadiusPropertyDescriptor())
     ..register(const OpacityPropertyDescriptor())
     ..register(const MaskColorPropertyDescriptor())
-    ..register(const MaskOpacityPropertyDescriptor());
+    ..register(const MaskOpacityPropertyDescriptor())
+    // Watermark-specific properties.
+    ..register(const WatermarkColorPropertyDescriptor())
+    ..register(const WatermarkTextPropertyDescriptor())
+    ..register(const WatermarkFontSizePropertyDescriptor())
+    ..register(const WatermarkFontFamilyPropertyDescriptor())
+    ..register(const WatermarkAnglePropertyDescriptor())
+    ..register(const WatermarkGapPropertyDescriptor())
+    ..register(const WatermarkOpacityPropertyDescriptor());
 }

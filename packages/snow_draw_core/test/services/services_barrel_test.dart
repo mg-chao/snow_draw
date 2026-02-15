@@ -43,5 +43,9 @@ void main() {
     test('SelectionGeometryResolver is accessible', () {
       expect(SelectionGeometryResolver, isNotNull);
     });
+
+    test('SystemFontService is accessible', () {
+      expect(SystemFontService.instance, isNotNull);
+    });
   });
 }

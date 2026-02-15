@@ -10,6 +10,7 @@ enum ToolType {
   text,
   serialNumber,
   filter,
+  watermark,
 }
 
 class ToolController extends ValueNotifier<ToolType> {

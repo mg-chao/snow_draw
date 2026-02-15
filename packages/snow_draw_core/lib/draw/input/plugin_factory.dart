@@ -44,18 +44,22 @@ class PluginFactory {
   /// Create a select plugin.
   SelectPlugin createSelectPlugin({
     ElementTypeId<ElementData>? currentToolTypeId,
+    bool isSelectionToolActive = true,
     InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
   }) => SelectPlugin(
     currentToolTypeId: currentToolTypeId,
+    isSelectionToolActive: isSelectionToolActive,
     routingPolicy: routingPolicy,
   );
 
   /// Create a text tool plugin.
   TextToolPlugin createTextToolPlugin({
     ElementTypeId<ElementData>? currentToolTypeId,
+    bool isSelectionToolActive = true,
     InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
   }) => TextToolPlugin(
     currentToolTypeId: currentToolTypeId,
+    isSelectionToolActive: isSelectionToolActive,
     routingPolicy: routingPolicy,
   );
 
@@ -64,11 +68,13 @@ class PluginFactory {
   /// Returns plugins sorted by priority.
   List<InputPlugin> createStandardPlugins({
     ElementTypeId<ElementData>? currentToolTypeId,
+    bool isSelectionToolActive = true,
     InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
   }) => [
     EditPlugin(routingPolicy: routingPolicy),
     TextToolPlugin(
       currentToolTypeId: currentToolTypeId,
+      isSelectionToolActive: isSelectionToolActive,
       routingPolicy: routingPolicy,
     ),
     CreatePlugin(
@@ -77,6 +83,7 @@ class PluginFactory {
     ),
     SelectPlugin(
       currentToolTypeId: currentToolTypeId,
+      isSelectionToolActive: isSelectionToolActive,
       routingPolicy: routingPolicy,
     ),
     BoxSelectPlugin(routingPolicy: routingPolicy),

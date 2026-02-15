@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -47,7 +48,10 @@ void main() {
         ),
         isEmpty,
       );
-      expect(store.config.highlight.maskOpacity, closeTo(0.6, 0.0001));
+      expect(
+        store.state.domain.document.globalElements.highlightMask.maskOpacity,
+        closeTo(0.6, 0.0001),
+      );
     },
   );
 
@@ -144,6 +148,25 @@ void main() {
       expect(text.strokeWidth, 3);
     },
   );
+
+  test('watermark gap update clamps to minimum value', () async {
+    final store = _createStore(selectedIds: const <String>{});
+    final adapter = StyleToolbarAdapter(store: store);
+
+    addTearDown(adapter.dispose);
+    addTearDown(store.dispose);
+
+    await adapter.applyStyleUpdate(
+      watermarkGap: 2,
+      toolType: ToolType.watermark,
+    );
+    await pumpEventQueue();
+
+    expect(
+      store.state.domain.document.globalElements.watermark.gap,
+      ConfigDefaults.minWatermarkGap,
+    );
+  });
 }
 
 DefaultDrawStore _createStore({required Set<String> selectedIds}) {

@@ -11,6 +11,7 @@ import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/snap_guides.dart';
 import 'highlight_mask_visibility.dart';
+import 'watermark_visibility.dart';
 
 /// Snapshot of element creation state for render key comparison.
 @immutable
@@ -49,6 +50,7 @@ class CreatingElementSnapshot {
 class StaticCanvasRenderKey {
   const StaticCanvasRenderKey({
     required this.documentVersion,
+    required this.textRenderingCacheRevision,
     required this.camera,
     required this.previewElementsById,
     required this.dynamicLayerStartIndex,
@@ -58,6 +60,8 @@ class StaticCanvasRenderKey {
     required this.gridConfig,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     this.locale,
@@ -65,6 +69,13 @@ class StaticCanvasRenderKey {
 
   /// Document version for detecting element changes.
   final int documentVersion;
+
+  /// Revision for text rendering cache invalidation.
+  ///
+  /// Incremented when runtime font loading clears paragraph/layout caches so
+  /// canvas painters can rebuild text paragraphs with the newly available
+  /// glyphs.
+  final int textRenderingCacheRevision;
 
   /// Camera state for viewport.
   final CameraState camera;
@@ -93,6 +104,12 @@ class StaticCanvasRenderKey {
   /// Highlight mask configuration.
   final HighlightMaskConfig highlightMaskConfig;
 
+  /// Watermark rendering layer.
+  final WatermarkLayer watermarkLayer;
+
+  /// Watermark configuration.
+  final WatermarkConfig watermarkConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -107,6 +124,7 @@ class StaticCanvasRenderKey {
       identical(this, other) ||
       other is StaticCanvasRenderKey &&
           other.documentVersion == documentVersion &&
+          other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
           _mapsEqual(other.previewElementsById, previewElementsById) &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
@@ -116,6 +134,8 @@ class StaticCanvasRenderKey {
           other.gridConfig == gridConfig &&
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
+          other.watermarkLayer == watermarkLayer &&
+          other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
@@ -123,6 +143,7 @@ class StaticCanvasRenderKey {
   @override
   int get hashCode => Object.hash(
     documentVersion,
+    textRenderingCacheRevision,
     camera,
     Object.hashAll(
       previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
@@ -134,6 +155,8 @@ class StaticCanvasRenderKey {
     gridConfig,
     highlightMaskLayer,
     highlightMaskConfig,
+    watermarkLayer,
+    watermarkConfig,
     elementRegistry,
     performanceMonitoringEnabled,
     locale,
@@ -176,6 +199,7 @@ class DynamicCanvasRenderKey {
     required this.hoverSelectionConfig,
     required this.snapGuides,
     required this.documentVersion,
+    required this.textRenderingCacheRevision,
     required this.camera,
     required this.previewElementsById,
     required this.dynamicLayerStartIndex,
@@ -186,6 +210,8 @@ class DynamicCanvasRenderKey {
     required this.snapConfig,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     this.locale,
@@ -218,6 +244,12 @@ class DynamicCanvasRenderKey {
   /// Document version for detecting element geometry changes.
   final int documentVersion;
 
+  /// Revision for text rendering cache invalidation.
+  ///
+  /// Incremented when runtime font loading clears paragraph/layout caches so
+  /// dynamic overlays repaint with updated glyph shaping.
+  final int textRenderingCacheRevision;
+
   /// Camera state for viewport.
   final CameraState camera;
 
@@ -248,6 +280,12 @@ class DynamicCanvasRenderKey {
   /// Highlight mask configuration.
   final HighlightMaskConfig highlightMaskConfig;
 
+  /// Watermark rendering layer.
+  final WatermarkLayer watermarkLayer;
+
+  /// Watermark configuration.
+  final WatermarkConfig watermarkConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -272,6 +310,7 @@ class DynamicCanvasRenderKey {
           other.hoverSelectionConfig == hoverSelectionConfig &&
           _listEquals(other.snapGuides, snapGuides) &&
           other.documentVersion == documentVersion &&
+          other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
           _mapsEqual(other.previewElementsById, previewElementsById) &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
@@ -282,6 +321,8 @@ class DynamicCanvasRenderKey {
           other.snapConfig == snapConfig &&
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
+          other.watermarkLayer == watermarkLayer &&
+          other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
@@ -299,6 +340,7 @@ class DynamicCanvasRenderKey {
     hoverSelectionConfig,
     Object.hashAll(snapGuides),
     documentVersion,
+    textRenderingCacheRevision,
     camera,
     Object.hashAll(
       previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
@@ -311,6 +353,8 @@ class DynamicCanvasRenderKey {
     snapConfig,
     highlightMaskLayer,
     highlightMaskConfig,
+    watermarkLayer,
+    watermarkConfig,
     elementRegistry,
     performanceMonitoringEnabled,
     locale,

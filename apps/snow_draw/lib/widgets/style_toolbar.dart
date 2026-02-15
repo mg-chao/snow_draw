@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 import '../icons/svg_icons.dart';
@@ -77,7 +78,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
   static const double _sliderTrackHeight = 2;
   static const double _sliderThumbRadius = 6;
   static const double _sliderOverlayRadius = 12;
-  static const _sliderDebounceDuration = Duration(milliseconds: 180);
   static const double _fontSizeSmall = 16;
   static const double _fontSizeMedium = 21;
   static const double _fontSizeLarge = 27;
@@ -102,14 +102,19 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   late Listenable _mergedListenable;
   late final ScrollController _scrollController;
-  Timer? _sliderUpdateTimer;
   double? _pendingCornerRadius;
   double? _pendingOpacity;
   double? _pendingFilterStrength;
   double? _pendingMaskOpacity;
+  double? _pendingWatermarkAngle;
+  double? _pendingWatermarkGap;
+  double? _pendingWatermarkOpacity;
+  String? _pendingWatermarkText;
   int? _pendingSerialNumber;
   late final TextEditingController _serialNumberController;
   late final FocusNode _serialNumberFocusNode;
+  late final TextEditingController _watermarkTextController;
+  late final FocusNode _watermarkTextFocusNode;
   List<String> _systemFontFamilies = const [];
   var _fontLoadRequested = false;
   StyleToolbarState? _cachedPropertyState;
@@ -125,6 +130,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
     _serialNumberController = TextEditingController();
     _serialNumberFocusNode = FocusNode();
     _serialNumberFocusNode.addListener(_handleSerialNumberFocusChange);
+    _watermarkTextController = TextEditingController();
+    _watermarkTextFocusNode = FocusNode();
+    _watermarkTextFocusNode.addListener(_handleWatermarkTextFocusChange);
     _mergedListenable = Listenable.merge([
       widget.toolController,
       widget.adapter.stateListenable,
@@ -133,11 +141,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   @override
   void dispose() {
-    _sliderUpdateTimer?.cancel();
     _scrollController.dispose();
     _serialNumberController.dispose();
     _serialNumberFocusNode
       ..removeListener(_handleSerialNumberFocusChange)
+      ..dispose();
+    _watermarkTextController.dispose();
+    _watermarkTextFocusNode
+      ..removeListener(_handleWatermarkTextFocusChange)
       ..dispose();
     super.dispose();
   }
@@ -159,7 +170,14 @@ class _StyleToolbarState extends State<StyleToolbar> {
     final sanitized = next < 0 ? 0 : next;
     setState(() => _pendingSerialNumber = null);
     _serialNumberController.text = sanitized.toString();
-    unawaited(_applyStyleUpdate(serialNumber: sanitized));
+    unawaited(
+      _applyStyleUpdate(
+        serialNumber: sanitized,
+        historyCoalescing: _historyCoalescingForProperty(
+          PropertyIds.serialNumber,
+        ),
+      ),
+    );
   }
 
   void _handleSerialNumberFocusChange() {
@@ -175,6 +193,30 @@ class _StyleToolbarState extends State<StyleToolbar> {
     } else {
       setState(() => _pendingSerialNumber = null);
     }
+  }
+
+  void _handleWatermarkTextFocusChange() {
+    if (_watermarkTextFocusNode.hasFocus) {
+      return;
+    }
+    if (_pendingWatermarkText == null) {
+      return;
+    }
+    _commitWatermarkText(_watermarkTextController.text);
+  }
+
+  void _commitWatermarkText(String text) {
+    final normalized = text.trim();
+    setState(() => _pendingWatermarkText = null);
+    _watermarkTextController.text = normalized;
+    unawaited(
+      _applyStyleUpdate(
+        watermarkText: normalized,
+        historyCoalescing: _historyCoalescingForProperty(
+          PropertyIds.watermarkText,
+        ),
+      ),
+    );
   }
 
   void _requestSystemFonts() {
@@ -207,6 +249,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
           tool == ToolType.highlight || state.hasSelectedHighlights;
       final showFilterControls =
           tool == ToolType.filter || state.hasSelectedFilters;
+      final showWatermarkControls = tool == ToolType.watermark;
       final showArrowControls =
           tool == ToolType.arrow || state.hasSelectedArrows;
       final showLineControls = tool == ToolType.line || state.hasSelectedLines;
@@ -219,12 +262,15 @@ class _StyleToolbarState extends State<StyleToolbar> {
           showRectangleControls ||
           showHighlightControls ||
           showFilterControls ||
+          showWatermarkControls ||
           showArrowControls ||
           showLineControls ||
           showFreeDrawControls ||
           showTextControls ||
           showSerialNumberControls;
-      if (showTextControls || showSerialNumberControls) {
+      if (showTextControls ||
+          showSerialNumberControls ||
+          showWatermarkControls) {
         _requestSystemFonts();
       }
       final maxHeight = math
@@ -519,6 +565,64 @@ class _StyleToolbarState extends State<StyleToolbar> {
     );
   }
 
+  Widget _buildWatermarkTextControl({
+    required MixedValue<String> value,
+    required String defaultValue,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final resolvedText = _pendingWatermarkText ?? value.valueOr(defaultValue);
+    if (!_watermarkTextFocusNode.hasFocus &&
+        _watermarkTextController.text != resolvedText) {
+      _watermarkTextController.text = resolvedText;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(widget.strings.watermarkText),
+        const SizedBox(height: _sectionGap),
+        TextField(
+          controller: _watermarkTextController,
+          focusNode: _watermarkTextFocusNode,
+          textInputAction: TextInputAction.done,
+          style: theme.textTheme.bodyMedium,
+          decoration: InputDecoration(
+            isDense: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_numberControlRadius),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_numberControlRadius),
+              borderSide: BorderSide(color: scheme.outlineVariant),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(_numberControlRadius),
+              borderSide: BorderSide(color: scheme.primary),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
+          ),
+          onChanged: (next) {
+            final normalized = next.trim();
+            setState(() => _pendingWatermarkText = normalized);
+            unawaited(
+              _applyStyleUpdate(
+                watermarkText: normalized,
+                historyCoalescing: _historyCoalescingForProperty(
+                  PropertyIds.watermarkText,
+                ),
+              ),
+            );
+          },
+          onSubmitted: _commitWatermarkText,
+        ),
+      ],
+    );
+  }
+
   Widget _buildSerialNumberControl({
     required MixedValue<int> value,
     required int defaultValue,
@@ -643,6 +747,18 @@ class _StyleToolbarState extends State<StyleToolbar> {
                               onChanged: (text) {
                                 final parsed = int.tryParse(text);
                                 setState(() => _pendingSerialNumber = parsed);
+                                if (parsed == null) {
+                                  return;
+                                }
+                                unawaited(
+                                  _applyStyleUpdate(
+                                    serialNumber: parsed,
+                                    historyCoalescing:
+                                        _historyCoalescingForProperty(
+                                          PropertyIds.serialNumber,
+                                        ),
+                                  ),
+                                );
                               },
                               onSubmitted: (text) {
                                 final parsed = int.tryParse(text);
@@ -1395,20 +1511,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
 
-  void _scheduleStyleUpdate(Future<void> Function() action) {
-    _sliderUpdateTimer?.cancel();
-    _sliderUpdateTimer = Timer(_sliderDebounceDuration, () async {
-      if (!mounted) {
-        return;
-      }
-      await action();
-    });
-  }
-
-  void _flushStyleUpdate() {
-    _sliderUpdateTimer?.cancel();
-    _sliderUpdateTimer = null;
-  }
+  HistoryCoalescing _historyCoalescingForProperty(String propertyId) =>
+      HistoryCoalescing(key: 'style_toolbar:$propertyId');
 
   int _channelFromUnit(double value) => (value * 255).round().clamp(0, 255);
 
@@ -1517,36 +1621,36 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   /// Create a StylePropertyContext from the current state
   StylePropertyContext _createPropertyContext(StyleToolbarState state) {
+    final tool = widget.toolController.value;
     final selectedTypes = <ElementType>{};
-    if (state.hasSelectedRectangles) {
+    if (tool != ToolType.watermark && state.hasSelectedRectangles) {
       selectedTypes.add(ElementType.rectangle);
     }
-    if (state.hasSelectedHighlights) {
+    if (tool != ToolType.watermark && state.hasSelectedHighlights) {
       selectedTypes.add(ElementType.highlight);
     }
-    if (state.hasSelectedFilters) {
+    if (tool != ToolType.watermark && state.hasSelectedFilters) {
       selectedTypes.add(ElementType.filter);
     }
-    if (state.hasSelectedArrows) {
+    if (tool != ToolType.watermark && state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
-    if (state.hasSelectedLines) {
+    if (tool != ToolType.watermark && state.hasSelectedLines) {
       selectedTypes.add(ElementType.line);
     }
-    if (state.hasSelectedFreeDraws) {
+    if (tool != ToolType.watermark && state.hasSelectedFreeDraws) {
       selectedTypes.add(ElementType.freeDraw);
     }
-    if (state.hasSelectedTexts) {
+    if (tool != ToolType.watermark && state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
-    if (state.hasSelectedSerialNumbers) {
+    if (tool != ToolType.watermark && state.hasSelectedSerialNumbers) {
       selectedTypes.add(ElementType.serialNumber);
     }
 
     // If no elements are selected, use the current tool to determine which
     // properties to show (for styling the element to be created)
     if (selectedTypes.isEmpty) {
-      final tool = widget.toolController.value;
       switch (tool) {
         case ToolType.rectangle:
           selectedTypes.add(ElementType.rectangle);
@@ -1564,6 +1668,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
           selectedTypes.add(ElementType.text);
         case ToolType.serialNumber:
           selectedTypes.add(ElementType.serialNumber);
+        case ToolType.watermark:
+          selectedTypes.add(ElementType.watermark);
         case ToolType.selection:
           break;
       }
@@ -1587,8 +1693,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
       filterDefaults: state.filterStyle,
       serialNumberDefaults: state.serialNumberStyle,
       highlightMask: state.highlightMask,
+      watermark: state.watermark,
       selectedElementTypes: selectedTypes,
-      currentTool: widget.toolController.value,
+      currentTool: tool,
     );
   }
 
@@ -1697,6 +1804,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case PropertyIds.textStrokeColor:
       case PropertyIds.highlightTextStrokeColor:
       case PropertyIds.maskColor:
+      case PropertyIds.watermarkColor:
         return _matchesPropertyType<Color>(property);
 
       case PropertyIds.strokeWidth:
@@ -1706,6 +1814,10 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case PropertyIds.cornerRadius:
       case PropertyIds.opacity:
       case PropertyIds.maskOpacity:
+      case PropertyIds.watermarkFontSize:
+      case PropertyIds.watermarkAngle:
+      case PropertyIds.watermarkGap:
+      case PropertyIds.watermarkOpacity:
       case PropertyIds.fontSize:
         return _matchesPropertyType<double>(property);
 
@@ -1732,6 +1844,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
         return _matchesPropertyType<int>(property);
 
       case PropertyIds.fontFamily:
+      case PropertyIds.watermarkText:
+      case PropertyIds.watermarkFontFamily:
         return _matchesPropertyType<String>(property);
 
       case PropertyIds.textAlign:
@@ -1892,6 +2006,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case PropertyIds.filterStrength:
         final value = property.value as MixedValue<double>;
         final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.filterStrength,
+        );
         return _buildSliderControl(
           label: widget.strings.filterStrength,
           value: value,
@@ -1901,12 +2018,19 @@ class _StyleToolbarState extends State<StyleToolbar> {
           pendingValue: _pendingFilterStrength,
           onChanged: (next) {
             setState(() => _pendingFilterStrength = next);
-            _scheduleStyleUpdate(() => _applyStyleUpdate(filterStrength: next));
+            unawaited(
+              _applyStyleUpdate(
+                filterStrength: next,
+                historyCoalescing: coalescing,
+              ),
+            );
           },
           onChangeEnd: (next) async {
-            _flushStyleUpdate();
             setState(() => _pendingFilterStrength = null);
-            await _applyStyleUpdate(filterStrength: next);
+            await _applyStyleUpdate(
+              filterStrength: next,
+              historyCoalescing: coalescing,
+            );
           },
         );
 
@@ -2012,6 +2136,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case PropertyIds.cornerRadius:
         final value = property.value as MixedValue<double>;
         final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.cornerRadius,
+        );
         return _buildSliderControl(
           label: widget.strings.cornerRadius,
           value: value,
@@ -2021,20 +2148,26 @@ class _StyleToolbarState extends State<StyleToolbar> {
           pendingValue: _pendingCornerRadius,
           onChanged: (newValue) {
             setState(() => _pendingCornerRadius = newValue);
-            _scheduleStyleUpdate(
-              () => _applyStyleUpdate(cornerRadius: newValue),
+            unawaited(
+              _applyStyleUpdate(
+                cornerRadius: newValue,
+                historyCoalescing: coalescing,
+              ),
             );
           },
           onChangeEnd: (newValue) async {
-            _flushStyleUpdate();
             setState(() => _pendingCornerRadius = null);
-            await _applyStyleUpdate(cornerRadius: newValue);
+            await _applyStyleUpdate(
+              cornerRadius: newValue,
+              historyCoalescing: coalescing,
+            );
           },
         );
 
       case PropertyIds.opacity:
         final value = property.value as MixedValue<double>;
         final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(PropertyIds.opacity);
         return _buildSliderControl(
           label: widget.strings.opacity,
           value: value,
@@ -2044,12 +2177,19 @@ class _StyleToolbarState extends State<StyleToolbar> {
           pendingValue: _pendingOpacity,
           onChanged: (newValue) {
             setState(() => _pendingOpacity = newValue);
-            _scheduleStyleUpdate(() => _applyStyleUpdate(opacity: newValue));
+            unawaited(
+              _applyStyleUpdate(
+                opacity: newValue,
+                historyCoalescing: coalescing,
+              ),
+            );
           },
           onChangeEnd: (newValue) async {
-            _flushStyleUpdate();
             setState(() => _pendingOpacity = null);
-            await _applyStyleUpdate(opacity: newValue);
+            await _applyStyleUpdate(
+              opacity: newValue,
+              historyCoalescing: coalescing,
+            );
           },
         );
 
@@ -2068,6 +2208,9 @@ class _StyleToolbarState extends State<StyleToolbar> {
       case PropertyIds.maskOpacity:
         final value = property.value as MixedValue<double>;
         final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.maskOpacity,
+        );
         return _buildSliderControl(
           label: widget.strings.maskOpacity,
           value: value,
@@ -2077,14 +2220,171 @@ class _StyleToolbarState extends State<StyleToolbar> {
           pendingValue: _pendingMaskOpacity,
           onChanged: (newValue) {
             setState(() => _pendingMaskOpacity = newValue);
-            _scheduleStyleUpdate(
-              () => _applyStyleUpdate(maskOpacity: newValue),
+            unawaited(
+              _applyStyleUpdate(
+                maskOpacity: newValue,
+                historyCoalescing: coalescing,
+              ),
             );
           },
           onChangeEnd: (newValue) async {
-            _flushStyleUpdate();
             setState(() => _pendingMaskOpacity = null);
-            await _applyStyleUpdate(maskOpacity: newValue);
+            await _applyStyleUpdate(
+              maskOpacity: newValue,
+              historyCoalescing: coalescing,
+            );
+          },
+        );
+
+      case PropertyIds.watermarkColor:
+        final value = property.value as MixedValue<Color>;
+        final defaultValue = property.defaultValue as Color;
+        return _buildColorRow(
+          label: widget.strings.color,
+          colors: _defaultColorPalette,
+          value: value,
+          customColor: value.valueOr(defaultValue),
+          onSelect: (color) => _applyStyleUpdate(watermarkColor: color),
+          allowAlpha: true,
+        );
+
+      case PropertyIds.watermarkText:
+        final value = property.value as MixedValue<String>;
+        final defaultValue = property.defaultValue as String;
+        return _buildWatermarkTextControl(
+          value: value,
+          defaultValue: defaultValue,
+        );
+
+      case PropertyIds.watermarkFontSize:
+        final value = property.value as MixedValue<double>;
+        return _buildStyleOptions<double>(
+          label: widget.strings.fontSize,
+          mixed: value.isMixed,
+          mixedLabel: widget.strings.mixed,
+          options: [
+            _StyleOption(
+              value: _fontSizeSmall,
+              label: widget.strings.small,
+              icon: const FontSizeSmallIcon(),
+            ),
+            _StyleOption(
+              value: _fontSizeMedium,
+              label: widget.strings.medium,
+              icon: const FontSizeMediumIcon(),
+            ),
+            _StyleOption(
+              value: _fontSizeLarge,
+              label: widget.strings.large,
+              icon: const FontSizeLargeIcon(),
+            ),
+            const _StyleOption(
+              value: _fontSizeExtraLarge,
+              label: 'Extra large',
+              icon: FontSizeVeryLargeIcon(),
+            ),
+          ],
+          selected: value.isMixed ? null : value.value,
+          onSelect: (size) => _applyStyleUpdate(watermarkFontSize: size),
+        );
+
+      case PropertyIds.watermarkFontFamily:
+        final value = property.value as MixedValue<String>;
+        return _buildFontFamilyControl(
+          value: value,
+          onSelect: (family) => _applyStyleUpdate(watermarkFontFamily: family),
+        );
+
+      case PropertyIds.watermarkAngle:
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.watermarkAngle,
+        );
+        return _buildSliderControl(
+          label: widget.strings.watermarkAngle,
+          value: value,
+          defaultValue: defaultValue,
+          min: -90,
+          max: 90,
+          pendingValue: _pendingWatermarkAngle,
+          onChanged: (next) {
+            setState(() => _pendingWatermarkAngle = next);
+            unawaited(
+              _applyStyleUpdate(
+                watermarkAngle: next,
+                historyCoalescing: coalescing,
+              ),
+            );
+          },
+          onChangeEnd: (next) async {
+            setState(() => _pendingWatermarkAngle = null);
+            await _applyStyleUpdate(
+              watermarkAngle: next,
+              historyCoalescing: coalescing,
+            );
+          },
+        );
+
+      case PropertyIds.watermarkGap:
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.watermarkGap,
+        );
+        return _buildSliderControl(
+          label: widget.strings.watermarkGap,
+          value: value,
+          defaultValue: defaultValue,
+          min: ConfigDefaults.minWatermarkGap,
+          max: ConfigDefaults.maxWatermarkGap,
+          pendingValue: _pendingWatermarkGap,
+          onChanged: (next) {
+            setState(() => _pendingWatermarkGap = next);
+            unawaited(
+              _applyStyleUpdate(
+                watermarkGap: next,
+                historyCoalescing: coalescing,
+              ),
+            );
+          },
+          onChangeEnd: (next) async {
+            setState(() => _pendingWatermarkGap = null);
+            await _applyStyleUpdate(
+              watermarkGap: next,
+              historyCoalescing: coalescing,
+            );
+          },
+        );
+
+      case PropertyIds.watermarkOpacity:
+        final value = property.value as MixedValue<double>;
+        final defaultValue = property.defaultValue as double;
+        final coalescing = _historyCoalescingForProperty(
+          PropertyIds.watermarkOpacity,
+        );
+        return _buildSliderControl(
+          label: widget.strings.opacity,
+          value: value,
+          defaultValue: defaultValue,
+          min: 0,
+          max: 1,
+          pendingValue: _pendingWatermarkOpacity,
+          onChanged: (next) {
+            setState(() => _pendingWatermarkOpacity = next);
+            unawaited(
+              _applyStyleUpdate(
+                watermarkOpacity: next,
+                historyCoalescing: coalescing,
+              ),
+            );
+          },
+          onChangeEnd: (next) async {
+            setState(() => _pendingWatermarkOpacity = null);
+            await _applyStyleUpdate(
+              watermarkOpacity: next,
+              historyCoalescing: coalescing,
+            );
           },
         );
 
@@ -2276,8 +2576,16 @@ class _StyleToolbarState extends State<StyleToolbar> {
     double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
+    Color? watermarkColor,
+    String? watermarkText,
+    double? watermarkFontSize,
+    String? watermarkFontFamily,
+    double? watermarkAngle,
+    double? watermarkGap,
+    double? watermarkOpacity,
     int? serialNumber,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
+    HistoryCoalescing? historyCoalescing,
   }) {
     final resolvedScope = (filterType != null || filterStrength != null)
         ? StyleUpdateScope.filtersOnly
@@ -2304,9 +2612,17 @@ class _StyleToolbarState extends State<StyleToolbar> {
       filterStrength: filterStrength,
       maskColor: maskColor,
       maskOpacity: maskOpacity,
+      watermarkColor: watermarkColor,
+      watermarkText: watermarkText,
+      watermarkFontSize: watermarkFontSize,
+      watermarkFontFamily: watermarkFontFamily,
+      watermarkAngle: watermarkAngle,
+      watermarkGap: watermarkGap,
+      watermarkOpacity: watermarkOpacity,
       serialNumber: serialNumber,
       toolType: widget.toolController.value,
       scope: resolvedScope,
+      historyCoalescing: historyCoalescing,
     );
   }
 

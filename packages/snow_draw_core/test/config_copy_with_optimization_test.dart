@@ -41,6 +41,10 @@ void main() {
         highlight.copyWith(maskOpacity: highlight.maskOpacity),
         same(highlight),
       );
+
+      const watermark = WatermarkConfig();
+      expect(watermark.copyWith(), same(watermark));
+      expect(watermark.copyWith(text: watermark.text), same(watermark));
     });
 
     test('selection configs return the same instance when unchanged', () {

@@ -30,10 +30,7 @@ void main() {
   // Shared helpers
   // =========================================================================
 
-  DrawState stateWith(
-    List<ElementState> elements, {
-    Set<String>? selectedIds,
-  }) {
+  DrawState stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
     final ids = selectedIds ?? {elements.first.id};
     return DrawState(
       domain: DomainState(
@@ -627,10 +624,7 @@ void main() {
       final state = stateWith([r1, r2], selectedIds: {'r1', 'r2'});
 
       const op = RotateOperation();
-      final center = const DrawRect(
-        maxX: 150,
-        maxY: 150,
-      ).center;
+      final center = const DrawRect(maxX: 150, maxY: 150).center;
       final startPos = DrawPoint(x: center.x + 80, y: center.y);
       final ctx = op.createContext(
         state: state,

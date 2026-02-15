@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -19,6 +20,43 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   group('History system regression', () {
+    test('undo and redo keep global elements update behavior stable', () async {
+      final store = _createStore(initialState: DrawState());
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        const UpdateGlobalElements(
+          highlightMask: HighlightMaskConfig(maskOpacity: 0.4),
+          watermark: WatermarkConfig(text: 'INTERNAL', opacity: 0.2),
+        ),
+      );
+      expect(
+        store.state.domain.document.globalElements.highlightMask.maskOpacity,
+        0.4,
+      );
+      expect(
+        store.state.domain.document.globalElements.watermark.text,
+        'INTERNAL',
+      );
+
+      await store.dispatch(const Undo());
+      expect(
+        store.state.domain.document.globalElements.highlightMask.maskOpacity,
+        0.0,
+      );
+      expect(store.state.domain.document.globalElements.watermark.text, '');
+
+      await store.dispatch(const Redo());
+      expect(
+        store.state.domain.document.globalElements.highlightMask.maskOpacity,
+        0.4,
+      );
+      expect(
+        store.state.domain.document.globalElements.watermark.text,
+        'INTERNAL',
+      );
+    });
+
     test('undo and redo keep UpdateElementsStyle behavior stable', () async {
       final store = _createStore(
         initialState: DrawState(
@@ -61,6 +99,221 @@ void main() {
         0.4,
       );
     });
+
+    test(
+      'coalesces rapid UpdateElementsStyle opacity history entries',
+      () async {
+        final store = _createStore(
+          initialState: DrawState(
+            domain: DomainState(
+              document: DocumentState(
+                elements: const [
+                  ElementState(
+                    id: 'styled',
+                    rect: DrawRect(maxX: 20, maxY: 20),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 0,
+                    data: FilterData(),
+                  ),
+                ],
+              ),
+              selection: const SelectionState(selectedIds: {'styled'}),
+            ),
+          ),
+        );
+        addTearDown(store.dispose);
+
+        const coalescing = HistoryCoalescing(
+          key: 'style_toolbar:opacity',
+          window: Duration(seconds: 1),
+        );
+
+        await store.dispatch(
+          UpdateElementsStyle(
+            elementIds: ['styled'],
+            opacity: 0.7,
+            historyCoalescing: coalescing,
+          ),
+        );
+        await store.dispatch(
+          UpdateElementsStyle(
+            elementIds: ['styled'],
+            opacity: 0.3,
+            historyCoalescing: coalescing,
+          ),
+        );
+
+        expect(
+          store.state.domain.document.getElementById('styled')?.opacity,
+          0.3,
+        );
+        expect(store.canUndo, isTrue);
+
+        await store.dispatch(const Undo());
+        expect(
+          store.state.domain.document.getElementById('styled')?.opacity,
+          1.0,
+        );
+        expect(store.canUndo, isFalse);
+        expect(store.canRedo, isTrue);
+
+        await store.dispatch(const Redo());
+        expect(
+          store.state.domain.document.getElementById('styled')?.opacity,
+          0.3,
+        );
+      },
+    );
+
+    test(
+      'coalesces rapid UpdateGlobalElements watermark angle history entries',
+      () async {
+        final store = _createStore(initialState: DrawState());
+        addTearDown(store.dispose);
+
+        const coalescing = HistoryCoalescing(
+          key: 'style_toolbar:watermarkAngle',
+          window: Duration(seconds: 1),
+        );
+
+        await store.dispatch(
+          const UpdateGlobalElements(
+            watermark: WatermarkConfig(angle: 12),
+            historyCoalescing: coalescing,
+          ),
+        );
+        await store.dispatch(
+          const UpdateGlobalElements(
+            watermark: WatermarkConfig(angle: 36),
+            historyCoalescing: coalescing,
+          ),
+        );
+
+        expect(store.state.domain.document.globalElements.watermark.angle, 36);
+        expect(store.canUndo, isTrue);
+
+        await store.dispatch(const Undo());
+        expect(
+          store.state.domain.document.globalElements.watermark.angle,
+          ConfigDefaults.defaultWatermarkAngle,
+        );
+        expect(store.canUndo, isFalse);
+        expect(store.canRedo, isTrue);
+
+        await store.dispatch(const Redo());
+        expect(store.state.domain.document.globalElements.watermark.angle, 36);
+      },
+    );
+
+    test(
+      'coalesces rapid UpdateElementsStyle serial number history entries',
+      () async {
+        final store = _createStore(
+          initialState: DrawState(
+            domain: DomainState(
+              document: DocumentState(
+                elements: const [
+                  ElementState(
+                    id: 'serial',
+                    rect: DrawRect(maxX: 24, maxY: 24),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 0,
+                    data: SerialNumberData(),
+                  ),
+                ],
+              ),
+              selection: const SelectionState(selectedIds: {'serial'}),
+            ),
+          ),
+        );
+        addTearDown(store.dispose);
+
+        const coalescing = HistoryCoalescing(
+          key: 'style_toolbar:serialNumber',
+          window: Duration(seconds: 1),
+        );
+
+        await store.dispatch(
+          UpdateElementsStyle(
+            elementIds: ['serial'],
+            serialNumber: 7,
+            historyCoalescing: coalescing,
+          ),
+        );
+        await store.dispatch(
+          UpdateElementsStyle(
+            elementIds: ['serial'],
+            serialNumber: 12,
+            historyCoalescing: coalescing,
+          ),
+        );
+
+        final current = store.state.domain.document.getElementById('serial');
+        expect(current, isNotNull);
+        expect((current!.data as SerialNumberData).number, 12);
+        expect(store.canUndo, isTrue);
+
+        await store.dispatch(const Undo());
+        final restored = store.state.domain.document.getElementById('serial');
+        expect(restored, isNotNull);
+        expect((restored!.data as SerialNumberData).number, 1);
+        expect(store.canUndo, isFalse);
+        expect(store.canRedo, isTrue);
+
+        await store.dispatch(const Redo());
+        final redone = store.state.domain.document.getElementById('serial');
+        expect(redone, isNotNull);
+        expect((redone!.data as SerialNumberData).number, 12);
+      },
+    );
+
+    test(
+      'coalesces rapid UpdateGlobalElements watermark text history entries',
+      () async {
+        final store = _createStore(initialState: DrawState());
+        addTearDown(store.dispose);
+
+        const coalescing = HistoryCoalescing(
+          key: 'style_toolbar:watermarkText',
+          window: Duration(seconds: 1),
+        );
+
+        await store.dispatch(
+          const UpdateGlobalElements(
+            watermark: WatermarkConfig(text: 'W'),
+            historyCoalescing: coalescing,
+          ),
+        );
+        await store.dispatch(
+          const UpdateGlobalElements(
+            watermark: WatermarkConfig(text: 'WATERMARK'),
+            historyCoalescing: coalescing,
+          ),
+        );
+
+        expect(
+          store.state.domain.document.globalElements.watermark.text,
+          'WATERMARK',
+        );
+        expect(store.canUndo, isTrue);
+
+        await store.dispatch(const Undo());
+        expect(
+          store.state.domain.document.globalElements.watermark.text,
+          ConfigDefaults.defaultWatermarkText,
+        );
+        expect(store.canUndo, isFalse);
+        expect(store.canRedo, isTrue);
+
+        await store.dispatch(const Redo());
+        expect(
+          store.state.domain.document.globalElements.watermark.text,
+          'WATERMARK',
+        );
+      },
+    );
 
     test('undo and redo keep ChangeElementsZIndex behavior stable', () async {
       final store = _createStore(

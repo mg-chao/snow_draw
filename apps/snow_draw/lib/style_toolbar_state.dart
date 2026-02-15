@@ -367,6 +367,7 @@ class StyleToolbarState {
     required this.hasSelectedHighlights,
     required this.hasSelectedFilters,
     required this.hasSelectedSerialNumbers,
+    this.watermark = const WatermarkConfig(),
   });
 
   final ElementStyleConfig rectangleStyle;
@@ -386,6 +387,7 @@ class StyleToolbarState {
   final FilterStyleValues filterStyleValues;
   final SerialNumberStyleValues serialNumberStyleValues;
   final HighlightMaskConfig highlightMask;
+  final WatermarkConfig watermark;
   final bool hasSelection;
   final bool hasSelectedRectangles;
   final bool hasSelectedArrows;
@@ -417,6 +419,7 @@ class StyleToolbarState {
           other.filterStyleValues == filterStyleValues &&
           other.serialNumberStyleValues == serialNumberStyleValues &&
           other.highlightMask == highlightMask &&
+          other.watermark == watermark &&
           other.hasSelection == hasSelection &&
           other.hasSelectedRectangles == hasSelectedRectangles &&
           other.hasSelectedArrows == hasSelectedArrows &&
@@ -446,6 +449,7 @@ class StyleToolbarState {
     filterStyleValues,
     serialNumberStyleValues,
     highlightMask,
+    watermark,
     hasSelection,
     hasSelectedRectangles,
     hasSelectedArrows,

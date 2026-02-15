@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import 'document_state.dart';
 import 'element_state.dart';
+import 'global_elements_state.dart';
 import 'selection_state.dart';
 
 /// Domain-layer state.
@@ -30,6 +31,9 @@ class DomainState {
 
   /// Convenient access to the element list.
   List<ElementState> get elements => document.elements;
+
+  /// Convenient access to document-level global elements.
+  GlobalElementsState get globalElements => document.globalElements;
 
   /// Elements version.
   int get elementsVersion => document.elementsVersion;

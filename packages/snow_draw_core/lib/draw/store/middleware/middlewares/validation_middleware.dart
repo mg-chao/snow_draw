@@ -52,6 +52,7 @@ class ValidationMiddleware extends MiddlewareBase {
     ChangeElementZIndex: _validateChangeElementZIndex,
     ChangeElementsZIndex: _validateChangeElementsZIndex,
     UpdateElementsStyle: _validateUpdateElementsStyle,
+    UpdateGlobalElements: _validateUpdateGlobalElements,
     CreateSerialNumberTextElements: _validateCreateSerialNumberTextElements,
     SelectElement: _validateSelectElement,
     ZoomCamera: _validateZoomCamera,
@@ -200,6 +201,19 @@ ValidationResult _validateUpdateElementsStyle(
       update.serialNumber == null) {
     return const ValidationResult.invalid(
       'UpdateElementsStyle has no fields to update',
+    );
+  }
+  return const ValidationResult.valid();
+}
+
+ValidationResult _validateUpdateGlobalElements(
+  DrawAction action,
+  DispatchContext context,
+) {
+  final update = action as UpdateGlobalElements;
+  if (!update.hasUpdates) {
+    return const ValidationResult.invalid(
+      'UpdateGlobalElements has no fields to update',
     );
   }
   return const ValidationResult.valid();

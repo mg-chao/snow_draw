@@ -12,6 +12,7 @@ enum ElementType {
   freeDraw,
   text,
   serialNumber,
+  watermark,
 }
 
 /// Context containing all style information needed for property evaluation
@@ -35,6 +36,7 @@ class StylePropertyContext {
     required this.serialNumberDefaults,
     required this.highlightMask,
     required this.selectedElementTypes,
+    this.watermark = const WatermarkConfig(),
     this.currentTool,
   });
 
@@ -55,6 +57,7 @@ class StylePropertyContext {
   final ElementStyleConfig filterDefaults;
   final ElementStyleConfig serialNumberDefaults;
   final HighlightMaskConfig highlightMask;
+  final WatermarkConfig watermark;
   final Set<ElementType> selectedElementTypes;
   final ToolType? currentTool;
 

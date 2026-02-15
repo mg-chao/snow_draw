@@ -42,16 +42,8 @@ void main() {
     });
 
     test('equal keys match', () {
-      final a = LineShaderKey(
-        spacing: 5,
-        lineWidth: 2,
-        angle: -math.pi / 4,
-      );
-      final b = LineShaderKey(
-        spacing: 5,
-        lineWidth: 2,
-        angle: -math.pi / 4,
-      );
+      final a = LineShaderKey(spacing: 5, lineWidth: 2, angle: -math.pi / 4);
+      final b = LineShaderKey(spacing: 5, lineWidth: 2, angle: -math.pi / 4);
       expect(a, equals(b));
       expect(a.hashCode, b.hashCode);
     });

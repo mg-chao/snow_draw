@@ -34,6 +34,8 @@ enum StyleUpdateScope {
 class StyleToolbarAdapter {
   StyleToolbarAdapter({required DrawStore store}) : _store = store {
     _config = _store.config;
+    _preloadFontsFromConfig(_config);
+    _syncGlobalElementsFromStore();
     _selectedIds = _store.state.domain.selection.selectedIds;
     _refreshSelectedElements();
     _resolveSelectedStyleValues();
@@ -70,6 +72,8 @@ class StyleToolbarAdapter {
   late HighlightStyleValues _highlightStyleValues;
   late FilterStyleValues _filterStyleValues;
   late SerialNumberStyleValues _serialNumberStyleValues;
+  var _highlightMask = const HighlightMaskConfig();
+  var _watermark = const WatermarkConfig();
   var _isDisposed = false;
   var _updateScheduled = false;
   var _pendingStyleUpdate = Future<void>.value();
@@ -108,9 +112,17 @@ class StyleToolbarAdapter {
     double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
+    Color? watermarkColor,
+    String? watermarkText,
+    double? watermarkFontSize,
+    String? watermarkFontFamily,
+    double? watermarkAngle,
+    double? watermarkGap,
+    double? watermarkOpacity,
     int? serialNumber,
     ToolType? toolType,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
+    HistoryCoalescing? historyCoalescing,
   }) => _enqueueStyleUpdate(
     () => _applyStyleUpdateInternal(
       color: color,
@@ -134,9 +146,17 @@ class StyleToolbarAdapter {
       filterStrength: filterStrength,
       maskColor: maskColor,
       maskOpacity: maskOpacity,
+      watermarkColor: watermarkColor,
+      watermarkText: watermarkText,
+      watermarkFontSize: watermarkFontSize,
+      watermarkFontFamily: watermarkFontFamily,
+      watermarkAngle: watermarkAngle,
+      watermarkGap: watermarkGap,
+      watermarkOpacity: watermarkOpacity,
       serialNumber: serialNumber,
       toolType: toolType,
       scope: scope,
+      historyCoalescing: historyCoalescing,
     ),
   );
 
@@ -162,16 +182,37 @@ class StyleToolbarAdapter {
     double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
+    Color? watermarkColor,
+    String? watermarkText,
+    double? watermarkFontSize,
+    String? watermarkFontFamily,
+    double? watermarkAngle,
+    double? watermarkGap,
+    double? watermarkOpacity,
     int? serialNumber,
     ToolType? toolType,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
+    HistoryCoalescing? historyCoalescing,
   }) async {
     if (_isDisposed) {
       return;
     }
+    final normalizedMaskOpacity = _clampUnit(maskOpacity);
+    final normalizedWatermarkGap = _normalizeWatermarkGap(watermarkGap);
+    final normalizedWatermarkOpacity = _clampUnit(watermarkOpacity);
     final normalizedFontFamily = _normalizeFontFamily(fontFamily);
+    final normalizedWatermarkFontFamily = _normalizeFontFamily(
+      watermarkFontFamily,
+    );
     if (normalizedFontFamily != null && normalizedFontFamily.isNotEmpty) {
       await ensureSystemFontLoaded(normalizedFontFamily);
+      if (_isDisposed) {
+        return;
+      }
+    }
+    if (normalizedWatermarkFontFamily != null &&
+        normalizedWatermarkFontFamily.isNotEmpty) {
+      await ensureSystemFontLoaded(normalizedWatermarkFontFamily);
       if (_isDisposed) {
         return;
       }
@@ -241,6 +282,7 @@ class StyleToolbarAdapter {
           filterType: filterType,
           filterStrength: filterStrength,
           serialNumber: serialNumber,
+          historyCoalescing: historyCoalescing,
         ),
       );
       if (_isDisposed) {
@@ -269,10 +311,18 @@ class StyleToolbarAdapter {
       filterType: filterType,
       filterStrength: filterStrength,
       maskColor: maskColor,
-      maskOpacity: maskOpacity,
+      maskOpacity: normalizedMaskOpacity,
+      watermarkColor: watermarkColor,
+      watermarkText: watermarkText,
+      watermarkFontSize: watermarkFontSize,
+      watermarkFontFamily: normalizedWatermarkFontFamily,
+      watermarkAngle: watermarkAngle,
+      watermarkGap: normalizedWatermarkGap,
+      watermarkOpacity: normalizedWatermarkOpacity,
       serialNumber: serialNumber,
       toolType: toolType,
       scope: scope,
+      historyCoalescing: historyCoalescing,
     );
   }
 
@@ -347,6 +397,11 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    final interaction = state.application.interaction;
+    if (interaction is TextEditingState) {
+      _requestFontPreload(interaction.draftData.fontFamily);
+    }
+    var shouldPublish = _syncGlobalElementsFromState(state);
     final nextSelectedIds = state.domain.selection.selectedIds;
     if (!setEquals(_selectedIds, nextSelectedIds)) {
       _selectedIds = nextSelectedIds;
@@ -357,15 +412,20 @@ class StyleToolbarAdapter {
     }
 
     if (_selectedIds.isEmpty) {
+      if (shouldPublish) {
+        _publishState();
+      }
       return;
     }
 
     final elementsChanged = _refreshSelectedElements();
-    if (!elementsChanged) {
-      return;
+    if (elementsChanged) {
+      _resolveSelectedStyleValues();
+      shouldPublish = true;
     }
-    _resolveSelectedStyleValues();
-    _publishState();
+    if (shouldPublish) {
+      _publishState();
+    }
   }
 
   void _resolveSelectedStyleValues() {
@@ -383,6 +443,7 @@ class StyleToolbarAdapter {
     if (_isDisposed) {
       return;
     }
+    _syncGlobalElementsFromStore();
     final nextSelectedIds = _store.state.domain.selection.selectedIds;
     final selectionChanged = !setEquals(_selectedIds, nextSelectedIds);
     if (selectionChanged) {
@@ -409,8 +470,8 @@ class StyleToolbarAdapter {
     final filterStyleChanged = config.filterStyle != _config.filterStyle;
     final serialNumberStyleChanged =
         config.serialNumberStyle != _config.serialNumberStyle;
-    final highlightMaskChanged = config.highlight != _config.highlight;
     _config = config;
+    _preloadFontsFromConfig(config);
     if (!rectangleStyleChanged &&
         !arrowStyleChanged &&
         !lineStyleChanged &&
@@ -418,8 +479,7 @@ class StyleToolbarAdapter {
         !textStyleChanged &&
         !highlightStyleChanged &&
         !filterStyleChanged &&
-        !serialNumberStyleChanged &&
-        !highlightMaskChanged) {
+        !serialNumberStyleChanged) {
       return;
     }
     if (_selectedRectangles.isEmpty && rectangleStyleChanged) {
@@ -447,6 +507,22 @@ class StyleToolbarAdapter {
       _serialNumberStyleValues = _resolveSerialNumberStyles();
     }
     _publishState();
+  }
+
+  bool _syncGlobalElementsFromStore() =>
+      _syncGlobalElementsFromState(_store.state);
+
+  bool _syncGlobalElementsFromState(DrawState state) {
+    final globals = state.domain.document.globalElements;
+    final highlightMask = globals.highlightMask;
+    final watermark = globals.watermark;
+    if (highlightMask == _highlightMask && watermark == _watermark) {
+      return false;
+    }
+    _highlightMask = highlightMask;
+    _watermark = watermark;
+    _requestFontPreload(watermark.fontFamily);
+    return true;
   }
 
   bool _refreshSelectedElements() {
@@ -1568,9 +1644,17 @@ class StyleToolbarAdapter {
     double? filterStrength,
     Color? maskColor,
     double? maskOpacity,
+    Color? watermarkColor,
+    String? watermarkText,
+    double? watermarkFontSize,
+    String? watermarkFontFamily,
+    double? watermarkAngle,
+    double? watermarkGap,
+    double? watermarkOpacity,
     int? serialNumber,
     ToolType? toolType,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
+    HistoryCoalescing? historyCoalescing,
   }) {
     final highlightsOnlyScope = scope == StyleUpdateScope.highlightsOnly;
     final filtersOnlyScope = scope == StyleUpdateScope.filtersOnly;
@@ -1649,7 +1733,19 @@ class StyleToolbarAdapter {
             !textsOnlyScope &&
             toolType == ToolType.serialNumber);
     final updateHighlightMask =
-        (maskColor != null || maskOpacity != null) && updateHighlightDefaults;
+        (maskColor != null || maskOpacity != null) &&
+        !filtersOnlyScope &&
+        !textsOnlyScope &&
+        (_selectedHighlights.isNotEmpty ||
+            (!hasSelection && toolType == ToolType.highlight));
+    final updateWatermarkDefaults =
+        watermarkColor != null ||
+        watermarkText != null ||
+        watermarkFontSize != null ||
+        watermarkFontFamily != null ||
+        watermarkAngle != null ||
+        watermarkGap != null ||
+        watermarkOpacity != null;
 
     if (!updateRectangleDefaults &&
         !updateArrowDefaults &&
@@ -1659,7 +1755,8 @@ class StyleToolbarAdapter {
         !updateHighlightDefaults &&
         !updateFilterDefaults &&
         !updateSerialNumberDefaults &&
-        !updateHighlightMask) {
+        !updateHighlightMask &&
+        !updateWatermarkDefaults) {
       return Future<void>.value();
     }
 
@@ -1678,7 +1775,6 @@ class StyleToolbarAdapter {
       var nextHighlightStyle = currentConfig.highlightStyle;
       var nextFilterStyle = currentConfig.filterStyle;
       var nextSerialNumberStyle = currentConfig.serialNumberStyle;
-      var nextHighlightMask = currentConfig.highlight;
 
       if (updateRectangleDefaults) {
         nextRectangleStyle = nextRectangleStyle.copyWith(
@@ -1760,12 +1856,6 @@ class StyleToolbarAdapter {
           filterStrength: filterStrength,
         );
       }
-      if (updateHighlightMask) {
-        nextHighlightMask = nextHighlightMask.copyWith(
-          maskColor: maskColor,
-          maskOpacity: maskOpacity,
-        );
-      }
       if (updateSerialNumberDefaults) {
         nextSerialNumberStyle = nextSerialNumberStyle.copyWith(
           serialNumber: serialNumber,
@@ -1780,39 +1870,78 @@ class StyleToolbarAdapter {
         );
       }
 
-      if (nextRectangleStyle == currentConfig.rectangleStyle &&
-          nextArrowStyle == currentConfig.arrowStyle &&
-          nextLineStyle == currentConfig.lineStyle &&
-          nextFreeDrawStyle == currentConfig.freeDrawStyle &&
-          nextTextStyle == currentConfig.textStyle &&
-          nextHighlightStyle == currentConfig.highlightStyle &&
-          nextFilterStyle == currentConfig.filterStyle &&
-          nextSerialNumberStyle == currentConfig.serialNumberStyle &&
-          nextHighlightMask == currentConfig.highlight) {
+      final defaultsChanged =
+          nextRectangleStyle != currentConfig.rectangleStyle ||
+          nextArrowStyle != currentConfig.arrowStyle ||
+          nextLineStyle != currentConfig.lineStyle ||
+          nextFreeDrawStyle != currentConfig.freeDrawStyle ||
+          nextTextStyle != currentConfig.textStyle ||
+          nextHighlightStyle != currentConfig.highlightStyle ||
+          nextFilterStyle != currentConfig.filterStyle ||
+          nextSerialNumberStyle != currentConfig.serialNumberStyle;
+      if (defaultsChanged) {
+        final nextConfig = currentConfig.copyWith(
+          rectangleStyle: nextRectangleStyle,
+          arrowStyle: nextArrowStyle,
+          lineStyle: nextLineStyle,
+          freeDrawStyle: nextFreeDrawStyle,
+          textStyle: nextTextStyle,
+          highlightStyle: nextHighlightStyle,
+          filterStyle: nextFilterStyle,
+          serialNumberStyle: nextSerialNumberStyle,
+        );
+        _handleConfigChange(nextConfig);
+        try {
+          await _store.dispatch(UpdateConfig(nextConfig));
+        } on Object {
+          if (_isDisposed) {
+            return;
+          }
+          _handleConfigChange(_store.config);
+          rethrow;
+        }
+      }
+
+      if (!updateHighlightMask && !updateWatermarkDefaults) {
         return;
       }
 
-      final nextConfig = currentConfig.copyWith(
-        rectangleStyle: nextRectangleStyle,
-        arrowStyle: nextArrowStyle,
-        lineStyle: nextLineStyle,
-        freeDrawStyle: nextFreeDrawStyle,
-        textStyle: nextTextStyle,
-        highlightStyle: nextHighlightStyle,
-        filterStyle: nextFilterStyle,
-        serialNumberStyle: nextSerialNumberStyle,
-        highlight: nextHighlightMask,
-      );
-      _handleConfigChange(nextConfig);
-      try {
-        await _store.dispatch(UpdateConfig(nextConfig));
-      } on Object {
-        if (_isDisposed) {
-          return;
-        }
-        _handleConfigChange(_store.config);
-        rethrow;
+      final currentGlobalElements = _store.state.domain.document.globalElements;
+      var nextHighlightMask = currentGlobalElements.highlightMask;
+      var nextWatermark = currentGlobalElements.watermark;
+
+      if (updateHighlightMask) {
+        nextHighlightMask = nextHighlightMask.copyWith(
+          maskColor: maskColor,
+          maskOpacity: maskOpacity,
+        );
       }
+      if (updateWatermarkDefaults) {
+        nextWatermark = nextWatermark.copyWith(
+          color: watermarkColor,
+          text: watermarkText,
+          fontSize: watermarkFontSize,
+          fontFamily: watermarkFontFamily,
+          angle: watermarkAngle,
+          gap: watermarkGap,
+          opacity: watermarkOpacity,
+        );
+      }
+
+      final highlightMaskChanged =
+          nextHighlightMask != currentGlobalElements.highlightMask;
+      final watermarkChanged = nextWatermark != currentGlobalElements.watermark;
+      if (!highlightMaskChanged && !watermarkChanged) {
+        return;
+      }
+
+      await _store.dispatch(
+        UpdateGlobalElements(
+          highlightMask: highlightMaskChanged ? nextHighlightMask : null,
+          watermark: watermarkChanged ? nextWatermark : null,
+          historyCoalescing: historyCoalescing,
+        ),
+      );
     });
   }
 
@@ -1859,7 +1988,8 @@ class StyleToolbarAdapter {
     highlightStyleValues: _highlightStyleValues,
     filterStyleValues: _filterStyleValues,
     serialNumberStyleValues: _serialNumberStyleValues,
-    highlightMask: _config.highlight,
+    highlightMask: _highlightMask,
+    watermark: _watermark,
     hasSelection: _selectedIds.isNotEmpty,
     hasSelectedRectangles: _selectedRectangles.isNotEmpty,
     hasSelectedArrows: _selectedArrows.isNotEmpty,
@@ -1879,6 +2009,52 @@ class StyleToolbarAdapter {
     }
     final trimmed = value.trim();
     return trimmed.isEmpty ? '' : trimmed;
+  }
+
+  void _preloadFontsFromConfig(DrawConfig config) {
+    _requestFontPreload(config.textStyle.fontFamily);
+    _requestFontPreload(config.serialNumberStyle.fontFamily);
+  }
+
+  void _requestFontPreload(String? family) {
+    final normalized = _normalizeFontFamily(family);
+    if (normalized == null || normalized.isEmpty) {
+      return;
+    }
+    unawaited(_preloadFont(normalized));
+  }
+
+  Future<void> _preloadFont(String family) async {
+    try {
+      await ensureSystemFontLoaded(family);
+    } on Exception catch (error, st) {
+      _store.context.log.configLog.error(
+        'Failed to preload system font family',
+        error,
+        st,
+        {'family': family},
+      );
+    }
+  }
+
+  double? _clampUnit(double? value) {
+    if (value == null) {
+      return null;
+    }
+    return value.clamp(0.0, 1.0);
+  }
+
+  double? _normalizeWatermarkGap(double? value) {
+    if (value == null) {
+      return null;
+    }
+    if (!value.isFinite) {
+      return ConfigDefaults.defaultWatermarkGap;
+    }
+    return value.clamp(
+      ConfigDefaults.minWatermarkGap,
+      ConfigDefaults.maxWatermarkGap,
+    );
   }
 }
 

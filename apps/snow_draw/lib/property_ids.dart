@@ -28,4 +28,11 @@ final class PropertyIds {
   static const opacity = 'opacity';
   static const maskColor = 'maskColor';
   static const maskOpacity = 'maskOpacity';
+  static const watermarkColor = 'watermarkColor';
+  static const watermarkText = 'watermarkText';
+  static const watermarkFontSize = 'watermarkFontSize';
+  static const watermarkFontFamily = 'watermarkFontFamily';
+  static const watermarkAngle = 'watermarkAngle';
+  static const watermarkGap = 'watermarkGap';
+  static const watermarkOpacity = 'watermarkOpacity';
 }

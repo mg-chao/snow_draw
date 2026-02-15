@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
+import '../models/global_elements_state.dart';
 import '../models/interaction_state.dart';
 import '../models/selection_overlay_state.dart';
 import '../models/selection_state.dart';
@@ -14,6 +15,8 @@ class HistoryDelta {
   const HistoryDelta._({
     required this.beforeElements,
     required this.afterElements,
+    required this.globalElementsBefore,
+    required this.globalElementsAfter,
     required this.orderBefore,
     required this.orderAfter,
     required this.selectionBefore,
@@ -24,6 +27,8 @@ class HistoryDelta {
   factory HistoryDelta.fromData({
     required Map<String, ElementState> beforeElements,
     required Map<String, ElementState> afterElements,
+    GlobalElementsState? globalElementsBefore,
+    GlobalElementsState? globalElementsAfter,
     List<String>? orderBefore,
     List<String>? orderAfter,
     SelectionState? selectionBefore,
@@ -32,6 +37,8 @@ class HistoryDelta {
   }) => HistoryDelta._(
     beforeElements: Map<String, ElementState>.unmodifiable(beforeElements),
     afterElements: Map<String, ElementState>.unmodifiable(afterElements),
+    globalElementsBefore: globalElementsBefore,
+    globalElementsAfter: globalElementsAfter,
     orderBefore: orderBefore == null
         ? null
         : List<String>.unmodifiable(orderBefore),
@@ -110,6 +117,13 @@ class HistoryDelta {
       }
     }
 
+    GlobalElementsState? globalElementsBefore;
+    GlobalElementsState? globalElementsAfter;
+    if (before.globalElements != after.globalElements) {
+      globalElementsBefore = before.globalElements;
+      globalElementsAfter = after.globalElements;
+    }
+
     final includeSelection = before.includeSelection && after.includeSelection;
     SelectionState? selectionBefore;
     SelectionState? selectionAfter;
@@ -121,6 +135,8 @@ class HistoryDelta {
     return HistoryDelta._(
       beforeElements: Map<String, ElementState>.unmodifiable(beforeElements),
       afterElements: Map<String, ElementState>.unmodifiable(afterElements),
+      globalElementsBefore: globalElementsBefore,
+      globalElementsAfter: globalElementsAfter,
       orderBefore: orderBefore,
       orderAfter: orderAfter,
       selectionBefore: selectionBefore,
@@ -130,6 +146,8 @@ class HistoryDelta {
   }
   final Map<String, ElementState> beforeElements;
   final Map<String, ElementState> afterElements;
+  final GlobalElementsState? globalElementsBefore;
+  final GlobalElementsState? globalElementsAfter;
   final List<String>? orderBefore;
   final List<String>? orderAfter;
   final SelectionState? selectionBefore;
@@ -144,6 +162,7 @@ class HistoryDelta {
   bool get hasChanges =>
       beforeElements.isNotEmpty ||
       afterElements.isNotEmpty ||
+      globalElementsBefore != null ||
       orderBefore != null ||
       selectionChanged;
 
@@ -202,7 +221,12 @@ class HistoryDelta {
 
     return state.copyWith(
       domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: resolvedElements),
+        document: state.domain.document.copyWith(
+          elements: resolvedElements,
+          globalElements:
+              (forward ? globalElementsAfter : globalElementsBefore) ??
+              state.domain.document.globalElements,
+        ),
         selection: selection ?? state.domain.selection,
       ),
       application: state.application.copyWith(

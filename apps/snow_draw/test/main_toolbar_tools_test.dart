@@ -20,6 +20,7 @@ void main() {
       strings.toolText: ToolType.text,
       strings.toolSerialNumber: ToolType.serialNumber,
       strings.toolFilter: ToolType.filter,
+      strings.toolWatermark: ToolType.watermark,
     };
 
     addTearDown(controller.dispose);

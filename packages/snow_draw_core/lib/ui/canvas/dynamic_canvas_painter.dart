@@ -35,6 +35,8 @@ import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'watermark_painter.dart';
+import 'watermark_visibility.dart';
 
 final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
@@ -103,6 +105,16 @@ class DynamicCanvasPainter extends CustomPainter {
         highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
+        scaleFactor: scale,
+        cameraPosition: Offset(camera.position.x, camera.position.y),
+      );
+    }
+
+    if (renderKey.watermarkLayer == WatermarkLayer.dynamicLayer) {
+      paintWatermark(
+        canvas: canvas,
+        viewportSize: size,
+        config: renderKey.watermarkConfig,
         scaleFactor: scale,
         cameraPosition: Offset(camera.position.x, camera.position.y),
       );
@@ -1273,11 +1285,11 @@ class DynamicCanvasPainter extends CustomPainter {
 
     for (final element in candidates) {
       final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      // Only show preview for elements that are completely within bounds.
-      if (bounds.minX <= aabb.minX &&
-          bounds.maxX >= aabb.maxX &&
-          bounds.minY <= aabb.minY &&
-          bounds.maxY >= aabb.maxY) {
+      // Show preview for elements that overlap the selection bounds.
+      if (bounds.minX <= aabb.maxX &&
+          bounds.maxX >= aabb.minX &&
+          bounds.minY <= aabb.maxY &&
+          bounds.maxY >= aabb.minY) {
         // Draw preview border using same style as multi-select outlines
         final effectiveElement = stateView.effectiveElement(element);
         if (effectiveElement.data is FreeDrawData) {

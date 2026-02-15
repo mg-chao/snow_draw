@@ -5,17 +5,25 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../utils/spatial_index.dart';
 import 'element_state.dart';
+import 'global_elements_state.dart';
 
 /// Persistent document data (lowest change frequency).
 @immutable
 class DocumentState {
-  DocumentState({this.elements = const [], this.elementsVersion = 0});
+  DocumentState({
+    this.elements = const [],
+    this.elementsVersion = 0,
+    this.globalElements = const GlobalElementsState(),
+  });
 
   /// All elements on the canvas, ordered by z-index.
   final List<ElementState> elements;
 
-  /// Version counter for element list changes.
+  /// Version counter for document changes.
   final int elementsVersion;
+
+  /// Persistent global document elements.
+  final GlobalElementsState globalElements;
 
   late final _elementMap = Map<String, ElementState>.unmodifiable({
     for (final element in elements) element.id: element,
@@ -146,19 +154,25 @@ class DocumentState {
     return ids;
   }
 
-  DocumentState copyWith({List<ElementState>? elements, int? elementsVersion}) {
-    if (elements != null) {
-      final nextVersion =
-          elementsVersion ??
-          (identical(elements, this.elements)
-              ? this.elementsVersion
-              : this.elementsVersion + 1);
-      return DocumentState(elements: elements, elementsVersion: nextVersion);
-    }
+  DocumentState copyWith({
+    List<ElementState>? elements,
+    int? elementsVersion,
+    GlobalElementsState? globalElements,
+  }) {
+    final nextElements = elements ?? this.elements;
+    final nextGlobalElements = globalElements ?? this.globalElements;
+    final hasElementsChanged = !identical(nextElements, this.elements);
+    final hasGlobalElementsChanged = nextGlobalElements != this.globalElements;
+    final nextVersion =
+        elementsVersion ??
+        (hasElementsChanged || hasGlobalElementsChanged
+            ? this.elementsVersion + 1
+            : this.elementsVersion);
 
     return DocumentState(
-      elements: this.elements,
-      elementsVersion: elementsVersion ?? this.elementsVersion,
+      elements: nextElements,
+      elementsVersion: nextVersion,
+      globalElements: nextGlobalElements,
     );
   }
 
@@ -167,12 +181,17 @@ class DocumentState {
       identical(this, other) ||
       other is DocumentState &&
           identical(other.elements, elements) &&
-          other.elementsVersion == elementsVersion;
+          other.elementsVersion == elementsVersion &&
+          other.globalElements == globalElements;
 
   @override
-  int get hashCode => Object.hash(elements, elementsVersion);
+  int get hashCode => Object.hash(elements, elementsVersion, globalElements);
 
   @override
   String toString() =>
-      'DocumentState(elements: ${elements.length}, version: $elementsVersion)';
+      'DocumentState('
+      'elements: ${elements.length}, '
+      'version: $elementsVersion, '
+      'globalElements: $globalElements'
+      ')';
 }

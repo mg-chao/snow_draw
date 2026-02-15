@@ -11,6 +11,7 @@ part 'canvas_config.dart';
 part 'grid_config.dart';
 part 'snap_config.dart';
 part 'highlight_config.dart';
+part 'watermark_config.dart';
 
 /// Centralized default values for the configuration system.
 ///
@@ -51,7 +52,34 @@ abstract class ConfigDefaults {
   static const defaultFilterStrength = 0.5;
 
   /// Default mask color.
-  static const defaultMaskColor = Color(0xFF000000);
+  static const defaultMaskColor = Color(0xFF1E1E1E);
+
+  /// Default watermark color.
+  static const defaultWatermarkColor = Color(0xFF1E1E1E);
+
+  /// Default watermark text (empty means disabled).
+  static const defaultWatermarkText = '';
+
+  /// Default watermark font size.
+  static const defaultWatermarkFontSize = 16.0;
+
+  /// Default watermark font family (`''` uses system font fallback).
+  static const defaultWatermarkFontFamily = '';
+
+  /// Default watermark text angle in degrees.
+  static const defaultWatermarkAngle = 30.0;
+
+  /// Default spacing between tiled watermark labels.
+  static const defaultWatermarkGap = 56.0;
+
+  /// Minimum spacing between tiled watermark labels.
+  static const minWatermarkGap = 10.0;
+
+  /// Maximum spacing between tiled watermark labels.
+  static const maxWatermarkGap = 200.0;
+
+  /// Default watermark opacity multiplier.
+  static const defaultWatermarkOpacity = 0.16;
 
   /// Default element corner radius.
   static const defaultCornerRadius = 4.0;
@@ -164,7 +192,6 @@ class DrawConfig {
     ElementStyleConfig? serialNumberStyle,
     ElementStyleConfig? filterStyle,
     ElementStyleConfig? highlightStyle,
-    HighlightMaskConfig? highlight,
     this.grid = const GridConfig(),
     this.snap = const SnapConfig(),
   }) : rectangleStyle = rectangleStyle ?? elementStyle,
@@ -175,8 +202,7 @@ class DrawConfig {
        serialNumberStyle =
            serialNumberStyle ?? _deriveSerialNumberStyle(elementStyle),
        filterStyle = filterStyle ?? _deriveFilterStyle(elementStyle),
-       highlightStyle = highlightStyle ?? _deriveHighlightStyle(elementStyle),
-       highlight = highlight ?? const HighlightMaskConfig();
+       highlightStyle = highlightStyle ?? _deriveHighlightStyle(elementStyle);
   final SelectionConfig selection;
   final ElementConfig element;
   final CanvasConfig canvas;
@@ -190,7 +216,6 @@ class DrawConfig {
   final ElementStyleConfig serialNumberStyle;
   final ElementStyleConfig filterStyle;
   final ElementStyleConfig highlightStyle;
-  final HighlightMaskConfig highlight;
   final GridConfig grid;
   final SnapConfig snap;
 
@@ -210,7 +235,6 @@ class DrawConfig {
     ElementStyleConfig? serialNumberStyle,
     ElementStyleConfig? filterStyle,
     ElementStyleConfig? highlightStyle,
-    HighlightMaskConfig? highlight,
     GridConfig? grid,
     SnapConfig? snap,
   }) {
@@ -252,7 +276,6 @@ class DrawConfig {
         (elementStyleChanged
             ? _deriveHighlightStyle(nextElementStyle)
             : this.highlightStyle);
-    final nextHighlight = highlight ?? this.highlight;
     final nextGrid = grid ?? this.grid;
     final nextSnap = snap ?? this.snap;
 
@@ -269,7 +292,6 @@ class DrawConfig {
         nextSerialNumberStyle == this.serialNumberStyle &&
         nextFilterStyle == this.filterStyle &&
         nextHighlightStyle == this.highlightStyle &&
-        nextHighlight == this.highlight &&
         nextGrid == this.grid &&
         nextSnap == this.snap) {
       return this;
@@ -289,7 +311,6 @@ class DrawConfig {
       serialNumberStyle: nextSerialNumberStyle,
       filterStyle: nextFilterStyle,
       highlightStyle: nextHighlightStyle,
-      highlight: nextHighlight,
       grid: nextGrid,
       snap: nextSnap,
     );
@@ -336,7 +357,6 @@ class DrawConfig {
           other.serialNumberStyle == serialNumberStyle &&
           other.filterStyle == filterStyle &&
           other.highlightStyle == highlightStyle &&
-          other.highlight == highlight &&
           other.grid == grid &&
           other.snap == snap;
 
@@ -355,7 +375,6 @@ class DrawConfig {
     serialNumberStyle,
     filterStyle,
     highlightStyle,
-    highlight,
     grid,
     snap,
   );
@@ -376,7 +395,6 @@ class DrawConfig {
       'serialNumberStyle: $serialNumberStyle, '
       'filterStyle: $filterStyle, '
       'highlightStyle: $highlightStyle, '
-      'highlight: $highlight, '
       'grid: $grid, '
       'snap: $snap'
       ')';
