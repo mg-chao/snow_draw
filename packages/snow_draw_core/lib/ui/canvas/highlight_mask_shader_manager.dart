@@ -45,6 +45,7 @@ class HighlightMaskShaderManager {
 
   ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
+  final _paint = Paint();
   var _isLoading = false;
   var _loadFailed = false;
 
@@ -234,8 +235,8 @@ class HighlightMaskShaderManager {
     }
     _previousHighlightCount = visible.length;
 
-    final paint = Paint()..shader = shader;
-    canvas.drawRect(Rect.fromLTWH(0, 0, screenWidth, screenHeight), paint);
+    _paint.shader = shader;
+    canvas.drawRect(Rect.fromLTWH(0, 0, screenWidth, screenHeight), _paint);
 
     return true;
   }

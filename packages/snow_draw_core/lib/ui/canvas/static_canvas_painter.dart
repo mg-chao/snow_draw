@@ -159,6 +159,8 @@ class StaticCanvasPainter extends CustomPainter {
 
   static Paint? _cachedBackgroundPaint;
   static Color? _cachedBackgroundColor;
+  static final _minorGridPaint = Paint()..style = PaintingStyle.stroke;
+  static final _majorGridPaint = Paint()..style = PaintingStyle.stroke;
 
   static Paint _resolveBackgroundPaint(Color color) {
     if (_cachedBackgroundPaint != null && _cachedBackgroundColor == color) {
@@ -268,12 +270,10 @@ class StaticCanvasPainter extends CustomPainter {
     final majorColor = config.lineColor.withValues(
       alpha: config.majorLineOpacity,
     );
-    final minorPaint = Paint()
-      ..style = PaintingStyle.stroke
+    final minorPaint = _minorGridPaint
       ..strokeWidth = minorStrokeWidth
       ..color = minorColor;
-    final majorPaint = Paint()
-      ..style = PaintingStyle.stroke
+    final majorPaint = _majorGridPaint
       ..strokeWidth = majorStrokeWidth
       ..color = majorColor;
 

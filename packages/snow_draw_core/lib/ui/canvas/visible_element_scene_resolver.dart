@@ -42,19 +42,19 @@ List<ElementState> resolveVisibleElementScene({
     effectiveById[element.id] = effective;
   }
 
+  var addedPreviewOnlyElement = false;
   for (final preview in previewElementsById.values) {
     if (preview.id == excludedElementId ||
         effectiveById.containsKey(preview.id)) {
       continue;
     }
-    final orderIndex = document.getOrderIndex(preview.id);
-    if (orderIndex != null) {
-      if (minOrderIndex != null && orderIndex < minOrderIndex) {
-        continue;
-      }
-      if (maxOrderIndex != null && orderIndex > maxOrderIndex) {
-        continue;
-      }
+
+    final orderIndex = _resolveOrderIndex(document: document, element: preview);
+    if (minOrderIndex != null && orderIndex < minOrderIndex) {
+      continue;
+    }
+    if (maxOrderIndex != null && orderIndex > maxOrderIndex) {
+      continue;
     }
 
     final aabb = SelectionCalculator.computeElementWorldAabb(preview);
@@ -62,16 +62,21 @@ List<ElementState> resolveVisibleElementScene({
       continue;
     }
     effectiveById[preview.id] = preview;
+    addedPreviewOnlyElement = true;
+  }
+
+  if (effectiveById.isEmpty) {
+    return <ElementState>[];
   }
 
   final effectiveElements = effectiveById.values.toList();
-  if (effectiveElements.length < 2) {
+  if (!addedPreviewOnlyElement || effectiveElements.length < 2) {
     return effectiveElements;
   }
 
   final orderById = <String, int>{
     for (final element in effectiveElements)
-      element.id: document.getOrderIndex(element.id) ?? element.zIndex,
+      element.id: _resolveOrderIndex(document: document, element: element),
   };
 
   effectiveElements.sort((a, b) {
@@ -83,6 +88,11 @@ List<ElementState> resolveVisibleElementScene({
   });
   return effectiveElements;
 }
+
+int _resolveOrderIndex({
+  required DocumentState document,
+  required ElementState element,
+}) => document.getOrderIndex(element.id) ?? element.zIndex;
 
 bool _rectsIntersect(DrawRect a, DrawRect b) =>
     a.minX <= b.maxX &&

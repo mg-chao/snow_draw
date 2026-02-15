@@ -128,4 +128,56 @@ void main() {
 
     expect(resolved.map((e) => e.id).toList(), ['e1', 'draft']);
   });
+
+  test('filters preview-only elements outside order-range constraints', () {
+    final document = DocumentState(
+      elements: const [
+        ElementState(
+          id: 'e0',
+          rect: DrawRect(minX: 10, minY: 10, maxX: 30, maxY: 30),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(minX: 40, minY: 10, maxX: 60, maxY: 30),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: RectangleData(),
+        ),
+      ],
+    );
+    const lowOrderPreview = ElementState(
+      id: 'draft-low',
+      rect: DrawRect(minX: 70, minY: 10, maxX: 90, maxY: 30),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const highOrderPreview = ElementState(
+      id: 'draft-high',
+      rect: DrawRect(minX: 95, minY: 10, maxX: 115, maxY: 30),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 5,
+      data: RectangleData(),
+    );
+
+    final resolved = resolveVisibleElementScene(
+      document: document,
+      viewportRect: viewport,
+      minOrderIndex: 1,
+      maxOrderIndex: 2,
+      previewElementsById: {
+        lowOrderPreview.id: lowOrderPreview,
+        highOrderPreview.id: highOrderPreview,
+      },
+    );
+
+    expect(resolved.map((e) => e.id).toList(), ['e1']);
+  });
 }
