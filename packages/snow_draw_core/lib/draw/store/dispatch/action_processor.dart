@@ -14,6 +14,7 @@ import '../../events/error_events.dart';
 import '../../events/event_bus.dart';
 import '../../events/state_events.dart';
 import '../../models/draw_state.dart';
+import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../config_manager.dart';
 import '../history_manager.dart';
@@ -300,8 +301,15 @@ class ActionProcessor {
       return;
     }
 
-    final nextSerial = data.number + 1;
+    final nextSerialFromDocument = _resolveNextSerialFromDocument(nextElements);
+    if (nextSerialFromDocument == null) {
+      return;
+    }
     final currentConfig = _services.configManager.current;
+    final nextSerial =
+        nextSerialFromDocument > currentConfig.serialNumberStyle.serialNumber
+        ? nextSerialFromDocument
+        : currentConfig.serialNumberStyle.serialNumber;
     final nextSerialStyle = currentConfig.serialNumberStyle.copyWith(
       serialNumber: nextSerial,
     );
@@ -311,6 +319,24 @@ class ActionProcessor {
     _services.configManager.update(
       currentConfig.copyWith(serialNumberStyle: nextSerialStyle),
     );
+  }
+
+  int? _resolveNextSerialFromDocument(List<ElementState> elements) {
+    int? maxNumber;
+    for (final element in elements) {
+      final data = element.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final candidate = data.number;
+      if (maxNumber == null || candidate > maxNumber) {
+        maxNumber = candidate;
+      }
+    }
+    if (maxNumber == null) {
+      return null;
+    }
+    return maxNumber + 1;
   }
 
   void _reportError(
