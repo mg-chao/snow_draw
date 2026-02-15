@@ -7,11 +7,7 @@ import 'package:snow_draw_core/ui/canvas/watermark_painter.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
-    // Reset the shared cache between tests so earlier state
-    // does not leak into subsequent assertions.
-    watermarkPainterCache.invalidate();
-  });
+  setUp(watermarkPainterCache.invalidate);
 
   test('watermark painter skips rendering when text is empty', () async {
     final recorder = ui.PictureRecorder();

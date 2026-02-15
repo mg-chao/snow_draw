@@ -100,8 +100,9 @@ void _paintHighlightMaskFallback({
 
   canvas.saveLayer(layerRect, _fallbackLayerPaint);
 
-  _fallbackMaskPaint.color =
-      maskConfig.maskColor.withValues(alpha: effectiveAlpha);
+  _fallbackMaskPaint.color = maskConfig.maskColor.withValues(
+    alpha: effectiveAlpha,
+  );
   canvas.drawRect(layerRect, _fallbackMaskPaint);
 
   for (final element in highlights) {
