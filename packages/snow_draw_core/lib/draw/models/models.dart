@@ -5,6 +5,7 @@ export 'draw_state.dart';
 export 'edit_enums.dart';
 export 'edit_session_id.dart';
 export 'element_state.dart';
+export 'global_elements_state.dart';
 export 'interaction_state.dart';
 export 'selection_derived_data.dart';
 export 'selection_geometry.dart';

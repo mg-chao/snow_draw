@@ -18,18 +18,14 @@ void main() {
     test('core package creates a DrawContext', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
-      final context = DrawContext.withDefaults(
-        elementRegistry: registry,
-      );
+      final context = DrawContext.withDefaults(elementRegistry: registry);
       expect(context, isNotNull);
     });
 
     test('core package creates a DefaultDrawStore', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
-      final context = DrawContext.withDefaults(
-        elementRegistry: registry,
-      );
+      final context = DrawContext.withDefaults(elementRegistry: registry);
       final store = DefaultDrawStore(context: context);
       expect(store, isNotNull);
       store.dispose();

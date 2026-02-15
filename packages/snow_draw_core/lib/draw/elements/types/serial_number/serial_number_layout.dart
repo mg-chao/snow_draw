@@ -70,6 +70,11 @@ final _textLayoutCache = LruCache<_TextLayoutKey, SerialNumberTextLayout>(
   maxEntries: _textLayoutCacheMaxEntries,
 );
 
+/// Clears cached serial-number text layouts.
+void clearSerialNumberTextLayoutCache() {
+  _textLayoutCache.clear();
+}
+
 SerialNumberTextLayout layoutSerialNumberText({
   required SerialNumberData data,
   Color? colorOverride,

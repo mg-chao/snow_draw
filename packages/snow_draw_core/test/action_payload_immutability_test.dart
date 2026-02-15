@@ -58,21 +58,18 @@ void main() {
       );
     });
 
-    test(
-      'CreateSerialNumberTextElements keeps an immutable snapshot '
-      'of elementIds',
-      () {
-        final elementIds = <String>['a'];
-        final action = CreateSerialNumberTextElements(elementIds: elementIds);
+    test('CreateSerialNumberTextElements keeps an immutable snapshot '
+        'of elementIds', () {
+      final elementIds = <String>['a'];
+      final action = CreateSerialNumberTextElements(elementIds: elementIds);
 
-        elementIds.add('b');
+      elementIds.add('b');
 
-        expect(action.elementIds, equals(['a']));
-        expect(
-          () => action.elementIds.add('c'),
-          throwsA(isA<UnsupportedError>()),
-        );
-      },
-    );
+      expect(action.elementIds, equals(['a']));
+      expect(
+        () => action.elementIds.add('c'),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
   });
 }

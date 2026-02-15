@@ -1,12 +1,17 @@
+import 'dart:ui' show Color;
+
 import 'package:meta/meta.dart';
 
+import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/unknown_element_data.dart';
+import '../actions/history_coalescing.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
+import '../models/global_elements_state.dart';
 import '../models/selection_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_rect.dart';
@@ -122,10 +127,28 @@ class HistoryManager {
     HistorySnapshot after, {
     HistoryMetadata? metadata,
     HistoryChangeSet? changes,
+    HistoryCoalescing? coalescing,
+    DrawState? currentState,
+    DateTime? recordedAt,
   }) {
+    final now = recordedAt ?? DateTime.now();
+    if (coalescing != null && currentState != null) {
+      final coalesced = _tryCoalesceCurrentRecord(
+        after: after,
+        metadata: metadata,
+        coalescing: coalescing,
+        currentState: currentState,
+        includeSelection: before.includeSelection,
+        recordedAt: now,
+      );
+      if (coalesced != null) {
+        return coalesced;
+      }
+    }
+
     final delta = HistoryDelta.fromSnapshots(before, after, changes: changes);
     if (!delta.hasChanges) {
-      _log?.debug('History record skipped (no changes)', {
+      _log?.trace('History record skipped (no changes)', {
         'description': metadata?.description,
       });
       return false;
@@ -136,10 +159,12 @@ class HistoryManager {
       parent: _current,
       delta: delta,
       metadata: metadata,
+      coalescing: coalescing,
+      recordedAt: now,
     );
     _current.children.add(node);
     _current = node;
-    _log?.debug('History record', {
+    _log?.trace('History record', {
       'nodeId': node.id,
       'parentId': node.parent?.id,
       'description': metadata?.description,
@@ -152,29 +177,114 @@ class HistoryManager {
     return true;
   }
 
+  bool? _tryCoalesceCurrentRecord({
+    required HistorySnapshot after,
+    required HistoryMetadata? metadata,
+    required HistoryCoalescing coalescing,
+    required DrawState currentState,
+    required bool includeSelection,
+    required DateTime recordedAt,
+  }) {
+    if (!_canCoalesceCurrent(coalescing: coalescing, recordedAt: recordedAt)) {
+      return null;
+    }
+
+    final parent = _current.parent;
+    if (parent == null) {
+      return null;
+    }
+
+    final parentState = _resolveCurrentParentState(currentState);
+    if (parentState == null) {
+      return null;
+    }
+
+    final mergedBefore = PersistentSnapshot.fromState(
+      parentState,
+      includeSelection: includeSelection,
+    );
+    final mergedDelta = HistoryDelta.fromSnapshots(mergedBefore, after);
+    if (!mergedDelta.hasChanges) {
+      parent.children.remove(_current);
+      _current = parent;
+      _log?.trace('History coalesced and removed empty node', {
+        'parentId': parent.id,
+        'coalescingKey': coalescing.key,
+      });
+      return false;
+    }
+
+    _current
+      ..delta = mergedDelta
+      ..metadata = metadata
+      ..coalescing = coalescing
+      ..recordedAt = recordedAt;
+
+    _log?.trace('History coalesced into current node', {
+      'nodeId': _current.id,
+      'parentId': parent.id,
+      'coalescingKey': coalescing.key,
+      'description': metadata?.description,
+    });
+    return true;
+  }
+
+  bool _canCoalesceCurrent({
+    required HistoryCoalescing coalescing,
+    required DateTime recordedAt,
+  }) {
+    if (_current.parent == null ||
+        _current.delta == null ||
+        _current.children.isNotEmpty) {
+      return false;
+    }
+    final active = _current.coalescing;
+    if (active == null || active.key != coalescing.key) {
+      return false;
+    }
+    final elapsed = recordedAt.difference(_current.recordedAt);
+    return elapsed.isNegative || elapsed <= coalescing.window;
+  }
+
+  DrawState? _resolveCurrentParentState(DrawState currentState) {
+    final delta = _current.delta;
+    if (delta == null || _current.parent == null) {
+      return null;
+    }
+    try {
+      return delta.applyBackward(currentState);
+    } on Object catch (error) {
+      _log?.warning('History coalescing anchor resolution failed', {
+        'nodeId': _current.id,
+        'error': error.toString(),
+      });
+      return null;
+    }
+  }
+
   DrawState? undo(DrawState currentState) {
     final parent = _current.parent;
     final delta = _current.delta;
     if (parent == null || delta == null) {
-      _log?.debug('History undo skipped', {'reason': 'no_parent'});
+      _log?.trace('History undo skipped', {'reason': 'no_parent'});
       return null;
     }
 
     final restoredState = delta.applyBackward(currentState);
-    _log?.info('History undo', {'nodeId': _current.id, 'parentId': parent.id});
+    _log?.trace('History undo', {'nodeId': _current.id, 'parentId': parent.id});
     _current = parent;
     return restoredState;
   }
 
   DrawState? redo(DrawState currentState, {int? branchIndex}) {
     if (_current.children.isEmpty) {
-      _log?.debug('History redo skipped', {'reason': 'no_children'});
+      _log?.trace('History redo skipped', {'reason': 'no_children'});
       return null;
     }
 
     final resolvedIndex = branchIndex ?? _current.children.length - 1;
     if (resolvedIndex < 0 || resolvedIndex >= _current.children.length) {
-      _log?.debug('History redo skipped', {
+      _log?.trace('History redo skipped', {
         'reason': 'invalid_branch',
         'branchIndex': branchIndex,
       });
@@ -184,12 +294,12 @@ class HistoryManager {
     final child = _current.children[resolvedIndex];
     final delta = child.delta;
     if (delta == null) {
-      _log?.debug('History redo skipped', {'reason': 'missing_delta'});
+      _log?.trace('History redo skipped', {'reason': 'missing_delta'});
       return null;
     }
 
     final restoredState = delta.applyForward(currentState);
-    _log?.info('History redo', {
+    _log?.trace('History redo', {
       'nodeId': child.id,
       'branchIndex': resolvedIndex,
     });
@@ -198,7 +308,7 @@ class HistoryManager {
   }
 
   void clear() {
-    _log?.info('History cleared', {
+    _log?.trace('History cleared', {
       'undoLength': undoLength,
       'redoLength': redoLength,
     });
@@ -345,7 +455,8 @@ class HistoryManager {
     _root
       ..parent = null
       ..delta = null
-      ..metadata = null;
+      ..metadata = null
+      ..coalescing = null;
   }
 }
 
@@ -369,6 +480,8 @@ class _HistoryNode {
     required this.parent,
     required this.delta,
     required this.metadata,
+    required this.recordedAt,
+    this.coalescing,
     List<_HistoryNode>? children,
   }) : children = children ?? [];
 
@@ -376,12 +489,16 @@ class _HistoryNode {
     : parent = null,
       delta = null,
       metadata = null,
+      coalescing = null,
+      recordedAt = DateTime.fromMillisecondsSinceEpoch(0),
       children = [];
   final int id;
   _HistoryNode? parent;
   final List<_HistoryNode> children;
   HistoryDelta? delta;
   HistoryMetadata? metadata;
+  HistoryCoalescing? coalescing;
+  DateTime recordedAt;
 
   @override
   String toString() => 'HistoryNode(id: $id, children: ${children.length})';
@@ -443,6 +560,8 @@ _HistoryTreeClone _cloneTree(_HistoryNode root) {
       parent: null,
       delta: node.delta,
       metadata: node.metadata,
+      coalescing: node.coalescing,
+      recordedAt: node.recordedAt,
     );
     byId[cloned.id] = cloned;
     for (final child in node.children) {
@@ -508,6 +627,7 @@ class _HistorySnapshotCodec {
                 onUnknownElement: onUnknownElement,
               ),
         metadata: metadataJson == null ? null : _metadataFromJson(metadataJson),
+        recordedAt: DateTime.fromMillisecondsSinceEpoch(0),
       );
     }
 
@@ -564,6 +684,12 @@ class _HistorySnapshotCodec {
     'afterElements': delta.afterElements.map(
       (id, element) => MapEntry(id, _elementToJson(element)),
     ),
+    if (delta.globalElementsBefore != null)
+      'globalElementsBefore': _globalElementsToJson(
+        delta.globalElementsBefore!,
+      ),
+    if (delta.globalElementsAfter != null)
+      'globalElementsAfter': _globalElementsToJson(delta.globalElementsAfter!),
     if (delta.orderBefore != null) 'orderBefore': delta.orderBefore,
     if (delta.orderAfter != null) 'orderAfter': delta.orderAfter,
     if (delta.selectionBefore != null)
@@ -612,6 +738,10 @@ class _HistorySnapshotCodec {
 
     final orderBefore = (json['orderBefore'] as List<dynamic>?)?.cast<String>();
     final orderAfter = (json['orderAfter'] as List<dynamic>?)?.cast<String>();
+    final globalElementsBeforeJson =
+        json['globalElementsBefore'] as Map<String, dynamic>?;
+    final globalElementsAfterJson =
+        json['globalElementsAfter'] as Map<String, dynamic>?;
 
     final selectionBeforeJson =
         json['selectionBefore'] as Map<String, dynamic>?;
@@ -620,6 +750,12 @@ class _HistorySnapshotCodec {
     return HistoryDelta.fromData(
       beforeElements: beforeElements,
       afterElements: afterElements,
+      globalElementsBefore: globalElementsBeforeJson == null
+          ? null
+          : _globalElementsFromJson(globalElementsBeforeJson),
+      globalElementsAfter: globalElementsAfterJson == null
+          ? null
+          : _globalElementsFromJson(globalElementsAfterJson),
       orderBefore: orderBefore,
       orderAfter: orderAfter,
       selectionBefore: selectionBeforeJson == null
@@ -735,6 +871,66 @@ class _HistorySnapshotCodec {
             const {},
         selectionVersion: json['selectionVersion'] as int? ?? 0,
       );
+
+  Map<String, dynamic> _globalElementsToJson(GlobalElementsState elements) => {
+    'highlightMask': _highlightMaskToJson(elements.highlightMask),
+    'watermark': _watermarkToJson(elements.watermark),
+  };
+
+  GlobalElementsState _globalElementsFromJson(Map<String, dynamic> json) =>
+      GlobalElementsState(
+        highlightMask: _highlightMaskFromJson(
+          (json['highlightMask'] as Map<String, dynamic>?) ?? const {},
+        ),
+        watermark: _watermarkFromJson(
+          (json['watermark'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+
+  Map<String, dynamic> _highlightMaskToJson(HighlightMaskConfig config) => {
+    'maskColor': config.maskColor.toARGB32(),
+    'maskOpacity': config.maskOpacity,
+  };
+
+  HighlightMaskConfig _highlightMaskFromJson(Map<String, dynamic> json) =>
+      HighlightMaskConfig(
+        maskColor: Color(
+          json['maskColor'] as int? ??
+              ConfigDefaults.defaultMaskColor.toARGB32(),
+        ),
+        maskOpacity: (json['maskOpacity'] as num?)?.toDouble() ?? 0,
+      );
+
+  Map<String, dynamic> _watermarkToJson(WatermarkConfig config) => {
+    'color': config.color.toARGB32(),
+    'text': config.text,
+    'fontSize': config.fontSize,
+    'fontFamily': config.fontFamily,
+    'angle': config.angle,
+    'gap': config.gap,
+    'opacity': config.opacity,
+  };
+
+  WatermarkConfig _watermarkFromJson(
+    Map<String, dynamic> json,
+  ) => WatermarkConfig(
+    color: Color(
+      json['color'] as int? ?? ConfigDefaults.defaultWatermarkColor.toARGB32(),
+    ),
+    text: json['text'] as String? ?? ConfigDefaults.defaultWatermarkText,
+    fontSize:
+        (json['fontSize'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultWatermarkFontSize,
+    fontFamily: json['fontFamily'] as String? ?? '',
+    angle:
+        (json['angle'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultWatermarkAngle,
+    gap:
+        (json['gap'] as num?)?.toDouble() ?? ConfigDefaults.defaultWatermarkGap,
+    opacity:
+        (json['opacity'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultWatermarkOpacity,
+  );
 
   Map<String, dynamic> _rectToJson(DrawRect rect) => {
     'minX': rect.minX,

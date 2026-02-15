@@ -13,11 +13,13 @@ class DrawCanvas extends StatefulWidget {
     super.key,
     this.scaleFactor = 1.0,
     this.currentToolTypeId,
+    this.isSelectionToolActive = true,
   });
   final Size size;
   final double scaleFactor;
   final DrawStore store;
   final ElementTypeId<ElementData>? currentToolTypeId;
+  final bool isSelectionToolActive;
 
   @override
   State<DrawCanvas> createState() => DrawCanvasState();
@@ -34,6 +36,12 @@ class DrawCanvas extends StatefulWidget {
           'currentToolTypeId',
           currentToolTypeId,
         ),
+      )
+      ..add(
+        DiagnosticsProperty<bool>(
+          'isSelectionToolActive',
+          isSelectionToolActive,
+        ),
       );
   }
 }
@@ -45,5 +53,6 @@ class DrawCanvasState extends State<DrawCanvas> {
     store: widget.store,
     scaleFactor: widget.scaleFactor,
     currentToolTypeId: widget.currentToolTypeId,
+    isSelectionToolActive: widget.isSelectionToolActive,
   );
 }

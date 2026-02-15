@@ -52,6 +52,7 @@ class SnapshotBuilder {
 
     return IncrementalSnapshot(
       elementsById: elementsById,
+      globalElements: state.domain.document.globalElements,
       selection: includeSelection
           ? state.domain.selection
           : const SelectionState(),

@@ -2,6 +2,7 @@
 /// refactoring to extract shared utility functions and eliminate
 /// duplicated preview/finish logic.
 library;
+
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';

@@ -18,24 +18,28 @@ import '../plugin_core.dart';
 
 /// Plugin that handles selection and intent detection.
 class SelectPlugin extends DrawInputPlugin {
-  SelectPlugin({this.currentToolTypeId, InputRoutingPolicy? routingPolicy})
-    : _routingPolicy = routingPolicy ?? InputRoutingPolicy.defaultPolicy,
-      super(
-        id: 'select',
-        name: 'Select Plugin',
-        priority: 20,
-        supportedEventTypes: {
-          PointerDownInputEvent,
-          PointerMoveInputEvent,
-          PointerUpInputEvent,
-          PointerCancelInputEvent,
-        },
-      );
+  SelectPlugin({
+    this.currentToolTypeId,
+    this.isSelectionToolActive = true,
+    InputRoutingPolicy? routingPolicy,
+  }) : _routingPolicy = routingPolicy ?? InputRoutingPolicy.defaultPolicy,
+       super(
+         id: 'select',
+         name: 'Select Plugin',
+         priority: 20,
+         supportedEventTypes: {
+           PointerDownInputEvent,
+           PointerMoveInputEvent,
+           PointerUpInputEvent,
+           PointerCancelInputEvent,
+         },
+       );
   static const _doubleClickThreshold = Duration(milliseconds: 500);
   static const double _doubleClickToleranceMultiplier = 2;
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
+  bool isSelectionToolActive;
 
   DateTime? _lastArrowHandleClickTime;
   DrawPoint? _lastArrowHandleClickPosition;
@@ -51,7 +55,7 @@ class SelectPlugin extends DrawInputPlugin {
 
   @override
   bool canHandle(InputEvent event, DrawState state) =>
-      _routingPolicy.allowSelection(state);
+      !_isSelectionBehaviorDisabled && _routingPolicy.allowSelection(state);
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) async {
@@ -348,6 +352,9 @@ class SelectPlugin extends DrawInputPlugin {
     if (intent == null) {
       return null;
     }
+    if (_isSelectionBehaviorDisabled) {
+      return null;
+    }
     if (currentToolTypeId == null) {
       return intent;
     }
@@ -368,6 +375,9 @@ class SelectPlugin extends DrawInputPlugin {
 
     return intent;
   }
+
+  bool get _isSelectionBehaviorDisabled =>
+      currentToolTypeId == null && !isSelectionToolActive;
 
   bool _isSelectableElement(String elementId) {
     final toolTypeId = currentToolTypeId;

@@ -45,47 +45,25 @@ void main() {
     test('small list: applies valid change, ignores ghost', () {
       final elements = List.generate(5, (i) => _element('e$i'));
       final replacement = elements[2].copyWith(
-        rect: const DrawRect(
-          minX: 50,
-          minY: 50,
-          maxX: 60,
-          maxY: 60,
-        ),
+        rect: const DrawRect(minX: 50, minY: 50, maxX: 60, maxY: 60),
       );
       final result = EditApply.replaceElementsById(
         elements: elements,
-        replacementsById: {
-          'e2': replacement,
-          'ghost': _element('ghost'),
-        },
+        replacementsById: {'e2': replacement, 'ghost': _element('ghost')},
       );
       expect(result.length, elements.length);
       expect(identical(result[2], replacement), isTrue);
-      expect(result.map((e) => e.id).toList(), [
-        'e0',
-        'e1',
-        'e2',
-        'e3',
-        'e4',
-      ]);
+      expect(result.map((e) => e.id).toList(), ['e0', 'e1', 'e2', 'e3', 'e4']);
     });
 
     test('large list: applies valid change, ignores ghost', () {
       final elements = List.generate(200, (i) => _element('el$i'));
       final replacement = elements[100].copyWith(
-        rect: const DrawRect(
-          minX: 999,
-          minY: 999,
-          maxX: 1000,
-          maxY: 1000,
-        ),
+        rect: const DrawRect(minX: 999, minY: 999, maxX: 1000, maxY: 1000),
       );
       final result = EditApply.replaceElementsById(
         elements: elements,
-        replacementsById: {
-          'el100': replacement,
-          'ghost': _element('ghost'),
-        },
+        replacementsById: {'el100': replacement, 'ghost': _element('ghost')},
       );
       expect(result.length, 200);
       expect(identical(result[100], replacement), isTrue);
@@ -104,36 +82,33 @@ void main() {
       expect(identical(result, elements), isTrue);
     });
 
-    test(
-      'large list: replacements count >= elements count still works',
-      () {
-        final elements = List.generate(3, (i) => _element('e$i'));
-        final replacements = <String, ElementState>{};
-        for (var i = 0; i < 5; i++) {
-          final id = 'e$i';
-          if (i < 3) {
-            replacements[id] = elements[i].copyWith(
-              rect: DrawRect(
-                minX: i * 10.0,
-                minY: i * 10.0,
-                maxX: i * 10.0 + 10,
-                maxY: i * 10.0 + 10,
-              ),
-            );
-          } else {
-            replacements[id] = _element(id);
-          }
+    test('large list: replacements count >= elements count still works', () {
+      final elements = List.generate(3, (i) => _element('e$i'));
+      final replacements = <String, ElementState>{};
+      for (var i = 0; i < 5; i++) {
+        final id = 'e$i';
+        if (i < 3) {
+          replacements[id] = elements[i].copyWith(
+            rect: DrawRect(
+              minX: i * 10.0,
+              minY: i * 10.0,
+              maxX: i * 10.0 + 10,
+              maxY: i * 10.0 + 10,
+            ),
+          );
+        } else {
+          replacements[id] = _element(id);
         }
-        final result = EditApply.replaceElementsById(
-          elements: elements,
-          replacementsById: replacements,
-        );
-        expect(result.length, 3);
-        expect(result[0].rect.minX, 0);
-        expect(result[1].rect.minX, 10);
-        expect(result[2].rect.minX, 20);
-      },
-    );
+      }
+      final result = EditApply.replaceElementsById(
+        elements: elements,
+        replacementsById: replacements,
+      );
+      expect(result.length, 3);
+      expect(result[0].rect.minX, 0);
+      expect(result[1].rect.minX, 10);
+      expect(result[2].rect.minX, 20);
+    });
   });
 
   // =========================================================================
@@ -170,48 +145,42 @@ void main() {
       expect(t.isIdentity, isFalse);
     });
 
-    test(
-      'resize operation: scale 1.0 with same bounds returns idle '
-      'without changes',
-      () {
-        final element = _rectangleElement(
-          id: 'r1',
-          rect: const DrawRect(maxX: 100, maxY: 100),
-        );
-        final state = _stateWith([element]);
+    test('resize operation: scale 1.0 with same bounds returns idle '
+        'without changes', () {
+      final element = _rectangleElement(
+        id: 'r1',
+        rect: const DrawRect(maxX: 100, maxY: 100),
+      );
+      final state = _stateWith([element]);
 
-        const op = ResizeOperation();
-        final ctx = op.createContext(
-          state: state,
-          position: DrawPoint(
-            x: element.rect.maxX,
-            y: element.rect.maxY,
-          ),
-          params: const ResizeOperationParams(
-            resizeMode: ResizeMode.bottomRight,
-            selectionPadding: 0,
-          ),
-        );
-        // Simulate a transform where scales are 1.0 and bounds match
-        const transform = ResizeTransform.complete(
-          currentPosition: DrawPoint(x: 100, y: 100),
-          newSelectionBounds: DrawRect(maxX: 100, maxY: 100),
-          scaleX: 1,
-          scaleY: 1,
-          anchor: DrawPoint.zero,
-        );
-        final result = op.finish(
-          state: state,
-          context: ctx,
-          transform: transform,
-        );
-        expect(result.application.interaction, isA<IdleState>());
-        expect(
-          result.domain.document.getElementById('r1')!.rect,
-          equals(element.rect),
-        );
-      },
-    );
+      const op = ResizeOperation();
+      final ctx = op.createContext(
+        state: state,
+        position: DrawPoint(x: element.rect.maxX, y: element.rect.maxY),
+        params: const ResizeOperationParams(
+          resizeMode: ResizeMode.bottomRight,
+          selectionPadding: 0,
+        ),
+      );
+      // Simulate a transform where scales are 1.0 and bounds match
+      const transform = ResizeTransform.complete(
+        currentPosition: DrawPoint(x: 100, y: 100),
+        newSelectionBounds: DrawRect(maxX: 100, maxY: 100),
+        scaleX: 1,
+        scaleY: 1,
+        anchor: DrawPoint.zero,
+      );
+      final result = op.finish(
+        state: state,
+        context: ctx,
+        transform: transform,
+      );
+      expect(result.application.interaction, isA<IdleState>());
+      expect(
+        result.domain.document.getElementById('r1')!.rect,
+        equals(element.rect),
+      );
+    });
   });
 
   // =========================================================================
@@ -222,10 +191,7 @@ void main() {
     test('returns true when initialPoints are present', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 0, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 0, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -253,10 +219,7 @@ void main() {
     test('endpoint drag: preview and finish produce same rect', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 0, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 0, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -296,18 +259,14 @@ void main() {
       );
 
       final previewEl = preview.previewElementsById['a1']!;
-      final finishEl =
-          finished.domain.document.getElementById('a1')!;
+      final finishEl = finished.domain.document.getElementById('a1')!;
       expect(previewEl.rect, equals(finishEl.rect));
     });
 
     test('no-change transform returns idle', () {
       final arrow = _arrowElement(
         id: 'a1',
-        points: const [
-          DrawPoint(x: 10, y: 50),
-          DrawPoint(x: 200, y: 50),
-        ],
+        points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
@@ -327,11 +286,7 @@ void main() {
         startPosition: const DrawPoint(x: 10, y: 50),
       );
 
-      final result = op.finish(
-        state: state,
-        context: ctx,
-        transform: t0,
-      );
+      final result = op.finish(state: state, context: ctx, transform: t0);
       expect(result.application.interaction, isA<IdleState>());
     });
   });
@@ -341,32 +296,26 @@ void main() {
   // =========================================================================
 
   group('EditValidation with ArrowPointEditContext', () {
-    test(
-      'isValidContext returns true for valid arrow point context',
-      () {
-        final arrow = _arrowElement(
-          id: 'a1',
-          points: const [
-            DrawPoint(x: 0, y: 50),
-            DrawPoint(x: 200, y: 50),
-          ],
-        );
-        final state = _stateWith([arrow], selectedIds: {'a1'});
+    test('isValidContext returns true for valid arrow point context', () {
+      final arrow = _arrowElement(
+        id: 'a1',
+        points: const [DrawPoint(x: 0, y: 50), DrawPoint(x: 200, y: 50)],
+      );
+      final state = _stateWith([arrow], selectedIds: {'a1'});
 
-        const op = ArrowPointOperation();
-        final ctx = op.createContext(
-          state: state,
-          position: const DrawPoint(x: 200, y: 50),
-          params: const ArrowPointOperationParams(
-            elementId: 'a1',
-            pointKind: ArrowPointKind.turning,
-            pointIndex: 1,
-          ),
-        );
-        // After fix, this should return true.
-        expect(EditValidation.isValidContext(ctx), isTrue);
-      },
-    );
+      const op = ArrowPointOperation();
+      final ctx = op.createContext(
+        state: state,
+        position: const DrawPoint(x: 200, y: 50),
+        params: const ArrowPointOperationParams(
+          elementId: 'a1',
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 1,
+        ),
+      );
+      // After fix, this should return true.
+      expect(EditValidation.isValidContext(ctx), isTrue);
+    });
   });
 }
 
@@ -374,27 +323,24 @@ void main() {
 // Test helpers
 // ===========================================================================
 
-ElementState _element(String id, {DrawRect? rect}) =>
-    ElementState(
-      id: id,
-      rect: rect ?? const DrawRect(maxX: 10, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: const RectangleData(),
-    );
-
-ElementState _rectangleElement({
-  required String id,
-  required DrawRect rect,
-}) => ElementState(
+ElementState _element(String id, {DrawRect? rect}) => ElementState(
   id: id,
-  rect: rect,
+  rect: rect ?? const DrawRect(maxX: 10, maxY: 10),
   rotation: 0,
   opacity: 1,
   zIndex: 0,
   data: const RectangleData(),
 );
+
+ElementState _rectangleElement({required String id, required DrawRect rect}) =>
+    ElementState(
+      id: id,
+      rect: rect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: const RectangleData(),
+    );
 
 ElementState _arrowElement({
   required String id,
@@ -415,10 +361,7 @@ ElementState _arrowElement({
   );
 }
 
-DrawState _stateWith(
-  List<ElementState> elements, {
-  Set<String>? selectedIds,
-}) {
+DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
   final ids = selectedIds ?? {elements.first.id};
   return DrawState(
     domain: DomainState(
@@ -448,10 +391,5 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
     maxY = minY + 1;
   }
 
-  return DrawRect(
-    minX: minX,
-    minY: minY,
-    maxX: maxX,
-    maxY: maxY,
-  );
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }

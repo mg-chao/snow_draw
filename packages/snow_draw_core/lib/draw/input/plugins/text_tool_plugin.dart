@@ -18,6 +18,7 @@ import '../plugin_core.dart';
 class TextToolPlugin extends DrawInputPlugin {
   TextToolPlugin({
     required this.currentToolTypeId,
+    this.isSelectionToolActive = true,
     InputRoutingPolicy? routingPolicy,
   }) : _routingPolicy = routingPolicy ?? InputRoutingPolicy.defaultPolicy,
        super(
@@ -36,6 +37,7 @@ class TextToolPlugin extends DrawInputPlugin {
   DrawStateViewBuilder? _stateViewBuilder;
 
   ElementTypeId<ElementData>? currentToolTypeId;
+  bool isSelectionToolActive;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -47,13 +49,14 @@ class TextToolPlugin extends DrawInputPlugin {
 
   bool get _isTextToolActive => currentToolTypeId == TextData.typeIdToken;
 
-  bool get _isSelectionToolActive => currentToolTypeId == null;
+  bool get _isSelectionToolModeActive =>
+      currentToolTypeId == null && isSelectionToolActive;
 
   bool get _isSerialToolActive =>
       currentToolTypeId == SerialNumberData.typeIdToken;
 
   bool get _isSelectionLikeToolActive =>
-      _isSelectionToolActive || _isSerialToolActive;
+      _isSelectionToolModeActive || _isSerialToolActive;
 
   @override
   bool canHandle(InputEvent event, DrawState state) {
@@ -63,7 +66,7 @@ class TextToolPlugin extends DrawInputPlugin {
     if (_isTextToolActive) {
       return _routingPolicy.allowCreate(state);
     }
-    if (_isSelectionToolActive) {
+    if (_isSelectionToolModeActive) {
       return _routingPolicy.allowSelection(state);
     }
     if (_isSerialToolActive) {

@@ -6,6 +6,7 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
 import 'element_state.dart';
+import 'global_elements_state.dart';
 import 'interaction_state.dart';
 import 'models.dart' show DrawState;
 
@@ -143,6 +144,10 @@ class DrawStateView {
 
   /// Selected ids.
   Set<String> get selectedIds => state.domain.selection.selectedIds;
+
+  /// Effective global document elements.
+  GlobalElementsState get globalElements =>
+      state.domain.document.globalElements;
 
   /// True if there is an active selection (either persistent or preview).
   bool get hasSelection => _effectiveSelection.hasSelection;

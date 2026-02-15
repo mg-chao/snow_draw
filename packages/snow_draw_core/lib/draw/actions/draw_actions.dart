@@ -1,5 +1,6 @@
 import 'dart:ui' show Color;
 
+import '../config/draw_config.dart';
 import '../edit/core/edit_cancel_reason.dart';
 import '../edit/core/edit_modifiers.dart';
 import '../edit/core/edit_operation_params.dart';
@@ -12,6 +13,7 @@ import '../types/draw_point.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
 import '../utils/edit_intent_detector.dart';
+import 'history_coalescing.dart';
 import 'history_policy.dart';
 
 enum ActionCriticality { critical, important, optional }
@@ -19,7 +21,8 @@ enum ActionCriticality { critical, important, optional }
 /// Base class for reducer actions.
 ///
 /// Actions are immutable data objects that describe state transition intents.
-abstract class DrawAction with HistoryPolicyProvider {
+abstract class DrawAction
+    with HistoryPolicyProvider, HistoryCoalescingProvider {
   const DrawAction();
 
   @override
@@ -277,6 +280,7 @@ class UpdateElementsStyle extends DrawAction {
     this.textStrokeWidth,
     this.highlightShape,
     this.serialNumber,
+    this.historyCoalescing,
   }) : elementIds = _freezeElementIds(elementIds);
 
   final List<String> elementIds;
@@ -300,6 +304,8 @@ class UpdateElementsStyle extends DrawAction {
   final double? textStrokeWidth;
   final HighlightShape? highlightShape;
   final int? serialNumber;
+  @override
+  final HistoryCoalescing? historyCoalescing;
 
   @override
   bool get conflictsWithEditing => true;
@@ -313,6 +319,54 @@ class UpdateElementsStyle extends DrawAction {
   @override
   String toString() =>
       'UpdateElementsStyle(ids: $elementIds, opacity: $opacity)';
+}
+
+class UpdateGlobalElements extends DrawAction implements Recordable {
+  const UpdateGlobalElements({
+    this.highlightMask,
+    this.watermark,
+    this.historyCoalescing,
+  });
+
+  final HighlightMaskConfig? highlightMask;
+  final WatermarkConfig? watermark;
+  @override
+  final HistoryCoalescing? historyCoalescing;
+
+  bool get hasUpdates => highlightMask != null || watermark != null;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  HistoryPolicy get historyPolicy => HistoryPolicy.record;
+
+  @override
+  bool get requiresPreActionSnapshot => true;
+
+  @override
+  String get historyDescription {
+    if (highlightMask != null && watermark != null) {
+      return 'Update global overlays';
+    }
+    if (highlightMask != null) {
+      return 'Update highlight mask';
+    }
+    if (watermark != null) {
+      return 'Update watermark';
+    }
+    return 'Update global overlays';
+  }
+
+  @override
+  HistoryRecordType get recordType => HistoryRecordType.edit;
+
+  @override
+  String toString() =>
+      'UpdateGlobalElements('
+      'highlightMask: $highlightMask, '
+      'watermark: $watermark'
+      ')';
 }
 
 class CreateSerialNumberTextElements extends DrawAction implements Recordable {
@@ -370,6 +424,20 @@ class UpdateTextEdit extends DrawAction implements NonRecordable {
 
   @override
   String toString() => 'UpdateTextEdit(textLength: ${text.length})';
+}
+
+/// Recomputes text element bounds after runtime font availability changes.
+///
+/// This action is used when system fonts are loaded asynchronously and text
+/// shaping metrics change. It refreshes bounds for auto-resizing text without
+/// recording a history entry.
+class RefreshAutoResizeTextLayoutsAfterFontLoad extends DrawAction
+    implements NonRecordable {
+  const RefreshAutoResizeTextLayoutsAfterFontLoad();
+
+  @override
+  String get nonRecordableReason =>
+      'Font-load layout refresh is a derived non-user state update.';
 }
 
 class FinishTextEdit extends DrawAction implements Recordable {

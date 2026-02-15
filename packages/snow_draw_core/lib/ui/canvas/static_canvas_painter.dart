@@ -16,6 +16,8 @@ import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'watermark_painter.dart';
+import 'watermark_visibility.dart';
 
 final ModuleLogger _staticCanvasFallbackLog = LogService.fallback.render;
 
@@ -165,6 +167,16 @@ class StaticCanvasPainter extends CustomPainter {
         highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
         maskConfig: renderKey.highlightMaskConfig,
+        scaleFactor: scale,
+        cameraPosition: Offset(camera.position.x, camera.position.y),
+      );
+    }
+
+    if (renderKey.watermarkLayer == WatermarkLayer.staticLayer) {
+      paintWatermark(
+        canvas: canvas,
+        viewportSize: size,
+        config: renderKey.watermarkConfig,
         scaleFactor: scale,
         cameraPosition: Offset(camera.position.x, camera.position.y),
       );

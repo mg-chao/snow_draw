@@ -65,11 +65,11 @@ class BoxSelectReducer {
     final candidates = document.getElementsInRect(bounds);
     for (final element in candidates) {
       final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      // Only select elements that are completely within the selection bounds.
-      if (bounds.minX <= aabb.minX &&
-          bounds.maxX >= aabb.maxX &&
-          bounds.minY <= aabb.minY &&
-          bounds.maxY >= aabb.maxY) {
+      // Select elements that overlap the selection bounds (intersection test).
+      if (bounds.minX <= aabb.maxX &&
+          bounds.maxX >= aabb.minX &&
+          bounds.minY <= aabb.maxY &&
+          bounds.maxY >= aabb.minY) {
         selectedIds.add(element.id);
       }
     }
