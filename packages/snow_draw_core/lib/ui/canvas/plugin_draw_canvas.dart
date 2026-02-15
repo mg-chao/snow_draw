@@ -481,6 +481,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hoveredBindingElementId: _hoveredBindingElementId,
       hoveredArrowHandle: _hoveredArrowHandle,
       activeArrowHandle: _resolveActiveArrowHandle(stateView),
+      arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
       hoverSelectionConfig: _resolveHoverSelectionConfig(),
       snapGuides: stateView.snapGuides,
       documentVersion: stateView.state.domain.document.elementsVersion,
@@ -1925,6 +1926,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: DrawPoint.zero,
       isFixed: isFixed,
     );
+  }
+
+  bool _isArrowDeleteIndicatorVisible(DrawStateView stateView) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState) {
+      return false;
+    }
+    final transform = interaction.currentTransform;
+    return transform is ArrowPointTransform && transform.shouldDelete;
   }
 
   MouseCursor? _resolveArrowHandleCursor({

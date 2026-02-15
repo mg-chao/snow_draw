@@ -23,7 +23,6 @@ import '../../draw/render/element_renderer.dart';
 import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
-import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/types/snap_guides.dart';
 import '../../draw/utils/arrow_binding_highlight.dart';
@@ -63,7 +62,7 @@ class DynamicCanvasPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final state = stateView.state;
-    final camera = state.application.view.camera;
+    final camera = renderKey.camera;
     final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
     final viewportRect = DrawRect(
       minX: -camera.position.x / scale,
@@ -297,14 +296,20 @@ class DynamicCanvasPainter extends CustomPainter {
       excludedElementId: creatingElement?.element.id,
     );
 
-    final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
     if (creatingElement != null && creatingElement.element.data is FilterData) {
       final previewFilter = creatingElement.element.copyWith(
         rect: creatingElement.currentRect,
       );
       effectiveElements.add(previewFilter);
     }
+
+    final shouldPaintSerialConnectors = _shouldPaintSerialConnectors(
+      boundTextIds: document.boundTextIds,
+      previewElementsById: renderKey.previewElementsById,
+    );
+    final serialConnectors = shouldPaintSerialConnectors
+        ? resolveSerialNumberConnectorMap(stateView)
+        : const <String, List<SerialNumberTextConnector>>{};
 
     filterSceneCompositor.paintElements(
       canvas: canvas,
@@ -317,11 +322,13 @@ class DynamicCanvasPainter extends CustomPainter {
           registry: renderKey.elementRegistry,
           locale: renderKey.locale,
         );
-        drawSerialNumberConnectorsForText(
-          canvas: sceneCanvas,
-          textElement: element,
-          connectorsByTextId: serialConnectors,
-        );
+        if (shouldPaintSerialConnectors) {
+          drawSerialNumberConnectorsForText(
+            canvas: sceneCanvas,
+            textElement: element,
+            connectorsByTextId: serialConnectors,
+          );
+        }
       },
     );
     if (renderKey.performanceMonitoringEnabled) {
@@ -374,7 +381,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final hoveredHandle = renderKey.hoveredArrowHandle;
     final activeHandle = renderKey.activeArrowHandle;
-    final shouldDelete = _shouldShowDeleteIndicator();
+    final shouldDelete = renderKey.arrowDeleteIndicatorVisible;
     final deletePosition = activeHandle == null || !shouldDelete
         ? null
         : _resolveHandlePosition(overlay, activeHandle);
@@ -820,13 +827,20 @@ class DynamicCanvasPainter extends CustomPainter {
     return Offset(0, dy);
   }
 
-  bool _shouldShowDeleteIndicator() {
-    final interaction = stateView.state.application.interaction;
-    if (interaction is! EditingState) {
-      return false;
+  bool _shouldPaintSerialConnectors({
+    required Set<String> boundTextIds,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (boundTextIds.isNotEmpty) {
+      return true;
     }
-    final transform = interaction.currentTransform;
-    return transform is ArrowPointTransform && transform.shouldDelete;
+    for (final previewElement in previewElementsById.values) {
+      final data = previewElement.data;
+      if (data is SerialNumberData && data.textElementId != null) {
+        return true;
+      }
+    }
+    return false;
   }
 
   DrawPoint? _resolveHandlePosition(

@@ -184,6 +184,7 @@ class StaticCanvasRenderKey {
 /// - Effective selection (bounds, center, rotation)
 /// - Box selection bounds
 /// - Selected/hovered element IDs (for selection outlines)
+/// - Arrow handle interaction state (including delete indicator visibility)
 /// - Document version (for selection outline refresh)
 /// - Preview elements and dynamic layer split index
 /// - Camera state (position/zoom), selection/box selection config, scale factor
@@ -198,6 +199,7 @@ class DynamicCanvasRenderKey {
     required this.hoveredBindingElementId,
     required this.hoveredArrowHandle,
     required this.activeArrowHandle,
+    required this.arrowDeleteIndicatorVisible,
     required this.hoverSelectionConfig,
     required this.snapGuides,
     required this.documentVersion,
@@ -236,6 +238,9 @@ class DynamicCanvasRenderKey {
   final String? hoveredBindingElementId;
   final ArrowPointHandle? hoveredArrowHandle;
   final ArrowPointHandle? activeArrowHandle;
+
+  /// Whether the arrow-point delete indicator should be painted.
+  final bool arrowDeleteIndicatorVisible;
 
   /// Selection config for hover outlines.
   final SelectionConfig hoverSelectionConfig;
@@ -309,6 +314,7 @@ class DynamicCanvasRenderKey {
           other.hoveredBindingElementId == hoveredBindingElementId &&
           other.hoveredArrowHandle == hoveredArrowHandle &&
           other.activeArrowHandle == activeArrowHandle &&
+          other.arrowDeleteIndicatorVisible == arrowDeleteIndicatorVisible &&
           other.hoverSelectionConfig == hoverSelectionConfig &&
           _listEquals(other.snapGuides, snapGuides) &&
           other.documentVersion == documentVersion &&
@@ -339,6 +345,7 @@ class DynamicCanvasRenderKey {
     hoveredBindingElementId,
     hoveredArrowHandle,
     activeArrowHandle,
+    arrowDeleteIndicatorVisible,
     hoverSelectionConfig,
     Object.hashAll(snapGuides),
     documentVersion,

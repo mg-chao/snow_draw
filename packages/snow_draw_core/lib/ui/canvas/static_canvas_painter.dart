@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
@@ -90,7 +91,13 @@ class StaticCanvasPainter extends CustomPainter {
         excludedElementId: creatingElementId,
       );
 
-      final serialConnectors = resolveSerialNumberConnectorMap(stateView);
+      final shouldPaintSerialConnectors = _shouldPaintSerialConnectors(
+        boundTextIds: document.boundTextIds,
+        previewElementsById: previewElements,
+      );
+      final serialConnectors = shouldPaintSerialConnectors
+          ? resolveSerialNumberConnectorMap(stateView)
+          : const <String, List<SerialNumberTextConnector>>{};
 
       filterSceneCompositor.paintElements(
         canvas: canvas,
@@ -103,11 +110,13 @@ class StaticCanvasPainter extends CustomPainter {
             registry: renderKey.elementRegistry,
             locale: renderKey.locale,
           );
-          drawSerialNumberConnectorsForText(
-            canvas: sceneCanvas,
-            textElement: element,
-            connectorsByTextId: serialConnectors,
-          );
+          if (shouldPaintSerialConnectors) {
+            drawSerialNumberConnectorsForText(
+              canvas: sceneCanvas,
+              textElement: element,
+              connectorsByTextId: serialConnectors,
+            );
+          }
         },
       );
       if (renderKey.performanceMonitoringEnabled) {
@@ -438,6 +447,22 @@ class StaticCanvasPainter extends CustomPainter {
 
   bool _isMajorLine(int index, int majorEvery) =>
       majorEvery > 0 && index % majorEvery == 0;
+
+  bool _shouldPaintSerialConnectors({
+    required Set<String> boundTextIds,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (boundTextIds.isNotEmpty) {
+      return true;
+    }
+    for (final previewElement in previewElementsById.values) {
+      final data = previewElement.data;
+      if (data is SerialNumberData && data.textElementId != null) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) =>
