@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/painting.dart' show PaintingBinding;
 import 'package:flutter/services.dart' hide TextLayoutMetrics;
 
 import '../../draw/actions/actions.dart';

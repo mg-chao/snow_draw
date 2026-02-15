@@ -14,7 +14,7 @@ import '../core/reducer_utils.dart';
 DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
   DrawState state,
   RefreshAutoResizeTextLayoutsAfterFontLoad _,
-  ElementReducerDeps __,
+  ElementReducerDeps _,
 ) {
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;

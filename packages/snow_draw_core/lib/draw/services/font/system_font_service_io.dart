@@ -1,10 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-import 'package:flutter/services.dart' show FontLoader;
-import 'package:snow_draw_core/draw/elements/text_rendering_cache_invalidation.dart';
 
-Future<List<String>> loadSystemFontFamiliesImpl() async {
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show FontLoader;
+
+import '../../elements/text_rendering_cache_invalidation.dart';
+
+final revisionNotifier = ValueNotifier<int>(0);
+
+// ---------------------------------------------------------------------------
+// Public entry points
+// ---------------------------------------------------------------------------
+
+Future<List<String>> listFamiliesImpl() async {
   final cached = _sortedFamilyCache;
   if (cached != null) {
     return cached;
@@ -15,7 +23,7 @@ Future<List<String>> loadSystemFontFamiliesImpl() async {
   return sorted;
 }
 
-Future<void> ensureSystemFontLoadedImpl(String family) async {
+Future<void> ensureLoadedImpl(String family) async {
   final trimmed = family.trim();
   if (trimmed.isEmpty) {
     return;
@@ -43,12 +51,20 @@ Future<void> ensureSystemFontLoadedImpl(String family) async {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Internal state
+// ---------------------------------------------------------------------------
+
 final Map<String, _FontFamilyEntry> _fontIndex = {};
 final Set<String> _loadedFamilies = {};
 final Map<String, Future<void>> _fontLoadTasks = {};
 final Map<String, bool> _fileExistsCache = {};
 List<String>? _sortedFamilyCache;
 Future<void>? _fontIndexTask;
+
+// ---------------------------------------------------------------------------
+// Index building
+// ---------------------------------------------------------------------------
 
 Future<void> _ensureFontIndex() async {
   final existing = _fontIndexTask;
@@ -75,6 +91,10 @@ Future<void> _buildFontIndex() async {
   } on Exception catch (_) {}
 }
 
+// ---------------------------------------------------------------------------
+// Font loading
+// ---------------------------------------------------------------------------
+
 Future<void> _loadFontFamily(
   String family,
   String key,
@@ -97,6 +117,7 @@ Future<void> _loadFontFamily(
     await loader.load();
     _loadedFamilies.add(key);
     invalidateTextRenderingCaches();
+    revisionNotifier.value = revisionNotifier.value + 1;
   } on Exception catch (_) {}
 }
 
@@ -117,13 +138,17 @@ List<String> _sortedFamilyNames() {
   return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 }
 
+// ---------------------------------------------------------------------------
+// Windows font indexing
+// ---------------------------------------------------------------------------
+
 const _windowsFontRegistryPaths = [
   r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
   r'HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
 ];
 
 final _windowsFontSuffixPattern = RegExp(
-  r'\s*\((TrueType|OpenType|Type 1|PostScript|Bitmap|All res)\)$',
+  r'\s*\((TrueType|OpenType|Type 1|PostScript|Bitmap|All res)\)',
   caseSensitive: false,
 );
 
@@ -213,6 +238,10 @@ String _resolveWindowsUserFontsDir() {
   return '$localAppData\\Microsoft\\Windows\\Fonts';
 }
 
+// ---------------------------------------------------------------------------
+// Linux font indexing
+// ---------------------------------------------------------------------------
+
 Future<void> _indexLinuxFonts() async {
   final output = await _runCommand('fc-list', ['-f', '%{family}::%{file}\n']);
   if (output == null) {
@@ -222,6 +251,10 @@ Future<void> _indexLinuxFonts() async {
     _addFontEntry(record.name, record.files);
   }
 }
+
+// ---------------------------------------------------------------------------
+// macOS font indexing
+// ---------------------------------------------------------------------------
 
 Future<void> _indexMacFonts() async {
   final fcListOutput = await _runCommand('fc-list', [
@@ -245,6 +278,10 @@ Future<void> _indexMacFonts() async {
     _addFontEntry(record.name, record.files);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shared parsers
+// ---------------------------------------------------------------------------
 
 Iterable<_FontRecord> _parseFontConfigEntries(String output) sync* {
   for (final line in const LineSplitter().convert(output)) {
@@ -319,6 +356,10 @@ String? _firstString(Map<String, Object?> entry, List<String> keys) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
 void _addFontEntry(String family, Iterable<String> files) {
   final trimmed = family.trim();
   if (trimmed.isEmpty) {
@@ -361,6 +402,10 @@ Future<String?> _runCommand(String command, List<String> args) async {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Data classes
+// ---------------------------------------------------------------------------
 
 class _FontFamilyEntry {
   _FontFamilyEntry({required this.displayName});

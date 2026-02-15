@@ -78,7 +78,6 @@ class _StyleToolbarState extends State<StyleToolbar> {
   static const double _sliderTrackHeight = 2;
   static const double _sliderThumbRadius = 6;
   static const double _sliderOverlayRadius = 12;
-  static const _historyCoalescingWindow = Duration(milliseconds: 220);
   static const double _fontSizeSmall = 16;
   static const double _fontSizeMedium = 21;
   static const double _fontSizeLarge = 27;
@@ -1513,10 +1512,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.01;
 
   HistoryCoalescing _historyCoalescingForProperty(String propertyId) =>
-      HistoryCoalescing(
-        key: 'style_toolbar:$propertyId',
-        window: _historyCoalescingWindow,
-      );
+      HistoryCoalescing(key: 'style_toolbar:$propertyId');
 
   int _channelFromUnit(double value) => (value * 255).round().clamp(0, 255);
 

@@ -1,6 +1,8 @@
-import 'system_fonts_stub.dart' if (dart.library.io) 'system_fonts_io.dart';
+import 'package:snow_draw_core/draw/services/font/system_font_service.dart';
 
-Future<List<String>> loadSystemFontFamilies() => loadSystemFontFamiliesImpl();
+final SystemFontService _service = SystemFontService.instance;
+
+Future<List<String>> loadSystemFontFamilies() => _service.listFamilies();
 
 Future<void> ensureSystemFontLoaded(String family) =>
-    ensureSystemFontLoadedImpl(family);
+    _service.ensureLoaded(family);

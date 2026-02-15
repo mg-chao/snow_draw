@@ -111,7 +111,7 @@ const _serialNumber = ElementState(
   rotation: 0,
   opacity: 1,
   zIndex: 0,
-  data: SerialNumberData(number: 1),
+  data: SerialNumberData(),
 );
 
 Future<({DefaultDrawStore store})> _pumpToolbar(

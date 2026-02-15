@@ -2,11 +2,11 @@ import 'dart:ui' show Color;
 
 import 'package:meta/meta.dart';
 
+import '../actions/history_coalescing.dart';
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/unknown_element_data.dart';
-import '../actions/history_coalescing.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/draw_state.dart';
