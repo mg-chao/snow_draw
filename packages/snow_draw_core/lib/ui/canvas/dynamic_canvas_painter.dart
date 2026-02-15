@@ -303,12 +303,20 @@ class DynamicCanvasPainter extends CustomPainter {
       effectiveElements.add(previewFilter);
     }
 
-    final shouldPaintSerialConnectors = _shouldPaintSerialConnectors(
-      boundTextIds: document.boundTextIds,
-      previewElementsById: renderKey.previewElementsById,
+    final hasVisibleTextElement = effectiveElements.any(
+      (element) => element.data is TextData,
     );
+    final shouldPaintSerialConnectors =
+        hasVisibleTextElement &&
+        _shouldPaintSerialConnectors(
+          boundTextIds: document.boundTextIds,
+          previewElementsById: renderKey.previewElementsById,
+        );
     final serialConnectors = shouldPaintSerialConnectors
-        ? resolveSerialNumberConnectorMap(stateView)
+        ? resolveSerialNumberConnectorMap(
+            stateView,
+            previewElementsById: renderKey.previewElementsById,
+          )
         : const <String, List<SerialNumberTextConnector>>{};
 
     filterSceneCompositor.paintElements(
@@ -836,7 +844,9 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     for (final previewElement in previewElementsById.values) {
       final data = previewElement.data;
-      if (data is SerialNumberData && data.textElementId != null) {
+      if (data is SerialNumberData &&
+          data.textElementId != null &&
+          data.textElementId!.isNotEmpty) {
         return true;
       }
     }

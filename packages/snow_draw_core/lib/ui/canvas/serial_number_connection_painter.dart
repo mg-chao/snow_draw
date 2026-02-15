@@ -23,8 +23,12 @@ typedef SerialNumberConnectorMap = Map<String, List<SerialNumberTextConnector>>;
 /// This is the preferred method for rendering as it uses version-based
 /// caching to avoid recomputing connectors on every paint cycle.
 SerialNumberConnectorMap resolveSerialNumberConnectorMap(
-  DrawStateView stateView,
-) => SerialNumberConnectorCache.instance.resolve(stateView);
+  DrawStateView stateView, {
+  Map<String, ElementState>? previewElementsById,
+}) => SerialNumberConnectorCache.instance.resolve(
+  stateView,
+  previewElementsById: previewElementsById,
+);
 
 void drawSerialNumberConnectorsForText({
   required Canvas canvas,

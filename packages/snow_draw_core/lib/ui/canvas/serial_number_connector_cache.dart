@@ -34,12 +34,16 @@ class SerialNumberConnectorCache {
   /// Uses cached data when possible, rebuilding only when:
   /// - Document version changes
   /// - Preview elements affect bound serial numbers or text elements
-  SerialNumberConnectorMap resolve(DrawStateView stateView) {
+  SerialNumberConnectorMap resolve(
+    DrawStateView stateView, {
+    Map<String, ElementState>? previewElementsById,
+  }) {
     final document = stateView.state.domain.document;
-    final previewElementsById = stateView.previewElementsById;
+    final effectivePreviewElements =
+        previewElementsById ?? stateView.previewElementsById;
 
     // Fast path: no elements
-    if (document.elements.isEmpty && previewElementsById.isEmpty) {
+    if (document.elements.isEmpty && effectivePreviewElements.isEmpty) {
       return const <String, List<SerialNumberTextConnector>>{};
     }
 
@@ -51,19 +55,20 @@ class SerialNumberConnectorCache {
     }
 
     // If no bindings exist, return empty
-    if (_bindingIndex.isEmpty) {
+    if (_bindingIndex.isEmpty &&
+        !_containsPreviewSerialBinding(effectivePreviewElements)) {
       return const <String, List<SerialNumberTextConnector>>{};
     }
 
     // Determine which connectors need recomputation
     final affectedSerialIds = _resolveAffectedSerialIds(
-      previewElementsById: previewElementsById,
+      previewElementsById: effectivePreviewElements,
     );
 
     // Build the result map
     return _buildConnectorMap(
       document: document,
-      previewElementsById: previewElementsById,
+      previewElementsById: effectivePreviewElements,
       affectedSerialIds: affectedSerialIds,
     );
   }
@@ -86,6 +91,21 @@ class SerialNumberConnectorCache {
     }
     if (documentVersion != _cachedDocumentVersion) {
       return true;
+    }
+    return false;
+  }
+
+  bool _containsPreviewSerialBinding(Map<String, ElementState> previews) {
+    if (previews.isEmpty) {
+      return false;
+    }
+    for (final preview in previews.values) {
+      final data = preview.data;
+      if (data is SerialNumberData &&
+          data.textElementId != null &&
+          data.textElementId!.isNotEmpty) {
+        return true;
+      }
     }
     return false;
   }
@@ -132,7 +152,7 @@ class SerialNumberConnectorCache {
         affected.add(previewId);
       }
 
-      // O(1) reverse lookup: text element → bound serial numbers
+      // O(1) reverse lookup: text element -> bound serial numbers
       final boundSerials = _reverseBindingIndex[previewId];
       if (boundSerials != null) {
         affected.addAll(boundSerials);
@@ -151,17 +171,24 @@ class SerialNumberConnectorCache {
 
     for (final entry in _bindingIndex.entries) {
       final serialId = entry.key;
-      final textId = entry.value;
 
       // Get effective elements (preview or document)
+      final previewSerialElement = previewElementsById[serialId];
       final serialElement =
-          previewElementsById[serialId] ?? document.getElementById(serialId);
+          previewSerialElement ?? document.getElementById(serialId);
       if (serialElement == null) {
         continue;
       }
 
       final serialData = serialElement.data;
       if (serialData is! SerialNumberData) {
+        continue;
+      }
+
+      final textId = previewSerialElement != null
+          ? serialData.textElementId
+          : entry.value;
+      if (textId == null || textId.isEmpty) {
         continue;
       }
 
@@ -177,8 +204,8 @@ class SerialNumberConnectorCache {
 
       SerialNumberTextConnector? connector;
 
-      if (!isAffected && cachedEntry != null && previewElementsById.isEmpty) {
-        // Use cached connector if not affected and no previews
+      if (!isAffected && cachedEntry != null) {
+        // Use cached connector whenever this serial is unaffected.
         connector = cachedEntry.connector;
       } else {
         // Compute new connector
@@ -188,8 +215,8 @@ class SerialNumberConnectorCache {
           textElement: textElement,
         );
 
-        // Cache if no previews (stable state)
-        if (previewElementsById.isEmpty && connector != null) {
+        // Cache only in stable document state.
+        if (!isAffected && previewElementsById.isEmpty && connector != null) {
           _connectorCache[serialId] = _CachedConnectorEntry(
             connector: connector,
           );
@@ -203,7 +230,58 @@ class SerialNumberConnectorCache {
       }
     }
 
+    _appendPreviewOnlySerialConnectors(
+      result: result,
+      document: document,
+      previewElementsById: previewElementsById,
+    );
+
     return result;
+  }
+
+  void _appendPreviewOnlySerialConnectors({
+    required SerialNumberConnectorMap result,
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (previewElementsById.isEmpty) {
+      return;
+    }
+
+    for (final preview in previewElementsById.values) {
+      if (_bindingIndex.containsKey(preview.id)) {
+        continue;
+      }
+
+      final serialData = preview.data;
+      if (serialData is! SerialNumberData) {
+        continue;
+      }
+
+      final textId = serialData.textElementId;
+      if (textId == null || textId.isEmpty) {
+        continue;
+      }
+
+      final textElement =
+          previewElementsById[textId] ?? document.getElementById(textId);
+      if (textElement == null || textElement.data is! TextData) {
+        continue;
+      }
+
+      final connector = _computeConnector(
+        serialElement: preview,
+        serialData: serialData,
+        textElement: textElement,
+      );
+      if (connector == null) {
+        continue;
+      }
+
+      result
+          .putIfAbsent(textId, () => <SerialNumberTextConnector>[])
+          .add(connector);
+    }
   }
 
   SerialNumberTextConnector? _computeConnector({
