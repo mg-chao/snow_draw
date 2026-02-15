@@ -145,9 +145,7 @@ class StaticCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    Object.hashAll(
-      previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    _mapHash(previewElementsById),
     dynamicLayerStartIndex,
     skipBaseElementScene,
     scaleFactor,
@@ -173,6 +171,10 @@ class StaticCanvasRenderKey {
     }
     return true;
   }
+
+  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
+    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
 }
 
 /// Render key for dynamic canvas.
@@ -342,9 +344,7 @@ class DynamicCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    Object.hashAll(
-      previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    _mapHash(previewElementsById),
     dynamicLayerStartIndex,
     rendersWholeElementScene,
     scaleFactor,
@@ -395,4 +395,8 @@ class DynamicCanvasRenderKey {
     }
     return true;
   }
+
+  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
+    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
 }

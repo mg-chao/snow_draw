@@ -9,13 +9,13 @@ import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_rect.dart';
-import '../../draw/utils/selection_calculator.dart';
 import 'filter_scene_compositor.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'visible_element_scene_resolver.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 
@@ -79,56 +79,18 @@ class StaticCanvasPainter extends CustomPainter {
     }
 
     if (!skipBaseElementScene) {
-      // Query visible elements. Preview elements are handled below to avoid
-      // lifting them into a higher render layer.
-      final visibleElements = document.queryElementsInRectOrdered(viewportRect);
-      if (creatingElementId != null) {
-        visibleElements.removeWhere(
-          (element) => element.id == creatingElementId,
-        );
-      }
-      if (dynamicLayerStartIndex != null) {
-        visibleElements.removeWhere((element) {
-          final orderIndex = document.getOrderIndex(element.id) ?? -1;
-          return orderIndex >= dynamicLayerStartIndex;
-        });
-      }
-      if (previewElements.isNotEmpty) {
-        final visibleIds = {for (final element in visibleElements) element.id};
-        for (final preview in previewElements.values) {
-          if (visibleIds.contains(preview.id)) {
-            continue;
-          }
-          final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-          if (_rectsIntersect(aabb, viewportRect)) {
-            visibleElements.add(preview);
-            visibleIds.add(preview.id);
-          }
-        }
-      }
+      final maxOrderIndex = dynamicLayerStartIndex == null
+          ? null
+          : dynamicLayerStartIndex - 1;
+      final effectiveElements = resolveVisibleElementScene(
+        document: document,
+        viewportRect: viewportRect,
+        previewElementsById: previewElements,
+        maxOrderIndex: maxOrderIndex,
+        excludedElementId: creatingElementId,
+      );
 
       final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
-      // Draw visible elements in document z-order, applying preview geometry
-      // without lifting elements to the top layer.
-      final effectiveElements = <ElementState>[];
-      if (previewElements.isEmpty) {
-        effectiveElements.addAll(visibleElements);
-      } else {
-        for (final element in visibleElements) {
-          final preview = previewElements[element.id];
-          final effectiveElement = preview ?? element;
-          if (preview != null) {
-            final aabb = SelectionCalculator.computeElementWorldAabb(
-              effectiveElement,
-            );
-            if (!_rectsIntersect(aabb, viewportRect)) {
-              continue;
-            }
-          }
-          effectiveElements.add(effectiveElement);
-        }
-      }
 
       filterSceneCompositor.paintElements(
         canvas: canvas,
@@ -434,17 +396,18 @@ class StaticCanvasPainter extends CustomPainter {
     required double scale,
     required double minSpacing,
   }) {
-    if (majorEvery <= 1) {
-      return majorEvery;
+    final normalizedMajorEvery = majorEvery < 1 ? 1 : majorEvery;
+    if (normalizedMajorEvery == 1) {
+      return 1;
     }
     if (scale <= 0 || minSpacing <= 0) {
-      return majorEvery;
+      return normalizedMajorEvery;
     }
 
-    var factor = majorEvery;
+    var factor = normalizedMajorEvery;
     var step = baseSize * factor;
     while (step * scale < minSpacing) {
-      factor *= majorEvery;
+      factor *= normalizedMajorEvery;
       step = baseSize * factor;
     }
     return factor;
@@ -475,12 +438,6 @@ class StaticCanvasPainter extends CustomPainter {
 
   bool _isMajorLine(int index, int majorEvery) =>
       majorEvery > 0 && index % majorEvery == 0;
-
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
 
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) =>

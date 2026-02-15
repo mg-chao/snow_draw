@@ -99,13 +99,14 @@ class FilterSegmentRenderer {
     Picture flattenPending() {
       assert(pending.isNotEmpty, 'pending must not be empty');
       if (pending.length == 1) {
-        return pending.removeAt(0);
+        return pending.removeLast();
       }
       _diagnostics.markPictureRecorder();
       final recorder = PictureRecorder();
       final mergeCanvas = Canvas(recorder);
       for (final p in pending) {
         mergeCanvas.drawPicture(p);
+        p.dispose();
       }
       pending.clear();
       return recorder.endRecording();
@@ -128,23 +129,30 @@ class FilterSegmentRenderer {
       final scene = flattenPending();
 
       if (segment is FilterSegment) {
-        pending.add(
-          _applyFilter(
-            scene: scene,
-            filterElement: segment.filterElement,
-            data: segment.filterData,
-          ),
+        final filtered = _applyFilter(
+          scene: scene,
+          filterElement: segment.filterElement,
+          data: segment.filterData,
         );
+        if (!identical(filtered, scene)) {
+          scene.dispose();
+        }
+        pending.add(filtered);
         continue;
       }
 
       if (segment is MergedFilterSegment) {
-        pending.add(_applyMergedFilter(scene: scene, merged: segment));
+        final filtered = _applyMergedFilter(scene: scene, merged: segment);
+        if (!identical(filtered, scene)) {
+          scene.dispose();
+        }
+        pending.add(filtered);
       }
     }
 
     for (final p in pending) {
       canvas.drawPicture(p);
+      p.dispose();
     }
     _diagnostics.endFrame();
   }
@@ -215,9 +223,8 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
   }) {
-    _diagnostics.markPictureRecorder();
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder)..drawPicture(scene);
+    PictureRecorder? recorder;
+    Canvas? outputCanvas;
     var applied = false;
 
     for (final filter in merged.filters) {
@@ -239,8 +246,14 @@ class FilterSegmentRenderer {
         continue;
       }
 
+      if (!applied) {
+        _diagnostics.markPictureRecorder();
+        recorder = PictureRecorder();
+        outputCanvas = Canvas(recorder)..drawPicture(scene);
+      }
+
       _applyClippedFilter(
-        canvas: canvas,
+        canvas: outputCanvas!,
         scene: scene,
         clip: clip,
         data: data,
@@ -255,7 +268,7 @@ class FilterSegmentRenderer {
     if (!applied) {
       return scene;
     }
-    return recorder.endRecording();
+    return recorder!.endRecording();
   }
 
   // ── Clipped filter application ────────────────────────

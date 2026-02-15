@@ -35,6 +35,7 @@ import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'visible_element_scene_resolver.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 
@@ -79,8 +80,8 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw elements at or above the selected element to preserve z-order.
     _drawDynamicElements(
       canvas: canvas,
-      size: size,
       scale: scale,
+      viewportRect: viewportRect,
       creatingElement: creatingElement,
     );
 
@@ -274,8 +275,8 @@ class DynamicCanvasPainter extends CustomPainter {
 
   void _drawDynamicElements({
     required Canvas canvas,
-    required Size size,
     required double scale,
+    required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
@@ -286,54 +287,15 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final state = stateView.state;
     final document = state.domain.document;
-    final camera = renderKey.camera;
-    final viewportRect = DrawRect(
-      minX: -camera.position.x / scale,
-      minY: -camera.position.y / scale,
-      maxX: (size.width - camera.position.x) / scale,
-      maxY: (size.height - camera.position.y) / scale,
-    );
-
-    final visibleElements = document.queryElementsInRectOrdered(
-      viewportRect,
+    final effectiveElements = resolveVisibleElementScene(
+      document: document,
+      viewportRect: viewportRect,
       minOrderIndex: rendersWholeScene ? null : (dynamicLayerStartIndex ?? 0),
+      previewElementsById: renderKey.previewElementsById,
+      excludedElementId: creatingElement?.element.id,
     );
-
-    final previewElements = renderKey.previewElementsById;
-    if (previewElements.isNotEmpty) {
-      final visibleIds = {for (final element in visibleElements) element.id};
-      for (final preview in previewElements.values) {
-        if (visibleIds.contains(preview.id)) {
-          continue;
-        }
-        final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-        if (_rectsIntersect(aabb, viewportRect)) {
-          visibleElements.add(preview);
-          visibleIds.add(preview.id);
-        }
-      }
-    }
 
     final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
-    final effectiveElements = <ElementState>[];
-    if (previewElements.isEmpty) {
-      effectiveElements.addAll(visibleElements);
-    } else {
-      for (final element in visibleElements) {
-        final preview = previewElements[element.id];
-        final effectiveElement = preview ?? element;
-        if (preview != null) {
-          final aabb = SelectionCalculator.computeElementWorldAabb(
-            effectiveElement,
-          );
-          if (!_rectsIntersect(aabb, viewportRect)) {
-            continue;
-          }
-        }
-        effectiveElements.add(effectiveElement);
-      }
-    }
 
     if (creatingElement != null && creatingElement.element.data is FilterData) {
       final previewFilter = creatingElement.element.copyWith(
@@ -1325,12 +1287,6 @@ class DynamicCanvasPainter extends CustomPainter {
       color: renderKey.selectionConfig.render.strokeColor,
     );
   }
-
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
 
   @override
   bool shouldRepaint(covariant DynamicCanvasPainter oldDelegate) =>

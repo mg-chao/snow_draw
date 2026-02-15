@@ -18,7 +18,6 @@ import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -716,25 +715,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   bool _dynamicOwnsWholeElementScene(DrawStateView view) {
     final split = _resolveDynamicLayerStartIndex(view);
-    if (split != 0) {
-      return false;
-    }
-
-    if (view.selectedIds.isEmpty) {
-      return false;
-    }
-    final document = view.state.domain.document;
-    final splitIndex = split ?? 0;
-    for (final element in document.elements) {
-      final orderIndex = document.getOrderIndex(element.id);
-      if (orderIndex == null || orderIndex < splitIndex) {
-        continue;
-      }
-      if (element.data is HighlightData) {
-        return true;
-      }
-    }
-    return false;
+    return split == 0;
   }
 
   /// Extract creating element snapshot from state view.
