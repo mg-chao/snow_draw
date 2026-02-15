@@ -305,6 +305,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleTextRenderingCacheInvalidation,
     );
     PaintingBinding.instance.systemFonts.addListener(_handleSystemFontsChange);
+    _updateCursorIfChanged(
+      _resolveCursorForState(widget.store.state, _lastPointerPosition),
+    );
   }
 
   @override
@@ -1396,11 +1399,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _clearHoverState();
     }
     if (!_isPointerInside) {
-      _updateCursorIfChanged(_defaultCursor);
+      _updateCursorIfChanged(_idleCursorForCurrentTool);
       return _clearHoverState();
     }
     if (_isElementInteractionDisabledForCurrentTool) {
-      _updateCursorIfChanged(_defaultCursor);
+      _updateCursorIfChanged(_idleCursorForCurrentTool);
       return _clearHoverState();
     }
 
@@ -1441,7 +1444,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hitResult: hitResult,
       selectionConfig: selectionConfig,
     )) {
-      nextCursor = _defaultCursor;
+      nextCursor = _idleCursorForCurrentTool;
     } else if (_shouldShowTextCursor(
       state: state,
       position: position,
@@ -1451,7 +1454,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     )) {
       nextCursor = SystemMouseCursors.text;
     } else if (!hitResult.isHit) {
-      nextCursor = _defaultCursor;
+      nextCursor = _idleCursorForCurrentTool;
     } else {
       nextCursor = _cursorResolver.resolveForHitTest(hitResult);
     }
@@ -2020,10 +2023,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     if (!_isPointerInside || position == null) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
     if (_isElementInteractionDisabledForCurrentTool) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
 
     final arrowHandle = _resolveArrowPointHandleForPosition(
@@ -2051,7 +2054,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hitResult: hitResult,
       selectionConfig: selectionConfig,
     )) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
     if (_shouldShowTextCursor(
       state: state,
@@ -2063,7 +2066,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return SystemMouseCursors.text;
     }
     if (!hitResult.isHit) {
-      return _defaultCursor;
+      return _idleCursorForCurrentTool;
     }
     return _cursorResolver.resolveForHitTest(hitResult);
   }
@@ -2072,6 +2075,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   bool get _isElementInteractionDisabledForCurrentTool =>
       widget.currentToolTypeId == null && !widget.isSelectionToolActive;
+
+  MouseCursor get _idleCursorForCurrentTool =>
+      _isElementInteractionDisabledForCurrentTool
+      ? SystemMouseCursors.basic
+      : _defaultCursor;
 
   DrawStateView _buildStateView(DrawState state) {
     final cachedState = _cachedState;

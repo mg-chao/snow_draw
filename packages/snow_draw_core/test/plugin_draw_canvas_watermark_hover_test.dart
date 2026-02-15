@@ -57,6 +57,26 @@ void main() {
       await _hoverAt(tester, const Offset(170, 120));
       expect(_dynamicRenderKey(tester).hoveredElementId, isNull);
     });
+
+    testWidgets('switching to watermark mode uses basic canvas cursor', (
+      tester,
+    ) async {
+      await _pumpCanvas(
+        tester: tester,
+        store: store,
+        currentToolTypeId: null,
+        isSelectionToolActive: true,
+      );
+      expect(_canvasCursor(tester), SystemMouseCursors.precise);
+
+      await _pumpCanvas(
+        tester: tester,
+        store: store,
+        currentToolTypeId: null,
+        isSelectionToolActive: false,
+      );
+      expect(_canvasCursor(tester), SystemMouseCursors.basic);
+    });
   });
 }
 
@@ -115,4 +135,12 @@ DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
     }
   }
   throw StateError('DynamicCanvasPainter not found');
+}
+
+MouseCursor _canvasCursor(WidgetTester tester) {
+  final mouseRegionFinder = find.descendant(
+    of: find.byType(PluginDrawCanvas),
+    matching: find.byType(MouseRegion),
+  );
+  return tester.widget<MouseRegion>(mouseRegionFinder).cursor;
 }
