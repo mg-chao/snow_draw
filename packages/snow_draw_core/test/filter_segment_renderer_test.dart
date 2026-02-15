@@ -8,6 +8,8 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/ui/canvas/filter_pipeline/filter_segment.dart';
+import 'package:snow_draw_core/ui/canvas/filter_pipeline/filter_segment_builder.dart';
 import 'package:snow_draw_core/ui/canvas/filter_pipeline/filter_segment_renderer.dart';
 
 void main() {
@@ -51,6 +53,57 @@ void main() {
             element.rect.height,
           ),
           Paint()..color = const Color(0xFF000000),
+        );
+      },
+    );
+
+    expect(paintCount, 2);
+    expect(usedOriginalCanvas, isTrue);
+    recorder.endRecording();
+  });
+
+  test('renderer paints all split non-filter batches on original canvas', () {
+    final renderer = FilterSegmentRenderer(
+      segmentBuilder: const _SplitBatchSegmentBuilder(),
+    );
+    var paintCount = 0;
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    var usedOriginalCanvas = true;
+
+    renderer.paint(
+      canvas: canvas,
+      elements: const [
+        ElementState(
+          id: 'first',
+          rect: DrawRect(maxX: 100, maxY: 60),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'second',
+          rect: DrawRect(minX: 30, maxX: 80, maxY: 60),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: RectangleData(),
+        ),
+      ],
+      paintElement: (sceneCanvas, element) {
+        if (!identical(sceneCanvas, canvas)) {
+          usedOriginalCanvas = false;
+        }
+        paintCount += 1;
+        sceneCanvas.drawRect(
+          Rect.fromLTWH(
+            element.rect.minX,
+            element.rect.minY,
+            element.rect.width,
+            element.rect.height,
+          ),
+          Paint()..color = const Color(0xFF336699),
         );
       },
     );
@@ -225,86 +278,93 @@ void main() {
     recorder.endRecording();
   });
 
-  test('semi-transparent content stacks under source-over blending', () async {
-    final renderer = FilterSegmentRenderer();
-    const imageSize = ui.Size(80, 80);
+  test(
+    'overlapping inversions keep sequential compositing semantics',
+    () async {
+      final renderer = FilterSegmentRenderer();
+      const imageSize = ui.Size(80, 80);
 
-    Future<Color> renderWithFilterCount(int filterCount) async {
-      final elements = <ElementState>[
-        const ElementState(
-          id: 'base',
-          rect: DrawRect(maxX: 80, maxY: 80),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
-        ),
-      ];
-      for (var i = 0; i < filterCount; i++) {
-        elements.add(
-          ElementState(
-            id: 'filter-$i',
-            rect: const DrawRect(maxX: 80, maxY: 80),
+      Future<Color> renderWithFilterCount(int filterCount) async {
+        final elements = <ElementState>[
+          const ElementState(
+            id: 'base',
+            rect: DrawRect(maxX: 80, maxY: 80),
             rotation: 0,
             opacity: 1,
-            zIndex: i + 1,
-            data: const FilterData(type: CanvasFilterType.inversion),
+            zIndex: 0,
+            data: RectangleData(),
           ),
+        ];
+        for (var i = 0; i < filterCount; i++) {
+          elements.add(
+            ElementState(
+              id: 'filter-$i',
+              rect: const DrawRect(maxX: 80, maxY: 80),
+              rotation: 0,
+              opacity: 1,
+              zIndex: i + 1,
+              data: const FilterData(type: CanvasFilterType.inversion),
+            ),
+          );
+        }
+
+        final recorder = PictureRecorder();
+        final canvas = Canvas(recorder);
+        renderer.paint(
+          canvas: canvas,
+          elements: elements,
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            sceneCanvas.drawRect(
+              Rect.fromLTWH(0, 0, imageSize.width, imageSize.height),
+              Paint()..color = const Color(0x80FF0000),
+            );
+          },
         );
+
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(
+          imageSize.width.toInt(),
+          imageSize.height.toInt(),
+        );
+        final data = await image.toByteData();
+        expect(data, isNotNull);
+        return _readPixel(data!, imageSize.width.toInt(), const Offset(40, 40));
       }
 
-      final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      renderer.paint(
-        canvas: canvas,
-        elements: elements,
-        paintElement: (sceneCanvas, element) {
-          if (element.id != 'base') {
-            return;
-          }
-          sceneCanvas.drawRect(
-            Rect.fromLTWH(0, 0, imageSize.width, imageSize.height),
-            Paint()..color = const Color(0x80FF0000),
-          );
-        },
-      );
+      final unfiltered = await renderWithFilterCount(0);
+      final singleFiltered = await renderWithFilterCount(1);
+      final doubleFiltered = await renderWithFilterCount(2);
 
-      final picture = recorder.endRecording();
-      final image = await picture.toImage(
-        imageSize.width.toInt(),
-        imageSize.height.toInt(),
-      );
-      final data = await image.toByteData();
-      expect(data, isNotNull);
-      return _readPixel(data!, imageSize.width.toInt(), const Offset(40, 40));
-    }
+      final unfilteredR = _channelFromUnit(unfiltered.r);
+      final unfilteredG = _channelFromUnit(unfiltered.g);
+      final unfilteredB = _channelFromUnit(unfiltered.b);
+      final singleFilteredR = _channelFromUnit(singleFiltered.r);
+      final singleFilteredG = _channelFromUnit(singleFiltered.g);
+      final singleFilteredB = _channelFromUnit(singleFiltered.b);
+      final doubleFilteredR = _channelFromUnit(doubleFiltered.r);
+      final doubleFilteredG = _channelFromUnit(doubleFiltered.g);
+      final doubleFilteredB = _channelFromUnit(doubleFiltered.b);
 
-    final unfiltered = await renderWithFilterCount(0);
-    final singleFiltered = await renderWithFilterCount(1);
-    final doubleFiltered = await renderWithFilterCount(2);
+      final singleDiff =
+          (singleFilteredR - unfilteredR).abs() +
+          (singleFilteredG - unfilteredG).abs() +
+          (singleFilteredB - unfilteredB).abs();
+      expect(singleDiff, greaterThan(10));
 
-    final unfilteredR = _channelFromUnit(unfiltered.r);
-    final unfilteredG = _channelFromUnit(unfiltered.g);
-    final unfilteredB = _channelFromUnit(unfiltered.b);
-    final singleFilteredR = _channelFromUnit(singleFiltered.r);
-    final singleFilteredG = _channelFromUnit(singleFiltered.g);
-    final singleFilteredB = _channelFromUnit(singleFiltered.b);
-    final doubleFilteredR = _channelFromUnit(doubleFiltered.r);
-    final doubleFilteredG = _channelFromUnit(doubleFiltered.g);
-    final doubleFilteredB = _channelFromUnit(doubleFiltered.b);
+      final doubleDiff =
+          (doubleFilteredR - unfilteredR).abs() +
+          (doubleFilteredG - unfilteredG).abs() +
+          (doubleFilteredB - unfilteredB).abs();
+      expect(doubleDiff, greaterThan(5));
 
-    final singleDiff =
-        (singleFilteredR - unfilteredR).abs() +
-        (singleFilteredG - unfilteredG).abs() +
-        (singleFilteredB - unfilteredB).abs();
-    expect(singleDiff, greaterThan(10));
-
-    final doubleDiff =
-        (doubleFilteredR - unfilteredR).abs() +
-        (doubleFilteredG - unfilteredG).abs() +
-        (doubleFilteredB - unfilteredB).abs();
-    expect(doubleDiff, greaterThan(5));
-  });
+      final diagnostics = renderer.lastDiagnostics;
+      expect(diagnostics.filterPasses, 2);
+      expect(diagnostics.pictureRecorders, greaterThanOrEqualTo(3));
+    },
+  );
 
   test('filter cache is bounded while filter bounds vary', () {
     final renderer = FilterSegmentRenderer();
@@ -375,11 +435,29 @@ int _channelFromUnit(double value) => (value * 255).round().clamp(0, 255);
 
 Color _readPixel(ByteData data, int width, Offset offset) {
   final x = offset.dx.round().clamp(0, width - 1);
-  final y = offset.dy.round();
+  final height = data.lengthInBytes ~/ (width * 4);
+  final y = offset.dy.round().clamp(0, height - 1);
   final index = ((y * width) + x) * 4;
   final r = data.getUint8(index);
   final g = data.getUint8(index + 1);
   final b = data.getUint8(index + 2);
   final a = data.getUint8(index + 3);
   return Color.fromARGB(a, r, g, b);
+}
+
+class _SplitBatchSegmentBuilder extends FilterSegmentBuilder {
+  const _SplitBatchSegmentBuilder();
+
+  @override
+  List<RenderSegment> build(List<ElementState> elements) {
+    if (elements.length < 2) {
+      return super.build(elements);
+    }
+    return elements
+        .map(
+          (element) =>
+              ElementBatchSegment(List<ElementState>.unmodifiable([element])),
+        )
+        .toList(growable: false);
+  }
 }

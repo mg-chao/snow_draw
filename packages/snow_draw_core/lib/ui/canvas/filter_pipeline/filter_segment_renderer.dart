@@ -80,9 +80,11 @@ class FilterSegmentRenderer {
       (s) => s is FilterSegment || s is MergedFilterSegment,
     );
     if (!hasFilter) {
-      final first = segments.isEmpty ? null : segments.first;
-      if (first is ElementBatchSegment) {
-        for (final element in first.elements) {
+      for (final segment in segments) {
+        if (segment is! ElementBatchSegment) {
+          continue;
+        }
+        for (final element in segment.elements) {
           paintElement(canvas, element);
         }
       }
@@ -170,29 +172,101 @@ class FilterSegmentRenderer {
     return recorder.endRecording();
   }
 
-  // ── Single-filter pass ──────────────────────────────────
-
   Picture _applyFilter({
     required Picture scene,
     required ElementState filterElement,
     required FilterData data,
   }) {
+    final prepared = _prepareFilterPass(
+      filterElement: filterElement,
+      data: data,
+    );
+    if (prepared == null) {
+      return scene;
+    }
+    return _applyPreparedFilter(scene: scene, pass: prepared);
+  }
+
+  Picture _applyMergedFilter({
+    required Picture scene,
+    required MergedFilterSegment merged,
+  }) {
+    final prepared = <_PreparedFilterPass>[];
+    for (final filter in merged.filters) {
+      final pass = _prepareFilterPass(
+        filterElement: filter.filterElement,
+        data: filter.filterData,
+      );
+      if (pass != null) {
+        prepared.add(pass);
+      }
+    }
+    if (prepared.isEmpty) {
+      return scene;
+    }
+
+    var currentScene = scene;
+    final pendingGroup = <_PreparedFilterPass>[];
+
+    void flushPendingGroup() {
+      if (pendingGroup.isEmpty) {
+        return;
+      }
+      final nextScene = _applyPreparedMergedGroup(
+        scene: currentScene,
+        group: pendingGroup,
+      );
+      if (!identical(nextScene, currentScene) &&
+          !identical(currentScene, scene)) {
+        currentScene.dispose();
+      }
+      pendingGroup.clear();
+      currentScene = nextScene;
+    }
+
+    for (final pass in prepared) {
+      if (pendingGroup.isNotEmpty && _overlapsAny(pass, pendingGroup)) {
+        flushPendingGroup();
+      }
+      pendingGroup.add(pass);
+    }
+    flushPendingGroup();
+    return currentScene;
+  }
+
+  // Prepared filter passes.
+  _PreparedFilterPass? _prepareFilterPass({
+    required ElementState filterElement,
+    required FilterData data,
+  }) {
     final rect = filterElement.rect;
     if (rect.width <= 0 || rect.height <= 0) {
-      return scene;
+      return null;
     }
 
     final opacity = filterElement.opacity.clamp(0.0, 1.0);
     if (opacity <= 0) {
-      return scene;
+      return null;
     }
 
     final clip = _resolveClipInfo(filterElement);
     final layerBounds = clip.bounds;
     if (layerBounds.isEmpty) {
-      return scene;
+      return null;
     }
 
+    return _PreparedFilterPass(
+      data: data,
+      clip: clip,
+      layerBounds: layerBounds,
+      opacity: opacity,
+    );
+  }
+
+  Picture _applyPreparedFilter({
+    required Picture scene,
+    required _PreparedFilterPass pass,
+  }) {
     _diagnostics.markPictureRecorder();
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder)..drawPicture(scene);
@@ -200,83 +274,71 @@ class FilterSegmentRenderer {
     _applyClippedFilter(
       canvas: canvas,
       scene: scene,
-      clip: clip,
-      data: data,
-      layerBounds: layerBounds,
-      opacity: opacity,
+      clip: pass.clip,
+      data: pass.data,
+      layerBounds: pass.layerBounds,
+      opacity: pass.opacity,
     );
 
     _diagnostics.markFilterPass();
     return recorder.endRecording();
   }
 
-  // ── Merged-filter pass ──────────────────────────────────
-
-  /// Applies a group of same-type filters in a single recorder pass.
-  ///
-  /// All filters in the group share one `PictureRecorder` regardless
-  /// of whether their clip regions overlap. This trades strict
-  /// compositing correctness in the overlap zone (e.g. double-
-  /// inversion cancelling out) for significantly fewer offscreen
-  /// buffer allocations and scene replays.
-  Picture _applyMergedFilter({
+  Picture _applyPreparedMergedGroup({
     required Picture scene,
-    required MergedFilterSegment merged,
+    required List<_PreparedFilterPass> group,
   }) {
-    PictureRecorder? recorder;
-    Canvas? outputCanvas;
-    var applied = false;
-
-    for (final filter in merged.filters) {
-      final element = filter.filterElement;
-      final data = filter.filterData;
-      final rect = element.rect;
-      if (rect.width <= 0 || rect.height <= 0) {
-        continue;
-      }
-
-      final opacity = element.opacity.clamp(0.0, 1.0);
-      if (opacity <= 0) {
-        continue;
-      }
-
-      final clip = _resolveClipInfo(element);
-      final layerBounds = clip.bounds;
-      if (layerBounds.isEmpty) {
-        continue;
-      }
-
-      if (!applied) {
-        _diagnostics.markPictureRecorder();
-        recorder = PictureRecorder();
-        outputCanvas = Canvas(recorder)..drawPicture(scene);
-      }
-
-      _applyClippedFilter(
-        canvas: outputCanvas!,
-        scene: scene,
-        clip: clip,
-        data: data,
-        layerBounds: layerBounds,
-        opacity: opacity,
-      );
-
-      _diagnostics.markFilterPass();
-      applied = true;
-    }
-
-    if (!applied) {
+    if (group.isEmpty) {
       return scene;
     }
-    return recorder!.endRecording();
+    if (group.length == 1) {
+      return _applyPreparedFilter(scene: scene, pass: group.first);
+    }
+
+    _diagnostics.markPictureRecorder();
+    final recorder = PictureRecorder();
+    final outputCanvas = Canvas(recorder)..drawPicture(scene);
+
+    for (final pass in group) {
+      _applyClippedFilter(
+        canvas: outputCanvas,
+        scene: scene,
+        clip: pass.clip,
+        data: pass.data,
+        layerBounds: pass.layerBounds,
+        opacity: pass.opacity,
+      );
+      _diagnostics.markFilterPass();
+    }
+
+    return recorder.endRecording();
   }
 
-  // ── Clipped filter application ────────────────────────
+  bool _overlapsAny(_PreparedFilterPass pass, List<_PreparedFilterPass> group) {
+    for (final candidate in group) {
+      if (_boundsOverlap(pass.layerBounds, candidate.layerBounds)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _boundsOverlap(Rect a, Rect b) {
+    if (a.left >= b.right || b.left >= a.right) {
+      return false;
+    }
+    if (a.top >= b.bottom || b.top >= a.bottom) {
+      return false;
+    }
+    return true;
+  }
+
+  // Clipped filter application.
 
   /// Applies a single filter within a clip region.
   ///
-  /// Composites the filtered scene over the clipped source region using
-  /// source-over blending.
+  /// Composites the filtered scene over the clipped source region
+  /// using source-over blending.
   /// Uses `clipRect` for axis-aligned clips to avoid the more
   /// expensive `clipPath` rasterization.
   void _applyClippedFilter({
@@ -535,6 +597,21 @@ class FilterSegmentRenderer {
 }
 
 // ── Cache keys ──────────────────────────────────────────
+
+@immutable
+class _PreparedFilterPass {
+  const _PreparedFilterPass({
+    required this.data,
+    required this.clip,
+    required this.layerBounds,
+    required this.opacity,
+  });
+
+  final FilterData data;
+  final _ClipInfo clip;
+  final Rect layerBounds;
+  final double opacity;
+}
 
 @immutable
 class _FilterClipCacheKey {

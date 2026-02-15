@@ -52,6 +52,8 @@ class DynamicCanvasPainter extends CustomPainter {
     required this.stateView,
   });
 
+  static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
+
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
 
@@ -1217,16 +1219,13 @@ class DynamicCanvasPainter extends CustomPainter {
     if (label == null) {
       return;
     }
-    final textPainter = TextPainter(
-      text: TextSpan(
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final textPainter = _gapLabelPainter
+      ..text = TextSpan(
         text: label.toStringAsFixed(0),
-        style: TextStyle(
-          color: color,
-          fontSize: 10 / (scale == 0 ? 1.0 : scale),
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+        style: TextStyle(color: color, fontSize: 10 / effectiveScale),
+      )
+      ..layout();
 
     final mid = DrawPoint(
       x: (guide.start.x + guide.end.x) / 2,
@@ -1234,7 +1233,7 @@ class DynamicCanvasPainter extends CustomPainter {
     );
     final offset = Offset(
       mid.x - textPainter.width / 2,
-      mid.y - textPainter.height - (4 / (scale == 0 ? 1.0 : scale)),
+      mid.y - textPainter.height - (4 / effectiveScale),
     );
     textPainter.paint(canvas, offset);
   }
