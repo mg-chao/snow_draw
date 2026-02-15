@@ -62,6 +62,7 @@ class PluginDrawCanvas extends StatefulWidget {
     this.scaleFactor = 1.0,
     this.currentToolTypeId,
     this.isSelectionToolActive = true,
+    this.isEraserToolActive = false,
     this.middlewares,
     this.customPlugins,
     this.enableDebugLogging = false,
@@ -72,6 +73,7 @@ class PluginDrawCanvas extends StatefulWidget {
   final DrawStore store;
   final ElementTypeId<ElementData>? currentToolTypeId;
   final bool isSelectionToolActive;
+  final bool isEraserToolActive;
 
   /// Custom middleware (optional).
   final List<InputMiddleware>? middlewares;
@@ -107,6 +109,7 @@ class PluginDrawCanvas extends StatefulWidget {
           isSelectionToolActive,
         ),
       )
+      ..add(DiagnosticsProperty<bool>('isEraserToolActive', isEraserToolActive))
       ..add(IterableProperty<InputMiddleware>('middlewares', middlewares))
       ..add(IterableProperty<InputPlugin>('customPlugins', customPlugins))
       ..add(DiagnosticsProperty<bool>('enableDebugLogging', enableDebugLogging))
@@ -123,6 +126,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
+  static const _eraserPreviewOpacityFactor = 0.5;
+  static const _eraserCursorRadius = 8.0;
+  static const _eraserCursorBorderWidth = 1.5;
+  static const ValueKey<String> _eraserCursorOverlayKey = ValueKey(
+    'eraser-cursor-overlay',
+  );
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
   static const Set<DrawStateChange> _stateChangeTypes = {
@@ -159,6 +168,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   String? _hoveredBindingElementId;
   ArrowPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
+  final _eraserPointerIds = <int>{};
+  final _pendingEraseElementIds = <String>{};
   int? _middlePanPointerId;
   Offset? _lastMiddlePanPosition;
 
@@ -321,6 +332,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final toolChanged =
         oldWidget.currentToolTypeId != widget.currentToolTypeId ||
         oldWidget.isSelectionToolActive != widget.isSelectionToolActive;
+    final eraserModeChanged =
+        oldWidget.isEraserToolActive != widget.isEraserToolActive;
 
     if (shouldRecreateCoordinator) {
       // Dispose old coordinator
@@ -358,6 +371,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           isSelectionToolActive: widget.isSelectionToolActive,
         );
       }
+    }
+    if (eraserModeChanged && !widget.isEraserToolActive) {
+      _clearEraserStrokeState();
     }
 
     _updateCursorIfChanged(
@@ -398,14 +414,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       locale: locale,
     );
     final dynamicLayerStartIndex = _resolveDynamicLayerStartIndex(stateView);
-    final staticPreviewElements = _previewElementsForStatic(
-      stateView,
-      dynamicLayerStartIndex,
+    final staticPreviewElements = _withEraserLayerPreview(
+      basePreviewElements: _previewElementsForStatic(
+        stateView,
+        dynamicLayerStartIndex,
+      ),
+      stateView: stateView,
+      dynamicLayerStartIndex: dynamicLayerStartIndex,
+      dynamicLayer: false,
     );
-    final dynamicPreviewElements = _previewElementsForDynamic(
-      stateView,
-      dynamicLayerStartIndex,
+    final dynamicPreviewElements = _withEraserLayerPreview(
+      basePreviewElements: _previewElementsForDynamic(
+        stateView,
+        dynamicLayerStartIndex,
+      ),
+      stateView: stateView,
+      dynamicLayerStartIndex: dynamicLayerStartIndex,
+      dynamicLayer: true,
     );
+    final eraserCursorOverlay = _buildEraserCursorOverlay();
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
     final globalElements = stateView.globalElements;
@@ -504,6 +531,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             ),
           ),
           ?textOverlay,
+          ?eraserCursorOverlay,
         ],
       ),
     );
@@ -603,6 +631,86 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return filtered;
   }
 
+  Map<String, ElementState> _withEraserLayerPreview({
+    required Map<String, ElementState> basePreviewElements,
+    required DrawStateView stateView,
+    required int? dynamicLayerStartIndex,
+    required bool dynamicLayer,
+  }) {
+    if (!widget.isEraserToolActive || _pendingEraseElementIds.isEmpty) {
+      return basePreviewElements;
+    }
+
+    final document = stateView.state.domain.document;
+    Map<String, ElementState>? merged;
+    for (final id in _pendingEraseElementIds) {
+      final orderIndex = document.getOrderIndex(id);
+      if (!_shouldIncludeEraserPreviewInLayer(
+        orderIndex: orderIndex,
+        dynamicLayerStartIndex: dynamicLayerStartIndex,
+        dynamicLayer: dynamicLayer,
+      )) {
+        continue;
+      }
+      final source = basePreviewElements[id] ?? document.getElementById(id);
+      if (source == null) {
+        continue;
+      }
+      final previewOpacity = (source.opacity * _eraserPreviewOpacityFactor)
+          .clamp(0.0, 1.0);
+      merged ??= Map<String, ElementState>.from(basePreviewElements);
+      merged[id] = source.copyWith(opacity: previewOpacity);
+    }
+    return merged ?? basePreviewElements;
+  }
+
+  bool _shouldIncludeEraserPreviewInLayer({
+    required int? orderIndex,
+    required int? dynamicLayerStartIndex,
+    required bool dynamicLayer,
+  }) {
+    if (dynamicLayerStartIndex == null) {
+      return !dynamicLayer;
+    }
+    if (orderIndex == null) {
+      return false;
+    }
+    return dynamicLayer
+        ? orderIndex >= dynamicLayerStartIndex
+        : orderIndex < dynamicLayerStartIndex;
+  }
+
+  Widget? _buildEraserCursorOverlay() {
+    if (!widget.isEraserToolActive || !_isPointerInside) {
+      return null;
+    }
+    final pointer = _lastPointerPosition;
+    if (pointer == null) {
+      return null;
+    }
+    final screenPosition = _coords.worldToScreen(pointer);
+    const diameter = _eraserCursorRadius * 2;
+    return Positioned(
+      left: screenPosition.x - _eraserCursorRadius,
+      top: screenPosition.y - _eraserCursorRadius,
+      child: IgnorePointer(
+        child: Container(
+          key: _eraserCursorOverlayKey,
+          width: diameter,
+          height: diameter,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.black.withValues(alpha: 0.55),
+              width: _eraserCursorBorderWidth,
+            ),
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+        ),
+      ),
+    );
+  }
+
   int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
       resolveDynamicLayerStartIndex(view);
 
@@ -698,7 +806,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    _recordPointerPosition(event.localPosition);
+    final position = _recordPointerPosition(event.localPosition);
     if (_isMousePointer(event)) {
       if (_isMiddleMouseButton(event.buttons)) {
         _startMiddlePan(event);
@@ -709,12 +817,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     _activePointerIds.add(event.pointer);
+    if (widget.isEraserToolActive) {
+      _eraserPointerIds.add(event.pointer);
+      _markElementsForErase(position);
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerDownInputEvent(
-          position: _transformPosition(
-            event.localPosition,
-          ).copyWith(pressure: event.pressure),
+          position: position.copyWith(pressure: event.pressure),
           modifiers: _currentModifiers,
           pressure: event.pressure,
         ),
@@ -731,12 +845,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!_activePointerIds.contains(event.pointer)) {
       return;
     }
+    if (widget.isEraserToolActive) {
+      if (_eraserPointerIds.contains(event.pointer)) {
+        _markElementsForErase(position);
+      }
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerMoveInputEvent(
-          position: _transformPosition(
-            event.localPosition,
-          ).copyWith(pressure: event.pressure),
+          position: position.copyWith(pressure: event.pressure),
           modifiers: _currentModifiers,
           pressure: event.pressure,
         ),
@@ -752,6 +873,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     if (!_activePointerIds.remove(event.pointer)) {
+      return;
+    }
+    if (widget.isEraserToolActive) {
+      _eraserPointerIds.remove(event.pointer);
+      if (_eraserPointerIds.isEmpty) {
+        unawaited(_commitPendingErase());
+      }
       return;
     }
     unawaited(
@@ -772,6 +900,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     if (!_activePointerIds.remove(event.pointer)) {
+      return;
+    }
+    if (widget.isEraserToolActive) {
+      _eraserPointerIds.remove(event.pointer);
+      if (_eraserPointerIds.isEmpty) {
+        unawaited(_commitPendingErase());
+      }
       return;
     }
     unawaited(
@@ -848,6 +983,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerHover(PointerHoverEvent event) {
     final position = _recordPointerPosition(event.localPosition);
     _updateCursorAndHoverForPosition(position);
+    if (widget.isEraserToolActive) {
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
     unawaited(
       _pluginCoordinator.handleEvent(
         PointerHoverInputEvent(
@@ -880,6 +1021,112 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastPointerPosition = position;
     _isPointerInside = true;
     return position;
+  }
+
+  void _markElementsForErase(DrawPoint position) {
+    final hitIds = _resolveEraserHitElementIds(position);
+    if (hitIds.isEmpty) {
+      return;
+    }
+    final newIds = <String>[];
+    for (final id in hitIds) {
+      if (!_pendingEraseElementIds.contains(id)) {
+        newIds.add(id);
+      }
+    }
+    if (newIds.isEmpty) {
+      return;
+    }
+    _pendingEraseElementIds.addAll(newIds);
+  }
+
+  List<String> _resolveEraserHitElementIds(DrawPoint position) {
+    final stateView = _buildStateView(widget.store.state);
+    final state = stateView.state;
+    final tolerance = _eraserCursorRadius / _effectiveScaleFactor();
+    final candidates = state.domain.document.queryElementsAtPointTopDown(
+      position,
+      tolerance,
+    );
+    if (candidates.isEmpty) {
+      return const [];
+    }
+    final registry = widget.store.context.elementRegistry;
+    final hitIds = <String>[];
+    for (final candidate in candidates) {
+      final element = stateView.effectiveElement(candidate);
+      final definition = registry.getDefinition(element.typeId);
+      final isHit =
+          definition?.hitTester.hitTest(
+            element: element,
+            position: position,
+            tolerance: tolerance,
+          ) ??
+          _isInsideRectWithTolerance(
+            rect: element.rect,
+            rotation: element.rotation,
+            position: position,
+            tolerance: tolerance,
+          );
+      if (isHit) {
+        hitIds.add(element.id);
+      }
+    }
+    return hitIds;
+  }
+
+  bool _isInsideRectWithTolerance({
+    required DrawRect rect,
+    required double rotation,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
+    final local = rotation == 0
+        ? position
+        : ElementSpace(
+            rotation: rotation,
+            origin: rect.center,
+          ).fromWorld(position);
+    return local.x >= rect.minX - tolerance &&
+        local.x <= rect.maxX + tolerance &&
+        local.y >= rect.minY - tolerance &&
+        local.y <= rect.maxY + tolerance;
+  }
+
+  Future<void> _commitPendingErase() async {
+    if (_pendingEraseElementIds.isEmpty) {
+      return;
+    }
+    final ids = _pendingEraseElementIds.toList(growable: false);
+    if (mounted) {
+      setState(_pendingEraseElementIds.clear);
+    } else {
+      _pendingEraseElementIds.clear();
+    }
+    try {
+      await widget.store.dispatch(DeleteElements(elementIds: ids));
+    } on Object catch (error, stackTrace) {
+      widget.store.context.log.input.error(
+        'Failed to delete erased elements',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  void _clearEraserStrokeState() {
+    if (_eraserPointerIds.isNotEmpty) {
+      _activePointerIds.removeAll(_eraserPointerIds);
+      _eraserPointerIds.clear();
+    }
+    if (_pendingEraseElementIds.isEmpty) {
+      return;
+    }
+    if (mounted) {
+      setState(_pendingEraseElementIds.clear);
+      return;
+    }
+    _pendingEraseElementIds.clear();
   }
 
   bool _isMousePointer(PointerEvent event) =>
@@ -2074,10 +2321,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
   bool get _isElementInteractionDisabledForCurrentTool =>
-      widget.currentToolTypeId == null && !widget.isSelectionToolActive;
+      widget.isEraserToolActive ||
+      (widget.currentToolTypeId == null && !widget.isSelectionToolActive);
 
-  MouseCursor get _idleCursorForCurrentTool =>
-      _isElementInteractionDisabledForCurrentTool
+  MouseCursor get _idleCursorForCurrentTool => widget.isEraserToolActive
+      ? SystemMouseCursors.none
+      : _isElementInteractionDisabledForCurrentTool
       ? SystemMouseCursors.basic
       : _defaultCursor;
 

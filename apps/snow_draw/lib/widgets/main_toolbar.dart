@@ -35,6 +35,10 @@ class MainToolbar extends StatelessWidget {
     _ToolDescriptor(type: ToolType.arrow, icon: Icons.arrow_right_alt),
     _ToolDescriptor(type: ToolType.line, icon: Icons.show_chart),
     _ToolDescriptor(type: ToolType.freeDraw, icon: Icons.brush_outlined),
+    _ToolDescriptor(
+      type: ToolType.eraser,
+      icon: Icons.cleaning_services_outlined,
+    ),
     _ToolDescriptor(type: ToolType.highlight, icon: Icons.highlight),
     _ToolDescriptor(type: ToolType.text, icon: Icons.text_fields),
     _ToolDescriptor(
@@ -137,6 +141,8 @@ class MainToolbar extends StatelessWidget {
         return strings.toolLine;
       case ToolType.freeDraw:
         return strings.toolFreeDraw;
+      case ToolType.eraser:
+        return strings.toolEraser;
       case ToolType.highlight:
         return strings.toolHighlight;
       case ToolType.text:

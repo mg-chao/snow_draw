@@ -58,6 +58,7 @@ class CanvasLayer extends StatelessWidget {
       store: store,
       currentToolTypeId: _toolTypeIds[tool],
       isSelectionToolActive: tool == ToolType.selection,
+      isEraserToolActive: tool == ToolType.eraser,
     ),
   );
 }
