@@ -74,6 +74,15 @@ void paintHighlightMask({
   );
 }
 
+/// Cached paints for the CPU fallback path to avoid allocating new
+/// native paint objects on every frame.
+final _fallbackLayerPaint = Paint();
+final _fallbackMaskPaint = Paint()..style = PaintingStyle.fill;
+final _fallbackClearPaint = Paint()
+  ..style = PaintingStyle.fill
+  ..blendMode = BlendMode.clear
+  ..isAntiAlias = true;
+
 /// Original `saveLayer`-based mask implementation used as a fallback.
 void _paintHighlightMaskFallback({
   required Canvas canvas,
@@ -89,17 +98,11 @@ void _paintHighlightMaskFallback({
     viewportRect.height,
   );
 
-  canvas.saveLayer(layerRect, Paint());
+  canvas.saveLayer(layerRect, _fallbackLayerPaint);
 
-  final maskPaint = Paint()
-    ..style = PaintingStyle.fill
-    ..color = maskConfig.maskColor.withValues(alpha: effectiveAlpha);
-  canvas.drawRect(layerRect, maskPaint);
-
-  final clearPaint = Paint()
-    ..style = PaintingStyle.fill
-    ..blendMode = BlendMode.clear
-    ..isAntiAlias = true;
+  _fallbackMaskPaint.color =
+      maskConfig.maskColor.withValues(alpha: effectiveAlpha);
+  canvas.drawRect(layerRect, _fallbackMaskPaint);
 
   for (final element in highlights) {
     final data = element.data as HighlightData;
@@ -130,9 +133,9 @@ void _paintHighlightMaskFallback({
     }
 
     if (data.shape == HighlightShape.rectangle) {
-      canvas.drawRect(expanded, clearPaint);
+      canvas.drawRect(expanded, _fallbackClearPaint);
     } else {
-      canvas.drawOval(expanded, clearPaint);
+      canvas.drawOval(expanded, _fallbackClearPaint);
     }
     canvas.restore();
   }
