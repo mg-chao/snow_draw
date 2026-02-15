@@ -16,6 +16,7 @@ void main() {
       strings.toolArrow: ToolType.arrow,
       strings.toolLine: ToolType.line,
       strings.toolFreeDraw: ToolType.freeDraw,
+      strings.toolEraser: ToolType.eraser,
       strings.toolHighlight: ToolType.highlight,
       strings.toolText: ToolType.text,
       strings.toolSerialNumber: ToolType.serialNumber,

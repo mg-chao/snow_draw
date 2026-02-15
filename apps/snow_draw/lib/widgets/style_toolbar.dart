@@ -243,21 +243,33 @@ class _StyleToolbarState extends State<StyleToolbar> {
     builder: (context, _) {
       final tool = widget.toolController.value;
       final state = widget.adapter.stateListenable.value;
+      final suppressSelectionStyleControls =
+          tool == ToolType.watermark || tool == ToolType.eraser;
       final showRectangleControls =
-          tool == ToolType.rectangle || state.hasSelectedRectangles;
+          tool == ToolType.rectangle ||
+          (!suppressSelectionStyleControls && state.hasSelectedRectangles);
       final showHighlightControls =
-          tool == ToolType.highlight || state.hasSelectedHighlights;
+          tool == ToolType.highlight ||
+          (!suppressSelectionStyleControls && state.hasSelectedHighlights);
       final showFilterControls =
-          tool == ToolType.filter || state.hasSelectedFilters;
+          tool == ToolType.filter ||
+          (!suppressSelectionStyleControls && state.hasSelectedFilters);
       final showWatermarkControls = tool == ToolType.watermark;
       final showArrowControls =
-          tool == ToolType.arrow || state.hasSelectedArrows;
-      final showLineControls = tool == ToolType.line || state.hasSelectedLines;
+          tool == ToolType.arrow ||
+          (!suppressSelectionStyleControls && state.hasSelectedArrows);
+      final showLineControls =
+          tool == ToolType.line ||
+          (!suppressSelectionStyleControls && state.hasSelectedLines);
       final showFreeDrawControls =
-          tool == ToolType.freeDraw || state.hasSelectedFreeDraws;
-      final showTextControls = tool == ToolType.text || state.hasSelectedTexts;
+          tool == ToolType.freeDraw ||
+          (!suppressSelectionStyleControls && state.hasSelectedFreeDraws);
+      final showTextControls =
+          tool == ToolType.text ||
+          (!suppressSelectionStyleControls && state.hasSelectedTexts);
       final showSerialNumberControls =
-          tool == ToolType.serialNumber || state.hasSelectedSerialNumbers;
+          tool == ToolType.serialNumber ||
+          (!suppressSelectionStyleControls && state.hasSelectedSerialNumbers);
       final showToolbar =
           showRectangleControls ||
           showHighlightControls ||
@@ -1623,28 +1635,44 @@ class _StyleToolbarState extends State<StyleToolbar> {
   StylePropertyContext _createPropertyContext(StyleToolbarState state) {
     final tool = widget.toolController.value;
     final selectedTypes = <ElementType>{};
-    if (tool != ToolType.watermark && state.hasSelectedRectangles) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedRectangles) {
       selectedTypes.add(ElementType.rectangle);
     }
-    if (tool != ToolType.watermark && state.hasSelectedHighlights) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedHighlights) {
       selectedTypes.add(ElementType.highlight);
     }
-    if (tool != ToolType.watermark && state.hasSelectedFilters) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedFilters) {
       selectedTypes.add(ElementType.filter);
     }
-    if (tool != ToolType.watermark && state.hasSelectedArrows) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedArrows) {
       selectedTypes.add(ElementType.arrow);
     }
-    if (tool != ToolType.watermark && state.hasSelectedLines) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedLines) {
       selectedTypes.add(ElementType.line);
     }
-    if (tool != ToolType.watermark && state.hasSelectedFreeDraws) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedFreeDraws) {
       selectedTypes.add(ElementType.freeDraw);
     }
-    if (tool != ToolType.watermark && state.hasSelectedTexts) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedTexts) {
       selectedTypes.add(ElementType.text);
     }
-    if (tool != ToolType.watermark && state.hasSelectedSerialNumbers) {
+    if (tool != ToolType.watermark &&
+        tool != ToolType.eraser &&
+        state.hasSelectedSerialNumbers) {
       selectedTypes.add(ElementType.serialNumber);
     }
 
@@ -1664,6 +1692,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
           selectedTypes.add(ElementType.line);
         case ToolType.freeDraw:
           selectedTypes.add(ElementType.freeDraw);
+        case ToolType.eraser:
+          break;
         case ToolType.text:
           selectedTypes.add(ElementType.text);
         case ToolType.serialNumber:

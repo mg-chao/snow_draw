@@ -14,12 +14,14 @@ class DrawCanvas extends StatefulWidget {
     this.scaleFactor = 1.0,
     this.currentToolTypeId,
     this.isSelectionToolActive = true,
+    this.isEraserToolActive = false,
   });
   final Size size;
   final double scaleFactor;
   final DrawStore store;
   final ElementTypeId<ElementData>? currentToolTypeId;
   final bool isSelectionToolActive;
+  final bool isEraserToolActive;
 
   @override
   State<DrawCanvas> createState() => DrawCanvasState();
@@ -42,6 +44,9 @@ class DrawCanvas extends StatefulWidget {
           'isSelectionToolActive',
           isSelectionToolActive,
         ),
+      )
+      ..add(
+        DiagnosticsProperty<bool>('isEraserToolActive', isEraserToolActive),
       );
   }
 }
@@ -54,5 +59,6 @@ class DrawCanvasState extends State<DrawCanvas> {
     scaleFactor: widget.scaleFactor,
     currentToolTypeId: widget.currentToolTypeId,
     isSelectionToolActive: widget.isSelectionToolActive,
+    isEraserToolActive: widget.isEraserToolActive,
   );
 }

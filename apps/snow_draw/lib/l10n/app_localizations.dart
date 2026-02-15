@@ -21,6 +21,7 @@ class AppLocalizations {
   String get toolArrow => 'Arrow';
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';
+  String get toolEraser => 'Eraser';
   String get toolText => 'Text';
   String get toolSerialNumber => 'Serial Number';
   String get objectSnapping => 'Object Snapping';

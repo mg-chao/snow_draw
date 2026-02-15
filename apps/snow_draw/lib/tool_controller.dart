@@ -6,6 +6,7 @@ enum ToolType {
   arrow,
   line,
   freeDraw,
+  eraser,
   highlight,
   text,
   serialNumber,

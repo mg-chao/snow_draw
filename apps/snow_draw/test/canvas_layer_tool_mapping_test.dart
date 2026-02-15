@@ -58,6 +58,9 @@ void main() {
   bool isSelectionToolActive(WidgetTester tester) =>
       tester.widget<DrawCanvas>(find.byType(DrawCanvas)).isSelectionToolActive;
 
+  bool isEraserToolActive(WidgetTester tester) =>
+      tester.widget<DrawCanvas>(find.byType(DrawCanvas)).isEraserToolActive;
+
   testWidgets(
     'selection tool maps to null current tool type id and selection mode',
     (tester) async {
@@ -66,6 +69,7 @@ void main() {
       expect(toolController.value, ToolType.selection);
       expect(currentToolTypeId(tester), isNull);
       expect(isSelectionToolActive(tester), isTrue);
+      expect(isEraserToolActive(tester), isFalse);
     },
   );
 
@@ -88,12 +92,20 @@ void main() {
       await tester.pump();
       expect(currentToolTypeId(tester), entry.value);
       expect(isSelectionToolActive(tester), isFalse);
+      expect(isEraserToolActive(tester), isFalse);
     }
+
+    toolController.setTool(ToolType.eraser);
+    await tester.pump();
+    expect(currentToolTypeId(tester), isNull);
+    expect(isSelectionToolActive(tester), isFalse);
+    expect(isEraserToolActive(tester), isTrue);
 
     toolController.setTool(ToolType.watermark);
     await tester.pump();
     expect(currentToolTypeId(tester), isNull);
     expect(isSelectionToolActive(tester), isFalse);
+    expect(isEraserToolActive(tester), isFalse);
   });
 
   testWidgets('canvas layer listens to a replaced tool controller', (
@@ -123,15 +135,18 @@ void main() {
     await tester.pump();
     expect(currentToolTypeId(tester), isNull);
     expect(isSelectionToolActive(tester), isTrue);
+    expect(isEraserToolActive(tester), isFalse);
 
     toolController.setTool(ToolType.filter);
     await tester.pump();
     expect(currentToolTypeId(tester), isNull);
     expect(isSelectionToolActive(tester), isTrue);
+    expect(isEraserToolActive(tester), isFalse);
 
     replacementController.setTool(ToolType.filter);
     await tester.pump();
     expect(currentToolTypeId(tester), FilterData.typeIdToken);
     expect(isSelectionToolActive(tester), isFalse);
+    expect(isEraserToolActive(tester), isFalse);
   });
 }
