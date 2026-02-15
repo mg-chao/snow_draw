@@ -61,7 +61,7 @@ class CreateElementReducer {
 
     final strategy =
         definition.creationStrategy ?? const RectCreationStrategy();
-    final styleDefaults = _resolveStyleDefaults(config, action.typeId);
+    final styleDefaults = _resolveStyleDefaults(state, config, action.typeId);
     var data = action.initialData ?? definition.createDefaultData();
     if (action.initialData == null && data is ElementStyleConfigurableData) {
       data = (data as ElementStyleConfigurableData).withElementStyle(
@@ -119,6 +119,7 @@ class CreateElementReducer {
   }
 
   ElementStyleConfig _resolveStyleDefaults(
+    DrawState state,
     DrawConfig config,
     ElementTypeId<ElementData> typeId,
   ) {
@@ -144,9 +145,41 @@ class CreateElementReducer {
       return config.textStyle;
     }
     if (typeId == SerialNumberData.typeIdToken) {
-      return config.serialNumberStyle;
+      return _resolveSerialNumberStyleDefaults(state, config.serialNumberStyle);
     }
     return config.elementStyle;
+  }
+
+  ElementStyleConfig _resolveSerialNumberStyleDefaults(
+    DrawState state,
+    ElementStyleConfig defaults,
+  ) {
+    final maxExisting = _resolveMaxExistingSerialNumber(
+      state.domain.document.elements,
+    );
+    if (maxExisting == null) {
+      return defaults;
+    }
+    final nextSerialFromDocument = maxExisting + 1;
+    if (defaults.serialNumber >= nextSerialFromDocument) {
+      return defaults;
+    }
+    return defaults.copyWith(serialNumber: nextSerialFromDocument);
+  }
+
+  int? _resolveMaxExistingSerialNumber(List<ElementState> elements) {
+    int? maxNumber;
+    for (final element in elements) {
+      final data = element.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final candidate = data.number;
+      if (maxNumber == null || candidate > maxNumber) {
+        maxNumber = candidate;
+      }
+    }
+    return maxNumber;
   }
 
   DrawState _updateCreatingElement(

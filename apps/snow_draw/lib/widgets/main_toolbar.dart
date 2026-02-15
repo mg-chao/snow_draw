@@ -28,7 +28,7 @@ class MainToolbar extends StatelessWidget {
   static const double _buttonRadius = 12;
   static const double _buttonGap = 2;
   static const double _dividerGap = 8;
-  static const double _iconSize = 18;
+  static const double _iconSize = 20;
   static const _toolDescriptors = <_ToolDescriptor>[
     _ToolDescriptor(type: ToolType.selection, icon: Icons.near_me_outlined),
     _ToolDescriptor(type: ToolType.rectangle, icon: Icons.rectangle_outlined),
