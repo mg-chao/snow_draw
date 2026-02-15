@@ -1,8 +1,9 @@
 name: Deploy Web to GitHub Pages
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
 
       - name: Configure GitHub Pages

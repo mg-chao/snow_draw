@@ -2,16 +2,13 @@
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
-import 'package:flutter_test/flutter_test.dart';
-
 // Core dependencies that MUST remain importable:
 import 'package:collection/collection.dart';
-import 'package:meta/meta.dart';
-import 'package:rbush/rbush.dart';
-
 // Flutter SDK dependency:
 import 'package:flutter/material.dart';
-
+import 'package:flutter_test/flutter_test.dart';
+import 'package:meta/meta.dart';
+import 'package:rbush/rbush.dart';
 // Internal package imports that exercise the dependency graph:
 import 'package:snow_draw_core/draw/services/services.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
@@ -37,8 +34,7 @@ void main() {
     });
 
     test('LruCache works correctly', () {
-      final cache = LruCache<String, int>(maxEntries: 2);
-      cache
+      final cache = LruCache<String, int>(maxEntries: 2)
         ..put('a', 1)
         ..put('b', 2);
       expect(cache.get('a'), 1);

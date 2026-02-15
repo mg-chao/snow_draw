@@ -1,9 +1,6 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +26,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
 
       - name: Bootstrap workspace
@@ -55,7 +52,7 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
       - run: flutter --version
 
@@ -91,7 +88,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: beta
           cache: true
 
       - name: Bootstrap workspace

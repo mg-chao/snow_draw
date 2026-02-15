@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,15 +7,13 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_visual_ca
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
 
 void main() {
   group('LruCache', () {
     test('getOrCreate returns existing value on cache hit', () {
-      final cache = LruCache<String, int>(maxEntries: 4);
-      cache.put('a', 1);
+      final cache = LruCache<String, int>(maxEntries: 4)..put('a', 1);
       var builderCalled = false;
       final result = cache.getOrCreate('a', () {
         builderCalled = true;
@@ -39,13 +36,10 @@ void main() {
 
     test('evicts least recently used entry', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 2,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('b', 2);
-      cache.put('c', 3);
+      final cache = LruCache<String, int>(maxEntries: 2, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..put('c', 3);
       expect(evicted, [1]);
       expect(cache.get('a'), isNull);
       expect(cache.get('b'), 2);
@@ -54,16 +48,13 @@ void main() {
 
     test('get promotes entry to front', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 2,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('b', 2);
+      final cache = LruCache<String, int>(maxEntries: 2, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('b', 2)
+        ..get('a')
+        ..put('c', 3);
       // Access 'a' to promote it.
-      cache.get('a');
       // Insert 'c' — should evict 'b' (now LRU).
-      cache.put('c', 3);
       expect(evicted, [2]);
       expect(cache.get('a'), 1);
       expect(cache.get('b'), isNull);
@@ -71,23 +62,16 @@ void main() {
 
     test('put replaces value and calls onEvict for old value', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.put('a', 2);
+      final cache = LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', 1)
+        ..put('a', 2);
       expect(evicted, [1]);
       expect(cache.get('a'), 2);
     });
 
     test('clear calls onEvict for all entries', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache
+      final cache = LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
         ..put('a', 1)
         ..put('b', 2)
         ..put('c', 3)
@@ -98,12 +82,9 @@ void main() {
 
     test('remove calls onEvict', () {
       final evicted = <int>[];
-      final cache = LruCache<String, int>(
-        maxEntries: 4,
-        onEvict: evicted.add,
-      );
-      cache.put('a', 1);
-      cache.remove('a');
+      final cache = LruCache<String, int>(maxEntries: 4, onEvict: evicted.add)
+        ..put('a', 1)
+        ..remove('a');
       expect(evicted, [1]);
       expect(cache.length, 0);
     });
@@ -191,30 +172,25 @@ void main() {
   });
 
   group('FreeDrawVisualCache', () {
-    ElementState _makeElement({
+    ElementState makeElement({
       required String id,
       required List<DrawPoint> points,
       double width = 100,
       double height = 100,
-    }) {
-      return ElementState(
-        id: id,
-        rect: DrawRect(minX: 0, minY: 0, maxX: width, maxY: height),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: FreeDrawData(
-          points: points,
-          strokeWidth: 2,
-        ),
-      );
-    }
+    }) => ElementState(
+      id: id,
+      rect: DrawRect(maxX: width, maxY: height),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: FreeDrawData(points: points),
+    );
 
     test('resolve returns same entry for identical element', () {
-      final element = _makeElement(
+      final element = makeElement(
         id: 'e1',
         points: const [
-          DrawPoint(x: 0, y: 0),
+          DrawPoint.zero,
           DrawPoint(x: 0.5, y: 0.5),
           DrawPoint(x: 1, y: 1),
         ],
@@ -232,23 +208,16 @@ void main() {
     });
 
     test('resolve rebuilds entry when size changes', () {
-      final element1 = _makeElement(
+      final element1 = makeElement(
         id: 'e2',
         points: const [
-          DrawPoint(x: 0, y: 0),
+          DrawPoint.zero,
           DrawPoint(x: 0.5, y: 0.5),
           DrawPoint(x: 1, y: 1),
         ],
-        width: 100,
-        height: 100,
       );
       final element2 = element1.copyWith(
-        rect: const DrawRect(
-          minX: 0,
-          minY: 0,
-          maxX: 200,
-          maxY: 200,
-        ),
+        rect: const DrawRect(maxX: 200, maxY: 200),
       );
       final cache = FreeDrawVisualCache.instance;
       final entry1 = cache.resolve(
@@ -273,7 +242,7 @@ void main() {
         path: Path(),
         strokePath: null,
       );
-      expect(entry.getCachedPicture(1.0), isNull);
+      expect(entry.getCachedPicture(1), isNull);
     });
 
     test('getCachedPicture returns picture for matching opacity', () {
@@ -288,8 +257,8 @@ void main() {
       final recorder = PictureRecorder();
       Canvas(recorder);
       final picture = recorder.endRecording();
-      entry.setCachedPicture(picture, 1.0);
-      expect(entry.getCachedPicture(1.0), isNotNull);
+      entry.setCachedPicture(picture, 1);
+      expect(entry.getCachedPicture(1), isNotNull);
       expect(entry.getCachedPicture(0.5), isNull);
       entry.dispose();
     });
@@ -306,15 +275,15 @@ void main() {
       final recorder1 = PictureRecorder();
       Canvas(recorder1);
       final picture1 = recorder1.endRecording();
-      entry.setCachedPicture(picture1, 1.0);
+      entry.setCachedPicture(picture1, 1);
 
       final recorder2 = PictureRecorder();
       Canvas(recorder2);
       final picture2 = recorder2.endRecording();
-      entry.setCachedPicture(picture2, 1.0);
+      entry.setCachedPicture(picture2, 1);
 
       // The entry should hold picture2 now.
-      expect(entry.getCachedPicture(1.0), same(picture2));
+      expect(entry.getCachedPicture(1), same(picture2));
       entry.dispose();
     });
 
@@ -385,15 +354,12 @@ void main() {
       final path = buildFreeDrawSmoothPath([]);
       expect(path.computeMetrics().isEmpty, isTrue);
 
-      final path1 = buildFreeDrawSmoothPath([const Offset(0, 0)]);
+      final path1 = buildFreeDrawSmoothPath([Offset.zero]);
       expect(path1.computeMetrics().isEmpty, isTrue);
     });
 
     test('returns straight line for exactly 2 points', () {
-      final path = buildFreeDrawSmoothPath([
-        const Offset(0, 0),
-        const Offset(100, 0),
-      ]);
+      final path = buildFreeDrawSmoothPath([Offset.zero, const Offset(100, 0)]);
       final metrics = path.computeMetrics().toList();
       expect(metrics.length, 1);
       expect(metrics.first.length, closeTo(100, 0.1));
@@ -401,7 +367,7 @@ void main() {
 
     test('returns smooth path for 3+ points', () {
       final path = buildFreeDrawSmoothPath([
-        const Offset(0, 0),
+        Offset.zero,
         const Offset(50, 50),
         const Offset(100, 0),
       ]);
@@ -412,10 +378,10 @@ void main() {
 
     test('handles closed path (first == last)', () {
       final path = buildFreeDrawSmoothPath([
-        const Offset(0, 0),
+        Offset.zero,
         const Offset(50, 50),
         const Offset(100, 0),
-        const Offset(0, 0),
+        Offset.zero,
       ]);
       final metrics = path.computeMetrics().toList();
       expect(metrics, isNotEmpty);
@@ -425,7 +391,7 @@ void main() {
   group('buildFreeDrawSmoothPathIncremental', () {
     test('returns null for too few points', () {
       final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: [const Offset(0, 0)],
+        allPoints: [Offset.zero],
         basePath: Path(),
         basePointCount: 0,
       );
@@ -434,7 +400,7 @@ void main() {
 
     test('returns path when extending existing path', () {
       final points = [
-        const Offset(0, 0),
+        Offset.zero,
         const Offset(25, 25),
         const Offset(50, 50),
         const Offset(75, 25),
@@ -466,10 +432,7 @@ void main() {
     test('scales normalized points to rect dimensions', () {
       final result = resolveFreeDrawLocalPoints(
         rect: const DrawRect(maxX: 200, maxY: 100),
-        points: const [
-          DrawPoint(x: 0.5, y: 0.5),
-          DrawPoint(x: 1, y: 1),
-        ],
+        points: const [DrawPoint(x: 0.5, y: 0.5), DrawPoint(x: 1, y: 1)],
       );
       expect(result.length, 2);
       expect(result[0].dx, closeTo(100, 0.01));
@@ -487,10 +450,7 @@ void main() {
 
     test('returns 0.5 for all when no pressure data', () {
       final result = resolveFreeDrawPressures(
-        points: const [
-          DrawPoint(x: 0, y: 0),
-          DrawPoint(x: 1, y: 1),
-        ],
+        points: const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
       );
       expect(result, [0.5, 0.5]);
     });
@@ -509,11 +469,7 @@ void main() {
 
   group('LineShaderKey', () {
     test('quantizes values', () {
-      final key = LineShaderKey(
-        spacing: 5.123,
-        lineWidth: 2.789,
-        angle: 0.5,
-      );
+      final key = LineShaderKey(spacing: 5.123, lineWidth: 2.789, angle: 0.5);
       expect(key.spacing, 5.1);
       expect(key.lineWidth, 2.8);
       expect(key.angle, 0.5);
@@ -541,7 +497,7 @@ void main() {
         ..moveTo(0, 0)
         ..lineTo(10, 0);
       final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(strokeWidth: 2),
+        data: const FreeDrawData(),
         width: 100,
         height: 100,
         pointCount: 2,
@@ -559,10 +515,10 @@ void main() {
       // A longer path should produce proportionally more points.
       final path = Path()..moveTo(0, 0);
       for (var i = 1; i <= 100; i++) {
-        path.lineTo(i * 10.0, (i % 2 == 0) ? 0 : 50);
+        path.lineTo(i * 10.0, i.isEven ? 0 : 50);
       }
       final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(strokeWidth: 2),
+        data: const FreeDrawData(),
         width: 1000,
         height: 50,
         pointCount: 101,

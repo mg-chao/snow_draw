@@ -152,8 +152,8 @@ void main() {
       const t = ResizeTransform.complete(
         currentPosition: DrawPoint(x: 10, y: 10),
         newSelectionBounds: DrawRect(maxX: 100, maxY: 100),
-        scaleX: 1.0,
-        scaleY: 1.0,
+        scaleX: 1,
+        scaleY: 1,
         anchor: DrawPoint.zero,
       );
       expect(t.isIdentity, isTrue);
@@ -163,8 +163,8 @@ void main() {
       const t = ResizeTransform.complete(
         currentPosition: DrawPoint(x: 10, y: 10),
         newSelectionBounds: DrawRect(maxX: 200, maxY: 200),
-        scaleX: 2.0,
-        scaleY: 2.0,
+        scaleX: 2,
+        scaleY: 2,
         anchor: DrawPoint.zero,
       );
       expect(t.isIdentity, isFalse);
@@ -196,8 +196,8 @@ void main() {
         const transform = ResizeTransform.complete(
           currentPosition: DrawPoint(x: 100, y: 100),
           newSelectionBounds: DrawRect(maxX: 100, maxY: 100),
-          scaleX: 1.0,
-          scaleY: 1.0,
+          scaleX: 1,
+          scaleY: 1,
           anchor: DrawPoint.zero,
         );
         final result = op.finish(
