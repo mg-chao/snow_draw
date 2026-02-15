@@ -2,18 +2,15 @@
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
-import 'package:flutter_test/flutter_test.dart';
-
+import 'package:flutter_localizations/flutter_localizations.dart';
 // Dependencies that MUST remain importable:
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-
-// Internal package dependency:
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
-
+import 'package:flutter_test/flutter_test.dart';
 // App-level imports that exercise the dependency graph:
 import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
+// Internal package dependency:
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
 void main() {
   group('snow_draw app dependency smoke tests', () {
@@ -29,8 +26,7 @@ void main() {
 
     test('snow_draw_core is importable', () {
       // The core package path dependency must resolve.
-      final cache = LruCache<String, int>(maxEntries: 2);
-      cache.put('x', 42);
+      final cache = LruCache<String, int>(maxEntries: 2)..put('x', 42);
       expect(cache.get('x'), 42);
     });
 
