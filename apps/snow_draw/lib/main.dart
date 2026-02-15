@@ -7,6 +7,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/services/log/log_config.dart';
+import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
 
@@ -35,10 +37,16 @@ void main() {
 DrawContext createAppContext() {
   final registry = DefaultElementRegistry();
   registerBuiltInElements(registry);
+  final logConfig = LogConfig.production.copyWith(
+    enabled: true,
+    colorOutput: !kReleaseMode,
+    emojiOutput: !kReleaseMode,
+  );
 
   return DrawContext.withDefaults(
     elementRegistry: registry,
     idGenerator: RandomStringIdGenerator().call,
+    logService: LogService(config: logConfig),
   );
 }
 

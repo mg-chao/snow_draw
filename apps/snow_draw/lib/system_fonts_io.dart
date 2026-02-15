@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show FontLoader;
+import 'package:snow_draw_core/draw/elements/text_rendering_cache_invalidation.dart';
 
 Future<List<String>> loadSystemFontFamiliesImpl() async {
   final cached = _sortedFamilyCache;
@@ -95,6 +96,7 @@ Future<void> _loadFontFamily(
   try {
     await loader.load();
     _loadedFamilies.add(key);
+    invalidateTextRenderingCaches();
   } on Exception catch (_) {}
 }
 

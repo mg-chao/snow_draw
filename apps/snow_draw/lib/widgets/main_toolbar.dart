@@ -28,7 +28,7 @@ class MainToolbar extends StatelessWidget {
   static const double _buttonRadius = 12;
   static const double _buttonGap = 2;
   static const double _dividerGap = 8;
-  static const double _iconSize = 20;
+  static const double _iconSize = 24;
   static const _toolDescriptors = <_ToolDescriptor>[
     _ToolDescriptor(type: ToolType.selection, icon: Icons.near_me_outlined),
     _ToolDescriptor(type: ToolType.rectangle, icon: Icons.rectangle_outlined),
@@ -42,6 +42,10 @@ class MainToolbar extends StatelessWidget {
       icon: Icons.looks_one_outlined,
     ),
     _ToolDescriptor(type: ToolType.filter, icon: Icons.auto_fix_high),
+    _ToolDescriptor(
+      type: ToolType.watermark,
+      icon: Icons.branding_watermark_outlined,
+    ),
   ];
 
   @override
@@ -141,6 +145,8 @@ class MainToolbar extends StatelessWidget {
         return strings.toolSerialNumber;
       case ToolType.filter:
         return strings.toolFilter;
+      case ToolType.watermark:
+        return strings.toolWatermark;
     }
   }
 }

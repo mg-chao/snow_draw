@@ -521,6 +521,152 @@ class MaskOpacityPropertyDescriptor extends PropertyDescriptor<double> {
       context.highlightMask.maskOpacity;
 }
 
+/// Property descriptor for watermark text color.
+class WatermarkColorPropertyDescriptor extends PropertyDescriptor<Color> {
+  const WatermarkColorPropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkColor,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<Color> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.color, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  Color getDefaultValue(StylePropertyContext context) =>
+      context.watermark.color;
+}
+
+/// Property descriptor for watermark label text.
+class WatermarkTextPropertyDescriptor extends PropertyDescriptor<String> {
+  const WatermarkTextPropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkText,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<String> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.text, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  String getDefaultValue(StylePropertyContext context) =>
+      context.watermark.text;
+}
+
+/// Property descriptor for watermark font size.
+class WatermarkFontSizePropertyDescriptor extends PropertyDescriptor<double> {
+  const WatermarkFontSizePropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkFontSize,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.fontSize, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.watermark.fontSize;
+}
+
+/// Property descriptor for watermark font family.
+class WatermarkFontFamilyPropertyDescriptor extends PropertyDescriptor<String> {
+  const WatermarkFontFamilyPropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkFontFamily,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<String> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.fontFamily, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  String getDefaultValue(StylePropertyContext context) =>
+      context.watermark.fontFamily;
+}
+
+/// Property descriptor for watermark rotation angle in degrees.
+class WatermarkAnglePropertyDescriptor extends PropertyDescriptor<double> {
+  const WatermarkAnglePropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkAngle,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.angle, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.watermark.angle;
+}
+
+/// Property descriptor for watermark tile gap.
+class WatermarkGapPropertyDescriptor extends PropertyDescriptor<double> {
+  const WatermarkGapPropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkGap,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.gap, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) => context.watermark.gap;
+}
+
+/// Property descriptor for watermark opacity.
+class WatermarkOpacityPropertyDescriptor extends PropertyDescriptor<double> {
+  const WatermarkOpacityPropertyDescriptor()
+    : super(
+        id: PropertyIds.watermarkOpacity,
+        supportedElementTypes: const {ElementType.watermark},
+      );
+
+  @override
+  MixedValue<double> extractValue(StylePropertyContext context) {
+    if (context.selectedElementTypes.contains(ElementType.watermark)) {
+      return MixedValue(value: context.watermark.opacity, isMixed: false);
+    }
+    return const MixedValue(value: null, isMixed: true);
+  }
+
+  @override
+  double getDefaultValue(StylePropertyContext context) =>
+      context.watermark.opacity;
+}
+
 /// Property descriptor for corner radius
 class CornerRadiusPropertyDescriptor extends PropertyDescriptor<double> {
   const CornerRadiusPropertyDescriptor()

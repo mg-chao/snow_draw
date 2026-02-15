@@ -17,6 +17,7 @@ class AppLocalizations {
   String get toolRectangle => 'Rectangle';
   String get toolHighlight => 'Highlight';
   String get toolFilter => 'Filter';
+  String get toolWatermark => 'Watermark';
   String get toolArrow => 'Arrow';
   String get toolLine => 'Line';
   String get toolFreeDraw => 'Free Draw';
@@ -59,6 +60,9 @@ class AppLocalizations {
   String get highlightTextStrokeColor => 'Highlight Stroke Color';
   String get maskColor => 'Mask Color';
   String get maskOpacity => 'Mask Opacity';
+  String get watermarkText => 'Watermark Text';
+  String get watermarkAngle => 'Watermark Angle';
+  String get watermarkGap => 'Watermark Gap';
   String get fontSize => 'Font Size';
   String get fontFamily => 'Font Family';
   String get number => 'Number';

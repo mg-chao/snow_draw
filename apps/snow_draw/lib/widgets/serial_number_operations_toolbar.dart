@@ -45,9 +45,9 @@ class SerialNumberOperationsToolbar extends StatefulWidget {
 
 class _SerialNumberOperationsToolbarState
     extends State<SerialNumberOperationsToolbar> {
-  static const double _toolbarRadius = 12;
-  static const double _buttonSize = 28;
-  static const double _iconSize = 16;
+  static const double _toolbarRadius = 10;
+  static const double _buttonSize = 24;
+  static const double _iconSize = 14;
   static const double _viewportPadding = 8;
   static const double _toolbarHeight = _buttonSize;
   static const double _toolbarWidth = _buttonSize * 3;

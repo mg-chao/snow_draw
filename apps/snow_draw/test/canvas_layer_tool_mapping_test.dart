@@ -55,14 +55,19 @@ void main() {
   Object? currentToolTypeId(WidgetTester tester) =>
       tester.widget<DrawCanvas>(find.byType(DrawCanvas)).currentToolTypeId;
 
-  testWidgets('selection tool maps to null current tool type id', (
-    tester,
-  ) async {
-    await pumpCanvasLayer(tester);
+  bool isSelectionToolActive(WidgetTester tester) =>
+      tester.widget<DrawCanvas>(find.byType(DrawCanvas)).isSelectionToolActive;
 
-    expect(toolController.value, ToolType.selection);
-    expect(currentToolTypeId(tester), isNull);
-  });
+  testWidgets(
+    'selection tool maps to null current tool type id and selection mode',
+    (tester) async {
+      await pumpCanvasLayer(tester);
+
+      expect(toolController.value, ToolType.selection);
+      expect(currentToolTypeId(tester), isNull);
+      expect(isSelectionToolActive(tester), isTrue);
+    },
+  );
 
   testWidgets('drawing tools map to expected element type ids', (tester) async {
     await pumpCanvasLayer(tester);
@@ -82,7 +87,13 @@ void main() {
       toolController.setTool(entry.key);
       await tester.pump();
       expect(currentToolTypeId(tester), entry.value);
+      expect(isSelectionToolActive(tester), isFalse);
     }
+
+    toolController.setTool(ToolType.watermark);
+    await tester.pump();
+    expect(currentToolTypeId(tester), isNull);
+    expect(isSelectionToolActive(tester), isFalse);
   });
 
   testWidgets('canvas layer listens to a replaced tool controller', (
@@ -111,13 +122,16 @@ void main() {
     );
     await tester.pump();
     expect(currentToolTypeId(tester), isNull);
+    expect(isSelectionToolActive(tester), isTrue);
 
     toolController.setTool(ToolType.filter);
     await tester.pump();
     expect(currentToolTypeId(tester), isNull);
+    expect(isSelectionToolActive(tester), isTrue);
 
     replacementController.setTool(ToolType.filter);
     await tester.pump();
     expect(currentToolTypeId(tester), FilterData.typeIdToken);
+    expect(isSelectionToolActive(tester), isFalse);
   });
 }
