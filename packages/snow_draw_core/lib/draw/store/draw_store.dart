@@ -30,7 +30,8 @@ class DefaultDrawStore implements DrawStore {
     SnapshotBuilder snapshotBuilder = const SnapshotBuilder(),
     MiddlewarePipeline? pipeline,
     EventBus? eventBus,
-  }) : _eventBus = eventBus ?? context.eventBus ?? EventBus(),
+  }) : _ownsEventBus = eventBus == null && context.eventBus == null,
+       _eventBus = eventBus ?? context.eventBus ?? EventBus(),
        _snapshotBuilder = snapshotBuilder,
        _editEventController = StreamController<EditSessionEvent>.broadcast() {
     this.context = context.eventBus == _eventBus
@@ -41,7 +42,15 @@ class DefaultDrawStore implements DrawStore {
         historyManager ?? HistoryManager(logService: this.context.log);
     _stateManager = StateManager(initialState ?? DrawState());
     _configManager = this.context.configManager;
-    _listenerRegistry = ListenerRegistry();
+    _listenerRegistry = ListenerRegistry(
+      onError: (error, stackTrace) {
+        this.context.log.store.error(
+          'Listener threw during notification',
+          error,
+          stackTrace,
+        );
+      },
+    );
 
     _editSessionService = EditSessionService.fromRegistry(
       this.context.editOperations,
@@ -79,6 +88,7 @@ class DefaultDrawStore implements DrawStore {
   late final EditSessionService _editSessionService;
   final StreamController<EditSessionEvent> _editEventController;
   final SnapshotBuilder _snapshotBuilder;
+  final bool _ownsEventBus;
   final EventBus _eventBus;
   final bool includeSelectionInHistory;
 
@@ -115,6 +125,22 @@ class DefaultDrawStore implements DrawStore {
   @override
   Stream<DrawEvent> get eventStream => _eventBus.stream;
 
+  @override
+  Stream<T> eventStreamOf<T extends DrawEvent>() => _eventBus.streamOf<T>();
+
+  @override
+  StreamSubscription<T> onEvent<T extends DrawEvent>(
+    void Function(T event) handler, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => _eventBus.on<T>(
+    handler,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
   /// Edit diagnostic event stream.
   Stream<EditSessionEvent> get editEvents => _editEventController.stream;
 
@@ -137,7 +163,10 @@ class DefaultDrawStore implements DrawStore {
     StateSelector<DrawState, T> selector,
     StateChangeListener<T> listener, {
     bool Function(T, T)? equals,
+    Set<DrawStateChange>? changeTypes,
   }) {
+    _checkNotDisposed();
+
     // Read the current value on init, but do not notify.
     var previousValue = selector.select(state);
 
@@ -151,7 +180,7 @@ class DefaultDrawStore implements DrawStore {
         previousValue = newValue;
         listener(newValue);
       }
-    });
+    }, changeTypes: changeTypes);
   }
 
   void beginBatch() {
@@ -237,6 +266,7 @@ class DefaultDrawStore implements DrawStore {
 
   void restoreHistory(HistoryManagerSnapshot snapshot) {
     _historyManager.restore(snapshot);
+    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
   Map<String, dynamic> exportHistoryJson() =>
@@ -256,6 +286,7 @@ class DefaultDrawStore implements DrawStore {
       },
     );
     _historyManager.restore(snapshot);
+    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
   void _checkNotDisposed() {
@@ -274,9 +305,12 @@ class DefaultDrawStore implements DrawStore {
 
     unawaited(_configManager.dispose());
     unawaited(_editEventController.close());
-    unawaited(_eventBus.dispose());
+    if (_ownsEventBus) {
+      unawaited(_eventBus.dispose());
+    }
     _listenerRegistry.clear();
     _historyManager.clear();
+    context.log.dispose();
   }
 
   EditSessionId _generateEditSessionId() {

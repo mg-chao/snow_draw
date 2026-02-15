@@ -15,7 +15,15 @@ class EditConfig {
     this.minElementSize = ConfigDefaults.minResizeElementSize,
     this.rotationSnapAngle = ConfigDefaults.rotationSnapAngle,
     this.rotationHandleOffset = ConfigDefaults.rotateHandleOffset,
-  });
+  }) : assert(dragThreshold >= 0, 'dragThreshold must be non-negative'),
+       assert(selectionPadding >= 0, 'selectionPadding must be non-negative'),
+       assert(handleTolerance > 0, 'handleTolerance must be positive'),
+       assert(minElementSize > 0, 'minElementSize must be positive'),
+       assert(rotationSnapAngle >= 0, 'rotationSnapAngle must be non-negative'),
+       assert(
+         rotationHandleOffset >= 0,
+         'rotationHandleOffset must be non-negative',
+       );
   // ============ Move configuration ============
 
   /// Drag detection threshold (pixels).
@@ -64,14 +72,31 @@ class EditConfig {
     double? minElementSize,
     double? rotationSnapAngle,
     double? rotationHandleOffset,
-  }) => EditConfig(
-    dragThreshold: dragThreshold ?? this.dragThreshold,
-    selectionPadding: selectionPadding ?? this.selectionPadding,
-    handleTolerance: handleTolerance ?? this.handleTolerance,
-    minElementSize: minElementSize ?? this.minElementSize,
-    rotationSnapAngle: rotationSnapAngle ?? this.rotationSnapAngle,
-    rotationHandleOffset: rotationHandleOffset ?? this.rotationHandleOffset,
-  );
+  }) {
+    final nextDragThreshold = dragThreshold ?? this.dragThreshold;
+    final nextSelectionPadding = selectionPadding ?? this.selectionPadding;
+    final nextHandleTolerance = handleTolerance ?? this.handleTolerance;
+    final nextMinElementSize = minElementSize ?? this.minElementSize;
+    final nextRotationSnapAngle = rotationSnapAngle ?? this.rotationSnapAngle;
+    final nextRotationHandleOffset =
+        rotationHandleOffset ?? this.rotationHandleOffset;
+    if (nextDragThreshold == this.dragThreshold &&
+        nextSelectionPadding == this.selectionPadding &&
+        nextHandleTolerance == this.handleTolerance &&
+        nextMinElementSize == this.minElementSize &&
+        nextRotationSnapAngle == this.rotationSnapAngle &&
+        nextRotationHandleOffset == this.rotationHandleOffset) {
+      return this;
+    }
+    return EditConfig(
+      dragThreshold: nextDragThreshold,
+      selectionPadding: nextSelectionPadding,
+      handleTolerance: nextHandleTolerance,
+      minElementSize: nextMinElementSize,
+      rotationSnapAngle: nextRotationSnapAngle,
+      rotationHandleOffset: nextRotationHandleOffset,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

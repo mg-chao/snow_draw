@@ -1,15 +1,11 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/painting.dart'
-    show Alignment, GradientRotation, LinearGradient;
-import 'package:meta/meta.dart';
-
 import '../../../config/draw_config.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
+import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import 'free_draw_data.dart';
 import 'free_draw_visual_cache.dart';
@@ -19,15 +15,12 @@ class FreeDrawRenderer extends ElementTypeRenderer {
 
   static const double _lineFillAngle = -math.pi / 4;
   static const double _crossLineFillAngle = math.pi / 4;
-  static final _lineShaderCache = LruCache<_LineShaderKey, Shader>(
-    maxEntries: 128,
-  );
 
   /// Clears the static shader cache.
   ///
   /// Call when switching documents or under memory pressure.
   static void clearCaches() {
-    _lineShaderCache.clear();
+    clearStrokePatternCaches();
   }
 
   @override
@@ -145,7 +138,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
         const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
         final fillColor = data.fillColor.withValues(alpha: fillOpacity);
-        final fillPaint = _buildLineFillPaint(
+        final fillPaint = buildLineFillPaint(
           spacing: spacing,
           lineWidth: fillLineWidth,
           angle: _lineFillAngle,
@@ -153,7 +146,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
         );
         canvas.drawPath(fillPath, fillPaint);
         if (data.fillStyle == FillStyle.crossLine) {
-          final crossPaint = _buildLineFillPaint(
+          final crossPaint = buildLineFillPaint(
             spacing: spacing,
             lineWidth: fillLineWidth,
             angle: _crossLineFillAngle,
@@ -168,13 +161,15 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       final strokeColor = data.color.withValues(alpha: strokeOpacity);
 
       if (data.strokeStyle == StrokeStyle.dotted) {
-        final dottedPath = cached.dottedPath;
-        if (dottedPath != null) {
+        final positions = cached.dotPositions;
+        if (positions != null && positions.isNotEmpty) {
           final dotPaint = Paint()
-            ..style = PaintingStyle.fill
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cached.dotRadius * 2
+            ..strokeCap = StrokeCap.round
             ..color = strokeColor
             ..isAntiAlias = true;
-          canvas.drawPath(dottedPath, dotPaint);
+          canvas.drawRawPoints(PointMode.points, positions, dotPaint);
         }
       } else if (data.strokeStyle == StrokeStyle.dashed) {
         final dashedPath = cached.strokePath;
@@ -217,75 +212,4 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final dy = (first.y - last.y) * rect.height;
     return (dx * dx + dy * dy) <= tolerance * tolerance;
   }
-
-  Paint _buildLineFillPaint({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-    required Color color,
-  }) => Paint()
-    ..style = PaintingStyle.fill
-    ..shader = _lineShaderCache.getOrCreate(
-      _LineShaderKey(spacing: spacing, lineWidth: lineWidth, angle: angle),
-      () => _buildLineShader(
-        spacing: spacing,
-        lineWidth: lineWidth,
-        angle: angle,
-      ),
-    )
-    ..colorFilter = ColorFilter.mode(color, BlendMode.modulate)
-    ..isAntiAlias = true;
-
-  Shader _buildLineShader({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-  }) {
-    final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-    final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
-    final cosAngle = math.cos(angle).abs();
-    final adjustedSpacing = cosAngle > 0.01
-        ? safeSpacing / cosAngle
-        : safeSpacing;
-    return LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      tileMode: TileMode.repeated,
-      colors: const [
-        Color(0xFFFFFFFF),
-        Color(0xFFFFFFFF),
-        Color(0x00FFFFFF),
-        Color(0x00FFFFFF),
-      ],
-      stops: [0.0, lineStop, lineStop, 1.0],
-      transform: GradientRotation(angle),
-    ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
-  }
-}
-
-@immutable
-class _LineShaderKey {
-  _LineShaderKey({
-    required double spacing,
-    required double lineWidth,
-    required this.angle,
-  }) : spacing = _quantize(spacing),
-       lineWidth = _quantize(lineWidth);
-
-  final double spacing;
-  final double lineWidth;
-  final double angle;
-
-  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LineShaderKey &&
-          other.spacing == spacing &&
-          other.lineWidth == lineWidth &&
-          other.angle == angle;
-
-  @override
-  int get hashCode => Object.hash(spacing, lineWidth, angle);
 }

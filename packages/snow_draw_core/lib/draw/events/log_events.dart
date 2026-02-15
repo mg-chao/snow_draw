@@ -2,6 +2,7 @@ import 'package:logger/logger.dart';
 import 'package:meta/meta.dart';
 
 import 'event_bus.dart';
+import 'event_payload_freezer.dart';
 
 /// Base class for log events.
 ///
@@ -26,13 +27,13 @@ abstract class LogEvent extends DrawEvent {
 /// General log event.
 @immutable
 class GeneralLogEvent extends LogEvent {
-  const GeneralLogEvent({
+  GeneralLogEvent({
     required this.level,
     required this.module,
     required this.message,
     required this.timestamp,
-    this.data,
-  });
+    Map<String, dynamic>? data,
+  }) : data = _freezeData(data);
   @override
   final Level level;
   @override
@@ -44,6 +45,13 @@ class GeneralLogEvent extends LogEvent {
 
   /// Additional data.
   final Map<String, dynamic>? data;
+
+  static Map<String, dynamic>? _freezeData(Map<String, dynamic>? data) {
+    if (data == null) {
+      return null;
+    }
+    return freezeEventPayloadMap(data);
+  }
 
   @override
   String toString() =>

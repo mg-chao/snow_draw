@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
@@ -18,6 +17,7 @@ import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
 import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
+import '../../utils/list_equality.dart';
 
 /// Single-source-of-truth geometry application for editing.
 ///
@@ -226,7 +226,8 @@ class EditApply {
             oldRect: startElement.rect,
             newRect: resized.rect,
           );
-          if (scaled != null && !_fixedSegmentsEqual(fixedSegments, scaled)) {
+          if (scaled != null &&
+              !fixedSegmentListEquals(fixedSegments, scaled)) {
             data = data.copyWith(fixedSegments: scaled);
             resized = resized.copyWith(data: data);
           }
@@ -238,51 +239,74 @@ class EditApply {
     return result;
   }
 
+  /// Returns a list where elements with matching ids are replaced.
+  ///
+  /// The original order is preserved. When [resolveIndex] is provided, it is
+  /// used as an O(1) id-to-index lookup fast path.
   static List<ElementState> replaceElementsById({
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
+    // Optional fast path for O(1) id-to-index lookup.
+    // Unresolved ids fall back to a linear scan.
+    int? Function(String id)? resolveIndex,
   }) {
-    if (replacementsById.isEmpty) {
+    if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
     }
 
-    var hasActualChanges = false;
-    for (final entry in replacementsById.entries) {
-      final index = _findElementIndex(elements, entry.key);
-      if (index != -1 && !identical(elements[index], entry.value)) {
-        hasActualChanges = true;
-        break;
+    if (resolveIndex != null) {
+      List<ElementState>? result;
+      final unresolved = <String, ElementState>{};
+      for (final entry in replacementsById.entries) {
+        final index = resolveIndex(entry.key);
+        if (index == null || index < 0 || index >= elements.length) {
+          unresolved[entry.key] = entry.value;
+          continue;
+        }
+        if (elements[index].id != entry.key) {
+          unresolved[entry.key] = entry.value;
+          continue;
+        }
+
+        final replacement = entry.value;
+        final current = (result ?? elements)[index];
+        if (replacement == current) {
+          continue;
+        }
+
+        result ??= List<ElementState>.of(elements, growable: false);
+        result[index] = replacement;
       }
+
+      if (unresolved.isNotEmpty) {
+        for (var i = 0; i < elements.length; i++) {
+          final current = (result ?? elements)[i];
+          final replacement = unresolved[current.id];
+          if (replacement == null || replacement == current) {
+            continue;
+          }
+
+          result ??= List<ElementState>.of(elements, growable: false);
+          result[i] = replacement;
+        }
+      }
+
+      return result ?? elements;
     }
 
-    if (!hasActualChanges) {
-      return elements;
-    }
-
-    assert(() {
-      if (elements.length > 1000 && replacementsById.length < 10) {
-        developer.log(
-          'Performance hint: replacing ${replacementsById.length} '
-          'elements in a list of ${elements.length}. Consider using '
-          'indexed replacement.',
-          name: 'EditApply',
-        );
-      }
-      return true;
-    }(), 'Performance logging for element replacement');
-
-    return elements
-        .map((e) => replacementsById[e.id] ?? e)
-        .toList(growable: false);
-  }
-
-  static int _findElementIndex(List<ElementState> elements, String id) {
+    List<ElementState>? result;
     for (var i = 0; i < elements.length; i++) {
-      if (elements[i].id == id) {
-        return i;
+      final current = elements[i];
+      final replacement = replacementsById[current.id];
+      if (replacement == null || replacement == current) {
+        continue;
       }
+
+      result ??= List<ElementState>.of(elements, growable: false);
+      result[i] = replacement;
     }
-    return -1;
+
+    return result ?? elements;
   }
 }
 
@@ -420,19 +444,4 @@ DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {
     x: newRect.minX + nx * newWidth,
     y: newRect.minY + ny * newHeight,
   );
-}
-
-bool _fixedSegmentsEqual(List<ElbowFixedSegment> a, List<ElbowFixedSegment> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

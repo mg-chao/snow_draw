@@ -20,9 +20,7 @@ class BoxSelectReducer {
     final StartBoxSelect a => _startBoxSelect(state, a),
     final UpdateBoxSelect a => _updateBoxSelect(state, a),
     FinishBoxSelect _ => _finishBoxSelect(state),
-    CancelBoxSelect _ => state.copyWith(
-      application: state.application.toIdle(),
-    ),
+    CancelBoxSelect _ => _cancelBoxSelect(state),
     _ => null,
   };
 
@@ -42,6 +40,9 @@ class BoxSelectReducer {
     if (interaction is! BoxSelectingState) {
       return state;
     }
+    if (interaction.currentPosition == action.currentPosition) {
+      return state;
+    }
     return state.copyWith(
       application: state.application.copyWith(
         interaction: interaction.copyWith(
@@ -54,7 +55,7 @@ class BoxSelectReducer {
   DrawState _finishBoxSelect(DrawState state) {
     final interaction = state.application.interaction;
     if (interaction is! BoxSelectingState) {
-      return state.copyWith(application: state.application.toIdle());
+      return state;
     }
 
     final bounds = interaction.bounds;
@@ -77,5 +78,12 @@ class BoxSelectReducer {
       application: state.application.copyWith(interaction: const IdleState()),
     );
     return applySelectionChange(next, selectedIds);
+  }
+
+  DrawState _cancelBoxSelect(DrawState state) {
+    if (state.application.interaction is! BoxSelectingState) {
+      return state;
+    }
+    return state.copyWith(application: state.application.toIdle());
   }
 }

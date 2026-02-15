@@ -24,6 +24,9 @@ final class FreeTransformEditContext extends EditContext {
   final DrawPoint? handleOffset;
   final double selectionRotation;
 
+  @override
+  bool get hasSnapshots => elementSnapshots.isNotEmpty;
+
   FreeTransformEditContext withMode(FreeTransformMode mode) =>
       FreeTransformEditContext(
         startPosition: startPosition,

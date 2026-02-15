@@ -181,6 +181,7 @@ class HitTest {
       config: config,
       tolerance: actualTolerance,
       filterTypeId: filterTypeId,
+      registry: registry,
       positionX: quantizedX,
       positionY: quantizedY,
     );
@@ -247,6 +248,7 @@ class HitTest {
             config: config,
             tolerance: actualTolerance,
             filterTypeId: filterTypeId,
+            registry: registry,
             positionX: quantizedX,
             positionY: quantizedY,
           );
@@ -255,27 +257,30 @@ class HitTest {
     }
 
     // 2. Check elements using spatial index (top-most first).
-    final candidates = document.queryElementsAtPointTopDown(
-      position,
-      actualTolerance,
-    );
-    for (final candidate in candidates) {
+    ElementState? hitElement;
+    document.visitElementsAtPointTopDown(position, actualTolerance, (
+      candidate,
+    ) {
       if (filterTypeId != null && candidate.typeId != filterTypeId) {
         if (!_allowsSerialBoundText(
           filterTypeId: filterTypeId,
           candidate: candidate,
           boundTextIds: boundTextIds,
         )) {
-          continue;
+          return true;
         }
       }
       final element = stateView.effectiveElement(candidate);
       if (!_testElement(element, position, registry, actualTolerance)) {
-        continue;
+        return true;
       }
+      hitElement = element;
+      return false;
+    });
+    if (hitElement != null) {
       return _storeCache(
         result: HitTestResult(
-          elementId: element.id,
+          elementId: hitElement!.id,
           cursorHint: CursorHint.move,
           target: HitTestTarget.element,
           isInSelectionPadding: isInSelectionPadding,
@@ -284,6 +289,7 @@ class HitTest {
         config: config,
         tolerance: actualTolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: quantizedX,
         positionY: quantizedY,
       );
@@ -306,6 +312,7 @@ class HitTest {
           config: config,
           tolerance: actualTolerance,
           filterTypeId: filterTypeId,
+          registry: registry,
           positionX: quantizedX,
           positionY: quantizedY,
         );
@@ -321,6 +328,7 @@ class HitTest {
       config: config,
       tolerance: actualTolerance,
       filterTypeId: filterTypeId,
+      registry: registry,
       positionX: quantizedX,
       positionY: quantizedY,
     );
@@ -564,6 +572,7 @@ class HitTest {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) {
@@ -573,6 +582,7 @@ class HitTest {
         config: config,
         tolerance: tolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: positionX,
         positionY: positionY,
         result: result,
@@ -770,6 +780,7 @@ class _HitTestCacheEntry {
     required this.config,
     required this.tolerance,
     required this.filterTypeId,
+    required this.registry,
     required this.positionX,
     required this.positionY,
     required this.result,
@@ -779,6 +790,7 @@ class _HitTestCacheEntry {
   final SelectionConfig config;
   final double tolerance;
   final ElementTypeId<ElementData>? filterTypeId;
+  final ElementRegistry registry;
   final int positionX;
   final int positionY;
   final HitTestResult result;
@@ -788,6 +800,7 @@ class _HitTestCacheEntry {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) =>
@@ -796,6 +809,7 @@ class _HitTestCacheEntry {
       this.positionY == positionY &&
       this.tolerance == tolerance &&
       this.filterTypeId == filterTypeId &&
+      identical(this.registry, registry) &&
       this.config == config;
 }
 
@@ -807,6 +821,7 @@ class _HitTestCache {
     required SelectionConfig config,
     required double tolerance,
     required ElementTypeId<ElementData>? filterTypeId,
+    required ElementRegistry registry,
     required int positionX,
     required int positionY,
   }) {
@@ -817,6 +832,7 @@ class _HitTestCache {
         config: config,
         tolerance: tolerance,
         filterTypeId: filterTypeId,
+        registry: registry,
         positionX: positionX,
         positionY: positionY,
       )) {

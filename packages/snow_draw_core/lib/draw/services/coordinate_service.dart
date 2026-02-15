@@ -11,19 +11,28 @@ import '../types/draw_point.dart';
 /// World coordinates are what drawing elements use.
 @immutable
 class CoordinateService {
-  const CoordinateService({required this.camera, this.scaleFactor = 1.0});
+  const CoordinateService({required this.camera, this.scaleFactor = 1.0})
+    : assert(
+        scaleFactor > 0 && scaleFactor < double.infinity,
+        'scaleFactor must be finite and > 0',
+      ),
+      _inverseScaleFactor = 1 / scaleFactor;
 
   factory CoordinateService.fromCamera(
     CameraState camera, {
-    double scaleFactor = 1.0,
-  }) => CoordinateService(camera: camera, scaleFactor: scaleFactor);
+    double? scaleFactor,
+  }) => CoordinateService(
+    camera: camera,
+    scaleFactor: scaleFactor ?? camera.zoom,
+  );
   final CameraState camera;
   final double scaleFactor;
+  final double _inverseScaleFactor;
 
   /// Screen/widget coordinates -> world coordinates.
   DrawPoint screenToWorld(DrawPoint screenPoint) => DrawPoint(
-    x: (screenPoint.x - camera.position.x) / scaleFactor,
-    y: (screenPoint.y - camera.position.y) / scaleFactor,
+    x: (screenPoint.x - camera.position.x) * _inverseScaleFactor,
+    y: (screenPoint.y - camera.position.y) * _inverseScaleFactor,
   );
 
   /// World coordinates -> screen/widget coordinates.
@@ -44,7 +53,7 @@ class CoordinateService {
 
   /// Screen distance -> world distance.
   double screenDistanceToWorld(double screenDistance) =>
-      screenDistance / scaleFactor;
+      screenDistance * _inverseScaleFactor;
 
   /// World distance -> screen distance.
   double worldDistanceToScreen(double worldDistance) =>

@@ -45,7 +45,7 @@ void main() {
       addTearDown(store.dispose);
 
       await store.dispatch(
-        const UpdateElementsStyle(
+        UpdateElementsStyle(
           elementIds: [filterId],
           filterType: CanvasFilterType.gaussianBlur,
           filterStrength: 0.9,

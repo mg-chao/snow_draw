@@ -2,25 +2,24 @@ import 'dart:math' as math;
 
 import '../../config/draw_config.dart';
 import '../../core/geometry/move_geometry.dart';
-import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../models/interaction_state.dart';
 import '../../models/multi_select_lifecycle.dart';
+import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
-import '../../services/selection_data_computer.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
+import '../../types/element_geometry.dart';
 import '../../types/snap_guides.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
-import '../core/arrow_binding_cleanup.dart';
+import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
 import '../core/edit_modifiers.dart';
 import '../core/edit_operation.dart';
@@ -28,9 +27,9 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
-import '../preview/edit_preview.dart';
+import '../core/standard_finish_mixin.dart';
 
-class MoveOperation extends EditOperation {
+class MoveOperation extends EditOperation with StandardFinishMixin {
   const MoveOperation();
 
   @override
@@ -62,24 +61,33 @@ class MoveOperation extends EditOperation {
       params,
       operationName: 'MoveOperation.createContext',
     );
-    final startBounds = requireSelectionBounds(
-      selectionData: SelectionDataComputer.compute(state),
-      initialSelectionBounds: typedParams.initialSelectionBounds,
+    final data = gatherStandardContextData(
+      state: state,
       operationName: 'MoveOperation.createContext',
+      toSnapshot: (e) => ElementMoveSnapshot(center: e.rect.center),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
     );
-
-    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
-    final elementSnapshots = buildMoveSnapshots(
-      snapshotSelectedElements(state),
+    final selectedIdsAtStart = data.selectedIds;
+    final targetElements = _resolveTargetElements(state, selectedIdsAtStart);
+    final referenceElements = resolveReferenceElements(
+      state,
+      selectedIdsAtStart,
+    );
+    final snapBounds = _resolveSnapBounds(
+      selectedElements: targetElements,
+      fallback: data.startBounds,
     );
 
     return MoveEditContext(
       startPosition: position,
-      startBounds: startBounds,
+      startBounds: data.startBounds,
       selectedIdsAtStart: selectedIdsAtStart,
-      selectionVersion: state.domain.selection.selectionVersion,
-      elementsVersion: state.domain.document.elementsVersion,
-      elementSnapshots: elementSnapshots,
+      selectionVersion: data.selectionVersion,
+      elementsVersion: data.elementsVersion,
+      elementSnapshots: data.elementSnapshots,
+      snapBoundsAtStart: snapBounds,
+      referenceElements: List<ElementState>.unmodifiable(referenceElements),
+      targetElements: List<ElementState>.unmodifiable(targetElements),
     );
   }
 
@@ -121,8 +129,9 @@ class MoveOperation extends EditOperation {
         snappingMode == SnappingMode.object &&
         (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
 
+    final baseSnapBounds = typedContext.snapBounds;
+
     if (shouldGridSnap) {
-      final baseSnapBounds = _resolveSnapBounds(state, typedContext);
       final targetRect = baseSnapBounds.translate(
         DrawPoint(x: displacement.dx, y: displacement.dy),
       );
@@ -138,31 +147,26 @@ class MoveOperation extends EditOperation {
       final zoom = state.application.view.camera.zoom;
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       final snapDistance = snapConfig.distance / effectiveZoom;
-      final baseSnapBounds = _resolveSnapBounds(state, typedContext);
       final targetRect = baseSnapBounds.translate(
         DrawPoint(x: displacement.dx, y: displacement.dy),
       );
-      final referenceElements = _resolveReferenceElements(
-        state,
-        typedContext.selectedIdsAtStart,
-      );
-      final targetElements = _resolveTargetElements(
-        state,
-        typedContext.selectedIdsAtStart,
-      );
-      final result = objectSnapService.snapMove(
-        targetRect: targetRect,
-        referenceElements: referenceElements,
-        snapDistance: snapDistance,
-        targetElements: targetElements.isEmpty ? null : targetElements,
-        targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
-      );
-      snappedDx += result.dx;
-      snappedDy += result.dy;
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
+      final referenceElements = typedContext.referenceElements;
+      if (referenceElements.isNotEmpty) {
+        final targetElements = typedContext.targetElements;
+        final result = objectSnapService.snapMove(
+          targetRect: targetRect,
+          referenceElements: referenceElements,
+          snapDistance: snapDistance,
+          targetElements: targetElements.isEmpty ? null : targetElements,
+          targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
+          enablePointSnaps: snapConfig.enablePointSnaps,
+          enableGapSnaps: snapConfig.enableGapSnaps,
+        );
+        snappedDx += result.dx;
+        snappedDy += result.dy;
+        if (snapConfig.showGuides) {
+          snapGuides = result.guides;
+        }
       }
     }
 
@@ -181,143 +185,54 @@ class MoveOperation extends EditOperation {
   }) => MoveTransform.zero;
 
   @override
-  DrawState finish({
+  EditComputedResult? computeResult({
     required DrawState state,
     required EditContext context,
     required EditTransform transform,
   }) {
     final typedContext = requireContext<MoveEditContext>(
       context,
-      operationName: 'MoveOperation.finish',
+      operationName: 'MoveOperation.computeResult',
     );
     final typedTransform = requireTransform<MoveTransform>(
       transform,
-      operationName: 'MoveOperation.finish',
+      operationName: 'MoveOperation.computeResult',
     );
-    final result = _compute(
-      state: state,
+    if (EditValidation.shouldSkipCompute(
       context: typedContext,
       transform: typedTransform,
-    );
-    if (result == null) {
-      return state.copyWith(application: state.application.toIdle());
-    }
-
-    final newElements = EditApply.replaceElementsById(
-      elements: state.domain.document.elements,
-      replacementsById: result.updatedElements,
-    );
-
-    // Update multi-select overlay state after committing a move.
-    final newOverlay = typedContext.isMultiSelect
-        ? MultiSelectLifecycle.onMoveFinished(
-            state.application.selectionOverlay,
-            newBounds: result.multiSelectBounds!,
-          )
-        : state.application.selectionOverlay;
-
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
-    );
-    final nextApplication = state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: newOverlay,
-    );
-
-    return state.copyWith(domain: nextDomain, application: nextApplication);
-  }
-
-  @override
-  EditPreview buildPreview({
-    required DrawState state,
-    required EditContext context,
-    required EditTransform transform,
-  }) {
-    final typedContext = requireContext<MoveEditContext>(
-      context,
-      operationName: 'MoveOperation.buildPreview',
-    );
-    final typedTransform = requireTransform<MoveTransform>(
-      transform,
-      operationName: 'MoveOperation.buildPreview',
-    );
-    final result = _compute(
-      state: state,
-      context: typedContext,
-      transform: typedTransform,
-    );
-    if (result == null) {
-      return EditPreview.none;
-    }
-
-    return buildEditPreview(
-      state: state,
-      context: typedContext,
-      previewElementsById: result.updatedElements,
-      multiSelectBounds: result.multiSelectBounds,
-    );
-  }
-
-  EditComputedResult? _compute({
-    required DrawState state,
-    required MoveEditContext context,
-    required MoveTransform transform,
-  }) {
-    if (!EditValidation.isValidContext(context) ||
-        !EditValidation.isValidBounds(context.startBounds)) {
-      return null;
-    }
-    if (transform.isIdentity) {
+    )) {
       return null;
     }
 
     final updatedById = EditApply.applyMoveToElements(
-      snapshots: context.elementSnapshots,
-      selectedIds: context.selectedIdsAtStart,
-      dx: transform.dx,
-      dy: transform.dy,
+      snapshots: typedContext.elementSnapshots,
+      selectedIds: typedContext.selectedIdsAtStart,
+      dx: typedTransform.dx,
+      dy: typedTransform.dy,
       currentElementsById: state.domain.document.elementMap,
     );
-    if (updatedById.isEmpty) {
-      return null;
-    }
 
-    final unboundMovedArrows = unbindArrowLikeElements(
-      transformedElements: updatedById,
-      baseElements: state.domain.document.elementMap,
-    );
-    if (unboundMovedArrows.isNotEmpty) {
-      updatedById.addAll(unboundMovedArrows);
-    }
-
-    final bindingUpdates = ArrowBindingResolver.instance.resolve(
-      baseElements: state.domain.document.elementMap,
-      updatedElements: updatedById,
-      changedElementIds: updatedById.keys.toSet(),
-      document: state.domain.document,
-    );
-    if (bindingUpdates.isNotEmpty) {
-      updatedById.addAll(bindingUpdates);
-    }
-
-    final translatedBounds = context.startBounds.translate(
-      DrawPoint(x: transform.dx, y: transform.dy),
+    final translatedBounds = typedContext.startBounds.translate(
+      DrawPoint(x: typedTransform.dx, y: typedTransform.dy),
     );
 
-    return EditComputedResult(
-      updatedElements: updatedById,
-      multiSelectBounds: context.isMultiSelect ? translatedBounds : null,
+    return EditComputePipeline.finalize(
+      state: state,
+      updatedById: updatedById,
+      multiSelectBounds: typedContext.isMultiSelect ? translatedBounds : null,
     );
   }
 
-  List<ElementState> _resolveReferenceElements(
-    DrawState state,
-    Set<String> selectedIds,
-  ) => state.domain.document.elements
-      .where(
-        (element) => element.opacity > 0 && !selectedIds.contains(element.id),
-      )
-      .toList();
+  @override
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
+    required EditContext context,
+  }) => MultiSelectLifecycle.onMoveFinished(
+    current,
+    newBounds: result.multiSelectBounds!,
+  );
 
   List<ElementState> _resolveTargetElements(
     DrawState state,
@@ -334,33 +249,24 @@ class MoveOperation extends EditOperation {
     ];
   }
 
-  DrawRect _resolveSnapBounds(DrawState state, MoveEditContext context) {
-    final selectedIds = context.selectedIdsAtStart;
-    if (selectedIds.isEmpty) {
-      return context.startBounds;
+  DrawRect _resolveSnapBounds({
+    required List<ElementState> selectedElements,
+    required DrawRect fallback,
+  }) {
+    if (selectedElements.isEmpty) {
+      return fallback;
     }
 
     var minX = double.infinity;
     var minY = double.infinity;
     var maxX = double.negativeInfinity;
     var maxY = double.negativeInfinity;
-    var hasElement = false;
-
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element == null) {
-        continue;
-      }
+    for (final element in selectedElements) {
       final aabb = SelectionCalculator.computeElementWorldAabb(element);
       minX = math.min(minX, aabb.minX);
       minY = math.min(minY, aabb.minY);
       maxX = math.max(maxX, aabb.maxX);
       maxY = math.max(maxY, aabb.maxY);
-      hasElement = true;
-    }
-
-    if (!hasElement) {
-      return context.startBounds;
     }
 
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);

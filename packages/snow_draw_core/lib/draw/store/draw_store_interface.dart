@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../actions/draw_actions.dart';
@@ -26,6 +28,17 @@ abstract interface class DrawStore implements StateProvider {
   DrawConfig get config;
   Stream<DrawConfig> get configStream;
   Stream<DrawEvent> get eventStream;
+
+  /// Returns a typed event stream for [T].
+  Stream<T> eventStreamOf<T extends DrawEvent>();
+
+  /// Registers a typed event listener for [T].
+  StreamSubscription<T> onEvent<T extends DrawEvent>(
+    void Function(T event) handler, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  });
   Future<void> call(DrawAction action);
 
   Future<void> dispatch(DrawAction action);
@@ -44,11 +57,16 @@ abstract interface class DrawStore implements StateProvider {
   /// [selector] selects data from the state.
   /// [listener] is invoked when the selected data changes.
   /// [equals] optionally overrides equality; defaults to selector.equals.
+  /// [changeTypes] optionally narrows when the selector is re-evaluated.
+  ///
+  /// Passing `null` keeps the legacy behavior and evaluates on all tracked
+  /// state changes.
   ///
   /// Returns a callback to unsubscribe.
   VoidCallback select<T>(
     StateSelector<DrawState, T> selector,
     StateChangeListener<T> listener, {
     bool Function(T, T)? equals,
+    Set<DrawStateChange>? changeTypes,
   });
 }

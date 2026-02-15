@@ -37,6 +37,10 @@ abstract class DrawAction with HistoryPolicyProvider {
   String toString() => runtimeType.toString();
 }
 
+List<String> _freezeElementIds(List<String> elementIds) => elementIds.isEmpty
+    ? const <String>[]
+    : List<String>.unmodifiable(elementIds);
+
 // ============================================================================
 // Selection actions
 // ============================================================================
@@ -175,7 +179,8 @@ class CancelCreateElement extends DrawAction {
 }
 
 class DeleteElements extends DrawAction {
-  const DeleteElements({required this.elementIds});
+  DeleteElements({required List<String> elementIds})
+    : elementIds = _freezeElementIds(elementIds);
   final List<String> elementIds;
 
   @override
@@ -189,11 +194,11 @@ class DeleteElements extends DrawAction {
 }
 
 class DuplicateElements extends DrawAction {
-  const DuplicateElements({
-    required this.elementIds,
+  DuplicateElements({
+    required List<String> elementIds,
     this.offsetX = 10.0,
     this.offsetY = 10.0,
-  });
+  }) : elementIds = _freezeElementIds(elementIds);
   final List<String> elementIds;
   final double offsetX;
   final double offsetY;
@@ -226,10 +231,10 @@ class ChangeElementZIndex extends DrawAction {
 }
 
 class ChangeElementsZIndex extends DrawAction {
-  const ChangeElementsZIndex({
-    required this.elementIds,
+  ChangeElementsZIndex({
+    required List<String> elementIds,
     required this.operation,
-  });
+  }) : elementIds = _freezeElementIds(elementIds);
   final List<String> elementIds;
   final ZIndexOperation operation;
 
@@ -250,8 +255,8 @@ class ChangeElementsZIndex extends DrawAction {
 enum ZIndexOperation { bringToFront, sendToBack, bringForward, sendBackward }
 
 class UpdateElementsStyle extends DrawAction {
-  const UpdateElementsStyle({
-    required this.elementIds,
+  UpdateElementsStyle({
+    required List<String> elementIds,
     this.color,
     this.fillColor,
     this.strokeWidth,
@@ -272,7 +277,7 @@ class UpdateElementsStyle extends DrawAction {
     this.textStrokeWidth,
     this.highlightShape,
     this.serialNumber,
-  });
+  }) : elementIds = _freezeElementIds(elementIds);
 
   final List<String> elementIds;
   final Color? color;
@@ -311,7 +316,8 @@ class UpdateElementsStyle extends DrawAction {
 }
 
 class CreateSerialNumberTextElements extends DrawAction implements Recordable {
-  const CreateSerialNumberTextElements({required this.elementIds});
+  CreateSerialNumberTextElements({required List<String> elementIds})
+    : elementIds = _freezeElementIds(elementIds);
 
   final List<String> elementIds;
 

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:snow_draw_core/draw/elements/core/element_data.dart';
+import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
@@ -13,7 +15,7 @@ import 'package:snow_draw_core/ui/canvas/draw_canvas.dart';
 
 import '../tool_controller.dart';
 
-class CanvasLayer extends StatefulWidget {
+class CanvasLayer extends StatelessWidget {
   const CanvasLayer({
     required this.size,
     required this.store,
@@ -26,9 +28,6 @@ class CanvasLayer extends StatefulWidget {
   final ToolController toolController;
 
   @override
-  State<CanvasLayer> createState() => _CanvasLayerState();
-
-  @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
@@ -38,33 +37,26 @@ class CanvasLayer extends StatefulWidget {
         DiagnosticsProperty<ToolController>('toolController', toolController),
       );
   }
-}
 
-class _CanvasLayerState extends State<CanvasLayer> {
+  static const Map<ToolType, ElementTypeId<ElementData>> _toolTypeIds = {
+    ToolType.rectangle: RectangleData.typeIdToken,
+    ToolType.highlight: HighlightData.typeIdToken,
+    ToolType.filter: FilterData.typeIdToken,
+    ToolType.arrow: ArrowData.typeIdToken,
+    ToolType.line: LineData.typeIdToken,
+    ToolType.freeDraw: FreeDrawData.typeIdToken,
+    ToolType.text: TextData.typeIdToken,
+    ToolType.serialNumber: SerialNumberData.typeIdToken,
+  };
+
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ToolType>(
     // Canvas owns store subscriptions; this layer only reacts to tool changes.
-    valueListenable: widget.toolController,
+    valueListenable: toolController,
     builder: (context, tool, _) => DrawCanvas(
-      size: widget.size,
-      store: widget.store,
-      currentToolTypeId: tool == ToolType.rectangle
-          ? RectangleData.typeIdToken
-          : tool == ToolType.highlight
-          ? HighlightData.typeIdToken
-          : tool == ToolType.filter
-          ? FilterData.typeIdToken
-          : tool == ToolType.arrow
-          ? ArrowData.typeIdToken
-          : tool == ToolType.line
-          ? LineData.typeIdToken
-          : tool == ToolType.freeDraw
-          ? FreeDrawData.typeIdToken
-          : tool == ToolType.text
-          ? TextData.typeIdToken
-          : tool == ToolType.serialNumber
-          ? SerialNumberData.typeIdToken
-          : null,
+      size: size,
+      store: store,
+      currentToolTypeId: _toolTypeIds[tool],
     ),
   );
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
@@ -61,7 +62,7 @@ class ActionProcessor {
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
   final MiddlewarePipeline _pipeline;
-  final List<_DispatchTask> _queue = [];
+  final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
 
@@ -74,6 +75,23 @@ class ActionProcessor {
 
   Future<void> dispatch(DrawAction action) =>
       _enqueue(() => _processWithExplicitCancel(action));
+
+  void syncHistoryAvailability({bool emitIfChanged = false}) {
+    final canUndo = _services.historyManager.canUndo;
+    final canRedo = _services.historyManager.canRedo;
+    final changed = canUndo != _lastCanUndo || canRedo != _lastCanRedo;
+
+    _lastCanUndo = canUndo;
+    _lastCanRedo = canRedo;
+
+    if (!emitIfChanged || !changed) {
+      return;
+    }
+
+    _services.eventBus.emitLazy(
+      () => HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
+    );
+  }
 
   void dispose() {
     if (_isDisposed) {
@@ -95,7 +113,7 @@ class ActionProcessor {
     }
 
     final queued = _DispatchTask(task);
-    _queue.add(queued);
+    _queue.addLast(queued);
 
     if (!_isProcessing) {
       unawaited(_drainQueue());
@@ -108,7 +126,7 @@ class ActionProcessor {
     _isProcessing = true;
     try {
       while (_queue.isNotEmpty) {
-        final next = _queue.removeAt(0);
+        final next = _queue.removeFirst();
         await next.run();
       }
     } finally {
@@ -312,8 +330,8 @@ class ActionProcessor {
           'traceId': traceId,
         });
 
-    _services.eventBus.emit(
-      ErrorEvent(
+    _services.eventBus.emitLazy(
+      () => ErrorEvent(
         message:
             'Dispatch ${action.runtimeType} failed '
             '(traceId: $traceId, source: $source)',
@@ -332,8 +350,8 @@ class ActionProcessor {
     final nextInteraction = nextState.application.interaction;
 
     if (prevInteraction is! EditingState && nextInteraction is EditingState) {
-      _services.eventBus.emit(
-        EditSessionStartedEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionStartedEvent(
           sessionId: nextInteraction.sessionId,
           operationId: nextInteraction.operationId,
         ),
@@ -343,8 +361,8 @@ class ActionProcessor {
 
     if (prevInteraction is EditingState && nextInteraction is EditingState) {
       if (prevInteraction.sessionId == nextInteraction.sessionId) {
-        _services.eventBus.emit(
-          EditSessionUpdatedEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionUpdatedEvent(
             sessionId: nextInteraction.sessionId,
             operationId: nextInteraction.operationId,
           ),
@@ -352,15 +370,15 @@ class ActionProcessor {
         return;
       }
 
-      _services.eventBus.emit(
-        EditSessionCancelledEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionCancelledEvent(
           sessionId: prevInteraction.sessionId,
           operationId: prevInteraction.operationId,
           reason: EditCancelReason.newEditStarted,
         ),
       );
-      _services.eventBus.emit(
-        EditSessionStartedEvent(
+      _services.eventBus.emitLazy(
+        () => EditSessionStartedEvent(
           sessionId: nextInteraction.sessionId,
           operationId: nextInteraction.operationId,
         ),
@@ -370,15 +388,15 @@ class ActionProcessor {
 
     if (prevInteraction is EditingState && nextInteraction is! EditingState) {
       if (action is FinishEdit) {
-        _services.eventBus.emit(
-          EditSessionFinishedEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionFinishedEvent(
             sessionId: prevInteraction.sessionId,
             operationId: prevInteraction.operationId,
           ),
         );
       } else {
-        _services.eventBus.emit(
-          EditSessionCancelledEvent(
+        _services.eventBus.emitLazy(
+          () => EditSessionCancelledEvent(
             sessionId: prevInteraction.sessionId,
             operationId: prevInteraction.operationId,
             reason: _resolveCancelReason(action),
@@ -394,8 +412,8 @@ class ActionProcessor {
   }) {
     if (previousState.domain.document.elementsVersion !=
         nextState.domain.document.elementsVersion) {
-      _services.eventBus.emit(
-        DocumentChangedEvent(
+      _services.eventBus.emitLazy(
+        () => DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
           elementCount: nextState.domain.document.elements.length,
         ),
@@ -404,26 +422,26 @@ class ActionProcessor {
 
     if (previousState.domain.selection.selectionVersion !=
         nextState.domain.selection.selectionVersion) {
-      _services.eventBus.emit(
-        SelectionChangedEvent(
-          selectedIds: Set<String>.unmodifiable(
-            nextState.domain.selection.selectedIds,
-          ),
+      _services.eventBus.emitLazy(
+        () => SelectionChangedEvent(
+          selectedIds: nextState.domain.selection.selectedIds,
           selectionVersion: nextState.domain.selection.selectionVersion,
         ),
       );
     }
 
     if (previousState.application.view != nextState.application.view) {
-      _services.eventBus.emit(
-        ViewChangedEvent(camera: nextState.application.view.camera),
+      _services.eventBus.emitLazy(
+        () => ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
     if (previousState.application.interaction !=
         nextState.application.interaction) {
-      _services.eventBus.emit(
-        InteractionChangedEvent(interaction: nextState.application.interaction),
+      _services.eventBus.emitLazy(
+        () => InteractionChangedEvent(
+          interaction: nextState.application.interaction,
+        ),
       );
     }
 
@@ -431,16 +449,7 @@ class ActionProcessor {
   }
 
   void _emitHistoryAvailabilityIfNeeded() {
-    final canUndo = _services.historyManager.canUndo;
-    final canRedo = _services.historyManager.canRedo;
-    if (canUndo == _lastCanUndo && canRedo == _lastCanRedo) {
-      return;
-    }
-    _lastCanUndo = canUndo;
-    _lastCanRedo = canRedo;
-    _services.eventBus.emit(
-      HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
-    );
+    syncHistoryAvailability(emitIfChanged: true);
   }
 
   EditCancelReason _resolveCancelReason(DrawAction action) => switch (action) {

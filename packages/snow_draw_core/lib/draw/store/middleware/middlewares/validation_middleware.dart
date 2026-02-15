@@ -82,8 +82,8 @@ class ValidationMiddleware extends MiddlewareBase {
           'reason': message,
           'traceId': context.traceId,
         });
-        context.drawContext.eventBus?.emit(
-          ValidationFailedEvent(
+        context.drawContext.eventBus?.emitLazy(
+          () => ValidationFailedEvent(
             action: context.action.runtimeType.toString(),
             reason: message,
             details: {'traceId': context.traceId},

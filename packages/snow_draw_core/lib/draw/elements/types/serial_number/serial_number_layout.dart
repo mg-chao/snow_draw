@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../../utils/lru_cache.dart';
 import 'serial_number_data.dart';
 
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
@@ -65,7 +66,7 @@ class _TextLayoutKey {
 /// text-shaping inputs (number, fontSize, fontFamily, locale) have not
 /// changed. Color is applied as a post-layout override so it does not
 /// participate in the cache key.
-final _textLayoutCache = _LruCache<_TextLayoutKey, SerialNumberTextLayout>(
+final _textLayoutCache = LruCache<_TextLayoutKey, SerialNumberTextLayout>(
   maxEntries: _textLayoutCacheMaxEntries,
 );
 
@@ -227,27 +228,4 @@ Rect? _resolveVisualBounds(TextPainter painter, String text) {
     bottom = math.max(bottom, box.bottom);
   }
   return Rect.fromLTRB(left, top, right, bottom);
-}
-
-class _LruCache<K, V> {
-  _LruCache({required this.maxEntries});
-
-  final int maxEntries;
-  final _cache = <K, V>{};
-
-  V? get(K key) {
-    final value = _cache.remove(key);
-    if (value != null) {
-      _cache[key] = value;
-    }
-    return value;
-  }
-
-  void put(K key, V value) {
-    _cache.remove(key);
-    _cache[key] = value;
-    if (_cache.length > maxEntries) {
-      _cache.remove(_cache.keys.first);
-    }
-  }
 }

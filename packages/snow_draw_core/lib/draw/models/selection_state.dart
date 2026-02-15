@@ -47,11 +47,28 @@ class SelectionState {
   bool get isSingleSelect => selectedIds.length == 1;
   int get count => selectedIds.length;
 
-  SelectionState copyWith({Set<String>? selectedIds, int? selectionVersion}) =>
-      SelectionState(
-        selectedIds: selectedIds ?? this.selectedIds,
-        selectionVersion: selectionVersion ?? this.selectionVersion,
-      );
+  SelectionState copyWith({Set<String>? selectedIds, int? selectionVersion}) {
+    final nextSelectedIds = selectedIds == null
+        ? this.selectedIds
+        : identical(selectedIds, this.selectedIds)
+        ? this.selectedIds
+        : _freezeSelectedIds(selectedIds);
+    final hasSelectionChanged = !_setEquals(this.selectedIds, nextSelectedIds);
+    final nextSelectionVersion =
+        selectionVersion ??
+        (hasSelectionChanged
+            ? this.selectionVersion + 1
+            : this.selectionVersion);
+
+    if (!hasSelectionChanged && nextSelectionVersion == this.selectionVersion) {
+      return this;
+    }
+
+    return SelectionState(
+      selectedIds: nextSelectedIds,
+      selectionVersion: nextSelectionVersion,
+    );
+  }
 
   /// Sets single selection.
   SelectionState withSelected(String elementId) =>
@@ -95,14 +112,17 @@ class SelectionState {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is SelectionState &&
-          _setEquals(selectedIds, other.selectedIds) &&
-          other.selectionVersion == selectionVersion;
+          other.selectionVersion == selectionVersion &&
+          _setEquals(selectedIds, other.selectedIds);
 
   @override
   int get hashCode =>
       Object.hash(Object.hashAllUnordered(selectedIds), selectionVersion);
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -121,12 +141,23 @@ class SelectionState {
       'version: $selectionVersion)';
 
   SelectionState _withSelectedIds(Set<String> ids) {
-    if (_setEquals(selectedIds, ids)) {
+    if (identical(selectedIds, ids)) {
+      return this;
+    }
+    final frozenIds = _freezeSelectedIds(ids);
+    if (_setEquals(selectedIds, frozenIds)) {
       return this;
     }
     return SelectionState(
-      selectedIds: ids,
+      selectedIds: frozenIds,
       selectionVersion: selectionVersion + 1,
     );
+  }
+
+  static Set<String> _freezeSelectedIds(Set<String> ids) {
+    if (ids.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(ids);
   }
 }

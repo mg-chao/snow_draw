@@ -1,8 +1,9 @@
 name: Deploy Web to GitHub Pages
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,11 +32,8 @@ jobs:
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v4
 
-      - name: Install Melos
-        run: dart pub global activate melos
-
       - name: Bootstrap workspace
-        run: melos bootstrap
+        run: dart run melos bootstrap
 
       - name: Build Web app
         run: |
@@ -48,13 +47,14 @@ jobs:
           flutter build web --release --base-href "$base_href"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: apps/snow_draw/build/web
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

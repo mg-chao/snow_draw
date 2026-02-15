@@ -26,8 +26,8 @@ DrawState _handleSelectElement(
       'action': action.runtimeType.toString(),
       'elementId': action.elementId,
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
+    context.eventBus?.emitLazy(
+      () => ValidationFailedEvent(
         action: action.runtimeType.toString(),
         reason: 'Element not found',
         details: {'elementId': action.elementId},

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
+import '../../../utils/stroke_pattern_utils.dart';
 import 'free_draw_data.dart';
 import 'free_draw_path_utils.dart';
 
@@ -26,7 +28,8 @@ class FreeDrawVisualEntry {
     required this.pointCount,
     required this.path,
     required this.strokePath,
-    required this.dottedPath,
+    this.dotPositions,
+    this.dotRadius = 0,
   });
 
   final FreeDrawData data;
@@ -40,8 +43,15 @@ class FreeDrawVisualEntry {
   /// Dashed stroke path (null when not dashed).
   final Path? strokePath;
 
-  /// Dotted stroke path (null when not dotted).
-  final Path? dottedPath;
+  /// Pre-computed dot center positions for dotted strokes.
+  ///
+  /// Stored as a flat [Float32List] of (x, y) pairs for use with
+  /// [Canvas.drawRawPoints], which batches all dots into a single
+  /// GPU draw call instead of tessellating individual ovals.
+  final Float32List? dotPositions;
+
+  /// Radius of each dot for dotted strokes.
+  final double dotRadius;
 
   /// Lazily computed flattened points for hit testing.
   ///
@@ -173,7 +183,6 @@ class FreeDrawVisualCache {
         pointCount: localPoints.length,
         path: Path(),
         strokePath: null,
-        dottedPath: null,
       );
     }
 
@@ -195,7 +204,8 @@ class FreeDrawVisualCache {
     basePath ??= buildFreeDrawSmoothPath(localPoints);
 
     Path? strokePath;
-    Path? dottedPath;
+    Float32List? dotPositions;
+    double dotRadius = 0;
 
     if (data.strokeWidth > 0) {
       switch (data.strokeStyle) {
@@ -204,11 +214,11 @@ class FreeDrawVisualCache {
         case StrokeStyle.dashed:
           final dashLength = data.strokeWidth * 2.0;
           final gapLength = dashLength * 1.2;
-          strokePath = _buildDashedPath(basePath, dashLength, gapLength);
+          strokePath = buildDashedPath(basePath, dashLength, gapLength);
         case StrokeStyle.dotted:
           final dotSpacing = data.strokeWidth * 2.0;
-          final dotRadius = data.strokeWidth * 0.5;
-          dottedPath = _buildDottedPath(basePath, dotSpacing, dotRadius);
+          dotRadius = data.strokeWidth * 0.5;
+          dotPositions = buildDotPositions(basePath, dotSpacing);
       }
     }
 
@@ -219,7 +229,8 @@ class FreeDrawVisualCache {
       pointCount: localPoints.length,
       path: basePath,
       strokePath: strokePath,
-      dottedPath: dottedPath,
+      dotPositions: dotPositions,
+      dotRadius: dotRadius,
     );
   }
 }
@@ -227,36 +238,6 @@ class FreeDrawVisualCache {
 // ============================================================
 // Path helpers (shared with cache)
 // ============================================================
-
-Path _buildDashedPath(Path basePath, double dashLength, double gapLength) {
-  final dashed = Path();
-  for (final metric in basePath.computeMetrics()) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final next = math.min(distance + dashLength, metric.length);
-      dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-      distance = next + gapLength;
-    }
-  }
-  return dashed;
-}
-
-Path _buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
-  final dotted = Path();
-  for (final metric in basePath.computeMetrics()) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent != null) {
-        dotted.addOval(
-          Rect.fromCircle(center: tangent.position, radius: dotRadius),
-        );
-      }
-      distance += dotSpacing;
-    }
-  }
-  return dotted;
-}
 
 List<Offset> _flattenPath(Path path, double step) {
   if (step <= 0) {
@@ -272,7 +253,11 @@ List<Offset> _flattenPath(Path path, double step) {
     totalPathLength += metric.length;
   }
   final needed = (totalPathLength / step).ceil() + 1;
-  final maxPoints = needed.clamp(512, 2048);
+  // Cap at 4096 to bound memory for extremely long paths while
+  // preserving hit-test precision for typical strokes. The previous
+  // clamp(512, 2048) wasted the min bound (the list grows on demand)
+  // and was too tight on the max for complex drawings.
+  final maxPoints = needed.clamp(2, 4096);
 
   final flattened = <Offset>[];
   for (final metric in metrics) {

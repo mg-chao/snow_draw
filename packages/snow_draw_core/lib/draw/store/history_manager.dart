@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
-import '../elements/core/element_type_id.dart';
 import '../elements/core/unknown_element_data.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
@@ -67,7 +66,22 @@ class HistoryManager {
     this.maxBranchPoints = 8,
     LogService? logService,
   }) : _log = logService?.history {
+    if (maxHistoryLength < 1) {
+      throw ArgumentError.value(
+        maxHistoryLength,
+        'maxHistoryLength',
+        'must be greater than or equal to 1',
+      );
+    }
+    if (maxBranchPoints < 0) {
+      throw ArgumentError.value(
+        maxBranchPoints,
+        'maxBranchPoints',
+        'must be greater than or equal to 0',
+      );
+    }
     _root = _HistoryNode.root(_nextNodeId++);
+    _normalizeRootPayload();
     _current = _root;
   }
   final int maxHistoryLength;
@@ -190,6 +204,7 @@ class HistoryManager {
     });
     _nextNodeId = 0;
     _root = _HistoryNode.root(_nextNodeId++);
+    _normalizeRootPayload();
     _current = _root;
   }
 
@@ -201,8 +216,12 @@ class HistoryManager {
   void restore(HistoryManagerSnapshot snapshot) {
     final clone = _cloneTree(snapshot._root);
     _root = clone.root;
+    _normalizeRootPayload();
     _current = clone.byId[snapshot._currentId] ?? _root;
-    _nextNodeId = snapshot._nextNodeId;
+    _nextNodeId = _resolveNextNodeId(
+      requestedNextNodeId: snapshot._nextNodeId,
+      minNextNodeId: _maxNodeId(_root) + 1,
+    );
   }
 
   /// Returns the path from root to the given node.
@@ -263,29 +282,19 @@ class HistoryManager {
   ///
   /// ## Branch Point Preservation
   ///
-  /// When [maxBranchPoints] > 0, the algorithm identifies nodes with multiple
-  /// children (branch points) along the current path and ensures the most
-  /// recent [maxBranchPoints] branches are preserved.
+  /// When [maxBranchPoints] > 0, pruning can move the new root slightly
+  /// earlier to preserve nearby branch points. The move-back window is
+  /// capped to [maxBranchPoints] steps before the basic pruning boundary.
   ///
-  /// **Example:**
-  /// ``` md
-  /// Path: [root, n1, n2*, n3, n4*, n5, n6, n7, n8, current]
-  ///       (* = branch point with multiple children)
-  ///
-  /// maxHistoryLength = 6, maxBranchPoints = 2
-  /// Basic pruning would make n4 the new root (depth 6)
-  /// But n4 is a branch point, so we move back to n2 to preserve both branches
-  /// Final newRoot = n2 (preserves branches at n2 and n4)
-  /// ```
+  /// This keeps memory bounded while retaining recent branching context:
+  /// max depth <= maxHistoryLength + maxBranchPoints.
   ///
   /// ## Implementation Steps
   ///
-  /// 1. Calculate basic newRoot by counting back [maxHistoryLength] steps
-  /// 2. Find all branch points along the current path
-  /// 3. Take the most recent [maxBranchPoints] branch points
-  /// 4. Find the earliest branch point that would be pruned
-  /// 5. Move newRoot back to preserve that branch point
-  /// 6. Detach newRoot from its parent to make it the new tree root
+  /// 1. Calculate basic newRoot index from [maxHistoryLength]
+  /// 2. Scan backward up to [maxBranchPoints] steps
+  /// 3. Move newRoot to include recent branch points in that window
+  /// 4. Detach newRoot from parent to make it the new root
   void _pruneIfNeeded() {
     final path = _pathFromRoot(_current);
     final depth = path.length - 1;
@@ -293,64 +302,50 @@ class HistoryManager {
       return;
     }
 
-    // Step 1: Calculate basic newRoot (without branch preservation).
-    final stepsToMove = depth - maxHistoryLength;
-    var newRoot = _current;
-    for (var i = 0; i < stepsToMove; i++) {
-      if (newRoot.parent == null) {
-        break;
-      }
-      newRoot = newRoot.parent!;
-    }
+    final candidateIndex = depth - maxHistoryLength;
+    var resolvedIndex = candidateIndex;
 
-    // Step 2-5: Adjust newRoot to preserve recent branch points.
-    if (maxBranchPoints > 0) {
-      // Step 2: Find all branch points along the current path.
-      final branchPoints = <_HistoryNode>[];
-      for (final node in path) {
-        if (node.children.length > 1) {
-          branchPoints.add(node);
+    if (maxBranchPoints > 0 && candidateIndex > 0) {
+      final earliestAllowedIndex = candidateIndex - maxBranchPoints < 0
+          ? 0
+          : candidateIndex - maxBranchPoints;
+      var preservedBranchCount = 0;
+
+      for (
+        var index = candidateIndex - 1;
+        index >= earliestAllowedIndex && preservedBranchCount < maxBranchPoints;
+        index--
+      ) {
+        if (path[index].children.length <= 1) {
+          continue;
         }
-      }
-
-      if (branchPoints.isNotEmpty) {
-        // Build index for quick path position lookup.
-        final pathIndex = <_HistoryNode, int>{};
-        for (var i = 0; i < path.length; i++) {
-          pathIndex[path[i]] = i;
-        }
-
-        final candidateIndex = pathIndex[newRoot] ?? 0;
-        var resolvedIndex = candidateIndex;
-
-        // Step 3-4: Find the earliest branch point that would be pruned.
-        // Take the most recent maxBranchPoints branches (reversed order).
-        for (final branchPoint in branchPoints.reversed.take(maxBranchPoints)) {
-          final index = pathIndex[branchPoint];
-          if (index != null && index < resolvedIndex) {
-            // This branch point would be pruned, move newRoot back to preserve
-            // it.
-            resolvedIndex = index;
-          }
-        }
-
-        // Step 5: Update newRoot to the adjusted position.
-        newRoot = path[resolvedIndex];
+        resolvedIndex = index;
+        preservedBranchCount++;
       }
     }
 
-    // Step 6: Detach newRoot from its parent to make it the new tree root.
+    final newRoot = path[resolvedIndex];
     final oldParent = newRoot.parent;
     if (oldParent != null) {
       oldParent.children.remove(newRoot);
-      newRoot.parent = null;
       _root = newRoot;
+      _normalizeRootPayload();
       _log?.debug('History pruned', {
         'newRootId': newRoot.id,
         'depth': depth,
         'maxHistoryLength': maxHistoryLength,
+        'maxBranchPoints': maxBranchPoints,
+        'candidateIndex': candidateIndex,
+        'resolvedIndex': resolvedIndex,
       });
     }
+  }
+
+  void _normalizeRootPayload() {
+    _root
+      ..parent = null
+      ..delta = null
+      ..metadata = null;
   }
 }
 
@@ -539,11 +534,18 @@ class _HistorySnapshotCodec {
 
     final rootId = json['rootId'] as int? ?? 0;
     final currentId = json['currentId'] as int? ?? rootId;
-    final nextNodeId =
-        json['nextNodeId'] as int? ??
-        (byId.isEmpty ? 1 : (byId.keys.reduce((a, b) => a > b ? a : b) + 1));
+    final maxNodeId = byId.isEmpty
+        ? rootId
+        : byId.keys.reduce((a, b) => a > b ? a : b);
+    final nextNodeId = _resolveNextNodeId(
+      requestedNextNodeId: json['nextNodeId'] as int?,
+      minNextNodeId: maxNodeId + 1,
+    );
 
-    final root = byId[rootId] ?? _HistoryNode.root(rootId);
+    final root = (byId[rootId] ?? _HistoryNode.root(rootId))
+      ..parent = null
+      ..delta = null
+      ..metadata = null;
     return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
@@ -568,6 +570,7 @@ class _HistorySnapshotCodec {
       'selectionBefore': _selectionToJson(delta.selectionBefore!),
     if (delta.selectionAfter != null)
       'selectionAfter': _selectionToJson(delta.selectionAfter!),
+    if (delta.reindexZIndices) 'reindexZIndices': true,
   };
 
   HistoryDelta _deltaFromJson(
@@ -625,6 +628,7 @@ class _HistorySnapshotCodec {
       selectionAfter: selectionAfterJson == null
           ? null
           : _selectionFromJson(selectionAfterJson),
+      reindexZIndices: json['reindexZIndices'] as bool? ?? false,
     );
   }
 
@@ -653,8 +657,7 @@ class _HistorySnapshotCodec {
         ? rawData
         : const <String, dynamic>{};
 
-    final typeId = ElementTypeId<ElementData>(type);
-    final definition = elementRegistry.getDefinition(typeId);
+    final definition = elementRegistry.getDefinitionByValue(type);
 
     ElementData data;
 
@@ -779,3 +782,28 @@ class _HistorySnapshotCodec {
 }
 
 final _historySnapshotCodec = _HistorySnapshotCodec();
+
+int _resolveNextNodeId({
+  required int? requestedNextNodeId,
+  required int minNextNodeId,
+}) {
+  final fallback = minNextNodeId < 0 ? 0 : minNextNodeId;
+  final resolved = requestedNextNodeId ?? fallback;
+  if (resolved < fallback) {
+    return fallback;
+  }
+  return resolved;
+}
+
+int _maxNodeId(_HistoryNode root) {
+  var maxId = root.id;
+  final stack = <_HistoryNode>[root];
+  while (stack.isNotEmpty) {
+    final node = stack.removeLast();
+    if (node.id > maxId) {
+      maxId = node.id;
+    }
+    stack.addAll(node.children);
+  }
+  return maxId;
+}

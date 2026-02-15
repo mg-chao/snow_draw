@@ -35,7 +35,7 @@ enum _ElbowEditMode {
 
 /// Result of a perpendicular endpoint adjustment.
 ///
-/// [moved] is true when existing points were shifted; [inserted] is true
+/// `moved` is true when existing points were shifted; `inserted` is true
 /// when new points were added to the path.
 typedef _PerpendicularAdjustment = ({
   List<DrawPoint> points,
@@ -153,13 +153,17 @@ final class _ElbowEditContext {
     required DrawPoint point,
   }) {
     final binding = isStart ? startBinding : endBinding;
-    if (binding == null) return null;
+    if (binding == null) {
+      return null;
+    }
     final heading = ElbowGeometry.resolveBoundHeading(
       binding: binding,
       elementsById: elementsById,
       point: point,
     );
-    if (heading == null) return null;
+    if (heading == null) {
+      return null;
+    }
     return isStart ? heading : heading.opposite;
   }
 }

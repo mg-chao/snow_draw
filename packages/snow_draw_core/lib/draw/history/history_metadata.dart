@@ -8,10 +8,12 @@ class HistoryMetadata {
   HistoryMetadata({
     required this.description,
     required this.recordType,
-    this.affectedElementIds = const {},
+    Set<String> affectedElementIds = const {},
     DateTime? timestamp,
-    this.extra,
-  }) : timestamp = timestamp ?? DateTime.now();
+    Map<String, dynamic>? extra,
+  }) : affectedElementIds = Set<String>.unmodifiable(affectedElementIds),
+       timestamp = timestamp ?? DateTime.now(),
+       extra = extra == null ? null : Map<String, dynamic>.unmodifiable(extra);
 
   factory HistoryMetadata.forEdit({
     required String operationType,

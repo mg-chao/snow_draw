@@ -70,17 +70,39 @@ class GridConfig {
     int? majorLineEvery,
     double? minScreenSpacing,
     double? minRenderSpacing,
-  }) => GridConfig(
-    enabled: enabled ?? this.enabled,
-    size: size ?? this.size,
-    lineColor: lineColor ?? this.lineColor,
-    lineOpacity: lineOpacity ?? this.lineOpacity,
-    majorLineOpacity: majorLineOpacity ?? this.majorLineOpacity,
-    lineWidth: lineWidth ?? this.lineWidth,
-    majorLineEvery: majorLineEvery ?? this.majorLineEvery,
-    minScreenSpacing: minScreenSpacing ?? this.minScreenSpacing,
-    minRenderSpacing: minRenderSpacing ?? this.minRenderSpacing,
-  );
+  }) {
+    final nextEnabled = enabled ?? this.enabled;
+    final nextSize = size ?? this.size;
+    final nextLineColor = lineColor ?? this.lineColor;
+    final nextLineOpacity = lineOpacity ?? this.lineOpacity;
+    final nextMajorLineOpacity = majorLineOpacity ?? this.majorLineOpacity;
+    final nextLineWidth = lineWidth ?? this.lineWidth;
+    final nextMajorLineEvery = majorLineEvery ?? this.majorLineEvery;
+    final nextMinScreenSpacing = minScreenSpacing ?? this.minScreenSpacing;
+    final nextMinRenderSpacing = minRenderSpacing ?? this.minRenderSpacing;
+    if (nextEnabled == this.enabled &&
+        nextSize == this.size &&
+        nextLineColor == this.lineColor &&
+        nextLineOpacity == this.lineOpacity &&
+        nextMajorLineOpacity == this.majorLineOpacity &&
+        nextLineWidth == this.lineWidth &&
+        nextMajorLineEvery == this.majorLineEvery &&
+        nextMinScreenSpacing == this.minScreenSpacing &&
+        nextMinRenderSpacing == this.minRenderSpacing) {
+      return this;
+    }
+    return GridConfig(
+      enabled: nextEnabled,
+      size: nextSize,
+      lineColor: nextLineColor,
+      lineOpacity: nextLineOpacity,
+      majorLineOpacity: nextMajorLineOpacity,
+      lineWidth: nextLineWidth,
+      majorLineEvery: nextMajorLineEvery,
+      minScreenSpacing: nextMinScreenSpacing,
+      minRenderSpacing: nextMinRenderSpacing,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

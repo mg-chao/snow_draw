@@ -1,10 +1,12 @@
+import 'dart:collection';
+
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
-import '../../services/element_index_service.dart';
 import '../../types/draw_point.dart';
 import '../core/reducer_utils.dart';
 
@@ -13,10 +15,89 @@ DrawState handleDeleteElements(
   DeleteElements action,
   ElementReducerDeps _,
 ) {
-  final deleteIds = action.elementIds.toSet();
+  if (action.elementIds.isEmpty) {
+    return state;
+  }
 
-  final updatedSerials = <String, ElementState>{};
-  for (final element in state.domain.document.elements) {
+  final document = state.domain.document;
+  final deleteIds = <String>{};
+  for (final id in action.elementIds) {
+    if (document.getElementById(id) != null) {
+      deleteIds.add(id);
+    }
+  }
+  if (deleteIds.isEmpty) {
+    return state;
+  }
+
+  _expandDeleteIdsForBoundSerialText(
+    elements: document.elements,
+    deleteIds: deleteIds,
+  );
+
+  final updatedElements = <String, ElementState>{};
+  for (final element in document.elements) {
+    if (deleteIds.contains(element.id)) {
+      continue;
+    }
+
+    final serialUpdate = _resolveSerialUnbindUpdate(
+      element: element,
+      deleteIds: deleteIds,
+    );
+    if (serialUpdate != null) {
+      updatedElements[element.id] = serialUpdate;
+      continue;
+    }
+
+    final arrowUpdate = _resolveArrowUnbindUpdate(
+      element: element,
+      deleteIds: deleteIds,
+    );
+    if (arrowUpdate != null) {
+      updatedElements[element.id] = arrowUpdate;
+    }
+  }
+
+  var removedAny = false;
+  final newElements = <ElementState>[];
+  for (final element in document.elements) {
+    if (deleteIds.contains(element.id)) {
+      removedAny = true;
+      continue;
+    }
+    final updated = updatedElements[element.id];
+    newElements.add(updated ?? element);
+  }
+
+  if (!removedAny && updatedElements.isEmpty) {
+    return state;
+  }
+
+  final selection = state.domain.selection.selectedIds;
+  final hasSelectionRemoval = selection.any(deleteIds.contains);
+  final newSelectedIds = hasSelectionRemoval
+      ? selection.where((id) => !deleteIds.contains(id)).toSet()
+      : selection;
+
+  final next = state.copyWith(
+    domain: state.domain.copyWith(
+      document: document.copyWith(elements: newElements),
+    ),
+  );
+  return applySelectionChange(next, newSelectedIds);
+}
+
+void _expandDeleteIdsForBoundSerialText({
+  required Iterable<ElementState> elements,
+  required Set<String> deleteIds,
+}) {
+  if (deleteIds.isEmpty) {
+    return;
+  }
+
+  final serialBindings = <String, List<String>>{};
+  for (final element in elements) {
     final data = element.data;
     if (data is! SerialNumberData) {
       continue;
@@ -25,36 +106,65 @@ DrawState handleDeleteElements(
     if (boundId == null) {
       continue;
     }
-    if (deleteIds.contains(element.id)) {
-      deleteIds.add(boundId);
-      continue;
-    }
-    if (deleteIds.contains(boundId)) {
-      updatedSerials[element.id] = element.copyWith(
-        data: data.copyWith(textElementId: null),
-      );
-    }
+    serialBindings.putIfAbsent(element.id, () => <String>[]).add(boundId);
   }
 
-  final newElements = <ElementState>[];
-  for (final element in state.domain.document.elements) {
-    if (deleteIds.contains(element.id)) {
+  final pending = ListQueue<String>.from(deleteIds);
+  while (pending.isNotEmpty) {
+    final id = pending.removeFirst();
+    final boundIds = serialBindings[id];
+    if (boundIds == null) {
       continue;
     }
-    final updated = updatedSerials[element.id];
-    newElements.add(updated ?? element);
+    for (final boundId in boundIds) {
+      if (deleteIds.add(boundId)) {
+        pending.add(boundId);
+      }
+    }
+  }
+}
+
+ElementState? _resolveSerialUnbindUpdate({
+  required ElementState element,
+  required Set<String> deleteIds,
+}) {
+  final data = element.data;
+  if (data is! SerialNumberData) {
+    return null;
+  }
+  final boundId = data.textElementId;
+  if (boundId == null || !deleteIds.contains(boundId)) {
+    return null;
+  }
+  return element.copyWith(data: data.copyWith(textElementId: null));
+}
+
+ElementState? _resolveArrowUnbindUpdate({
+  required ElementState element,
+  required Set<String> deleteIds,
+}) {
+  final data = element.data;
+  if (data is! ArrowLikeData) {
+    return null;
   }
 
-  final newSelectedIds = state.domain.selection.selectedIds
-      .where((id) => !deleteIds.contains(id))
-      .toSet();
+  final startBinding = data.startBinding;
+  final endBinding = data.endBinding;
+  final clearStart =
+      startBinding != null && deleteIds.contains(startBinding.elementId);
+  final clearEnd =
+      endBinding != null && deleteIds.contains(endBinding.elementId);
+  if (!clearStart && !clearEnd) {
+    return null;
+  }
 
-  final next = state.copyWith(
-    domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
-    ),
+  final nextData = data.copyWith(
+    startBinding: clearStart ? null : startBinding,
+    endBinding: clearEnd ? null : endBinding,
+    startIsSpecial: clearStart ? null : data.startIsSpecial,
+    endIsSpecial: clearEnd ? null : data.endIsSpecial,
   );
-  return applySelectionChange(next, newSelectedIds);
+  return element.copyWith(data: nextData);
 }
 
 DrawState handleDuplicateElements(
@@ -66,8 +176,8 @@ DrawState handleDuplicateElements(
     context.log.store.warning('Duplicate failed: empty selection', {
       'action': action.runtimeType.toString(),
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
+    context.eventBus?.emitLazy(
+      () => ValidationFailedEvent(
         action: action.runtimeType.toString(),
         reason: 'No element ids provided',
       ),
@@ -75,9 +185,10 @@ DrawState handleDuplicateElements(
     return state;
   }
 
-  final index = ElementIndexService(state.domain.document.elements);
-  final idsToDuplicate = <String>{...action.elementIds};
-  for (final id in action.elementIds) {
+  final index = state.domain.document.elementMap;
+  final selectedIds = action.elementIds.toSet();
+  final idsToDuplicate = <String>{...selectedIds};
+  for (final id in selectedIds) {
     final element = index[id];
     final data = element?.data;
     if (data is SerialNumberData) {
@@ -99,8 +210,8 @@ DrawState handleDuplicateElements(
       'action': action.runtimeType.toString(),
       'elementIds': action.elementIds.join(','),
     });
-    context.eventBus?.emit(
-      ValidationFailedEvent(
+    context.eventBus?.emitLazy(
+      () => ValidationFailedEvent(
         action: action.runtimeType.toString(),
         reason: 'No valid elements to duplicate',
         details: {'elementIds': action.elementIds.toList()},
@@ -116,6 +227,7 @@ DrawState handleDuplicateElements(
 
   final newElements = <ElementState>[];
   final newSelectedIds = <String>{};
+  var nextZIndex = resolveNextZIndex(state.domain.document.elements);
 
   for (final element in elementsToDuplicate) {
     final newId = idMap[element.id]!;
@@ -126,15 +238,20 @@ DrawState handleDuplicateElements(
           : idMap[nextData.textElementId!];
       nextData = nextData.copyWith(textElementId: mapped);
     }
+    if (nextData is ArrowLikeData) {
+      nextData = _remapArrowBindings(nextData, idMap);
+    }
     final duplicated = element.copyWith(
       id: newId,
       rect: element.rect.translate(
         DrawPoint(x: action.offsetX, y: action.offsetY),
       ),
+      zIndex: nextZIndex,
       data: nextData,
     );
+    nextZIndex++;
     newElements.add(duplicated);
-    if (action.elementIds.contains(element.id)) {
+    if (selectedIds.contains(element.id)) {
       newSelectedIds.add(newId);
     }
   }
@@ -146,4 +263,41 @@ DrawState handleDuplicateElements(
     ),
   );
   return applySelectionChange(next, newSelectedIds);
+}
+
+/// Remaps arrow/line binding element IDs to their duplicated counterparts.
+///
+/// If a binding target was not duplicated, the binding is cleared (set to
+/// null) so the duplicated arrow does not reference the original element.
+ArrowLikeData _remapArrowBindings(
+  ArrowLikeData data,
+  Map<String, String> idMap,
+) {
+  final startBinding = data.startBinding;
+  final endBinding = data.endBinding;
+  if (startBinding == null && endBinding == null) {
+    return data;
+  }
+
+  final mappedStartId = startBinding == null
+      ? null
+      : idMap[startBinding.elementId];
+  final mappedEndId = endBinding == null ? null : idMap[endBinding.elementId];
+
+  final mappedStart = startBinding == null || mappedStartId == null
+      ? null
+      : startBinding.copyWith(elementId: mappedStartId);
+  final mappedEnd = endBinding == null || mappedEndId == null
+      ? null
+      : endBinding.copyWith(elementId: mappedEndId);
+
+  final clearStartSpecial = startBinding != null && mappedStart == null;
+  final clearEndSpecial = endBinding != null && mappedEnd == null;
+
+  return data.copyWith(
+    startBinding: mappedStart,
+    endBinding: mappedEnd,
+    startIsSpecial: clearStartSpecial ? null : data.startIsSpecial,
+    endIsSpecial: clearEndSpecial ? null : data.endIsSpecial,
+  );
 }

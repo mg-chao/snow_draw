@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../core/dependency_interfaces.dart';
+import '../../../elements/types/arrow/arrow_like_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_layout.dart';
@@ -92,6 +93,9 @@ class TextEditReducer {
     if (interaction is! TextEditingState) {
       return state;
     }
+    if (action.text == interaction.draftData.text) {
+      return state;
+    }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
     final nextRect = _resolveTextRect(
@@ -129,15 +133,20 @@ class TextEditReducer {
           .toList();
       final updatedElements = <ElementState>[];
       for (final element in remainingElements) {
-        final data = element.data;
-        if (data is SerialNumberData &&
-            data.textElementId == interaction.elementId) {
-          updatedElements.add(
-            element.copyWith(data: data.copyWith(textElementId: null)),
-          );
-        } else {
-          updatedElements.add(element);
+        final serialUpdate = _resolveSerialUnbindUpdate(
+          element: element,
+          deletedTextId: interaction.elementId,
+        );
+        if (serialUpdate != null) {
+          updatedElements.add(serialUpdate);
+          continue;
         }
+
+        final arrowUpdate = _resolveArrowUnbindUpdate(
+          element: element,
+          deletedTextId: interaction.elementId,
+        );
+        updatedElements.add(arrowUpdate ?? element);
       }
       final nextDomain = state.domain.copyWith(
         document: state.domain.document.copyWith(elements: updatedElements),
@@ -164,7 +173,7 @@ class TextEditReducer {
         rect: nextRect,
         rotation: 0,
         opacity: interaction.opacity,
-        zIndex: state.domain.document.elements.length,
+        zIndex: resolveNextZIndex(state.domain.document.elements),
         data: nextData,
       );
       final nextElements = [...state.domain.document.elements, element];
@@ -178,22 +187,33 @@ class TextEditReducer {
       return nextState.copyWith(application: nextState.application.toIdle());
     }
 
-    final elements = <ElementState>[];
-    for (final element in state.domain.document.elements) {
-      if (element.id != interaction.elementId) {
-        elements.add(element);
+    final elements = state.domain.document.elements;
+    List<ElementState>? nextElements;
+    for (var index = 0; index < elements.length; index++) {
+      final currentElement = elements[index];
+      if (currentElement.id != interaction.elementId) {
         continue;
       }
-      elements.add(element.copyWith(rect: nextRect, data: nextData));
+      if (currentElement.rect == nextRect && currentElement.data == nextData) {
+        continue;
+      }
+      nextElements ??= [...elements];
+      nextElements[index] = currentElement.copyWith(
+        rect: nextRect,
+        data: nextData,
+      );
     }
 
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: elements),
-    );
-    final nextState = applySelectionChange(
-      state.copyWith(domain: nextDomain),
-      const {},
-    );
+    var nextBaseState = state;
+    if (nextElements != null) {
+      nextBaseState = state.copyWith(
+        domain: state.domain.copyWith(
+          document: state.domain.document.copyWith(elements: nextElements),
+        ),
+      );
+    }
+
+    final nextState = applySelectionChange(nextBaseState, const {});
     return nextState.copyWith(application: nextState.application.toIdle());
   }
 
@@ -245,5 +265,44 @@ class TextEditReducer {
       maxX: origin.x + nextWidth,
       maxY: origin.y + desiredHeight,
     );
+  }
+
+  ElementState? _resolveSerialUnbindUpdate({
+    required ElementState element,
+    required String deletedTextId,
+  }) {
+    final data = element.data;
+    if (data is! SerialNumberData || data.textElementId != deletedTextId) {
+      return null;
+    }
+    return element.copyWith(data: data.copyWith(textElementId: null));
+  }
+
+  ElementState? _resolveArrowUnbindUpdate({
+    required ElementState element,
+    required String deletedTextId,
+  }) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      return null;
+    }
+
+    final startBinding = data.startBinding;
+    final endBinding = data.endBinding;
+    final clearStart =
+        startBinding != null && startBinding.elementId == deletedTextId;
+    final clearEnd =
+        endBinding != null && endBinding.elementId == deletedTextId;
+    if (!clearStart && !clearEnd) {
+      return null;
+    }
+
+    final nextData = data.copyWith(
+      startBinding: clearStart ? null : startBinding,
+      endBinding: clearEnd ? null : endBinding,
+      startIsSpecial: clearStart ? null : data.startIsSpecial,
+      endIsSpecial: clearEnd ? null : data.endIsSpecial,
+    );
+    return element.copyWith(data: nextData);
   }
 }

@@ -8,6 +8,7 @@ class HistoryChangeSet {
     Set<String>? removedIds,
     this.orderChanged = false,
     this.selectionChanged = false,
+    this.reindexZIndices = false,
   }) : modifiedIds = Set<String>.unmodifiable(modifiedIds ?? const {}),
        addedIds = Set<String>.unmodifiable(addedIds ?? const {}),
        removedIds = Set<String>.unmodifiable(removedIds ?? const {});
@@ -16,6 +17,7 @@ class HistoryChangeSet {
   final Set<String> removedIds;
   final bool orderChanged;
   final bool selectionChanged;
+  final bool reindexZIndices;
 
   bool get hasElementChanges =>
       modifiedIds.isNotEmpty || addedIds.isNotEmpty || removedIds.isNotEmpty;
@@ -32,5 +34,6 @@ class HistoryChangeSet {
       'added: ${addedIds.length}, '
       'removed: ${removedIds.length}, '
       'orderChanged: $orderChanged, '
-      'selectionChanged: $selectionChanged)';
+      'selectionChanged: $selectionChanged, '
+      'reindexZIndices: $reindexZIndices)';
 }

@@ -100,7 +100,7 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    final editModifiers = _toEditModifiers(modifiers);
+    final editModifiers = modifiers.toEditModifiers();
 
     if (intent is StartArrowPointIntent) {
       final handle = _resolveArrowHandleForIntent(
@@ -199,7 +199,7 @@ class SelectPlugin extends DrawInputPlugin {
             addToSelection: addToSelection,
           ),
           position: pointerDownPosition,
-          modifiers: _toEditModifiers(event.modifiers),
+          modifiers: event.modifiers.toEditModifiers(),
         );
         if (didStart) {
           await _updateEditFromEvent(event);
@@ -340,15 +340,8 @@ class SelectPlugin extends DrawInputPlugin {
   Future<void> _updateEditFromEvent(PointerMoveInputEvent event) => dispatch(
     UpdateEdit(
       currentPosition: event.position,
-      modifiers: _toEditModifiers(event.modifiers),
+      modifiers: event.modifiers.toEditModifiers(),
     ),
-  );
-
-  EditModifiers _toEditModifiers(KeyModifiers modifiers) => EditModifiers(
-    maintainAspectRatio: modifiers.shift,
-    discreteAngle: modifiers.shift,
-    fromCenter: modifiers.alt,
-    snapOverride: modifiers.control,
   );
 
   EditIntent? _filterIntentForTool(EditIntent? intent) {

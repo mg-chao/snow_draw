@@ -23,8 +23,6 @@ import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
-import '../../draw/events/event_bus.dart';
-import '../../draw/events/state_events.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
 import '../../draw/models/draw_state.dart';
@@ -117,8 +115,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const MouseCursor _defaultCursor = SystemMouseCursors.precise;
   static const MouseCursor _draggingCursor = SystemMouseCursors.grabbing;
+  static const Set<DrawStateChange> _stateChangeTypes = {
+    DrawStateChange.document,
+    DrawStateChange.selection,
+    DrawStateChange.view,
+    DrawStateChange.interaction,
+  };
 
-  StreamSubscription<DrawEvent>? _eventSubscription;
+  VoidCallback? _stateUnsubscribe;
   StreamSubscription<DrawConfig>? _configSubscription;
   final _focusNode = FocusNode();
   late final FocusNode _textFocusNode;
@@ -279,21 +283,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(FilterShaderManager.instance.load());
     unawaited(HighlightMaskShaderManager.instance.load());
 
-    _eventSubscription = widget.store.eventStream.listen(_handleEvent);
+    _stateUnsubscribe = widget.store.listen(
+      _handleStateChange,
+      changeTypes: _stateChangeTypes,
+    );
 
-    _configSubscription = widget.store.configStream.listen((_) {
-      if (!mounted) {
-        return;
-      }
-      final position = _lastPointerPosition;
-      if (position != null && _isPointerInside) {
-        _updateCursorAndHoverForPosition(position);
-      } else {
-        _updateCursorIfChanged(
-          _resolveCursorForState(widget.store.state, position),
-        );
-      }
-    });
+    _configSubscription = widget.store.configStream.listen(_handleConfigChange);
   }
 
   @override
@@ -311,27 +306,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       unawaited(_pluginCoordinator.dispose());
 
       if (oldWidget.store != widget.store) {
-        // Unsubscribe from old store events
-        unawaited(_eventSubscription?.cancel());
+        _stateUnsubscribe?.call();
+        _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
         _cachedState = null;
         _cachedStateView = null;
 
-        _eventSubscription = widget.store.eventStream.listen(_handleEvent);
+        _stateUnsubscribe = widget.store.listen(
+          _handleStateChange,
+          changeTypes: _stateChangeTypes,
+        );
 
-        _configSubscription = widget.store.configStream.listen((_) {
-          if (!mounted) {
-            return;
-          }
-          final position = _lastPointerPosition;
-          if (position != null && _isPointerInside) {
-            _updateCursorAndHoverForPosition(position);
-          } else {
-            _updateCursorIfChanged(
-              _resolveCursorForState(widget.store.state, position),
-            );
-          }
-        });
+        _configSubscription = widget.store.configStream.listen(
+          _handleConfigChange,
+        );
 
         _stateViewBuilder = DrawStateViewBuilder(
           editOperations: widget.store.context.editOperations,
@@ -355,7 +343,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   @override
   void dispose() {
-    unawaited(_eventSubscription?.cancel());
+    _stateUnsubscribe?.call();
+    _stateUnsubscribe = null;
     unawaited(_configSubscription?.cancel());
     _focusNode.dispose();
     _textController?.dispose();
@@ -890,6 +879,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _updateCursorIfChanged(
         _resolveCursorForState(widget.store.state, position),
       );
+      _clearHoverState();
     }
   }
 
@@ -1348,27 +1338,24 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   /// Computes cursor and hover state in a single pass, sharing the
   /// hit test result and arrow-handle lookup between both paths.
-  void _updateCursorAndHoverForPosition(DrawPoint position) {
+  bool _updateCursorAndHoverForPosition(DrawPoint position) {
     final state = widget.store.state;
 
     // --- cursor early-outs that skip the hit test entirely ---
     if (_middlePanPointerId != null) {
       _updateCursorIfChanged(_draggingCursor);
-      _clearHoverState();
-      return;
+      return _clearHoverState();
     }
     final lockedCursor = _cursorResolver.resolveLockedCursor(
       state.application.interaction,
     );
     if (lockedCursor != null) {
       _updateCursorIfChanged(lockedCursor);
-      _clearHoverState();
-      return;
+      return _clearHoverState();
     }
     if (!_isPointerInside) {
       _updateCursorIfChanged(_defaultCursor);
-      _clearHoverState();
-      return;
+      return _clearHoverState();
     }
 
     // Shared arrow-handle lookup (used by both cursor and hover).
@@ -1381,12 +1368,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           _resolveArrowHandleCursor(state: state, handle: arrowHandle) ??
           _cursorResolver.grabCursor();
       _updateCursorIfChanged(arrowCursor);
-      _applyHoverState(
+      return _applyHoverState(
         selectionId: null,
         bindingId: null,
         arrowHandle: arrowHandle,
       );
-      return;
     }
 
     // Shared hit test (computed once, used for both cursor and hover).
@@ -1451,18 +1437,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
 
-    _applyHoverState(
+    return _applyHoverState(
       selectionId: hoverId,
       bindingId: bindingId,
       arrowHandle: null,
     );
   }
 
-  void _clearHoverState() {
-    _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
-  }
+  bool _clearHoverState() =>
+      _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
 
-  void _applyHoverState({
+  bool _applyHoverState({
     required String? selectionId,
     required String? bindingId,
     required ArrowPointHandle? arrowHandle,
@@ -1470,69 +1455,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_hoveredSelectionElementId == selectionId &&
         _hoveredBindingElementId == bindingId &&
         _hoveredArrowHandle == arrowHandle) {
-      return;
+      return false;
     }
     setState(() {
       _hoveredSelectionElementId = selectionId;
       _hoveredBindingElementId = bindingId;
       _hoveredArrowHandle = arrowHandle;
     });
-  }
-
-  String? _resolveHoverSelectionElementId({
-    required DrawState state,
-    required DrawPoint position,
-  }) {
-    if (!_isPointerInside || _middlePanPointerId != null) {
-      return null;
-    }
-    final interaction = state.application.interaction;
-    if (interaction is EditingState ||
-        interaction is CreatingState ||
-        interaction is BoxSelectingState ||
-        interaction is TextEditingState) {
-      return null;
-    }
-
-    final stateView = _buildStateView(state);
-    final selectionConfig = _resolveSelectionConfigForInput(state);
-    final hitResult = draw_hit_test.hitTest.test(
-      stateView: stateView,
-      position: position,
-      config: selectionConfig,
-      registry: widget.store.context.elementRegistry,
-      filterTypeId: widget.currentToolTypeId,
-    );
-    if (hitResult.isHandleHit) {
-      return null;
-    }
-
-    final elementId = hitResult.elementId;
-    if (elementId == null) {
-      return null;
-    }
-    if (state.domain.selection.selectedIds.contains(elementId)) {
-      return null;
-    }
-    return elementId;
-  }
-
-  ({String? selectionId, String? bindingId}) _resolveHoverSelectionAndBinding({
-    required DrawState state,
-    required DrawPoint position,
-  }) {
-    final selectionId = _resolveHoverSelectionElementId(
-      state: state,
-      position: position,
-    );
-    if (selectionId != null) {
-      return (selectionId: selectionId, bindingId: null);
-    }
-    final bindingId = _resolveHoverBindingElementId(
-      state: state,
-      position: position,
-    );
-    return (selectionId: selectionId, bindingId: bindingId);
+    return true;
   }
 
   String? _resolveHoverBindingElementId({
@@ -1623,14 +1553,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   ) {
     final document = state.domain.document;
     final targets = <ElementState>[];
-    final candidates = document.queryElementsAtPointTopDown(position, distance);
-    for (final element in candidates) {
+    document.visitElementsAtPointTopDown(position, distance, (element) {
       if (element.opacity <= 0 ||
           !ArrowBindingUtils.isBindableTarget(element)) {
-        continue;
+        return true;
       }
       targets.add(element);
-    }
+      return true;
+    });
     return targets;
   }
 
@@ -2525,41 +2455,36 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
-  void _handleEvent(DrawEvent event) {
-    if (event is HistoryAvailabilityChangedEvent) {
-      return;
-    }
-    if (event is! StateChangeEvent) {
-      return;
-    }
+  void _handleStateChange(DrawState state) {
     final position = _lastPointerPosition;
     if (position != null && _isPointerInside) {
       // Use the combined path when a pointer position is available.
       if (!mounted) {
         // When not mounted we cannot call setState, so compute
         // cursor and hover state directly.
-        _cursor = _resolveCursorForState(widget.store.state, position);
-        final hoverTargets = _resolveHoverSelectionAndBinding(
-          state: widget.store.state,
+        _cursor = _resolveCursorForState(state, position);
+        _hoveredSelectionElementId = null;
+        _hoveredBindingElementId = _resolveHoverBindingElementId(
+          state: state,
           position: position,
         );
-        _hoveredSelectionElementId = hoverTargets.selectionId;
-        _hoveredBindingElementId = hoverTargets.bindingId;
         _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
-          state: widget.store.state,
+          state: state,
           position: position,
         );
         return;
       }
-      _updateCursorAndHoverForPosition(position);
+      final hoverStateChanged = _updateCursorAndHoverForPosition(position);
       // Always rebuild on state changes so the canvas picks up new
       // interaction state (e.g. creating element with appended points).
       // _updateCursorAndHoverForPosition only calls setState when hover
       // values change, which is not enough for live creation updates.
-      setState(() {});
+      if (!hoverStateChanged) {
+        setState(() {});
+      }
       return;
     }
-    final cursor = _resolveCursorForState(widget.store.state, position);
+    final cursor = _resolveCursorForState(state, position);
     if (!mounted) {
       _cursor = cursor;
       _hoveredSelectionElementId = null;
@@ -2568,9 +2493,31 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _updateCursorIfChanged(cursor);
-    _clearHoverState();
+    final hoverStateChanged = _clearHoverState();
     // Rebuild unconditionally so the canvas reflects the new state.
-    setState(() {});
+    if (!hoverStateChanged) {
+      setState(() {});
+    }
+  }
+
+  void _handleConfigChange(DrawConfig _) {
+    if (!mounted) {
+      return;
+    }
+
+    final position = _lastPointerPosition;
+    late final bool hoverStateChanged;
+    if (position != null && _isPointerInside) {
+      hoverStateChanged = _updateCursorAndHoverForPosition(position);
+    } else {
+      _updateCursorIfChanged(
+        _resolveCursorForState(widget.store.state, position),
+      );
+      hoverStateChanged = _clearHoverState();
+    }
+    if (!hoverStateChanged) {
+      setState(() {});
+    }
   }
 
   void _updateCursorIfChanged(MouseCursor nextCursor) {

@@ -1,7 +1,10 @@
 import '../../../actions/draw_actions.dart';
 import '../../../actions/history_policy.dart';
+import '../../../elements/types/arrow/arrow_like_data.dart';
+import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
+import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../history_change_set.dart';
 import '../../snapshot.dart';
@@ -161,8 +164,11 @@ class HistoryMiddleware extends MiddlewareBase {
     final includeSelection = context.includeSelectionInHistory;
 
     try {
+      final useIncremental =
+          changes != null &&
+          !_requiresPersistentSnapshots(action: action, changes: changes);
+
       // Take snapshot before action
-      final useIncremental = changes != null;
       final snapshotBefore = useIncremental
           ? (action.requiresPreActionSnapshot
                 ? context.snapshotBuilder.buildIncrementalSnapshotBeforeAction(
@@ -242,6 +248,10 @@ class HistoryMiddleware extends MiddlewareBase {
   }
 
   HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) {
+    if (action is FinishTextEdit) {
+      return _metadataFromFinishTextEdit(context, action);
+    }
+
     if (action is FinishEdit) {
       return action.metadata ?? _metadataFromEdit(context);
     }
@@ -255,6 +265,49 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     return null;
+  }
+
+  HistoryMetadata _metadataFromFinishTextEdit(
+    DispatchContext context,
+    FinishTextEdit action,
+  ) {
+    final resolved = _resolveFinishTextEditPayload(context, action);
+    final trimmed = resolved.text.trim();
+    final isDelete = trimmed.isEmpty && !resolved.isNew;
+    final isCreate = resolved.isNew;
+
+    return HistoryMetadata(
+      description: isDelete
+          ? 'Delete text'
+          : isCreate
+          ? 'Create text'
+          : 'Edit text',
+      recordType: isDelete
+          ? HistoryRecordType.delete
+          : isCreate
+          ? HistoryRecordType.create
+          : HistoryRecordType.edit,
+    );
+  }
+
+  ({String elementId, bool isNew, String text}) _resolveFinishTextEditPayload(
+    DispatchContext context,
+    FinishTextEdit action,
+  ) {
+    final interaction = context.initialState.application.interaction;
+    if (interaction is TextEditingState) {
+      return (
+        elementId: interaction.elementId,
+        isNew: interaction.isNew,
+        text: action.text,
+      );
+    }
+
+    return (
+      elementId: action.elementId,
+      isNew: action.isNew,
+      text: action.text,
+    );
   }
 
   HistoryMetadata? _metadataFromEdit(DispatchContext context) {
@@ -289,8 +342,12 @@ class HistoryMiddleware extends MiddlewareBase {
     if (action is FinishEdit) {
       final affected = metadata?.affectedElementIds ?? const <String>{};
       if (affected.isNotEmpty) {
-        return HistoryChangeSet(
+        final expandedAffectedIds = _expandModifiedIdsForArrowBindings(
+          elements: context.initialState.domain.document.elements,
           modifiedIds: affected,
+        );
+        return HistoryChangeSet(
+          modifiedIds: expandedAffectedIds,
           selectionChanged: selectionChanged,
         );
       }
@@ -298,16 +355,51 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is ChangeElementZIndex) {
+      final reordered = _didElementOrderChange(context);
       return HistoryChangeSet(
         modifiedIds: {action.elementId},
         orderChanged: true,
         selectionChanged: selectionChanged,
+        reindexZIndices: reordered,
+      );
+    }
+
+    if (action is ChangeElementsZIndex) {
+      final reordered = _didElementOrderChange(context);
+      return HistoryChangeSet(
+        modifiedIds: action.elementIds.toSet(),
+        orderChanged: true,
+        selectionChanged: selectionChanged,
+        reindexZIndices: reordered,
       );
     }
 
     if (action is DeleteElements) {
+      final beforeElements = context.initialState.domain.document.elements;
+      final removedIds = action.elementIds.toSet();
+      _expandDeleteIdsForBoundSerialText(
+        elements: beforeElements,
+        removedIds: removedIds,
+      );
+      final modifiedIds = <String>{};
+      for (final element in beforeElements) {
+        if (removedIds.contains(element.id)) {
+          continue;
+        }
+        final data = element.data;
+        if (data is SerialNumberData) {
+          final boundId = data.textElementId;
+          if (boundId != null && removedIds.contains(boundId)) {
+            modifiedIds.add(element.id);
+          }
+        }
+        if (_isArrowBoundToAny(data: data, targetIds: removedIds)) {
+          modifiedIds.add(element.id);
+        }
+      }
       return HistoryChangeSet(
-        removedIds: action.elementIds.toSet(),
+        modifiedIds: modifiedIds,
+        removedIds: removedIds,
         orderChanged: true,
         selectionChanged: selectionChanged,
       );
@@ -326,32 +418,49 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     if (action is FinishTextEdit) {
-      final trimmed = action.text.trim();
+      final resolved = _resolveFinishTextEditPayload(context, action);
+      final trimmed = resolved.text.trim();
       if (trimmed.isEmpty) {
-        if (action.isNew) {
+        if (resolved.isNew) {
           return null;
         }
+        final modifiedIds = _dependentIdsBoundToDeletedText(
+          elements: context.initialState.domain.document.elements,
+          textElementId: resolved.elementId,
+        );
         return HistoryChangeSet(
-          removedIds: {action.elementId},
+          modifiedIds: modifiedIds,
+          removedIds: {resolved.elementId},
           orderChanged: true,
           selectionChanged: selectionChanged,
         );
       }
-      if (action.isNew) {
+      if (resolved.isNew) {
         return HistoryChangeSet(
-          addedIds: {action.elementId},
+          addedIds: {resolved.elementId},
           orderChanged: true,
           selectionChanged: selectionChanged,
         );
       }
       return HistoryChangeSet(
-        modifiedIds: {action.elementId},
+        modifiedIds: {resolved.elementId},
         selectionChanged: selectionChanged,
       );
     }
 
     if (action is DuplicateElements) {
-      return null;
+      final addedIds = _addedElementIds(
+        before: context.initialState.domain.document.elements,
+        after: context.currentState.domain.document.elements,
+      );
+      if (addedIds.isEmpty) {
+        return null;
+      }
+      return HistoryChangeSet(
+        addedIds: addedIds,
+        orderChanged: true,
+        selectionChanged: selectionChanged,
+      );
     }
 
     final affected = metadata?.affectedElementIds ?? const <String>{};
@@ -363,5 +472,129 @@ class HistoryMiddleware extends MiddlewareBase {
     }
 
     return null;
+  }
+
+  bool _requiresPersistentSnapshots({
+    required DrawAction action,
+    required HistoryChangeSet changes,
+  }) {
+    if ((action is ChangeElementZIndex || action is ChangeElementsZIndex) &&
+        !changes.reindexZIndices) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _didElementOrderChange(DispatchContext context) {
+    final before = context.initialState.domain.document.elements;
+    final after = context.currentState.domain.document.elements;
+    if (before.length != after.length) {
+      return true;
+    }
+    for (var index = 0; index < before.length; index++) {
+      if (before[index].id != after[index].id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Set<String> _expandModifiedIdsForArrowBindings({
+    required Iterable<ElementState> elements,
+    required Set<String> modifiedIds,
+  }) {
+    final expandedIds = <String>{...modifiedIds};
+    for (final element in elements) {
+      if (expandedIds.contains(element.id)) {
+        continue;
+      }
+      if (_isArrowBoundToAny(data: element.data, targetIds: modifiedIds)) {
+        expandedIds.add(element.id);
+      }
+    }
+    return expandedIds;
+  }
+
+  Set<String> _addedElementIds({
+    required Iterable<ElementState> before,
+    required Iterable<ElementState> after,
+  }) {
+    final beforeIds = <String>{for (final element in before) element.id};
+    final addedIds = <String>{};
+    for (final element in after) {
+      if (!beforeIds.contains(element.id)) {
+        addedIds.add(element.id);
+      }
+    }
+    return addedIds;
+  }
+
+  void _expandDeleteIdsForBoundSerialText({
+    required Iterable<ElementState> elements,
+    required Set<String> removedIds,
+  }) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final element in elements) {
+        if (!removedIds.contains(element.id)) {
+          continue;
+        }
+        final data = element.data;
+        if (data is! SerialNumberData) {
+          continue;
+        }
+        final boundId = data.textElementId;
+        if (boundId == null) {
+          continue;
+        }
+        if (removedIds.add(boundId)) {
+          changed = true;
+        }
+      }
+    }
+  }
+
+  bool _isArrowBoundToAny({
+    required Object data,
+    required Set<String> targetIds,
+  }) {
+    if (data is! ArrowLikeData) {
+      return false;
+    }
+    final startTarget = data.startBinding?.elementId;
+    final endTarget = data.endBinding?.elementId;
+    return (startTarget != null && targetIds.contains(startTarget)) ||
+        (endTarget != null && targetIds.contains(endTarget));
+  }
+
+  Set<String> _dependentIdsBoundToDeletedText({
+    required Iterable<ElementState> elements,
+    required String textElementId,
+  }) {
+    final ids = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is SerialNumberData && data.textElementId == textElementId) {
+        ids.add(element.id);
+        continue;
+      }
+      if (_isArrowBoundToTargetId(data: data, targetId: textElementId)) {
+        ids.add(element.id);
+      }
+    }
+    return ids;
+  }
+
+  bool _isArrowBoundToTargetId({
+    required Object data,
+    required String targetId,
+  }) {
+    if (data is! ArrowLikeData) {
+      return false;
+    }
+    final startTarget = data.startBinding?.elementId;
+    final endTarget = data.endBinding?.elementId;
+    return startTarget == targetId || endTarget == targetId;
   }
 }

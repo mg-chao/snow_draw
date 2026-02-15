@@ -72,7 +72,9 @@ class InputRoutingPolicy {
   final bool allowCreateWhileEditing;
   final EditPointerDownBehavior editPointerDownBehavior;
 
-  static const defaultPolicy = InputRoutingPolicy();
+  static const defaultPolicy = InputRoutingPolicy(
+    editPointerDownBehavior: EditPointerDownBehavior.commitEdit,
+  );
 
   bool allowSelection(DrawState state) =>
       !state.application.isEditing || allowSelectionWhileEditing;

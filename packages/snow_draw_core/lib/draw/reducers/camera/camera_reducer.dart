@@ -9,16 +9,24 @@ DrawState? cameraReducer(
   DrawAction action,
   CameraReducerDeps context,
 ) => switch (action) {
-  final MoveCamera a => state.copyWith(
-    application: state.application.copyWith(
-      view: state.application.view.copyWith(
-        camera: state.application.view.camera.translated(a.dx, a.dy),
-      ),
-    ),
-  ),
+  final MoveCamera a => _handleMoveCamera(state, a),
   final ZoomCamera a => _handleZoomCamera(state, a, context),
   _ => null,
 };
+
+DrawState _handleMoveCamera(DrawState state, MoveCamera action) {
+  if (action.dx == 0 && action.dy == 0) {
+    return state;
+  }
+
+  return state.copyWith(
+    application: state.application.copyWith(
+      view: state.application.view.copyWith(
+        camera: state.application.view.camera.translated(action.dx, action.dy),
+      ),
+    ),
+  );
+}
 
 DrawState _handleZoomCamera(
   DrawState state,

@@ -5,7 +5,8 @@ import '../models/element_state.dart';
 /// This is intended to be a short-lived object: create a new instance whenever
 /// the underlying element list changes.
 class ElementIndexService {
-  ElementIndexService(this._elements);
+  ElementIndexService(List<ElementState> elements)
+    : _elements = List<ElementState>.unmodifiable(elements);
   final List<ElementState> _elements;
 
   Map<String, ElementState>? _byIdCache;

@@ -15,6 +15,7 @@ class ConfigManager {
   DrawConfig? _frozenConfig;
   DrawConfig? _pendingConfig;
   var _freezeDepth = 0;
+  var _isDisposed = false;
 
   /// Get the current configuration.
   DrawConfig get current => _frozenConfig ?? _config;
@@ -27,7 +28,13 @@ class ConfigManager {
   /// If the new config matches the current one, do nothing.
   /// Returns true if updated, false if unchanged.
   bool update(DrawConfig newConfig) {
+    if (_isDisposed) {
+      return false;
+    }
     if (_freezeDepth > 0) {
+      if (newConfig == _configForWrites) {
+        return false;
+      }
       _pendingConfig = newConfig;
       return false;
     }
@@ -36,6 +43,9 @@ class ConfigManager {
 
   /// Freeze config reads during a dispatch.
   void freeze() {
+    if (_isDisposed) {
+      return;
+    }
     _freezeDepth += 1;
     if (_freezeDepth == 1) {
       _frozenConfig = _config;
@@ -44,7 +54,7 @@ class ConfigManager {
 
   /// Unfreeze and apply any pending update.
   void unfreeze() {
-    if (_freezeDepth == 0) {
+    if (_isDisposed || _freezeDepth == 0) {
       return;
     }
     _freezeDepth -= 1;
@@ -61,11 +71,13 @@ class ConfigManager {
   }
 
   bool _applyUpdate(DrawConfig newConfig) {
-    if (newConfig == _config) {
+    if (_isDisposed || newConfig == _config) {
       return false;
     }
     _config = newConfig;
-    _controller.add(_config);
+    if (!_controller.isClosed) {
+      _controller.add(_config);
+    }
     return true;
   }
 
@@ -74,15 +86,26 @@ class ConfigManager {
   /// Convenience method to update only the selection config.
   /// Returns true if updated, false if unchanged.
   bool updateSelection(SelectionConfig selection) =>
-      update(_config.copyWith(selection: selection));
+      update(_configForWrites.copyWith(selection: selection));
 
   /// Update canvas configuration.
   ///
   /// Convenience method to update only the canvas config.
   /// Returns true if updated, false if unchanged.
   bool updateCanvas(CanvasConfig canvas) =>
-      update(_config.copyWith(canvas: canvas));
+      update(_configForWrites.copyWith(canvas: canvas));
+
+  DrawConfig get _configForWrites => _pendingConfig ?? _config;
 
   /// Release resources.
-  Future<void> dispose() => _controller.close();
+  Future<void> dispose() {
+    if (_isDisposed || _controller.isClosed) {
+      return Future<void>.value();
+    }
+    _isDisposed = true;
+    _freezeDepth = 0;
+    _frozenConfig = null;
+    _pendingConfig = null;
+    return _controller.close();
+  }
 }

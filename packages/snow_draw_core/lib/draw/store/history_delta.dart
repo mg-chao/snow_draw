@@ -18,6 +18,7 @@ class HistoryDelta {
     required this.orderAfter,
     required this.selectionBefore,
     required this.selectionAfter,
+    required this.reindexZIndices,
   });
 
   factory HistoryDelta.fromData({
@@ -27,6 +28,7 @@ class HistoryDelta {
     List<String>? orderAfter,
     SelectionState? selectionBefore,
     SelectionState? selectionAfter,
+    bool reindexZIndices = false,
   }) => HistoryDelta._(
     beforeElements: Map<String, ElementState>.unmodifiable(beforeElements),
     afterElements: Map<String, ElementState>.unmodifiable(afterElements),
@@ -42,6 +44,7 @@ class HistoryDelta {
     selectionAfter: selectionAfter == null
         ? null
         : _copySelection(selectionAfter),
+    reindexZIndices: reindexZIndices,
   );
 
   factory HistoryDelta.fromSnapshots(
@@ -55,20 +58,20 @@ class HistoryDelta {
     final beforeElements = <String, ElementState>{};
     final afterElements = <String, ElementState>{};
 
-    if (changes != null && changes.isSingleElementChange) {
-      final id = changes.allElementIds.first;
-      final beforeElement = beforeById[id];
-      final afterElement = afterById[id];
-      if (beforeElement != null && afterElement == null) {
-        beforeElements[id] = beforeElement;
-      } else if (beforeElement == null && afterElement != null) {
-        afterElements[id] = afterElement;
-      } else if (beforeElement != null &&
-          afterElement != null &&
-          beforeElement != afterElement) {
-        beforeElements[id] = beforeElement;
-        afterElements[id] = afterElement;
-      }
+    // Reordering actions can implicitly update many elements (for example
+    // z-index reindexing), so targeted element diffing is only safe when
+    // order is unchanged.
+    final useTargetedElementDiff =
+        changes != null && changes.hasElementChanges && !changes.orderChanged;
+
+    if (useTargetedElementDiff) {
+      _collectChangedElementsById(
+        beforeById: beforeById,
+        afterById: afterById,
+        changedIds: changes.allElementIds,
+        beforeElements: beforeElements,
+        afterElements: afterElements,
+      );
     } else {
       for (final entry in beforeById.entries) {
         final afterElement = afterById[entry.key];
@@ -122,6 +125,7 @@ class HistoryDelta {
       orderAfter: orderAfter,
       selectionBefore: selectionBefore,
       selectionAfter: selectionAfter,
+      reindexZIndices: changes?.reindexZIndices ?? false,
     );
   }
   final Map<String, ElementState> beforeElements;
@@ -130,6 +134,7 @@ class HistoryDelta {
   final List<String>? orderAfter;
   final SelectionState? selectionBefore;
   final SelectionState? selectionAfter;
+  final bool reindexZIndices;
 
   bool get selectionChanged =>
       selectionBefore != null &&
@@ -179,8 +184,9 @@ class HistoryDelta {
     }
 
     if (order == null && nextElements.length != nextById.length) {
+      final knownOrderIds = targetOrder.toSet();
       for (final id in nextById.keys) {
-        if (!targetOrder.contains(id)) {
+        if (!knownOrderIds.contains(id)) {
           final element = nextById[id];
           if (element != null) {
             nextElements.add(element);
@@ -190,10 +196,13 @@ class HistoryDelta {
     }
 
     final selection = forward ? selectionAfter : selectionBefore;
+    final resolvedElements = reindexZIndices
+        ? _reindexElements(nextElements)
+        : nextElements;
 
     return state.copyWith(
       domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: nextElements),
+        document: state.domain.document.copyWith(elements: resolvedElements),
         selection: selection ?? state.domain.selection,
       ),
       application: state.application.copyWith(
@@ -202,6 +211,49 @@ class HistoryDelta {
       ),
     );
   }
+}
+
+void _collectChangedElementsById({
+  required Map<String, ElementState> beforeById,
+  required Map<String, ElementState> afterById,
+  required Set<String> changedIds,
+  required Map<String, ElementState> beforeElements,
+  required Map<String, ElementState> afterElements,
+}) {
+  for (final id in changedIds) {
+    final beforeElement = beforeById[id];
+    final afterElement = afterById[id];
+
+    if (beforeElement != null && afterElement != null) {
+      if (beforeElement != afterElement) {
+        beforeElements[id] = beforeElement;
+        afterElements[id] = afterElement;
+      }
+      continue;
+    }
+
+    if (beforeElement != null) {
+      beforeElements[id] = beforeElement;
+    }
+    if (afterElement != null) {
+      afterElements[id] = afterElement;
+    }
+  }
+}
+
+List<ElementState> _reindexElements(List<ElementState> elements) {
+  var changed = false;
+  final reindexed = <ElementState>[];
+  for (var index = 0; index < elements.length; index++) {
+    final element = elements[index];
+    if (element.zIndex == index) {
+      reindexed.add(element);
+      continue;
+    }
+    changed = true;
+    reindexed.add(element.copyWith(zIndex: index));
+  }
+  return changed ? reindexed : elements;
 }
 
 SelectionState _copySelection(SelectionState selection) => SelectionState(

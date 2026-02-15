@@ -1,19 +1,50 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: "Release version (e.g., v1.0.0)"
         required: true
         type: string
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: beta
+          cache: true
+
+      - name: Bootstrap workspace
+        run: dart run melos bootstrap
+
+      - name: Run static analysis
+        run: dart run melos run analyze
+
+      - name: Run formatting checks
+        run: dart run melos run format:check
+
+      - name: Run test suite
+        run: dart run melos run test
+
   build-windows:
+    needs: quality-gate
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,11 +56,8 @@ jobs:
           cache: true
       - run: flutter --version
 
-      - name: Install Melos
-        run: dart pub global activate melos
-
       - name: Bootstrap workspace
-        run: melos bootstrap
+        run: dart run melos bootstrap
 
       - name: Build Windows app
         run: |
@@ -46,9 +74,13 @@ jobs:
         with:
           name: snow_draw-windows-x64
           path: snow_draw-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
 
   build-web:
+    needs: quality-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,11 +91,8 @@ jobs:
           channel: beta
           cache: true
 
-      - name: Install Melos
-        run: dart pub global activate melos
-
       - name: Bootstrap workspace
-        run: melos bootstrap
+        run: dart run melos bootstrap
 
       - name: Build Web app
         run: |
@@ -80,15 +109,20 @@ jobs:
         with:
           name: snow_draw-web
           path: snow_draw-web.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
   create-release:
-    needs: [build-windows, build-web]
+    needs: [quality-gate, build-windows, build-web]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
@@ -109,6 +143,34 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Validate version format
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "Invalid version '$version'. Expected vMAJOR.MINOR.PATCH with optional pre-release and build metadata suffixes."
+            exit 1
+          fi
+
+      - name: Validate tag availability
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          git fetch --tags --force
+          if git show-ref --verify --quiet "refs/tags/$version"; then
+            echo "Tag '$version' already exists. Please provide a new version."
+            exit 1
+          fi
+
+      - name: Derive release channel
+        id: release_channel
+        run: |
+          version="${{ steps.get_version.outputs.version }}"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Generate Release Notes
         id: release_notes
         uses: actions/github-script@v7
@@ -120,21 +182,27 @@ jobs:
               tag_name: '${{ steps.get_version.outputs.version }}'
             });
 
+            const repoName = context.repo.repo;
+            const owner = context.repo.owner;
+            const pagesUrl = repoName.endsWith('.github.io')
+              ? `https://${repoName}/`
+              : `https://${owner}.github.io/${repoName}/`;
+
             // Add custom installation instructions
             const customBody = `${data.body}
 
-            ## 🌐 Try It Online
+            ## Try It Online
 
-            **[Launch Snow Draw Web App](https://mg-chao.github.io/snow_draw/)** - Try the app directly in your browser!
+            **[Launch Snow Draw Web App](${pagesUrl})** - Try the app directly in your browser!
 
-            ## 📦 Downloads
+            ## Downloads
 
             | Platform | File | Description |
             |----------|------|-------------|
-            | 🪟 Windows | \`snow_draw-windows-x64.zip\` | Windows x64 executable |
-            | 🌐 Web | \`snow_draw-web.tar.gz\` | Web application bundle |
+            | Windows | \`snow_draw-windows-x64.zip\` | Windows x64 executable |
+            | Web | \`snow_draw-web.tar.gz\` | Web application bundle |
 
-            ## 📖 Installation Instructions
+            ## Installation Instructions
 
             ### Windows
             1. Download \`snow_draw-windows-x64.zip\`
@@ -147,7 +215,7 @@ jobs:
             3. Serve the contents with a web server (e.g., \`python -m http.server\`)
 
             ---
-            *Built with Flutter • Released via GitHub Actions*`;
+            *Built with Flutter - Released via GitHub Actions*`;
 
             return customBody;
           result-encoding: string
@@ -158,7 +226,7 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: Release ${{ steps.get_version.outputs.version }}
           draft: true
-          prerelease: false
+          prerelease: ${{ steps.release_channel.outputs.prerelease }}
           files: |
             snow_draw-windows-x64.zip
             snow_draw-web.tar.gz

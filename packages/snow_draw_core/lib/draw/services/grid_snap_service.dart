@@ -9,20 +9,28 @@ class GridSnapService {
   const GridSnapService();
 
   double snapValue(double value, double gridSize) {
-    if (gridSize <= 0) {
+    if (!_isSnapEnabled(gridSize) || !value.isFinite) {
       return value;
     }
-    return (value / gridSize).round() * gridSize;
+    final normalized = value / gridSize;
+    if (!normalized.isFinite) {
+      return value;
+    }
+    final snapped = normalized.roundToDouble() * gridSize;
+    return snapped.isFinite ? snapped : value;
   }
 
   DrawPoint snapPoint({required DrawPoint point, required double gridSize}) {
-    if (gridSize <= 0) {
+    if (!_isSnapEnabled(gridSize)) {
       return point;
     }
-    return DrawPoint(
-      x: snapValue(point.x, gridSize),
-      y: snapValue(point.y, gridSize),
-    );
+    final snappedX = snapValue(point.x, gridSize);
+    final snappedY = snapValue(point.y, gridSize);
+    if (_sameCoordinate(snappedX, point.x) &&
+        _sameCoordinate(snappedY, point.y)) {
+      return point;
+    }
+    return DrawPoint(x: snappedX, y: snappedY);
   }
 
   DrawRect snapRect({
@@ -33,16 +41,36 @@ class GridSnapService {
     bool snapMinY = false,
     bool snapMaxY = false,
   }) {
-    if (gridSize <= 0) {
+    if (!_isSnapEnabled(gridSize)) {
       return rect;
     }
+    if (!snapMinX && !snapMaxX && !snapMinY && !snapMaxY) {
+      return rect;
+    }
+
+    final snappedMinX = snapMinX ? snapValue(rect.minX, gridSize) : rect.minX;
+    final snappedMinY = snapMinY ? snapValue(rect.minY, gridSize) : rect.minY;
+    final snappedMaxX = snapMaxX ? snapValue(rect.maxX, gridSize) : rect.maxX;
+    final snappedMaxY = snapMaxY ? snapValue(rect.maxY, gridSize) : rect.maxY;
+
+    if (_sameCoordinate(snappedMinX, rect.minX) &&
+        _sameCoordinate(snappedMinY, rect.minY) &&
+        _sameCoordinate(snappedMaxX, rect.maxX) &&
+        _sameCoordinate(snappedMaxY, rect.maxY)) {
+      return rect;
+    }
+
     return DrawRect(
-      minX: snapMinX ? snapValue(rect.minX, gridSize) : rect.minX,
-      minY: snapMinY ? snapValue(rect.minY, gridSize) : rect.minY,
-      maxX: snapMaxX ? snapValue(rect.maxX, gridSize) : rect.maxX,
-      maxY: snapMaxY ? snapValue(rect.maxY, gridSize) : rect.maxY,
+      minX: snappedMinX,
+      minY: snappedMinY,
+      maxX: snappedMaxX,
+      maxY: snappedMaxY,
     );
   }
+
+  bool _isSnapEnabled(double gridSize) => gridSize.isFinite && gridSize > 0;
+
+  bool _sameCoordinate(double a, double b) => a == b || (a.isNaN && b.isNaN);
 }
 
 const gridSnapService = GridSnapService();

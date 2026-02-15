@@ -45,7 +45,7 @@ void main() {
       addTearDown(store.dispose);
 
       await store.dispatch(
-        const UpdateElementsStyle(
+        UpdateElementsStyle(
           elementIds: [highlightId],
           highlightShape: HighlightShape.ellipse,
         ),
