@@ -16,6 +16,46 @@ import 'filter_segment_builder.dart';
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
 
+/// Scope identifier used to isolate cached filter-scene batches.
+enum FilterRenderCacheDomain { staticLayer, dynamicLayer }
+
+/// Stable paint-context key used for cross-frame batch picture reuse.
+@immutable
+class FilterRenderCacheContext {
+  const FilterRenderCacheContext({
+    required this.domain,
+    required this.documentVersion,
+    required this.textRenderingCacheRevision,
+    required this.scaleKey,
+    required this.localeTag,
+  });
+
+  final FilterRenderCacheDomain domain;
+  final int documentVersion;
+  final int textRenderingCacheRevision;
+  final int scaleKey;
+  final String localeTag;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FilterRenderCacheContext &&
+          other.domain == domain &&
+          other.documentVersion == documentVersion &&
+          other.textRenderingCacheRevision == textRenderingCacheRevision &&
+          other.scaleKey == scaleKey &&
+          other.localeTag == localeTag;
+
+  @override
+  int get hashCode => Object.hash(
+    domain,
+    documentVersion,
+    textRenderingCacheRevision,
+    scaleKey,
+    localeTag,
+  );
+}
+
 /// Renders element scenes with filter segments.
 ///
 /// Unlike per-element compositing, this pipeline scales with the number of
@@ -26,6 +66,7 @@ class FilterSegmentRenderer {
 
   static const _filterImageCacheLimit = 256;
   static const _clipInfoCacheLimit = 512;
+  static const _batchPictureCacheLimit = 96;
 
   final FilterSegmentBuilder _segmentBuilder;
   final _clipInfoCache = LruCache<_FilterClipCacheKey, _ClipInfo>(
@@ -34,6 +75,11 @@ class FilterSegmentRenderer {
   final _filterCache = LruCache<_FilterImageCacheKey, ImageFilter>(
     maxEntries: _filterImageCacheLimit,
   );
+  final _batchPictureCache =
+      LruCache<_BatchPictureCacheKey, _CachedBatchPicture>(
+        maxEntries: _batchPictureCacheLimit,
+        onEvict: (entry) => entry.markEvicted(),
+      );
   final _diagnostics = FilterRenderDiagnosticsCollector();
 
   /// Reusable paint object for `saveLayer` calls.
@@ -51,10 +97,17 @@ class FilterSegmentRenderer {
   @visibleForTesting
   int get debugFilterCacheLimit => _filterImageCacheLimit;
 
+  @visibleForTesting
+  int get debugBatchPictureCacheSize => _batchPictureCache.length;
+
+  @visibleForTesting
+  int get debugBatchPictureCacheLimit => _batchPictureCacheLimit;
+
   /// Clears internal caches.
   void clearCaches() {
     _clipInfoCache.clear();
     _filterCache.clear();
+    _batchPictureCache.clear();
   }
 
   /// Paints [elements] in z-order using segmented filter
@@ -63,6 +116,8 @@ class FilterSegmentRenderer {
     required Canvas canvas,
     required List<ElementState> elements,
     required SceneElementPainter paintElement,
+    FilterRenderCacheContext? cacheContext,
+    Set<String> dynamicElementIds = const <String>{},
   }) {
     _diagnostics.beginFrame();
     if (elements.isEmpty) {
@@ -96,9 +151,9 @@ class FilterSegmentRenderer {
     // scene when a filter needs to read the composited result.
     // This avoids creating intermediate PictureRecorder merges
     // between consecutive batches.
-    final pending = <Picture>[];
+    final pending = <_ScenePictureRef>[];
 
-    Picture flattenPending() {
+    _ScenePictureRef flattenPending() {
       assert(pending.isNotEmpty, 'pending must not be empty');
       if (pending.length == 1) {
         return pending.removeLast();
@@ -106,12 +161,12 @@ class FilterSegmentRenderer {
       _diagnostics.markPictureRecorder();
       final recorder = PictureRecorder();
       final mergeCanvas = Canvas(recorder);
-      for (final p in pending) {
-        mergeCanvas.drawPicture(p);
-        p.dispose();
+      for (final scene in pending) {
+        mergeCanvas.drawPicture(scene.picture);
+        scene.release();
       }
       pending.clear();
-      return recorder.endRecording();
+      return _ScenePictureRef.owned(recorder.endRecording());
     }
 
     for (final segment in segments) {
@@ -120,7 +175,14 @@ class FilterSegmentRenderer {
           continue;
         }
         _diagnostics.markBatch();
-        pending.add(_recordBatch(segment.elements, paintElement));
+        pending.add(
+          _recordBatch(
+            segment.elements,
+            paintElement,
+            cacheContext: cacheContext,
+            dynamicElementIds: dynamicElementIds,
+          ),
+        );
         continue;
       }
 
@@ -132,44 +194,91 @@ class FilterSegmentRenderer {
 
       if (segment is FilterSegment) {
         final filtered = _applyFilter(
-          scene: scene,
+          scene: scene.picture,
           filterElement: segment.filterElement,
           data: segment.filterData,
         );
-        if (!identical(filtered, scene)) {
-          scene.dispose();
+        if (identical(filtered, scene.picture)) {
+          pending.add(scene);
+        } else {
+          scene.release();
+          pending.add(_ScenePictureRef.owned(filtered));
         }
-        pending.add(filtered);
         continue;
       }
 
       if (segment is MergedFilterSegment) {
-        final filtered = _applyMergedFilter(scene: scene, merged: segment);
-        if (!identical(filtered, scene)) {
-          scene.dispose();
+        final filtered = _applyMergedFilter(
+          scene: scene.picture,
+          merged: segment,
+        );
+        if (identical(filtered, scene.picture)) {
+          pending.add(scene);
+        } else {
+          scene.release();
+          pending.add(_ScenePictureRef.owned(filtered));
         }
-        pending.add(filtered);
       }
     }
 
-    for (final p in pending) {
-      canvas.drawPicture(p);
-      p.dispose();
+    for (final scene in pending) {
+      canvas.drawPicture(scene.picture);
+      scene.release();
     }
     _diagnostics.endFrame();
   }
 
-  Picture _recordBatch(
+  _ScenePictureRef _recordBatch(
     List<ElementState> elements,
-    SceneElementPainter paintElement,
-  ) {
+    SceneElementPainter paintElement, {
+    required FilterRenderCacheContext? cacheContext,
+    required Set<String> dynamicElementIds,
+  }) {
+    final canUseCache =
+        cacheContext != null &&
+        _isBatchCacheEligible(elements, dynamicElementIds);
+    if (canUseCache) {
+      final cacheKey = _BatchPictureCacheKey(
+        context: cacheContext,
+        fingerprint: _batchFingerprint(elements),
+        length: elements.length,
+      );
+      final cached = _batchPictureCache.get(cacheKey);
+      if (cached != null && cached.matches(elements)) {
+        _diagnostics.markBatchCacheHit();
+        cached.retain();
+        return _ScenePictureRef.shared(
+          picture: cached.picture,
+          onRelease: cached.release,
+        );
+      }
+      _diagnostics
+        ..markBatchCacheMiss()
+        ..markPictureRecorder();
+      final recorder = PictureRecorder();
+      final batchCanvas = Canvas(recorder);
+      for (final element in elements) {
+        paintElement(batchCanvas, element);
+      }
+      final picture = recorder.endRecording();
+      final cachedEntry = _CachedBatchPicture(
+        picture: picture,
+        elementRefs: List<ElementState>.of(elements, growable: false),
+      )..retain();
+      _batchPictureCache.put(cacheKey, cachedEntry);
+      return _ScenePictureRef.shared(
+        picture: picture,
+        onRelease: cachedEntry.release,
+      );
+    }
+
     _diagnostics.markPictureRecorder();
     final recorder = PictureRecorder();
     final batchCanvas = Canvas(recorder);
     for (final element in elements) {
       paintElement(batchCanvas, element);
     }
-    return recorder.endRecording();
+    return _ScenePictureRef.owned(recorder.endRecording());
   }
 
   Picture _applyFilter({
@@ -586,6 +695,32 @@ class FilterSegmentRenderer {
     return _ClipInfo(bounds: path.getBounds(), path: path);
   }
 
+  bool _isBatchCacheEligible(
+    List<ElementState> elements,
+    Set<String> dynamicElementIds,
+  ) {
+    if (elements.isEmpty) {
+      return false;
+    }
+    if (dynamicElementIds.isEmpty) {
+      return true;
+    }
+    for (final element in elements) {
+      if (dynamicElementIds.contains(element.id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  int _batchFingerprint(List<ElementState> elements) {
+    var hash = 17;
+    for (final element in elements) {
+      hash = 0x1fffffff & (hash * 31 + element.id.hashCode);
+    }
+    return hash;
+  }
+
   double _mapStrength({
     required double strength,
     required double minValue,
@@ -597,6 +732,110 @@ class FilterSegmentRenderer {
 }
 
 // ── Cache keys ──────────────────────────────────────────
+
+@immutable
+class _ScenePictureRef {
+  const _ScenePictureRef._({
+    required this.picture,
+    required this.isOwned,
+    this.onRelease,
+  });
+
+  const _ScenePictureRef.owned(Picture picture)
+    : this._(picture: picture, isOwned: true);
+
+  const _ScenePictureRef.shared({
+    required Picture picture,
+    required void Function() onRelease,
+  }) : this._(picture: picture, isOwned: false, onRelease: onRelease);
+
+  final Picture picture;
+  final bool isOwned;
+  final void Function()? onRelease;
+
+  void release() {
+    if (isOwned) {
+      picture.dispose();
+      return;
+    }
+    onRelease?.call();
+  }
+}
+
+@immutable
+class _BatchPictureCacheKey {
+  const _BatchPictureCacheKey({
+    required this.context,
+    required this.fingerprint,
+    required this.length,
+  });
+
+  final FilterRenderCacheContext context;
+  final int fingerprint;
+  final int length;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BatchPictureCacheKey &&
+          other.context == context &&
+          other.fingerprint == fingerprint &&
+          other.length == length;
+
+  @override
+  int get hashCode => Object.hash(context, fingerprint, length);
+}
+
+class _CachedBatchPicture {
+  _CachedBatchPicture({required this.picture, required this.elementRefs});
+
+  final Picture picture;
+  final List<ElementState> elementRefs;
+  var _activeReaders = 0;
+  var _evicted = false;
+  var _disposed = false;
+
+  bool matches(List<ElementState> elements) {
+    if (elements.length != elementRefs.length) {
+      return false;
+    }
+    for (var index = 0; index < elements.length; index++) {
+      if (!identical(elements[index], elementRefs[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void retain() {
+    _activeReaders += 1;
+  }
+
+  void release() {
+    if (_activeReaders == 0) {
+      return;
+    }
+    _activeReaders -= 1;
+    if (_activeReaders == 0 && _evicted) {
+      _dispose();
+    }
+  }
+
+  void markEvicted() {
+    _evicted = true;
+    if (_activeReaders == 0) {
+      _dispose();
+    }
+  }
+
+  void _dispose() {
+    if (_disposed) {
+      return;
+    }
+    picture.dispose();
+    _disposed = true;
+  }
+}
 
 @immutable
 class _PreparedFilterPass {

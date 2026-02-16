@@ -362,9 +362,185 @@ void main() {
 
       final diagnostics = renderer.lastDiagnostics;
       expect(diagnostics.filterPasses, 2);
-      expect(diagnostics.pictureRecorders, greaterThanOrEqualTo(3));
+      expect(diagnostics.pictureRecorders, greaterThanOrEqualTo(2));
     },
   );
+
+  test(
+    'renderer reuses stable non-filter batches across filter preview frames',
+    () {
+      final renderer = FilterSegmentRenderer();
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      const baseElement = ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: 160, maxY: 90),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const cacheContext = FilterRenderCacheContext(
+        domain: FilterRenderCacheDomain.dynamicLayer,
+        documentVersion: 42,
+        textRenderingCacheRevision: 7,
+        scaleKey: 1000,
+        localeTag: 'en-US',
+      );
+
+      void paintFrame(DrawRect filterRect) {
+        renderer.paint(
+          canvas: canvas,
+          elements: [
+            baseElement,
+            ElementState(
+              id: 'filter',
+              rect: filterRect,
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: const FilterData(type: CanvasFilterType.inversion),
+            ),
+          ],
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            sceneCanvas.drawRect(
+              const Rect.fromLTWH(0, 0, 160, 90),
+              Paint()..color = const Color(0xFF114477),
+            );
+          },
+          cacheContext: cacheContext,
+          dynamicElementIds: const {'filter'},
+        );
+      }
+
+      paintFrame(const DrawRect(maxX: 80, maxY: 80));
+      final firstFrame = renderer.lastDiagnostics;
+      paintFrame(const DrawRect(minX: 10, minY: 10, maxX: 90, maxY: 90));
+      final secondFrame = renderer.lastDiagnostics;
+
+      expect(firstFrame.batchCacheHits, 0);
+      expect(firstFrame.batchCacheMisses, 1);
+      expect(secondFrame.batchCacheHits, 1);
+      expect(secondFrame.batchCacheMisses, 0);
+      expect(
+        secondFrame.pictureRecorders,
+        lessThan(firstFrame.pictureRecorders),
+      );
+      recorder.endRecording();
+    },
+  );
+
+  test('batch cache eviction keeps in-flight batch pictures valid', () async {
+    final renderer = FilterSegmentRenderer(
+      segmentBuilder: const _SplitNonFilterSegmentBuilder(),
+    );
+    const batchCount = 128;
+    const baseColor = Color(0xFF223344);
+    const cacheContext = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.staticLayer,
+      documentVersion: 11,
+      textRenderingCacheRevision: 3,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+    final elements = <ElementState>[
+      for (var i = 0; i < batchCount; i++)
+        ElementState(
+          id: 'base-$i',
+          rect: DrawRect(minX: i * 2, maxX: (i + 1) * 2, maxY: 24),
+          rotation: 0,
+          opacity: 1,
+          zIndex: i,
+          data: const RectangleData(),
+        ),
+      const ElementState(
+        id: 'filter',
+        rect: DrawRect(maxX: batchCount * 2, maxY: 24),
+        rotation: 0,
+        opacity: 1,
+        zIndex: batchCount,
+        data: FilterData(type: CanvasFilterType.inversion),
+      ),
+    ];
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    renderer.paint(
+      canvas: canvas,
+      elements: elements,
+      cacheContext: cacheContext,
+      dynamicElementIds: const {'filter'},
+      paintElement: (sceneCanvas, element) {
+        if (element.id == 'filter') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          Rect.fromLTWH(
+            element.rect.minX,
+            element.rect.minY,
+            element.rect.width,
+            element.rect.height,
+          ),
+          Paint()..color = baseColor,
+        );
+      },
+    );
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(batchCount * 2, 24);
+    final data = await image.toByteData();
+    expect(data, isNotNull);
+
+    final expected = Color.fromARGB(
+      255,
+      255 - _channelFromUnit(baseColor.r),
+      255 - _channelFromUnit(baseColor.g),
+      255 - _channelFromUnit(baseColor.b),
+    );
+    final firstPixel = _readPixel(data!, batchCount * 2, const Offset(1, 12));
+    final lastPixel = _readPixel(
+      data,
+      batchCount * 2,
+      const Offset((batchCount * 2) - 2, 12),
+    );
+    expect(_channelFromUnit(firstPixel.a), greaterThan(0));
+    expect(_channelFromUnit(lastPixel.a), greaterThan(0));
+
+    final expectedR = _channelFromUnit(expected.r);
+    final expectedG = _channelFromUnit(expected.g);
+    final expectedB = _channelFromUnit(expected.b);
+    expect(
+      (_channelFromUnit(firstPixel.r) - expectedR).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(firstPixel.g) - expectedG).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(firstPixel.b) - expectedB).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(lastPixel.r) - expectedR).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(lastPixel.g) - expectedG).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(lastPixel.b) - expectedB).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      renderer.debugBatchPictureCacheSize,
+      lessThanOrEqualTo(renderer.debugBatchPictureCacheLimit),
+    );
+  });
 
   test('filter cache is bounded while filter bounds vary', () {
     final renderer = FilterSegmentRenderer();
@@ -459,5 +635,27 @@ class _SplitBatchSegmentBuilder extends FilterSegmentBuilder {
               ElementBatchSegment(List<ElementState>.unmodifiable([element])),
         )
         .toList(growable: false);
+  }
+}
+
+class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
+  const _SplitNonFilterSegmentBuilder();
+
+  @override
+  List<RenderSegment> build(List<ElementState> elements) {
+    final segments = super.build(elements);
+    final splitSegments = <RenderSegment>[];
+    for (final segment in segments) {
+      if (segment is! ElementBatchSegment || segment.elements.length <= 1) {
+        splitSegments.add(segment);
+        continue;
+      }
+      for (final element in segment.elements) {
+        splitSegments.add(
+          ElementBatchSegment(List<ElementState>.unmodifiable([element])),
+        );
+      }
+    }
+    return splitSegments;
   }
 }

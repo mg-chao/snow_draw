@@ -504,6 +504,9 @@ class DynamicCanvasPainter extends CustomPainter {
     final hasFilterElement = effectiveElements.any(
       (element) => element.data is FilterData,
     );
+    final filterCacheContext = shouldPaintSerialConnectors
+        ? null
+        : _buildFilterCacheContext(scale: scale);
     if (_canUseInteractionSceneCache(
       hasFilterElement: hasFilterElement,
       effectiveElements: effectiveElements,
@@ -526,6 +529,8 @@ class DynamicCanvasPainter extends CustomPainter {
       canvas: canvas,
       elements: effectiveElements,
       paintElement: paintElement,
+      cacheContext: filterCacheContext,
+      dynamicElementIds: dynamicElementIds,
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSceneCompositor.lastDiagnostics;
@@ -535,9 +540,23 @@ class DynamicCanvasPainter extends CustomPainter {
           'saveLayers': diagnostics.saveLayers,
           'filterPasses': diagnostics.filterPasses,
           'batchCount': diagnostics.batchCount,
+          'batchCacheHits': diagnostics.batchCacheHits,
+          'batchCacheMisses': diagnostics.batchCacheMisses,
         });
       }
     }
+  }
+
+  FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
+    final localeTag = renderKey.locale?.toLanguageTag() ?? '';
+    final normalizedScale = scale == 0 ? 1.0 : scale;
+    return FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleKey: (normalizedScale * 1000).round(),
+      localeTag: localeTag,
+    );
   }
 
   bool _canUseInteractionSceneCache({

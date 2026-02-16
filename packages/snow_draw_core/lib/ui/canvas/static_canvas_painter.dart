@@ -107,10 +107,14 @@ class StaticCanvasPainter extends CustomPainter {
               visibleTextElementIds: visibleTextIds,
             )
           : const <String, List<SerialNumberTextConnector>>{};
+      final filterCacheContext = shouldPaintSerialConnectors
+          ? null
+          : _buildFilterCacheContext(scale: scale);
 
       filterSceneCompositor.paintElements(
         canvas: canvas,
         elements: effectiveElements,
+        cacheContext: filterCacheContext,
         paintElement: (sceneCanvas, element) {
           elementRenderer.renderElement(
             canvas: sceneCanvas,
@@ -136,6 +140,8 @@ class StaticCanvasPainter extends CustomPainter {
             'saveLayers': diagnostics.saveLayers,
             'filterPasses': diagnostics.filterPasses,
             'batchCount': diagnostics.batchCount,
+            'batchCacheHits': diagnostics.batchCacheHits,
+            'batchCacheMisses': diagnostics.batchCacheMisses,
           });
         }
       }
@@ -502,6 +508,18 @@ class StaticCanvasPainter extends CustomPainter {
 
   bool _isMajorLine(int index, int majorEvery) =>
       majorEvery > 0 && index % majorEvery == 0;
+
+  FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
+    final localeTag = renderKey.locale?.toLanguageTag() ?? '';
+    final normalizedScale = scale == 0 ? 1.0 : scale;
+    return FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.staticLayer,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleKey: (normalizedScale * 1000).round(),
+      localeTag: localeTag,
+    );
+  }
 
   bool _shouldPaintSerialConnectors({
     required Set<String> boundTextIds,
