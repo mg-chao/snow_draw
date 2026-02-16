@@ -53,6 +53,7 @@ import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
+import 'watermark_canvas_painter.dart';
 import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
@@ -420,6 +421,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final scaleFactor = _effectiveScaleFactor();
     final elementRegistry = widget.store.context.elementRegistry;
     final locale = Localizations.maybeLocaleOf(context);
+    final camera = stateView.state.application.view.camera;
     final textOverlay = _buildTextEditorOverlay(
       state: widget.store.state,
       scaleFactor: scaleFactor,
@@ -469,10 +471,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hasDynamicContent: hasDynamicContent,
       config: highlightMask,
     );
-    final watermarkLayer = resolveWatermarkLayer(
-      hasDynamicContent: hasDynamicContent,
-      config: watermark,
-    );
+    // Watermark rendering is isolated in its own repaint boundary so
+    // watermark edits do not invalidate static/dynamic scene painters.
+    final showWatermarkOverlay = isWatermarkVisible(watermark);
     final textRenderingCacheRevision =
         textRenderingCacheRevisionListenable.value;
 
@@ -480,7 +481,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final staticRenderKey = StaticCanvasRenderKey(
       documentVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: stateView.state.application.view.camera,
+      camera: camera,
       previewElementsById: staticPreviewElements,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       skipBaseElementScene: ownsWholeScene,
@@ -489,8 +490,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       gridConfig: config.grid,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
-      watermarkLayer: watermarkLayer,
-      watermarkConfig: watermark,
       elementRegistry: elementRegistry,
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
@@ -510,7 +509,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       snapGuides: stateView.snapGuides,
       documentVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: stateView.state.application.view.camera,
+      camera: camera,
       previewElementsById: dynamicPreviewElements,
       optimizedDynamicElementIds: optimizedDynamicElementIds,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
@@ -521,8 +520,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       snapConfig: config.snap,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
-      watermarkLayer: watermarkLayer,
-      watermarkConfig: watermark,
       elementRegistry: elementRegistry,
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
@@ -555,6 +552,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
               size: widget.size,
             ),
           ),
+          if (showWatermarkOverlay)
+            RepaintBoundary(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  isComplex: true,
+                  painter: WatermarkCanvasPainter(
+                    camera: camera,
+                    scaleFactor: scaleFactor,
+                    config: watermark,
+                  ),
+                  size: widget.size,
+                ),
+              ),
+            ),
           ?textOverlay,
           ?eraserCursorOverlay,
         ],

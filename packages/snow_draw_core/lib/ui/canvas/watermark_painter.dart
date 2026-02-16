@@ -44,9 +44,10 @@ class WatermarkPainterCache {
     double scaleFactor = 1,
     Offset cameraPosition = Offset.zero,
   }) {
-    // The caller (resolveWatermarkLayer) already filters disabled
-    // configs, but guard against direct calls with no-op configs to
-    // avoid unnecessary canvas state changes.
+    // Callers should filter disabled configs (for example via
+    // isWatermarkVisible/resolveWatermarkLayer), but guard against
+    // direct calls with no-op configs to avoid unnecessary canvas
+    // state changes.
     if (config.text.isEmpty || config.opacity <= 0) {
       return;
     }
@@ -86,14 +87,9 @@ class WatermarkPainterCache {
   }) {
     // Snap the viewport to a coarse grid so small resize deltas
     // (e.g. during a window drag) reuse the existing picture.
-    final snapped = Size(
-      _snap(viewportSize.width),
-      _snap(viewportSize.height),
-    );
+    final snapped = Size(_snap(viewportSize.width), _snap(viewportSize.height));
 
-    if (_picture != null &&
-        _config == config &&
-        _viewportSize == snapped) {
+    if (_picture != null && _config == config && _viewportSize == snapped) {
       return _picture!;
     }
 
@@ -111,11 +107,7 @@ class WatermarkPainterCache {
   /// by ~57 %), this computes the tight AABB of the rotated corners.
   /// The tiling loop then iterates only over tiles that can actually
   /// intersect the visible area.
-  static Rect _rotatedViewportAabb(
-    Size size,
-    Offset center,
-    double angleRad,
-  ) {
+  static Rect _rotatedViewportAabb(Size size, Offset center, double angleRad) {
     final cosA = math.cos(angleRad).abs();
     final sinA = math.sin(angleRad).abs();
     final halfW = size.width / 2;
@@ -136,8 +128,7 @@ class WatermarkPainterCache {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Offset.zero & viewportSize);
 
-    final effectiveAlpha =
-        (config.color.a * config.opacity).clamp(0.0, 1.0);
+    final effectiveAlpha = (config.color.a * config.opacity).clamp(0.0, 1.0);
 
     // At 8-bit precision an alpha below 1/255 ≈ 0.004 maps to zero.
     if (effectiveAlpha < 0.004) {

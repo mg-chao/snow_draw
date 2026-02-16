@@ -21,7 +21,11 @@ class DocumentState {
   /// All elements on the canvas, ordered by z-index.
   final List<ElementState> elements;
 
-  /// Version counter for document changes.
+  /// Version counter for element-list changes.
+  ///
+  /// Global document elements (highlight mask/watermark) are versioned
+  /// separately through value equality and should not invalidate
+  /// element-scene caches tied to [elementsVersion].
   final int elementsVersion;
 
   /// Persistent global document elements.
@@ -204,12 +208,9 @@ class DocumentState {
     final nextElements = elements ?? this.elements;
     final nextGlobalElements = globalElements ?? this.globalElements;
     final hasElementsChanged = !identical(nextElements, this.elements);
-    final hasGlobalElementsChanged = nextGlobalElements != this.globalElements;
     final nextVersion =
         elementsVersion ??
-        (hasElementsChanged || hasGlobalElementsChanged
-            ? this.elementsVersion + 1
-            : this.elementsVersion);
+        (hasElementsChanged ? this.elementsVersion + 1 : this.elementsVersion);
 
     return DocumentState(
       elements: nextElements,

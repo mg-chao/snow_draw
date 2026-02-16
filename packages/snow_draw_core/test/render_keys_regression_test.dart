@@ -8,7 +8,6 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_core/ui/canvas/render_keys.dart';
-import 'package:snow_draw_core/ui/canvas/watermark_visibility.dart';
 
 void main() {
   group('DynamicCanvasRenderKey', () {
@@ -92,8 +91,6 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   snapConfig: const SnapConfig(),
   highlightMaskLayer: HighlightMaskLayer.none,
   highlightMaskConfig: const HighlightMaskConfig(),
-  watermarkLayer: WatermarkLayer.none,
-  watermarkConfig: const WatermarkConfig(),
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
 );
