@@ -13,6 +13,7 @@ import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_visual_cache.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -32,6 +33,7 @@ import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
 import '../../draw/utils/stroke_pattern_utils.dart';
 import 'filter_scene_compositor.dart';
+import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
@@ -54,6 +56,7 @@ class DynamicCanvasPainter extends CustomPainter {
   });
 
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
+  static final _highlightSceneCache = HighlightInteractionSceneCache();
 
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
@@ -406,25 +409,44 @@ class DynamicCanvasPainter extends CustomPainter {
           )
         : const <String, List<SerialNumberTextConnector>>{};
 
+    void paintElement(Canvas sceneCanvas, ElementState element) {
+      elementRenderer.renderElement(
+        canvas: sceneCanvas,
+        element: element,
+        scaleFactor: scale,
+        registry: renderKey.elementRegistry,
+        locale: renderKey.locale,
+      );
+      if (shouldPaintSerialConnectors) {
+        drawSerialNumberConnectorsForText(
+          canvas: sceneCanvas,
+          textElement: element,
+          connectorsByTextId: serialConnectors,
+        );
+      }
+    }
+
+    final hasFilterElement = effectiveElements.any(
+      (element) => element.data is FilterData,
+    );
+    if (_canUseHighlightSceneCache(hasFilterElement: hasFilterElement)) {
+      _highlightSceneCache.paint(
+        canvas: canvas,
+        elements: effectiveElements,
+        dynamicElementIds: _resolveHighlightDynamicElementIds(),
+        documentVersion: renderKey.documentVersion,
+        textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+        scaleFactor: scale,
+        locale: renderKey.locale,
+        paintElement: paintElement,
+      );
+      return;
+    }
+
     filterSceneCompositor.paintElements(
       canvas: canvas,
       elements: effectiveElements,
-      paintElement: (sceneCanvas, element) {
-        elementRenderer.renderElement(
-          canvas: sceneCanvas,
-          element: element,
-          scaleFactor: scale,
-          registry: renderKey.elementRegistry,
-          locale: renderKey.locale,
-        );
-        if (shouldPaintSerialConnectors) {
-          drawSerialNumberConnectorsForText(
-            canvas: sceneCanvas,
-            textElement: element,
-            connectorsByTextId: serialConnectors,
-          );
-        }
-      },
+      paintElement: paintElement,
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSceneCompositor.lastDiagnostics;
@@ -437,6 +459,42 @@ class DynamicCanvasPainter extends CustomPainter {
         });
       }
     }
+  }
+
+  bool _canUseHighlightSceneCache({required bool hasFilterElement}) {
+    if (hasFilterElement) {
+      return false;
+    }
+
+    final previewElements = renderKey.previewElementsById;
+    final document = stateView.state.domain.document;
+    if (previewElements.isNotEmpty) {
+      for (final preview in previewElements.values) {
+        if (preview.data is! HighlightData) {
+          return false;
+        }
+        final persisted = document.getElementById(preview.id);
+        if (persisted != null && persisted.data is! HighlightData) {
+          return false;
+        }
+      }
+    }
+
+    final creatingElement = renderKey.creatingElement;
+    if (creatingElement != null &&
+        creatingElement.element.data is HighlightData) {
+      return true;
+    }
+
+    return previewElements.isNotEmpty;
+  }
+
+  Set<String> _resolveHighlightDynamicElementIds() {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty) {
+      return const <String>{};
+    }
+    return previewElements.keys.toSet();
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

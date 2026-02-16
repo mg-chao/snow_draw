@@ -149,6 +149,66 @@ void main() {
     expect(highlights.last.rect, creatingRect);
   });
 
+  test(
+    'deduplicates creating highlight when preview map already contains it',
+    () {
+      const creatingId = 'creating';
+      const currentRect = DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90);
+      const previewRect = DrawRect(minX: 1, minY: 2, maxX: 3, maxY: 4);
+      final creatingInteraction = CreatingState(
+        element: const ElementState(
+          id: creatingId,
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 5,
+          data: HighlightData(),
+        ),
+        startPosition: DrawPoint.zero,
+        currentRect: currentRect,
+      );
+      final state = _buildState(
+        elements: const [
+          ElementState(
+            id: 'h1',
+            rect: DrawRect(maxX: 10, maxY: 10),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: HighlightData(),
+          ),
+        ],
+        interaction: creatingInteraction,
+      );
+      const previewHighlight = ElementState(
+        id: creatingId,
+        rect: previewRect,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 5,
+        data: HighlightData(),
+      );
+
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: const {creatingId: previewHighlight},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      );
+
+      final highlights = view.highlightMaskScene.elements;
+      expect(highlights.map((element) => element.id).toList(), [
+        'h1',
+        creatingId,
+      ]);
+      expect(
+        highlights.where((element) => element.id == creatingId),
+        hasLength(1),
+      );
+      expect(highlights.last.rect, currentRect);
+    },
+  );
+
   test('excludes creating element when it is not a highlight', () {
     final creatingInteraction = CreatingState(
       element: const ElementState(

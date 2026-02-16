@@ -167,17 +167,17 @@ class DrawStateView {
   }
 
   HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
+    final document = state.domain.document;
     final highlights = <ElementState>[];
 
-    for (final element in state.domain.document.elements) {
-      final effective = effectiveElement(element);
+    for (final element in document.highlightElements) {
+      final effective = _previewElementsById[element.id] ?? element;
       if (effective.data is HighlightData) {
         highlights.add(effective);
       }
     }
 
     if (_previewElementsById.isNotEmpty) {
-      final document = state.domain.document;
       for (final preview in _previewElementsById.values) {
         if (document.getElementById(preview.id) != null) {
           continue;
@@ -191,9 +191,12 @@ class DrawStateView {
     final interaction = state.application.interaction;
     if (interaction is CreatingState &&
         interaction.elementData is HighlightData) {
-      highlights.add(
-        interaction.element.copyWith(rect: interaction.currentRect),
+      final creatingElement = interaction.element.copyWith(
+        rect: interaction.currentRect,
       );
+      highlights
+        ..removeWhere((element) => element.id == creatingElement.id)
+        ..add(creatingElement);
     }
 
     return HighlightMaskSceneSnapshot(highlights);

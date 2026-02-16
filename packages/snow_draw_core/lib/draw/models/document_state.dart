@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
@@ -48,6 +49,15 @@ class DocumentState {
   /// rectangle/text/serial-number elements are present.
   late final bool hasArrowBindableElements = _buildHasArrowBindableElements();
 
+  /// Cached highlight elements in document z-order.
+  ///
+  /// The list is computed lazily once per [DocumentState] instance and reused
+  /// by highlight-mask rendering paths to avoid repeated O(n) scans during
+  /// high-frequency interactions.
+  late final highlightElements = List<ElementState>.unmodifiable(
+    _buildHighlightElements(),
+  );
+
   Map<String, ElementState> get elementMap => _elementMap;
 
   ElementState? getElementById(String id) => _elementMap[id];
@@ -58,7 +68,10 @@ class DocumentState {
 
   /// Touch lazy caches eagerly to avoid stalls during interactive work.
   int warmCaches() =>
-      _elementMap.length + _orderIndex.length + _spatialIndex.size;
+      _elementMap.length +
+      _orderIndex.length +
+      _spatialIndex.size +
+      highlightElements.length;
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
     final result = <ElementState>[];
@@ -171,6 +184,16 @@ class DocumentState {
       }
     }
     return false;
+  }
+
+  List<ElementState> _buildHighlightElements() {
+    final highlights = <ElementState>[];
+    for (final element in elements) {
+      if (element.data is HighlightData) {
+        highlights.add(element);
+      }
+    }
+    return highlights;
   }
 
   DocumentState copyWith({
