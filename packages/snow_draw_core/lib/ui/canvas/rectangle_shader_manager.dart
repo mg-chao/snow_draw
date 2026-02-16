@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../draw/types/element_style.dart';
+import '../../draw/utils/lru_cache.dart';
 
 /// Manages the rectangle fragment shader for GPU-accelerated rendering.
 ///
@@ -11,22 +13,29 @@ import '../../draw/types/element_style.dart';
 /// using the shader. The shader renders the entire rectangle (fill + stroke
 /// with all patterns) in a single GPU draw call.
 ///
-/// A single [ui.FragmentShader] and [Paint] instance are reused across
-/// draw calls to avoid per-rectangle allocations. This is safe because
-/// `setFloat` overwrites uniforms in place and `Canvas.drawRect` consumes
-/// the shader state at call time.
+/// On web backends, sharing a single mutable [ui.FragmentShader] across
+/// multiple rectangle draw calls in one frame can cause uniform values from
+/// later calls to overwrite earlier draws. To keep rendering deterministic,
+/// web uses a bounded per-element shader cache.
 class RectangleShaderManager {
   RectangleShaderManager._();
 
   static final instance = RectangleShaderManager._();
 
   ui.FragmentProgram? _program;
-  ui.FragmentShader? _shader;
+  ui.FragmentShader? _sharedShader;
   var _isLoading = false;
   var _loadFailed = false;
 
-  /// Reusable paint for shader draw calls.
-  final _paint = Paint();
+  /// Reusable paint for non-web shader draw calls.
+  final _sharedPaint = Paint();
+
+  /// Bounded web shader cache keyed by element id.
+  static const _webShaderCacheEntries = 512;
+  final _webShaderCache = LruCache<String, ui.FragmentShader>(
+    maxEntries: _webShaderCacheEntries,
+    onEvict: (shader) => shader.dispose(),
+  );
 
   /// Whether the shader is ready to use.
   bool get isReady => _program != null;
@@ -49,7 +58,9 @@ class RectangleShaderManager {
         'packages/snow_draw_core/shaders/rectangle.frag',
       );
       _program = program;
-      _shader = program.fragmentShader();
+      if (!kIsWeb) {
+        _sharedShader = program.fragmentShader();
+      }
     } on Exception catch (e) {
       _loadFailed = true;
       debugPrint('Failed to load rectangle shader: $e');
@@ -64,6 +75,7 @@ class RectangleShaderManager {
   /// should be used instead.
   bool paintRectangle({
     required Canvas canvas,
+    required String elementId,
     required Offset center,
     required Size size,
     required double rotation,
@@ -81,13 +93,16 @@ class RectangleShaderManager {
     required double dotRadius,
     required double aaWidth,
   }) {
-    final shader = _shader;
+    final program = _program;
+    if (program == null) {
+      return false;
+    }
+
+    final shader = _resolveShader(program, elementId);
     if (shader == null) {
       return false;
     }
 
-    // Reuse the cached shader instance — setFloat overwrites uniforms
-    // in place and Canvas.drawRect snapshots the state at call time.
     var idx = 0;
 
     // uResolution (vec2)
@@ -104,7 +119,7 @@ class RectangleShaderManager {
       // uFillStyle (float, interpreted as int in shader)
       ..setFloat(idx++, fillStyle.index.toDouble());
 
-    // uFillColor (vec4) — premultiplied alpha
+    // uFillColor (vec4), premultiplied alpha.
     final fillAlpha = fillColor.a;
     shader
       ..setFloat(idx++, fillColor.r * fillAlpha)
@@ -118,7 +133,7 @@ class RectangleShaderManager {
       // uStrokeStyle (float, interpreted as int in shader)
       ..setFloat(idx++, strokeStyle.index.toDouble());
 
-    // uStrokeColor (vec4) — premultiplied alpha
+    // uStrokeColor (vec4), premultiplied alpha.
     final strokeAlpha = strokeColor.a;
     shader
       ..setFloat(idx++, strokeColor.r * strokeAlpha)
@@ -138,13 +153,12 @@ class RectangleShaderManager {
       // uAAWidth (float)
       ..setFloat(idx++, aaWidth);
 
-    // Reuse paint — just swap the shader reference.
-    _paint.shader = shader;
+    final paint = _resolvePaint(shader);
 
     // Calculate tight bounding box for rotated rectangle.
-    // For rotation angle θ, the bounding box dimensions are:
-    // width = |w·cos(θ)| + |h·sin(θ)|
-    // height = |w·sin(θ)| + |h·cos(θ)|
+    // For rotation angle r, the bounding box dimensions are:
+    // width = |w * cos(r)| + |h * sin(r)|
+    // height = |w * sin(r)| + |h * cos(r)|
     final cosR = math.cos(rotation).abs();
     final sinR = math.sin(rotation).abs();
     final rotatedWidth = size.width * cosR + size.height * sinR;
@@ -156,14 +170,40 @@ class RectangleShaderManager {
       height: rotatedHeight + padding,
     );
 
-    canvas.drawRect(boundingRect, _paint);
+    canvas.drawRect(boundingRect, paint);
     return true;
+  }
+
+  ui.FragmentShader? _resolveShader(
+    ui.FragmentProgram program,
+    String elementId,
+  ) {
+    if (!kIsWeb) {
+      final shader = _sharedShader;
+      if (shader != null) {
+        return shader;
+      }
+      final created = program.fragmentShader();
+      _sharedShader = created;
+      return created;
+    }
+    return _webShaderCache.getOrCreate(elementId, program.fragmentShader);
+  }
+
+  Paint _resolvePaint(ui.FragmentShader shader) {
+    if (!kIsWeb) {
+      return _sharedPaint..shader = shader;
+    }
+    // Keep paint instances isolated on web to avoid mutable-state carry-over
+    // when multiple draw commands are queued in one frame.
+    return Paint()..shader = shader;
   }
 
   /// Disposes of the shader resources.
   void dispose() {
-    _shader?.dispose();
-    _shader = null;
+    _sharedShader?.dispose();
+    _sharedShader = null;
+    _webShaderCache.clear();
     _program = null;
   }
 }

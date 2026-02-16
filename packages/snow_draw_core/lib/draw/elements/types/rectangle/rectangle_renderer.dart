@@ -95,6 +95,7 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     return shaderManager.paintRectangle(
       canvas: canvas,
+      elementId: element.id,
       center: Offset(rect.centerX, rect.centerY),
       size: Size(rect.width, rect.height),
       rotation: rotation,
