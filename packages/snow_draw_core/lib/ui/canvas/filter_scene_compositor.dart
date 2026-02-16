@@ -28,6 +28,7 @@ class FilterSceneCompositor {
     required List<ElementState> elements,
     required SceneElementPainter paintElement,
     FilterRenderCacheContext? cacheContext,
+    Rect? visibleBounds,
     Set<String> dynamicElementIds = const <String>{},
   }) {
     _renderer.paint(
@@ -35,6 +36,7 @@ class FilterSceneCompositor {
       elements: elements,
       paintElement: paintElement,
       cacheContext: cacheContext,
+      visibleBounds: visibleBounds,
       dynamicElementIds: dynamicElementIds,
     );
   }

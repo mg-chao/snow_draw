@@ -12,10 +12,16 @@ sealed class RenderSegment {
 /// A contiguous batch of non-filter elements.
 @immutable
 final class ElementBatchSegment extends RenderSegment {
-  const ElementBatchSegment(this.elements);
+  const ElementBatchSegment(this.elements, {this.idFingerprint});
 
   /// Non-filter elements in z-order.
   final List<ElementState> elements;
+
+  /// Optional fingerprint of [elements] based on stable element ids.
+  ///
+  /// When provided by the segment builder, the renderer can skip recomputing
+  /// an id hash for cache lookups on every frame.
+  final int? idFingerprint;
 }
 
 /// A filter element segment.

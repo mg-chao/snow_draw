@@ -144,6 +144,12 @@ class StaticCanvasPainter extends CustomPainter {
           canvas: canvas,
           elements: effectiveElements,
           cacheContext: filterCacheContext,
+          visibleBounds: Rect.fromLTWH(
+            viewportRect.minX,
+            viewportRect.minY,
+            viewportRect.width,
+            viewportRect.height,
+          ),
           paintElement: paintElement,
         );
         if (renderKey.performanceMonitoringEnabled) {

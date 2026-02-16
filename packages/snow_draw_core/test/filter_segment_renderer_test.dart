@@ -587,6 +587,191 @@ void main() {
     );
     recorder.endRecording();
   });
+
+  test('tail filter pass avoids additional picture recording on cache hit', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContext = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: 3,
+      textRenderingCacheRevision: 1,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+    const base = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 128, maxY: 96),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const filter = ElementState(
+      id: 'filter',
+      rect: DrawRect(minX: 16, minY: 16, maxX: 112, maxY: 80),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.inversion),
+    );
+
+    void paintFrame() {
+      renderer.paint(
+        canvas: canvas,
+        elements: const [base, filter],
+        cacheContext: cacheContext,
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 128, 96),
+            Paint()..color = const Color(0xFF667788),
+          );
+        },
+      );
+    }
+
+    paintFrame();
+    final first = renderer.lastDiagnostics;
+    paintFrame();
+    final second = renderer.lastDiagnostics;
+
+    expect(first.pictureRecorders, greaterThanOrEqualTo(1));
+    expect(second.pictureRecorders, 0);
+    expect(second.batchCacheHits, 1);
+    recorder.endRecording();
+  });
+
+  test('offscreen filter work is skipped when visible bounds are provided', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    renderer.paint(
+      canvas: canvas,
+      visibleBounds: const Rect.fromLTWH(0, 0, 100, 100),
+      elements: const [
+        ElementState(
+          id: 'base',
+          rect: DrawRect(maxX: 100, maxY: 100),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'offscreen-filter',
+          rect: DrawRect(minX: 500, minY: 500, maxX: 620, maxY: 620),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: FilterData(type: CanvasFilterType.gaussianBlur),
+        ),
+      ],
+      paintElement: (sceneCanvas, element) {
+        if (element.id != 'base') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          const Rect.fromLTWH(0, 0, 100, 100),
+          Paint()..color = const Color(0xFF112233),
+        );
+      },
+    );
+
+    final diagnostics = renderer.lastDiagnostics;
+    expect(diagnostics.filterPasses, 0);
+    expect(diagnostics.saveLayers, 0);
+    recorder.endRecording();
+  });
+
+  test(
+    'mosaic filter stays visually stable when visible bounds cull the layer',
+    () async {
+      final renderer = FilterSegmentRenderer();
+      const imageWidth = 320.0;
+      const imageHeight = 320.0;
+      const base = ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const filter = ElementState(
+        id: 'mosaic',
+        rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(),
+      );
+
+      Future<Color> renderSampleColor({Rect? visibleBounds}) async {
+        final recorder = PictureRecorder();
+        final canvas = Canvas(recorder);
+        renderer.paint(
+          canvas: canvas,
+          visibleBounds: visibleBounds,
+          elements: const [base, filter],
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            const tileSize = 8;
+            for (var y = 0; y < imageHeight; y += tileSize) {
+              for (var x = 0; x < imageWidth; x += tileSize) {
+                final isDarkTile =
+                    (((x ~/ tileSize) + (y ~/ tileSize)) & 1) == 0;
+                sceneCanvas.drawRect(
+                  Rect.fromLTWH(
+                    x.toDouble(),
+                    y.toDouble(),
+                    tileSize.toDouble(),
+                    tileSize.toDouble(),
+                  ),
+                  Paint()
+                    ..color = isDarkTile
+                        ? const Color(0xFF14213D)
+                        : const Color(0xFFFCA311),
+                );
+              }
+            }
+          },
+        );
+
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(
+          imageWidth.toInt(),
+          imageHeight.toInt(),
+        );
+        final bytes = await image.toByteData();
+        expect(bytes, isNotNull);
+        return _readPixel(bytes!, imageWidth.toInt(), const Offset(188, 172));
+      }
+
+      final fullFrame = await renderSampleColor();
+      final culledFrame = await renderSampleColor(
+        visibleBounds: const Rect.fromLTWH(120, 120, 120, 120),
+      );
+
+      expect(
+        (_channelFromUnit(fullFrame.r) - _channelFromUnit(culledFrame.r)).abs(),
+        lessThanOrEqualTo(2),
+      );
+      expect(
+        (_channelFromUnit(fullFrame.g) - _channelFromUnit(culledFrame.g)).abs(),
+        lessThanOrEqualTo(2),
+      );
+      expect(
+        (_channelFromUnit(fullFrame.b) - _channelFromUnit(culledFrame.b)).abs(),
+        lessThanOrEqualTo(2),
+      );
+    },
+  );
 }
 
 Color _lerpColor(Color a, Color b, double t) {

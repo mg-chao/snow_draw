@@ -11,6 +11,9 @@ import 'filter_segment.dart';
 class FilterSegmentBuilder {
   const FilterSegmentBuilder();
 
+  static const _batchFingerprintSeed = 17;
+  static const _hashMask = 0x1fffffff;
+
   /// Builds alternating element-batch and filter segments.
   List<RenderSegment> build(List<ElementState> elements) {
     if (elements.isEmpty) {
@@ -19,15 +22,20 @@ class FilterSegmentBuilder {
 
     final segments = <RenderSegment>[];
     final currentBatch = <ElementState>[];
+    var currentBatchFingerprint = _batchFingerprintSeed;
 
     void flushBatch() {
       if (currentBatch.isEmpty) {
         return;
       }
       segments.add(
-        ElementBatchSegment(List<ElementState>.unmodifiable(currentBatch)),
+        ElementBatchSegment(
+          List<ElementState>.unmodifiable(currentBatch),
+          idFingerprint: currentBatchFingerprint,
+        ),
       );
       currentBatch.clear();
+      currentBatchFingerprint = _batchFingerprintSeed;
     }
 
     for (final element in elements) {
@@ -38,6 +46,8 @@ class FilterSegmentBuilder {
         continue;
       }
       currentBatch.add(element);
+      currentBatchFingerprint =
+          _hashMask & ((currentBatchFingerprint * 31) + element.id.hashCode);
     }
 
     flushBatch();

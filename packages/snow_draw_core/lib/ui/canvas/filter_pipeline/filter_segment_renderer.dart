@@ -67,6 +67,7 @@ class FilterSegmentRenderer {
   static const _filterImageCacheLimit = 256;
   static const _clipInfoCacheLimit = 512;
   static const _batchPictureCacheLimit = 96;
+  static const _maxViewportOutset = 72.0;
 
   final FilterSegmentBuilder _segmentBuilder;
   final _clipInfoCache = LruCache<_FilterClipCacheKey, _ClipInfo>(
@@ -117,6 +118,7 @@ class FilterSegmentRenderer {
     required List<ElementState> elements,
     required SceneElementPainter paintElement,
     FilterRenderCacheContext? cacheContext,
+    Rect? visibleBounds,
     Set<String> dynamicElementIds = const <String>{},
   }) {
     _diagnostics.beginFrame();
@@ -146,6 +148,13 @@ class FilterSegmentRenderer {
       _diagnostics.endFrame();
       return;
     }
+    var lastFilterSegmentIndex = -1;
+    for (var index = 0; index < segments.length; index++) {
+      final segment = segments[index];
+      if (segment is FilterSegment || segment is MergedFilterSegment) {
+        lastFilterSegmentIndex = index;
+      }
+    }
 
     // Accumulate batch pictures and only flatten into a single
     // scene when a filter needs to read the composited result.
@@ -169,7 +178,8 @@ class FilterSegmentRenderer {
       return _ScenePictureRef.owned(recorder.endRecording());
     }
 
-    for (final segment in segments) {
+    for (var segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+      final segment = segments[segmentIndex];
       if (segment is ElementBatchSegment) {
         if (segment.elements.isEmpty) {
           continue;
@@ -179,6 +189,7 @@ class FilterSegmentRenderer {
           _recordBatch(
             segment.elements,
             paintElement,
+            idFingerprint: segment.idFingerprint,
             cacheContext: cacheContext,
             dynamicElementIds: dynamicElementIds,
           ),
@@ -193,10 +204,24 @@ class FilterSegmentRenderer {
       final scene = flattenPending();
 
       if (segment is FilterSegment) {
+        if (segmentIndex == lastFilterSegmentIndex) {
+          _paintFilterDirectlyToCanvas(
+            canvas: canvas,
+            scene: scene.picture,
+            filterElement: segment.filterElement,
+            data: segment.filterData,
+            visibleBounds: visibleBounds,
+            useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+          );
+          scene.release();
+          continue;
+        }
         final filtered = _applyFilter(
           scene: scene.picture,
           filterElement: segment.filterElement,
           data: segment.filterData,
+          visibleBounds: visibleBounds,
+          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -211,6 +236,8 @@ class FilterSegmentRenderer {
         final filtered = _applyMergedFilter(
           scene: scene.picture,
           merged: segment,
+          visibleBounds: visibleBounds,
+          dynamicElementIds: dynamicElementIds,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -231,6 +258,7 @@ class FilterSegmentRenderer {
   _ScenePictureRef _recordBatch(
     List<ElementState> elements,
     SceneElementPainter paintElement, {
+    required int? idFingerprint,
     required FilterRenderCacheContext? cacheContext,
     required Set<String> dynamicElementIds,
   }) {
@@ -240,7 +268,7 @@ class FilterSegmentRenderer {
     if (canUseCache) {
       final cacheKey = _BatchPictureCacheKey(
         context: cacheContext,
-        fingerprint: _batchFingerprint(elements),
+        fingerprint: idFingerprint ?? _batchFingerprint(elements),
         length: elements.length,
       );
       final cached = _batchPictureCache.get(cacheKey);
@@ -285,10 +313,14 @@ class FilterSegmentRenderer {
     required Picture scene,
     required ElementState filterElement,
     required FilterData data,
+    required Rect? visibleBounds,
+    required bool useClipCache,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
+      visibleBounds: visibleBounds,
+      useClipCache: useClipCache,
     );
     if (prepared == null) {
       return scene;
@@ -299,12 +331,16 @@ class FilterSegmentRenderer {
   Picture _applyMergedFilter({
     required Picture scene,
     required MergedFilterSegment merged,
+    required Rect? visibleBounds,
+    required Set<String> dynamicElementIds,
   }) {
     final prepared = <_PreparedFilterPass>[];
     for (final filter in merged.filters) {
       final pass = _prepareFilterPass(
         filterElement: filter.filterElement,
         data: filter.filterData,
+        visibleBounds: visibleBounds,
+        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
       );
       if (pass != null) {
         prepared.add(pass);
@@ -343,10 +379,41 @@ class FilterSegmentRenderer {
     return currentScene;
   }
 
+  void _paintFilterDirectlyToCanvas({
+    required Canvas canvas,
+    required Picture scene,
+    required ElementState filterElement,
+    required FilterData data,
+    required Rect? visibleBounds,
+    required bool useClipCache,
+  }) {
+    final prepared = _prepareFilterPass(
+      filterElement: filterElement,
+      data: data,
+      visibleBounds: visibleBounds,
+      useClipCache: useClipCache,
+    );
+    canvas.drawPicture(scene);
+    if (prepared == null) {
+      return;
+    }
+    _applyClippedFilter(
+      canvas: canvas,
+      scene: scene,
+      clip: prepared.clip,
+      data: prepared.data,
+      layerBounds: prepared.layerBounds,
+      opacity: prepared.opacity,
+    );
+    _diagnostics.markFilterPass();
+  }
+
   // Prepared filter passes.
   _PreparedFilterPass? _prepareFilterPass({
     required ElementState filterElement,
     required FilterData data,
+    required Rect? visibleBounds,
+    required bool useClipCache,
   }) {
     final rect = filterElement.rect;
     if (rect.width <= 0 || rect.height <= 0) {
@@ -358,8 +425,12 @@ class FilterSegmentRenderer {
       return null;
     }
 
-    final clip = _resolveClipInfo(filterElement);
-    final layerBounds = clip.bounds;
+    final clip = _resolveClipInfo(filterElement, useCache: useClipCache);
+    final layerBounds = _resolveVisibleLayerBounds(
+      clipBounds: clip.bounds,
+      visibleBounds: visibleBounds,
+      data: data,
+    );
     if (layerBounds.isEmpty) {
       return null;
     }
@@ -464,6 +535,7 @@ class FilterSegmentRenderer {
       canvas: canvas,
       scene: scene,
       data: data,
+      filterBounds: clip.bounds,
       layerBounds: layerBounds,
       opacity: opacity,
     );
@@ -476,6 +548,7 @@ class FilterSegmentRenderer {
     required Canvas canvas,
     required Picture scene,
     required FilterData data,
+    required Rect filterBounds,
     required Rect layerBounds,
     required double opacity,
     BlendMode blendMode = BlendMode.srcOver,
@@ -486,6 +559,7 @@ class FilterSegmentRenderer {
           canvas,
           scene,
           data,
+          filterBounds,
           layerBounds,
           opacity,
           blendMode: blendMode,
@@ -526,24 +600,33 @@ class FilterSegmentRenderer {
     Canvas canvas,
     Picture scene,
     FilterData data,
+    Rect filterBounds,
     Rect layerBounds,
     double opacity, {
     BlendMode blendMode = BlendMode.srcOver,
   }) {
+    final mosaicBlockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
+      strength: data.strength,
+      regionSize: filterBounds.size,
+    );
+    final mosaicOrigin = filterBounds.topLeft;
+    final normalizedOffsetX = _positiveModulo(mosaicOrigin.dx, mosaicBlockSize);
+    final normalizedOffsetY = _positiveModulo(mosaicOrigin.dy, mosaicBlockSize);
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.mosaic,
-      param0: data.strength,
+      param0: mosaicBlockSize,
       param1: layerBounds.width,
       param2: layerBounds.height,
-      param3: layerBounds.left,
-      param4: layerBounds.top,
+      param3: normalizedOffsetX,
+      param4: normalizedOffsetY,
     );
     final shaderFilter =
         _filterCache.get(cacheKey) ??
         FilterShaderManager.instance.createMosaicFilter(
           strength: data.strength,
           regionSize: layerBounds.size,
-          regionOffset: layerBounds.topLeft,
+          regionOffset: mosaicOrigin,
+          blockSize: mosaicBlockSize,
         );
     if (shaderFilter != null) {
       _filterCache.put(cacheKey, shaderFilter);
@@ -650,7 +733,61 @@ class FilterSegmentRenderer {
           : const Color(0xFFFFFFFF);
   }
 
-  _ClipInfo _resolveClipInfo(ElementState element) {
+  Rect _resolveVisibleLayerBounds({
+    required Rect clipBounds,
+    required Rect? visibleBounds,
+    required FilterData data,
+  }) {
+    if (visibleBounds == null) {
+      return clipBounds;
+    }
+    final viewportOutset = _resolveFilterViewportOutset(
+      data: data,
+      clipBounds: clipBounds,
+    );
+    final expandedVisible = Rect.fromLTRB(
+      visibleBounds.left - viewportOutset,
+      visibleBounds.top - viewportOutset,
+      visibleBounds.right + viewportOutset,
+      visibleBounds.bottom + viewportOutset,
+    );
+    return Rect.fromLTRB(
+      math.max(clipBounds.left, expandedVisible.left),
+      math.max(clipBounds.top, expandedVisible.top),
+      math.min(clipBounds.right, expandedVisible.right),
+      math.min(clipBounds.bottom, expandedVisible.bottom),
+    );
+  }
+
+  double _resolveFilterViewportOutset({
+    required FilterData data,
+    required Rect clipBounds,
+  }) {
+    switch (data.type) {
+      case CanvasFilterType.gaussianBlur:
+        final sigma = _mapStrength(
+          strength: data.strength,
+          minValue: 0.5,
+          maxValue: 12,
+        );
+        final blurRadius = (sigma * 3) + 2;
+        return math.min(blurRadius, _maxViewportOutset);
+      case CanvasFilterType.mosaic:
+        final blockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
+          strength: data.strength,
+          regionSize: clipBounds.size,
+        );
+        return math.min(math.max(blockSize, 8), _maxViewportOutset);
+      case CanvasFilterType.grayscale:
+      case CanvasFilterType.inversion:
+        return 0;
+    }
+  }
+
+  _ClipInfo _resolveClipInfo(ElementState element, {required bool useCache}) {
+    if (!useCache) {
+      return _buildClipInfo(element);
+    }
     final key = _FilterClipCacheKey(
       id: element.id,
       rect: element.rect,
@@ -728,6 +865,17 @@ class FilterSegmentRenderer {
   }) {
     final normalized = strength.clamp(0.0, 1.0);
     return minValue + (maxValue - minValue) * normalized;
+  }
+
+  double _positiveModulo(double value, double period) {
+    if (period <= 0) {
+      return value;
+    }
+    final remainder = value % period;
+    if (remainder < 0) {
+      return remainder + period;
+    }
+    return remainder;
   }
 }
 

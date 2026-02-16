@@ -77,6 +77,7 @@ class FilterShaderManager {
     required double strength,
     required Size regionSize,
     required Offset regionOffset,
+    double? blockSize,
   }) {
     final width = regionSize.width;
     final height = regionSize.height;
@@ -84,23 +85,22 @@ class FilterShaderManager {
       return null;
     }
 
-    final blockSize = resolveMosaicBlockSize(
-      strength: strength,
-      regionSize: regionSize,
-    );
+    final resolvedBlockSize =
+        blockSize ??
+        resolveMosaicBlockSize(strength: strength, regionSize: regionSize);
 
     final shaderFilter = _createShaderBackedMosaicFilter(
       regionWidth: width,
       regionHeight: height,
       regionOffset: regionOffset,
-      blockSize: blockSize,
+      blockSize: resolvedBlockSize,
     );
     if (shaderFilter != null) {
       return shaderFilter;
     }
 
     return _createMatrixMosaicFilter(
-      blockSize: blockSize,
+      blockSize: resolvedBlockSize,
       regionOffset: regionOffset,
     );
   }

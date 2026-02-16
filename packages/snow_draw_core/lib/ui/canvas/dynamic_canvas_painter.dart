@@ -307,6 +307,7 @@ class DynamicCanvasPainter extends CustomPainter {
         _paintElementScene(
           canvas: canvas,
           scale: scale,
+          viewportRect: viewportRect,
           effectiveElements: previewOnlyElements,
         );
         return;
@@ -318,6 +319,7 @@ class DynamicCanvasPainter extends CustomPainter {
       _paintElementScene(
         canvas: canvas,
         scale: scale,
+        viewportRect: viewportRect,
         effectiveElements: optimizedElements,
       );
       return;
@@ -358,6 +360,7 @@ class DynamicCanvasPainter extends CustomPainter {
     _paintElementScene(
       canvas: canvas,
       scale: scale,
+      viewportRect: viewportRect,
       effectiveElements: effectiveElements,
     );
   }
@@ -495,6 +498,7 @@ class DynamicCanvasPainter extends CustomPainter {
   void _paintElementScene({
     required Canvas canvas,
     required double scale,
+    required DrawRect viewportRect,
     required List<ElementState> effectiveElements,
   }) {
     if (effectiveElements.isEmpty) {
@@ -528,6 +532,7 @@ class DynamicCanvasPainter extends CustomPainter {
           )
         : const <String, List<SerialNumberTextConnector>>{};
     final dynamicElementIds = _resolveDynamicElementIds(
+      creatingFilterId: _resolveCreatingFilterId(),
       serialConnectorTextIds: shouldPaintSerialConnectors
           ? serialConnectors.keys
           : const <String>{},
@@ -585,6 +590,12 @@ class DynamicCanvasPainter extends CustomPainter {
       elements: effectiveElements,
       paintElement: paintElement,
       cacheContext: filterCacheContext,
+      visibleBounds: Rect.fromLTWH(
+        viewportRect.minX,
+        viewportRect.minY,
+        viewportRect.width,
+        viewportRect.height,
+      ),
       dynamicElementIds: dynamicElementIds,
     );
     if (renderKey.performanceMonitoringEnabled) {
@@ -682,12 +693,14 @@ class DynamicCanvasPainter extends CustomPainter {
   }
 
   Set<String> _resolveDynamicElementIds({
+    String? creatingFilterId,
     Iterable<String> serialConnectorTextIds = const <String>{},
   }) {
     final previewElements = renderKey.previewElementsById;
     final hasPreviewElements = previewElements.isNotEmpty;
+    final hasCreatingFilter = creatingFilterId != null;
     final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
-    if (!hasPreviewElements && !hasSerialConnectorTexts) {
+    if (!hasPreviewElements && !hasCreatingFilter && !hasSerialConnectorTexts) {
       return const <String>{};
     }
 
@@ -695,10 +708,21 @@ class DynamicCanvasPainter extends CustomPainter {
     if (hasPreviewElements) {
       dynamicElementIds.addAll(previewElements.keys);
     }
+    if (creatingFilterId != null) {
+      dynamicElementIds.add(creatingFilterId);
+    }
     if (hasSerialConnectorTexts) {
       dynamicElementIds.addAll(serialConnectorTextIds);
     }
     return dynamicElementIds;
+  }
+
+  String? _resolveCreatingFilterId() {
+    final creatingElement = renderKey.creatingElement?.element;
+    if (creatingElement == null || creatingElement.data is! FilterData) {
+      return null;
+    }
+    return creatingElement.id;
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>
