@@ -318,6 +318,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pointerMoveDispatcher = FrameAlignedPointerMoveDispatcher(
       dispatchMove: _dispatchPointerMoveEvent,
       shouldCoalesce: _shouldFrameCoalescePointerMove,
+      mergeCoalescedEvents: _mergeCoalescedPointerMoveEvents,
     );
     _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
       dispatchEvent: _dispatchEraserMove,
@@ -1173,8 +1174,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   bool _shouldFrameCoalescePointerMove() {
-    if (widget.currentToolTypeId == FreeDrawData.typeIdToken) {
-      return false;
+    if (_shouldBatchFreeDrawMoves()) {
+      return true;
     }
 
     final interaction = widget.store.state.application.interaction;
@@ -1185,6 +1186,28 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return interaction is EditingState ||
         interaction is BoxSelectingState ||
         interaction is DragPendingState;
+  }
+
+  bool _shouldBatchFreeDrawMoves() {
+    if (_isShiftPressed) {
+      return false;
+    }
+    if (widget.currentToolTypeId == FreeDrawData.typeIdToken) {
+      return true;
+    }
+    final interaction = widget.store.state.application.interaction;
+    return interaction is CreatingState &&
+        interaction.elementData is FreeDrawData;
+  }
+
+  PointerMoveInputEvent _mergeCoalescedPointerMoveEvents(
+    PointerMoveInputEvent pending,
+    PointerMoveInputEvent incoming,
+  ) {
+    if (_shouldBatchFreeDrawMoves()) {
+      return pending.mergeWith(incoming);
+    }
+    return incoming;
   }
 
   Future<void> _dispatchPointerUpInput({

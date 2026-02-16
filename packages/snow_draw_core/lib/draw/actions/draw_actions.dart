@@ -44,6 +44,9 @@ List<String> _freezeElementIds(List<String> elementIds) => elementIds.isEmpty
     ? const <String>[]
     : List<String>.unmodifiable(elementIds);
 
+List<DrawPoint> _freezePoints(List<DrawPoint> points) =>
+    points.isEmpty ? const <DrawPoint>[] : List<DrawPoint>.unmodifiable(points);
+
 // ============================================================================
 // Selection actions
 // ============================================================================
@@ -134,6 +137,29 @@ class UpdateCreatingElement extends DrawAction {
   @override
   String toString() =>
       'UpdateCreatingElement(position: $currentPosition, '
+      'snapOverride: $snapOverride)';
+}
+
+class UpdateCreatingElementBatch extends DrawAction {
+  UpdateCreatingElementBatch({
+    required List<DrawPoint> positions,
+    this.maintainAspectRatio = false,
+    this.createFromCenter = false,
+    this.snapOverride = false,
+  }) : positions = _freezePoints(positions);
+
+  /// Ordered pointer positions represented by this batched update.
+  final List<DrawPoint> positions;
+  final bool maintainAspectRatio;
+  final bool createFromCenter;
+  final bool snapOverride;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  String toString() =>
+      'UpdateCreatingElementBatch(count: ${positions.length}, '
       'snapOverride: $snapOverride)';
 }
 

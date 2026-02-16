@@ -26,8 +26,8 @@ import '../../core/reducer_utils.dart';
 
 /// Reducer for element creation.
 ///
-/// Handles: CreateElement, UpdateCreatingElement, FinishCreateElement,
-/// CancelCreateElement.
+/// Handles: CreateElement, UpdateCreatingElement,
+/// UpdateCreatingElementBatch, FinishCreateElement, CancelCreateElement.
 @immutable
 class CreateElementReducer {
   const CreateElementReducer();
@@ -42,6 +42,11 @@ class CreateElementReducer {
   ) => switch (action) {
     final CreateElement a => _startCreateElement(state, a, context),
     final UpdateCreatingElement a => _updateCreatingElement(state, a, context),
+    final UpdateCreatingElementBatch a => _updateCreatingElementBatch(
+      state,
+      a,
+      context,
+    ),
     final AddArrowPoint a => _addCreationPoint(state, a, context),
     FinishCreateElement _ => _finishCreateElement(state, context),
     CancelCreateElement _ => _cancelCreateElement(state),
@@ -224,6 +229,64 @@ class CreateElementReducer {
     );
     return state.copyWith(
       application: state.application.copyWith(interaction: nextInteraction),
+    );
+  }
+
+  DrawState _updateCreatingElementBatch(
+    DrawState state,
+    UpdateCreatingElementBatch action,
+    CreateElementReducerDeps context,
+  ) {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState || action.positions.isEmpty) {
+      return state;
+    }
+
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: context.config,
+      ctrlPressed: action.snapOverride,
+    );
+
+    var working = interaction;
+    var hasChanges = false;
+
+    for (final position in action.positions) {
+      final updateResult = strategy.update(
+        state: state,
+        config: context.config,
+        creatingState: working,
+        currentPosition: position,
+        maintainAspectRatio: action.maintainAspectRatio,
+        createFromCenter: action.createFromCenter,
+        snappingMode: snappingMode,
+      );
+      if (_isCreationStateUnchanged(working, updateResult)) {
+        continue;
+      }
+
+      hasChanges = true;
+      final baseElement = working.element;
+      final updatedElement = updateResult.data == working.elementData
+          ? baseElement
+          : baseElement.copyWith(data: updateResult.data);
+      working = working.copyWith(
+        element: updatedElement,
+        currentRect: updateResult.rect,
+        snapGuides: updateResult.snapGuides,
+        creationMode: updateResult.creationMode,
+      );
+    }
+
+    if (!hasChanges) {
+      return state;
+    }
+
+    return state.copyWith(
+      application: state.application.copyWith(interaction: working),
     );
   }
 

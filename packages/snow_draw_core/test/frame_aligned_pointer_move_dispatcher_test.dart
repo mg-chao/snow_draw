@@ -52,6 +52,31 @@ void main() {
       await dispatcher.dispose();
     });
 
+    testWidgets('merge callback keeps coalesced move samples', (tester) async {
+      final dispatched = <PointerMoveInputEvent>[];
+      final dispatcher = FrameAlignedPointerMoveDispatcher(
+        dispatchMove: (event) async {
+          dispatched.add(event);
+        },
+        shouldCoalesce: () => true,
+        mergeCoalescedEvents: (pending, incoming) =>
+            pending.mergeWith(incoming),
+      );
+
+      _dispatchMoves(dispatcher, const [1, 2, 3]);
+
+      await tester.pump();
+
+      expect(dispatched, hasLength(1));
+      final event = dispatched.single;
+      expect(event.sampleCount, 3);
+      expect(
+        event.samples().map((point) => point.x).toList(growable: false),
+        equals(const [1.0, 2.0, 3.0]),
+      );
+      await dispatcher.dispose();
+    });
+
     testWidgets('dispatches every move immediately when coalescing is off', (
       tester,
     ) async {

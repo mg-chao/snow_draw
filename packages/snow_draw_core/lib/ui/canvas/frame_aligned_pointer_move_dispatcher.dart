@@ -18,11 +18,16 @@ class FrameAlignedEventDispatcher<T> {
   FrameAlignedEventDispatcher({
     required FrameAlignedEventSink<T> dispatchEvent,
     required bool Function() shouldCoalesce,
+    T Function(T pending, T incoming)? mergePendingEvents,
   }) : _dispatchEvent = _eraseDispatch(dispatchEvent),
-       _shouldCoalesce = shouldCoalesce;
+       _shouldCoalesce = shouldCoalesce,
+       _mergePendingEvents = mergePendingEvents == null
+           ? null
+           : _eraseMerge(mergePendingEvents);
 
   final Future<void> Function(Object?) _dispatchEvent;
   final bool Function() _shouldCoalesce;
+  final Object? Function(Object?, Object?)? _mergePendingEvents;
 
   T? _pendingEvent;
   Future<void>? _inFlightDispatch;
@@ -44,7 +49,13 @@ class FrameAlignedEventDispatcher<T> {
       return;
     }
 
-    _pendingEvent = event;
+    final pending = _pendingEvent;
+    if (pending == null) {
+      _pendingEvent = event;
+    } else {
+      final merged = _mergePendingEvents?.call(pending, event);
+      _pendingEvent = (merged ?? event) as T;
+    }
     _scheduleFrameDispatch();
   }
 
@@ -146,21 +157,32 @@ class FrameAlignedEventDispatcher<T> {
     FrameAlignedEventSink<T> dispatchEvent,
   ) =>
       (event) => dispatchEvent(event as T);
+
+  static Object? Function(Object?, Object?) _eraseMerge<T>(
+    T Function(T pending, T incoming) mergePendingEvents,
+  ) =>
+      (pending, incoming) => mergePendingEvents(pending as T, incoming as T);
 }
 
 /// Dispatches pointer move events with optional frame-aligned coalescing.
 ///
 /// Interactive transforms (move/resize/create) only need the latest pointer
-/// position per frame to render smoothly. This dispatcher keeps free-draw-like
-/// tools fully unthrottled while coalescing rectangle-style interactions to one
-/// update per frame.
+/// position per frame to render smoothly. For free-draw-like interactions, a
+/// custom merge callback can preserve intermediate samples in the coalesced
+/// event payload.
 class FrameAlignedPointerMoveDispatcher {
   FrameAlignedPointerMoveDispatcher({
     required PointerMoveEventSink dispatchMove,
     required bool Function() shouldCoalesce,
+    PointerMoveInputEvent Function(
+      PointerMoveInputEvent pending,
+      PointerMoveInputEvent incoming,
+    )?
+    mergeCoalescedEvents,
   }) : _dispatcher = FrameAlignedEventDispatcher<PointerMoveInputEvent>(
          dispatchEvent: dispatchMove,
          shouldCoalesce: shouldCoalesce,
+         mergePendingEvents: mergeCoalescedEvents,
        );
 
   final FrameAlignedEventDispatcher<PointerMoveInputEvent> _dispatcher;

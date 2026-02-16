@@ -3,6 +3,7 @@ import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/free_draw/free_draw_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
@@ -143,8 +144,26 @@ class CreatePlugin extends DrawInputPlugin {
       }
     }
 
-    if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
+    final isFreeDrawCreating = _isFreeDrawCreating(state);
+    final hasBatchedSamples =
+        isFreeDrawCreating && event.sampleCount > 1 && !event.modifiers.shift;
+    if (!_shouldDispatchCreatingUpdate(
+      event.position,
+      event.modifiers,
+      hasBatchedSamples: hasBatchedSamples,
+    )) {
       return handled(message: 'Create unchanged');
+    }
+
+    if (hasBatchedSamples) {
+      await dispatch(
+        UpdateCreatingElementBatch(
+          positions: event.samples().toList(growable: false),
+          createFromCenter: event.modifiers.alt,
+          snapOverride: event.modifiers.control,
+        ),
+      );
+      return handled(message: 'Create updated (batched)');
     }
 
     await dispatch(
@@ -297,6 +316,14 @@ class CreatePlugin extends DrawInputPlugin {
     return interaction is CreatingState && interaction.isPointCreation;
   }
 
+  bool _isFreeDrawCreating(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState) {
+      return false;
+    }
+    return interaction.elementData is FreeDrawData;
+  }
+
   bool _isElbowArrowCreating(DrawState state) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
@@ -333,9 +360,12 @@ class CreatePlugin extends DrawInputPlugin {
 
   bool _shouldDispatchCreatingUpdate(
     DrawPoint position,
-    KeyModifiers modifiers,
-  ) {
-    if (_lastUpdatePosition == position && _lastUpdateModifiers == modifiers) {
+    KeyModifiers modifiers, {
+    bool hasBatchedSamples = false,
+  }) {
+    if (!hasBatchedSamples &&
+        _lastUpdatePosition == position &&
+        _lastUpdateModifiers == modifiers) {
       return false;
     }
     _lastUpdatePosition = position;

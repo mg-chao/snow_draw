@@ -55,6 +55,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
   static final _interactionSceneCache = InteractionSceneCache();
+  static final _freeDrawPreviewCache = _FreeDrawCreationPreviewCache();
 
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
@@ -65,6 +66,9 @@ class DynamicCanvasPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final state = stateView.state;
+    if (!_isFreeDrawCreationInteraction(state.application.interaction)) {
+      _freeDrawPreviewCache.clear();
+    }
     final camera = renderKey.camera;
     final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
     final viewportRect = DrawRect(
@@ -273,6 +277,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     canvas.restore();
   }
+
+  bool _isFreeDrawCreationInteraction(InteractionState interaction) =>
+      interaction is CreatingState && interaction.elementData is FreeDrawData;
 
   void _drawDynamicElements({
     required Canvas canvas,
@@ -1067,9 +1074,9 @@ class DynamicCanvasPainter extends CustomPainter {
       return false;
     }
 
-    final previewPath = mode.previewPath;
     final points = mode.worldPoints;
-    if (previewPath == null || points == null || points.isEmpty) {
+    if (points == null || points.isEmpty) {
+      _freeDrawPreviewCache.clear();
       return false;
     }
 
@@ -1078,6 +1085,7 @@ class DynamicCanvasPainter extends CustomPainter {
       1.0,
     );
     if (strokeOpacity <= 0 || data.strokeWidth <= 0) {
+      _freeDrawPreviewCache.clear();
       return true;
     }
 
@@ -1090,13 +1098,35 @@ class DynamicCanvasPainter extends CustomPainter {
       ..color = strokeColor
       ..isAntiAlias = true;
 
-    _drawFreeDrawStrokePath(
-      canvas: canvas,
-      path: previewPath,
-      data: data,
-      strokePaint: strokePaint,
-      strokeColor: strokeColor,
-    );
+    final useChunkedSolidPreview =
+        data.strokeStyle == StrokeStyle.solid && !mode.isLineActive;
+    if (useChunkedSolidPreview) {
+      _freeDrawPreviewCache
+        ..sync(
+          elementId: interaction.elementId,
+          points: points,
+          signature: _FreeDrawPreviewStrokeSignature(
+            strokeStyle: data.strokeStyle,
+            strokeWidth: data.strokeWidth,
+            strokeColor: strokeColor,
+          ),
+          strokePaint: strokePaint,
+        )
+        ..paint(canvas: canvas, strokePaint: strokePaint);
+    } else {
+      _freeDrawPreviewCache.clear();
+      final previewPath = mode.previewPath;
+      if (previewPath == null) {
+        return false;
+      }
+      _drawFreeDrawStrokePath(
+        canvas: canvas,
+        path: previewPath,
+        data: data,
+        strokePaint: strokePaint,
+        strokeColor: strokeColor,
+      );
+    }
 
     if (mode.isLineActive &&
         mode.lineAnchor != null &&
@@ -1749,4 +1779,183 @@ class _ArrowBindingHighlight {
   const _ArrowBindingHighlight({required this.elementId});
 
   final String elementId;
+}
+
+@immutable
+class _FreeDrawPreviewStrokeSignature {
+  const _FreeDrawPreviewStrokeSignature({
+    required this.strokeStyle,
+    required this.strokeWidth,
+    required this.strokeColor,
+  });
+
+  final StrokeStyle strokeStyle;
+  final double strokeWidth;
+  final Color strokeColor;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _FreeDrawPreviewStrokeSignature &&
+          other.strokeStyle == strokeStyle &&
+          other.strokeWidth == strokeWidth &&
+          other.strokeColor == strokeColor;
+
+  @override
+  int get hashCode => Object.hash(strokeStyle, strokeWidth, strokeColor);
+}
+
+class _FreeDrawCreationPreviewCache {
+  static const _chunkPointThreshold = 96;
+
+  String? _elementId;
+  _FreeDrawPreviewStrokeSignature? _signature;
+  var _processedPointCount = 0;
+  DrawPoint? _lastProcessedPoint;
+  DrawPoint? _tailLastPoint;
+  var _tailPath = Path();
+  var _tailPointCount = 0;
+  Picture? _committedPicture;
+
+  void clear() {
+    _committedPicture?.dispose();
+    _committedPicture = null;
+    _elementId = null;
+    _signature = null;
+    _processedPointCount = 0;
+    _lastProcessedPoint = null;
+    _tailLastPoint = null;
+    _tailPath = Path();
+    _tailPointCount = 0;
+  }
+
+  void sync({
+    required String elementId,
+    required List<DrawPoint> points,
+    required _FreeDrawPreviewStrokeSignature signature,
+    required Paint strokePaint,
+  }) {
+    if (points.isEmpty) {
+      clear();
+      return;
+    }
+
+    if (_needsReset(
+      elementId: elementId,
+      points: points,
+      signature: signature,
+    )) {
+      _resetForSession(elementId: elementId, signature: signature);
+    }
+
+    if (_processedPointCount == 0) {
+      final firstPoint = points.first;
+      _tailPath.moveTo(firstPoint.x, firstPoint.y);
+      _tailLastPoint = firstPoint;
+      _lastProcessedPoint = firstPoint;
+      _tailPointCount = 1;
+      _processedPointCount = 1;
+    }
+
+    for (var i = _processedPointCount; i < points.length; i++) {
+      _appendPoint(points[i], strokePaint);
+    }
+    _processedPointCount = points.length;
+    _lastProcessedPoint = points.last;
+  }
+
+  void paint({required Canvas canvas, required Paint strokePaint}) {
+    final committedPicture = _committedPicture;
+    if (committedPicture != null) {
+      canvas.drawPicture(committedPicture);
+    }
+    if (_tailPointCount >= 2) {
+      canvas.drawPath(_tailPath, strokePaint);
+    }
+  }
+
+  bool _needsReset({
+    required String elementId,
+    required List<DrawPoint> points,
+    required _FreeDrawPreviewStrokeSignature signature,
+  }) {
+    if (_elementId != elementId || _signature != signature) {
+      return true;
+    }
+    if (_processedPointCount == 0) {
+      return false;
+    }
+    if (_processedPointCount > points.length) {
+      return true;
+    }
+    final lastProcessedPoint = _lastProcessedPoint;
+    if (lastProcessedPoint == null) {
+      return true;
+    }
+    return points[_processedPointCount - 1] != lastProcessedPoint;
+  }
+
+  void _resetForSession({
+    required String elementId,
+    required _FreeDrawPreviewStrokeSignature signature,
+  }) {
+    _committedPicture?.dispose();
+    _committedPicture = null;
+    _elementId = elementId;
+    _signature = signature;
+    _processedPointCount = 0;
+    _lastProcessedPoint = null;
+    _tailLastPoint = null;
+    _tailPath = Path();
+    _tailPointCount = 0;
+  }
+
+  void _appendPoint(DrawPoint point, Paint strokePaint) {
+    final lastPoint = _tailLastPoint;
+    if (lastPoint == null) {
+      _tailPath.moveTo(point.x, point.y);
+      _tailLastPoint = point;
+      _tailPointCount = 1;
+      return;
+    }
+    if (lastPoint.x == point.x && lastPoint.y == point.y) {
+      _tailLastPoint = point;
+      return;
+    }
+
+    _tailPath.lineTo(point.x, point.y);
+    _tailLastPoint = point;
+    _tailPointCount += 1;
+
+    if (_tailPointCount >= _chunkPointThreshold) {
+      _commitTailChunk(strokePaint);
+    }
+  }
+
+  void _commitTailChunk(Paint strokePaint) {
+    if (_tailPointCount < 2) {
+      return;
+    }
+
+    final recorder = PictureRecorder();
+    final chunkCanvas = Canvas(recorder);
+    final committedPicture = _committedPicture;
+    if (committedPicture != null) {
+      chunkCanvas.drawPicture(committedPicture);
+    }
+    chunkCanvas.drawPath(_tailPath, strokePaint);
+    final nextPicture = recorder.endRecording();
+
+    _committedPicture?.dispose();
+    _committedPicture = nextPicture;
+
+    final tailLastPoint = _tailLastPoint;
+    _tailPath = Path();
+    if (tailLastPoint != null) {
+      _tailPath.moveTo(tailLastPoint.x, tailLastPoint.y);
+      _tailPointCount = 1;
+    } else {
+      _tailPointCount = 0;
+    }
+  }
 }

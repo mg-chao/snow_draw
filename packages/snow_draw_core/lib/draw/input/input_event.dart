@@ -72,14 +72,80 @@ class PointerDownInputEvent extends InputEvent {
 }
 
 class PointerMoveInputEvent extends InputEvent {
-  const PointerMoveInputEvent({
+  PointerMoveInputEvent({
     required super.position,
     required super.modifiers,
     super.pressure,
-  });
+    List<DrawPoint> sampledPoints = const <DrawPoint>[],
+  }) : sampledPoints = _freezeSampledPoints(
+         sampledPoints: sampledPoints,
+         position: position,
+       );
+
+  /// Coalesced pointer samples represented by this event.
+  ///
+  /// When empty, [position] is the sole sample.
+  final List<DrawPoint> sampledPoints;
+
+  /// Total number of pointer samples represented by this event.
+  int get sampleCount => sampledPoints.isEmpty ? 1 : sampledPoints.length;
+
+  /// Returns all pointer samples in draw order.
+  Iterable<DrawPoint> samples() sync* {
+    if (sampledPoints.isEmpty) {
+      yield position;
+      return;
+    }
+    yield* sampledPoints;
+  }
+
+  /// Merges this event with [next], preserving sample order.
+  ///
+  /// The merged event uses [next]'s position/modifiers/pressure and keeps all
+  /// intermediate samples from both events.
+  PointerMoveInputEvent mergeWith(PointerMoveInputEvent next) {
+    final merged = <DrawPoint>[];
+
+    void appendSample(DrawPoint point) {
+      if (merged.isEmpty || merged.last != point) {
+        merged.add(point);
+      }
+    }
+
+    void appendEventSamples(PointerMoveInputEvent event) {
+      for (final point in event.samples()) {
+        appendSample(point);
+      }
+    }
+
+    appendEventSamples(this);
+    appendEventSamples(next);
+
+    return PointerMoveInputEvent(
+      position: next.position,
+      modifiers: next.modifiers,
+      pressure: next.pressure,
+      sampledPoints: merged,
+    );
+  }
 
   @override
-  String toString() => 'PointerMoveInputEvent($position, $modifiers)';
+  String toString() =>
+      'PointerMoveInputEvent($position, $modifiers, samples: $sampleCount)';
+}
+
+List<DrawPoint> _freezeSampledPoints({
+  required List<DrawPoint> sampledPoints,
+  required DrawPoint position,
+}) {
+  if (sampledPoints.isEmpty) {
+    return const <DrawPoint>[];
+  }
+  if (sampledPoints.last == position) {
+    return List<DrawPoint>.unmodifiable(sampledPoints);
+  }
+  final normalized = List<DrawPoint>.of(sampledPoints)..add(position);
+  return List<DrawPoint>.unmodifiable(normalized);
 }
 
 class PointerHoverInputEvent extends InputEvent {

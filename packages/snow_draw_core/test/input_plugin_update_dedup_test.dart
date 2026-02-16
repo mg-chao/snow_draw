@@ -32,8 +32,8 @@ void main() {
         );
         await plugin.onLoad(context);
 
-        const event = PointerMoveInputEvent(
-          position: DrawPoint(x: 16, y: 24, pressure: 0.5),
+        final event = PointerMoveInputEvent(
+          position: const DrawPoint(x: 16, y: 24, pressure: 0.5),
           modifiers: KeyModifiers.none,
           pressure: 0.5,
         );
@@ -44,13 +44,55 @@ void main() {
         expect(updates, hasLength(1));
 
         await plugin.handleEvent(
-          const PointerMoveInputEvent(
-            position: DrawPoint(x: 16, y: 24, pressure: 0.5),
-            modifiers: KeyModifiers(shift: true),
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 16, y: 24, pressure: 0.5),
+            modifiers: const KeyModifiers(shift: true),
             pressure: 0.5,
           ),
         );
         expect(dispatched.whereType<UpdateCreatingElement>(), hasLength(2));
+
+        await plugin.onUnload();
+      },
+    );
+
+    test(
+      'dispatches batched create updates for coalesced free-draw moves',
+      () async {
+        final dispatched = <DrawAction>[];
+        final state = _creatingFreeDrawState();
+        final context = _pluginContext(
+          stateProvider: () => state,
+          dispatched: dispatched,
+        );
+        final plugin = CreatePlugin(
+          currentToolTypeId: FreeDrawData.typeIdToken,
+        );
+        await plugin.onLoad(context);
+
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 26, y: 38, pressure: 0.7),
+            modifiers: KeyModifiers.none,
+            pressure: 0.7,
+            sampledPoints: const [
+              DrawPoint(x: 14, y: 18, pressure: 0.4),
+              DrawPoint(x: 20, y: 28, pressure: 0.5),
+              DrawPoint(x: 26, y: 38, pressure: 0.7),
+            ],
+          ),
+        );
+
+        final batched = dispatched
+            .whereType<UpdateCreatingElementBatch>()
+            .toList();
+        expect(batched, hasLength(1));
+        expect(batched.single.positions, hasLength(3));
+        expect(
+          batched.single.positions.map((point) => point.x).toList(),
+          equals(const [14.0, 20.0, 26.0]),
+        );
+        expect(dispatched.whereType<UpdateCreatingElement>(), isEmpty);
 
         await plugin.onUnload();
       },
@@ -70,8 +112,8 @@ void main() {
         final plugin = EditPlugin();
         await plugin.onLoad(context);
 
-        const event = PointerMoveInputEvent(
-          position: DrawPoint(x: 80, y: 48),
+        final event = PointerMoveInputEvent(
+          position: const DrawPoint(x: 80, y: 48),
           modifiers: KeyModifiers.none,
         );
         await plugin.handleEvent(event);
@@ -80,9 +122,9 @@ void main() {
         expect(dispatched.whereType<UpdateEdit>(), hasLength(1));
 
         await plugin.handleEvent(
-          const PointerMoveInputEvent(
-            position: DrawPoint(x: 80, y: 48),
-            modifiers: KeyModifiers(alt: true),
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 80, y: 48),
+            modifiers: const KeyModifiers(alt: true),
           ),
         );
         expect(dispatched.whereType<UpdateEdit>(), hasLength(2));
