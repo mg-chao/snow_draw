@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
+import '../../../models/document_state.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
@@ -133,6 +134,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: adjustedCurrent,
       snappingMode: snappingMode,
+      sessionData: sessionData,
     );
     adjustedCurrent = snapResult.position;
     snapGuides = snapResult.guides;
@@ -268,6 +270,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       config: config,
       position: adjustedPosition,
       snappingMode: snappingMode,
+      sessionData: sessionData,
     );
     adjustedPosition = snapResult.position;
     final snapGuides = snapResult.guides;
@@ -406,6 +409,9 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 }
 
 const _loopCloseToleranceMultiplier = 1.5;
+const _bindingCacheTargetThresholdFactor = 0.4;
+const _bindingCacheEmptyThresholdFactor = 0.75;
+const _preferredBindingStickinessFactor = 0.3;
 
 /// Calculates accurate bounding rect for arrow, accounting for curved paths.
 DrawRect _calculateArrowRect({
@@ -504,6 +510,7 @@ _PointSnapResult _snapCreatePoint({
   required DrawConfig config,
   required DrawPoint position,
   required SnappingMode snappingMode,
+  _ArrowCreationSessionData? sessionData,
 }) {
   if (snappingMode != SnappingMode.object) {
     return _PointSnapResult(position: position);
@@ -512,7 +519,10 @@ _PointSnapResult _snapCreatePoint({
   if (!snapConfig.enablePointSnaps && !snapConfig.enableGapSnaps) {
     return _PointSnapResult(position: position);
   }
-  final referenceElements = _resolveReferenceElements(state);
+  final referenceElements = _resolveReferenceElements(
+    state,
+    sessionData: sessionData,
+  );
   if (referenceElements.isEmpty) {
     return _PointSnapResult(position: position);
   }
@@ -587,6 +597,24 @@ _BindingSnapResult _snapBindingPoint({
     return _BindingSnapResult(position: position);
   }
 
+  final preferredCandidate = _resolvePreferredBindingCandidate(
+    position: position,
+    targets: targets,
+    arrowType: arrowType,
+    arrowheadStyle: arrowheadStyle,
+    snapDistance: bindingDistance,
+    preferredBinding: preferredBinding,
+    referencePoint: referencePoint,
+  );
+  if (preferredCandidate != null &&
+      preferredCandidate.distance <=
+          bindingDistance * _preferredBindingStickinessFactor) {
+    return _BindingSnapResult(
+      position: preferredCandidate.snapPoint,
+      binding: preferredCandidate.binding,
+    );
+  }
+
   final candidate = arrowType == ArrowType.elbow
       ? ArrowBindingUtils.resolveElbowBindingCandidate(
           worldPoint: position,
@@ -611,12 +639,64 @@ _BindingSnapResult _snapBindingPoint({
   );
 }
 
-List<ElementState> _resolveReferenceElements(DrawState state) => state
-    .domain
-    .document
-    .elements
-    .where((element) => element.opacity > 0)
-    .toList();
+ArrowBindingResult? _resolvePreferredBindingCandidate({
+  required DrawPoint position,
+  required List<ElementState> targets,
+  required ArrowType arrowType,
+  required ArrowheadStyle arrowheadStyle,
+  required double snapDistance,
+  ArrowBinding? preferredBinding,
+  DrawPoint? referencePoint,
+}) {
+  if (preferredBinding == null) {
+    return null;
+  }
+  final preferredTarget = _resolveTargetById(
+    targets,
+    preferredBinding.elementId,
+  );
+  if (preferredTarget == null) {
+    return null;
+  }
+  if (arrowType == ArrowType.elbow) {
+    return ArrowBindingUtils.resolveElbowBindingCandidate(
+      worldPoint: position,
+      targets: [preferredTarget],
+      snapDistance: snapDistance,
+      preferredBinding: preferredBinding,
+      allowNewBinding: false,
+      hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
+    );
+  }
+  return ArrowBindingUtils.resolveBindingCandidate(
+    worldPoint: position,
+    targets: [preferredTarget],
+    snapDistance: snapDistance,
+    preferredBinding: preferredBinding,
+    allowNewBinding: false,
+    referencePoint: referencePoint,
+  );
+}
+
+ElementState? _resolveTargetById(List<ElementState> targets, String id) {
+  for (final target in targets) {
+    if (target.id == id) {
+      return target;
+    }
+  }
+  return null;
+}
+
+List<ElementState> _resolveReferenceElements(
+  DrawState state, {
+  _ArrowCreationSessionData? sessionData,
+}) {
+  final document = state.domain.document;
+  if (sessionData != null) {
+    return sessionData.resolveReferenceElements(document);
+  }
+  return document.elements.where((element) => element.opacity > 0).toList();
+}
 
 List<ElementState> _resolveBindingTargets(
   DrawState state,
@@ -625,7 +705,7 @@ List<ElementState> _resolveBindingTargets(
 ) {
   final document = state.domain.document;
   final targets = <ElementState>[];
-  document.visitElementsAtPointTopDown(position, distance, (element) {
+  document.visitElementsAtPoint(position, distance, (element) {
     if (element.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(element)) {
       return true;
     }
@@ -645,7 +725,10 @@ List<ElementState> _resolveBindingTargetsCached({
     return _resolveBindingTargets(state, position, distance);
   }
   final elementsVersion = state.domain.document.elementsVersion;
-  final threshold = distance * 0.4;
+  final thresholdFactor = cache.targets.isEmpty
+      ? _bindingCacheEmptyThresholdFactor
+      : _bindingCacheTargetThresholdFactor;
+  final threshold = distance * thresholdFactor;
   if (cache.isValid(
     position: position,
     threshold: threshold,
@@ -676,6 +759,19 @@ _ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
 class _ArrowCreationSessionData {
   final startTargetCache = ArrowBindingTargetCache();
   final endTargetCache = ArrowBindingTargetCache();
+
+  var _referenceElementsVersion = -1;
+  List<ElementState> _referenceElements = const [];
+
+  List<ElementState> resolveReferenceElements(DocumentState document) {
+    if (_referenceElementsVersion == document.elementsVersion) {
+      return _referenceElements;
+    }
+    _referenceElementsVersion = document.elementsVersion;
+    return _referenceElements = document.elements
+        .where((element) => element.opacity > 0)
+        .toList(growable: false);
+  }
 }
 
 @immutable

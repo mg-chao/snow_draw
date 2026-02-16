@@ -9,6 +9,16 @@ import 'arrow_visual_cache.dart';
 class ArrowRenderer extends ElementTypeRenderer {
   const ArrowRenderer();
 
+  static final _strokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true;
+  static final _dotPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..isAntiAlias = true;
+
   @override
   void render({
     required Canvas canvas,
@@ -44,23 +54,16 @@ class ArrowRenderer extends ElementTypeRenderer {
     }
     canvas.translate(rect.minX, rect.minY);
 
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final strokePaint = _strokePaint
       ..strokeWidth = data.strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = data.color.withValues(alpha: strokeOpacity)
-      ..isAntiAlias = true;
+      ..color = data.color.withValues(alpha: strokeOpacity);
 
     if (data.strokeStyle == StrokeStyle.dotted) {
       final dotPositions = cached.dotPositions;
       if (dotPositions != null && dotPositions.isNotEmpty) {
-        final dotPaint = Paint()
-          ..style = PaintingStyle.stroke
+        final dotPaint = _dotPaint
           ..strokeWidth = cached.dotRadius * 2
-          ..strokeCap = StrokeCap.round
-          ..color = data.color.withValues(alpha: strokeOpacity)
-          ..isAntiAlias = true;
+          ..color = data.color.withValues(alpha: strokeOpacity);
         canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
       }
 

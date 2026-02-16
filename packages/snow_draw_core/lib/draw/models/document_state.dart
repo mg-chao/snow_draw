@@ -86,8 +86,9 @@ class DocumentState {
     return result;
   }
 
-  bool hasElementAtPoint(DrawPoint point, double tolerance) =>
-      _spatialIndex.searchPointEntries(point, tolerance).isNotEmpty;
+  bool hasElementAtPoint(DrawPoint point, double tolerance) => _spatialIndex
+      .searchPointEntries(point, tolerance, sortByZ: false)
+      .isNotEmpty;
 
   List<ElementState> getElementsInRect(DrawRect rect) {
     final entries = _spatialIndex.searchRectEntries(rect);
@@ -146,6 +147,30 @@ class DocumentState {
     bool Function(ElementState element) visitor,
   ) {
     final entries = _spatialIndex.searchPointEntries(point, tolerance);
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        if (!visitor(element)) {
+          return;
+        }
+      }
+    }
+  }
+
+  /// Visits point candidates in arbitrary order.
+  ///
+  /// This skips z-order sorting and is suitable for callers that only need
+  /// geometric candidates (for example arrow binding resolution).
+  void visitElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor,
+  ) {
+    final entries = _spatialIndex.searchPointEntries(
+      point,
+      tolerance,
+      sortByZ: false,
+    );
     for (final entry in entries) {
       final element = getElementById(entry.id);
       if (element != null) {

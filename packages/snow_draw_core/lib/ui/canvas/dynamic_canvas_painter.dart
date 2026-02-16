@@ -56,6 +56,12 @@ class DynamicCanvasPainter extends CustomPainter {
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
   static final _interactionSceneCache = InteractionSceneCache();
   static final _freeDrawPreviewCache = _FreeDrawCreationPreviewCache();
+  static final _arrowOverlayPaints = _ArrowOverlayPaints();
+  static final _arrowHoverStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true;
 
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
@@ -715,73 +721,31 @@ class DynamicCanvasPainter extends CustomPainter {
     final loopOuterRadius = handleSize * 1.0;
     final loopInnerRadius = handleSize * 0.5;
     final hoverOuterRadius = loopOuterRadius;
-
-    final addableStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.35)
-      ..isAntiAlias = true;
-    final addableFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.18)
-      ..isAntiAlias = true;
-    final addableStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.85)
-      ..isAntiAlias = true;
-    final addableFillPaintHighlighted = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.55)
-      ..isAntiAlias = true;
-    final turningFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = fillColor.withValues(alpha: 0.90)
-      ..isAntiAlias = true;
-    final turningStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor
-      ..isAntiAlias = true;
-    final turningStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-    final fixedFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = fillColor.withValues(alpha: 0.90)
-      ..isAntiAlias = true;
-    final fixedStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.9)
-      ..isAntiAlias = true;
-    final fixedStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-    final hoverOuterFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.25)
-      ..isAntiAlias = true;
+    final paints = _arrowOverlayPaints
+      ..configure(
+        strokeWidth: strokeWidth,
+        fillColor: fillColor,
+        strokeColor: strokeColor,
+        highlightStrokeColor: highlightStroke,
+      );
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       final isFixed = handle.isFixed;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
       final fillPaint = isFixed
-          ? fixedFillPaint
-          : (isHighlighted ? addableFillPaintHighlighted : addableFillPaint);
-      final strokePaint = isFixed
-          ? (isHighlighted ? fixedStrokePaintHighlighted : fixedStrokePaint)
+          ? paints.fixedFill
           : (isHighlighted
-                ? addableStrokePaintHighlighted
-                : addableStrokePaint);
+                ? paints.addableFillHighlighted
+                : paints.addableFill);
+      final strokePaint = isFixed
+          ? (isHighlighted ? paints.fixedStrokeHighlighted : paints.fixedStroke)
+          : (isHighlighted
+                ? paints.addableStrokeHighlighted
+                : paints.addableStroke);
       final radius = addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
@@ -792,35 +756,22 @@ class DynamicCanvasPainter extends CustomPainter {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
-      final fillPaint = turningFillPaint;
+      final fillPaint = paints.turningFill;
       final strokePaint = isHighlighted
-          ? turningStrokePaintHighlighted
-          : turningStrokePaint;
+          ? paints.turningStrokeHighlighted
+          : paints.turningStroke;
       canvas
         ..drawCircle(center, turnRadius, fillPaint)
         ..drawCircle(center, turnRadius, strokePaint);
     }
 
-    // Pre-build loop stroke paints outside the loop to avoid
-    // allocating a new Paint per loop-point per frame.
-    final loopStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor
-      ..isAntiAlias = true;
-    final loopStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-
     for (final handle in overlay.loopPoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
       final radius = handle.kind == ArrowPointKind.loopEnd
           ? loopOuterRadius
@@ -828,23 +779,18 @@ class DynamicCanvasPainter extends CustomPainter {
 
       // Inner loop point (loopStart) has filled style like bend points
       if (handle.kind == ArrowPointKind.loopStart) {
-        canvas.drawCircle(center, radius, turningFillPaint);
+        canvas.drawCircle(center, radius, paints.turningFill);
       }
       canvas.drawCircle(
         center,
         radius,
-        isHighlighted ? loopStrokePaintHighlighted : loopStrokePaint,
+        isHighlighted ? paints.loopStrokeHighlighted : paints.loopStroke,
       );
     }
 
     if (deletePosition != null) {
       final center = _localOffset(effectiveElement.rect, deletePosition);
-      final deletePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth * 1.4
-        ..color = Colors.redAccent
-        ..isAntiAlias = true;
-      canvas.drawCircle(center, turnRadius * 1.35, deletePaint);
+      canvas.drawCircle(center, turnRadius * 1.35, paints.deleteStroke);
     }
 
     canvas.restore();
@@ -959,13 +905,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     // Use hover selection color with modified appearance
     final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final strokePaint = _arrowHoverStrokePaint
       ..strokeWidth = hoverStrokeWidth / scale
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = hoverColor
-      ..isAntiAlias = true;
+      ..color = hoverColor;
 
     // Draw shaft (always solid for hover outline)
     canvas.drawPath(cached.shaftPath, strokePaint);
@@ -1773,6 +1715,92 @@ class DynamicCanvasPainter extends CustomPainter {
 
   @override
   int get hashCode => renderKey.hashCode;
+}
+
+class _ArrowOverlayPaints {
+  _ArrowOverlayPaints();
+
+  final addableStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final addableFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final addableStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final addableFillHighlighted = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final turningFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final turningStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final turningStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final fixedFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final fixedStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final fixedStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final hoverOuterFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final loopStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final loopStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final deleteStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..color = Colors.redAccent
+    ..isAntiAlias = true;
+
+  void configure({
+    required double strokeWidth,
+    required Color fillColor,
+    required Color strokeColor,
+    required Color highlightStrokeColor,
+  }) {
+    addableStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.35);
+    addableFill.color = strokeColor.withValues(alpha: 0.18);
+    addableStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.85);
+    addableFillHighlighted.color = strokeColor.withValues(alpha: 0.55);
+    turningFill.color = fillColor.withValues(alpha: 0.90);
+    turningStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor;
+    turningStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    fixedFill.color = fillColor.withValues(alpha: 0.90);
+    fixedStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.9);
+    fixedStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    hoverOuterFill.color = strokeColor.withValues(alpha: 0.25);
+    loopStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor;
+    loopStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    deleteStroke.strokeWidth = strokeWidth * 1.4;
+  }
 }
 
 class _ArrowBindingHighlight {

@@ -124,6 +124,16 @@ class _CountingDocumentState extends DocumentState {
   final _HitTestCounter counter;
 
   @override
+  void visitElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor,
+  ) {
+    counter.value++;
+    super.visitElementsAtPoint(point, tolerance, visitor);
+  }
+
+  @override
   void visitElementsAtPointTopDown(
     DrawPoint point,
     double tolerance,

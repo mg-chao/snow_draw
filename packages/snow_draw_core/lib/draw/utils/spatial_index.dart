@@ -63,6 +63,7 @@ class SpatialIndex {
     DrawPoint point,
     double tolerance, {
     bool descending = true,
+    bool sortByZ = true,
   }) {
     final results = _tree.search(
       RBushBox(
@@ -74,12 +75,14 @@ class SpatialIndex {
     );
     final buffer = _pointSearchBuffer
       ..clear()
-      ..addAll(results)
-      ..sort(
+      ..addAll(results);
+    if (sortByZ && buffer.length > 1) {
+      buffer.sort(
         descending
             ? (a, b) => b.zIndex.compareTo(a.zIndex)
             : (a, b) => a.zIndex.compareTo(b.zIndex),
       );
+    }
     return buffer;
   }
 

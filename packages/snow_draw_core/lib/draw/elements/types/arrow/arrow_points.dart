@@ -8,6 +8,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
+import 'elbow/elbow_fixed_segment.dart';
 
 enum ArrowPointKind { turning, addable, loopStart, loopEnd }
 
@@ -115,15 +116,13 @@ class ArrowPointUtils {
         );
       }
       final addablePoints = <ArrowPointHandle>[];
-      final fixedSegments = data.fixedSegments ?? const [];
+      final fixedSegmentIndexes = _fixedSegmentIndexSet(data.fixedSegments);
       for (var i = 0; i < rawPoints.length - 1; i++) {
         if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
           continue;
         }
         final segmentIndex = i + 1;
-        final isFixed = fixedSegments.any(
-          (segment) => segment.index == segmentIndex,
-        );
+        final isFixed = fixedSegmentIndexes.contains(segmentIndex);
         addablePoints.add(
           ArrowPointHandle(
             elementId: element.id,
@@ -258,7 +257,7 @@ class ArrowPointUtils {
         return nearest;
       }
 
-      final fixedSegments = data.fixedSegments ?? const [];
+      final fixedSegmentIndexes = _fixedSegmentIndexSet(data.fixedSegments);
       final segmentHitRadius = hitRadius;
       for (var i = 0; i < rawPoints.length - 1; i++) {
         if (_isSegmentTooShort(rawPoints[i], rawPoints[i + 1], handleSize)) {
@@ -268,9 +267,7 @@ class ArrowPointUtils {
         final distanceSq = localPosition.distanceSquared(midpoint);
         if (distanceSq <= segmentHitRadius * segmentHitRadius) {
           final segmentIndex = i + 1;
-          final isFixed = fixedSegments.any(
-            (segment) => segment.index == segmentIndex,
-          );
+          final isFixed = fixedSegmentIndexes.contains(segmentIndex);
           return ArrowPointHandle(
             elementId: element.id,
             kind: ArrowPointKind.addable,
@@ -440,5 +437,14 @@ class ArrowPointUtils {
     }
     final length = start.distance(end);
     return length < handleSize * 0.5;
+  }
+
+  static Set<int> _fixedSegmentIndexSet(
+    List<ElbowFixedSegment>? fixedSegments,
+  ) {
+    if (fixedSegments == null || fixedSegments.isEmpty) {
+      return const <int>{};
+    }
+    return {for (final segment in fixedSegments) segment.index};
   }
 }

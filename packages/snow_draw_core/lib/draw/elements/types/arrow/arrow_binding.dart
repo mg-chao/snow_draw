@@ -155,8 +155,12 @@ class ArrowBindingUtils {
         score = math.max(0, score - snapDistance * 0.25);
       }
 
-      if (score < bestScore ||
-          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+      if (_isBetterBindingCandidate(
+        candidate: result,
+        candidateScore: score,
+        currentBest: best,
+        currentBestScore: bestScore,
+      )) {
         best = result;
         bestScore = score;
       }
@@ -208,8 +212,12 @@ class ArrowBindingUtils {
         score = math.max(0, score - snapDistance * 0.25);
       }
 
-      if (score < bestScore ||
-          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+      if (_isBetterBindingCandidate(
+        candidate: result,
+        candidateScore: score,
+        currentBest: best,
+        currentBestScore: bestScore,
+      )) {
         best = result;
         bestScore = score;
       }
@@ -419,6 +427,31 @@ class ArrowBindingUtils {
       zIndex: target.zIndex,
     );
   }
+}
+
+bool _isBetterBindingCandidate({
+  required ArrowBindingResult candidate,
+  required double candidateScore,
+  required ArrowBindingResult? currentBest,
+  required double currentBestScore,
+}) {
+  if (candidateScore < currentBestScore) {
+    return true;
+  }
+  if (candidateScore > currentBestScore) {
+    return false;
+  }
+  if (currentBest == null) {
+    return true;
+  }
+  if (candidate.zIndex > currentBest.zIndex) {
+    return true;
+  }
+  if (candidate.zIndex < currentBest.zIndex) {
+    return false;
+  }
+  return candidate.binding.elementId.compareTo(currentBest.binding.elementId) <
+      0;
 }
 
 @immutable

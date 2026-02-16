@@ -581,6 +581,10 @@ final class _BoundarySegmentDragResult {
   final List<ElbowFixedSegment> fixedSegments;
 }
 
+const _bindingCacheTargetThresholdFactor = 0.4;
+const _bindingCacheEmptyThresholdFactor = 0.75;
+const _preferredBindingStickinessFactor = 0.3;
+
 _ArrowPointComputation _compute({
   required ArrowPointEditContext context,
   required DrawPoint currentPosition,
@@ -799,23 +803,34 @@ _ArrowPointComputation _compute({
       final hasArrowhead = index == 0
           ? startArrowhead != ArrowheadStyle.none
           : endArrowhead != ArrowheadStyle.none;
-      final candidate = context.arrowType == ArrowType.elbow
-          ? ArrowBindingUtils.resolveElbowBindingCandidate(
-              worldPoint: worldTarget,
-              targets: bindingTargets,
-              snapDistance: bindingDistance,
-              preferredBinding: existingBinding,
-              allowNewBinding: allowNewBinding,
-              hasArrowhead: hasArrowhead,
-            )
-          : ArrowBindingUtils.resolveBindingCandidate(
-              worldPoint: worldTarget,
-              targets: bindingTargets,
-              snapDistance: bindingDistance,
-              preferredBinding: existingBinding,
-              allowNewBinding: allowNewBinding,
-              referencePoint: referencePoint,
-            );
+      final candidate =
+          _resolvePreferredBindingCandidate(
+            worldTarget: worldTarget,
+            bindingTargets: bindingTargets,
+            arrowType: context.arrowType,
+            hasArrowhead: hasArrowhead,
+            snapDistance: bindingDistance,
+            preferredBinding: existingBinding,
+            allowNewBinding: allowNewBinding,
+            referencePoint: referencePoint,
+          ) ??
+          (context.arrowType == ArrowType.elbow
+              ? ArrowBindingUtils.resolveElbowBindingCandidate(
+                  worldPoint: worldTarget,
+                  targets: bindingTargets,
+                  snapDistance: bindingDistance,
+                  preferredBinding: existingBinding,
+                  allowNewBinding: allowNewBinding,
+                  hasArrowhead: hasArrowhead,
+                )
+              : ArrowBindingUtils.resolveBindingCandidate(
+                  worldPoint: worldTarget,
+                  targets: bindingTargets,
+                  snapDistance: bindingDistance,
+                  preferredBinding: existingBinding,
+                  allowNewBinding: allowNewBinding,
+                  referencePoint: referencePoint,
+                ));
       if (candidate != null) {
         target = _toLocalPosition(
           context.elementRect,
@@ -886,6 +901,65 @@ _ArrowPointComputation _compute({
   );
 }
 
+ArrowBindingResult? _resolvePreferredBindingCandidate({
+  required DrawPoint worldTarget,
+  required List<ElementState> bindingTargets,
+  required ArrowType arrowType,
+  required bool hasArrowhead,
+  required double snapDistance,
+  required ArrowBinding? preferredBinding,
+  required bool allowNewBinding,
+  DrawPoint? referencePoint,
+}) {
+  if (preferredBinding == null) {
+    return null;
+  }
+  final preferredTarget = _findBindingTargetById(
+    bindingTargets,
+    preferredBinding.elementId,
+  );
+  if (preferredTarget == null) {
+    return null;
+  }
+  final preferredCandidate = arrowType == ArrowType.elbow
+      ? ArrowBindingUtils.resolveElbowBindingCandidate(
+          worldPoint: worldTarget,
+          targets: [preferredTarget],
+          snapDistance: snapDistance,
+          preferredBinding: preferredBinding,
+          allowNewBinding: false,
+          hasArrowhead: hasArrowhead,
+        )
+      : ArrowBindingUtils.resolveBindingCandidate(
+          worldPoint: worldTarget,
+          targets: [preferredTarget],
+          snapDistance: snapDistance,
+          preferredBinding: preferredBinding,
+          allowNewBinding: false,
+          referencePoint: referencePoint,
+        );
+  if (preferredCandidate == null) {
+    return null;
+  }
+  if (!allowNewBinding) {
+    return preferredCandidate;
+  }
+  if (preferredCandidate.distance <=
+      snapDistance * _preferredBindingStickinessFactor) {
+    return preferredCandidate;
+  }
+  return null;
+}
+
+ElementState? _findBindingTargetById(List<ElementState> targets, String id) {
+  for (final target in targets) {
+    if (target.id == id) {
+      return target;
+    }
+  }
+  return null;
+}
+
 bool _requiresBindingLookup(ArrowPointEditContext context) =>
     switch (context.pointKind) {
       ArrowPointKind.loopStart => true,
@@ -904,7 +978,7 @@ List<ElementState> _resolveBindingTargets(
 ) {
   final document = state.domain.document;
   final targets = <ElementState>[];
-  document.visitElementsAtPointTopDown(position, distance, (element) {
+  document.visitElementsAtPoint(position, distance, (element) {
     if (element.opacity <= 0 ||
         element.id == excludeId ||
         !ArrowBindingUtils.isBindableTarget(element)) {
@@ -924,7 +998,10 @@ List<ElementState> _resolveBindingTargetsCached({
 }) {
   final cache = context._bindingTargetCache;
   final elementsVersion = state.domain.document.elementsVersion;
-  final threshold = distance * 0.4;
+  final thresholdFactor = cache.targets.isEmpty
+      ? _bindingCacheEmptyThresholdFactor
+      : _bindingCacheTargetThresholdFactor;
+  final threshold = distance * thresholdFactor;
   if (cache.isValid(
     position: position,
     threshold: threshold,
