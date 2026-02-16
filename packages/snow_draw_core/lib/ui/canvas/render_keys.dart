@@ -156,6 +156,9 @@ class StaticCanvasRenderKey {
   );
 
   static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -364,6 +367,9 @@ class DynamicCanvasRenderKey {
   ]);
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -376,6 +382,9 @@ class DynamicCanvasRenderKey {
   }
 
   static bool _listEquals(List<SnapGuide> a, List<SnapGuide> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -388,6 +397,9 @@ class DynamicCanvasRenderKey {
   }
 
   static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }

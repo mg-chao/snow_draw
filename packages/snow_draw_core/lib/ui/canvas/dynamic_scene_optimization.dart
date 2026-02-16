@@ -1,0 +1,267 @@
+import 'package:meta/meta.dart';
+
+import '../../draw/edit/arrow/arrow_point_operation.dart';
+import '../../draw/elements/core/element_data.dart';
+import '../../draw/elements/core/element_type_id.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
+import '../../draw/elements/types/line/line_data.dart';
+import '../../draw/elements/types/serial_number/serial_number_data.dart';
+import '../../draw/elements/types/text/text_data.dart';
+import '../../draw/models/document_state.dart';
+import '../../draw/models/draw_state_view.dart';
+import '../../draw/models/element_state.dart';
+import '../../draw/models/interaction_state.dart';
+
+const _maxLocalizedPreviewElementCount = 24;
+
+/// Dynamic-scene optimization plan for edit previews.
+///
+/// When present, the static painter hides [staticHiddenElementIds] while the
+/// dynamic painter renders [optimizedElementIds] plus overlapping occluders.
+@immutable
+class DynamicSceneOptimizationPlan {
+  DynamicSceneOptimizationPlan({
+    required Set<String> optimizedElementIds,
+    required Set<String> staticHiddenElementIds,
+  }) : optimizedElementIds = Set<String>.unmodifiable(optimizedElementIds),
+       staticHiddenElementIds = Set<String>.unmodifiable(
+         staticHiddenElementIds,
+       );
+
+  factory DynamicSceneOptimizationPlan.single(String elementId) =>
+      DynamicSceneOptimizationPlan(
+        optimizedElementIds: {elementId},
+        staticHiddenElementIds: {elementId},
+      );
+
+  final Set<String> optimizedElementIds;
+  final Set<String> staticHiddenElementIds;
+}
+
+/// Resolves localized dynamic-scene optimization for the current [view].
+///
+/// Returns `null` when the interaction should keep using the regular dynamic
+/// layer split.
+DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
+  required DrawStateView view,
+  required ElementTypeId<ElementData>? activeToolTypeId,
+}) {
+  final linePointPlan = _resolveLinePointOptimizationPlan(view);
+  if (linePointPlan != null) {
+    return linePointPlan;
+  }
+
+  final serialPlan = _resolveSerialNumberOptimizationPlan(
+    view: view,
+    activeToolTypeId: activeToolTypeId,
+  );
+  if (serialPlan != null) {
+    return serialPlan;
+  }
+
+  return _resolveSingleSelectionEditOptimizationPlan(view);
+}
+
+DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
+  DrawStateView view,
+) {
+  final interaction = view.state.application.interaction;
+  if (interaction is! EditingState ||
+      interaction.context is! ArrowPointEditContext) {
+    return null;
+  }
+
+  final context = interaction.context as ArrowPointEditContext;
+  final elementId = context.elementId;
+  if (view.selectedIds.length != 1 || !view.selectedIds.contains(elementId)) {
+    return null;
+  }
+
+  final preview = view.previewElementsById[elementId];
+  final document = view.state.domain.document;
+  final element = document.getElementById(elementId);
+  if (element == null ||
+      element.data is! LineData ||
+      preview == null ||
+      preview.data is! LineData) {
+    return null;
+  }
+
+  final orderIndex = document.getOrderIndex(elementId);
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan.single(elementId);
+}
+
+DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan({
+  required DrawStateView view,
+  required ElementTypeId<ElementData>? activeToolTypeId,
+}) {
+  if (activeToolTypeId != SerialNumberData.typeIdToken) {
+    return null;
+  }
+
+  final interaction = view.state.application.interaction;
+  if (interaction is! EditingState || view.selectedIds.length != 1) {
+    return null;
+  }
+
+  final selectedId = view.selectedIds.first;
+  final document = view.state.domain.document;
+  final element = document.getElementById(selectedId);
+  final preview = view.previewElementsById[selectedId];
+  if (element == null ||
+      preview == null ||
+      element.data is! SerialNumberData ||
+      preview.data is! SerialNumberData) {
+    return null;
+  }
+
+  final serialData = preview.data as SerialNumberData;
+  final companionIds = <String>{selectedId};
+  final textId = serialData.textElementId;
+  if (textId != null) {
+    final textElement = document.getElementById(textId);
+    if (textElement?.data is TextData) {
+      companionIds.add(textId);
+    }
+  }
+
+  final orderIndex = _resolveLowestOrderIndex(
+    document: document,
+    elementIds: companionIds,
+  );
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan(
+    optimizedElementIds: companionIds,
+    staticHiddenElementIds: companionIds,
+  );
+}
+
+DynamicSceneOptimizationPlan? _resolveSingleSelectionEditOptimizationPlan(
+  DrawStateView view,
+) {
+  final interaction = view.state.application.interaction;
+  if (interaction is! EditingState || view.selectedIds.length != 1) {
+    return null;
+  }
+
+  final previewElements = view.previewElementsById;
+  if (previewElements.isEmpty ||
+      previewElements.length > _maxLocalizedPreviewElementCount) {
+    return null;
+  }
+
+  final document = view.state.domain.document;
+  final candidateIds = <String>{};
+  for (final entry in previewElements.entries) {
+    final persisted = document.getElementById(entry.key);
+    if (persisted == null) {
+      continue;
+    }
+    if (_isBlendSensitiveElement(entry.value)) {
+      return null;
+    }
+    candidateIds.add(entry.key);
+  }
+  _includeSerialCompanionTextIds(
+    document: document,
+    previewElementsById: previewElements,
+    candidateIds: candidateIds,
+  );
+  if (candidateIds.isEmpty) {
+    return null;
+  }
+
+  final orderIndex = _resolveLowestOrderIndex(
+    document: document,
+    elementIds: candidateIds,
+  );
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan(
+    optimizedElementIds: candidateIds,
+    staticHiddenElementIds: candidateIds,
+  );
+}
+
+bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) {
+  for (var i = orderIndex + 1; i < document.elements.length; i++) {
+    final candidate = document.elements[i];
+    if (candidate.opacity <= 0) {
+      continue;
+    }
+    if (_isBlendSensitiveElement(candidate)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _isBlendSensitiveElement(ElementState element) {
+  final data = element.data;
+  return data is HighlightData || data is FilterData;
+}
+
+void _includeSerialCompanionTextIds({
+  required DocumentState document,
+  required Map<String, ElementState> previewElementsById,
+  required Set<String> candidateIds,
+}) {
+  if (candidateIds.isEmpty) {
+    return;
+  }
+
+  final companionTextIds = <String>{};
+  for (final id in candidateIds) {
+    final effectiveCandidate =
+        previewElementsById[id] ?? document.getElementById(id);
+    final data = effectiveCandidate?.data;
+    if (data is! SerialNumberData) {
+      continue;
+    }
+
+    final textId = data.textElementId;
+    if (textId == null || textId.isEmpty) {
+      continue;
+    }
+
+    final textElement =
+        previewElementsById[textId] ?? document.getElementById(textId);
+    if (textElement?.data is TextData) {
+      companionTextIds.add(textId);
+    }
+  }
+
+  if (companionTextIds.isNotEmpty) {
+    candidateIds.addAll(companionTextIds);
+  }
+}
+
+int? _resolveLowestOrderIndex({
+  required DocumentState document,
+  required Set<String> elementIds,
+}) {
+  var lowestOrderIndex = -1;
+  for (final elementId in elementIds) {
+    final orderIndex = document.getOrderIndex(elementId);
+    if (orderIndex == null) {
+      continue;
+    }
+    if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
+      lowestOrderIndex = orderIndex;
+    }
+  }
+  return lowestOrderIndex < 0 ? null : lowestOrderIndex;
+}

@@ -19,10 +19,8 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
-import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -30,7 +28,6 @@ import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
-import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
@@ -47,6 +44,7 @@ import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
+import 'dynamic_scene_optimization.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
@@ -447,7 +445,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final optimizationPlan = _resolveDynamicSceneOptimizationPlan(stateView);
+    final optimizationPlan = resolveDynamicSceneOptimizationPlan(
+      view: stateView,
+      activeToolTypeId: widget.currentToolTypeId,
+    );
     final optimizedDynamicElementIds =
         optimizationPlan?.optimizedElementIds ?? const <String>{};
     final dynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
@@ -686,140 +687,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     return filtered;
-  }
-
-  _DynamicSceneOptimizationPlan? _resolveDynamicSceneOptimizationPlan(
-    DrawStateView view,
-  ) {
-    final linePointPlan = _resolveLinePointOptimizationPlan(view);
-    if (linePointPlan != null) {
-      return linePointPlan;
-    }
-    return _resolveSerialNumberOptimizationPlan(view);
-  }
-
-  _DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
-    DrawStateView view,
-  ) {
-    final interaction = view.state.application.interaction;
-    if (interaction is! EditingState ||
-        interaction.context is! ArrowPointEditContext) {
-      return null;
-    }
-
-    final context = interaction.context as ArrowPointEditContext;
-    final elementId = context.elementId;
-    if (view.selectedIds.length != 1 || !view.selectedIds.contains(elementId)) {
-      return null;
-    }
-
-    final preview = view.previewElementsById[elementId];
-    final document = view.state.domain.document;
-    final element = document.getElementById(elementId);
-    if (element == null ||
-        element.data is! LineData ||
-        preview == null ||
-        preview.data is! LineData) {
-      return null;
-    }
-
-    final orderIndex = document.getOrderIndex(elementId);
-    if (orderIndex == null) {
-      return null;
-    }
-
-    // Blend-based elements require full-scene split to preserve compositing.
-    for (var i = orderIndex + 1; i < document.elements.length; i++) {
-      final candidate = document.elements[i];
-      if (candidate.opacity <= 0) {
-        continue;
-      }
-      final data = candidate.data;
-      if (data is HighlightData || data is FilterData) {
-        return null;
-      }
-    }
-
-    return _DynamicSceneOptimizationPlan.single(elementId);
-  }
-
-  _DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
-    DrawStateView view,
-  ) {
-    if (widget.currentToolTypeId != SerialNumberData.typeIdToken) {
-      return null;
-    }
-
-    final interaction = view.state.application.interaction;
-    if (interaction is! EditingState || view.selectedIds.length != 1) {
-      return null;
-    }
-
-    final selectedId = view.selectedIds.first;
-    final document = view.state.domain.document;
-    final element = document.getElementById(selectedId);
-    final preview = view.previewElementsById[selectedId];
-    if (element == null ||
-        preview == null ||
-        element.data is! SerialNumberData ||
-        preview.data is! SerialNumberData) {
-      return null;
-    }
-
-    final serialData = preview.data as SerialNumberData;
-    final companionIds = <String>{selectedId};
-    final textId = serialData.textElementId;
-    if (textId != null) {
-      final textElement = document.getElementById(textId);
-      if (textElement?.data is TextData) {
-        companionIds.add(textId);
-      }
-    }
-
-    final orderIndex = _resolveLowestOrderIndex(
-      document: document,
-      elementIds: companionIds,
-    );
-    if (orderIndex == null ||
-        !_canApplyLocalizedOptimization(document, orderIndex)) {
-      return null;
-    }
-
-    return _DynamicSceneOptimizationPlan(
-      optimizedElementIds: companionIds,
-      staticHiddenElementIds: companionIds,
-    );
-  }
-
-  bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) {
-    for (var i = orderIndex + 1; i < document.elements.length; i++) {
-      final candidate = document.elements[i];
-      if (candidate.opacity <= 0) {
-        continue;
-      }
-      final data = candidate.data;
-      if (data is HighlightData || data is FilterData) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  int? _resolveLowestOrderIndex({
-    required DocumentState document,
-    required Set<String> elementIds,
-  }) {
-    var lowestOrderIndex = -1;
-    for (final elementId in elementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
-        lowestOrderIndex = orderIndex;
-      }
-    }
-    return lowestOrderIndex < 0 ? null : lowestOrderIndex;
   }
 
   Map<String, ElementState> _previewElementsForStaticOptimizedScene(
@@ -3400,26 +3267,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
-}
-
-@immutable
-class _DynamicSceneOptimizationPlan {
-  _DynamicSceneOptimizationPlan({
-    required Set<String> optimizedElementIds,
-    required Set<String> staticHiddenElementIds,
-  }) : optimizedElementIds = Set<String>.unmodifiable(optimizedElementIds),
-       staticHiddenElementIds = Set<String>.unmodifiable(
-         staticHiddenElementIds,
-       );
-
-  factory _DynamicSceneOptimizationPlan.single(String elementId) =>
-      _DynamicSceneOptimizationPlan(
-        optimizedElementIds: {elementId},
-        staticHiddenElementIds: {elementId},
-      );
-
-  final Set<String> optimizedElementIds;
-  final Set<String> staticHiddenElementIds;
 }
 
 @immutable
