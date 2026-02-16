@@ -65,6 +65,7 @@ class RectCreationStrategy extends CreationStrategy {
       createFromCenter: createFromCenter,
     );
 
+    var nextCreationMode = creatingState.creationMode;
     var snapGuides = const <SnapGuide>[];
     final snapConfig = config.snap;
     final shouldSnap =
@@ -82,7 +83,12 @@ class RectCreationStrategy extends CreationStrategy {
       );
       final anchorsX = _createAnchorsX(direction);
       final anchorsY = _createAnchorsY(direction);
-      final referenceElements = _resolveReferenceElements(state);
+      final snapReferences = _resolveSnapReferences(
+        state: state,
+        creationMode: creatingState.creationMode,
+      );
+      final referenceElements = snapReferences.referenceElements;
+      nextCreationMode = snapReferences.creationMode;
       final result = objectSnapService.snapRect(
         targetRect: newRect,
         referenceElements: referenceElements,
@@ -112,7 +118,7 @@ class RectCreationStrategy extends CreationStrategy {
     return CreationUpdateResult(
       data: creatingState.elementData,
       rect: newRect,
-      creationMode: creatingState.creationMode,
+      creationMode: nextCreationMode,
       snapGuides: snapGuides,
     );
   }
@@ -146,6 +152,28 @@ class _CreateDirection {
   final _CreateAxis vertical;
 }
 
+@immutable
+class _SnapReferencesResult {
+  const _SnapReferencesResult({
+    required this.referenceElements,
+    required this.creationMode,
+  });
+
+  final List<ElementState> referenceElements;
+  final CreationMode creationMode;
+}
+
+@immutable
+class _CachedRectCreationMode extends CreationMode {
+  const _CachedRectCreationMode({
+    required this.referenceElements,
+    required this.elementsVersion,
+  });
+
+  final List<ElementState> referenceElements;
+  final int elementsVersion;
+}
+
 _CreateDirection _resolveCreateDirection(DrawPoint start, DrawPoint current) {
   final horizontal = current.x >= start.x ? _CreateAxis.end : _CreateAxis.start;
   final vertical = current.y >= start.y ? _CreateAxis.end : _CreateAxis.start;
@@ -165,6 +193,31 @@ List<SnapAxisAnchor> _createAnchorsY(_CreateDirection direction) => [
   else
     SnapAxisAnchor.end,
 ];
+
+_SnapReferencesResult _resolveSnapReferences({
+  required DrawState state,
+  required CreationMode creationMode,
+}) {
+  final elementsVersion = state.domain.document.elementsVersion;
+  if (creationMode is _CachedRectCreationMode &&
+      creationMode.elementsVersion == elementsVersion) {
+    return _SnapReferencesResult(
+      referenceElements: creationMode.referenceElements,
+      creationMode: creationMode,
+    );
+  }
+
+  final references = List<ElementState>.unmodifiable(
+    _resolveReferenceElements(state),
+  );
+  return _SnapReferencesResult(
+    referenceElements: references,
+    creationMode: _CachedRectCreationMode(
+      referenceElements: references,
+      elementsVersion: elementsVersion,
+    ),
+  );
+}
 
 List<ElementState> _resolveReferenceElements(DrawState state) => state
     .domain

@@ -43,6 +43,7 @@ import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
 import 'filter_shader_manager.dart';
+import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
@@ -176,6 +177,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CoordinateService? _coordinateService;
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
+  late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
   var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
@@ -295,6 +297,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void initState() {
     super.initState();
     _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
+    _pointerMoveDispatcher = FrameAlignedPointerMoveDispatcher(
+      dispatchMove: _dispatchPointerMoveEvent,
+      shouldCoalesce: _shouldFrameCoalescePointerMove,
+    );
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
@@ -336,6 +342,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         oldWidget.isEraserToolActive != widget.isEraserToolActive;
 
     if (shouldRecreateCoordinator) {
+      _pointerMoveDispatcher.reset();
       // Dispose old coordinator
       unawaited(_pluginCoordinator.dispose());
 
@@ -396,6 +403,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textController?.dispose();
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
+    unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
     super.dispose();
   }
@@ -808,6 +816,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     _activePointerIds.add(event.pointer);
+    _pointerMoveDispatcher.reset();
     if (widget.isEraserToolActive) {
       _eraserPointerIds.add(event.pointer);
       _markElementsForErase(position);
@@ -848,19 +857,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerMoveInputEvent(
-          position: position.copyWith(pressure: event.pressure),
-          modifiers: _currentModifiers,
-          pressure: event.pressure,
-        ),
+    _pointerMoveDispatcher.dispatch(
+      PointerMoveInputEvent(
+        position: position.copyWith(pressure: event.pressure),
+        modifiers: _currentModifiers,
+        pressure: event.pressure,
       ),
     );
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    _recordPointerPosition(event.localPosition);
+    final position = _recordPointerPosition(event.localPosition);
     if (_middlePanPointerId == event.pointer) {
       _stopMiddlePan();
       _activePointerIds.remove(event.pointer);
@@ -876,18 +883,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
+    final modifiers = _currentModifiers;
     unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerUpInputEvent(
-          position: _transformPosition(event.localPosition),
-          modifiers: _currentModifiers,
-        ),
-      ),
+      _dispatchPointerUpInput(position: position, modifiers: modifiers),
     );
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
     _syncKeyboardModifiers();
+    final position = _transformPosition(event.localPosition);
+    final modifiers = _currentModifiers;
     if (_middlePanPointerId == event.pointer) {
       _stopMiddlePan();
       _activePointerIds.remove(event.pointer);
@@ -904,12 +909,46 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerCancelInputEvent(
-          position: _transformPosition(event.localPosition),
-          modifiers: _currentModifiers,
-        ),
-      ),
+      _dispatchPointerCancelInput(position: position, modifiers: modifiers),
+    );
+  }
+
+  Future<void> _dispatchPointerMoveEvent(PointerMoveInputEvent event) async {
+    await _pluginCoordinator.handleEvent(event);
+  }
+
+  bool _shouldFrameCoalescePointerMove() {
+    if (widget.currentToolTypeId == FreeDrawData.typeIdToken) {
+      return false;
+    }
+
+    final interaction = widget.store.state.application.interaction;
+    if (interaction is CreatingState) {
+      return interaction.creationMode is! FreeDrawCreationMode;
+    }
+
+    return interaction is EditingState ||
+        interaction is BoxSelectingState ||
+        interaction is DragPendingState;
+  }
+
+  Future<void> _dispatchPointerUpInput({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+  }) async {
+    await _pointerMoveDispatcher.flush();
+    await _pluginCoordinator.handleEvent(
+      PointerUpInputEvent(position: position, modifiers: modifiers),
+    );
+  }
+
+  Future<void> _dispatchPointerCancelInput({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+  }) async {
+    await _pointerMoveDispatcher.flush();
+    await _pluginCoordinator.handleEvent(
+      PointerCancelInputEvent(position: position, modifiers: modifiers),
     );
   }
 
@@ -2917,6 +2956,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   Future<void> _resetInteractionForToolChange() async {
+    _pointerMoveDispatcher.reset();
     final interaction = widget.store.state.application.interaction;
     if (interaction is TextEditingState) {
       await widget.store.dispatch(
