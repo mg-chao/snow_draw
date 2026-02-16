@@ -12,6 +12,7 @@ import '../../draw/config/draw_config.dart';
 import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
+import '../../draw/elements/core/element_hit_tester.dart';
 import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/elements/text_rendering_cache_invalidation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
@@ -181,8 +182,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   ArrowPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
-  final _pendingEraseElementIds = <String>{};
+  final _pendingErasePreviewElementsById = <String, ElementState>{};
   final _lastEraserProcessedPositions = <int, DrawPoint>{};
+  final _eraserHitTesterByType =
+      <ElementTypeId<ElementData>, ElementHitTester?>{};
   final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
   int? _middlePanPointerId;
   Offset? _lastMiddlePanPosition;
@@ -402,6 +405,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           editOperations: widget.store.context.editOperations,
         );
       }
+      _eraserHitTesterByType.clear();
 
       // Recreate coordinator
       unawaited(_recreatePluginCoordinator());
@@ -463,37 +467,55 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final optimizationPlan = resolveDynamicSceneOptimizationPlan(
-      view: stateView,
-      activeToolTypeId: widget.currentToolTypeId,
-    );
-    final optimizedDynamicElementIds =
-        optimizationPlan?.optimizedElementIds ?? const <String>{};
-    final dynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
+    final promoteEraserPreviewToDynamicLayer =
+        widget.isEraserToolActive &&
+        _pendingErasePreviewElementsById.isNotEmpty;
+    final optimizationPlan = promoteEraserPreviewToDynamicLayer
+        ? null
+        : resolveDynamicSceneOptimizationPlan(
+            view: stateView,
+            activeToolTypeId: widget.currentToolTypeId,
+          );
+    final optimizedDynamicElementIds = promoteEraserPreviewToDynamicLayer
+        ? const <String>{}
+        : optimizationPlan?.optimizedElementIds ?? const <String>{};
+    final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
         ? _resolveDynamicLayerStartIndex(stateView)
         : null;
-    final staticPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: optimizedDynamicElementIds.isEmpty
-          ? _previewElementsForStatic(stateView, dynamicLayerStartIndex)
-          : _previewElementsForStaticOptimizedScene(
-              stateView,
-              optimizationPlan!.staticHiddenElementIds,
-            ),
-      stateView: stateView,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      dynamicLayer: false,
-    );
-    final dynamicPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: optimizedDynamicElementIds.isEmpty
-          ? _previewElementsForDynamic(stateView, dynamicLayerStartIndex)
-          : _previewElementsForDynamicOptimizedScene(
-              stateView,
-              optimizationPlan!.optimizedElementIds,
-            ),
-      stateView: stateView,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      dynamicLayer: true,
-    );
+    final dynamicLayerStartIndex = promoteEraserPreviewToDynamicLayer
+        ? 0
+        : baseDynamicLayerStartIndex;
+
+    final baseStaticPreviewElements = optimizedDynamicElementIds.isEmpty
+        ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
+        : _previewElementsForStaticOptimizedScene(
+            stateView,
+            optimizationPlan!.staticHiddenElementIds,
+          );
+    final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
+        ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
+        : _previewElementsForDynamicOptimizedScene(
+            stateView,
+            optimizationPlan!.optimizedElementIds,
+          );
+
+    late final Map<String, ElementState> staticPreviewElements;
+    late final Map<String, ElementState> dynamicPreviewElements;
+    if (promoteEraserPreviewToDynamicLayer) {
+      final eraserPreviewElements = _snapshotPendingEraserPreviewElements();
+      final wholeScenePreviewElements = _mergePreviewElements(
+        basePreviewElements: baseStaticPreviewElements,
+        overridePreviewElements: baseDynamicPreviewElements,
+      );
+      staticPreviewElements = const <String, ElementState>{};
+      dynamicPreviewElements = _mergePreviewElements(
+        basePreviewElements: wholeScenePreviewElements,
+        overridePreviewElements: eraserPreviewElements,
+      );
+    } else {
+      staticPreviewElements = baseStaticPreviewElements;
+      dynamicPreviewElements = baseDynamicPreviewElements;
+    }
     final eraserCursorOverlay = _buildEraserCursorOverlay();
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
@@ -745,53 +767,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return previews;
   }
 
-  Map<String, ElementState> _withEraserLayerPreview({
-    required Map<String, ElementState> basePreviewElements,
-    required DrawStateView stateView,
-    required int? dynamicLayerStartIndex,
-    required bool dynamicLayer,
-  }) {
-    if (!widget.isEraserToolActive || _pendingEraseElementIds.isEmpty) {
-      return basePreviewElements;
+  Map<String, ElementState> _snapshotPendingEraserPreviewElements() {
+    if (_pendingErasePreviewElementsById.isEmpty) {
+      return const <String, ElementState>{};
     }
-
-    final document = stateView.state.domain.document;
-    Map<String, ElementState>? merged;
-    for (final id in _pendingEraseElementIds) {
-      final orderIndex = document.getOrderIndex(id);
-      if (!_shouldIncludeEraserPreviewInLayer(
-        orderIndex: orderIndex,
-        dynamicLayerStartIndex: dynamicLayerStartIndex,
-        dynamicLayer: dynamicLayer,
-      )) {
-        continue;
-      }
-      final source = basePreviewElements[id] ?? document.getElementById(id);
-      if (source == null) {
-        continue;
-      }
-      final previewOpacity = (source.opacity * _eraserPreviewOpacityFactor)
-          .clamp(0.0, 1.0);
-      merged ??= Map<String, ElementState>.from(basePreviewElements);
-      merged[id] = source.copyWith(opacity: previewOpacity);
-    }
-    return merged ?? basePreviewElements;
+    return Map<String, ElementState>.from(_pendingErasePreviewElementsById);
   }
 
-  bool _shouldIncludeEraserPreviewInLayer({
-    required int? orderIndex,
-    required int? dynamicLayerStartIndex,
-    required bool dynamicLayer,
+  Map<String, ElementState> _mergePreviewElements({
+    required Map<String, ElementState> basePreviewElements,
+    required Map<String, ElementState> overridePreviewElements,
   }) {
-    if (dynamicLayerStartIndex == null) {
-      return !dynamicLayer;
+    if (overridePreviewElements.isEmpty) {
+      return basePreviewElements;
     }
-    if (orderIndex == null) {
-      return false;
+    if (basePreviewElements.isEmpty) {
+      return Map<String, ElementState>.from(overridePreviewElements);
     }
-    return dynamicLayer
-        ? orderIndex >= dynamicLayerStartIndex
-        : orderIndex < dynamicLayerStartIndex;
+    return Map<String, ElementState>.from(basePreviewElements)
+      ..addAll(overridePreviewElements);
   }
 
   Widget? _buildEraserCursorOverlay() {
@@ -1263,81 +1257,143 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final previous = _lastEraserProcessedPositions[pointerId];
     _lastEraserProcessedPositions[pointerId] = position;
-    if (previous == null) {
-      return _markElementsForEraseAtPosition(
-        stateView: stateView,
-        position: position,
-        tolerance: tolerance,
-      );
-    }
-
-    final dx = position.x - previous.x;
-    final dy = position.y - previous.y;
-    final distanceSquared = dx * dx + dy * dy;
-    if (_doubleEquals(distanceSquared, 0)) {
+    final strokeStart = previous ?? position;
+    final samplePoints = _buildEraserStrokeSamples(
+      start: strokeStart,
+      end: position,
+      tolerance: tolerance,
+      includeStart: previous == null,
+    );
+    if (samplePoints.isEmpty) {
       return false;
     }
+    final queryRect = _buildEraserStrokeQueryRect(
+      start: strokeStart,
+      end: position,
+      tolerance: tolerance,
+    );
+    return _markElementsForEraseAcrossStroke(
+      stateView: stateView,
+      samplePoints: samplePoints,
+      queryRect: queryRect,
+      tolerance: tolerance,
+    );
+  }
+
+  List<DrawPoint> _buildEraserStrokeSamples({
+    required DrawPoint start,
+    required DrawPoint end,
+    required double tolerance,
+    required bool includeStart,
+  }) {
+    final dx = end.x - start.x;
+    final dy = end.y - start.y;
+    final distanceSquared = dx * dx + dy * dy;
+    if (_doubleEquals(distanceSquared, 0)) {
+      return includeStart ? <DrawPoint>[end] : const <DrawPoint>[];
+    }
+
     final sampleStep = tolerance * 0.5;
     if (sampleStep <= 0) {
-      return _markElementsForEraseAtPosition(
-        stateView: stateView,
-        position: position,
-        tolerance: tolerance,
-      );
+      return includeStart ? <DrawPoint>[start, end] : <DrawPoint>[end];
     }
 
     final distance = math.sqrt(distanceSquared);
     final sampleCount = math.max(1, (distance / sampleStep).ceil());
-    var hasNewHits = false;
+    final samples = <DrawPoint>[if (includeStart) start];
     for (var i = 1; i <= sampleCount; i++) {
       final t = i / sampleCount;
-      final sample = DrawPoint(x: previous.x + dx * t, y: previous.y + dy * t);
-      if (_markElementsForEraseAtPosition(
-        stateView: stateView,
-        position: sample,
-        tolerance: tolerance,
-      )) {
-        hasNewHits = true;
-      }
+      samples.add(DrawPoint(x: start.x + dx * t, y: start.y + dy * t));
     }
-    return hasNewHits;
+    return samples;
   }
 
-  bool _markElementsForEraseAtPosition({
+  DrawRect _buildEraserStrokeQueryRect({
+    required DrawPoint start,
+    required DrawPoint end,
+    required double tolerance,
+  }) => DrawRect(
+    minX: math.min(start.x, end.x) - tolerance,
+    minY: math.min(start.y, end.y) - tolerance,
+    maxX: math.max(start.x, end.x) + tolerance,
+    maxY: math.max(start.y, end.y) + tolerance,
+  );
+
+  bool _markElementsForEraseAcrossStroke({
     required DrawStateView stateView,
-    required DrawPoint position,
+    required List<DrawPoint> samplePoints,
+    required DrawRect queryRect,
     required double tolerance,
   }) {
-    final state = stateView.state;
-    final document = state.domain.document;
-    final registry = widget.store.context.elementRegistry;
+    final document = stateView.state.domain.document;
     var hasNewHits = false;
-    document.visitElementsAtPointTopDown(position, tolerance, (candidate) {
-      if (_pendingEraseElementIds.contains(candidate.id)) {
+    document.visitElementsInRect(queryRect, (candidate) {
+      if (_pendingErasePreviewElementsById.containsKey(candidate.id)) {
         return true;
       }
       final element = stateView.effectiveElement(candidate);
-      final definition = registry.getDefinition(element.typeId);
-      final isHit =
-          definition?.hitTester.hitTest(
-            element: element,
-            position: position,
-            tolerance: tolerance,
-          ) ??
-          _isInsideRectWithTolerance(
-            rect: element.rect,
-            rotation: element.rotation,
-            position: position,
-            tolerance: tolerance,
-          );
-      if (isHit) {
-        if (_pendingEraseElementIds.add(element.id)) {
+      if (_isElementHitByAnyEraserSample(
+        element: element,
+        samplePoints: samplePoints,
+        tolerance: tolerance,
+      )) {
+        if (_queueElementForErasePreview(element)) {
           hasNewHits = true;
         }
       }
       return true;
     });
     return hasNewHits;
+  }
+
+  bool _isElementHitByAnyEraserSample({
+    required ElementState element,
+    required List<DrawPoint> samplePoints,
+    required double tolerance,
+  }) {
+    final hitTester = _resolveEraserHitTester(element);
+    for (final sample in samplePoints) {
+      final isHit =
+          hitTester?.hitTest(
+            element: element,
+            position: sample,
+            tolerance: tolerance,
+          ) ??
+          _isInsideRectWithTolerance(
+            rect: element.rect,
+            rotation: element.rotation,
+            position: sample,
+            tolerance: tolerance,
+          );
+      if (isHit) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  ElementHitTester? _resolveEraserHitTester(ElementState element) {
+    final typeId = element.typeId;
+    if (_eraserHitTesterByType.containsKey(typeId)) {
+      return _eraserHitTesterByType[typeId];
+    }
+    final hitTester = widget.store.context.elementRegistry
+        .getDefinition(typeId)
+        ?.hitTester;
+    _eraserHitTesterByType[typeId] = hitTester;
+    return hitTester;
+  }
+
+  bool _queueElementForErasePreview(ElementState element) {
+    if (_pendingErasePreviewElementsById.containsKey(element.id)) {
+      return false;
+    }
+    final previewOpacity = (element.opacity * _eraserPreviewOpacityFactor)
+        .clamp(0.0, 1.0);
+    _pendingErasePreviewElementsById[element.id] = element.copyWith(
+      opacity: previewOpacity,
+    );
+    return true;
   }
 
   bool _isInsideRectWithTolerance({
@@ -1359,14 +1415,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   Future<void> _commitPendingErase() async {
-    if (_pendingEraseElementIds.isEmpty) {
+    if (_pendingErasePreviewElementsById.isEmpty) {
       return;
     }
-    final ids = _pendingEraseElementIds.toList(growable: false);
+    final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     if (mounted) {
-      setState(_pendingEraseElementIds.clear);
+      setState(_pendingErasePreviewElementsById.clear);
     } else {
-      _pendingEraseElementIds.clear();
+      _pendingErasePreviewElementsById.clear();
     }
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
@@ -1386,14 +1442,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _activePointerIds.removeAll(_eraserPointerIds);
       _eraserPointerIds.clear();
     }
-    if (_pendingEraseElementIds.isEmpty) {
+    if (_pendingErasePreviewElementsById.isEmpty) {
       return;
     }
     if (mounted) {
-      setState(_pendingEraseElementIds.clear);
+      setState(_pendingErasePreviewElementsById.clear);
       return;
     }
-    _pendingEraseElementIds.clear();
+    _pendingErasePreviewElementsById.clear();
   }
 
   bool _isMousePointer(PointerEvent event) =>

@@ -10,6 +10,7 @@ import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_core/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_core/ui/canvas/static_canvas_painter.dart';
 
@@ -58,9 +59,12 @@ void main() {
         await mouse.down(const Offset(170, 120));
         await tester.pump();
 
-        final previewElement = _staticPainter(
-          tester,
-        ).renderKey.previewElementsById[elementId];
+        final staticPainter = _staticPainter(tester);
+        expect(staticPainter.renderKey.skipBaseElementScene, isTrue);
+        final dynamicPainter = _dynamicPainter(tester);
+        expect(dynamicPainter.renderKey.dynamicLayerStartIndex, 0);
+        final previewElement =
+            dynamicPainter.renderKey.previewElementsById[elementId];
         expect(previewElement, isNotNull);
         expect(previewElement!.opacity, closeTo(0.3, 0.0001));
 
@@ -221,6 +225,18 @@ StaticCanvasPainter _staticPainter(WidgetTester tester) {
     }
   }
   throw StateError('StaticCanvasPainter not found');
+}
+
+DynamicCanvasPainter _dynamicPainter(WidgetTester tester) {
+  for (final paint in tester.widgetList<CustomPaint>(
+    find.byType(CustomPaint),
+  )) {
+    final painter = paint.painter;
+    if (painter is DynamicCanvasPainter) {
+      return painter;
+    }
+  }
+  throw StateError('DynamicCanvasPainter not found');
 }
 
 MouseCursor _canvasCursor(WidgetTester tester) {

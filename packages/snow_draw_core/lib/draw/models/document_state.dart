@@ -181,6 +181,25 @@ class DocumentState {
     }
   }
 
+  /// Visits rect-intersecting candidates in arbitrary order.
+  ///
+  /// This skips z-order sorting and is suitable for broad-phase queries where
+  /// callers perform their own geometric checks.
+  void visitElementsInRect(
+    DrawRect rect,
+    bool Function(ElementState element) visitor,
+  ) {
+    final entries = _spatialIndex.searchRectEntries(rect, sortByZ: false);
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        if (!visitor(element)) {
+          return;
+        }
+      }
+    }
+  }
+
   List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
     final elements = <ElementState>[];
     for (final entry in entries) {

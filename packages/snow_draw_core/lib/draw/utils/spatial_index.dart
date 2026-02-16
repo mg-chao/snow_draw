@@ -89,6 +89,7 @@ class SpatialIndex {
   List<SpatialIndexEntry> searchRectEntries(
     DrawRect rect, {
     bool ascending = false,
+    bool sortByZ = true,
   }) {
     final results = _tree.search(
       RBushBox(
@@ -100,12 +101,14 @@ class SpatialIndex {
     );
     final buffer = _rectSearchBuffer
       ..clear()
-      ..addAll(results)
-      ..sort(
+      ..addAll(results);
+    if (sortByZ && buffer.length > 1) {
+      buffer.sort(
         ascending
             ? (a, b) => a.zIndex.compareTo(b.zIndex)
             : (a, b) => b.zIndex.compareTo(a.zIndex),
       );
+    }
     return buffer;
   }
 
