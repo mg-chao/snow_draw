@@ -17,8 +17,10 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
@@ -421,21 +423,30 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final dynamicLayerStartIndex = _resolveDynamicLayerStartIndex(stateView);
+    final optimizedLinePointElementId = _resolveLinePointOptimizedElementId(
+      stateView,
+    );
+    final dynamicLayerStartIndex = optimizedLinePointElementId == null
+        ? _resolveDynamicLayerStartIndex(stateView)
+        : null;
     final staticPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: _previewElementsForStatic(
-        stateView,
-        dynamicLayerStartIndex,
-      ),
+      basePreviewElements: optimizedLinePointElementId == null
+          ? _previewElementsForStatic(stateView, dynamicLayerStartIndex)
+          : _previewElementsForStaticLinePointOptimization(
+              stateView,
+              optimizedLinePointElementId,
+            ),
       stateView: stateView,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       dynamicLayer: false,
     );
     final dynamicPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: _previewElementsForDynamic(
-        stateView,
-        dynamicLayerStartIndex,
-      ),
+      basePreviewElements: optimizedLinePointElementId == null
+          ? _previewElementsForDynamic(stateView, dynamicLayerStartIndex)
+          : _previewElementsForDynamicLinePointOptimization(
+              stateView,
+              optimizedLinePointElementId,
+            ),
       stateView: stateView,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       dynamicLayer: true,
@@ -446,9 +457,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final watermark = globalElements.watermark;
-    final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
+    final ownsWholeScene = dynamicLayerStartIndex == 0;
     final hasDynamicContent =
-        dynamicLayerStartIndex != null || creatingSnapshot != null;
+        dynamicLayerStartIndex != null ||
+        creatingSnapshot != null ||
+        dynamicPreviewElements.isNotEmpty;
     final highlightMaskLayer = resolveHighlightMaskLayer(
       hasHighlights: hasHighlights,
       hasDynamicContent: hasDynamicContent,
@@ -497,6 +510,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       textRenderingCacheRevision: textRenderingCacheRevision,
       camera: stateView.state.application.view.camera,
       previewElementsById: dynamicPreviewElements,
+      linePointOptimizedElementId: optimizedLinePointElementId,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       rendersWholeElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
@@ -640,6 +654,74 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return filtered;
   }
 
+  String? _resolveLinePointOptimizedElementId(DrawStateView view) {
+    final interaction = view.state.application.interaction;
+    if (interaction is! EditingState ||
+        interaction.context is! ArrowPointEditContext) {
+      return null;
+    }
+
+    final context = interaction.context as ArrowPointEditContext;
+    final elementId = context.elementId;
+    if (view.selectedIds.length != 1 || !view.selectedIds.contains(elementId)) {
+      return null;
+    }
+
+    final preview = view.previewElementsById[elementId];
+    final document = view.state.domain.document;
+    final element = document.getElementById(elementId);
+    if (element == null ||
+        element.data is! LineData ||
+        preview == null ||
+        preview.data is! LineData) {
+      return null;
+    }
+
+    final orderIndex = document.getOrderIndex(elementId);
+    if (orderIndex == null) {
+      return null;
+    }
+
+    // Blend-based elements require full-scene split to preserve compositing.
+    for (var i = orderIndex + 1; i < document.elements.length; i++) {
+      final candidate = document.elements[i];
+      if (candidate.opacity <= 0) {
+        continue;
+      }
+      final data = candidate.data;
+      if (data is HighlightData || data is FilterData) {
+        return null;
+      }
+    }
+
+    return elementId;
+  }
+
+  Map<String, ElementState> _previewElementsForStaticLinePointOptimization(
+    DrawStateView view,
+    String elementId,
+  ) {
+    final element = view.state.domain.document.getElementById(elementId);
+    if (element == null) {
+      return const <String, ElementState>{};
+    }
+    if (element.opacity == 0) {
+      return {elementId: element};
+    }
+    return {elementId: element.copyWith(opacity: 0)};
+  }
+
+  Map<String, ElementState> _previewElementsForDynamicLinePointOptimization(
+    DrawStateView view,
+    String elementId,
+  ) {
+    final preview = view.previewElementsById[elementId];
+    if (preview == null) {
+      return const <String, ElementState>{};
+    }
+    return {elementId: preview};
+  }
+
   Map<String, ElementState> _withEraserLayerPreview({
     required Map<String, ElementState> basePreviewElements,
     required DrawStateView stateView,
@@ -722,11 +804,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
       resolveDynamicLayerStartIndex(view);
-
-  bool _dynamicOwnsWholeElementScene(DrawStateView view) {
-    final split = _resolveDynamicLayerStartIndex(view);
-    return split == 0;
-  }
 
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {

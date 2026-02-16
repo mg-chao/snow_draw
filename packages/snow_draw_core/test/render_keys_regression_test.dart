@@ -43,6 +43,22 @@ void main() {
       expect(first, isNot(second));
       expect(first.hashCode, isNot(second.hashCode));
     });
+
+    test('line point optimized id participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+      );
+      final optimized = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        linePointOptimizedElementId: 'line-1',
+      );
+
+      expect(baseline, isNot(optimized));
+      expect(baseline.hashCode, isNot(optimized.hashCode));
+    });
   });
 }
 
@@ -50,6 +66,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required DefaultElementRegistry registry,
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
+  String? linePointOptimizedElementId,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -66,6 +83,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   textRenderingCacheRevision: 0,
   camera: CameraState.initial,
   previewElementsById: const {},
+  linePointOptimizedElementId: linePointOptimizedElementId,
   dynamicLayerStartIndex: null,
   rendersWholeElementScene: false,
   scaleFactor: 1,

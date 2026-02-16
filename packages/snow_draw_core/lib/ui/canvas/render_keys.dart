@@ -214,6 +214,7 @@ class DynamicCanvasRenderKey {
     required this.textRenderingCacheRevision,
     required this.camera,
     required this.previewElementsById,
+    required this.linePointOptimizedElementId,
     required this.dynamicLayerStartIndex,
     required this.rendersWholeElementScene,
     required this.scaleFactor,
@@ -270,6 +271,13 @@ class DynamicCanvasRenderKey {
 
   /// Preview elements during editing.
   final Map<String, ElementState> previewElementsById;
+
+  /// Edited line id for the line-point optimized dynamic scene.
+  ///
+  /// When non-null, the dynamic painter renders only the edited line preview
+  /// and overlapping top-order occluders instead of every element above the
+  /// selection.
+  final String? linePointOptimizedElementId;
 
   /// First element index that renders on the dynamic layer.
   final int? dynamicLayerStartIndex;
@@ -329,6 +337,7 @@ class DynamicCanvasRenderKey {
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
           _mapsEqual(other.previewElementsById, previewElementsById) &&
+          other.linePointOptimizedElementId == linePointOptimizedElementId &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
           other.rendersWholeElementScene == rendersWholeElementScene &&
           other.scaleFactor == scaleFactor &&
@@ -360,6 +369,7 @@ class DynamicCanvasRenderKey {
     textRenderingCacheRevision,
     camera,
     _mapHash(previewElementsById),
+    linePointOptimizedElementId,
     dynamicLayerStartIndex,
     rendersWholeElementScene,
     scaleFactor,

@@ -291,7 +291,20 @@ class DynamicCanvasPainter extends CustomPainter {
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
     final rendersWholeScene = renderKey.rendersWholeElementScene;
+    final optimizedElementId = renderKey.linePointOptimizedElementId;
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
+      if (optimizedElementId == null) {
+        return;
+      }
+      final optimizedElements = _resolveLinePointOptimizedScene(
+        viewportRect: viewportRect,
+        optimizedElementId: optimizedElementId,
+      );
+      _paintElementScene(
+        canvas: canvas,
+        scale: scale,
+        effectiveElements: optimizedElements,
+      );
       return;
     }
 
@@ -312,6 +325,71 @@ class DynamicCanvasPainter extends CustomPainter {
       effectiveElements.add(previewFilter);
     }
 
+    _paintElementScene(
+      canvas: canvas,
+      scale: scale,
+      effectiveElements: effectiveElements,
+    );
+  }
+
+  List<ElementState> _resolveLinePointOptimizedScene({
+    required DrawRect viewportRect,
+    required String optimizedElementId,
+  }) {
+    final preview = renderKey.previewElementsById[optimizedElementId];
+    if (preview == null || preview.opacity <= 0) {
+      return const <ElementState>[];
+    }
+
+    final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
+    if (!_rectsIntersect(previewAabb, viewportRect)) {
+      return const <ElementState>[];
+    }
+
+    final document = stateView.state.domain.document;
+    final orderIndex = document.getOrderIndex(optimizedElementId);
+    if (orderIndex == null) {
+      return <ElementState>[preview];
+    }
+
+    final occluders = document.queryElementsInRectOrdered(
+      previewAabb,
+      minOrderIndex: orderIndex + 1,
+    );
+
+    if (occluders.isEmpty) {
+      return <ElementState>[preview];
+    }
+
+    final optimized = <ElementState>[preview];
+    for (final element in occluders) {
+      if (element.id == optimizedElementId) {
+        continue;
+      }
+      final effective = renderKey.previewElementsById[element.id] ?? element;
+      if (effective.opacity <= 0) {
+        continue;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(effective);
+      if (!_rectsIntersect(aabb, previewAabb) ||
+          !_rectsIntersect(aabb, viewportRect)) {
+        continue;
+      }
+      optimized.add(effective);
+    }
+    return optimized;
+  }
+
+  void _paintElementScene({
+    required Canvas canvas,
+    required double scale,
+    required List<ElementState> effectiveElements,
+  }) {
+    if (effectiveElements.isEmpty) {
+      return;
+    }
+
+    final document = stateView.state.domain.document;
     final hasVisibleTextElement = effectiveElements.any(
       (element) => element.data is TextData,
     );
@@ -360,6 +438,12 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
   }
+
+  bool _rectsIntersect(DrawRect a, DrawRect b) =>
+      a.minX <= b.maxX &&
+      a.maxX >= b.minX &&
+      a.minY <= b.maxY &&
+      a.maxY >= b.minY;
 
   void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
     if (renderKey.selectedIds.length != 1) {
