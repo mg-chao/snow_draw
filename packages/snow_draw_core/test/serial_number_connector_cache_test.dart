@@ -78,6 +78,95 @@ void main() {
     expect(identical(affectedAfter, affectedBefore), isFalse);
   });
 
+  test('limits connector resolution to visible text ids', () {
+    const textA = ElementState(
+      id: 'text-a',
+      rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: TextData(text: 'A'),
+    );
+    const serialA = ElementState(
+      id: 'serial-a',
+      rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: SerialNumberData(textElementId: 'text-a'),
+    );
+    const textB = ElementState(
+      id: 'text-b',
+      rect: DrawRect(minX: 320, minY: 180, maxX: 420, maxY: 220),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 2,
+      data: TextData(text: 'B'),
+    );
+    const serialB = ElementState(
+      id: 'serial-b',
+      rect: DrawRect(minX: 240, minY: 190, maxX: 272, maxY: 222),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 3,
+      data: SerialNumberData(textElementId: 'text-b'),
+    );
+
+    final state = _stateWithElements([textA, serialA, textB, serialB]);
+    final view = DrawStateView.withPreview(
+      state: state,
+      previewElementsById: const {},
+      effectiveSelection: EffectiveSelection.none,
+      snapGuides: const [],
+    );
+
+    final connectors = resolveSerialNumberConnectorMap(
+      view,
+      visibleTextElementIds: {'text-a'},
+    );
+
+    expect(connectors.keys, {'text-a'});
+    expect(connectors['text-a'], isNotEmpty);
+    expect(connectors['text-b'], isNull);
+  });
+
+  test('treats preview-hidden text as not visible', () {
+    const text = ElementState(
+      id: 'text',
+      rect: DrawRect(minX: 120, minY: 80, maxX: 220, maxY: 120),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: TextData(text: 'A'),
+    );
+    const serial = ElementState(
+      id: 'serial',
+      rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: SerialNumberData(textElementId: 'text'),
+    );
+
+    final state = _stateWithElements([text, serial]);
+    final hiddenText = text.copyWith(opacity: 0);
+    final view = DrawStateView.withPreview(
+      state: state,
+      previewElementsById: {hiddenText.id: hiddenText},
+      effectiveSelection: EffectiveSelection.none,
+      snapGuides: const [],
+    );
+
+    final explicitConnectors = resolveSerialNumberConnectorMap(
+      view,
+      visibleTextElementIds: {'text'},
+    );
+    final inferredConnectors = resolveSerialNumberConnectorMap(view);
+
+    expect(explicitConnectors, isEmpty);
+    expect(inferredConnectors, isEmpty);
+  });
+
   test('uses preview serial bindings when text target changes', () {
     const textA = ElementState(
       id: 'text-a',

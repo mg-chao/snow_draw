@@ -44,7 +44,7 @@ void main() {
       expect(first.hashCode, isNot(second.hashCode));
     });
 
-    test('line point optimized id participates in equality', () {
+    test('optimized dynamic ids participate in equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildDynamicRenderKey(
         registry: registry,
@@ -53,7 +53,7 @@ void main() {
       final optimized = _buildDynamicRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
-        linePointOptimizedElementId: 'line-1',
+        optimizedDynamicElementIds: {'line-1'},
       );
 
       expect(baseline, isNot(optimized));
@@ -66,7 +66,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required DefaultElementRegistry registry,
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
-  String? linePointOptimizedElementId,
+  Set<String> optimizedDynamicElementIds = const <String>{},
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -83,7 +83,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   textRenderingCacheRevision: 0,
   camera: CameraState.initial,
   previewElementsById: const {},
-  linePointOptimizedElementId: linePointOptimizedElementId,
+  optimizedDynamicElementIds: optimizedDynamicElementIds,
   dynamicLayerStartIndex: null,
   rendersWholeElementScene: false,
   scaleFactor: 1,

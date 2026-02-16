@@ -25,9 +25,11 @@ typedef SerialNumberConnectorMap = Map<String, List<SerialNumberTextConnector>>;
 SerialNumberConnectorMap resolveSerialNumberConnectorMap(
   DrawStateView stateView, {
   Map<String, ElementState>? previewElementsById,
+  Set<String>? visibleTextElementIds,
 }) => SerialNumberConnectorCache.instance.resolve(
   stateView,
   previewElementsById: previewElementsById,
+  visibleTextElementIds: visibleTextElementIds,
 );
 
 void drawSerialNumberConnectorsForText({
@@ -35,7 +37,7 @@ void drawSerialNumberConnectorsForText({
   required ElementState textElement,
   required SerialNumberConnectorMap connectorsByTextId,
 }) {
-  if (textElement.data is! TextData) {
+  if (textElement.data is! TextData || textElement.opacity <= 0) {
     return;
   }
 

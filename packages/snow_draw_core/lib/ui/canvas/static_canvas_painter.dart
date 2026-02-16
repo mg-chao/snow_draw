@@ -92,19 +92,19 @@ class StaticCanvasPainter extends CustomPainter {
         excludedElementId: creatingElementId,
       );
 
-      final hasVisibleTextElement = effectiveElements.any(
-        (element) => element.data is TextData,
-      );
+      final visibleTextIds = _resolveVisibleTextIds(effectiveElements);
       final shouldPaintSerialConnectors =
-          hasVisibleTextElement &&
+          visibleTextIds.isNotEmpty &&
           _shouldPaintSerialConnectors(
             boundTextIds: document.boundTextIds,
             previewElementsById: previewElements,
+            visibleTextIds: visibleTextIds,
           );
       final serialConnectors = shouldPaintSerialConnectors
           ? resolveSerialNumberConnectorMap(
               stateView,
               previewElementsById: previewElements,
+              visibleTextElementIds: visibleTextIds,
             )
           : const <String, List<SerialNumberTextConnector>>{};
 
@@ -506,19 +506,34 @@ class StaticCanvasPainter extends CustomPainter {
   bool _shouldPaintSerialConnectors({
     required Set<String> boundTextIds,
     required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
   }) {
-    if (boundTextIds.isNotEmpty) {
-      return true;
+    for (final textId in visibleTextIds) {
+      if (boundTextIds.contains(textId)) {
+        return true;
+      }
     }
     for (final previewElement in previewElementsById.values) {
       final data = previewElement.data;
       if (data is SerialNumberData &&
           data.textElementId != null &&
-          data.textElementId!.isNotEmpty) {
+          data.textElementId!.isNotEmpty &&
+          visibleTextIds.contains(data.textElementId)) {
         return true;
       }
     }
     return false;
+  }
+
+  Set<String> _resolveVisibleTextIds(List<ElementState> effectiveElements) {
+    final visible = <String>{};
+    for (final element in effectiveElements) {
+      if (element.opacity <= 0 || element.data is! TextData) {
+        continue;
+      }
+      visible.add(element.id);
+    }
+    return visible;
   }
 
   @override

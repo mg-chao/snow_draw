@@ -28,6 +28,7 @@ import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
@@ -424,29 +425,29 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final optimizedLinePointElementId = _resolveLinePointOptimizedElementId(
-      stateView,
-    );
-    final dynamicLayerStartIndex = optimizedLinePointElementId == null
+    final optimizationPlan = _resolveDynamicSceneOptimizationPlan(stateView);
+    final optimizedDynamicElementIds =
+        optimizationPlan?.optimizedElementIds ?? const <String>{};
+    final dynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
         ? _resolveDynamicLayerStartIndex(stateView)
         : null;
     final staticPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: optimizedLinePointElementId == null
+      basePreviewElements: optimizedDynamicElementIds.isEmpty
           ? _previewElementsForStatic(stateView, dynamicLayerStartIndex)
-          : _previewElementsForStaticLinePointOptimization(
+          : _previewElementsForStaticOptimizedScene(
               stateView,
-              optimizedLinePointElementId,
+              optimizationPlan!.staticHiddenElementIds,
             ),
       stateView: stateView,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       dynamicLayer: false,
     );
     final dynamicPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: optimizedLinePointElementId == null
+      basePreviewElements: optimizedDynamicElementIds.isEmpty
           ? _previewElementsForDynamic(stateView, dynamicLayerStartIndex)
-          : _previewElementsForDynamicLinePointOptimization(
+          : _previewElementsForDynamicOptimizedScene(
               stateView,
-              optimizedLinePointElementId,
+              optimizationPlan!.optimizedElementIds,
             ),
       stateView: stateView,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
@@ -511,7 +512,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       textRenderingCacheRevision: textRenderingCacheRevision,
       camera: stateView.state.application.view.camera,
       previewElementsById: dynamicPreviewElements,
-      linePointOptimizedElementId: optimizedLinePointElementId,
+      optimizedDynamicElementIds: optimizedDynamicElementIds,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       rendersWholeElementScene: ownsWholeScene,
       scaleFactor: scaleFactor,
@@ -656,7 +657,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return filtered;
   }
 
-  String? _resolveLinePointOptimizedElementId(DrawStateView view) {
+  _DynamicSceneOptimizationPlan? _resolveDynamicSceneOptimizationPlan(
+    DrawStateView view,
+  ) {
+    final linePointPlan = _resolveLinePointOptimizationPlan(view);
+    if (linePointPlan != null) {
+      return linePointPlan;
+    }
+    return _resolveSerialNumberOptimizationPlan(view);
+  }
+
+  _DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
+    DrawStateView view,
+  ) {
     final interaction = view.state.application.interaction;
     if (interaction is! EditingState ||
         interaction.context is! ArrowPointEditContext) {
@@ -696,32 +709,133 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
 
-    return elementId;
+    return _DynamicSceneOptimizationPlan.single(elementId);
   }
 
-  Map<String, ElementState> _previewElementsForStaticLinePointOptimization(
+  _DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
     DrawStateView view,
-    String elementId,
   ) {
-    final element = view.state.domain.document.getElementById(elementId);
-    if (element == null) {
-      return const <String, ElementState>{};
+    if (widget.currentToolTypeId != SerialNumberData.typeIdToken) {
+      return null;
     }
-    if (element.opacity == 0) {
-      return {elementId: element};
+
+    final interaction = view.state.application.interaction;
+    if (interaction is! EditingState || view.selectedIds.length != 1) {
+      return null;
     }
-    return {elementId: element.copyWith(opacity: 0)};
+
+    final selectedId = view.selectedIds.first;
+    final document = view.state.domain.document;
+    final element = document.getElementById(selectedId);
+    final preview = view.previewElementsById[selectedId];
+    if (element == null ||
+        preview == null ||
+        element.data is! SerialNumberData ||
+        preview.data is! SerialNumberData) {
+      return null;
+    }
+
+    final serialData = preview.data as SerialNumberData;
+    final companionIds = <String>{selectedId};
+    final textId = serialData.textElementId;
+    if (textId != null) {
+      final textElement = document.getElementById(textId);
+      if (textElement?.data is TextData) {
+        companionIds.add(textId);
+      }
+    }
+
+    final orderIndex = _resolveLowestOrderIndex(
+      document: document,
+      elementIds: companionIds,
+    );
+    if (orderIndex == null ||
+        !_canApplyLocalizedOptimization(document, orderIndex)) {
+      return null;
+    }
+
+    return _DynamicSceneOptimizationPlan(
+      optimizedElementIds: companionIds,
+      staticHiddenElementIds: companionIds,
+    );
   }
 
-  Map<String, ElementState> _previewElementsForDynamicLinePointOptimization(
+  bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) {
+    for (var i = orderIndex + 1; i < document.elements.length; i++) {
+      final candidate = document.elements[i];
+      if (candidate.opacity <= 0) {
+        continue;
+      }
+      final data = candidate.data;
+      if (data is HighlightData || data is FilterData) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  int? _resolveLowestOrderIndex({
+    required DocumentState document,
+    required Set<String> elementIds,
+  }) {
+    var lowestOrderIndex = -1;
+    for (final elementId in elementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null) {
+        continue;
+      }
+      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
+        lowestOrderIndex = orderIndex;
+      }
+    }
+    return lowestOrderIndex < 0 ? null : lowestOrderIndex;
+  }
+
+  Map<String, ElementState> _previewElementsForStaticOptimizedScene(
     DrawStateView view,
-    String elementId,
+    Set<String> hiddenElementIds,
   ) {
-    final preview = view.previewElementsById[elementId];
-    if (preview == null) {
+    if (hiddenElementIds.isEmpty) {
       return const <String, ElementState>{};
     }
-    return {elementId: preview};
+    final previews = <String, ElementState>{};
+    final document = view.state.domain.document;
+    for (final elementId in hiddenElementIds) {
+      final element = document.getElementById(elementId);
+      if (element == null) {
+        continue;
+      }
+      if (element.opacity == 0) {
+        previews[elementId] = element;
+      } else {
+        previews[elementId] = element.copyWith(opacity: 0);
+      }
+    }
+    return previews;
+  }
+
+  Map<String, ElementState> _previewElementsForDynamicOptimizedScene(
+    DrawStateView view,
+    Set<String> optimizedElementIds,
+  ) {
+    if (optimizedElementIds.isEmpty) {
+      return const <String, ElementState>{};
+    }
+
+    final previews = <String, ElementState>{};
+    final document = view.state.domain.document;
+    for (final elementId in optimizedElementIds) {
+      final preview = view.previewElementsById[elementId];
+      if (preview != null) {
+        previews[elementId] = preview;
+        continue;
+      }
+      final persisted = document.getElementById(elementId);
+      if (persisted != null) {
+        previews[elementId] = persisted;
+      }
+    }
+    return previews;
   }
 
   Map<String, ElementState> _withEraserLayerPreview({
@@ -3121,6 +3235,26 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
+}
+
+@immutable
+class _DynamicSceneOptimizationPlan {
+  _DynamicSceneOptimizationPlan({
+    required Set<String> optimizedElementIds,
+    required Set<String> staticHiddenElementIds,
+  }) : optimizedElementIds = Set<String>.unmodifiable(optimizedElementIds),
+       staticHiddenElementIds = Set<String>.unmodifiable(
+         staticHiddenElementIds,
+       );
+
+  factory _DynamicSceneOptimizationPlan.single(String elementId) =>
+      _DynamicSceneOptimizationPlan(
+        optimizedElementIds: {elementId},
+        staticHiddenElementIds: {elementId},
+      );
+
+  final Set<String> optimizedElementIds;
+  final Set<String> staticHiddenElementIds;
 }
 
 @immutable

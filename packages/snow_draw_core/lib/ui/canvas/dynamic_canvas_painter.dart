@@ -294,9 +294,9 @@ class DynamicCanvasPainter extends CustomPainter {
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
     final rendersWholeScene = renderKey.rendersWholeElementScene;
-    final optimizedElementId = renderKey.linePointOptimizedElementId;
+    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
-      if (optimizedElementId == null) {
+      if (optimizedElementIds.isEmpty) {
         final previewOnlyElements = _resolvePreviewOnlyScene(
           viewportRect: viewportRect,
         );
@@ -307,9 +307,9 @@ class DynamicCanvasPainter extends CustomPainter {
         );
         return;
       }
-      final optimizedElements = _resolveLinePointOptimizedScene(
+      final optimizedElements = _resolveOptimizedScene(
         viewportRect: viewportRect,
-        optimizedElementId: optimizedElementId,
+        optimizedElementIds: optimizedElementIds,
       );
       _paintElementScene(
         canvas: canvas,
@@ -379,51 +379,81 @@ class DynamicCanvasPainter extends CustomPainter {
     return visible;
   }
 
-  List<ElementState> _resolveLinePointOptimizedScene({
+  List<ElementState> _resolveOptimizedScene({
     required DrawRect viewportRect,
-    required String optimizedElementId,
+    required Set<String> optimizedElementIds,
   }) {
-    final preview = renderKey.previewElementsById[optimizedElementId];
-    if (preview == null || preview.opacity <= 0) {
-      return const <ElementState>[];
-    }
-
-    final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
-    if (!_rectsIntersect(previewAabb, viewportRect)) {
-      return const <ElementState>[];
-    }
-
     final document = stateView.state.domain.document;
-    final orderIndex = document.getOrderIndex(optimizedElementId);
-    if (orderIndex == null) {
-      return <ElementState>[preview];
+    if (optimizedElementIds.isEmpty) {
+      return const <ElementState>[];
     }
 
-    final occluders = document.queryElementsInRectOrdered(
-      previewAabb,
-      minOrderIndex: orderIndex + 1,
-    );
-
-    if (occluders.isEmpty) {
-      return <ElementState>[preview];
-    }
-
-    final optimized = <ElementState>[preview];
-    for (final element in occluders) {
-      if (element.id == optimizedElementId) {
-        continue;
-      }
-      final effective = renderKey.previewElementsById[element.id] ?? element;
-      if (effective.opacity <= 0) {
+    final effectiveById = <String, ElementState>{};
+    for (final elementId in optimizedElementIds) {
+      final effective =
+          renderKey.previewElementsById[elementId] ??
+          document.getElementById(elementId);
+      if (effective == null || effective.opacity <= 0) {
         continue;
       }
       final aabb = SelectionCalculator.computeElementWorldAabb(effective);
-      if (!_rectsIntersect(aabb, previewAabb) ||
-          !_rectsIntersect(aabb, viewportRect)) {
+      if (!_rectsIntersect(aabb, viewportRect)) {
         continue;
       }
-      optimized.add(effective);
+      effectiveById[elementId] = effective;
     }
+
+    if (effectiveById.isEmpty) {
+      return const <ElementState>[];
+    }
+
+    final seedAabbsById = <String, DrawRect>{};
+    for (final entry in effectiveById.entries) {
+      seedAabbsById[entry.key] = SelectionCalculator.computeElementWorldAabb(
+        entry.value,
+      );
+    }
+
+    for (final entry in seedAabbsById.entries) {
+      final orderIndex = document.getOrderIndex(entry.key);
+      if (orderIndex == null) {
+        continue;
+      }
+      final occluders = document.queryElementsInRectOrdered(
+        entry.value,
+        minOrderIndex: orderIndex + 1,
+      );
+      for (final element in occluders) {
+        if (optimizedElementIds.contains(element.id)) {
+          continue;
+        }
+        final effective = renderKey.previewElementsById[element.id] ?? element;
+        if (effective.opacity <= 0) {
+          continue;
+        }
+        final aabb = SelectionCalculator.computeElementWorldAabb(effective);
+        if (!_rectsIntersect(aabb, entry.value) ||
+            !_rectsIntersect(aabb, viewportRect)) {
+          continue;
+        }
+        effectiveById[element.id] = effective;
+      }
+    }
+
+    final optimized = effectiveById.values.toList(growable: false);
+    if (optimized.length < 2) {
+      return optimized;
+    }
+
+    optimized.sort((a, b) {
+      final orderA = document.getOrderIndex(a.id) ?? a.zIndex;
+      final orderB = document.getOrderIndex(b.id) ?? b.zIndex;
+      final orderComparison = orderA.compareTo(orderB);
+      if (orderComparison != 0) {
+        return orderComparison;
+      }
+      return a.id.compareTo(b.id);
+    });
     return optimized;
   }
 
@@ -437,19 +467,19 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final document = stateView.state.domain.document;
-    final hasVisibleTextElement = effectiveElements.any(
-      (element) => element.data is TextData,
-    );
+    final visibleTextIds = _resolveVisibleTextIds(effectiveElements);
     final shouldPaintSerialConnectors =
-        hasVisibleTextElement &&
+        visibleTextIds.isNotEmpty &&
         _shouldPaintSerialConnectors(
           boundTextIds: document.boundTextIds,
           previewElementsById: renderKey.previewElementsById,
+          visibleTextIds: visibleTextIds,
         );
     final serialConnectors = shouldPaintSerialConnectors
         ? resolveSerialNumberConnectorMap(
             stateView,
             previewElementsById: renderKey.previewElementsById,
+            visibleTextElementIds: visibleTextIds,
           )
         : const <String, List<SerialNumberTextConnector>>{};
 
@@ -1189,19 +1219,34 @@ class DynamicCanvasPainter extends CustomPainter {
   bool _shouldPaintSerialConnectors({
     required Set<String> boundTextIds,
     required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
   }) {
-    if (boundTextIds.isNotEmpty) {
-      return true;
+    for (final textId in visibleTextIds) {
+      if (boundTextIds.contains(textId)) {
+        return true;
+      }
     }
     for (final previewElement in previewElementsById.values) {
       final data = previewElement.data;
       if (data is SerialNumberData &&
           data.textElementId != null &&
-          data.textElementId!.isNotEmpty) {
+          data.textElementId!.isNotEmpty &&
+          visibleTextIds.contains(data.textElementId)) {
         return true;
       }
     }
     return false;
+  }
+
+  Set<String> _resolveVisibleTextIds(List<ElementState> effectiveElements) {
+    final visible = <String>{};
+    for (final element in effectiveElements) {
+      if (element.opacity <= 0 || element.data is! TextData) {
+        continue;
+      }
+      visible.add(element.id);
+    }
+    return visible;
   }
 
   DrawPoint? _resolveHandlePosition(

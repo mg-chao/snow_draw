@@ -37,6 +37,7 @@ class SerialNumberConnectorCache {
   SerialNumberConnectorMap resolve(
     DrawStateView stateView, {
     Map<String, ElementState>? previewElementsById,
+    Set<String>? visibleTextElementIds,
   }) {
     final document = stateView.state.domain.document;
     final effectivePreviewElements =
@@ -60,9 +61,28 @@ class SerialNumberConnectorCache {
       return const <String, List<SerialNumberTextConnector>>{};
     }
 
+    final visibleTextIds = _normalizeVisibleTextIds(
+      document: document,
+      previewElementsById: effectivePreviewElements,
+      visibleTextElementIds: visibleTextElementIds,
+    );
+
+    if (visibleTextIds.isEmpty) {
+      return const <String, List<SerialNumberTextConnector>>{};
+    }
+
+    final candidateSerialIds = _resolveCandidateSerialIds(
+      previewElementsById: effectivePreviewElements,
+      visibleTextIds: visibleTextIds,
+    );
+    if (candidateSerialIds.isEmpty) {
+      return const <String, List<SerialNumberTextConnector>>{};
+    }
+
     // Determine which connectors need recomputation
     final affectedSerialIds = _resolveAffectedSerialIds(
       previewElementsById: effectivePreviewElements,
+      candidateSerialIds: candidateSerialIds,
     );
 
     // Build the result map
@@ -70,6 +90,8 @@ class SerialNumberConnectorCache {
       document: document,
       previewElementsById: effectivePreviewElements,
       affectedSerialIds: affectedSerialIds,
+      candidateSerialIds: candidateSerialIds,
+      visibleTextIds: visibleTextIds,
     );
   }
 
@@ -139,8 +161,9 @@ class SerialNumberConnectorCache {
 
   Set<String> _resolveAffectedSerialIds({
     required Map<String, ElementState> previewElementsById,
+    required Set<String> candidateSerialIds,
   }) {
-    if (previewElementsById.isEmpty) {
+    if (previewElementsById.isEmpty || candidateSerialIds.isEmpty) {
       return const {};
     }
 
@@ -148,14 +171,19 @@ class SerialNumberConnectorCache {
 
     for (final previewId in previewElementsById.keys) {
       // If the preview is a serial number with a binding, it's affected
-      if (_bindingIndex.containsKey(previewId)) {
+      if (_bindingIndex.containsKey(previewId) &&
+          candidateSerialIds.contains(previewId)) {
         affected.add(previewId);
       }
 
       // O(1) reverse lookup: text element -> bound serial numbers
       final boundSerials = _reverseBindingIndex[previewId];
       if (boundSerials != null) {
-        affected.addAll(boundSerials);
+        for (final serialId in boundSerials) {
+          if (candidateSerialIds.contains(serialId)) {
+            affected.add(serialId);
+          }
+        }
       }
     }
 
@@ -166,13 +194,12 @@ class SerialNumberConnectorCache {
     required DocumentState document,
     required Map<String, ElementState> previewElementsById,
     required Set<String> affectedSerialIds,
+    required Set<String> candidateSerialIds,
+    required Set<String> visibleTextIds,
   }) {
     final result = <String, List<SerialNumberTextConnector>>{};
 
-    for (final entry in _bindingIndex.entries) {
-      final serialId = entry.key;
-
-      // Get effective elements (preview or document)
+    for (final serialId in candidateSerialIds) {
       final previewSerialElement = previewElementsById[serialId];
       final serialElement =
           previewSerialElement ?? document.getElementById(serialId);
@@ -185,10 +212,10 @@ class SerialNumberConnectorCache {
         continue;
       }
 
-      final textId = previewSerialElement != null
-          ? serialData.textElementId
-          : entry.value;
-      if (textId == null || textId.isEmpty) {
+      final textId = serialData.textElementId;
+      if (textId == null ||
+          textId.isEmpty ||
+          !visibleTextIds.contains(textId)) {
         continue;
       }
 
@@ -230,58 +257,89 @@ class SerialNumberConnectorCache {
       }
     }
 
-    _appendPreviewOnlySerialConnectors(
-      result: result,
-      document: document,
-      previewElementsById: previewElementsById,
-    );
-
     return result;
   }
 
-  void _appendPreviewOnlySerialConnectors({
-    required SerialNumberConnectorMap result,
+  Set<String> _normalizeVisibleTextIds({
     required DocumentState document,
     required Map<String, ElementState> previewElementsById,
+    required Set<String>? visibleTextElementIds,
   }) {
+    if (visibleTextElementIds == null) {
+      final allVisible = <String>{};
+      for (final element in document.elements) {
+        if (element.data is TextData && element.opacity > 0) {
+          allVisible.add(element.id);
+        }
+      }
+      for (final preview in previewElementsById.values) {
+        if (preview.data is! TextData) {
+          continue;
+        }
+        if (preview.opacity > 0) {
+          allVisible.add(preview.id);
+        } else {
+          allVisible.remove(preview.id);
+        }
+      }
+      return allVisible;
+    }
+    if (visibleTextElementIds.isEmpty) {
+      return const <String>{};
+    }
+
+    final normalized = <String>{};
+    for (final textId in visibleTextElementIds) {
+      final preview = previewElementsById[textId];
+      if (preview != null) {
+        if (preview.data is TextData && preview.opacity > 0) {
+          normalized.add(textId);
+        }
+        continue;
+      }
+      final element = document.getElementById(textId);
+      if (element != null && element.data is TextData && element.opacity > 0) {
+        normalized.add(textId);
+      }
+    }
+    return normalized;
+  }
+
+  Set<String> _resolveCandidateSerialIds({
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    if (visibleTextIds.isEmpty) {
+      return const <String>{};
+    }
+
+    final candidateSerialIds = <String>{};
+    for (final textId in visibleTextIds) {
+      final boundSerials = _reverseBindingIndex[textId];
+      if (boundSerials != null) {
+        candidateSerialIds.addAll(boundSerials);
+      }
+    }
+
     if (previewElementsById.isEmpty) {
-      return;
+      return candidateSerialIds;
     }
 
     for (final preview in previewElementsById.values) {
-      if (_bindingIndex.containsKey(preview.id)) {
+      final data = preview.data;
+      if (data is! SerialNumberData) {
         continue;
       }
-
-      final serialData = preview.data;
-      if (serialData is! SerialNumberData) {
-        continue;
-      }
-
-      final textId = serialData.textElementId;
+      final textId = data.textElementId;
       if (textId == null || textId.isEmpty) {
         continue;
       }
-
-      final textElement =
-          previewElementsById[textId] ?? document.getElementById(textId);
-      if (textElement == null || textElement.data is! TextData) {
-        continue;
+      if (visibleTextIds.contains(textId)) {
+        candidateSerialIds.add(preview.id);
       }
-
-      final connector = _computeConnector(
-        serialElement: preview,
-        serialData: serialData,
-        textElement: textElement,
-      );
-      if (connector == null) {
-        continue;
-      }
-
-      result
-          .putIfAbsent(textId, () => <SerialNumberTextConnector>[])
-          .add(connector);
     }
+
+    return candidateSerialIds;
   }
 
   SerialNumberTextConnector? _computeConnector({
