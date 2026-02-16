@@ -15,6 +15,7 @@ import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../arrow/arrow_binding.dart';
+import '../line/line_data.dart';
 import 'arrow_binding_target_cache.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
@@ -84,6 +85,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         data: elementData,
         rect: creatingState.currentRect,
         creationMode: creatingState.creationMode,
+      );
+    }
+    if (elementData is LineData) {
+      return _updateLine(
+        state: state,
+        config: config,
+        creatingState: creatingState,
+        currentPosition: currentPosition,
+        snappingMode: snappingMode,
+        data: elementData,
       );
     }
     final sessionData = _resolveSessionData(creatingState.creationMode);
@@ -408,6 +419,123 @@ class ArrowCreationStrategy extends PointCreationStrategy {
   }
 }
 
+CreationUpdateResult _updateLine({
+  required DrawState state,
+  required DrawConfig config,
+  required CreatingState creatingState,
+  required DrawPoint currentPosition,
+  required SnappingMode snappingMode,
+  required LineData data,
+}) {
+  final sessionData = _resolveSessionData(creatingState.creationMode);
+  final gridConfig = config.grid;
+  final snapToGrid = snappingMode == SnappingMode.grid;
+  var startPosition = snapToGrid
+      ? gridSnapService.snapPoint(
+          point: creatingState.startPosition,
+          gridSize: gridConfig.size,
+        )
+      : creatingState.startPosition;
+  var adjustedCurrent = snapToGrid
+      ? gridSnapService.snapPoint(
+          point: currentPosition,
+          gridSize: gridConfig.size,
+        )
+      : currentPosition;
+
+  final startBindingResult = _snapBindingPoint(
+    state: state,
+    config: config,
+    position: startPosition,
+    snappingMode: snappingMode,
+    arrowType: data.arrowType,
+    arrowheadStyle: data.startArrowhead,
+    preferredBinding: data.startBinding,
+    referencePoint: adjustedCurrent,
+    targetCache: sessionData.startTargetCache,
+  );
+  startPosition = startBindingResult.position;
+
+  final fixedPoints = _applyBoundStartToFixedPoints(
+    fixedPoints: creatingState.fixedPoints,
+    boundStart: startPosition,
+  );
+  final segmentStart = fixedPoints.isNotEmpty
+      ? fixedPoints.last
+      : startPosition;
+  adjustedCurrent = _resolveArrowSegmentPosition(
+    segmentStart: segmentStart,
+    currentPosition: adjustedCurrent,
+  );
+
+  final snapResult = _snapCreatePoint(
+    state: state,
+    config: config,
+    position: adjustedCurrent,
+    snappingMode: snappingMode,
+    sessionData: sessionData,
+  );
+  adjustedCurrent = snapResult.position;
+
+  final bindingResult = _snapBindingPoint(
+    state: state,
+    config: config,
+    position: adjustedCurrent,
+    snappingMode: snappingMode,
+    arrowType: data.arrowType,
+    arrowheadStyle: data.endArrowhead,
+    preferredBinding: data.endBinding,
+    referencePoint: segmentStart,
+    targetCache: sessionData.endTargetCache,
+  );
+  adjustedCurrent = bindingResult.position;
+  var endBinding = bindingResult.binding;
+
+  final closeTolerance =
+      config.selection.interaction.handleTolerance *
+      _loopCloseToleranceMultiplier;
+  if (fixedPoints.length >= 2) {
+    final firstPoint = fixedPoints.first;
+    if (adjustedCurrent.distanceSquared(firstPoint) <=
+        closeTolerance * closeTolerance) {
+      adjustedCurrent = firstPoint;
+      endBinding = startBindingResult.binding;
+    }
+  }
+
+  final worldPoints = _appendCurrentPoint(
+    fixedPoints: fixedPoints,
+    currentPoint: adjustedCurrent,
+  );
+  final lineRect = worldPoints.length > 2
+      ? _calculateArrowRect(
+          points: worldPoints,
+          arrowType: data.arrowType,
+          strokeWidth: data.strokeWidth,
+        )
+      : _calculateStraightBounds(worldPoints);
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: lineRect,
+  );
+  final updatedData = data.copyWith(
+    points: normalizedPoints,
+    startBinding: startBindingResult.binding,
+    endBinding: endBinding,
+  );
+
+  return CreationUpdateResult(
+    data: updatedData,
+    rect: lineRect,
+    snapGuides: snapResult.guides,
+    creationMode: PointCreationMode(
+      fixedPoints: fixedPoints,
+      currentPoint: adjustedCurrent,
+      sessionData: sessionData,
+    ),
+  );
+}
+
 const _loopCloseToleranceMultiplier = 1.5;
 const _bindingCacheTargetThresholdFactor = 0.4;
 const _bindingCacheEmptyThresholdFactor = 0.75;
@@ -422,6 +550,31 @@ DrawRect _calculateArrowRect({
   worldPoints: points,
   arrowType: arrowType,
 );
+
+DrawRect _calculateStraightBounds(List<DrawPoint> points) {
+  if (points.isEmpty) {
+    return const DrawRect();
+  }
+
+  var minX = points.first.x;
+  var minY = points.first.y;
+  var maxX = points.first.x;
+  var maxY = points.first.y;
+  for (var index = 1; index < points.length; index++) {
+    final point = points[index];
+    if (point.x < minX) {
+      minX = point.x;
+    } else if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    } else if (point.y > maxY) {
+      maxY = point.y;
+    }
+  }
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
 
 DrawPoint _resolveArrowSegmentPosition({
   required DrawPoint segmentStart,

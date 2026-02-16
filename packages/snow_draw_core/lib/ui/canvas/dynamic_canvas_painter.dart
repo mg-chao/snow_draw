@@ -36,6 +36,7 @@ import 'filter_scene_compositor.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
+import 'optimized_scene_occlusion.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 import 'visible_element_scene_resolver.dart';
@@ -409,35 +410,51 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final seedAabbsById = <String, DrawRect>{};
+    final effectiveAabbsById = <String, DrawRect>{};
     for (final entry in effectiveById.entries) {
-      seedAabbsById[entry.key] = SelectionCalculator.computeElementWorldAabb(
-        entry.value,
-      );
+      final aabb = SelectionCalculator.computeElementWorldAabb(entry.value);
+      seedAabbsById[entry.key] = aabb;
+      effectiveAabbsById[entry.key] = aabb;
     }
 
     for (final entry in seedAabbsById.entries) {
+      final seedElement = effectiveById[entry.key];
+      if (seedElement == null) {
+        continue;
+      }
+      final seedAabb = entry.value;
       final orderIndex = document.getOrderIndex(entry.key);
       if (orderIndex == null) {
         continue;
       }
-      final occluders = document.queryElementsInRectOrdered(
-        entry.value,
-        minOrderIndex: orderIndex + 1,
+      final queryRects = resolveOptimizedOccluderQueryRects(
+        seedElement: seedElement,
+        seedAabb: seedAabb,
       );
-      for (final element in occluders) {
-        if (optimizedElementIds.contains(element.id)) {
-          continue;
+      for (final queryRect in queryRects) {
+        final occluders = document.queryElementsInRectOrdered(
+          queryRect,
+          minOrderIndex: orderIndex + 1,
+        );
+        for (final element in occluders) {
+          if (optimizedElementIds.contains(element.id)) {
+            continue;
+          }
+          final effective =
+              renderKey.previewElementsById[element.id] ?? element;
+          if (effective.opacity <= 0) {
+            continue;
+          }
+          final aabb =
+              effectiveAabbsById[element.id] ??
+              SelectionCalculator.computeElementWorldAabb(effective);
+          effectiveAabbsById[element.id] = aabb;
+          if (!_rectsIntersect(aabb, queryRect) ||
+              !_rectsIntersect(aabb, viewportRect)) {
+            continue;
+          }
+          effectiveById[element.id] = effective;
         }
-        final effective = renderKey.previewElementsById[element.id] ?? element;
-        if (effective.opacity <= 0) {
-          continue;
-        }
-        final aabb = SelectionCalculator.computeElementWorldAabb(effective);
-        if (!_rectsIntersect(aabb, entry.value) ||
-            !_rectsIntersect(aabb, viewportRect)) {
-          continue;
-        }
-        effectiveById[element.id] = effective;
       }
     }
 
