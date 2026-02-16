@@ -8,12 +8,14 @@ import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/dynamic_canvas_painter.dart';
@@ -99,6 +101,61 @@ void main() {
     // frame; static ranges come from the interaction-scene cache.
     expect(counter.count, 1);
   });
+
+  test(
+    'creating filter preview paints without mutating cached scene lists',
+    () {
+      final registry = _buildRegistry(_RenderCounter());
+      const persisted = ElementState(
+        id: 'cache-static-1',
+        rect: DrawRect(maxX: 40, maxY: 40),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: _CacheTestData(),
+      );
+      const creatingElement = ElementState(
+        id: 'new-filter',
+        rect: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 80),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(),
+      );
+      final interaction = CreatingState(
+        element: creatingElement,
+        startPosition: const DrawPoint(x: 20, y: 20),
+        currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 90),
+      );
+      final state = DrawState.fromLayers(
+        domain: DomainState(
+          document: DocumentState(
+            elements: const [persisted],
+            elementsVersion: 7,
+          ),
+        ),
+        application: ApplicationState.initial().copyWith(
+          interaction: interaction,
+        ),
+      );
+
+      expect(
+        () => _paintFrame(
+          stateView: DrawStateView.fromState(state),
+          renderKey: _buildRenderKey(
+            state: state,
+            registry: registry,
+            previewElementsById: const <String, ElementState>{},
+            creatingElement: const CreatingElementSnapshot(
+              element: creatingElement,
+              currentRect: DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 90),
+            ),
+          ),
+        ),
+        returnsNormally,
+      );
+    },
+  );
 }
 
 DefaultElementRegistry _buildRegistry(_RenderCounter counter) =>
@@ -117,8 +174,9 @@ DynamicCanvasRenderKey _buildRenderKey({
   required DrawState state,
   required DefaultElementRegistry registry,
   required Map<String, ElementState> previewElementsById,
+  CreatingElementSnapshot? creatingElement,
 }) => DynamicCanvasRenderKey(
-  creatingElement: null,
+  creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
   boxSelectionBounds: null,
   selectedIds: const <String>{},

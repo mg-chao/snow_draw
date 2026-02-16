@@ -39,6 +39,7 @@ import 'highlight_mask_visibility.dart';
 import 'optimized_scene_occlusion.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'visible_element_scene_cache.dart';
 import 'visible_element_scene_resolver.dart';
 
 final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
@@ -56,6 +57,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
   static final _interactionSceneCache = InteractionSceneCache();
+  static final _visibleSceneCache = VisibleElementSceneCache();
   static final _freeDrawPreviewCache = _FreeDrawCreationPreviewCache();
   static final _arrowOverlayPaints = _ArrowOverlayPaints();
   static final _arrowHoverStrokePaint = Paint()
@@ -323,19 +325,34 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final state = stateView.state;
     final document = state.domain.document;
-    final effectiveElements = resolveVisibleElementScene(
+    final minOrderIndex = rendersWholeScene
+        ? null
+        : (dynamicLayerStartIndex ?? 0);
+    final baseVisibleElements = _visibleSceneCache.resolve(
       document: document,
       viewportRect: viewportRect,
-      minOrderIndex: rendersWholeScene ? null : (dynamicLayerStartIndex ?? 0),
+      minOrderIndex: minOrderIndex,
+    );
+    final excludedElementId =
+        creatingElement != null &&
+            document.getElementById(creatingElement.element.id) != null
+        ? creatingElement.element.id
+        : null;
+    var effectiveElements = resolveVisibleElementScene(
+      document: document,
+      viewportRect: viewportRect,
+      baseVisibleElements: baseVisibleElements,
+      minOrderIndex: minOrderIndex,
       previewElementsById: renderKey.previewElementsById,
-      excludedElementId: creatingElement?.element.id,
+      excludedElementId: excludedElementId,
     );
 
     if (creatingElement != null && creatingElement.element.data is FilterData) {
       final previewFilter = creatingElement.element.copyWith(
         rect: creatingElement.currentRect,
       );
-      effectiveElements.add(previewFilter);
+      effectiveElements = List<ElementState>.of(effectiveElements)
+        ..add(previewFilter);
     }
 
     _paintElementScene(

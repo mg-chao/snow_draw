@@ -3,24 +3,40 @@ import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/utils/selection_calculator.dart';
 
+/// Queries visible document elements in z-order without preview replacements.
+///
+/// This is the base scene query used by both static and dynamic painters.
+List<ElementState> resolveBaseVisibleElementScene({
+  required DocumentState document,
+  required DrawRect viewportRect,
+  int? minOrderIndex,
+  int? maxOrderIndex,
+}) => document.queryElementsInRectOrdered(
+  viewportRect,
+  minOrderIndex: minOrderIndex,
+  maxOrderIndex: maxOrderIndex,
+);
+
 /// Builds a z-ordered list of visible elements with preview replacements.
 ///
-/// This resolver keeps document ordering stable even when preview geometry
-/// moves an element into the viewport from outside the spatial index query
-/// bounds.
+/// Callers can pass [baseVisibleElements] to reuse a cached viewport query.
 List<ElementState> resolveVisibleElementScene({
   required DocumentState document,
   required DrawRect viewportRect,
   required Map<String, ElementState> previewElementsById,
+  List<ElementState>? baseVisibleElements,
   int? minOrderIndex,
   int? maxOrderIndex,
   String? excludedElementId,
 }) {
-  final visibleElements = document.queryElementsInRectOrdered(
-    viewportRect,
-    minOrderIndex: minOrderIndex,
-    maxOrderIndex: maxOrderIndex,
-  );
+  final visibleElements =
+      baseVisibleElements ??
+      resolveBaseVisibleElementScene(
+        document: document,
+        viewportRect: viewportRect,
+        minOrderIndex: minOrderIndex,
+        maxOrderIndex: maxOrderIndex,
+      );
 
   if (previewElementsById.isEmpty && excludedElementId == null) {
     return visibleElements;
