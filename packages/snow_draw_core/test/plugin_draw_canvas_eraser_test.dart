@@ -71,6 +71,94 @@ void main() {
         expect(store.state.domain.document.getElementById(elementId), isNull);
       },
     );
+
+    testWidgets('erases elements along long move paths in a single stroke', (
+      tester,
+    ) async {
+      final leftId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 30, y: 70),
+        end: const DrawPoint(x: 70, y: 110),
+      );
+      final middleId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 120, y: 70),
+        end: const DrawPoint(x: 160, y: 110),
+      );
+      final rightId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 210, y: 70),
+        end: const DrawPoint(x: 250, y: 110),
+      );
+
+      await _pumpCanvas(
+        tester: tester,
+        store: store,
+        currentToolTypeId: null,
+        isSelectionToolActive: false,
+        isEraserToolActive: true,
+      );
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await tester.pump();
+
+      await mouse.down(const Offset(50, 90));
+      await tester.pump();
+      await mouse.moveTo(const Offset(230, 90));
+      await tester.pump();
+      await mouse.up();
+      await tester.pump();
+      await tester.pump();
+
+      final document = store.state.domain.document;
+      expect(document.getElementById(leftId), isNull);
+      expect(document.getElementById(middleId), isNull);
+      expect(document.getElementById(rightId), isNull);
+    });
+
+    testWidgets('does not interpolate between concurrent eraser pointers', (
+      tester,
+    ) async {
+      final leftId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 30, y: 70),
+        end: const DrawPoint(x: 70, y: 110),
+      );
+      final middleId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 120, y: 70),
+        end: const DrawPoint(x: 160, y: 110),
+      );
+      final rightId = await _createRectangle(
+        store,
+        start: const DrawPoint(x: 210, y: 70),
+        end: const DrawPoint(x: 250, y: 110),
+      );
+
+      await _pumpCanvas(
+        tester: tester,
+        store: store,
+        currentToolTypeId: null,
+        isSelectionToolActive: false,
+        isEraserToolActive: true,
+      );
+
+      final firstTouch = await tester.startGesture(const Offset(50, 90));
+      final secondTouch = await tester.startGesture(const Offset(230, 90));
+      await tester.pump();
+
+      await firstTouch.up();
+      await secondTouch.up();
+      await tester.pump();
+      await tester.pump();
+
+      final document = store.state.domain.document;
+      expect(document.getElementById(leftId), isNull);
+      expect(document.getElementById(middleId), isNotNull);
+      expect(document.getElementById(rightId), isNull);
+    });
   });
 }
 
@@ -100,17 +188,17 @@ Future<void> _pumpCanvas({
 Future<String> _createRectangle(
   DefaultDrawStore store, {
   double opacity = 1.0,
+  DrawPoint start = const DrawPoint(x: 120, y: 80),
+  DrawPoint end = const DrawPoint(x: 220, y: 160),
 }) async {
   await store.dispatch(
-    const CreateElement(
+    CreateElement(
       typeId: RectangleData.typeIdToken,
-      position: DrawPoint(x: 120, y: 80),
-      initialData: RectangleData(fillColor: Color(0x401576FE)),
+      position: start,
+      initialData: const RectangleData(fillColor: Color(0x401576FE)),
     ),
   );
-  await store.dispatch(
-    const UpdateCreatingElement(currentPosition: DrawPoint(x: 220, y: 160)),
-  );
+  await store.dispatch(UpdateCreatingElement(currentPosition: end));
   await store.dispatch(const FinishCreateElement());
 
   final elementId = store.state.domain.document.elements.last.id;

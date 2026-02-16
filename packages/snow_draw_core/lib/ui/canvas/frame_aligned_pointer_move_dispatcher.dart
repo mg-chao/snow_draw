@@ -7,29 +7,30 @@ import '../../draw/input/input_event.dart';
 typedef PointerMoveEventSink =
     Future<void> Function(PointerMoveInputEvent event);
 
-/// Dispatches pointer move events with optional frame-aligned coalescing.
+typedef FrameAlignedEventSink<T> = Future<void> Function(T event);
+
+/// Dispatches high-frequency events with optional frame-aligned coalescing.
 ///
-/// Interactive transforms (move/resize/create) only need the latest pointer
-/// position per frame to render smoothly. This dispatcher keeps free-draw-like
-/// tools fully unthrottled while coalescing rectangle-style interactions to one
-/// update per frame.
-class FrameAlignedPointerMoveDispatcher {
-  FrameAlignedPointerMoveDispatcher({
-    required PointerMoveEventSink dispatchMove,
+/// Callers can coalesce to the latest event per frame for interaction paths
+/// where only the latest position matters, while keeping other flows fully
+/// unthrottled.
+class FrameAlignedEventDispatcher<T> {
+  FrameAlignedEventDispatcher({
+    required FrameAlignedEventSink<T> dispatchEvent,
     required bool Function() shouldCoalesce,
-  }) : _dispatchMove = dispatchMove,
+  }) : _dispatchEvent = _eraseDispatch(dispatchEvent),
        _shouldCoalesce = shouldCoalesce;
 
-  final PointerMoveEventSink _dispatchMove;
+  final Future<void> Function(Object?) _dispatchEvent;
   final bool Function() _shouldCoalesce;
 
-  PointerMoveInputEvent? _pendingMove;
+  T? _pendingEvent;
   Future<void>? _inFlightDispatch;
   var _withoutCoalescingQueue = Future<void>.value();
   var _frameCallbackScheduled = false;
   var _isDisposed = false;
 
-  void dispatch(PointerMoveInputEvent event) {
+  void dispatch(T event) {
     if (_isDisposed) {
       return;
     }
@@ -43,7 +44,7 @@ class FrameAlignedPointerMoveDispatcher {
       return;
     }
 
-    _pendingMove = event;
+    _pendingEvent = event;
     _scheduleFrameDispatch();
   }
 
@@ -53,7 +54,7 @@ class FrameAlignedPointerMoveDispatcher {
     }
     await _withoutCoalescingQueue;
     await _waitForInFlightDispatch();
-    final pending = _takePendingMove();
+    final pending = _takePendingEvent();
     if (pending == null) {
       return;
     }
@@ -61,7 +62,7 @@ class FrameAlignedPointerMoveDispatcher {
   }
 
   void reset() {
-    _pendingMove = null;
+    _pendingEvent = null;
   }
 
   Future<void> dispose() async {
@@ -69,14 +70,14 @@ class FrameAlignedPointerMoveDispatcher {
       return;
     }
     _isDisposed = true;
-    _pendingMove = null;
+    _pendingEvent = null;
     await _withoutCoalescingQueue;
     await _waitForInFlightDispatch();
   }
 
-  Future<void> _dispatchWithoutCoalescing(PointerMoveInputEvent event) async {
+  Future<void> _dispatchWithoutCoalescing(T event) async {
     await _waitForInFlightDispatch();
-    final pending = _takePendingMove();
+    final pending = _takePendingEvent();
     if (pending != null) {
       await _dispatchImmediately(pending);
     }
@@ -101,16 +102,16 @@ class FrameAlignedPointerMoveDispatcher {
       return;
     }
     await _waitForInFlightDispatch();
-    final pending = _takePendingMove();
+    final pending = _takePendingEvent();
     if (pending == null) {
       return;
     }
     await _dispatchImmediately(pending);
-    if (_pendingMove != null) {
+    if (_pendingEvent != null) {
       if (_shouldCoalesce()) {
         _scheduleFrameDispatch();
       } else {
-        final remaining = _takePendingMove();
+        final remaining = _takePendingEvent();
         if (remaining != null) {
           await _dispatchImmediately(remaining);
         }
@@ -118,8 +119,8 @@ class FrameAlignedPointerMoveDispatcher {
     }
   }
 
-  Future<void> _dispatchImmediately(PointerMoveInputEvent event) {
-    final future = _dispatchMove(event);
+  Future<void> _dispatchImmediately(T event) {
+    final future = _dispatchEvent(event);
     _inFlightDispatch = future;
     return future.whenComplete(() {
       if (identical(_inFlightDispatch, future)) {
@@ -135,9 +136,42 @@ class FrameAlignedPointerMoveDispatcher {
     }
   }
 
-  PointerMoveInputEvent? _takePendingMove() {
-    final pending = _pendingMove;
-    _pendingMove = null;
+  T? _takePendingEvent() {
+    final pending = _pendingEvent;
+    _pendingEvent = null;
     return pending;
   }
+
+  static Future<void> Function(Object?) _eraseDispatch<T>(
+    FrameAlignedEventSink<T> dispatchEvent,
+  ) =>
+      (event) => dispatchEvent(event as T);
+}
+
+/// Dispatches pointer move events with optional frame-aligned coalescing.
+///
+/// Interactive transforms (move/resize/create) only need the latest pointer
+/// position per frame to render smoothly. This dispatcher keeps free-draw-like
+/// tools fully unthrottled while coalescing rectangle-style interactions to one
+/// update per frame.
+class FrameAlignedPointerMoveDispatcher {
+  FrameAlignedPointerMoveDispatcher({
+    required PointerMoveEventSink dispatchMove,
+    required bool Function() shouldCoalesce,
+  }) : _dispatcher = FrameAlignedEventDispatcher<PointerMoveInputEvent>(
+         dispatchEvent: dispatchMove,
+         shouldCoalesce: shouldCoalesce,
+       );
+
+  final FrameAlignedEventDispatcher<PointerMoveInputEvent> _dispatcher;
+
+  void dispatch(PointerMoveInputEvent event) {
+    _dispatcher.dispatch(event);
+  }
+
+  Future<void> flush() => _dispatcher.flush();
+
+  void reset() => _dispatcher.reset();
+
+  Future<void> dispose() => _dispatcher.dispose();
 }

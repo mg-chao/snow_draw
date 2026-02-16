@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -127,6 +129,13 @@ class PluginDrawCanvas extends StatefulWidget {
   }
 }
 
+class _EraserMoveEvent {
+  const _EraserMoveEvent({required this.pointerId, required this.position});
+
+  final int pointerId;
+  final DrawPoint position;
+}
+
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
@@ -176,6 +185,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingEraseElementIds = <String>{};
+  final _lastEraserProcessedPositions = <int, DrawPoint>{};
+  final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
   int? _middlePanPointerId;
   Offset? _lastMiddlePanPosition;
 
@@ -183,6 +194,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
+  late final FrameAlignedEventDispatcher<_EraserMoveEvent>
+  _eraserMoveDispatcher;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
   var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
@@ -306,6 +319,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dispatchMove: _dispatchPointerMoveEvent,
       shouldCoalesce: _shouldFrameCoalescePointerMove,
     );
+    _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
+      dispatchEvent: _dispatchEraserMove,
+      shouldCoalesce: () => _eraserPointerIds.length <= 1,
+    );
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
@@ -408,7 +425,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textController?.dispose();
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
+    _eraserCursorPositionNotifier.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
+    unawaited(_eraserMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
     super.dispose();
   }
@@ -899,18 +918,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   Widget? _buildEraserCursorOverlay() {
-    if (!widget.isEraserToolActive || !_isPointerInside) {
+    if (!widget.isEraserToolActive) {
       return null;
     }
-    final pointer = _lastPointerPosition;
-    if (pointer == null) {
-      return null;
-    }
-    final screenPosition = _coords.worldToScreen(pointer);
     const diameter = _eraserCursorRadius * 2;
-    return Positioned(
-      left: screenPosition.x - _eraserCursorRadius,
-      top: screenPosition.y - _eraserCursorRadius,
+    return ValueListenableBuilder<DrawPoint?>(
+      valueListenable: _eraserCursorPositionNotifier,
+      builder: (context, pointer, child) {
+        if (pointer == null || !_isPointerInside) {
+          return const SizedBox.shrink();
+        }
+        final screenPosition = _coords.worldToScreen(pointer);
+        return Positioned(
+          left: screenPosition.x - _eraserCursorRadius,
+          top: screenPosition.y - _eraserCursorRadius,
+          child: child!,
+        );
+      },
       child: IgnorePointer(
         child: Container(
           key: _eraserCursorOverlayKey,
@@ -1022,9 +1046,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _activePointerIds.add(event.pointer);
     _pointerMoveDispatcher.reset();
     if (widget.isEraserToolActive) {
+      final isFirstEraserPointer = _eraserPointerIds.isEmpty;
       _eraserPointerIds.add(event.pointer);
-      _markElementsForErase(position);
-      if (mounted) {
+      if (isFirstEraserPointer) {
+        _eraserMoveDispatcher.reset();
+        _lastEraserProcessedPositions.clear();
+      }
+      _lastEraserProcessedPositions.remove(event.pointer);
+      final previewChanged = _markElementsForErase(
+        pointerId: event.pointer,
+        position: position,
+      );
+      if (previewChanged && mounted) {
         setState(() {});
       }
       return;
@@ -1054,10 +1087,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     if (widget.isEraserToolActive) {
       if (_eraserPointerIds.contains(event.pointer)) {
-        _markElementsForErase(position);
-      }
-      if (mounted) {
-        setState(() {});
+        _eraserMoveDispatcher.dispatch(
+          _EraserMoveEvent(pointerId: event.pointer, position: position),
+        );
       }
       return;
     }
@@ -1083,7 +1115,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (widget.isEraserToolActive) {
       _eraserPointerIds.remove(event.pointer);
       if (_eraserPointerIds.isEmpty) {
-        unawaited(_commitPendingErase());
+        unawaited(_finishEraserStroke());
       }
       return;
     }
@@ -1108,7 +1140,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (widget.isEraserToolActive) {
       _eraserPointerIds.remove(event.pointer);
       if (_eraserPointerIds.isEmpty) {
-        unawaited(_commitPendingErase());
+        unawaited(_finishEraserStroke());
       }
       return;
     }
@@ -1119,6 +1151,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   Future<void> _dispatchPointerMoveEvent(PointerMoveInputEvent event) async {
     await _pluginCoordinator.handleEvent(event);
+  }
+
+  Future<void> _dispatchEraserMove(_EraserMoveEvent event) async {
+    if (!widget.isEraserToolActive) {
+      return;
+    }
+    final previewChanged = _markElementsForErase(
+      pointerId: event.pointerId,
+      position: event.position,
+    );
+    if (previewChanged && mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _finishEraserStroke() async {
+    await _eraserMoveDispatcher.flush();
+    _lastEraserProcessedPositions.clear();
+    await _commitPendingErase();
   }
 
   bool _shouldFrameCoalescePointerMove() {
@@ -1221,9 +1272,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final position = _recordPointerPosition(event.localPosition);
     _updateCursorAndHoverForPosition(position);
     if (widget.isEraserToolActive) {
-      if (mounted) {
-        setState(() {});
-      }
       return;
     }
     unawaited(
@@ -1239,6 +1287,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerExit(PointerExitEvent event) {
     _isPointerInside = false;
     _lastPointerPosition = null;
+    _eraserCursorPositionNotifier.value = null;
     if (_hoveredSelectionElementId != null ||
         _hoveredBindingElementId != null ||
         _hoveredArrowHandle != null) {
@@ -1256,41 +1305,73 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _syncKeyboardModifiers();
     final position = _transformPosition(localPosition);
     _lastPointerPosition = position;
+    _eraserCursorPositionNotifier.value = position;
     _isPointerInside = true;
     return position;
   }
 
-  void _markElementsForErase(DrawPoint position) {
-    final hitIds = _resolveEraserHitElementIds(position);
-    if (hitIds.isEmpty) {
-      return;
+  bool _markElementsForErase({
+    required int pointerId,
+    required DrawPoint position,
+  }) {
+    final stateView = _buildStateView(widget.store.state);
+    final tolerance = _eraserCursorRadius / _effectiveScaleFactor();
+
+    final previous = _lastEraserProcessedPositions[pointerId];
+    _lastEraserProcessedPositions[pointerId] = position;
+    if (previous == null) {
+      return _markElementsForEraseAtPosition(
+        stateView: stateView,
+        position: position,
+        tolerance: tolerance,
+      );
     }
-    final newIds = <String>[];
-    for (final id in hitIds) {
-      if (!_pendingEraseElementIds.contains(id)) {
-        newIds.add(id);
+
+    final dx = position.x - previous.x;
+    final dy = position.y - previous.y;
+    final distanceSquared = dx * dx + dy * dy;
+    if (_doubleEquals(distanceSquared, 0)) {
+      return false;
+    }
+    final sampleStep = tolerance * 0.5;
+    if (sampleStep <= 0) {
+      return _markElementsForEraseAtPosition(
+        stateView: stateView,
+        position: position,
+        tolerance: tolerance,
+      );
+    }
+
+    final distance = math.sqrt(distanceSquared);
+    final sampleCount = math.max(1, (distance / sampleStep).ceil());
+    var hasNewHits = false;
+    for (var i = 1; i <= sampleCount; i++) {
+      final t = i / sampleCount;
+      final sample = DrawPoint(x: previous.x + dx * t, y: previous.y + dy * t);
+      if (_markElementsForEraseAtPosition(
+        stateView: stateView,
+        position: sample,
+        tolerance: tolerance,
+      )) {
+        hasNewHits = true;
       }
     }
-    if (newIds.isEmpty) {
-      return;
-    }
-    _pendingEraseElementIds.addAll(newIds);
+    return hasNewHits;
   }
 
-  List<String> _resolveEraserHitElementIds(DrawPoint position) {
-    final stateView = _buildStateView(widget.store.state);
+  bool _markElementsForEraseAtPosition({
+    required DrawStateView stateView,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
     final state = stateView.state;
-    final tolerance = _eraserCursorRadius / _effectiveScaleFactor();
-    final candidates = state.domain.document.queryElementsAtPointTopDown(
-      position,
-      tolerance,
-    );
-    if (candidates.isEmpty) {
-      return const [];
-    }
+    final document = state.domain.document;
     final registry = widget.store.context.elementRegistry;
-    final hitIds = <String>[];
-    for (final candidate in candidates) {
+    var hasNewHits = false;
+    document.visitElementsAtPointTopDown(position, tolerance, (candidate) {
+      if (_pendingEraseElementIds.contains(candidate.id)) {
+        return true;
+      }
       final element = stateView.effectiveElement(candidate);
       final definition = registry.getDefinition(element.typeId);
       final isHit =
@@ -1306,10 +1387,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             tolerance: tolerance,
           );
       if (isHit) {
-        hitIds.add(element.id);
+        if (_pendingEraseElementIds.add(element.id)) {
+          hasNewHits = true;
+        }
       }
-    }
-    return hitIds;
+      return true;
+    });
+    return hasNewHits;
   }
 
   bool _isInsideRectWithTolerance({
@@ -1352,6 +1436,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _clearEraserStrokeState() {
+    _eraserMoveDispatcher.reset();
+    _lastEraserProcessedPositions.clear();
     if (_eraserPointerIds.isNotEmpty) {
       _activePointerIds.removeAll(_eraserPointerIds);
       _eraserPointerIds.clear();
