@@ -829,11 +829,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _handlePointerMove(PointerMoveEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorAndHoverForPosition(position);
+    final hasActivePointer = _activePointerIds.contains(event.pointer);
+    if (!hasActivePointer) {
+      _updateCursorAndHoverForPosition(position);
+    }
     if (_handleMiddlePanMove(event)) {
       return;
     }
-    if (!_activePointerIds.contains(event.pointer)) {
+    if (!hasActivePointer) {
       return;
     }
     if (widget.isEraserToolActive) {
@@ -1623,17 +1626,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   /// hit test result and arrow-handle lookup between both paths.
   bool _updateCursorAndHoverForPosition(DrawPoint position) {
     final state = widget.store.state;
+    final interaction = state.application.interaction;
 
     // --- cursor early-outs that skip the hit test entirely ---
     if (_middlePanPointerId != null) {
       _updateCursorIfChanged(_draggingCursor);
       return _clearHoverState();
     }
-    final lockedCursor = _cursorResolver.resolveLockedCursor(
-      state.application.interaction,
-    );
+    final lockedCursor = _cursorResolver.resolveLockedCursor(interaction);
     if (lockedCursor != null) {
       _updateCursorIfChanged(lockedCursor);
+      return _clearHoverState();
+    }
+    final interactionCursor = _resolveInteractionCursorWithoutHitTest(
+      interaction,
+    );
+    if (interactionCursor != null) {
+      _updateCursorIfChanged(interactionCursor);
       return _clearHoverState();
     }
     if (!_isPointerInside) {
@@ -1700,7 +1709,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     // --- derive hover selection from shared hitResult ---
     String? hoverId;
-    final interaction = state.application.interaction;
     final canHover =
         _isPointerInside &&
         _middlePanPointerId == null &&
@@ -1729,6 +1737,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       bindingId: bindingId,
       arrowHandle: null,
     );
+  }
+
+  MouseCursor? _resolveInteractionCursorWithoutHitTest(
+    InteractionState interaction,
+  ) {
+    if (interaction is CreatingState || interaction is BoxSelectingState) {
+      return _idleCursorForCurrentTool;
+    }
+    return null;
   }
 
   bool _clearHoverState() =>
@@ -2262,11 +2279,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_middlePanPointerId != null) {
       return _draggingCursor;
     }
-    final lockedCursor = _cursorResolver.resolveLockedCursor(
-      state.application.interaction,
-    );
+    final interaction = state.application.interaction;
+    final lockedCursor = _cursorResolver.resolveLockedCursor(interaction);
     if (lockedCursor != null) {
       return lockedCursor;
+    }
+    final interactionCursor = _resolveInteractionCursorWithoutHitTest(
+      interaction,
+    );
+    if (interactionCursor != null) {
+      return interactionCursor;
     }
 
     if (!_isPointerInside || position == null) {

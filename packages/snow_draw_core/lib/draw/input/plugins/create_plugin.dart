@@ -46,6 +46,8 @@ class CreatePlugin extends DrawInputPlugin {
   var _justFinishedDragCreate = false;
   DateTime? _lastClickTime;
   DrawPoint? _lastClickPosition;
+  DrawPoint? _lastUpdatePosition;
+  KeyModifiers? _lastUpdateModifiers;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -141,6 +143,10 @@ class CreatePlugin extends DrawInputPlugin {
       }
     }
 
+    if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
+      return handled(message: 'Create unchanged');
+    }
+
     await dispatch(
       UpdateCreatingElement(
         currentPosition: event.position,
@@ -155,6 +161,9 @@ class CreatePlugin extends DrawInputPlugin {
   Future<PluginResult> _handlePointerHover(PointerHoverInputEvent event) async {
     if (!_isPointCreating(state) || !_isMultiPoint) {
       return unhandled();
+    }
+    if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
+      return handled(message: 'Create hover unchanged');
     }
     await dispatch(
       UpdateCreatingElement(
@@ -322,18 +331,43 @@ class CreatePlugin extends DrawInputPlugin {
     _lastClickPosition = null;
   }
 
+  bool _shouldDispatchCreatingUpdate(
+    DrawPoint position,
+    KeyModifiers modifiers,
+  ) {
+    if (_lastUpdatePosition == position && _lastUpdateModifiers == modifiers) {
+      return false;
+    }
+    _lastUpdatePosition = position;
+    _lastUpdateModifiers = modifiers;
+    return true;
+  }
+
   void _syncInternalState() {
     if (!_isPointCreating(state)) {
-      _resetPointCreationState();
+      _resetPointCreationSessionState();
+      if (!state.application.isCreating) {
+        _resetUpdateSignature();
+      }
     }
   }
 
   void _resetPointCreationState() {
+    _resetPointCreationSessionState();
+    _resetUpdateSignature();
+  }
+
+  void _resetPointCreationSessionState() {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
     _justFinishedDragCreate = false;
     _clearClickState();
+  }
+
+  void _resetUpdateSignature() {
+    _lastUpdatePosition = null;
+    _lastUpdateModifiers = null;
   }
 
   DrawStateView get _stateView {
