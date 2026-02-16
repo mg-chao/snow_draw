@@ -527,6 +527,11 @@ class DynamicCanvasPainter extends CustomPainter {
             visibleTextElementIds: visibleTextIds,
           )
         : const <String, List<SerialNumberTextConnector>>{};
+    final dynamicElementIds = _resolveDynamicElementIds(
+      serialConnectorTextIds: shouldPaintSerialConnectors
+          ? serialConnectors.keys
+          : const <String>{},
+    );
 
     void paintElement(Canvas sceneCanvas, ElementState element) {
       elementRenderer.renderElement(
@@ -545,10 +550,8 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
-    final dynamicElementIds = _resolveDynamicElementIds();
     if (_canUseInteractionSceneCache(
       hasFilterElement: hasFilterElement,
-      shouldPaintSerialConnectors: shouldPaintSerialConnectors,
       effectiveElements: effectiveElements,
       dynamicElementIds: dynamicElementIds,
     )) {
@@ -613,11 +616,10 @@ class DynamicCanvasPainter extends CustomPainter {
 
   bool _canUseInteractionSceneCache({
     required bool hasFilterElement,
-    required bool shouldPaintSerialConnectors,
     required List<ElementState> effectiveElements,
     required Set<String> dynamicElementIds,
   }) {
-    if (hasFilterElement || shouldPaintSerialConnectors) {
+    if (hasFilterElement) {
       return false;
     }
 
@@ -679,12 +681,24 @@ class DynamicCanvasPainter extends CustomPainter {
     return true;
   }
 
-  Set<String> _resolveDynamicElementIds() {
+  Set<String> _resolveDynamicElementIds({
+    Iterable<String> serialConnectorTextIds = const <String>{},
+  }) {
     final previewElements = renderKey.previewElementsById;
-    if (previewElements.isEmpty) {
+    final hasPreviewElements = previewElements.isNotEmpty;
+    final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
+    if (!hasPreviewElements && !hasSerialConnectorTexts) {
       return const <String>{};
     }
-    return previewElements.keys.toSet();
+
+    final dynamicElementIds = <String>{};
+    if (hasPreviewElements) {
+      dynamicElementIds.addAll(previewElements.keys);
+    }
+    if (hasSerialConnectorTexts) {
+      dynamicElementIds.addAll(serialConnectorTextIds);
+    }
+    return dynamicElementIds;
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

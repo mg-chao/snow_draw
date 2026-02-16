@@ -12,7 +12,8 @@ import 'serial_number_data.dart';
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
 const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
 const _serialNumberPaddingFactor = 0.26;
-const _textLayoutCacheMaxEntries = 64;
+const _textGeometryCacheMaxEntries = 64;
+const _textPainterCacheMaxEntries = 192;
 
 @immutable
 class SerialNumberTextLayout {
@@ -29,13 +30,12 @@ class SerialNumberTextLayout {
   final Rect? visualBounds;
 }
 
-/// Cache key for text layout results.
+/// Cache key for serial-number text geometry.
 ///
-/// Only includes fields that affect text shaping and metrics — color is
-/// excluded because it does not change layout geometry.
+/// Color is intentionally excluded because it does not affect shaping metrics.
 @immutable
-class _TextLayoutKey {
-  const _TextLayoutKey({
+class _TextGeometryKey {
+  const _TextGeometryKey({
     required this.number,
     required this.fontSize,
     required this.fontFamily,
@@ -50,7 +50,7 @@ class _TextLayoutKey {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _TextLayoutKey &&
+      other is _TextGeometryKey &&
           other.number == number &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
@@ -60,19 +60,85 @@ class _TextLayoutKey {
   int get hashCode => Object.hash(number, fontSize, fontFamily, locale);
 }
 
-/// LRU cache for [SerialNumberTextLayout] results.
-///
-/// Avoids repeated [TextPainter.layout] calls for serial numbers whose
-/// text-shaping inputs (number, fontSize, fontFamily, locale) have not
-/// changed. Color is applied as a post-layout override so it does not
-/// participate in the cache key.
-final _textLayoutCache = LruCache<_TextLayoutKey, SerialNumberTextLayout>(
-  maxEntries: _textLayoutCacheMaxEntries,
+/// Cache key for color-specific [TextPainter] instances.
+@immutable
+class _TextPainterKey {
+  const _TextPainterKey({required this.geometryKey, required this.color});
+
+  final _TextGeometryKey geometryKey;
+  final Color color;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TextPainterKey &&
+          other.geometryKey == geometryKey &&
+          other.color == color;
+
+  @override
+  int get hashCode => Object.hash(geometryKey, color);
+}
+
+@immutable
+class _TextGeometry {
+  const _TextGeometry({
+    required this.size,
+    required this.lineHeight,
+    required this.visualBounds,
+  });
+
+  final Size size;
+  final double lineHeight;
+  final Rect? visualBounds;
+}
+
+final _textGeometryCache = LruCache<_TextGeometryKey, _TextGeometry>(
+  maxEntries: _textGeometryCacheMaxEntries,
 );
+final _textPainterCache = LruCache<_TextPainterKey, TextPainter>(
+  maxEntries: _textPainterCacheMaxEntries,
+);
+
+var _textGeometryBuildCount = 0;
+var _textPainterBuildCount = 0;
 
 /// Clears cached serial-number text layouts.
 void clearSerialNumberTextLayoutCache() {
-  _textLayoutCache.clear();
+  _textGeometryCache.clear();
+  _textPainterCache.clear();
+  _textGeometryBuildCount = 0;
+  _textPainterBuildCount = 0;
+}
+
+/// Cache diagnostics for serial-number text layout.
+@immutable
+class SerialNumberLayoutCacheStats {
+  const SerialNumberLayoutCacheStats({
+    required this.geometryBuildCount,
+    required this.painterBuildCount,
+    required this.geometryCacheEntries,
+    required this.painterCacheEntries,
+  });
+
+  final int geometryBuildCount;
+  final int painterBuildCount;
+  final int geometryCacheEntries;
+  final int painterCacheEntries;
+}
+
+@visibleForTesting
+SerialNumberLayoutCacheStats debugSerialNumberLayoutCacheStats() =>
+    SerialNumberLayoutCacheStats(
+      geometryBuildCount: _textGeometryBuildCount,
+      painterBuildCount: _textPainterBuildCount,
+      geometryCacheEntries: _textGeometryCache.length,
+      painterCacheEntries: _textPainterCache.length,
+    );
+
+@visibleForTesting
+void resetSerialNumberLayoutCacheStats() {
+  _textGeometryBuildCount = 0;
+  _textPainterBuildCount = 0;
 }
 
 SerialNumberTextLayout layoutSerialNumberText({
@@ -81,61 +147,111 @@ SerialNumberTextLayout layoutSerialNumberText({
   Locale? locale,
 }) {
   final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
-  final key = _TextLayoutKey(
+  final geometryKey = _TextGeometryKey(
     number: data.number,
     fontSize: data.fontSize,
     fontFamily: sanitizedFamily,
     locale: locale,
   );
-
   final color = colorOverride ?? data.color;
+  final painterKey = _TextPainterKey(geometryKey: geometryKey, color: color);
 
-  // Try the cache first. If the layout geometry is cached we only need
-  // to rebuild the TextPainter when the requested color differs, which
-  // is cheap compared to a full layout pass.
-  final cached = _textLayoutCache.get(key);
-  if (cached != null) {
-    final cachedColor = cached.painter.text?.style?.color;
-    if (cachedColor == color) {
-      return cached;
-    }
-    // Geometry matches — rebuild painter with the new color only.
-    final layout = _buildLayout(
-      data: data,
-      color: color,
-      sanitizedFamily: sanitizedFamily,
-      locale: locale,
+  final cachedGeometry = _textGeometryCache.get(geometryKey);
+  final cachedPainter = _textPainterCache.get(painterKey);
+  if (cachedGeometry != null && cachedPainter != null) {
+    return SerialNumberTextLayout(
+      painter: cachedPainter,
+      size: cachedGeometry.size,
+      lineHeight: cachedGeometry.lineHeight,
+      visualBounds: cachedGeometry.visualBounds,
     );
-    // Don't evict the geometry entry; just return the recolored result.
-    return layout;
   }
 
-  final layout = _buildLayout(
-    data: data,
-    color: color,
-    sanitizedFamily: sanitizedFamily,
-    locale: locale,
+  final text = geometryKey.number.toString();
+  final painter =
+      cachedPainter ??
+      _cacheTextPainter(
+        key: painterKey,
+        text: text,
+        fontSize: geometryKey.fontSize,
+        sanitizedFamily: sanitizedFamily,
+        locale: geometryKey.locale,
+        color: color,
+      );
+  final geometry =
+      cachedGeometry ??
+      _cacheTextGeometry(key: geometryKey, text: text, painter: painter);
+
+  return SerialNumberTextLayout(
+    painter: painter,
+    size: geometry.size,
+    lineHeight: geometry.lineHeight,
+    visualBounds: geometry.visualBounds,
   );
-  _textLayoutCache.put(key, layout);
-  return layout;
 }
 
-SerialNumberTextLayout _buildLayout({
-  required SerialNumberData data,
-  required Color color,
-  required String? sanitizedFamily,
-  Locale? locale,
+_TextGeometry _cacheTextGeometry({
+  required _TextGeometryKey key,
+  required String text,
+  required TextPainter painter,
 }) {
-  final text = data.number.toString();
+  _textGeometryBuildCount += 1;
+  final geometry = _buildTextGeometry(text: text, painter: painter);
+  _textGeometryCache.put(key, geometry);
+  return geometry;
+}
+
+TextPainter _cacheTextPainter({
+  required _TextPainterKey key,
+  required String text,
+  required double fontSize,
+  required String? sanitizedFamily,
+  required Locale? locale,
+  required Color color,
+}) {
+  _textPainterBuildCount += 1;
+  final painter = _buildTextPainter(
+    text: text,
+    fontSize: fontSize,
+    sanitizedFamily: sanitizedFamily,
+    locale: locale,
+    color: color,
+  );
+  _textPainterCache.put(key, painter);
+  return painter;
+}
+
+_TextGeometry _buildTextGeometry({
+  required String text,
+  required TextPainter painter,
+}) {
+  final metrics = painter.computeLineMetrics();
+  final lineHeight = metrics.isNotEmpty
+      ? metrics.first.height
+      : painter.preferredLineHeight;
+  return _TextGeometry(
+    size: painter.size,
+    lineHeight: lineHeight,
+    visualBounds: _resolveVisualBounds(painter, text),
+  );
+}
+
+TextPainter _buildTextPainter({
+  required String text,
+  required double fontSize,
+  required String? sanitizedFamily,
+  required Locale? locale,
+  required Color color,
+}) {
   final style = TextStyle(
     inherit: false,
     color: color,
-    fontSize: data.fontSize,
+    fontSize: fontSize,
     fontFamily: sanitizedFamily,
     locale: locale,
     textBaseline: TextBaseline.alphabetic,
   );
-  final painter = TextPainter(
+  return TextPainter(
     text: TextSpan(text: text, style: style),
     textAlign: TextAlign.center,
     textDirection: TextDirection.ltr,
@@ -144,17 +260,6 @@ SerialNumberTextLayout _buildLayout({
     strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
     locale: locale,
   )..layout();
-  final metrics = painter.computeLineMetrics();
-  final lineHeight = metrics.isNotEmpty
-      ? metrics.first.height
-      : painter.preferredLineHeight;
-  final visualBounds = _resolveVisualBounds(painter, text);
-  return SerialNumberTextLayout(
-    painter: painter,
-    size: painter.size,
-    lineHeight: lineHeight,
-    visualBounds: visualBounds,
-  );
 }
 
 double resolveSerialNumberDiameter({

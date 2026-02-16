@@ -9,6 +9,8 @@ import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -102,6 +104,83 @@ void main() {
     expect(counter.count, 1);
   });
 
+  test('reuses static segments when serial connectors are visible', () {
+    final counter = _RenderCounter();
+    final registry = _buildRegistryWithSerialSupport(counter);
+    final elements = <ElementState>[
+      const ElementState(
+        id: 'serial-text',
+        rect: DrawRect(minX: 180, minY: 80, maxX: 260, maxY: 120),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: TextData(text: 'connector target'),
+      ),
+      const ElementState(
+        id: 'serial-node',
+        rect: DrawRect(minX: 60, minY: 84, maxX: 96, maxY: 120),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: SerialNumberData(textElementId: 'serial-text'),
+      ),
+      const ElementState(
+        id: 'cache-static',
+        rect: DrawRect(minX: 280, minY: 40, maxX: 340, maxY: 100),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: _CacheTestData(),
+      ),
+    ];
+    final state = DrawState.fromLayers(
+      domain: DomainState(
+        document: DocumentState(elements: elements, elementsVersion: 314159),
+      ),
+      application: ApplicationState.initial(),
+    );
+
+    final firstPreview = elements[1].copyWith(
+      rect: const DrawRect(minX: 70, minY: 92, maxX: 106, maxY: 128),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {firstPreview.id: firstPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {firstPreview.id: firstPreview},
+      ),
+    );
+    expect(counter.count, 3);
+
+    counter.reset();
+    final secondPreview = firstPreview.copyWith(
+      rect: const DrawRect(minX: 92, minY: 108, maxX: 128, maxY: 144),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {secondPreview.id: secondPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {secondPreview.id: secondPreview},
+      ),
+    );
+
+    // Serial connector rendering keeps both the preview serial node and
+    // its bound text dynamic. Cached static segments should still be reused.
+    expect(counter.count, 2);
+  });
+
   test(
     'creating filter preview paints without mutating cached scene lists',
     () {
@@ -169,6 +248,31 @@ DefaultElementRegistry _buildRegistry(_RenderCounter counter) =>
         fromJson: (_) => const _CacheTestData(),
       ),
     );
+
+DefaultElementRegistry _buildRegistryWithSerialSupport(_RenderCounter counter) {
+  final registry = _buildRegistry(counter)
+    ..register<TextData>(
+      ElementDefinition<TextData>(
+        typeId: TextData.typeIdToken,
+        displayName: 'text',
+        renderer: _CacheCountingRenderer(counter),
+        hitTester: const _CacheHitTester(),
+        createDefaultData: TextData.new,
+        fromJson: TextData.fromJson,
+      ),
+    )
+    ..register<SerialNumberData>(
+      ElementDefinition<SerialNumberData>(
+        typeId: SerialNumberData.typeIdToken,
+        displayName: 'serial',
+        renderer: _CacheCountingRenderer(counter),
+        hitTester: const _CacheHitTester(),
+        createDefaultData: SerialNumberData.new,
+        fromJson: SerialNumberData.fromJson,
+      ),
+    );
+  return registry;
+}
 
 DynamicCanvasRenderKey _buildRenderKey({
   required DrawState state,
