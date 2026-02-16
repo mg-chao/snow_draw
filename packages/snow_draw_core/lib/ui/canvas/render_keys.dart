@@ -19,6 +19,7 @@ class CreatingElementSnapshot {
   const CreatingElementSnapshot({
     required this.element,
     required this.currentRect,
+    this.creationRevision = 0,
   });
 
   /// The element being created.
@@ -27,15 +28,22 @@ class CreatingElementSnapshot {
   /// Current rect of the element being created.
   final DrawRect currentRect;
 
+  /// Monotonic revision for in-progress creation previews.
+  ///
+  /// Used by high-frequency tools (such as free draw) whose visual preview can
+  /// change without changing [element] or [currentRect].
+  final int creationRevision;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CreatingElementSnapshot &&
           other.element == element &&
-          other.currentRect == currentRect;
+          other.currentRect == currentRect &&
+          other.creationRevision == creationRevision;
 
   @override
-  int get hashCode => Object.hash(element, currentRect);
+  int get hashCode => Object.hash(element, currentRect, creationRevision);
 }
 
 /// Render key for static canvas.

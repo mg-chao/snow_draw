@@ -1,0 +1,191 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/elements/core/creation_strategy.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
+
+void main() {
+  group('FreeDrawCreationStrategy', () {
+    test(
+      'update keeps element data identity and advances preview revision',
+      () {
+        const strategy = FreeDrawCreationStrategy();
+        const data = FreeDrawData();
+        const start = DrawPoint(x: 40, y: 50);
+
+        final startResult = strategy.start(data: data, startPosition: start);
+        final creatingState = _toCreatingState(
+          result: startResult,
+          startPosition: start,
+        );
+
+        final update = strategy.update(
+          state: DrawState(),
+          config: DrawConfig(),
+          creatingState: creatingState,
+          currentPosition: const DrawPoint(x: 70, y: 90),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+
+        expect(identical(update.data, creatingState.elementData), isTrue);
+        final mode = update.creationMode as FreeDrawCreationMode;
+        expect(mode.revision, 1);
+        expect(mode.worldPoints, isNotNull);
+        expect(mode.previewPath, isNotNull);
+        expect(update.rect.maxX, greaterThan(creatingState.currentRect.maxX));
+        expect(update.rect.maxY, greaterThan(creatingState.currentRect.maxY));
+      },
+    );
+
+    test('sub-threshold updates keep creation mode stable', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData();
+      const start = DrawPoint(x: 10, y: 10);
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      final creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      final update = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 10.5, y: 10.5),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      expect(identical(update.creationMode, startResult.creationMode), isTrue);
+      final mode = update.creationMode as FreeDrawCreationMode;
+      expect(mode.revision, 0);
+      expect(update.rect, creatingState.currentRect);
+    });
+
+    test('releasing line mode clears transient line segment state', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData();
+      const start = DrawPoint(x: 20, y: 20);
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      var creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      final withLine = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 45, y: 35),
+        maintainAspectRatio: true,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final lineMode = withLine.creationMode as FreeDrawCreationMode;
+      expect(lineMode.isLineActive, isTrue);
+      expect(lineMode.lineAnchor, isNotNull);
+      expect(lineMode.lineCurrent, isNotNull);
+
+      creatingState = creatingState.copyWith(
+        element: creatingState.element.copyWith(data: withLine.data),
+        currentRect: withLine.rect,
+        creationMode: withLine.creationMode,
+      );
+
+      final withoutLine = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 50, y: 40),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final freeMode = withoutLine.creationMode as FreeDrawCreationMode;
+      expect(freeMode.isLineActive, isFalse);
+      expect(freeMode.lineAnchor, isNull);
+      expect(freeMode.lineCurrent, isNull);
+      expect(freeMode.revision, greaterThan(lineMode.revision));
+    });
+
+    test('finish normalizes once and returns commit-ready data', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData();
+      const start = DrawPoint(x: 100, y: 100);
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      var creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      for (final point in const [
+        DrawPoint(x: 130, y: 130),
+        DrawPoint(x: 160, y: 120),
+        DrawPoint(x: 190, y: 150),
+      ]) {
+        final update = strategy.update(
+          state: DrawState(),
+          config: DrawConfig(),
+          creatingState: creatingState,
+          currentPosition: point,
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+
+        creatingState = creatingState.copyWith(
+          element: creatingState.element.copyWith(data: update.data),
+          currentRect: update.rect,
+          creationMode: update.creationMode,
+        );
+      }
+
+      final finish = strategy.finish(
+        config: DrawConfig(),
+        creatingState: creatingState,
+      );
+
+      expect(finish.shouldCommit, isTrue);
+      final finishedData = finish.data as FreeDrawData;
+      expect(finishedData.points.length, greaterThan(2));
+      for (final point in finishedData.points) {
+        expect(point.x, inInclusiveRange(0.0, 1.0));
+        expect(point.y, inInclusiveRange(0.0, 1.0));
+      }
+    });
+  });
+}
+
+CreatingState _toCreatingState({
+  required CreationUpdateResult result,
+  required DrawPoint startPosition,
+}) {
+  final element = ElementState(
+    id: 'free-draw-test',
+    rect: result.rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: result.data,
+  );
+
+  return CreatingState(
+    element: element,
+    startPosition: startPosition,
+    currentRect: result.rect,
+    creationMode: result.creationMode,
+  );
+}

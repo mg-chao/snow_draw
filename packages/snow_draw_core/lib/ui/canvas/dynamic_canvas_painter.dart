@@ -10,6 +10,7 @@ import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
+import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_visual_cache.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -29,6 +30,7 @@ import '../../draw/utils/arrow_binding_highlight.dart';
 import '../../draw/utils/binding_highlight_style.dart';
 import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
+import '../../draw/utils/stroke_pattern_utils.dart';
 import 'filter_scene_compositor.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
@@ -89,16 +91,23 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw creating element preview above the static layer.
     if (creatingElement != null &&
         creatingElement.element.data is! FilterData) {
-      final previewElement = creatingElement.element.copyWith(
-        rect: creatingElement.currentRect,
-      );
-      elementRenderer.renderElement(
+      final interaction = state.application.interaction;
+      final renderedWithLowLatencyPath = _renderFreeDrawCreatingPreview(
         canvas: canvas,
-        element: previewElement,
-        scaleFactor: scale,
-        registry: renderKey.elementRegistry,
-        locale: renderKey.locale,
+        interaction: interaction,
       );
+      if (!renderedWithLowLatencyPath) {
+        final previewElement = creatingElement.element.copyWith(
+          rect: creatingElement.currentRect,
+        );
+        elementRenderer.renderElement(
+          canvas: canvas,
+          element: previewElement,
+          scaleFactor: scale,
+          registry: renderKey.elementRegistry,
+          locale: renderKey.locale,
+        );
+      }
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
@@ -747,6 +756,129 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  /// Renders an in-progress free-draw stroke directly from creation-mode
+  /// world-space data.
+  ///
+  /// This bypasses the normal normalized-data renderer path during creation,
+  /// removing the O(n) conversion and cache rebuild cost from pointer-move
+  /// frames.
+  bool _renderFreeDrawCreatingPreview({
+    required Canvas canvas,
+    required InteractionState interaction,
+  }) {
+    if (interaction is! CreatingState) {
+      return false;
+    }
+
+    final data = interaction.elementData;
+    if (data is! FreeDrawData) {
+      return false;
+    }
+
+    final mode = interaction.creationMode;
+    if (mode is! FreeDrawCreationMode) {
+      return false;
+    }
+
+    final previewPath = mode.previewPath;
+    final points = mode.worldPoints;
+    if (previewPath == null || points == null || points.isEmpty) {
+      return false;
+    }
+
+    final strokeOpacity = (data.color.a * interaction.elementOpacity).clamp(
+      0.0,
+      1.0,
+    );
+    if (strokeOpacity <= 0 || data.strokeWidth <= 0) {
+      return true;
+    }
+
+    final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = data.strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = strokeColor
+      ..isAntiAlias = true;
+
+    _drawFreeDrawStrokePath(
+      canvas: canvas,
+      path: previewPath,
+      data: data,
+      strokePaint: strokePaint,
+      strokeColor: strokeColor,
+    );
+
+    if (mode.isLineActive &&
+        mode.lineAnchor != null &&
+        mode.lineCurrent != null) {
+      final activeLinePath = Path()
+        ..moveTo(mode.lineAnchor!.x, mode.lineAnchor!.y)
+        ..lineTo(mode.lineCurrent!.x, mode.lineCurrent!.y);
+      _drawFreeDrawStrokePath(
+        canvas: canvas,
+        path: activeLinePath,
+        data: data,
+        strokePaint: strokePaint,
+        strokeColor: strokeColor,
+      );
+    }
+
+    final isSinglePointStroke =
+        points.length == 1 ||
+        (points.length == 2 &&
+            points.first.x == points.last.x &&
+            points.first.y == points.last.y);
+    if (isSinglePointStroke && !mode.isLineActive) {
+      final point = points.first;
+      final pointPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = strokeColor
+        ..isAntiAlias = true;
+      canvas.drawCircle(
+        Offset(point.x, point.y),
+        data.strokeWidth / 2,
+        pointPaint,
+      );
+    }
+
+    return true;
+  }
+
+  void _drawFreeDrawStrokePath({
+    required Canvas canvas,
+    required Path path,
+    required FreeDrawData data,
+    required Paint strokePaint,
+    required Color strokeColor,
+  }) {
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
+        canvas.drawPath(path, strokePaint);
+      case StrokeStyle.dashed:
+        final dashLength = data.strokeWidth * 2.0;
+        final gapLength = dashLength * 1.2;
+        final dashedPath = buildDashedPath(path, dashLength, gapLength);
+        canvas.drawPath(dashedPath, strokePaint);
+      case StrokeStyle.dotted:
+        final dotSpacing = data.strokeWidth * 2.0;
+        final dotRadius = data.strokeWidth * 0.5;
+        final dotPositions = buildDotPositions(path, dotSpacing);
+        if (dotPositions.isEmpty) {
+          return;
+        }
+        final dotPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = dotRadius * 2
+          ..strokeCap = StrokeCap.round
+          ..color = strokeColor
+          ..isAntiAlias = true;
+        canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
+    }
   }
 
   void _drawFreeDrawHoverOutline({

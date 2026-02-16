@@ -17,6 +17,7 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -726,9 +727,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return CreatingElementSnapshot(
         element: interaction.element,
         currentRect: interaction.currentRect,
+        creationRevision: _resolveCreationRevision(interaction.creationMode),
       );
     }
     return null;
+  }
+
+  int _resolveCreationRevision(CreationMode mode) {
+    if (mode is FreeDrawCreationMode) {
+      return mode.revision;
+    }
+    return 0;
   }
 
   /// Extract box selection bounds from state view.
