@@ -56,7 +56,7 @@ class DynamicCanvasPainter extends CustomPainter {
   });
 
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
-  static final _highlightSceneCache = HighlightInteractionSceneCache();
+  static final _interactionSceneCache = InteractionSceneCache();
 
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
@@ -297,6 +297,14 @@ class DynamicCanvasPainter extends CustomPainter {
     final optimizedElementId = renderKey.linePointOptimizedElementId;
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
       if (optimizedElementId == null) {
+        final previewOnlyElements = _resolvePreviewOnlyScene(
+          viewportRect: viewportRect,
+        );
+        _paintElementScene(
+          canvas: canvas,
+          scale: scale,
+          effectiveElements: previewOnlyElements,
+        );
         return;
       }
       final optimizedElements = _resolveLinePointOptimizedScene(
@@ -333,6 +341,42 @@ class DynamicCanvasPainter extends CustomPainter {
       scale: scale,
       effectiveElements: effectiveElements,
     );
+  }
+
+  List<ElementState> _resolvePreviewOnlyScene({
+    required DrawRect viewportRect,
+  }) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty) {
+      return const <ElementState>[];
+    }
+
+    final visible = <ElementState>[];
+    for (final preview in previewElements.values) {
+      if (preview.opacity <= 0) {
+        continue;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(preview);
+      if (!_rectsIntersect(aabb, viewportRect)) {
+        continue;
+      }
+      visible.add(preview);
+    }
+    if (visible.length < 2) {
+      return visible;
+    }
+
+    final document = stateView.state.domain.document;
+    visible.sort((a, b) {
+      final orderA = document.getOrderIndex(a.id) ?? a.zIndex;
+      final orderB = document.getOrderIndex(b.id) ?? b.zIndex;
+      final orderComparison = orderA.compareTo(orderB);
+      if (orderComparison != 0) {
+        return orderComparison;
+      }
+      return a.id.compareTo(b.id);
+    });
+    return visible;
   }
 
   List<ElementState> _resolveLinePointOptimizedScene({
@@ -426,14 +470,19 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
+    final dynamicElementIds = _resolveDynamicElementIds();
     final hasFilterElement = effectiveElements.any(
       (element) => element.data is FilterData,
     );
-    if (_canUseHighlightSceneCache(hasFilterElement: hasFilterElement)) {
-      _highlightSceneCache.paint(
+    if (_canUseInteractionSceneCache(
+      hasFilterElement: hasFilterElement,
+      effectiveElements: effectiveElements,
+      dynamicElementIds: dynamicElementIds,
+    )) {
+      _interactionSceneCache.paint(
         canvas: canvas,
         elements: effectiveElements,
-        dynamicElementIds: _resolveHighlightDynamicElementIds(),
+        dynamicElementIds: dynamicElementIds,
         documentVersion: renderKey.documentVersion,
         textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
         scaleFactor: scale,
@@ -461,35 +510,63 @@ class DynamicCanvasPainter extends CustomPainter {
     }
   }
 
-  bool _canUseHighlightSceneCache({required bool hasFilterElement}) {
+  bool _canUseInteractionSceneCache({
+    required bool hasFilterElement,
+    required List<ElementState> effectiveElements,
+    required Set<String> dynamicElementIds,
+  }) {
     if (hasFilterElement) {
       return false;
     }
 
-    final previewElements = renderKey.previewElementsById;
-    final document = stateView.state.domain.document;
-    if (previewElements.isNotEmpty) {
-      for (final preview in previewElements.values) {
-        if (preview.data is! HighlightData) {
-          return false;
-        }
-        final persisted = document.getElementById(preview.id);
-        if (persisted != null && persisted.data is! HighlightData) {
-          return false;
-        }
-      }
-    }
-
-    final creatingElement = renderKey.creatingElement;
-    if (creatingElement != null &&
-        creatingElement.element.data is HighlightData) {
+    if (_isHighlightPreviewCacheEligible()) {
       return true;
     }
 
-    return previewElements.isNotEmpty;
+    if (dynamicElementIds.isEmpty) {
+      return false;
+    }
+
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! TextEditingState) {
+      return false;
+    }
+    if (!dynamicElementIds.contains(interaction.elementId)) {
+      return false;
+    }
+    for (final element in effectiveElements) {
+      if (dynamicElementIds.contains(element.id)) {
+        continue;
+      }
+      if (element.data is HighlightData) {
+        return false;
+      }
+    }
+    return true;
   }
 
-  Set<String> _resolveHighlightDynamicElementIds() {
+  bool _isHighlightPreviewCacheEligible() {
+    final previewElements = renderKey.previewElementsById;
+    final creatingElement = renderKey.creatingElement;
+    if (previewElements.isEmpty) {
+      return creatingElement != null &&
+          creatingElement.element.data is HighlightData;
+    }
+
+    final document = stateView.state.domain.document;
+    for (final preview in previewElements.values) {
+      if (preview.data is! HighlightData) {
+        return false;
+      }
+      final persisted = document.getElementById(preview.id);
+      if (persisted != null && persisted.data is! HighlightData) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Set<String> _resolveDynamicElementIds() {
     final previewElements = renderKey.previewElementsById;
     if (previewElements.isEmpty) {
       return const <String>{};

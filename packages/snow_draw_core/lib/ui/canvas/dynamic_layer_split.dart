@@ -11,8 +11,11 @@ import '../../draw/models/interaction_state.dart';
 int? resolveDynamicLayerStartIndex(DrawStateView view) {
   final interaction = view.state.application.interaction;
 
+  // New text draft rendering is handled as a dynamic preview-only overlay.
+  // Keep the committed document on the static layer to avoid full-scene
+  // dynamic repaints while typing.
   if (interaction is TextEditingState && interaction.isNew) {
-    return 0;
+    return null;
   }
 
   if (interaction is CreatingState &&

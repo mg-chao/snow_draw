@@ -155,6 +155,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _textFocusScheduled = false;
   TextLayoutMetrics? _editingTextLayout;
   PainterTextLayoutMetrics? _editingPainterLayout;
+  _EditingPainterLayoutKey? _editingPainterLayoutKey;
   TextSelection? _lastVerticalSelection;
   double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
@@ -616,9 +617,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateView view,
     int? dynamicLayerStartIndex,
   ) {
-    if (dynamicLayerStartIndex == null) {
-      return const <String, ElementState>{};
-    }
     final interaction = view.state.application.interaction;
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
@@ -636,6 +634,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         data: interaction.draftData,
       );
       return {interaction.elementId: textElement};
+    }
+
+    if (dynamicLayerStartIndex == null) {
+      return const <String, ElementState>{};
     }
 
     final previewElements = view.previewElementsById;
@@ -2504,7 +2506,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final height = rect.height;
     if (layoutWidth <= 0 || height <= 0) {
       _editingTextLayout = null;
-      _editingPainterLayout = null;
+      _clearEditingPainterLayoutCache();
       return null;
     }
     // RenderEditable subtracts a caret margin from maxWidth when laying out.
@@ -2529,13 +2531,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       locale: locale,
     );
     _editingTextLayout = layout;
-
-    // Painter-backed layout for caret navigation (getOffsetForCaret).
-    _editingPainterLayout = layoutTextWithPainter(
+    _invalidateEditingPainterLayoutIfNeeded(
       data: data,
-      maxWidth: layoutWidth,
-      minWidth: layoutWidth,
-      widthBasis: TextWidthBasis.parent,
+      layoutWidth: layoutWidth,
       locale: locale,
     );
     final textHeight = layout.size.height;
@@ -2619,12 +2617,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ..addListener(_handleTextControllerChanged);
       _editingElementId = interaction.elementId;
       _initialSelectionApplied = false;
+      _clearEditingPainterLayoutCache();
       _resetVerticalCaretRun();
     } else if (!_suppressTextControllerChange &&
         controller.text != interaction.draftData.text) {
       _suppressTextControllerChange = true;
       controller.text = interaction.draftData.text;
       _suppressTextControllerChange = false;
+      _clearEditingPainterLayoutCache();
     }
 
     _scheduleTextFocus();
@@ -2641,7 +2641,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _editingElementId = null;
     _initialSelectionApplied = false;
     _editingTextLayout = null;
-    _editingPainterLayout = null;
+    _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
       _textFocusNode.unfocus();
@@ -2664,6 +2664,66 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     });
   }
 
+  void _invalidateEditingPainterLayoutIfNeeded({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) {
+    final nextKey = _EditingPainterLayoutKey(
+      text: data.text,
+      fontSize: data.fontSize,
+      fontFamily: data.fontFamily,
+      horizontalAlign: data.horizontalAlign,
+      layoutWidth: layoutWidth,
+      localeTag: locale?.toLanguageTag(),
+    );
+    if (_editingPainterLayoutKey == nextKey) {
+      return;
+    }
+    _editingPainterLayoutKey = nextKey;
+    _editingPainterLayout = null;
+  }
+
+  PainterTextLayoutMetrics? _resolveEditingPainterLayout() {
+    final interaction = widget.store.state.application.interaction;
+    if (interaction is! TextEditingState) {
+      return null;
+    }
+    final layoutWidth = interaction.rect.width;
+    if (layoutWidth <= 0) {
+      return null;
+    }
+    final locale = Localizations.maybeLocaleOf(context);
+    final nextKey = _EditingPainterLayoutKey(
+      text: interaction.draftData.text,
+      fontSize: interaction.draftData.fontSize,
+      fontFamily: interaction.draftData.fontFamily,
+      horizontalAlign: interaction.draftData.horizontalAlign,
+      layoutWidth: layoutWidth,
+      localeTag: locale?.toLanguageTag(),
+    );
+    final cachedLayout = _editingPainterLayout;
+    if (cachedLayout != null && _editingPainterLayoutKey == nextKey) {
+      return cachedLayout;
+    }
+
+    final layout = layoutTextWithPainter(
+      data: interaction.draftData,
+      maxWidth: layoutWidth,
+      minWidth: layoutWidth,
+      widthBasis: TextWidthBasis.parent,
+      locale: locale,
+    );
+    _editingPainterLayout = layout;
+    _editingPainterLayoutKey = nextKey;
+    return layout;
+  }
+
+  void _clearEditingPainterLayoutCache() {
+    _editingPainterLayout = null;
+    _editingPainterLayoutKey = null;
+  }
+
   void _handleTextControllerChanged() {
     if (_suppressTextControllerChange) {
       return;
@@ -2680,6 +2740,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (nextText == interaction.draftData.text) {
       return;
     }
+    _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
     unawaited(widget.store.dispatch(UpdateTextEdit(text: nextText)));
   }
@@ -2734,7 +2795,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double? pageOffset,
   }) {
     final controller = _textController;
-    final layout = _editingPainterLayout;
+    final layout = _resolveEditingPainterLayout();
     if (controller == null || layout == null) {
       return;
     }
@@ -2743,7 +2804,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
 
-    final lineMetrics = layout.painter.computeLineMetrics();
+    final lineMetrics = layout.lineMetrics;
     if (lineMetrics.isEmpty) {
       return;
     }
@@ -2975,6 +3036,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       return;
     }
+    _editingTextLayout = null;
+    _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
     setState(() {});
   }
@@ -3058,4 +3121,44 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
+}
+
+@immutable
+class _EditingPainterLayoutKey {
+  const _EditingPainterLayoutKey({
+    required this.text,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.horizontalAlign,
+    required this.layoutWidth,
+    required this.localeTag,
+  });
+
+  final String text;
+  final double fontSize;
+  final String? fontFamily;
+  final TextHorizontalAlign horizontalAlign;
+  final double layoutWidth;
+  final String? localeTag;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _EditingPainterLayoutKey &&
+          other.text == text &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.horizontalAlign == horizontalAlign &&
+          other.layoutWidth == layoutWidth &&
+          other.localeTag == localeTag;
+
+  @override
+  int get hashCode => Object.hash(
+    text,
+    fontSize,
+    fontFamily,
+    horizontalAlign,
+    layoutWidth,
+    localeTag,
+  );
 }

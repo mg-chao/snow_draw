@@ -6,17 +6,17 @@ import '../../draw/models/element_state.dart';
 import '../../draw/utils/lru_cache.dart';
 
 /// Callback used to draw a single element into a target [Canvas].
-typedef HighlightSceneElementPainter =
+typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
 
-/// Caches static scene segments during high-frequency highlight interactions.
+/// Caches static scene segments during high-frequency interactions.
 ///
-/// Highlight create/edit flows only mutate a small subset of elements while
+/// Interactive create/edit flows only mutate a small subset of elements while
 /// most of the visible scene stays unchanged. This cache records stable
 /// segments into [Picture] objects and replays them across frames so only
 /// dynamic elements are repainted.
-class HighlightInteractionSceneCache {
-  HighlightInteractionSceneCache({int maxEntries = 24})
+class InteractionSceneCache {
+  InteractionSceneCache({int maxEntries = 24})
     : _segmentCache = LruCache<int, _CachedSegment>(
         maxEntries: maxEntries,
         onEvict: (entry) => entry.picture.dispose(),
@@ -44,7 +44,7 @@ class HighlightInteractionSceneCache {
     required int textRenderingCacheRevision,
     required double scaleFactor,
     required Locale? locale,
-    required HighlightSceneElementPainter paintElement,
+    required SceneElementPainter paintElement,
   }) {
     if (elements.isEmpty) {
       return;
@@ -97,7 +97,7 @@ class HighlightInteractionSceneCache {
     required int textRenderingCacheRevision,
     required int scaleKey,
     required String localeTag,
-    required HighlightSceneElementPainter paintElement,
+    required SceneElementPainter paintElement,
   }) {
     if (start >= end) {
       return;
@@ -144,7 +144,7 @@ class HighlightInteractionSceneCache {
     required List<ElementState> elements,
     required int start,
     required int end,
-    required HighlightSceneElementPainter paintElement,
+    required SceneElementPainter paintElement,
   }) {
     final recorder = PictureRecorder();
     final segmentCanvas = Canvas(recorder);
@@ -166,6 +166,14 @@ class HighlightInteractionSceneCache {
     final normalized = scaleFactor == 0 ? 1.0 : scaleFactor;
     return (normalized * 1000).round();
   }
+}
+
+/// Backward-compatible alias.
+typedef HighlightSceneElementPainter = SceneElementPainter;
+
+/// Backward-compatible alias.
+class HighlightInteractionSceneCache extends InteractionSceneCache {
+  HighlightInteractionSceneCache({super.maxEntries = 24});
 }
 
 @immutable

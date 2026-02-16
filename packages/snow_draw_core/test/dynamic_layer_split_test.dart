@@ -215,7 +215,7 @@ void main() {
     expect(splitIndex, 0);
   });
 
-  test('lifts all document elements while creating new text', () {
+  test('keeps static scene when creating new text', () {
     const interaction = TextEditingState(
       elementId: 't_new',
       draftData: TextData(text: 'draft'),
@@ -228,7 +228,7 @@ void main() {
     final view = DrawStateView.fromState(state);
 
     final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 0);
+    expect(splitIndex, isNull);
   });
 }
 
