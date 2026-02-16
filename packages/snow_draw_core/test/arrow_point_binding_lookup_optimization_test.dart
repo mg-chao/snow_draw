@@ -113,6 +113,51 @@ void main() {
       expect(counter.value, greaterThan(0));
     });
 
+    test('endpoint drag skips lookup when no bindable targets exist', () {
+      final arrow = _arrowElement(
+        id: 'arrow',
+        points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 190, y: 50)],
+      );
+      final nonBindableArrow = _arrowElement(
+        id: 'other-arrow',
+        points: const [DrawPoint(x: 240, y: 60), DrawPoint(x: 320, y: 80)],
+      ).copyWith(zIndex: 2);
+      final counter = _HitTestCounter();
+      final document = _CountingDocumentState(
+        elements: [arrow, nonBindableArrow],
+        counter: counter,
+      );
+      final state = _stateWith(document, selectedIds: const {'arrow'});
+
+      const operation = ArrowPointOperation();
+      final context = operation.createContext(
+        state: state,
+        position: const DrawPoint(x: 10, y: 50),
+        params: const ArrowPointOperationParams(
+          elementId: 'arrow',
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 0,
+        ),
+      );
+      final initialTransform = operation.initialTransform(
+        state: state,
+        context: context,
+        startPosition: const DrawPoint(x: 10, y: 50),
+      );
+
+      counter.reset();
+      operation.update(
+        state: state,
+        context: context,
+        transform: initialTransform,
+        currentPosition: const DrawPoint(x: 30, y: 55),
+        modifiers: const EditModifiers(),
+        config: DrawConfig.defaultConfig,
+      );
+
+      expect(counter.value, 0);
+    });
+
     test('addable-point drag skips binding target queries', () {
       final arrow = _arrowElement(
         id: 'arrow',

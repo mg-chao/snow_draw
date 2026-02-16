@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
@@ -106,6 +107,6 @@ ArrowPointEditContext _buildContext({
     dragOffset: DrawPoint.zero,
     releaseFixedSegment: false,
     deletePointOnStart: false,
-    bindingTargetCache: BindingTargetCache(),
+    bindingTargetCache: ArrowBindingTargetCache(),
   );
 }

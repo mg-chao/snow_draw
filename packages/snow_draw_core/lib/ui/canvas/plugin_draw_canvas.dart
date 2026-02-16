@@ -1845,6 +1845,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (bindingDistance <= 0) {
       return null;
     }
+    if (!state.domain.document.hasArrowBindableElements) {
+      return null;
+    }
 
     final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
       bindingDistance,

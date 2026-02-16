@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../elements/types/arrow/arrow_binding.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
@@ -40,6 +41,12 @@ class DocumentState {
   /// Avoids an O(n) scan of all elements on every hit test when
   /// the serial-number tool is active.
   late final boundTextIds = Set<String>.unmodifiable(_buildBoundTextIds());
+
+  /// Whether the document currently contains any bindable arrow targets.
+  ///
+  /// This lets arrow create/edit flows skip spatial queries entirely when no
+  /// rectangle/text/serial-number elements are present.
+  late final bool hasArrowBindableElements = _buildHasArrowBindableElements();
 
   Map<String, ElementState> get elementMap => _elementMap;
 
@@ -152,6 +159,18 @@ class DocumentState {
       }
     }
     return ids;
+  }
+
+  bool _buildHasArrowBindableElements() {
+    for (final element in elements) {
+      if (element.opacity <= 0) {
+        continue;
+      }
+      if (ArrowBindingUtils.isBindableTarget(element)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   DocumentState copyWith({

@@ -14,6 +14,7 @@ import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../arrow/arrow_binding.dart';
+import 'arrow_binding_target_cache.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_router.dart';
@@ -51,12 +52,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       rect: arrowRect,
     );
     final updatedData = data.copyWith(points: normalizedPoints);
+    final sessionData = _ArrowCreationSessionData();
     return CreationUpdateResult(
       data: updatedData,
       rect: arrowRect,
       creationMode: PointCreationMode(
         fixedPoints: List<DrawPoint>.unmodifiable([startPosition]),
         currentPoint: startPosition,
+        sessionData: sessionData,
       ),
     );
   }
@@ -82,6 +85,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         creationMode: creatingState.creationMode,
       );
     }
+    final sessionData = _resolveSessionData(creatingState.creationMode);
 
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
@@ -107,6 +111,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedCurrent,
+      targetCache: sessionData.startTargetCache,
     );
     startPosition = startBindingResult.position;
 
@@ -141,6 +146,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       referencePoint: segmentStart,
+      targetCache: sessionData.endTargetCache,
     );
     adjustedCurrent = bindingResult.position;
     var endBinding = bindingResult.binding;
@@ -195,6 +201,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             ? List<DrawPoint>.unmodifiable([startPosition])
             : fixedPoints,
         currentPoint: adjustedCurrent,
+        sessionData: sessionData,
       ),
     );
   }
@@ -218,6 +225,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     if (elementData.arrowType == ArrowType.elbow) {
       return null;
     }
+    final sessionData = _resolveSessionData(creatingState.creationMode);
 
     final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
@@ -240,6 +248,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedPosition,
+      targetCache: sessionData.startTargetCache,
     );
     startPosition = startBindingResult.position;
 
@@ -272,6 +281,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       referencePoint: segmentStart,
+      targetCache: sessionData.endTargetCache,
     );
     adjustedPosition = bindingResult.position;
 
@@ -313,6 +323,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       creationMode: PointCreationMode(
         fixedPoints: updatedFixedPoints,
         currentPoint: adjustedPosition,
+        sessionData: sessionData,
       ),
     );
   }
@@ -541,6 +552,7 @@ _BindingSnapResult _snapBindingPoint({
   required ArrowheadStyle arrowheadStyle,
   ArrowBinding? preferredBinding,
   DrawPoint? referencePoint,
+  ArrowBindingTargetCache? targetCache,
 }) {
   final snapConfig = config.snap;
   final bindingEnabled = _shouldAttemptBinding(
@@ -548,21 +560,28 @@ _BindingSnapResult _snapBindingPoint({
     snappingMode: snappingMode,
   );
   if (!bindingEnabled) {
+    targetCache?.reset();
     return _BindingSnapResult(position: position);
   }
   final zoom = state.application.view.camera.zoom;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
   final bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
   if (bindingDistance <= 0) {
+    targetCache?.reset();
+    return _BindingSnapResult(position: position);
+  }
+  if (!state.domain.document.hasArrowBindableElements) {
+    targetCache?.reset();
     return _BindingSnapResult(position: position);
   }
   final bindingSearchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
     bindingDistance,
   );
-  final targets = _resolveBindingTargets(
-    state,
-    position,
-    bindingSearchDistance,
+  final targets = _resolveBindingTargetsCached(
+    state: state,
+    position: position,
+    distance: bindingSearchDistance,
+    cache: targetCache,
   );
   if (targets.isEmpty) {
     return _BindingSnapResult(position: position);
@@ -614,6 +633,49 @@ List<ElementState> _resolveBindingTargets(
     return true;
   });
   return targets;
+}
+
+List<ElementState> _resolveBindingTargetsCached({
+  required DrawState state,
+  required DrawPoint position,
+  required double distance,
+  ArrowBindingTargetCache? cache,
+}) {
+  if (cache == null) {
+    return _resolveBindingTargets(state, position, distance);
+  }
+  final elementsVersion = state.domain.document.elementsVersion;
+  final threshold = distance * 0.4;
+  if (cache.isValid(
+    position: position,
+    threshold: threshold,
+    distance: distance,
+    elementsVersion: elementsVersion,
+  )) {
+    return cache.targets;
+  }
+  final targets = _resolveBindingTargets(state, position, distance);
+  cache.update(
+    position: position,
+    distance: distance,
+    elementsVersion: elementsVersion,
+    targets: targets,
+  );
+  return targets;
+}
+
+_ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
+  if (mode case PointCreationMode(:final sessionData)) {
+    if (sessionData is _ArrowCreationSessionData) {
+      return sessionData;
+    }
+  }
+  return _ArrowCreationSessionData();
+}
+
+class _ArrowCreationSessionData {
+  final startTargetCache = ArrowBindingTargetCache();
+  final endTargetCache = ArrowBindingTargetCache();
 }
 
 @immutable

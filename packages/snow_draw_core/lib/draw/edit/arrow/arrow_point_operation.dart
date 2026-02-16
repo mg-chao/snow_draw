@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_binding_target_cache.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
@@ -140,7 +141,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       dragOffset: dragOffset,
       releaseFixedSegment: shouldReleaseSegment,
       deletePointOnStart: shouldDeletePoint,
-      bindingTargetCache: BindingTargetCache(),
+      bindingTargetCache: ArrowBindingTargetCache(),
     );
   }
 
@@ -264,18 +265,24 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     final data = element?.data is ArrowLikeData
         ? element!.data as ArrowLikeData
         : null;
+    final startBinding = typedTransform.startBinding ?? data?.startBinding;
+    final endBinding = typedTransform.endBinding ?? data?.endBinding;
+    final hasBindableTargets = state.domain.document.hasArrowBindableElements;
     final zoom = state.application.view.camera.zoom;
     var bindingDistance = 0.0;
     var allowNewBinding = false;
     var bindingTargets = const <ElementState>[];
-    if (_requiresBindingLookup(typedContext)) {
+    final shouldLookupBindings =
+        _requiresBindingLookup(typedContext) &&
+        (hasBindableTargets || startBinding != null || endBinding != null);
+    if (shouldLookupBindings) {
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
       allowNewBinding =
           snapConfig.enableArrowBinding &&
           !modifiers.snapOverride &&
           snappingMode != SnappingMode.grid;
-      if (element != null && bindingDistance > 0) {
+      if (element != null && bindingDistance > 0 && hasBindableTargets) {
         final bindingSearchDistance =
             ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
         final bindingSearchPoint = _toWorldPosition(
@@ -297,8 +304,8 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       didInsert: typedTransform.didInsert,
       config: config,
       zoom: zoom,
-      startBinding: typedTransform.startBinding ?? data?.startBinding,
-      endBinding: typedTransform.endBinding ?? data?.endBinding,
+      startBinding: startBinding,
+      endBinding: endBinding,
       startArrowhead: data?.startArrowhead ?? ArrowheadStyle.none,
       endArrowhead: data?.endArrowhead ?? ArrowheadStyle.none,
       bindingTargets: bindingTargets,
@@ -520,7 +527,7 @@ final class ArrowPointEditContext extends EditContext {
     required this.dragOffset,
     required this.releaseFixedSegment,
     required this.deletePointOnStart,
-    required BindingTargetCache bindingTargetCache,
+    required ArrowBindingTargetCache bindingTargetCache,
   }) : _bindingTargetCache = bindingTargetCache;
 
   final String elementId;
@@ -534,7 +541,7 @@ final class ArrowPointEditContext extends EditContext {
   final DrawPoint dragOffset;
   final bool releaseFixedSegment;
   final bool deletePointOnStart;
-  final BindingTargetCache _bindingTargetCache;
+  final ArrowBindingTargetCache _bindingTargetCache;
 
   @override
   bool get hasSnapshots => initialPoints.length >= 2;
@@ -940,48 +947,6 @@ List<ElementState> _resolveBindingTargetsCached({
     targets: targets,
   );
   return targets;
-}
-
-class BindingTargetCache {
-  DrawPoint? _lastPosition;
-  double _lastDistance = 0;
-  var _elementsVersion = -1;
-  List<ElementState> _targets = const [];
-
-  List<ElementState> get targets => _targets;
-
-  bool isValid({
-    required DrawPoint position,
-    required double threshold,
-    required double distance,
-    required int elementsVersion,
-  }) {
-    if (_lastPosition == null) {
-      return false;
-    }
-    if (_elementsVersion != elementsVersion) {
-      return false;
-    }
-    if (_lastDistance != distance) {
-      return false;
-    }
-    if (threshold <= 0) {
-      return false;
-    }
-    return _lastPosition!.distanceSquared(position) <= threshold * threshold;
-  }
-
-  void update({
-    required DrawPoint position,
-    required double distance,
-    required int elementsVersion,
-    required List<ElementState> targets,
-  }) {
-    _lastPosition = position;
-    _lastDistance = distance;
-    _elementsVersion = elementsVersion;
-    _targets = targets;
-  }
 }
 
 DrawPoint _resolvePointPosition({

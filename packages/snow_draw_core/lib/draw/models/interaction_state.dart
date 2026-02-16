@@ -195,7 +195,13 @@ class RectCreationMode extends CreationMode {
 /// Point-based creation mode (for arrows).
 @immutable
 class PointCreationMode extends CreationMode {
-  const PointCreationMode({this.fixedPoints = const [], this.currentPoint});
+  static const _sessionDataUnset = Object();
+
+  const PointCreationMode({
+    this.fixedPoints = const [],
+    this.currentPoint,
+    this.sessionData,
+  });
 
   /// Fixed turning points in world coordinates.
   final List<DrawPoint> fixedPoints;
@@ -203,12 +209,22 @@ class PointCreationMode extends CreationMode {
   /// Current (preview) point in world coordinates.
   final DrawPoint? currentPoint;
 
+  /// Optional transient session payload.
+  ///
+  /// This is intentionally excluded from equality/hashCode so reducers can
+  /// attach mutable caches without forcing state churn.
+  final Object? sessionData;
+
   PointCreationMode copyWith({
     List<DrawPoint>? fixedPoints,
     DrawPoint? currentPoint,
+    Object? sessionData = _sessionDataUnset,
   }) => PointCreationMode(
     fixedPoints: fixedPoints ?? this.fixedPoints,
     currentPoint: currentPoint ?? this.currentPoint,
+    sessionData: sessionData == _sessionDataUnset
+        ? this.sessionData
+        : sessionData,
   );
 
   @override
