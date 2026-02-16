@@ -54,7 +54,6 @@ import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
 import 'watermark_canvas_painter.dart';
-import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -191,9 +190,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CoordinateService? _coordinateService;
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
+  late final WatermarkCanvasLayerController _watermarkLayerController;
+  late final WatermarkCanvasPainter _watermarkCanvasPainter;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
+  DrawState? _lastObservedState;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
   var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
@@ -312,6 +314,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   void initState() {
     super.initState();
+    final initialState = widget.store.state;
     _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
     _pointerMoveDispatcher = FrameAlignedPointerMoveDispatcher(
       dispatchMove: _dispatchPointerMoveEvent,
@@ -325,6 +328,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
+    );
+    _lastObservedState = initialState;
+    _watermarkLayerController = WatermarkCanvasLayerController(
+      initialState: WatermarkCanvasLayerState(
+        camera: initialState.application.view.camera,
+        scaleFactor: _effectiveScaleFactor(),
+        config: initialState.domain.document.globalElements.watermark,
+      ),
+    );
+    _watermarkCanvasPainter = WatermarkCanvasPainter(
+      controller: _watermarkLayerController,
     );
 
     // Preload GPU shaders for optimal first-frame performance.
@@ -371,6 +385,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _stateUnsubscribe?.call();
         _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
+        _lastObservedState = widget.store.state;
         _cachedState = null;
         _cachedStateView = null;
 
@@ -407,6 +422,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
+    _syncWatermarkLayerState(widget.store.state);
   }
 
   @override
@@ -425,6 +441,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
+    _watermarkLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_eraserMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
@@ -437,6 +454,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final config = widget.store.config;
     final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
+    _syncWatermarkLayerState(stateView.state, scaleFactor: scaleFactor);
     final elementRegistry = widget.store.context.elementRegistry;
     final locale = Localizations.maybeLocaleOf(context);
     final camera = stateView.state.application.view.camera;
@@ -481,7 +499,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
-    final watermark = globalElements.watermark;
     final ownsWholeScene = dynamicLayerStartIndex == 0;
     final hasDynamicContent =
         dynamicLayerStartIndex != null ||
@@ -492,9 +509,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hasDynamicContent: hasDynamicContent,
       config: highlightMask,
     );
-    // Watermark rendering is isolated in its own repaint boundary so
-    // watermark edits do not invalidate static/dynamic scene painters.
-    final showWatermarkOverlay = isWatermarkVisible(watermark);
     final textRenderingCacheRevision =
         textRenderingCacheRevisionListenable.value;
 
@@ -573,20 +587,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
               size: widget.size,
             ),
           ),
-          if (showWatermarkOverlay)
-            RepaintBoundary(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  isComplex: true,
-                  painter: WatermarkCanvasPainter(
-                    camera: camera,
-                    scaleFactor: scaleFactor,
-                    config: watermark,
-                  ),
-                  size: widget.size,
-                ),
+          RepaintBoundary(
+            child: IgnorePointer(
+              child: CustomPaint(
+                isComplex: true,
+                painter: _watermarkCanvasPainter,
+                size: widget.size,
               ),
             ),
+          ),
           ?textOverlay,
           ?eraserCursorOverlay,
         ],
@@ -2607,6 +2616,47 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return _cursorResolver.resolveForHitTest(hitResult);
   }
 
+  void _syncWatermarkLayerState(DrawState state, {double? scaleFactor}) {
+    _watermarkLayerController.update(
+      WatermarkCanvasLayerState(
+        camera: state.application.view.camera,
+        scaleFactor: scaleFactor ?? _effectiveScaleFactor(),
+        config: state.domain.document.globalElements.watermark,
+      ),
+    );
+  }
+
+  bool _isWatermarkOnlyStateChange(DrawState previous, DrawState next) {
+    if (identical(previous, next)) {
+      return false;
+    }
+
+    if (previous.application.view != next.application.view ||
+        previous.application.interaction != next.application.interaction ||
+        previous.application.selectionOverlay !=
+            next.application.selectionOverlay ||
+        previous.domain.selection != next.domain.selection) {
+      return false;
+    }
+
+    final previousDocument = previous.domain.document;
+    final nextDocument = next.domain.document;
+
+    if (previousDocument.elementsVersion != nextDocument.elementsVersion ||
+        !identical(previousDocument.elements, nextDocument.elements)) {
+      return false;
+    }
+
+    final previousGlobals = previousDocument.globalElements;
+    final nextGlobals = nextDocument.globalElements;
+
+    if (previousGlobals.highlightMask != nextGlobals.highlightMask) {
+      return false;
+    }
+
+    return previousGlobals.watermark != nextGlobals.watermark;
+  }
+
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
   bool get _isElementInteractionDisabledForCurrentTool =>
@@ -3114,6 +3164,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleStateChange(DrawState state) {
+    final previousState = _lastObservedState;
+    _lastObservedState = state;
+    _syncWatermarkLayerState(state);
+
+    if (previousState != null &&
+        _isWatermarkOnlyStateChange(previousState, state)) {
+      return;
+    }
+
     final position = _lastPointerPosition;
     if (position != null && _isPointerInside) {
       // Use the combined path when a pointer position is available.
