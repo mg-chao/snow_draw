@@ -47,6 +47,11 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   required DrawStateView view,
   required ElementTypeId<ElementData>? activeToolTypeId,
 }) {
+  final textEditingPlan = _resolveTextEditingOptimizationPlan(view);
+  if (textEditingPlan != null) {
+    return textEditingPlan;
+  }
+
   final linePointPlan = _resolveLinePointOptimizationPlan(view);
   if (linePointPlan != null) {
     return linePointPlan;
@@ -61,6 +66,43 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   }
 
   return _resolveSingleSelectionEditOptimizationPlan(view);
+}
+
+DynamicSceneOptimizationPlan? _resolveTextEditingOptimizationPlan(
+  DrawStateView view,
+) {
+  final interaction = view.state.application.interaction;
+  if (interaction is! TextEditingState || interaction.isNew) {
+    return null;
+  }
+
+  // Text editing mutates a single preview element every keystroke. Keeping the
+  // dynamic scene localized to that element avoids rebuilding all higher
+  // z-index elements on each frame.
+  final selectedIds = view.selectedIds;
+  if (selectedIds.isNotEmpty &&
+      (selectedIds.length != 1 ||
+          !selectedIds.contains(interaction.elementId))) {
+    return null;
+  }
+
+  final document = view.state.domain.document;
+  final persisted = document.getElementById(interaction.elementId);
+  final preview = view.previewElementsById[interaction.elementId];
+  if (persisted == null ||
+      persisted.data is! TextData ||
+      preview == null ||
+      preview.data is! TextData) {
+    return null;
+  }
+
+  final orderIndex = document.getOrderIndex(interaction.elementId);
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan.single(interaction.elementId);
 }
 
 DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(

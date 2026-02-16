@@ -187,6 +187,147 @@ void main() {
         expect(plan.staticHiddenElementIds, {'serial-1', 'text-1'});
       },
     );
+
+    test('optimizes existing text-edit previews to a localized scene', () {
+      final text = _text(
+        id: 'text-1',
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 160, maxY: 100),
+        zIndex: 0,
+      );
+      final background = _rectangle(
+        id: 'rect-1',
+        rect: const DrawRect(minX: 220, minY: 40, maxX: 340, maxY: 140),
+        zIndex: 1,
+      );
+      final state = _textEditingState(
+        elements: [text, background],
+        elementId: 'text-1',
+        selectedIds: {'text-1'},
+      );
+      final preview = text.copyWith(
+        data: const TextData(text: 'edited'),
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 220, maxY: 100),
+      );
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {'text-1': preview},
+        effectiveSelection: EffectiveSelection(
+          bounds: preview.rect,
+          center: preview.rect.center,
+          rotation: preview.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(
+        view: view,
+        activeToolTypeId: TextData.typeIdToken,
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.optimizedElementIds, {'text-1'});
+      expect(plan.staticHiddenElementIds, {'text-1'});
+    });
+
+    test('skips text-edit optimization for new text drafts', () {
+      final state = _textEditingState(
+        elements: const [],
+        elementId: 'text-new',
+        selectedIds: const {},
+        isNew: true,
+      );
+      const preview = ElementState(
+        id: 'text-new',
+        rect: DrawRect(minX: 10, minY: 10, maxX: 120, maxY: 80),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: TextData(text: 'draft'),
+      );
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: const {'text-new': preview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(
+        view: view,
+        activeToolTypeId: TextData.typeIdToken,
+      );
+
+      expect(plan, isNull);
+    });
+
+    test('skips text-edit optimization for non-text persisted elements', () {
+      final rectangle = _rectangle(
+        id: 'rect-1',
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 180, maxY: 120),
+        zIndex: 0,
+      );
+      final state = _textEditingState(
+        elements: [rectangle],
+        elementId: 'rect-1',
+        selectedIds: {'rect-1'},
+      );
+      final preview = rectangle.copyWith(data: const TextData(text: 'edited'));
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {'rect-1': preview},
+        effectiveSelection: EffectiveSelection(
+          bounds: preview.rect,
+          center: preview.rect.center,
+          rotation: preview.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(
+        view: view,
+        activeToolTypeId: TextData.typeIdToken,
+      );
+
+      expect(plan, isNull);
+    });
+
+    test('falls back when text-edit dynamic range contains highlight', () {
+      final text = _text(
+        id: 'text-1',
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 160, maxY: 100),
+        zIndex: 0,
+      );
+      final highlight = _highlight(
+        id: 'hl-1',
+        rect: const DrawRect(minX: 40, minY: 20, maxX: 220, maxY: 120),
+        zIndex: 1,
+      );
+      final state = _textEditingState(
+        elements: [text, highlight],
+        elementId: 'text-1',
+        selectedIds: {'text-1'},
+      );
+      final preview = text.copyWith(data: const TextData(text: 'edited'));
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {'text-1': preview},
+        effectiveSelection: EffectiveSelection(
+          bounds: preview.rect,
+          center: preview.rect.center,
+          rotation: preview.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(
+        view: view,
+        activeToolTypeId: TextData.typeIdToken,
+      );
+
+      expect(plan, isNull);
+    });
   });
 }
 
@@ -216,6 +357,33 @@ DrawState _editingState({
         sessionId: 'edit-session-1',
         context: context,
         currentTransform: MoveTransform.zero,
+      ),
+    ),
+  );
+}
+
+DrawState _textEditingState({
+  required List<ElementState> elements,
+  required String elementId,
+  required Set<String> selectedIds,
+  bool isNew = false,
+}) {
+  final base = DrawState(
+    domain: DomainState(
+      document: DocumentState(elements: elements),
+      selection: SelectionState(selectedIds: selectedIds),
+    ),
+    application: ApplicationState.initial(),
+  );
+  return base.copyWith(
+    application: base.application.copyWith(
+      interaction: TextEditingState(
+        elementId: elementId,
+        draftData: const TextData(text: 'draft'),
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 160, maxY: 100),
+        isNew: isNew,
+        opacity: 1,
+        rotation: 0,
       ),
     ),
   );
