@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/draw_state_view.dart';
@@ -90,7 +91,16 @@ class StaticCanvasPainter extends CustomPainter {
         excludedElementId: creatingElementId,
       );
 
-      final visibleTextIds = _resolveVisibleTextIds(effectiveElements);
+      var hasFilterElement = false;
+      final visibleTextIds = <String>{};
+      for (final element in effectiveElements) {
+        if (!hasFilterElement && element.data is FilterData) {
+          hasFilterElement = true;
+        }
+        if (element.opacity > 0 && element.data is TextData) {
+          visibleTextIds.add(element.id);
+        }
+      }
       final shouldPaintSerialConnectors =
           visibleTextIds.isNotEmpty &&
           _shouldPaintSerialConnectors(
@@ -105,42 +115,50 @@ class StaticCanvasPainter extends CustomPainter {
               visibleTextElementIds: visibleTextIds,
             )
           : const <String, List<SerialNumberTextConnector>>{};
-      final filterCacheContext = shouldPaintSerialConnectors
-          ? null
-          : _buildFilterCacheContext(scale: scale);
-
-      filterSceneCompositor.paintElements(
-        canvas: canvas,
-        elements: effectiveElements,
-        cacheContext: filterCacheContext,
-        paintElement: (sceneCanvas, element) {
-          elementRenderer.renderElement(
+      void paintElement(Canvas sceneCanvas, ElementState element) {
+        elementRenderer.renderElement(
+          canvas: sceneCanvas,
+          element: element,
+          scaleFactor: scale,
+          registry: renderKey.elementRegistry,
+          locale: renderKey.locale,
+        );
+        if (shouldPaintSerialConnectors) {
+          drawSerialNumberConnectorsForText(
             canvas: sceneCanvas,
-            element: element,
-            scaleFactor: scale,
-            registry: renderKey.elementRegistry,
-            locale: renderKey.locale,
+            textElement: element,
+            connectorsByTextId: serialConnectors,
           );
-          if (shouldPaintSerialConnectors) {
-            drawSerialNumberConnectorsForText(
-              canvas: sceneCanvas,
-              textElement: element,
-              connectorsByTextId: serialConnectors,
-            );
+        }
+      }
+
+      if (!hasFilterElement) {
+        for (final element in effectiveElements) {
+          paintElement(canvas, element);
+        }
+      } else {
+        final filterCacheContext = shouldPaintSerialConnectors
+            ? null
+            : _buildFilterCacheContext(scale: scale);
+        filterSceneCompositor.paintElements(
+          canvas: canvas,
+          elements: effectiveElements,
+          cacheContext: filterCacheContext,
+          paintElement: paintElement,
+        );
+        if (renderKey.performanceMonitoringEnabled) {
+          final diagnostics = filterSceneCompositor.lastDiagnostics;
+          if (diagnostics.pictureRecorders > 12 ||
+              diagnostics.filterPasses > 6) {
+            _staticCanvasFallbackLog.warning('Heavy static filter frame', {
+              'pictureRecorders': diagnostics.pictureRecorders,
+              'saveLayers': diagnostics.saveLayers,
+              'filterPasses': diagnostics.filterPasses,
+              'batchCount': diagnostics.batchCount,
+              'batchCacheHits': diagnostics.batchCacheHits,
+              'batchCacheMisses': diagnostics.batchCacheMisses,
+            });
           }
-        },
-      );
-      if (renderKey.performanceMonitoringEnabled) {
-        final diagnostics = filterSceneCompositor.lastDiagnostics;
-        if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
-          _staticCanvasFallbackLog.warning('Heavy static filter frame', {
-            'pictureRecorders': diagnostics.pictureRecorders,
-            'saveLayers': diagnostics.saveLayers,
-            'filterPasses': diagnostics.filterPasses,
-            'batchCount': diagnostics.batchCount,
-            'batchCacheHits': diagnostics.batchCacheHits,
-            'batchCacheMisses': diagnostics.batchCacheMisses,
-          });
         }
       }
     }
@@ -529,17 +547,6 @@ class StaticCanvasPainter extends CustomPainter {
       }
     }
     return false;
-  }
-
-  Set<String> _resolveVisibleTextIds(List<ElementState> effectiveElements) {
-    final visible = <String>{};
-    for (final element in effectiveElements) {
-      if (element.opacity <= 0 || element.data is! TextData) {
-        continue;
-      }
-      visible.add(element.id);
-    }
-    return visible;
   }
 
   @override

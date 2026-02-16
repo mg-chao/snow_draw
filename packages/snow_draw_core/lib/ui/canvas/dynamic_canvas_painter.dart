@@ -455,7 +455,17 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final document = stateView.state.domain.document;
-    final visibleTextIds = _resolveVisibleTextIds(effectiveElements);
+    var hasFilterElement = false;
+    final visibleTextIds = <String>{};
+    for (final element in effectiveElements) {
+      if (!hasFilterElement && element.data is FilterData) {
+        hasFilterElement = true;
+      }
+      if (element.opacity > 0 && element.data is TextData) {
+        visibleTextIds.add(element.id);
+      }
+    }
+
     final shouldPaintSerialConnectors =
         visibleTextIds.isNotEmpty &&
         _shouldPaintSerialConnectors(
@@ -489,14 +499,9 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final dynamicElementIds = _resolveDynamicElementIds();
-    final hasFilterElement = effectiveElements.any(
-      (element) => element.data is FilterData,
-    );
-    final filterCacheContext = shouldPaintSerialConnectors
-        ? null
-        : _buildFilterCacheContext(scale: scale);
     if (_canUseInteractionSceneCache(
       hasFilterElement: hasFilterElement,
+      shouldPaintSerialConnectors: shouldPaintSerialConnectors,
       effectiveElements: effectiveElements,
       dynamicElementIds: dynamicElementIds,
     )) {
@@ -513,6 +518,18 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
+    if (!hasFilterElement) {
+      _paintElementsDirectly(
+        canvas: canvas,
+        elements: effectiveElements,
+        paintElement: paintElement,
+      );
+      return;
+    }
+
+    final filterCacheContext = shouldPaintSerialConnectors
+        ? null
+        : _buildFilterCacheContext(scale: scale);
     filterSceneCompositor.paintElements(
       canvas: canvas,
       elements: effectiveElements,
@@ -549,10 +566,11 @@ class DynamicCanvasPainter extends CustomPainter {
 
   bool _canUseInteractionSceneCache({
     required bool hasFilterElement,
+    required bool shouldPaintSerialConnectors,
     required List<ElementState> effectiveElements,
     required Set<String> dynamicElementIds,
   }) {
-    if (hasFilterElement) {
+    if (hasFilterElement || shouldPaintSerialConnectors) {
       return false;
     }
 
@@ -560,26 +578,37 @@ class DynamicCanvasPainter extends CustomPainter {
       return true;
     }
 
-    if (dynamicElementIds.isEmpty) {
+    if (effectiveElements.length < 2) {
       return false;
     }
 
-    final interaction = stateView.state.application.interaction;
-    if (interaction is! TextEditingState) {
-      return false;
+    if (dynamicElementIds.isEmpty) {
+      return true;
     }
-    if (!dynamicElementIds.contains(interaction.elementId)) {
-      return false;
-    }
+
+    var visibleDynamicCount = 0;
     for (final element in effectiveElements) {
-      if (dynamicElementIds.contains(element.id)) {
+      if (!dynamicElementIds.contains(element.id)) {
         continue;
       }
-      if (element.data is HighlightData) {
+      visibleDynamicCount += 1;
+      if (visibleDynamicCount >= effectiveElements.length) {
         return false;
       }
     }
+
     return true;
+  }
+
+  void _paintElementsDirectly({
+    required Canvas canvas,
+    required List<ElementState> elements,
+    required void Function(Canvas sceneCanvas, ElementState element)
+    paintElement,
+  }) {
+    for (final element in elements) {
+      paintElement(canvas, element);
+    }
   }
 
   bool _isHighlightPreviewCacheEligible() {
@@ -1243,17 +1272,6 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
     return false;
-  }
-
-  Set<String> _resolveVisibleTextIds(List<ElementState> effectiveElements) {
-    final visible = <String>{};
-    for (final element in effectiveElements) {
-      if (element.opacity <= 0 || element.data is! TextData) {
-        continue;
-      }
-      visible.add(element.id);
-    }
-    return visible;
   }
 
   DrawPoint? _resolveHandlePosition(
