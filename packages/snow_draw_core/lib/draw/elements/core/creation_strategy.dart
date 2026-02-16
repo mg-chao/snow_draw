@@ -57,6 +57,66 @@ abstract class CreationStrategy {
     required SnappingMode snappingMode,
   });
 
+  /// Applies a batch of pointer positions to the current creation session.
+  ///
+  /// The default implementation falls back to repeatedly calling [update].
+  /// Strategies with high-frequency workflows (for example free draw) can
+  /// override this to process a whole sample batch with less overhead.
+  CreationUpdateResult updateBatch({
+    required DrawState state,
+    required DrawConfig config,
+    required CreatingState creatingState,
+    required List<DrawPoint> positions,
+    required bool maintainAspectRatio,
+    required bool createFromCenter,
+    required SnappingMode snappingMode,
+  }) {
+    if (positions.isEmpty) {
+      return CreationUpdateResult(
+        data: creatingState.elementData,
+        rect: creatingState.currentRect,
+        creationMode: creatingState.creationMode,
+        snapGuides: creatingState.snapGuides,
+      );
+    }
+
+    var working = creatingState;
+    for (final position in positions) {
+      final updateResult = update(
+        state: state,
+        config: config,
+        creatingState: working,
+        currentPosition: position,
+        maintainAspectRatio: maintainAspectRatio,
+        createFromCenter: createFromCenter,
+        snappingMode: snappingMode,
+      );
+
+      if (_isCreationStateUnchanged(working, updateResult)) {
+        continue;
+      }
+
+      final baseElement = working.element;
+      final updatedElement = updateResult.data == working.elementData
+          ? baseElement
+          : baseElement.copyWith(data: updateResult.data);
+
+      working = working.copyWith(
+        element: updatedElement,
+        currentRect: updateResult.rect,
+        snapGuides: updateResult.snapGuides,
+        creationMode: updateResult.creationMode,
+      );
+    }
+
+    return CreationUpdateResult(
+      data: working.elementData,
+      rect: working.currentRect,
+      creationMode: working.creationMode,
+      snapGuides: working.snapGuides,
+    );
+  }
+
   CreationUpdateResult? addPoint({
     required DrawState state,
     required DrawConfig config,
@@ -75,4 +135,28 @@ abstract class CreationStrategy {
 @immutable
 abstract class PointCreationStrategy extends CreationStrategy {
   const PointCreationStrategy();
+}
+
+bool _isCreationStateUnchanged(
+  CreatingState interaction,
+  CreationUpdateResult updateResult,
+) =>
+    interaction.elementData == updateResult.data &&
+    interaction.currentRect == updateResult.rect &&
+    interaction.creationMode == updateResult.creationMode &&
+    _listEquals(interaction.snapGuides, updateResult.snapGuides);
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) {
+      return false;
+    }
+  }
+  return true;
 }

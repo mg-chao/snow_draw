@@ -250,43 +250,32 @@ class CreateElementReducer {
       config: context.config,
       ctrlPressed: action.snapOverride,
     );
-
-    var working = interaction;
-    var hasChanges = false;
-
-    for (final position in action.positions) {
-      final updateResult = strategy.update(
-        state: state,
-        config: context.config,
-        creatingState: working,
-        currentPosition: position,
-        maintainAspectRatio: action.maintainAspectRatio,
-        createFromCenter: action.createFromCenter,
-        snappingMode: snappingMode,
-      );
-      if (_isCreationStateUnchanged(working, updateResult)) {
-        continue;
-      }
-
-      hasChanges = true;
-      final baseElement = working.element;
-      final updatedElement = updateResult.data == working.elementData
-          ? baseElement
-          : baseElement.copyWith(data: updateResult.data);
-      working = working.copyWith(
-        element: updatedElement,
-        currentRect: updateResult.rect,
-        snapGuides: updateResult.snapGuides,
-        creationMode: updateResult.creationMode,
-      );
-    }
-
-    if (!hasChanges) {
+    final updateResult = strategy.updateBatch(
+      state: state,
+      config: context.config,
+      creatingState: interaction,
+      positions: action.positions,
+      maintainAspectRatio: action.maintainAspectRatio,
+      createFromCenter: action.createFromCenter,
+      snappingMode: snappingMode,
+    );
+    if (_isCreationStateUnchanged(interaction, updateResult)) {
       return state;
     }
 
+    final baseElement = interaction.element;
+    final updatedElement = updateResult.data == interaction.elementData
+        ? baseElement
+        : baseElement.copyWith(data: updateResult.data);
+    final nextInteraction = interaction.copyWith(
+      element: updatedElement,
+      currentRect: updateResult.rect,
+      snapGuides: updateResult.snapGuides,
+      creationMode: updateResult.creationMode,
+    );
+
     return state.copyWith(
-      application: state.application.copyWith(interaction: working),
+      application: state.application.copyWith(interaction: nextInteraction),
     );
   }
 

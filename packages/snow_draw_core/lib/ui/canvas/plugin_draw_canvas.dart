@@ -1000,21 +1000,52 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       case LogicalKeyboardKey.shift:
       case LogicalKeyboardKey.shiftLeft:
       case LogicalKeyboardKey.shiftRight:
-        _isShiftPressed = isPressed;
+        _setShiftPressed(isPressed);
         return;
       case LogicalKeyboardKey.control:
       case LogicalKeyboardKey.controlLeft:
       case LogicalKeyboardKey.controlRight:
-        _isControlPressed = isPressed;
+        _setControlPressed(isPressed);
         return;
       case LogicalKeyboardKey.alt:
       case LogicalKeyboardKey.altLeft:
       case LogicalKeyboardKey.altRight:
-        _isAltPressed = isPressed;
+        _setAltPressed(isPressed);
         return;
       default:
         break;
     }
+  }
+
+  void _setShiftPressed(bool isPressed) {
+    if (_isShiftPressed == isPressed) {
+      return;
+    }
+    _isShiftPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _setControlPressed(bool isPressed) {
+    if (_isControlPressed == isPressed) {
+      return;
+    }
+    _isControlPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _setAltPressed(bool isPressed) {
+    if (_isAltPressed == isPressed) {
+      return;
+    }
+    _isAltPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _flushPendingPointerMoveForModifierChange() {
+    if (_activePointerIds.isEmpty) {
+      return;
+    }
+    unawaited(_pointerMoveDispatcher.flush());
   }
 
   void _syncKeyboardModifiers() {
@@ -1174,11 +1205,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   bool _shouldFrameCoalescePointerMove() {
+    final interaction = widget.store.state.application.interaction;
+    if (interaction is CreatingState &&
+        interaction.creationMode is FreeDrawCreationMode) {
+      final mode = interaction.creationMode as FreeDrawCreationMode;
+      if (mode.isLineActive) {
+        return true;
+      }
+    }
+
     if (_shouldBatchFreeDrawMoves()) {
       return true;
     }
 
-    final interaction = widget.store.state.application.interaction;
     if (interaction is CreatingState) {
       return interaction.creationMode is! FreeDrawCreationMode;
     }
@@ -1204,7 +1243,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     PointerMoveInputEvent pending,
     PointerMoveInputEvent incoming,
   ) {
-    if (_shouldBatchFreeDrawMoves()) {
+    final canBatchSamples =
+        _shouldBatchFreeDrawMoves() &&
+        !pending.modifiers.shift &&
+        !incoming.modifiers.shift &&
+        pending.modifiers.control == incoming.modifiers.control &&
+        pending.modifiers.alt == incoming.modifiers.alt;
+    if (canBatchSamples) {
       return pending.mergeWith(incoming);
     }
     return incoming;

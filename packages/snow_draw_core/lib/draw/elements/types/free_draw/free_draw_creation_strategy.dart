@@ -187,6 +187,127 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   }
 
   @override
+  CreationUpdateResult updateBatch({
+    required DrawState state,
+    required DrawConfig config,
+    required CreatingState creatingState,
+    required List<DrawPoint> positions,
+    required bool maintainAspectRatio,
+    required bool createFromCenter,
+    required SnappingMode snappingMode,
+  }) {
+    if (positions.isEmpty) {
+      return CreationUpdateResult(
+        data: creatingState.elementData,
+        rect: creatingState.currentRect,
+        creationMode: creatingState.creationMode,
+        snapGuides: creatingState.snapGuides,
+      );
+    }
+
+    if (positions.length == 1 || maintainAspectRatio) {
+      return update(
+        state: state,
+        config: config,
+        creatingState: creatingState,
+        currentPosition: positions.last,
+        maintainAspectRatio: maintainAspectRatio,
+        createFromCenter: createFromCenter,
+        snappingMode: snappingMode,
+      );
+    }
+
+    if (state.application.isCreating) {
+      // Free draw ignores state-derived modifiers during creation updates.
+    }
+    if (createFromCenter) {
+      // Free draw ignores createFromCenter.
+    }
+
+    final elementData = creatingState.elementData;
+    if (elementData is! FreeDrawData) {
+      return super.updateBatch(
+        state: state,
+        config: config,
+        creatingState: creatingState,
+        positions: positions,
+        maintainAspectRatio: maintainAspectRatio,
+        createFromCenter: createFromCenter,
+        snappingMode: snappingMode,
+      );
+    }
+
+    final mode = _resolveFreeDrawMode(creatingState.creationMode);
+    final worldPoints =
+        mode.worldPoints ??
+        _resolveWorldPoints(
+          rect: creatingState.currentRect,
+          normalizedPoints: elementData.points,
+        );
+    final previewPath = mode.previewPath ?? _buildPreviewPath(worldPoints);
+
+    var rect = creatingState.currentRect;
+    var previewChanged = false;
+
+    if (mode.isLineActive) {
+      final completedLinePoint =
+          mode.lineCurrent ??
+          (worldPoints.isNotEmpty ? worldPoints.last : null);
+      if (completedLinePoint != null) {
+        _appendPreviewPoint(previewPath, completedLinePoint);
+        rect = _expandBoundsWithPoint(rect, completedLinePoint);
+        previewChanged = true;
+      }
+    }
+
+    for (final rawPosition in positions) {
+      final adjustedPosition = snappingMode == SnappingMode.grid
+          ? gridSnapService.snapPoint(
+              point: rawPosition,
+              gridSize: config.grid.size,
+            )
+          : rawPosition;
+      final appendResult = _appendSmoothedPoint(
+        worldPoints: worldPoints,
+        currentPosition: adjustedPosition,
+      );
+      if (!appendResult.hasAppendedPoint) {
+        continue;
+      }
+      final appendedPoint = appendResult.appendedPoint!;
+      _appendPreviewPoint(
+        previewPath,
+        appendedPoint,
+        moveTo: worldPoints.length == 1,
+      );
+      rect = _expandBoundsWithPoint(rect, appendedPoint);
+      previewChanged = true;
+    }
+
+    final lineStateChanged = mode.isLineActive;
+    if (!previewChanged && !lineStateChanged) {
+      return CreationUpdateResult(
+        data: elementData,
+        rect: creatingState.currentRect,
+        creationMode: mode,
+      );
+    }
+
+    return CreationUpdateResult(
+      data: elementData,
+      rect: rect,
+      creationMode: mode.copyWith(
+        isLineActive: false,
+        worldPoints: worldPoints,
+        previewPath: previewPath,
+        lineAnchor: null,
+        lineCurrent: null,
+        revision: mode.revision + 1,
+      ),
+    );
+  }
+
+  @override
   CreationFinishResult finish({
     required DrawConfig config,
     required CreatingState creatingState,
@@ -424,6 +545,28 @@ DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
     if (point.y > maxY) {
       maxY = point.y;
     }
+  }
+
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+DrawRect _expandBoundsWithPoint(DrawRect current, DrawPoint point) {
+  var minX = current.minX;
+  var maxX = current.maxX;
+  var minY = current.minY;
+  var maxY = current.maxY;
+
+  if (point.x < minX) {
+    minX = point.x;
+  }
+  if (point.x > maxX) {
+    maxX = point.x;
+  }
+  if (point.y < minY) {
+    minY = point.y;
+  }
+  if (point.y > maxY) {
+    maxY = point.y;
   }
 
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);

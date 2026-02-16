@@ -166,6 +166,39 @@ void main() {
         expect(point.y, inInclusiveRange(0.0, 1.0));
       }
     });
+
+    test('updateBatch processes sampled points with one revision bump', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData();
+      const start = DrawPoint(x: 12, y: 18);
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      final creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      final update = strategy.updateBatch(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        positions: const [
+          DrawPoint(x: 18, y: 22),
+          DrawPoint(x: 30, y: 36),
+          DrawPoint(x: 48, y: 52),
+        ],
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final mode = update.creationMode as FreeDrawCreationMode;
+      expect(mode.revision, 1);
+      expect(mode.worldPoints, isNotNull);
+      expect(mode.worldPoints!.length, greaterThan(2));
+      expect(update.rect.maxX, greaterThan(creatingState.currentRect.maxX));
+      expect(update.rect.maxY, greaterThan(creatingState.currentRect.maxY));
+    });
   });
 }
 

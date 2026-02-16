@@ -71,7 +71,7 @@ void main() {
     final mode = creating.creationMode;
     expect(mode, isA<FreeDrawCreationMode>());
     final freeDrawMode = mode as FreeDrawCreationMode;
-    expect(freeDrawMode.revision, greaterThan(0));
+    expect(freeDrawMode.revision, 1);
     expect(freeDrawMode.worldPoints, isNotNull);
     expect(freeDrawMode.worldPoints!.length, greaterThan(2));
     expect(creating.currentRect.maxX, greaterThan(10));

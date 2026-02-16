@@ -1815,11 +1815,10 @@ class _FreeDrawCreationPreviewCache {
   DrawPoint? _tailLastPoint;
   var _tailPath = Path();
   var _tailPointCount = 0;
-  Picture? _committedPicture;
+  final _committedChunks = <Picture>[];
 
   void clear() {
-    _committedPicture?.dispose();
-    _committedPicture = null;
+    _disposeCommittedChunks();
     _elementId = null;
     _signature = null;
     _processedPointCount = 0;
@@ -1865,9 +1864,8 @@ class _FreeDrawCreationPreviewCache {
   }
 
   void paint({required Canvas canvas, required Paint strokePaint}) {
-    final committedPicture = _committedPicture;
-    if (committedPicture != null) {
-      canvas.drawPicture(committedPicture);
+    for (final picture in _committedChunks) {
+      canvas.drawPicture(picture);
     }
     if (_tailPointCount >= 2) {
       canvas.drawPath(_tailPath, strokePaint);
@@ -1899,8 +1897,7 @@ class _FreeDrawCreationPreviewCache {
     required String elementId,
     required _FreeDrawPreviewStrokeSignature signature,
   }) {
-    _committedPicture?.dispose();
-    _committedPicture = null;
+    _disposeCommittedChunks();
     _elementId = elementId;
     _signature = signature;
     _processedPointCount = 0;
@@ -1938,16 +1935,8 @@ class _FreeDrawCreationPreviewCache {
     }
 
     final recorder = PictureRecorder();
-    final chunkCanvas = Canvas(recorder);
-    final committedPicture = _committedPicture;
-    if (committedPicture != null) {
-      chunkCanvas.drawPicture(committedPicture);
-    }
-    chunkCanvas.drawPath(_tailPath, strokePaint);
-    final nextPicture = recorder.endRecording();
-
-    _committedPicture?.dispose();
-    _committedPicture = nextPicture;
+    Canvas(recorder).drawPath(_tailPath, strokePaint);
+    _committedChunks.add(recorder.endRecording());
 
     final tailLastPoint = _tailLastPoint;
     _tailPath = Path();
@@ -1957,5 +1946,12 @@ class _FreeDrawCreationPreviewCache {
     } else {
       _tailPointCount = 0;
     }
+  }
+
+  void _disposeCommittedChunks() {
+    for (final picture in _committedChunks) {
+      picture.dispose();
+    }
+    _committedChunks.clear();
   }
 }
