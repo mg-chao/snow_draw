@@ -122,6 +122,63 @@ void main() {
       expect(document.getElementById(rightId), isNull);
     });
 
+    testWidgets(
+      'keeps static layer stable while previewing additional erased elements',
+      (tester) async {
+        final firstId = await _createRectangle(
+          store,
+          start: const DrawPoint(x: 30, y: 70),
+          end: const DrawPoint(x: 70, y: 110),
+        );
+        final secondId = await _createRectangle(
+          store,
+          start: const DrawPoint(x: 210, y: 70),
+          end: const DrawPoint(x: 250, y: 110),
+        );
+
+        await _pumpCanvas(
+          tester: tester,
+          store: store,
+          currentToolTypeId: null,
+          isSelectionToolActive: false,
+          isEraserToolActive: true,
+        );
+
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: Offset.zero);
+        await tester.pump();
+
+        await mouse.down(const Offset(50, 90));
+        await tester.pump();
+
+        final staticPainterBeforeMove = _staticPainter(tester);
+
+        await mouse.moveTo(const Offset(230, 90));
+        await tester.pump();
+
+        final staticPainterAfterMove = _staticPainter(tester);
+        expect(
+          identical(staticPainterBeforeMove, staticPainterAfterMove),
+          isTrue,
+        );
+
+        final dynamicPainter = _dynamicPainter(tester);
+        expect(
+          dynamicPainter.renderKey.previewElementsById[firstId],
+          isNotNull,
+        );
+        expect(
+          dynamicPainter.renderKey.previewElementsById[secondId],
+          isNotNull,
+        );
+
+        await mouse.up();
+        await tester.pump();
+        await tester.pump();
+      },
+    );
+
     testWidgets('does not interpolate between concurrent eraser pointers', (
       tester,
     ) async {

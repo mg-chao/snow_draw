@@ -1044,12 +1044,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _eraserStrokeProcessor.reset();
       }
       _eraserStrokeProcessor.clearPointer(event.pointer);
+      final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
       final previewChanged = _markElementsForErase(
         pointerId: event.pointer,
         position: position,
       );
-      if (previewChanged && mounted) {
-        setState(() {});
+      if (previewChanged) {
+        _handleEraserPreviewMutation(hadPendingPreview: hadPendingPreview);
       }
       return;
     }
@@ -1167,12 +1168,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!widget.isEraserToolActive) {
       return;
     }
+    final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
     final previewChanged = _markElementsForErase(
       pointerId: event.pointerId,
       position: event.position,
     );
-    if (previewChanged && mounted) {
-      setState(() {});
+    if (previewChanged) {
+      _handleEraserPreviewMutation(hadPendingPreview: hadPendingPreview);
     }
   }
 
@@ -1367,6 +1369,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     queuePreview: _queueElementForErasePreview,
   );
 
+  void _handleEraserPreviewMutation({required bool hadPendingPreview}) {
+    final hasPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
+    if (!mounted) {
+      return;
+    }
+    if (hadPendingPreview != hasPendingPreview) {
+      setState(() {});
+      return;
+    }
+    if (!hasPendingPreview) {
+      return;
+    }
+    _refreshDynamicLayerSnapshot(widget.store.state, assumeChanged: true);
+  }
+
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
     final typeId = element.typeId;
     if (_eraserHitTesterByType.containsKey(typeId)) {
@@ -1396,11 +1413,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
-    if (mounted) {
-      setState(_pendingErasePreviewElementsById.clear);
-    } else {
-      _pendingErasePreviewElementsById.clear();
-    }
+    _pendingErasePreviewElementsById.clear();
+    _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
     } on Object catch (error, stackTrace) {
@@ -1422,11 +1436,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_pendingErasePreviewElementsById.isEmpty) {
       return;
     }
-    if (mounted) {
-      setState(_pendingErasePreviewElementsById.clear);
-      return;
-    }
     _pendingErasePreviewElementsById.clear();
+    _handleEraserPreviewMutation(hadPendingPreview: true);
   }
 
   bool _isMousePointer(PointerEvent event) =>
@@ -2902,18 +2913,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _setDynamicLayerSnapshot({
     required DrawStateView stateView,
     required DynamicCanvasRenderKey renderKey,
+    bool assumeChanged = false,
   }) {
     final nextSnapshot = _DynamicLayerSnapshot(
       stateView: stateView,
       renderKey: renderKey,
     );
-    if (_dynamicLayerSnapshotNotifier.value == nextSnapshot) {
+    if (!assumeChanged && _dynamicLayerSnapshotNotifier.value == nextSnapshot) {
       return;
     }
     _dynamicLayerSnapshotNotifier.value = nextSnapshot;
   }
 
-  void _refreshDynamicLayerSnapshotForSerialInteraction(DrawState state) {
+  void _refreshDynamicLayerSnapshot(
+    DrawState state, {
+    bool assumeChanged = false,
+  }) {
+    if (!mounted) {
+      return;
+    }
     final stateView = _buildStateView(state);
     final scene = _resolveCanvasLayerSceneSnapshot(stateView);
     final locale =
@@ -2926,7 +2944,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scene: scene,
       locale: locale,
     );
-    _setDynamicLayerSnapshot(stateView: stateView, renderKey: renderKey);
+    _setDynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: renderKey,
+      assumeChanged: assumeChanged,
+    );
   }
 
   Widget _buildTextEditorOverlay({
@@ -3683,7 +3705,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(cursor);
     final hoverStateChanged = _clearHoverState();
     if (!hoverStateChanged) {
-      _refreshDynamicLayerSnapshotForSerialInteraction(state);
+      _refreshDynamicLayerSnapshot(state);
     }
   }
 

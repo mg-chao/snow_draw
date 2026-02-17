@@ -24,11 +24,13 @@ class EraserStrokeProcessor {
   final EraserHitTesterResolver _hitTesterResolver;
   final _lastProcessedPositions = <int, DrawPoint>{};
   final _effectiveElementCache = <String, ElementState>{};
+  DrawStateView? _cachedEffectiveStateView;
 
   /// Clears all stroke state.
   void reset() {
     _lastProcessedPositions.clear();
     _effectiveElementCache.clear();
+    _cachedEffectiveStateView = null;
   }
 
   /// Clears the cached last position for a pointer.
@@ -55,7 +57,13 @@ class EraserStrokeProcessor {
 
     final document = stateView.state.domain.document;
     final hasPreviewOverrides = stateView.previewElementsById.isNotEmpty;
-    _effectiveElementCache.clear();
+    if (!hasPreviewOverrides) {
+      _effectiveElementCache.clear();
+      _cachedEffectiveStateView = null;
+    } else if (!identical(_cachedEffectiveStateView, stateView)) {
+      _effectiveElementCache.clear();
+      _cachedEffectiveStateView = stateView;
+    }
 
     var hasNewHits = false;
     _visitStrokeSamples(
