@@ -1,10 +1,11 @@
-﻿import '../../draw/config/draw_config.dart';
+import '../../draw/config/draw_config.dart';
 
 enum HighlightMaskLayer { none, staticLayer, dynamicLayer }
 
 HighlightMaskLayer resolveHighlightMaskLayer({
   required bool hasHighlights,
   required bool hasDynamicContent,
+  required bool hasDynamicHighlights,
   required HighlightMaskConfig config,
 }) {
   if (!hasHighlights) {
@@ -13,7 +14,7 @@ HighlightMaskLayer resolveHighlightMaskLayer({
   if (config.maskOpacity <= 0) {
     return HighlightMaskLayer.none;
   }
-  return hasDynamicContent
+  return hasDynamicContent || hasDynamicHighlights
       ? HighlightMaskLayer.dynamicLayer
       : HighlightMaskLayer.staticLayer;
 }

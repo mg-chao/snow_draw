@@ -573,6 +573,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final hasFreeDrawPreview =
         _freeDrawPreviewLayerController.renderKey.hasPreview;
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
+    final hasDynamicHighlights =
+        stateView.highlightMaskScene.hasDynamicHighlights;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final ownsWholeScene = dynamicLayerStartIndex == 0;
@@ -584,6 +586,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final highlightMaskLayer = resolveHighlightMaskLayer(
       hasHighlights: hasHighlights,
       hasDynamicContent: hasDynamicContent,
+      hasDynamicHighlights: hasDynamicHighlights,
       config: highlightMask,
     );
     final textRenderingCacheRevision =

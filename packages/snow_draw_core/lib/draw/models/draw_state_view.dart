@@ -5,6 +5,7 @@ import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
+import 'document_state.dart';
 import 'element_state.dart';
 import 'global_elements_state.dart';
 import 'interaction_state.dart';
@@ -50,16 +51,32 @@ class EffectiveSelection {
 /// transient elements next, then the in-progress creating element last.
 @immutable
 class HighlightMaskSceneSnapshot {
-  HighlightMaskSceneSnapshot(List<ElementState> elements)
-    : _elements = List<ElementState>.unmodifiable(elements);
+  HighlightMaskSceneSnapshot({
+    required List<ElementState> elements,
+    required List<ElementState> staticElements,
+    required List<ElementState> dynamicElements,
+  }) : _elements = List<ElementState>.unmodifiable(elements),
+       _staticElements = List<ElementState>.unmodifiable(staticElements),
+       _dynamicElements = List<ElementState>.unmodifiable(dynamicElements);
 
   final List<ElementState> _elements;
+  final List<ElementState> _staticElements;
+  final List<ElementState> _dynamicElements;
 
   /// Highlight elements in the order expected by highlight mask compositing.
   List<ElementState> get elements => _elements;
 
+  /// Stable highlights that do not change on every interaction frame.
+  List<ElementState> get staticElements => _staticElements;
+
+  /// Highlights whose geometry/style can change on the current frame.
+  List<ElementState> get dynamicElements => _dynamicElements;
+
   /// Whether at least one highlight is present in this snapshot.
   bool get hasHighlights => _elements.isNotEmpty;
+
+  /// Whether any highlight is dynamic for the active interaction.
+  bool get hasDynamicHighlights => _dynamicElements.isNotEmpty;
 }
 
 /// A unified "effective state" view for rendering and hit-testing.
@@ -168,12 +185,20 @@ class DrawStateView {
 
   HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
     final document = state.domain.document;
+    final dynamicHighlightIds = _resolveDynamicHighlightIds(document);
     final highlights = <ElementState>[];
+    final staticHighlights = <ElementState>[];
+    final dynamicHighlights = <ElementState>[];
 
     for (final element in document.highlightElements) {
       final effective = _previewElementsById[element.id] ?? element;
       if (effective.data is HighlightData) {
         highlights.add(effective);
+        if (dynamicHighlightIds.contains(effective.id)) {
+          dynamicHighlights.add(effective);
+        } else {
+          staticHighlights.add(effective);
+        }
       }
     }
 
@@ -184,6 +209,7 @@ class DrawStateView {
         }
         if (preview.data is HighlightData) {
           highlights.add(preview);
+          dynamicHighlights.add(preview);
         }
       }
     }
@@ -194,12 +220,45 @@ class DrawStateView {
       final creatingElement = interaction.element.copyWith(
         rect: interaction.currentRect,
       );
-      highlights
-        ..removeWhere((element) => element.id == creatingElement.id)
-        ..add(creatingElement);
+      highlights.removeWhere((element) => element.id == creatingElement.id);
+      staticHighlights.removeWhere(
+        (element) => element.id == creatingElement.id,
+      );
+      dynamicHighlights.removeWhere(
+        (element) => element.id == creatingElement.id,
+      );
+      highlights.add(creatingElement);
+      dynamicHighlights.add(creatingElement);
     }
 
-    return HighlightMaskSceneSnapshot(highlights);
+    return HighlightMaskSceneSnapshot(
+      elements: highlights,
+      staticElements: staticHighlights,
+      dynamicElements: dynamicHighlights,
+    );
+  }
+
+  Set<String> _resolveDynamicHighlightIds(DocumentState document) {
+    final ids = <String>{};
+    if (_previewElementsById.isNotEmpty) {
+      for (final entry in _previewElementsById.entries) {
+        final preview = entry.value;
+        if (preview.data is! HighlightData) {
+          continue;
+        }
+        final persisted = document.getElementById(entry.key);
+        if (persisted == null || persisted != preview) {
+          ids.add(entry.key);
+        }
+      }
+    }
+
+    final interaction = state.application.interaction;
+    if (interaction is CreatingState &&
+        interaction.elementData is HighlightData) {
+      ids.add(interaction.elementId);
+    }
+    return ids;
   }
 
   @override

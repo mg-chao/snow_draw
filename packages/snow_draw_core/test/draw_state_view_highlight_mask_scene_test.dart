@@ -108,6 +108,18 @@ void main() {
         view.highlightMaskScene.elements.map((element) => element.id).toList(),
         ['h1', 'h_preview'],
       );
+      expect(
+        view.highlightMaskScene.staticElements
+            .map((element) => element.id)
+            .toList(),
+        ['h1'],
+      );
+      expect(
+        view.highlightMaskScene.dynamicElements
+            .map((element) => element.id)
+            .toList(),
+        ['h_preview'],
+      );
     },
   );
 
@@ -147,6 +159,19 @@ void main() {
       'creating',
     ]);
     expect(highlights.last.rect, creatingRect);
+    expect(
+      view.highlightMaskScene.staticElements
+          .map((element) => element.id)
+          .toList(),
+      ['h1'],
+    );
+    expect(
+      view.highlightMaskScene.dynamicElements
+          .map((element) => element.id)
+          .toList(),
+      ['creating'],
+    );
+    expect(view.highlightMaskScene.hasDynamicHighlights, isTrue);
   });
 
   test(
@@ -240,6 +265,50 @@ void main() {
     expect(view.highlightMaskScene.elements.map((element) => element.id), [
       'h1',
     ]);
+    expect(view.highlightMaskScene.dynamicElements, isEmpty);
+  });
+
+  test('marks edited highlight previews as dynamic', () {
+    const h1 = ElementState(
+      id: 'h1',
+      rect: DrawRect(maxX: 10, maxY: 10),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: HighlightData(),
+    );
+    const h2 = ElementState(
+      id: 'h2',
+      rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: HighlightData(),
+    );
+    final movedH2 = h2.copyWith(
+      rect: const DrawRect(minX: 24, minY: 2, maxX: 34, maxY: 12),
+    );
+
+    final state = _buildState(elements: const [h1, h2]);
+    final view = DrawStateView.withPreview(
+      state: state,
+      previewElementsById: {h2.id: movedH2},
+      effectiveSelection: EffectiveSelection.none,
+      snapGuides: const [],
+    );
+
+    expect(
+      view.highlightMaskScene.staticElements
+          .map((element) => element.id)
+          .toList(),
+      ['h1'],
+    );
+    expect(
+      view.highlightMaskScene.dynamicElements
+          .map((element) => element.id)
+          .toList(),
+      ['h2'],
+    );
   });
 }
 

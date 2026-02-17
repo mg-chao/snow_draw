@@ -57,6 +57,7 @@ class DynamicCanvasPainter extends CustomPainter {
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
   static final _interactionSceneCache = InteractionSceneCache();
   static final _visibleSceneCache = VisibleElementSceneCache();
+  static _SceneRenderContextCacheEntry? _sceneRenderContextCache;
   static final _arrowOverlayPaints = _ArrowOverlayPaints();
   static final _arrowHoverStrokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -706,9 +707,25 @@ class DynamicCanvasPainter extends CustomPainter {
   }) {
     final document = stateView.state.domain.document;
     final previewElements = renderKey.previewElementsById;
+    final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
+    final creatingFilterId = _resolveCreatingFilterId();
+    final serialConnectorPreviewElements =
+        _extractSerialConnectorPreviewElements(previewElements);
+    final cached = _sceneRenderContextCache;
+    if (cached != null &&
+        cached.matches(
+          document: document,
+          elements: elements,
+          dynamicPreviewIds: dynamicPreviewIds,
+          creatingFilterId: creatingFilterId,
+          serialConnectorPreviewElements: serialConnectorPreviewElements,
+        )) {
+      return cached.context;
+    }
+
     final canHaveSerialConnectors =
         document.boundTextIds.isNotEmpty ||
-        _previewMayAffectSerialConnectors(previewElements);
+        serialConnectorPreviewElements.isNotEmpty;
 
     var hasFilterElement = false;
     final filterElementIds = <String>{};
@@ -745,7 +762,8 @@ class DynamicCanvasPainter extends CustomPainter {
             dynamicTextElementIds: <String>{},
           );
     final dynamicElementIds = _resolveDynamicElementIds(
-      creatingFilterId: _resolveCreatingFilterId(),
+      dynamicPreviewIds: dynamicPreviewIds,
+      creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
     var hasDynamicFilterElement = false;
@@ -759,13 +777,22 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
-    return _SceneRenderContext(
+    final context = _SceneRenderContext(
       hasFilterElement: hasFilterElement,
       hasDynamicFilterElement: hasDynamicFilterElement,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       dynamicElementIds: dynamicElementIds,
     );
+    _sceneRenderContextCache = _SceneRenderContextCacheEntry(
+      document: document,
+      elements: elements,
+      dynamicPreviewIds: dynamicPreviewIds,
+      creatingFilterId: creatingFilterId,
+      serialConnectorPreviewElements: serialConnectorPreviewElements,
+      context: context,
+    );
+    return context;
   }
 
   void _paintSceneElement({
@@ -790,19 +817,22 @@ class DynamicCanvasPainter extends CustomPainter {
     }
   }
 
-  bool _previewMayAffectSerialConnectors(
+  Map<String, ElementState> _extractSerialConnectorPreviewElements(
     Map<String, ElementState> previewElementsById,
   ) {
     if (previewElementsById.isEmpty) {
-      return false;
+      return const <String, ElementState>{};
     }
-    for (final preview in previewElementsById.values) {
+
+    Map<String, ElementState>? relevant;
+    for (final entry in previewElementsById.entries) {
+      final preview = entry.value;
       final data = preview.data;
       if (data is SerialNumberData || data is TextData) {
-        return true;
+        (relevant ??= <String, ElementState>{})[entry.key] = preview;
       }
     }
-    return false;
+    return relevant ?? const <String, ElementState>{};
   }
 
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
@@ -885,11 +915,10 @@ class DynamicCanvasPainter extends CustomPainter {
   }
 
   Set<String> _resolveDynamicElementIds({
+    required Set<String> dynamicPreviewIds,
     String? creatingFilterId,
     Iterable<String> serialConnectorTextIds = const <String>{},
   }) {
-    final previewElements = renderKey.previewElementsById;
-    final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
     final hasPreviewElements = dynamicPreviewIds.isNotEmpty;
     final hasCreatingFilter = creatingFilterId != null;
     final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
@@ -1960,4 +1989,71 @@ class _SceneRenderContext {
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> dynamicElementIds;
+}
+
+class _SceneRenderContextCacheEntry {
+  _SceneRenderContextCacheEntry({
+    required this.document,
+    required this.elements,
+    required Set<String> dynamicPreviewIds,
+    required this.creatingFilterId,
+    required Map<String, ElementState> serialConnectorPreviewElements,
+    required this.context,
+  }) : dynamicPreviewIds = Set<String>.unmodifiable(dynamicPreviewIds),
+       serialConnectorPreviewElements = Map<String, ElementState>.unmodifiable(
+         serialConnectorPreviewElements,
+       );
+
+  final DocumentState document;
+  final List<ElementState> elements;
+  final Set<String> dynamicPreviewIds;
+  final String? creatingFilterId;
+  final Map<String, ElementState> serialConnectorPreviewElements;
+  final _SceneRenderContext context;
+
+  bool matches({
+    required DocumentState document,
+    required List<ElementState> elements,
+    required Set<String> dynamicPreviewIds,
+    required String? creatingFilterId,
+    required Map<String, ElementState> serialConnectorPreviewElements,
+  }) =>
+      identical(this.document, document) &&
+      identical(this.elements, elements) &&
+      this.creatingFilterId == creatingFilterId &&
+      _setEquals(this.dynamicPreviewIds, dynamicPreviewIds) &&
+      _mapsEqual(
+        this.serialConnectorPreviewElements,
+        serialConnectorPreviewElements,
+      );
+
+  static bool _setEquals<T>(Set<T> a, Set<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (final value in a) {
+      if (!b.contains(value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || a[key] != b[key]) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
