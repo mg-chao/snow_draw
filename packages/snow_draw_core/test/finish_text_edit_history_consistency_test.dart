@@ -34,6 +34,74 @@ void main() {
     });
 
     test(
+      'UpdateTextEdit shrinks fixed-width text edit bounds to fit content',
+      () async {
+        const initialRect = DrawRect(minX: 10, minY: 10, maxX: 210, maxY: 210);
+        final store = _createStore(
+          initialState: _stateWithActiveTextEdit(
+            elementId: 'text-1',
+            initialText: 'seed',
+            draftText: 'seed',
+            rect: initialRect,
+            autoResize: false,
+          ),
+        );
+        addTearDown(store.dispose);
+
+        const nextText = 'short';
+        const nextData = TextData(text: nextText, autoResize: false);
+        final expectedRect = _fixedWidthTextRect(
+          currentRect: initialRect,
+          data: nextData,
+        );
+
+        await store.dispatch(const UpdateTextEdit(text: nextText));
+
+        final interaction = store.state.application.interaction;
+        expect(interaction, isA<TextEditingState>());
+        final editing = interaction as TextEditingState;
+        expect(editing.rect, equals(expectedRect));
+        expect(editing.rect.height, lessThan(initialRect.height));
+      },
+    );
+
+    test(
+      'FinishTextEdit persists shrunk bounds for fixed-width text elements',
+      () async {
+        const initialRect = DrawRect(minX: 10, minY: 10, maxX: 210, maxY: 210);
+        final store = _createStore(
+          initialState: _stateWithActiveTextEdit(
+            elementId: 'text-1',
+            initialText: 'seed',
+            draftText: 'seed',
+            rect: initialRect,
+            autoResize: false,
+          ),
+        );
+        addTearDown(store.dispose);
+
+        const nextText = 'short';
+        const nextData = TextData(text: nextText, autoResize: false);
+        final expectedRect = _fixedWidthTextRect(
+          currentRect: initialRect,
+          data: nextData,
+        );
+
+        await store.dispatch(
+          const FinishTextEdit(
+            elementId: 'text-1',
+            text: nextText,
+            isNew: false,
+          ),
+        );
+
+        final element = store.state.domain.document.getElementById('text-1');
+        expect(element, isNotNull);
+        expect(element!.rect, equals(expectedRect));
+      },
+    );
+
+    test(
       'undo restores text content when action payload matches session',
       () async {
         final store = _createStore(
@@ -188,6 +256,7 @@ DrawState _stateWithActiveTextEdit({
   required String initialText,
   required String draftText,
   DrawRect? rect,
+  bool autoResize = true,
 }) {
   final resolvedRect = rect ?? _autoResizeTextRect(initialText);
   final initial = DrawState(
@@ -200,7 +269,7 @@ DrawState _stateWithActiveTextEdit({
             rotation: 0,
             opacity: 1,
             zIndex: 0,
-            data: TextData(text: initialText),
+            data: TextData(text: initialText, autoResize: autoResize),
           ),
         ],
       ),
@@ -210,7 +279,7 @@ DrawState _stateWithActiveTextEdit({
 
   final interaction = TextEditingState(
     elementId: elementId,
-    draftData: TextData(text: draftText),
+    draftData: TextData(text: draftText, autoResize: autoResize),
     rect: resolvedRect,
     isNew: false,
     opacity: 1,
@@ -273,5 +342,21 @@ DrawRect _autoResizeTextRect(
     minY: originY,
     maxX: originX + width,
     maxY: originY + height,
+  );
+}
+
+DrawRect _fixedWidthTextRect({
+  required DrawRect currentRect,
+  required TextData data,
+}) {
+  final layout = layoutText(data: data, maxWidth: currentRect.width);
+  final height = layout.size.height > layout.lineHeight
+      ? layout.size.height
+      : layout.lineHeight;
+  return DrawRect(
+    minX: currentRect.minX,
+    minY: currentRect.minY,
+    maxX: currentRect.maxX,
+    maxY: currentRect.minY + height,
   );
 }

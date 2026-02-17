@@ -419,5 +419,28 @@ class TextEditingState extends InteractionState {
   );
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextEditingState &&
+          other.elementId == elementId &&
+          other.draftData == draftData &&
+          other.rect == rect &&
+          other.isNew == isNew &&
+          other.opacity == opacity &&
+          other.rotation == rotation &&
+          other.initialCursorPosition == initialCursorPosition;
+
+  @override
+  int get hashCode => Object.hash(
+    elementId,
+    draftData,
+    rect,
+    isNew,
+    opacity,
+    rotation,
+    initialCursorPosition,
+  );
+
+  @override
   String toString() => 'TextEditingState(elementId: $elementId, isNew: $isNew)';
 }

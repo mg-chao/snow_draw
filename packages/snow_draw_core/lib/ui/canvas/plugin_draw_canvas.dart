@@ -54,6 +54,7 @@ import 'highlight_mask_visibility.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
+import 'text_editing_state_change.dart';
 import 'watermark_canvas_painter.dart';
 
 /// DrawCanvas based on the plugin system.
@@ -3302,6 +3303,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     if (previousState != null &&
         _isWatermarkOnlyStateChange(previousState, state)) {
+      return;
+    }
+    // Keystrokes in text editing mutate only the draft payload and trigger
+    // very high-frequency state updates. Skip cursor hit-testing work and
+    // rebuild directly so typing stays at the display refresh rate.
+    if (previousState != null &&
+        isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
+      if (mounted) {
+        setState(() {});
+      }
       return;
     }
 
