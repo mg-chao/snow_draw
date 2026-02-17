@@ -537,11 +537,15 @@ class DynamicCanvasPainter extends CustomPainter {
       return const <ElementState>[];
     }
 
+    final previewElementsById = renderKey.previewElementsById;
     final effectiveById = <String, ElementState>{};
+    final effectiveAabbsById = <String, DrawRect>{};
+    final seedAabbsById = <String, DrawRect>{};
+    final seedOrderIndexById = <String, int>{};
+
     for (final elementId in optimizedElementIds) {
       final effective =
-          renderKey.previewElementsById[elementId] ??
-          document.getElementById(elementId);
+          previewElementsById[elementId] ?? document.getElementById(elementId);
       if (effective == null || effective.opacity <= 0) {
         continue;
       }
@@ -550,58 +554,73 @@ class DynamicCanvasPainter extends CustomPainter {
         continue;
       }
       effectiveById[elementId] = effective;
+      effectiveAabbsById[elementId] = aabb;
+      seedAabbsById[elementId] = aabb;
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex != null) {
+        seedOrderIndexById[elementId] = orderIndex;
+      }
     }
 
     if (effectiveById.isEmpty) {
       return const <ElementState>[];
     }
 
-    final seedAabbsById = <String, DrawRect>{};
-    final effectiveAabbsById = <String, DrawRect>{};
-    for (final entry in effectiveById.entries) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(entry.value);
-      seedAabbsById[entry.key] = aabb;
-      effectiveAabbsById[entry.key] = aabb;
+    final orderIndexCache = <String, int?>{};
+    int? resolveOrderIndex(String elementId) {
+      if (orderIndexCache.containsKey(elementId)) {
+        return orderIndexCache[elementId];
+      }
+      final orderIndex = document.getOrderIndex(elementId);
+      orderIndexCache[elementId] = orderIndex;
+      return orderIndex;
+    }
+
+    DrawRect resolveAabb(ElementState element) {
+      final cached = effectiveAabbsById[element.id];
+      if (cached != null) {
+        return cached;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(element);
+      effectiveAabbsById[element.id] = aabb;
+      return aabb;
     }
 
     for (final entry in seedAabbsById.entries) {
       final seedElement = effectiveById[entry.key];
-      if (seedElement == null) {
-        continue;
-      }
-      final seedAabb = entry.value;
-      final orderIndex = document.getOrderIndex(entry.key);
-      if (orderIndex == null) {
+      final seedOrderIndex = seedOrderIndexById[entry.key];
+      if (seedElement == null || seedOrderIndex == null) {
         continue;
       }
       final queryRects = resolveOptimizedOccluderQueryRects(
         seedElement: seedElement,
-        seedAabb: seedAabb,
+        seedAabb: entry.value,
       );
       for (final queryRect in queryRects) {
-        final occluders = document.queryElementsInRectOrdered(
-          queryRect,
-          minOrderIndex: orderIndex + 1,
-        );
-        for (final element in occluders) {
-          if (optimizedElementIds.contains(element.id)) {
-            continue;
+        document.visitElementsInRect(queryRect, (element) {
+          final elementId = element.id;
+          if (optimizedElementIds.contains(elementId)) {
+            return true;
           }
-          final effective =
-              renderKey.previewElementsById[element.id] ?? element;
+          if (effectiveById.containsKey(elementId)) {
+            return true;
+          }
+          final orderIndex = resolveOrderIndex(elementId);
+          if (orderIndex == null || orderIndex <= seedOrderIndex) {
+            return true;
+          }
+          final effective = previewElementsById[elementId] ?? element;
           if (effective.opacity <= 0) {
-            continue;
+            return true;
           }
-          final aabb =
-              effectiveAabbsById[element.id] ??
-              SelectionCalculator.computeElementWorldAabb(effective);
-          effectiveAabbsById[element.id] = aabb;
+          final aabb = resolveAabb(effective);
           if (!_rectsIntersect(aabb, queryRect) ||
               !_rectsIntersect(aabb, viewportRect)) {
-            continue;
+            return true;
           }
-          effectiveById[element.id] = effective;
-        }
+          effectiveById[elementId] = effective;
+          return true;
+        });
       }
     }
 
@@ -611,8 +630,8 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     optimized.sort((a, b) {
-      final orderA = document.getOrderIndex(a.id) ?? a.zIndex;
-      final orderB = document.getOrderIndex(b.id) ?? b.zIndex;
+      final orderA = resolveOrderIndex(a.id) ?? a.zIndex;
+      final orderB = resolveOrderIndex(b.id) ?? b.zIndex;
       final orderComparison = orderA.compareTo(orderB);
       if (orderComparison != 0) {
         return orderComparison;
