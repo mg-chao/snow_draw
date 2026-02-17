@@ -206,6 +206,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     null,
   );
   late final ValueNotifier<_DynamicLayerSnapshot> _dynamicLayerSnapshotNotifier;
+  StaticCanvasRenderKey? _lastStaticRenderKey;
   late final FrameAlignedEventDispatcher<_PendingTextDraftSync>
   _textDraftDispatcher;
   _PendingTextDraftSync? _pendingTextDraftSync;
@@ -415,8 +416,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     widget.watermarkPreviewListenable?.addListener(
       _handleWatermarkPreviewChange,
     );
+    final initialDynamicSnapshot = _createInitialDynamicLayerSnapshot(
+      initialState,
+    );
     _dynamicLayerSnapshotNotifier = ValueNotifier<_DynamicLayerSnapshot>(
-      _createInitialDynamicLayerSnapshot(initialState),
+      initialDynamicSnapshot,
+    );
+    final initialScene = _resolveCanvasLayerSceneSnapshot(
+      initialDynamicSnapshot.stateView,
+    );
+    _lastStaticRenderKey = _buildStaticRenderKey(
+      stateView: initialDynamicSnapshot.stateView,
+      scaleFactor: _effectiveScaleFactor(),
+      scene: initialScene,
+      locale: null,
     );
 
     // Preload GPU shaders for optimal first-frame performance.
@@ -473,8 +486,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cachedInputSelectionConfig = null;
         _cachedInputSelectionScale = null;
         _syncTextEditingOverlayState(widget.store.state);
-        _dynamicLayerSnapshotNotifier.value =
-            _createInitialDynamicLayerSnapshot(widget.store.state);
+        final initialDynamicSnapshot = _createInitialDynamicLayerSnapshot(
+          widget.store.state,
+        );
+        _dynamicLayerSnapshotNotifier.value = initialDynamicSnapshot;
+        final initialScene = _resolveCanvasLayerSceneSnapshot(
+          initialDynamicSnapshot.stateView,
+        );
+        _lastStaticRenderKey = _buildStaticRenderKey(
+          stateView: initialDynamicSnapshot.stateView,
+          scaleFactor: _effectiveScaleFactor(),
+          scene: initialScene,
+          locale: _lastStaticRenderKey?.locale,
+        );
 
         _stateUnsubscribe = widget.store.listen(
           _handleStateChange,
@@ -583,6 +607,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scene: layerScene,
       locale: locale,
     );
+    _lastStaticRenderKey = staticRenderKey;
     _setDynamicLayerSnapshot(stateView: stateView, renderKey: dynamicRenderKey);
 
     final paintStack = Listener(
@@ -1153,6 +1178,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _updateCursorAndHoverForPosition(event.position);
+    _refreshDynamicLayerSnapshot(widget.store.state);
     if (!event.dispatchPluginHover || widget.isEraserToolActive) {
       return;
     }
@@ -1304,6 +1330,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final position = _recordPointerPosition(event.localPosition);
     _hoverMoveDispatcher.reset();
     _updateCursorAndHoverForPosition(position);
+    _refreshDynamicLayerSnapshot(widget.store.state);
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
@@ -1319,17 +1346,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastPointerPosition = null;
     _eraserCursorPositionNotifier.value = null;
     _hoverMoveDispatcher.reset();
-    if (_hoveredSelectionElementId != null ||
-        _hoveredBindingElementId != null ||
-        _hoveredArrowHandle != null) {
-      setState(() {
-        _hoveredSelectionElementId = null;
-        _hoveredBindingElementId = null;
-        _hoveredArrowHandle = null;
-      });
-    }
+    _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
     final nextCursor = _resolveCursorForState(widget.store.state, null);
     _updateCursorIfChanged(nextCursor);
+    _refreshDynamicLayerSnapshot(widget.store.state);
   }
 
   void _queueHoverUpdate({
@@ -1374,14 +1394,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       return;
     }
-    if (hadPendingPreview != hasPendingPreview) {
-      setState(() {});
+    if (!hasPendingPreview && !hadPendingPreview) {
       return;
     }
-    if (!hasPendingPreview) {
-      return;
-    }
-    _refreshDynamicLayerSnapshot(widget.store.state, assumeChanged: true);
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -1485,6 +1504,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
       _clearHoverState();
     }
+    _refreshDynamicLayerSnapshot(widget.store.state);
   }
 
   double? _resolvePrimaryScrollDelta(PointerScrollEvent event) {
@@ -2079,11 +2099,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _hoveredArrowHandle == arrowHandle) {
       return false;
     }
-    setState(() {
-      _hoveredSelectionElementId = selectionId;
-      _hoveredBindingElementId = bindingId;
-      _hoveredArrowHandle = arrowHandle;
-    });
+    _hoveredSelectionElementId = selectionId;
+    _hoveredBindingElementId = bindingId;
+    _hoveredArrowHandle = arrowHandle;
     return true;
   }
 
@@ -2925,31 +2943,62 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _dynamicLayerSnapshotNotifier.value = nextSnapshot;
   }
 
-  void _refreshDynamicLayerSnapshot(
+  Locale? _resolveCanvasLocale() =>
+      Localizations.maybeLocaleOf(context) ??
+      _dynamicLayerSnapshotNotifier.value.renderKey.locale ??
+      _lastStaticRenderKey?.locale;
+
+  void _refreshCanvasLayerSnapshots(
     DrawState state, {
-    bool assumeChanged = false,
+    bool assumeDynamicChanged = false,
+    bool refreshStaticLayer = true,
   }) {
     if (!mounted) {
       return;
     }
+
     final stateView = _buildStateView(state);
     final scene = _resolveCanvasLayerSceneSnapshot(stateView);
-    final locale =
-        Localizations.maybeLocaleOf(context) ??
-        _dynamicLayerSnapshotNotifier.value.renderKey.locale;
-    final renderKey = _buildDynamicRenderKey(
+    final scaleFactor = _effectiveScaleFactor();
+    final locale = _resolveCanvasLocale();
+    final dynamicRenderKey = _buildDynamicRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
-      scaleFactor: _effectiveScaleFactor(),
+      scaleFactor: scaleFactor,
       scene: scene,
       locale: locale,
     );
     _setDynamicLayerSnapshot(
       stateView: stateView,
-      renderKey: renderKey,
-      assumeChanged: assumeChanged,
+      renderKey: dynamicRenderKey,
+      assumeChanged: assumeDynamicChanged,
     );
+
+    if (!refreshStaticLayer) {
+      return;
+    }
+
+    final staticRenderKey = _buildStaticRenderKey(
+      stateView: stateView,
+      scaleFactor: scaleFactor,
+      scene: scene,
+      locale: locale,
+    );
+    final staticLayerChanged = _lastStaticRenderKey != staticRenderKey;
+    _lastStaticRenderKey = staticRenderKey;
+    if (staticLayerChanged) {
+      setState(() {});
+    }
   }
+
+  void _refreshDynamicLayerSnapshot(
+    DrawState state, {
+    bool assumeChanged = false,
+  }) => _refreshCanvasLayerSnapshots(
+    state,
+    assumeDynamicChanged: assumeChanged,
+    refreshStaticLayer: false,
+  );
 
   Widget _buildTextEditorOverlay({
     required double scaleFactor,
@@ -3622,9 +3671,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleSerialNumberInteractionMutation(state);
       return;
     }
+    final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
-      final position = _lastPointerPosition;
       if (position != null && _isPointerInside) {
         if (!mounted) {
           _cursor = _resolveCursorForState(state, position);
@@ -3634,27 +3683,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           return;
         }
         _updateCursorAndHoverForPosition(position);
-        return;
+      } else {
+        final cursor = _resolveCursorForState(state, position);
+        if (!mounted) {
+          _cursor = cursor;
+          _hoveredSelectionElementId = null;
+          _hoveredBindingElementId = null;
+          _hoveredArrowHandle = null;
+          return;
+        }
+        _updateCursorIfChanged(cursor);
+        _clearHoverState();
       }
-      final cursor = _resolveCursorForState(state, position);
-      if (!mounted) {
-        _cursor = cursor;
-        _hoveredSelectionElementId = null;
-        _hoveredBindingElementId = null;
-        _hoveredArrowHandle = null;
-        return;
-      }
-      _updateCursorIfChanged(cursor);
-      _clearHoverState();
+      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
       return;
     }
 
-    final position = _lastPointerPosition;
     if (position != null && _isPointerInside) {
       // Use the combined path when a pointer position is available.
       if (!mounted) {
-        // When not mounted we cannot call setState, so compute
-        // cursor and hover state directly.
         _cursor = _resolveCursorForState(state, position);
         _hoveredSelectionElementId = null;
         _hoveredBindingElementId = _resolveHoverBindingElementId(
@@ -3667,16 +3714,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         );
         return;
       }
-      final hoverStateChanged = _updateCursorAndHoverForPosition(position);
-      // Always rebuild on state changes so the canvas picks up new
-      // interaction state (e.g. creating element with appended points).
-      // _updateCursorAndHoverForPosition only calls setState when hover
-      // values change, which is not enough for live creation updates.
-      if (!hoverStateChanged) {
-        setState(() {});
-      }
+      _updateCursorAndHoverForPosition(position);
+      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
       return;
     }
+
     final cursor = _resolveCursorForState(state, position);
     if (!mounted) {
       _cursor = cursor;
@@ -3686,11 +3728,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _updateCursorIfChanged(cursor);
-    final hoverStateChanged = _clearHoverState();
-    // Rebuild unconditionally so the canvas reflects the new state.
-    if (!hoverStateChanged) {
-      setState(() {});
-    }
+    _clearHoverState();
+    _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
 
   void _handleSerialNumberInteractionMutation(DrawState state) {
@@ -3703,10 +3742,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _updateCursorIfChanged(cursor);
-    final hoverStateChanged = _clearHoverState();
-    if (!hoverStateChanged) {
-      _refreshDynamicLayerSnapshot(state);
-    }
+    _clearHoverState();
+    _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
 
   void _handleConfigChange(DrawConfig _) {
@@ -3718,18 +3755,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _cachedInputSelectionScale = null;
 
     final position = _lastPointerPosition;
-    late final bool hoverStateChanged;
     if (position != null && _isPointerInside) {
-      hoverStateChanged = _updateCursorAndHoverForPosition(position);
+      _updateCursorAndHoverForPosition(position);
     } else {
       _updateCursorIfChanged(
         _resolveCursorForState(widget.store.state, position),
       );
-      hoverStateChanged = _clearHoverState();
+      _clearHoverState();
     }
-    if (!hoverStateChanged) {
-      setState(() {});
-    }
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   void _handleTextRenderingCacheInvalidation() {
@@ -3739,7 +3776,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _editingTextLayout = null;
     _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
-    setState(() {});
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   void _handleSystemFontsChange() {

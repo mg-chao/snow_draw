@@ -137,8 +137,10 @@ void main() {
     expect(watermarkAfter.controller.state.isVisible, isFalse);
   });
 
-  testWidgets('watermark updates do not skip scene rebuild '
-      'when selection overlay changes', (tester) async {
+  testWidgets('watermark updates keep static scene stable '
+      'while refreshing dynamic overlays for selection changes', (
+    tester,
+  ) async {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
     final context = DrawContext.withDefaults(elementRegistry: registry);
@@ -181,7 +183,7 @@ void main() {
     final dynamicAfter = _dynamicPainter(tester);
     final watermarkAfter = _watermarkPainter(tester);
 
-    expect(identical(staticBefore, staticAfter), isFalse);
+    expect(identical(staticBefore, staticAfter), isTrue);
     expect(identical(dynamicBefore, dynamicAfter), isFalse);
     expect(identical(watermarkBefore, watermarkAfter), isTrue);
     expect(watermarkAfter.controller.state.config.text, 'AUDIT');
