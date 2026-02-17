@@ -1,9 +1,9 @@
 import 'package:meta/meta.dart';
 
 import '../../draw/edit/arrow/arrow_point_operation.dart';
+import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
-import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/document_state.dart';
@@ -50,9 +50,9 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
     return textEditingPlan;
   }
 
-  final linePointPlan = _resolveLinePointOptimizationPlan(view);
-  if (linePointPlan != null) {
-    return linePointPlan;
+  final arrowPointPlan = _resolveArrowPointOptimizationPlan(view);
+  if (arrowPointPlan != null) {
+    return arrowPointPlan;
   }
 
   final serialPlan = _resolveSerialNumberOptimizationPlan(view);
@@ -100,7 +100,7 @@ DynamicSceneOptimizationPlan? _resolveTextEditingOptimizationPlan(
   return DynamicSceneOptimizationPlan.single(interaction.elementId);
 }
 
-DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
+DynamicSceneOptimizationPlan? _resolveArrowPointOptimizationPlan(
   DrawStateView view,
 ) {
   final interaction = view.state.application.interaction;
@@ -118,10 +118,10 @@ DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
   final preview = view.previewElementsById[elementId];
   final document = view.state.domain.document;
   final element = document.getElementById(elementId);
-  if (element == null ||
-      element.data is! LineData ||
-      preview == null ||
-      preview.data is! LineData) {
+  if (element == null || element.data is! ArrowLikeData) {
+    return null;
+  }
+  if (preview != null && preview.data is! ArrowLikeData) {
     return null;
   }
 

@@ -478,7 +478,6 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     referencePoint: lineEndpoints.segmentStart,
     targetCache: sessionData.endTargetCache,
-    targetCacheThresholdFactor: _lineBindingCacheTargetThresholdFactor,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
@@ -538,9 +537,8 @@ CreationUpdateResult _updateLine({
 }
 
 const _loopCloseToleranceMultiplier = 1.5;
-const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _defaultBindingCacheTargetThresholdFactor = 0.9;
 const _defaultBindingCacheEmptyThresholdFactor = 0.75;
-const _lineBindingCacheTargetThresholdFactor = 0.9;
 
 _LineEndpointResolution _resolveLineEndpoints({
   required DrawState state,
@@ -576,7 +574,6 @@ _LineEndpointResolution _resolveLineEndpoints({
     preferredBinding: data.startBinding,
     referencePoint: adjustedCurrent,
     sessionData: sessionData,
-    targetCacheThresholdFactor: _lineBindingCacheTargetThresholdFactor,
   );
   startPosition = startBindingResult.position;
 
@@ -754,94 +751,36 @@ _BindingSnapResult _snapBindingPoint({
   double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
 }) {
   final snapConfig = config.snap;
-  final bindingEnabled = ArrowBindingSnapper.shouldAttemptBinding(
+  final shouldLookupBindings = ArrowBindingSnapper.shouldAttemptBinding(
     snapConfig: snapConfig,
     snappingMode: snappingMode,
   );
-  if (!bindingEnabled) {
+  final bindingDistance = shouldLookupBindings
+      ? ArrowBindingSnapper.resolveBindingDistance(
+          state: state,
+          snapConfig: snapConfig,
+        )
+      : 0.0;
+  if (!shouldLookupBindings || bindingDistance <= 0) {
     targetCache?.reset();
     return _BindingSnapResult(position: position);
   }
-  final bindingDistance = ArrowBindingSnapper.resolveBindingDistance(
+
+  final candidate = ArrowBindingSnapper.resolveEndpointBindingCandidate(
     state: state,
-    snapConfig: snapConfig,
-  );
-  if (bindingDistance <= 0) {
-    targetCache?.reset();
-    return _BindingSnapResult(position: position);
-  }
-
-  final preferredDirect =
-      ArrowBindingSnapper.resolvePreferredBindingCandidateDirect(
-        state: state,
-        worldPoint: position,
-        arrowType: arrowType,
-        arrowheadStyle: arrowheadStyle,
-        snapDistance: bindingDistance,
-        allowNewBinding: true,
-        preferredBinding: preferredBinding,
-        referencePoint: referencePoint,
-      );
-  if (preferredDirect != null) {
-    return _BindingSnapResult(
-      position: preferredDirect.snapPoint,
-      binding: preferredDirect.binding,
-    );
-  }
-
-  if (!state.domain.document.hasArrowBindableElements) {
-    targetCache?.reset();
-    return _BindingSnapResult(position: position);
-  }
-
-  final bindingSearchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
-    bindingDistance,
-  );
-  final targets = ArrowBindingSnapper.resolveBindingTargetsCached(
-    state: state,
-    position: position,
-    distance: bindingSearchDistance,
+    worldPoint: position,
+    arrowType: arrowType,
+    arrowheadStyle: arrowheadStyle,
+    shouldLookupBindings: shouldLookupBindings,
+    snapDistance: bindingDistance,
+    allowNewBinding: true,
+    hasBindableTargets: state.domain.document.hasArrowBindableElements,
+    preferredBinding: preferredBinding,
+    referencePoint: referencePoint,
     cache: targetCache,
     targetCacheThresholdFactor: targetCacheThresholdFactor,
     emptyCacheThresholdFactor: emptyCacheThresholdFactor,
   );
-  if (targets.isEmpty) {
-    return _BindingSnapResult(position: position);
-  }
-
-  final preferredCandidate =
-      ArrowBindingSnapper.resolvePreferredBindingCandidate(
-        worldPoint: position,
-        targets: targets,
-        arrowType: arrowType,
-        arrowheadStyle: arrowheadStyle,
-        snapDistance: bindingDistance,
-        allowNewBinding: true,
-        preferredBinding: preferredBinding,
-        referencePoint: referencePoint,
-      );
-  if (preferredCandidate != null) {
-    return _BindingSnapResult(
-      position: preferredCandidate.snapPoint,
-      binding: preferredCandidate.binding,
-    );
-  }
-
-  final candidate = arrowType == ArrowType.elbow
-      ? ArrowBindingUtils.resolveElbowBindingCandidate(
-          worldPoint: position,
-          targets: targets,
-          snapDistance: bindingDistance,
-          preferredBinding: preferredBinding,
-          hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
-        )
-      : ArrowBindingUtils.resolveBindingCandidate(
-          worldPoint: position,
-          targets: targets,
-          snapDistance: bindingDistance,
-          preferredBinding: preferredBinding,
-          referencePoint: referencePoint,
-        );
   if (candidate == null) {
     return _BindingSnapResult(position: position);
   }

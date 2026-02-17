@@ -7,7 +7,7 @@ import '../../../utils/snapping_mode.dart';
 import 'arrow_binding.dart';
 import 'arrow_binding_target_cache.dart';
 
-const _bindingCacheTargetThresholdFactor = 0.4;
+const _bindingCacheTargetThresholdFactor = 0.9;
 const _bindingCacheEmptyThresholdFactor = 0.75;
 const _preferredBindingStickinessFactor = 0.3;
 
@@ -145,6 +145,110 @@ class ArrowBindingSnapper {
       return preferredCandidate;
     }
     return null;
+  }
+
+  /// Resolves an endpoint binding candidate with shared lookup/caching policy.
+  ///
+  /// This method combines:
+  /// - preferred-binding direct checks (no spatial query),
+  /// - cached nearby-target lookup, and
+  /// - fallback best-candidate resolution.
+  ///
+  /// Returns `null` when no valid binding candidate exists.
+  static ArrowBindingResult? resolveEndpointBindingCandidate({
+    required DrawState state,
+    required DrawPoint worldPoint,
+    required ArrowType arrowType,
+    required ArrowheadStyle arrowheadStyle,
+    required bool shouldLookupBindings,
+    required double snapDistance,
+    required bool allowNewBinding,
+    required bool hasBindableTargets,
+    ArrowBinding? preferredBinding,
+    DrawPoint? referencePoint,
+    ArrowBindingTargetCache? cache,
+    String? excludedElementId,
+    double targetCacheThresholdFactor = _bindingCacheTargetThresholdFactor,
+    double emptyCacheThresholdFactor = _bindingCacheEmptyThresholdFactor,
+  }) {
+    if (snapDistance <= 0 || !shouldLookupBindings) {
+      cache?.reset();
+      return null;
+    }
+    if (!allowNewBinding && preferredBinding == null) {
+      cache?.reset();
+      return null;
+    }
+
+    final preferredDirect = resolvePreferredBindingCandidateDirect(
+      state: state,
+      worldPoint: worldPoint,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      snapDistance: snapDistance,
+      allowNewBinding: allowNewBinding,
+      preferredBinding: preferredBinding,
+      referencePoint: referencePoint,
+      excludedElementId: excludedElementId,
+    );
+    if (preferredDirect != null) {
+      return preferredDirect;
+    }
+
+    if (!hasBindableTargets) {
+      cache?.reset();
+      return null;
+    }
+
+    final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
+      snapDistance,
+    );
+    final targets = resolveBindingTargetsCached(
+      state: state,
+      position: worldPoint,
+      distance: searchDistance,
+      cache: cache,
+      excludedElementId: excludedElementId,
+      targetCacheThresholdFactor: targetCacheThresholdFactor,
+      emptyCacheThresholdFactor: emptyCacheThresholdFactor,
+    );
+    if (targets.isEmpty) {
+      return null;
+    }
+
+    final preferredFromTargets = resolvePreferredBindingCandidate(
+      worldPoint: worldPoint,
+      targets: targets,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      snapDistance: snapDistance,
+      allowNewBinding: allowNewBinding,
+      preferredBinding: preferredBinding,
+      referencePoint: referencePoint,
+    );
+    if (preferredFromTargets != null) {
+      return preferredFromTargets;
+    }
+
+    if (arrowType == ArrowType.elbow) {
+      return ArrowBindingUtils.resolveElbowBindingCandidate(
+        worldPoint: worldPoint,
+        targets: targets,
+        snapDistance: snapDistance,
+        preferredBinding: preferredBinding,
+        allowNewBinding: allowNewBinding,
+        hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
+      );
+    }
+
+    return ArrowBindingUtils.resolveBindingCandidate(
+      worldPoint: worldPoint,
+      targets: targets,
+      snapDistance: snapDistance,
+      preferredBinding: preferredBinding,
+      allowNewBinding: allowNewBinding,
+      referencePoint: referencePoint,
+    );
   }
 
   /// Resolves nearby bindable targets using [cache] when possible.

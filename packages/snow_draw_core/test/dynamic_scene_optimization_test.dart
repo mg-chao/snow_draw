@@ -1,4 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
@@ -14,7 +19,9 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
+import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/ui/canvas/dynamic_scene_optimization.dart';
 
 void main() {
@@ -54,6 +61,41 @@ void main() {
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'rect-1'});
       expect(plan.staticHiddenElementIds, {'rect-1'});
+    });
+
+    test('optimizes arrow-point edits even without preview deltas', () {
+      final arrow = _arrow(
+        id: 'arrow-1',
+        points: const [DrawPoint(x: 40, y: 40), DrawPoint(x: 180, y: 120)],
+        zIndex: 0,
+      );
+      final background = _rectangle(
+        id: 'rect-2',
+        rect: const DrawRect(minX: 220, minY: 20, maxX: 340, maxY: 120),
+        zIndex: 1,
+      );
+      final state = _arrowPointEditingState(
+        elements: [arrow, background],
+        elementId: 'arrow-1',
+        selectedIds: {'arrow-1'},
+      );
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: const {},
+        effectiveSelection: EffectiveSelection(
+          bounds: arrow.rect,
+          center: arrow.rect.center,
+          rotation: arrow.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
+
+      expect(plan, isNotNull);
+      expect(plan!.optimizedElementIds, {'arrow-1'});
+      expect(plan.staticHiddenElementIds, {'arrow-1'});
     });
 
     test(
@@ -518,6 +560,102 @@ ElementState _serial({
   zIndex: zIndex,
   data: SerialNumberData(textElementId: textElementId),
 );
+
+ElementState _arrow({
+  required String id,
+  required List<DrawPoint> points,
+  required int zIndex,
+}) {
+  final minX = points
+      .map((point) => point.x)
+      .reduce((value, element) => value < element ? value : element);
+  final maxX = points
+      .map((point) => point.x)
+      .reduce((value, element) => value > element ? value : element);
+  final minY = points
+      .map((point) => point.y)
+      .reduce((value, element) => value < element ? value : element);
+  final maxY = points
+      .map((point) => point.y)
+      .reduce((value, element) => value > element ? value : element);
+  final rect = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: points,
+    rect: rect,
+  );
+
+  return ElementState(
+    id: id,
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: zIndex,
+    data: ArrowData(points: normalizedPoints),
+  );
+}
+
+DrawState _arrowPointEditingState({
+  required List<ElementState> elements,
+  required String elementId,
+  required Set<String> selectedIds,
+}) {
+  final base = DrawState(
+    domain: DomainState(
+      document: DocumentState(elements: elements),
+      selection: SelectionState(selectedIds: selectedIds),
+    ),
+    application: ApplicationState.initial(),
+  );
+  final element = base.domain.document.getElementById(elementId)!;
+  final data = element.data as ArrowData;
+  final initialPoints = ArrowGeometry.resolveWorldPoints(
+    rect: element.rect,
+    normalizedPoints: data.points,
+  ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList(growable: false);
+
+  final context = ArrowPointEditContext(
+    startPosition: initialPoints.first,
+    startBounds: element.rect,
+    selectedIdsAtStart: selectedIds,
+    selectionVersion: base.domain.selection.selectionVersion,
+    elementsVersion: base.domain.document.elementsVersion,
+    elementId: element.id,
+    elementRect: element.rect,
+    rotation: element.rotation,
+    initialPoints: initialPoints,
+    initialFixedSegments: const [],
+    arrowType: data.arrowType,
+    pointKind: ArrowPointKind.turning,
+    pointIndex: 0,
+    dragOffset: DrawPoint.zero,
+    baseElement: element,
+    elementSpace: null,
+    releaseFixedSegment: false,
+    deletePointOnStart: false,
+    bindingTargetCache: ArrowBindingTargetCache(),
+    startArrowhead: ArrowheadStyle.none,
+    endArrowhead: ArrowheadStyle.standard,
+    initialStartBinding: data.startBinding,
+    initialEndBinding: data.endBinding,
+    hasBindableTargets: base.domain.document.hasArrowBindableElements,
+  );
+
+  return base.copyWith(
+    application: base.application.copyWith(
+      interaction: EditingState(
+        operationId: EditOperationIds.arrowPoint,
+        sessionId: 'arrow-edit-session',
+        context: context,
+        currentTransform: ArrowPointTransform(
+          currentPosition: initialPoints.first,
+          points: initialPoints,
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+        ),
+      ),
+    ),
+  );
+}
 
 class _TestEditContext extends EditContext {
   const _TestEditContext({

@@ -40,7 +40,7 @@ import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/standard_finish_mixin.dart';
 
-const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _defaultBindingCacheTargetThresholdFactor = 0.9;
 const _linePointBindingCacheTargetThresholdFactor = 0.9;
 
 class ArrowPointOperation extends EditOperation with StandardFinishMixin {
@@ -1050,96 +1050,26 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
   required bool allowNewBinding,
   DrawPoint? referencePoint,
 }) {
-  if (snapDistance <= 0) {
-    context._bindingTargetCache.reset();
-    return null;
-  }
-
-  if (!shouldLookupBindings) {
-    context._bindingTargetCache.reset();
-    return null;
-  }
-
-  if (!allowNewBinding && existingBinding == null) {
-    context._bindingTargetCache.reset();
-    return null;
-  }
-
   final preferredArrowheadStyle = hasArrowhead
       ? ArrowheadStyle.standard
       : ArrowheadStyle.none;
-  final preferredCandidate =
-      ArrowBindingSnapper.resolvePreferredBindingCandidateDirect(
-        state: state,
-        worldPoint: worldTarget,
-        arrowType: context.arrowType,
-        arrowheadStyle: preferredArrowheadStyle,
-        snapDistance: snapDistance,
-        allowNewBinding: allowNewBinding,
-        preferredBinding: existingBinding,
-        referencePoint: referencePoint,
-        excludedElementId: context.elementId,
-      );
-  if (preferredCandidate != null) {
-    return preferredCandidate;
-  }
-
-  if (!context.hasBindableTargets) {
-    context._bindingTargetCache.reset();
-    return null;
-  }
-
-  final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
-    snapDistance,
-  );
   final targetCacheThresholdFactor = context.isLineElement
       ? _linePointBindingCacheTargetThresholdFactor
       : _defaultBindingCacheTargetThresholdFactor;
-  final targets = ArrowBindingSnapper.resolveBindingTargetsCached(
+  return ArrowBindingSnapper.resolveEndpointBindingCandidate(
     state: state,
-    position: worldTarget,
-    distance: searchDistance,
-    cache: context._bindingTargetCache,
-    excludedElementId: context.elementId,
-    targetCacheThresholdFactor: targetCacheThresholdFactor,
-  );
-  if (targets.isEmpty) {
-    return null;
-  }
-
-  final preferredFromTargets =
-      ArrowBindingSnapper.resolvePreferredBindingCandidate(
-        worldPoint: worldTarget,
-        targets: targets,
-        arrowType: context.arrowType,
-        arrowheadStyle: preferredArrowheadStyle,
-        snapDistance: snapDistance,
-        allowNewBinding: allowNewBinding,
-        preferredBinding: existingBinding,
-        referencePoint: referencePoint,
-      );
-  if (preferredFromTargets != null) {
-    return preferredFromTargets;
-  }
-
-  if (context.arrowType == ArrowType.elbow) {
-    return ArrowBindingUtils.resolveElbowBindingCandidate(
-      worldPoint: worldTarget,
-      targets: targets,
-      snapDistance: snapDistance,
-      preferredBinding: existingBinding,
-      allowNewBinding: allowNewBinding,
-      hasArrowhead: hasArrowhead,
-    );
-  }
-
-  return ArrowBindingUtils.resolveBindingCandidate(
     worldPoint: worldTarget,
-    targets: targets,
+    arrowType: context.arrowType,
+    arrowheadStyle: preferredArrowheadStyle,
+    shouldLookupBindings: shouldLookupBindings,
     snapDistance: snapDistance,
-    preferredBinding: existingBinding,
     allowNewBinding: allowNewBinding,
+    hasBindableTargets: context.hasBindableTargets,
+    preferredBinding: existingBinding,
     referencePoint: referencePoint,
+    cache: context._bindingTargetCache,
+    targetCacheThresholdFactor: targetCacheThresholdFactor,
+    excludedElementId: context.elementId,
   );
 }
 

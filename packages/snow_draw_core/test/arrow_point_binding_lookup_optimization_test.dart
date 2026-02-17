@@ -256,6 +256,67 @@ void main() {
     });
 
     test(
+      'arrow endpoint drag reuses binding target cache on medium movement',
+      () {
+        final arrow = _arrowElement(
+          id: 'arrow',
+          points: const [DrawPoint(x: 120, y: 160), DrawPoint(x: 320, y: 160)],
+        );
+        final target = _rectangleElement(
+          id: 'target',
+          rect: const DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: [target, arrow],
+          counter: counter,
+        );
+        final state = _stateWith(document, selectedIds: const {'arrow'});
+
+        const operation = ArrowPointOperation();
+        final context = operation.createContext(
+          state: state,
+          position: const DrawPoint(x: 120, y: 160),
+          params: const ArrowPointOperationParams(
+            elementId: 'arrow',
+            pointKind: ArrowPointKind.turning,
+            pointIndex: 0,
+          ),
+        );
+        final initialTransform = operation.initialTransform(
+          state: state,
+          context: context,
+          startPosition: const DrawPoint(x: 120, y: 160),
+        );
+
+        counter.reset();
+        final first = operation.update(
+          state: state,
+          context: context,
+          transform: initialTransform,
+          currentPosition: const DrawPoint(x: 209, y: 160),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final firstTransform = first.transform as ArrowPointTransform;
+        final callsAfterFirstUpdate = counter.value;
+
+        operation.update(
+          state: state,
+          context: context,
+          transform: firstTransform,
+          currentPosition: const DrawPoint(x: 217, y: 160),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final callsAfterSecondUpdate = counter.value;
+
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+      },
+    );
+
+    test(
       'line endpoint drag reuses binding target cache on medium movement',
       () {
         final line = _lineElement(

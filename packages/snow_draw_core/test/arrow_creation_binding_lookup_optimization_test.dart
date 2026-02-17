@@ -72,6 +72,64 @@ void main() {
       expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
     });
 
+    test('arrow creation reuses target cache for medium pointer moves', () {
+      const target = ElementState(
+        id: 'target',
+        rect: DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      final counter = _HitTestCounter();
+      final document = _CountingDocumentState(
+        elements: const [target],
+        counter: counter,
+      );
+      final state = _stateWith(document);
+
+      const strategy = ArrowCreationStrategy();
+      const start = DrawPoint(x: 80, y: 80);
+      final startResult = strategy.start(
+        data: const ArrowData(),
+        startPosition: start,
+      );
+      var creating = _creatingState(
+        elementId: 'arrow',
+        startPosition: start,
+        startResult: startResult,
+      );
+
+      counter.reset();
+      final firstUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 209, y: 160),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, firstUpdate);
+      final callsAfterFirstUpdate = counter.value;
+
+      final secondUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 217, y: 160),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, secondUpdate);
+      final callsAfterSecondUpdate = counter.value;
+      expect(creating.currentRect, isNotNull);
+
+      expect(callsAfterFirstUpdate, greaterThan(0));
+      expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+    });
+
     test(
       'skips binding target queries when document has no bindable elements',
       () {
