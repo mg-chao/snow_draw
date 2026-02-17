@@ -6,8 +6,8 @@ import '../../draw/models/interaction_state.dart';
 /// Resolves the first document index rendered on the dynamic canvas layer.
 ///
 /// Returns `null` when no split is needed. Returns `0` when all document
-/// elements should be lifted to the dynamic layer to preserve blend behavior
-/// for in-progress overlays such as highlight creation.
+/// elements should be lifted to the dynamic layer to preserve filter
+/// compositing behavior.
 int? resolveDynamicLayerStartIndex(DrawStateView view) {
   final interaction = view.state.application.interaction;
 
@@ -18,9 +18,12 @@ int? resolveDynamicLayerStartIndex(DrawStateView view) {
     return null;
   }
 
+  // Highlight creation happens on top of the committed scene and can stay as
+  // a lightweight preview-only dynamic overlay. Keeping the static scene
+  // stable avoids full-scene dynamic repaints on every pointer frame.
   if (interaction is CreatingState &&
       interaction.elementData is HighlightData) {
-    return 0;
+    return null;
   }
 
   if (interaction is CreatingState && interaction.elementData is FilterData) {
@@ -48,7 +51,15 @@ int? resolveDynamicLayerStartIndex(DrawStateView view) {
     return null;
   }
 
-  if (document.hasBlendSensitiveElementFromOrderIndex(minIndex)) {
+  // Visible filters require full-scene lifting because the dynamic filter
+  // compositor needs a single consistent scene source for backdrop sampling.
+  //
+  // Highlights can stay scoped to the selected range: they are drawn in
+  // normal z-order over the static backdrop and preserve blend correctness.
+  if (document.hasFilterElementFromOrderIndex(
+    minIndex,
+    includeTransparent: false,
+  )) {
     return 0;
   }
 

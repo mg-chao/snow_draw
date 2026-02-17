@@ -82,6 +82,40 @@ void main() {
       );
     });
   });
+
+  group('DocumentState filter range queries', () {
+    test('detects filter elements at or above index', () {
+      final document = DocumentState(
+        elements: [
+          _rectangle(id: 'rect-1', zIndex: 0),
+          _highlight(id: 'hl-1', zIndex: 1),
+          _filter(id: 'filter-1', zIndex: 2),
+          _rectangle(id: 'rect-2', zIndex: 3),
+        ],
+      );
+
+      expect(document.hasFilterElementFromOrderIndex(0), isTrue);
+      expect(document.hasFilterElementFromOrderIndex(2), isTrue);
+      expect(document.hasFilterElementFromOrderIndex(3), isFalse);
+      expect(document.hasFilterElementAboveOrderIndex(1), isTrue);
+      expect(document.hasFilterElementAboveOrderIndex(2), isFalse);
+    });
+
+    test('can ignore transparent filters', () {
+      final document = DocumentState(
+        elements: [
+          _filter(id: 'filter-1', zIndex: 0, opacity: 0),
+          _rectangle(id: 'rect-1', zIndex: 1),
+        ],
+      );
+
+      expect(document.hasFilterElementFromOrderIndex(0), isTrue);
+      expect(
+        document.hasFilterElementFromOrderIndex(0, includeTransparent: false),
+        isFalse,
+      );
+    });
+  });
 }
 
 ElementState _rectangle({

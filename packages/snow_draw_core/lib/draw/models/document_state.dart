@@ -86,6 +86,22 @@ class DocumentState {
   late final List<bool> _visibleBlendSensitiveSuffix =
       _buildBlendSensitiveSuffix(includeTransparent: false);
 
+  /// Suffix cache for filter element presence.
+  ///
+  /// Index `i` answers whether any filter element exists in
+  /// `[i, elements.length)`, regardless of opacity.
+  late final List<bool> _filterSuffix = _buildFilterSuffix(
+    includeTransparent: true,
+  );
+
+  /// Suffix cache for visible filter element presence.
+  ///
+  /// Index `i` answers whether any non-transparent filter element exists in
+  /// `[i, elements.length)`.
+  late final List<bool> _visibleFilterSuffix = _buildFilterSuffix(
+    includeTransparent: false,
+  );
+
   Map<String, ElementState> get elementMap => _elementMap;
 
   ElementState? getElementById(String id) => _elementMap[id];
@@ -119,6 +135,30 @@ class DocumentState {
     int orderIndex, {
     bool includeTransparent = true,
   }) => hasBlendSensitiveElementFromOrderIndex(
+    orderIndex + 1,
+    includeTransparent: includeTransparent,
+  );
+
+  /// Returns whether any filter element exists at or above [orderIndex].
+  ///
+  /// Set [includeTransparent] to `false` to only consider filters with
+  /// positive opacity.
+  bool hasFilterElementFromOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) {
+    final normalizedIndex = _normalizeOrderIndex(orderIndex);
+    final suffix = includeTransparent ? _filterSuffix : _visibleFilterSuffix;
+    return suffix[normalizedIndex];
+  }
+
+  /// Returns whether any filter element exists strictly above [orderIndex].
+  ///
+  /// This is equivalent to querying from `orderIndex + 1`.
+  bool hasFilterElementAboveOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) => hasFilterElementFromOrderIndex(
     orderIndex + 1,
     includeTransparent: includeTransparent,
   );
@@ -167,7 +207,9 @@ class DocumentState {
       _arrowBindableSpatialIndex.size +
       highlightElements.length +
       _blendSensitiveSuffix.length +
-      _visibleBlendSensitiveSuffix.length;
+      _visibleBlendSensitiveSuffix.length +
+      _filterSuffix.length +
+      _visibleFilterSuffix.length;
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
     final result = <ElementState>[];
@@ -350,6 +392,24 @@ class DocumentState {
         hasBlendSensitive = true;
       }
       suffix[index] = hasBlendSensitive;
+    }
+
+    return List<bool>.unmodifiable(suffix);
+  }
+
+  List<bool> _buildFilterSuffix({required bool includeTransparent}) {
+    final suffix = List<bool>.filled(elements.length + 1, false);
+    var hasFilter = false;
+
+    for (var index = elements.length - 1; index >= 0; index--) {
+      final element = elements[index];
+      final data = element.data;
+      final isFilter = data is FilterData;
+      final isVisible = includeTransparent || element.opacity > 0;
+      if (isFilter && isVisible) {
+        hasFilter = true;
+      }
+      suffix[index] = hasFilter;
     }
 
     return List<bool>.unmodifiable(suffix);

@@ -28,75 +28,77 @@ void main() {
     expect(splitIndex, 1);
   });
 
-  test(
-    'lifts all document elements when selected range includes highlight',
-    () {
-      final state = _stateWith(
-        selectedIds: const {'e1'},
-        elements: const [
-          ElementState(
-            id: 'e1',
-            rect: DrawRect(maxX: 10, maxY: 10),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 0,
-            data: RectangleData(),
-          ),
-          ElementState(
-            id: 'h1',
-            rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 1,
-            data: HighlightData(),
-          ),
-          ElementState(
-            id: 'e3',
-            rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2,
-            data: RectangleData(),
-          ),
-        ],
-      );
-      final view = DrawStateView.fromState(state);
+  test('highlight above selection does not force full-scene lifting', () {
+    final state = _stateWith(
+      selectedIds: const {'e2'},
+      elements: const [
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'e2',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'h1',
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: HighlightData(),
+        ),
+      ],
+    );
+    final view = DrawStateView.fromState(state);
 
-      final splitIndex = resolveDynamicLayerStartIndex(view);
-      expect(splitIndex, 0);
-    },
-  );
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 1);
+  });
 
-  test(
-    'transparent highlight still forces full dynamic layer for selection range',
-    () {
-      final state = _stateWith(
-        selectedIds: const {'e1'},
-        elements: const [
-          ElementState(
-            id: 'e1',
-            rect: DrawRect(maxX: 10, maxY: 10),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 0,
-            data: RectangleData(),
-          ),
-          ElementState(
-            id: 'h1',
-            rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-            rotation: 0,
-            opacity: 0,
-            zIndex: 1,
-            data: HighlightData(),
-          ),
-        ],
-      );
-      final view = DrawStateView.fromState(state);
+  test('selected highlight keeps dynamic split scoped to its z-index', () {
+    final state = _stateWith(
+      selectedIds: const {'h1'},
+      elements: const [
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'h1',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: HighlightData(),
+        ),
+        ElementState(
+          id: 'e3',
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: RectangleData(),
+        ),
+      ],
+    );
+    final view = DrawStateView.fromState(state);
 
-      final splitIndex = resolveDynamicLayerStartIndex(view);
-      expect(splitIndex, 0);
-    },
-  );
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 1);
+  });
 
   test('keeps earliest selected index when no highlight in dynamic range', () {
     final state = _stateWith(
@@ -134,7 +136,7 @@ void main() {
     expect(splitIndex, 1);
   });
 
-  test('lifts all document elements while creating highlight', () {
+  test('highlight creation keeps committed scene on static layer', () {
     final interaction = CreatingState(
       element: const ElementState(
         id: 'h_new',
@@ -151,7 +153,7 @@ void main() {
     final view = DrawStateView.fromState(state);
 
     final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 0);
+    expect(splitIndex, isNull);
   });
 
   test('creating filter lifts all document elements', () {
@@ -244,6 +246,42 @@ void main() {
 
     final splitIndex = resolveDynamicLayerStartIndex(view);
     expect(splitIndex, 0);
+  });
+
+  test('transparent filter does not force full-scene lifting', () {
+    final state = _stateWith(
+      selectedIds: const {'e2'},
+      elements: const [
+        ElementState(
+          id: 'e1',
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'e2',
+          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: RectangleData(),
+        ),
+        ElementState(
+          id: 'f1',
+          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+          rotation: 0,
+          opacity: 0,
+          zIndex: 2,
+          data: FilterData(),
+        ),
+      ],
+    );
+    final view = DrawStateView.fromState(state);
+
+    final splitIndex = resolveDynamicLayerStartIndex(view);
+    expect(splitIndex, 1);
   });
 
   test('keeps static scene when creating new text', () {
