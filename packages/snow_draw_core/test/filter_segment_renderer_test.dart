@@ -433,6 +433,72 @@ void main() {
     },
   );
 
+  test('batch cache survives document-version changes '
+      'when batch elements are stable', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContextV1 = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: 101,
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+    const cacheContextV2 = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: 102,
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+    const baseElement = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 160, maxY: 90),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const filterElement = ElementState(
+      id: 'filter',
+      rect: DrawRect(maxX: 80, maxY: 80),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.inversion),
+    );
+    const sceneElements = [baseElement, filterElement];
+
+    void paintFrame(FilterRenderCacheContext cacheContext) {
+      renderer.paint(
+        canvas: canvas,
+        elements: sceneElements,
+        cacheContext: cacheContext,
+        dynamicElementIds: const {'filter'},
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 160, 90),
+            Paint()..color = const Color(0xFF225588),
+          );
+        },
+      );
+    }
+
+    paintFrame(cacheContextV1);
+    final firstFrame = renderer.lastDiagnostics;
+    paintFrame(cacheContextV2);
+    final secondFrame = renderer.lastDiagnostics;
+
+    expect(firstFrame.batchCacheMisses, 1);
+    expect(secondFrame.batchCacheHits, 1);
+    expect(secondFrame.batchCacheMisses, 0);
+    recorder.endRecording();
+  });
+
   test('batch cache eviction keeps in-flight batch pictures valid', () async {
     final renderer = FilterSegmentRenderer(
       segmentBuilder: const _SplitNonFilterSegmentBuilder(),
@@ -644,6 +710,159 @@ void main() {
     recorder.endRecording();
   });
 
+  test('interaction preview skips mosaic filter creation '
+      'when shader path is unavailable', () {
+    final kernelFactory = _TestKernelFactory(canUseMosaicShader: false);
+    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
+    const elements = [
+      ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: 128, maxY: 96),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      ),
+      ElementState(
+        id: 'filter',
+        rect: DrawRect(minX: 16, minY: 16, maxX: 112, maxY: 80),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(strength: 0.8),
+      ),
+    ];
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    renderer.paint(
+      canvas: canvas,
+      elements: elements,
+      renderHints: const FilterRenderHints(interactionPreview: true),
+      paintElement: (sceneCanvas, element) {
+        if (element.id != 'base') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          const Rect.fromLTWH(0, 0, 128, 96),
+          Paint()..color = const Color(0xFF778899),
+        );
+      },
+    );
+
+    expect(kernelFactory.createMosaicCalls, 0);
+    expect(kernelFactory.resolveMosaicCalls, 0);
+
+    renderer.paint(
+      canvas: canvas,
+      elements: elements,
+      paintElement: (sceneCanvas, element) {
+        if (element.id != 'base') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          const Rect.fromLTWH(0, 0, 128, 96),
+          Paint()..color = const Color(0xFF778899),
+        );
+      },
+    );
+
+    expect(kernelFactory.createMosaicCalls, 1);
+    expect(kernelFactory.resolveMosaicCalls, 1);
+    recorder.endRecording();
+  });
+
+  test('interaction-preview mosaic fallback remains stable '
+      'when visible bounds cull the layer', () async {
+    final kernelFactory = _TestKernelFactory(
+      canUseMosaicShader: false,
+      resolvedBlockSize: 8,
+    );
+    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
+    const imageWidth = 320.0;
+    const imageHeight = 320.0;
+    const base = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const filter = ElementState(
+      id: 'mosaic',
+      rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(strength: 1),
+    );
+
+    Future<Color> renderSampleColor({Rect? visibleBounds}) async {
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      renderer.paint(
+        canvas: canvas,
+        visibleBounds: visibleBounds,
+        renderHints: const FilterRenderHints(interactionPreview: true),
+        elements: const [base, filter],
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          const tileSize = 8;
+          for (var y = 0; y < imageHeight; y += tileSize) {
+            for (var x = 0; x < imageWidth; x += tileSize) {
+              final isDarkTile = (((x ~/ tileSize) + (y ~/ tileSize)) & 1) == 0;
+              sceneCanvas.drawRect(
+                Rect.fromLTWH(
+                  x.toDouble(),
+                  y.toDouble(),
+                  tileSize.toDouble(),
+                  tileSize.toDouble(),
+                ),
+                Paint()
+                  ..color = isDarkTile
+                      ? const Color(0xFF14213D)
+                      : const Color(0xFFFCA311),
+              );
+            }
+          }
+        },
+      );
+
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(
+        imageWidth.toInt(),
+        imageHeight.toInt(),
+      );
+      final bytes = await image.toByteData();
+      expect(bytes, isNotNull);
+      return _readPixel(bytes!, imageWidth.toInt(), const Offset(124, 172));
+    }
+
+    final fullFrame = await renderSampleColor();
+    final culledFrame = await renderSampleColor(
+      visibleBounds: const Rect.fromLTWH(120, 120, 120, 120),
+    );
+
+    expect(
+      (_channelFromUnit(fullFrame.r) - _channelFromUnit(culledFrame.r)).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(fullFrame.g) - _channelFromUnit(culledFrame.g)).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(
+      (_channelFromUnit(fullFrame.b) - _channelFromUnit(culledFrame.b)).abs(),
+      lessThanOrEqualTo(2),
+    );
+    expect(kernelFactory.createMosaicCalls, 0);
+    expect(kernelFactory.resolveMosaicCalls, 0);
+  });
+
   test('offscreen filter work is skipped when visible bounds are provided', () {
     final renderer = FilterSegmentRenderer();
     final recorder = PictureRecorder();
@@ -842,5 +1061,39 @@ class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
       }
     }
     return splitSegments;
+  }
+}
+
+class _TestKernelFactory implements FilterKernelFactory {
+  _TestKernelFactory({
+    required this.canUseMosaicShader,
+    this.resolvedBlockSize = 12,
+  });
+
+  @override
+  final bool canUseMosaicShader;
+  final double resolvedBlockSize;
+
+  var createMosaicCalls = 0;
+  var resolveMosaicCalls = 0;
+
+  @override
+  double resolveMosaicBlockSize({
+    required double strength,
+    required Size regionSize,
+  }) {
+    resolveMosaicCalls += 1;
+    return resolvedBlockSize;
+  }
+
+  @override
+  ImageFilter? createMosaicFilter({
+    required double strength,
+    required Size regionSize,
+    required Offset regionOffset,
+    double? blockSize,
+  }) {
+    createMosaicCalls += 1;
+    return ImageFilter.blur(sigmaX: 6, sigmaY: 6);
   }
 }

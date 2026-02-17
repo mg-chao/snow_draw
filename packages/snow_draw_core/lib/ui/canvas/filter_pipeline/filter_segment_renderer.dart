@@ -56,20 +56,94 @@ class FilterRenderCacheContext {
   );
 }
 
+/// Runtime hints for adaptive filter rendering.
+///
+/// Interaction previews can opt into lower-cost approximations to sustain
+/// frame rate on backends that do not support shader-based filters.
+@immutable
+class FilterRenderHints {
+  const FilterRenderHints({this.interactionPreview = false});
+
+  /// Whether this frame is a high-frequency interaction preview.
+  final bool interactionPreview;
+}
+
+/// Factory interface for creating filter kernels.
+///
+/// This indirection keeps [FilterSegmentRenderer] decoupled from the singleton
+/// shader manager and makes fallback behavior testable.
+abstract interface class FilterKernelFactory {
+  const FilterKernelFactory();
+
+  /// Whether high-quality shader-based mosaic filtering is currently available.
+  bool get canUseMosaicShader;
+
+  /// Resolves mosaic block size in logical pixels.
+  double resolveMosaicBlockSize({
+    required double strength,
+    required Size regionSize,
+  });
+
+  /// Builds a mosaic [ImageFilter] for the specified region.
+  ImageFilter? createMosaicFilter({
+    required double strength,
+    required Size regionSize,
+    required Offset regionOffset,
+    double? blockSize,
+  });
+}
+
+/// Default [FilterKernelFactory] backed by [FilterShaderManager].
+class DefaultFilterKernelFactory implements FilterKernelFactory {
+  const DefaultFilterKernelFactory();
+
+  @override
+  bool get canUseMosaicShader =>
+      FilterShaderManager.instance.canUseShaderBackedMosaic;
+
+  @override
+  double resolveMosaicBlockSize({
+    required double strength,
+    required Size regionSize,
+  }) => FilterShaderManager.instance.resolveMosaicBlockSize(
+    strength: strength,
+    regionSize: regionSize,
+  );
+
+  @override
+  ImageFilter? createMosaicFilter({
+    required double strength,
+    required Size regionSize,
+    required Offset regionOffset,
+    double? blockSize,
+  }) => FilterShaderManager.instance.createMosaicFilter(
+    strength: strength,
+    regionSize: regionSize,
+    regionOffset: regionOffset,
+    blockSize: blockSize,
+  );
+}
+
 /// Renders element scenes with filter segments.
 ///
 /// Unlike per-element compositing, this pipeline scales with the number of
 /// filter passes and contiguous element batches.
 class FilterSegmentRenderer {
-  FilterSegmentRenderer({FilterSegmentBuilder? segmentBuilder})
-    : _segmentBuilder = segmentBuilder ?? const FilterSegmentBuilder();
+  FilterSegmentRenderer({
+    FilterSegmentBuilder? segmentBuilder,
+    FilterKernelFactory? kernelFactory,
+  }) : _segmentBuilder = segmentBuilder ?? const FilterSegmentBuilder(),
+       _kernelFactory = kernelFactory ?? const DefaultFilterKernelFactory();
 
   static const _filterImageCacheLimit = 256;
   static const _clipInfoCacheLimit = 512;
   static const _batchPictureCacheLimit = 96;
   static const _maxViewportOutset = 72.0;
+  static const _interactiveMosaicMinSigma = 2.5;
+  static const _interactiveMosaicMaxSigma = 20.0;
 
   final FilterSegmentBuilder _segmentBuilder;
+  final FilterKernelFactory _kernelFactory;
   final _clipInfoCache = LruCache<_FilterClipCacheKey, _ClipInfo>(
     maxEntries: _clipInfoCacheLimit,
   );
@@ -120,6 +194,7 @@ class FilterSegmentRenderer {
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
     Set<String> dynamicElementIds = const <String>{},
+    FilterRenderHints renderHints = const FilterRenderHints(),
   }) {
     _diagnostics.beginFrame();
     if (elements.isEmpty) {
@@ -212,6 +287,7 @@ class FilterSegmentRenderer {
             data: segment.filterData,
             visibleBounds: visibleBounds,
             useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+            renderHints: renderHints,
           );
           scene.release();
           continue;
@@ -222,6 +298,7 @@ class FilterSegmentRenderer {
           data: segment.filterData,
           visibleBounds: visibleBounds,
           useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+          renderHints: renderHints,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -238,6 +315,7 @@ class FilterSegmentRenderer {
           merged: segment,
           visibleBounds: visibleBounds,
           dynamicElementIds: dynamicElementIds,
+          renderHints: renderHints,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -267,7 +345,9 @@ class FilterSegmentRenderer {
         _isBatchCacheEligible(elements, dynamicElementIds);
     if (canUseCache) {
       final cacheKey = _BatchPictureCacheKey(
-        context: cacheContext,
+        contextSignature: _BatchPictureContextSignature.fromContext(
+          cacheContext,
+        ),
         fingerprint: idFingerprint ?? _batchFingerprint(elements),
         length: elements.length,
       );
@@ -315,17 +395,23 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
+    required FilterRenderHints renderHints,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
       useClipCache: useClipCache,
+      renderHints: renderHints,
     );
     if (prepared == null) {
       return scene;
     }
-    return _applyPreparedFilter(scene: scene, pass: prepared);
+    return _applyPreparedFilter(
+      scene: scene,
+      pass: prepared,
+      renderHints: renderHints,
+    );
   }
 
   Picture _applyMergedFilter({
@@ -333,6 +419,7 @@ class FilterSegmentRenderer {
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
     required Set<String> dynamicElementIds,
+    required FilterRenderHints renderHints,
   }) {
     final prepared = <_PreparedFilterPass>[];
     for (final filter in merged.filters) {
@@ -341,6 +428,7 @@ class FilterSegmentRenderer {
         data: filter.filterData,
         visibleBounds: visibleBounds,
         useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
+        renderHints: renderHints,
       );
       if (pass != null) {
         prepared.add(pass);
@@ -360,6 +448,7 @@ class FilterSegmentRenderer {
       final nextScene = _applyPreparedMergedGroup(
         scene: currentScene,
         group: pendingGroup,
+        renderHints: renderHints,
       );
       if (!identical(nextScene, currentScene) &&
           !identical(currentScene, scene)) {
@@ -386,12 +475,14 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
+    required FilterRenderHints renderHints,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
       useClipCache: useClipCache,
+      renderHints: renderHints,
     );
     canvas.drawPicture(scene);
     if (prepared == null) {
@@ -404,6 +495,7 @@ class FilterSegmentRenderer {
       data: prepared.data,
       layerBounds: prepared.layerBounds,
       opacity: prepared.opacity,
+      renderHints: renderHints,
     );
     _diagnostics.markFilterPass();
   }
@@ -414,6 +506,7 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
+    required FilterRenderHints renderHints,
   }) {
     final rect = filterElement.rect;
     if (rect.width <= 0 || rect.height <= 0) {
@@ -430,6 +523,7 @@ class FilterSegmentRenderer {
       clipBounds: clip.bounds,
       visibleBounds: visibleBounds,
       data: data,
+      renderHints: renderHints,
     );
     if (layerBounds.isEmpty) {
       return null;
@@ -446,6 +540,7 @@ class FilterSegmentRenderer {
   Picture _applyPreparedFilter({
     required Picture scene,
     required _PreparedFilterPass pass,
+    required FilterRenderHints renderHints,
   }) {
     _diagnostics.markPictureRecorder();
     final recorder = PictureRecorder();
@@ -458,6 +553,7 @@ class FilterSegmentRenderer {
       data: pass.data,
       layerBounds: pass.layerBounds,
       opacity: pass.opacity,
+      renderHints: renderHints,
     );
 
     _diagnostics.markFilterPass();
@@ -467,12 +563,17 @@ class FilterSegmentRenderer {
   Picture _applyPreparedMergedGroup({
     required Picture scene,
     required List<_PreparedFilterPass> group,
+    required FilterRenderHints renderHints,
   }) {
     if (group.isEmpty) {
       return scene;
     }
     if (group.length == 1) {
-      return _applyPreparedFilter(scene: scene, pass: group.first);
+      return _applyPreparedFilter(
+        scene: scene,
+        pass: group.first,
+        renderHints: renderHints,
+      );
     }
 
     _diagnostics.markPictureRecorder();
@@ -487,6 +588,7 @@ class FilterSegmentRenderer {
         data: pass.data,
         layerBounds: pass.layerBounds,
         opacity: pass.opacity,
+        renderHints: renderHints,
       );
       _diagnostics.markFilterPass();
     }
@@ -528,6 +630,7 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect layerBounds,
     required double opacity,
+    required FilterRenderHints renderHints,
   }) {
     canvas.save();
     clip.applyTo(canvas);
@@ -538,6 +641,7 @@ class FilterSegmentRenderer {
       filterBounds: clip.bounds,
       layerBounds: layerBounds,
       opacity: opacity,
+      renderHints: renderHints,
     );
     canvas.restore();
   }
@@ -551,6 +655,7 @@ class FilterSegmentRenderer {
     required Rect filterBounds,
     required Rect layerBounds,
     required double opacity,
+    required FilterRenderHints renderHints,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
     switch (data.type) {
@@ -562,6 +667,7 @@ class FilterSegmentRenderer {
           filterBounds,
           layerBounds,
           opacity,
+          renderHints: renderHints,
           blendMode: blendMode,
         );
       case CanvasFilterType.gaussianBlur:
@@ -603,9 +709,26 @@ class FilterSegmentRenderer {
     Rect filterBounds,
     Rect layerBounds,
     double opacity, {
+    required FilterRenderHints renderHints,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final mosaicBlockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
+    final shouldUseFastInteractionApproximation =
+        renderHints.interactionPreview && !_kernelFactory.canUseMosaicShader;
+    if (shouldUseFastInteractionApproximation) {
+      _paintBlurFilter(
+        canvas,
+        scene,
+        layerBounds,
+        opacity,
+        data,
+        minSigma: _interactiveMosaicMinSigma,
+        maxSigma: _interactiveMosaicMaxSigma,
+        blendMode: blendMode,
+      );
+      return;
+    }
+
+    final mosaicBlockSize = _kernelFactory.resolveMosaicBlockSize(
       strength: data.strength,
       regionSize: filterBounds.size,
     );
@@ -622,7 +745,7 @@ class FilterSegmentRenderer {
     );
     final shaderFilter =
         _filterCache.get(cacheKey) ??
-        FilterShaderManager.instance.createMosaicFilter(
+        _kernelFactory.createMosaicFilter(
           strength: data.strength,
           regionSize: layerBounds.size,
           regionOffset: mosaicOrigin,
@@ -737,6 +860,7 @@ class FilterSegmentRenderer {
     required Rect clipBounds,
     required Rect? visibleBounds,
     required FilterData data,
+    required FilterRenderHints renderHints,
   }) {
     if (visibleBounds == null) {
       return clipBounds;
@@ -744,6 +868,7 @@ class FilterSegmentRenderer {
     final viewportOutset = _resolveFilterViewportOutset(
       data: data,
       clipBounds: clipBounds,
+      renderHints: renderHints,
     );
     final expandedVisible = Rect.fromLTRB(
       visibleBounds.left - viewportOutset,
@@ -762,6 +887,7 @@ class FilterSegmentRenderer {
   double _resolveFilterViewportOutset({
     required FilterData data,
     required Rect clipBounds,
+    required FilterRenderHints renderHints,
   }) {
     switch (data.type) {
       case CanvasFilterType.gaussianBlur:
@@ -773,7 +899,19 @@ class FilterSegmentRenderer {
         final blurRadius = (sigma * 3) + 2;
         return math.min(blurRadius, _maxViewportOutset);
       case CanvasFilterType.mosaic:
-        final blockSize = FilterShaderManager.instance.resolveMosaicBlockSize(
+        final shouldUseFastInteractionApproximation =
+            renderHints.interactionPreview &&
+            !_kernelFactory.canUseMosaicShader;
+        if (shouldUseFastInteractionApproximation) {
+          final sigma = _mapStrength(
+            strength: data.strength,
+            minValue: _interactiveMosaicMinSigma,
+            maxValue: _interactiveMosaicMaxSigma,
+          );
+          final blurRadius = (sigma * 3) + 2;
+          return math.min(blurRadius, _maxViewportOutset);
+        }
+        final blockSize = _kernelFactory.resolveMosaicBlockSize(
           strength: data.strength,
           regionSize: clipBounds.size,
         );
@@ -911,14 +1049,53 @@ class _ScenePictureRef {
 }
 
 @immutable
+class _BatchPictureContextSignature {
+  const _BatchPictureContextSignature({
+    required this.domain,
+    required this.textRenderingCacheRevision,
+    required this.scaleKey,
+    required this.localeTag,
+  });
+
+  factory _BatchPictureContextSignature.fromContext(
+    FilterRenderCacheContext context,
+  ) => _BatchPictureContextSignature(
+    domain: context.domain,
+    textRenderingCacheRevision: context.textRenderingCacheRevision,
+    scaleKey: context.scaleKey,
+    localeTag: context.localeTag,
+  );
+
+  final FilterRenderCacheDomain domain;
+  final int textRenderingCacheRevision;
+  final int scaleKey;
+  final String localeTag;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _BatchPictureContextSignature &&
+          other.domain == domain &&
+          other.textRenderingCacheRevision == textRenderingCacheRevision &&
+          other.scaleKey == scaleKey &&
+          other.localeTag == localeTag;
+
+  @override
+  int get hashCode =>
+      Object.hash(domain, textRenderingCacheRevision, scaleKey, localeTag);
+}
+
+@immutable
 class _BatchPictureCacheKey {
   const _BatchPictureCacheKey({
-    required this.context,
+    required this.contextSignature,
     required this.fingerprint,
     required this.length,
   });
 
-  final FilterRenderCacheContext context;
+  /// Signature intentionally excludes document version so stable non-filter
+  /// batches survive filter-only document updates (for example strength drags).
+  final _BatchPictureContextSignature contextSignature;
   final int fingerprint;
   final int length;
 
@@ -926,12 +1103,12 @@ class _BatchPictureCacheKey {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _BatchPictureCacheKey &&
-          other.context == context &&
+          other.contextSignature == contextSignature &&
           other.fingerprint == fingerprint &&
           other.length == length;
 
   @override
-  int get hashCode => Object.hash(context, fingerprint, length);
+  int get hashCode => Object.hash(contextSignature, fingerprint, length);
 }
 
 class _CachedBatchPicture {

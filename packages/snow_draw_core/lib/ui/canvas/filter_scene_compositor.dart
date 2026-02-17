@@ -4,7 +4,7 @@ import '../../draw/models/element_state.dart';
 import 'filter_pipeline/filter_render_diagnostics.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
 export 'filter_pipeline/filter_segment_renderer.dart'
-    show FilterRenderCacheContext, FilterRenderCacheDomain;
+    show FilterRenderCacheContext, FilterRenderCacheDomain, FilterRenderHints;
 
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
@@ -30,6 +30,7 @@ class FilterSceneCompositor {
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
     Set<String> dynamicElementIds = const <String>{},
+    FilterRenderHints renderHints = const FilterRenderHints(),
   }) {
     _renderer.paint(
       canvas: canvas,
@@ -38,6 +39,7 @@ class FilterSceneCompositor {
       cacheContext: cacheContext,
       visibleBounds: visibleBounds,
       dynamicElementIds: dynamicElementIds,
+      renderHints: renderHints,
     );
   }
 

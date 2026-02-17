@@ -686,6 +686,9 @@ class DynamicCanvasPainter extends CustomPainter {
         viewportRect.height,
       ),
       dynamicElementIds: sceneContext.dynamicElementIds,
+      renderHints: FilterRenderHints(
+        interactionPreview: sceneContext.hasDynamicFilterElement,
+      ),
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSceneCompositor.lastDiagnostics;
@@ -712,10 +715,14 @@ class DynamicCanvasPainter extends CustomPainter {
         _previewMayAffectSerialConnectors(previewElements);
 
     var hasFilterElement = false;
+    final filterElementIds = <String>{};
     final visibleTextIds = <String>{};
     for (final element in elements) {
       if (!hasFilterElement && element.data is FilterData) {
         hasFilterElement = true;
+      }
+      if (element.data is FilterData) {
+        filterElementIds.add(element.id);
       }
       if (canHaveSerialConnectors &&
           element.opacity > 0 &&
@@ -745,9 +752,20 @@ class DynamicCanvasPainter extends CustomPainter {
       creatingFilterId: _resolveCreatingFilterId(),
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
+    var hasDynamicFilterElement = false;
+    if (dynamicElementIds.isNotEmpty && filterElementIds.isNotEmpty) {
+      for (final dynamicId in dynamicElementIds) {
+        if (!filterElementIds.contains(dynamicId)) {
+          continue;
+        }
+        hasDynamicFilterElement = true;
+        break;
+      }
+    }
 
     return _SceneRenderContext(
       hasFilterElement: hasFilterElement,
+      hasDynamicFilterElement: hasDynamicFilterElement,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       dynamicElementIds: dynamicElementIds,
@@ -2118,12 +2136,14 @@ class _ArrowBindingHighlight {
 class _SceneRenderContext {
   const _SceneRenderContext({
     required this.hasFilterElement,
+    required this.hasDynamicFilterElement,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.dynamicElementIds,
   });
 
   final bool hasFilterElement;
+  final bool hasDynamicFilterElement;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> dynamicElementIds;

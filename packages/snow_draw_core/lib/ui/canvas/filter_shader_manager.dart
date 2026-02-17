@@ -23,6 +23,9 @@ class FilterShaderManager {
   /// Whether the mosaic shader program is ready.
   bool get isMosaicReady => _mosaicProgram != null;
 
+  /// Whether the backend can render mosaic using a fragment shader.
+  bool get canUseShaderBackedMosaic => isShaderFilterSupported && isMosaicReady;
+
   /// Preloads shader programs used for filter rendering.
   Future<void> load() async {
     await _loadMosaicProgram();
