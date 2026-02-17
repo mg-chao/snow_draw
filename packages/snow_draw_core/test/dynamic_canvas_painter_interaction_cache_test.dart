@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
+import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
@@ -181,6 +182,83 @@ void main() {
     expect(counter.count, 2);
   });
 
+  test('whole-scene highlight preview keeps cached static scene '
+      'when preview exits viewport', () {
+    final counter = _RenderCounter();
+    final registry = _buildRegistryWithHighlightSupport(counter);
+    final elements = <ElementState>[
+      const ElementState(
+        id: 'cache-static-1',
+        rect: DrawRect(maxX: 40, maxY: 40),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: _CacheTestData(),
+      ),
+      const ElementState(
+        id: 'cache-highlight',
+        rect: DrawRect(minX: 50, maxX: 90, maxY: 40),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: HighlightData(),
+      ),
+      const ElementState(
+        id: 'cache-static-2',
+        rect: DrawRect(minX: 100, maxX: 140, maxY: 40),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: _CacheTestData(),
+      ),
+    ];
+    final state = DrawState.fromLayers(
+      domain: DomainState(
+        document: DocumentState(elements: elements, elementsVersion: 777777),
+      ),
+      application: ApplicationState.initial(),
+    );
+
+    final firstPreview = elements[1].copyWith(
+      rect: const DrawRect(minX: 60, minY: 10, maxX: 100, maxY: 50),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {firstPreview.id: firstPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {firstPreview.id: firstPreview},
+      ),
+    );
+    expect(counter.count, 3);
+
+    counter.reset();
+    final offscreenPreview = firstPreview.copyWith(
+      rect: const DrawRect(minX: 400, minY: 400, maxX: 440, maxY: 440),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {offscreenPreview.id: offscreenPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {offscreenPreview.id: offscreenPreview},
+      ),
+    );
+
+    // Static ranges stay cached and the offscreen preview is culled.
+    expect(counter.count, 0);
+  });
+
   test(
     'creating filter preview paints without mutating cached scene lists',
     () {
@@ -269,6 +347,23 @@ DefaultElementRegistry _buildRegistryWithSerialSupport(_RenderCounter counter) {
         hitTester: const _CacheHitTester(),
         createDefaultData: SerialNumberData.new,
         fromJson: SerialNumberData.fromJson,
+      ),
+    );
+  return registry;
+}
+
+DefaultElementRegistry _buildRegistryWithHighlightSupport(
+  _RenderCounter counter,
+) {
+  final registry = _buildRegistry(counter)
+    ..register<HighlightData>(
+      ElementDefinition<HighlightData>(
+        typeId: HighlightData.typeIdToken,
+        displayName: 'highlight',
+        renderer: _CacheCountingRenderer(counter),
+        hitTester: const _CacheHitTester(),
+        createDefaultData: HighlightData.new,
+        fromJson: HighlightData.fromJson,
       ),
     );
   return registry;

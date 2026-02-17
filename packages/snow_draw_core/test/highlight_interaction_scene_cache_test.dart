@@ -173,6 +173,46 @@ void main() {
       expect(paintCount, 3);
     },
   );
+
+  test('rebuilds segment layout when dynamic ids change', () {
+    final cache = HighlightInteractionSceneCache();
+    final elements = _buildScene(
+      dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+    );
+    var paintCount = 0;
+
+    _paintOnFreshCanvas((canvas) {
+      cache.paint(
+        canvas: canvas,
+        elements: elements,
+        dynamicElementIds: const {'dynamic'},
+        documentVersion: 50,
+        textRenderingCacheRevision: 0,
+        scaleFactor: 1,
+        locale: const ui.Locale('en'),
+        paintElement: (_, _) => paintCount++,
+      );
+    });
+    expect(paintCount, 3);
+
+    paintCount = 0;
+    _paintOnFreshCanvas((canvas) {
+      cache.paint(
+        canvas: canvas,
+        elements: elements,
+        dynamicElementIds: const {'static_2'},
+        documentVersion: 50,
+        textRenderingCacheRevision: 0,
+        scaleFactor: 1,
+        locale: const ui.Locale('en'),
+        paintElement: (_, _) => paintCount++,
+      );
+    });
+
+    // A new dynamic-id split requires rebuilding static segments for the
+    // changed range.
+    expect(paintCount, 3);
+  });
 }
 
 List<ElementState> _buildScene({required DrawRect dynamicRect}) => [

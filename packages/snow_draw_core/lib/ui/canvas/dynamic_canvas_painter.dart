@@ -18,6 +18,7 @@ import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
@@ -310,6 +311,18 @@ class DynamicCanvasPainter extends CustomPainter {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
     final rendersWholeScene = renderKey.rendersWholeElementScene;
     final optimizedElementIds = renderKey.optimizedDynamicElementIds;
+    final canUseHighlightWholeScenePath = _tryPaintHighlightWholeScenePath(
+      canvas: canvas,
+      scale: scale,
+      viewportRect: viewportRect,
+      creatingElement: creatingElement,
+      rendersWholeScene: rendersWholeScene,
+      optimizedElementIds: optimizedElementIds,
+    );
+    if (canUseHighlightWholeScenePath) {
+      return;
+    }
+
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
       if (optimizedElementIds.isEmpty) {
         final previewOnlyElements = _resolvePreviewOnlyScene(
@@ -374,6 +387,109 @@ class DynamicCanvasPainter extends CustomPainter {
       viewportRect: viewportRect,
       effectiveElements: effectiveElements,
     );
+  }
+
+  bool _tryPaintHighlightWholeScenePath({
+    required Canvas canvas,
+    required double scale,
+    required DrawRect viewportRect,
+    required CreatingElementSnapshot? creatingElement,
+    required bool rendersWholeScene,
+    required Set<String> optimizedElementIds,
+  }) {
+    if (!rendersWholeScene ||
+        optimizedElementIds.isNotEmpty ||
+        !_isHighlightPreviewCacheEligible()) {
+      return false;
+    }
+
+    final creatingData = creatingElement?.element.data;
+    if (creatingData is FilterData) {
+      return false;
+    }
+
+    final state = stateView.state;
+    final document = state.domain.document;
+    final baseVisibleElements = _visibleSceneCache.resolve(
+      document: document,
+      viewportRect: viewportRect,
+    );
+    if (!_canUseHighlightWholeSceneFastPath(
+      baseVisibleElements: baseVisibleElements,
+      viewportRect: viewportRect,
+      document: document,
+    )) {
+      return false;
+    }
+
+    final sceneContext = _resolveSceneRenderContext(
+      elements: baseVisibleElements,
+    );
+    if (sceneContext.hasFilterElement) {
+      return false;
+    }
+
+    void paintElement(Canvas sceneCanvas, ElementState element) {
+      final effective = renderKey.previewElementsById[element.id] ?? element;
+      if (!identical(effective, element)) {
+        final previewAabb = SelectionCalculator.computeElementWorldAabb(
+          effective,
+        );
+        if (!_rectsIntersect(previewAabb, viewportRect)) {
+          return;
+        }
+      }
+      _paintSceneElement(
+        canvas: sceneCanvas,
+        element: effective,
+        scale: scale,
+        sceneContext: sceneContext,
+      );
+    }
+
+    _interactionSceneCache.paint(
+      canvas: canvas,
+      elements: baseVisibleElements,
+      dynamicElementIds: sceneContext.dynamicElementIds,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleFactor: scale,
+      locale: renderKey.locale,
+      paintElement: paintElement,
+    );
+    return true;
+  }
+
+  bool _canUseHighlightWholeSceneFastPath({
+    required List<ElementState> baseVisibleElements,
+    required DrawRect viewportRect,
+    required DocumentState document,
+  }) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty) {
+      return true;
+    }
+
+    for (final preview in previewElements.values) {
+      if (document.getElementById(preview.id) == null) {
+        return false;
+      }
+      var isVisibleInBase = false;
+      for (final element in baseVisibleElements) {
+        if (element.id == preview.id) {
+          isVisibleInBase = true;
+          break;
+        }
+      }
+      if (isVisibleInBase) {
+        continue;
+      }
+      final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
+      if (_rectsIntersect(previewAabb, viewportRect)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<ElementState> _resolvePreviewOnlyScene({
@@ -516,65 +632,27 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final document = stateView.state.domain.document;
-    var hasFilterElement = false;
-    final visibleTextIds = <String>{};
-    for (final element in effectiveElements) {
-      if (!hasFilterElement && element.data is FilterData) {
-        hasFilterElement = true;
-      }
-      if (element.opacity > 0 && element.data is TextData) {
-        visibleTextIds.add(element.id);
-      }
-    }
-
-    final shouldPaintSerialConnectors =
-        visibleTextIds.isNotEmpty &&
-        _shouldPaintSerialConnectors(
-          boundTextIds: document.boundTextIds,
-          previewElementsById: renderKey.previewElementsById,
-          visibleTextIds: visibleTextIds,
-        );
-    final serialConnectors = shouldPaintSerialConnectors
-        ? resolveSerialNumberConnectorMap(
-            stateView,
-            previewElementsById: renderKey.previewElementsById,
-            visibleTextElementIds: visibleTextIds,
-          )
-        : const <String, List<SerialNumberTextConnector>>{};
-    final dynamicElementIds = _resolveDynamicElementIds(
-      creatingFilterId: _resolveCreatingFilterId(),
-      serialConnectorTextIds: shouldPaintSerialConnectors
-          ? serialConnectors.keys
-          : const <String>{},
+    final sceneContext = _resolveSceneRenderContext(
+      elements: effectiveElements,
     );
 
-    void paintElement(Canvas sceneCanvas, ElementState element) {
-      elementRenderer.renderElement(
-        canvas: sceneCanvas,
-        element: element,
-        scaleFactor: scale,
-        registry: renderKey.elementRegistry,
-        locale: renderKey.locale,
-      );
-      if (shouldPaintSerialConnectors) {
-        drawSerialNumberConnectorsForText(
+    void paintElement(Canvas sceneCanvas, ElementState element) =>
+        _paintSceneElement(
           canvas: sceneCanvas,
-          textElement: element,
-          connectorsByTextId: serialConnectors,
+          element: element,
+          scale: scale,
+          sceneContext: sceneContext,
         );
-      }
-    }
 
     if (_canUseInteractionSceneCache(
-      hasFilterElement: hasFilterElement,
+      hasFilterElement: sceneContext.hasFilterElement,
       effectiveElements: effectiveElements,
-      dynamicElementIds: dynamicElementIds,
+      dynamicElementIds: sceneContext.dynamicElementIds,
     )) {
       _interactionSceneCache.paint(
         canvas: canvas,
         elements: effectiveElements,
-        dynamicElementIds: dynamicElementIds,
+        dynamicElementIds: sceneContext.dynamicElementIds,
         documentVersion: renderKey.documentVersion,
         textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
         scaleFactor: scale,
@@ -584,7 +662,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    if (!hasFilterElement) {
+    if (!sceneContext.hasFilterElement) {
       _paintElementsDirectly(
         canvas: canvas,
         elements: effectiveElements,
@@ -593,7 +671,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
-    final filterCacheContext = shouldPaintSerialConnectors
+    final filterCacheContext = sceneContext.shouldPaintSerialConnectors
         ? null
         : _buildFilterCacheContext(scale: scale);
     filterSceneCompositor.paintElements(
@@ -607,7 +685,7 @@ class DynamicCanvasPainter extends CustomPainter {
         viewportRect.width,
         viewportRect.height,
       ),
-      dynamicElementIds: dynamicElementIds,
+      dynamicElementIds: sceneContext.dynamicElementIds,
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSceneCompositor.lastDiagnostics;
@@ -622,6 +700,94 @@ class DynamicCanvasPainter extends CustomPainter {
         });
       }
     }
+  }
+
+  _SceneRenderContext _resolveSceneRenderContext({
+    required List<ElementState> elements,
+  }) {
+    final document = stateView.state.domain.document;
+    final previewElements = renderKey.previewElementsById;
+    final canHaveSerialConnectors =
+        document.boundTextIds.isNotEmpty ||
+        _previewMayAffectSerialConnectors(previewElements);
+
+    var hasFilterElement = false;
+    final visibleTextIds = <String>{};
+    for (final element in elements) {
+      if (!hasFilterElement && element.data is FilterData) {
+        hasFilterElement = true;
+      }
+      if (canHaveSerialConnectors &&
+          element.opacity > 0 &&
+          element.data is TextData) {
+        visibleTextIds.add(element.id);
+      }
+    }
+
+    final shouldPaintSerialConnectors =
+        visibleTextIds.isNotEmpty &&
+        _shouldPaintSerialConnectors(
+          boundTextIds: document.boundTextIds,
+          previewElementsById: previewElements,
+          visibleTextIds: visibleTextIds,
+        );
+    final serialConnectors = shouldPaintSerialConnectors
+        ? resolveSerialNumberConnectorMap(
+            stateView,
+            previewElementsById: previewElements,
+            visibleTextElementIds: visibleTextIds,
+          )
+        : const <String, List<SerialNumberTextConnector>>{};
+    final dynamicElementIds = _resolveDynamicElementIds(
+      creatingFilterId: _resolveCreatingFilterId(),
+      serialConnectorTextIds: shouldPaintSerialConnectors
+          ? serialConnectors.keys
+          : const <String>{},
+    );
+
+    return _SceneRenderContext(
+      hasFilterElement: hasFilterElement,
+      shouldPaintSerialConnectors: shouldPaintSerialConnectors,
+      serialConnectors: serialConnectors,
+      dynamicElementIds: dynamicElementIds,
+    );
+  }
+
+  void _paintSceneElement({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+    required _SceneRenderContext sceneContext,
+  }) {
+    elementRenderer.renderElement(
+      canvas: canvas,
+      element: element,
+      scaleFactor: scale,
+      registry: renderKey.elementRegistry,
+      locale: renderKey.locale,
+    );
+    if (sceneContext.shouldPaintSerialConnectors) {
+      drawSerialNumberConnectorsForText(
+        canvas: canvas,
+        textElement: element,
+        connectorsByTextId: sceneContext.serialConnectors,
+      );
+    }
+  }
+
+  bool _previewMayAffectSerialConnectors(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return false;
+    }
+    for (final preview in previewElementsById.values) {
+      final data = preview.data;
+      if (data is SerialNumberData || data is TextData) {
+        return true;
+      }
+    }
+    return false;
   }
 
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
@@ -1927,4 +2093,18 @@ class _ArrowBindingHighlight {
   const _ArrowBindingHighlight({required this.elementId});
 
   final String elementId;
+}
+
+class _SceneRenderContext {
+  const _SceneRenderContext({
+    required this.hasFilterElement,
+    required this.shouldPaintSerialConnectors,
+    required this.serialConnectors,
+    required this.dynamicElementIds,
+  });
+
+  final bool hasFilterElement;
+  final bool shouldPaintSerialConnectors;
+  final Map<String, List<SerialNumberTextConnector>> serialConnectors;
+  final Set<String> dynamicElementIds;
 }

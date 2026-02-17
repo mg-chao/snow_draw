@@ -23,6 +23,7 @@ class InteractionSceneCache {
       );
 
   final LruCache<int, _CachedSegment> _segmentCache;
+  _SegmentLayoutCacheEntry? _layoutCacheEntry;
 
   @visibleForTesting
   int get debugEntryCount => _segmentCache.length;
@@ -30,6 +31,7 @@ class InteractionSceneCache {
   /// Clears all cached segments and disposes the underlying pictures.
   void clear() {
     _segmentCache.clear();
+    _layoutCacheEntry = null;
   }
 
   /// Paints [elements] in z-order, reusing cached pictures for static ranges.
@@ -50,36 +52,32 @@ class InteractionSceneCache {
       return;
     }
 
+    final layout = _resolveSegmentLayout(
+      elements: elements,
+      dynamicElementIds: dynamicElementIds,
+    );
     final localeTag = locale?.toLanguageTag() ?? '';
     final scaleKey = _quantizeScale(scaleFactor);
-
-    var segmentStart = 0;
-    for (var index = 0; index < elements.length; index++) {
-      final element = elements[index];
-      if (!dynamicElementIds.contains(element.id)) {
-        continue;
-      }
-
+    for (var i = 0; i < layout.dynamicIndices.length; i++) {
+      final staticRange = layout.staticRanges[i];
       _drawStaticSegment(
         canvas: canvas,
         elements: elements,
-        start: segmentStart,
-        end: index,
+        staticRange: staticRange,
         documentVersion: documentVersion,
         textRenderingCacheRevision: textRenderingCacheRevision,
         scaleKey: scaleKey,
         localeTag: localeTag,
         paintElement: paintElement,
       );
-      paintElement(canvas, element);
-      segmentStart = index + 1;
+      final dynamicIndex = layout.dynamicIndices[i];
+      paintElement(canvas, elements[dynamicIndex]);
     }
 
     _drawStaticSegment(
       canvas: canvas,
       elements: elements,
-      start: segmentStart,
-      end: elements.length,
+      staticRange: layout.staticRanges.last,
       documentVersion: documentVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       scaleKey: scaleKey,
@@ -91,19 +89,20 @@ class InteractionSceneCache {
   void _drawStaticSegment({
     required Canvas canvas,
     required List<ElementState> elements,
-    required int start,
-    required int end,
+    required _StaticSegmentRange staticRange,
     required int documentVersion,
     required int textRenderingCacheRevision,
     required int scaleKey,
     required String localeTag,
     required SceneElementPainter paintElement,
   }) {
+    final start = staticRange.start;
+    final end = staticRange.end;
     if (start >= end) {
       return;
     }
 
-    final fingerprint = _segmentFingerprint(elements, start, end);
+    final fingerprint = staticRange.fingerprint;
     final cached = _segmentCache.get(fingerprint);
     if (cached != null &&
         cached.matches(
@@ -128,6 +127,9 @@ class InteractionSceneCache {
 
     final nextEntry = _CachedSegment(
       picture: picture,
+      sourceElements: elements,
+      start: start,
+      end: end,
       elementRefs: [
         for (var index = start; index < end; index++) elements[index],
       ],
@@ -138,6 +140,62 @@ class InteractionSceneCache {
     );
     _segmentCache.put(fingerprint, nextEntry);
     canvas.drawPicture(picture);
+  }
+
+  _SegmentLayout _resolveSegmentLayout({
+    required List<ElementState> elements,
+    required Set<String> dynamicElementIds,
+  }) {
+    final cached = _layoutCacheEntry;
+    if (cached != null &&
+        cached.matches(
+          elements: elements,
+          dynamicElementIds: dynamicElementIds,
+        )) {
+      return cached.layout;
+    }
+
+    final dynamicIndices = <int>[];
+    final staticRanges = <_StaticSegmentRange>[];
+    var segmentStart = 0;
+
+    for (var index = 0; index < elements.length; index++) {
+      if (!dynamicElementIds.contains(elements[index].id)) {
+        continue;
+      }
+      staticRanges.add(
+        _StaticSegmentRange(
+          start: segmentStart,
+          end: index,
+          fingerprint: _segmentFingerprint(elements, segmentStart, index),
+        ),
+      );
+      dynamicIndices.add(index);
+      segmentStart = index + 1;
+    }
+
+    staticRanges.add(
+      _StaticSegmentRange(
+        start: segmentStart,
+        end: elements.length,
+        fingerprint: _segmentFingerprint(
+          elements,
+          segmentStart,
+          elements.length,
+        ),
+      ),
+    );
+
+    final layout = _SegmentLayout(
+      dynamicIndices: List<int>.unmodifiable(dynamicIndices),
+      staticRanges: List<_StaticSegmentRange>.unmodifiable(staticRanges),
+    );
+    _layoutCacheEntry = _SegmentLayoutCacheEntry(
+      elements: elements,
+      dynamicElementIds: Set<String>.unmodifiable(dynamicElementIds),
+      layout: layout,
+    );
+    return layout;
   }
 
   Picture _recordSegment({
@@ -166,6 +224,21 @@ class InteractionSceneCache {
     final normalized = scaleFactor == 0 ? 1.0 : scaleFactor;
     return (normalized * 1000).round();
   }
+
+  static bool _setEquals<T>(Set<T> a, Set<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
+    if (a.length != b.length) {
+      return false;
+    }
+    for (final value in a) {
+      if (!b.contains(value)) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 /// Backward-compatible alias.
@@ -180,6 +253,9 @@ class HighlightInteractionSceneCache extends InteractionSceneCache {
 class _CachedSegment {
   const _CachedSegment({
     required this.picture,
+    required this.sourceElements,
+    required this.start,
+    required this.end,
     required this.elementRefs,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
@@ -188,6 +264,9 @@ class _CachedSegment {
   });
 
   final Picture picture;
+  final List<ElementState> sourceElements;
+  final int start;
+  final int end;
   final List<ElementState> elementRefs;
   final int documentVersion;
   final int textRenderingCacheRevision;
@@ -210,6 +289,12 @@ class _CachedSegment {
       return false;
     }
 
+    if (identical(sourceElements, elements) &&
+        this.start == start &&
+        this.end == end) {
+      return true;
+    }
+
     final length = end - start;
     if (elementRefs.length != length) {
       return false;
@@ -223,4 +308,48 @@ class _CachedSegment {
 
     return true;
   }
+}
+
+class _StaticSegmentRange {
+  const _StaticSegmentRange({
+    required this.start,
+    required this.end,
+    required this.fingerprint,
+  });
+
+  final int start;
+  final int end;
+  final int fingerprint;
+}
+
+class _SegmentLayout {
+  const _SegmentLayout({
+    required this.dynamicIndices,
+    required this.staticRanges,
+  });
+
+  final List<int> dynamicIndices;
+  final List<_StaticSegmentRange> staticRanges;
+}
+
+class _SegmentLayoutCacheEntry {
+  const _SegmentLayoutCacheEntry({
+    required this.elements,
+    required this.dynamicElementIds,
+    required this.layout,
+  });
+
+  final List<ElementState> elements;
+  final Set<String> dynamicElementIds;
+  final _SegmentLayout layout;
+
+  bool matches({
+    required List<ElementState> elements,
+    required Set<String> dynamicElementIds,
+  }) =>
+      identical(this.elements, elements) &&
+      InteractionSceneCache._setEquals(
+        this.dynamicElementIds,
+        dynamicElementIds,
+      );
 }
