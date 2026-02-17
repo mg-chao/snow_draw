@@ -157,8 +157,8 @@ class CreatePlugin extends DrawInputPlugin {
 
     if (hasBatchedSamples) {
       await dispatch(
-        UpdateCreatingElementBatch(
-          positions: event.samples().toList(growable: false),
+        UpdateCreatingElementBatch.frozen(
+          positions: event.sampledPoints,
           createFromCenter: event.modifiers.alt,
           snapOverride: event.modifiers.control,
         ),

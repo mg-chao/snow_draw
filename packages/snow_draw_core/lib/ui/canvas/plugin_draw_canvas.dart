@@ -3695,7 +3695,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _updateCursorIfChanged(cursor);
         _clearHoverState();
       }
-      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+      // The dedicated free-draw preview layer already repaints from
+      // [_syncFreeDrawPreviewLayerState], so avoid rebuilding canvas snapshots
+      // on every point.
       return;
     }
 

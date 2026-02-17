@@ -64,5 +64,50 @@ void main() {
       expect(merged.position, const DrawPoint(x: 6, y: 6));
       expect(merged.sampleCount, 3);
     });
+
+    test('mergeWith supports long coalesced chains efficiently', () {
+      var merged = PointerMoveInputEvent(
+        position: DrawPoint.zero,
+        modifiers: KeyModifiers.none,
+      );
+
+      for (var i = 1; i < 512; i++) {
+        merged = merged.mergeWith(
+          PointerMoveInputEvent(
+            position: DrawPoint(x: i.toDouble(), y: 0),
+            modifiers: KeyModifiers.none,
+          ),
+        );
+      }
+
+      expect(merged.sampleCount, 512);
+      final samples = merged.samples().toList(growable: false);
+      expect(samples, hasLength(512));
+      expect(samples.first, DrawPoint.zero);
+      expect(samples.last, const DrawPoint(x: 511, y: 0));
+    });
+
+    test('sampleCount remains safe for very deep coalesced chains', () {
+      const totalSamples = 20000;
+      var merged = PointerMoveInputEvent(
+        position: DrawPoint.zero,
+        modifiers: KeyModifiers.none,
+      );
+
+      for (var i = 1; i < totalSamples; i++) {
+        merged = merged.mergeWith(
+          PointerMoveInputEvent(
+            position: DrawPoint(x: i.toDouble(), y: 0),
+            modifiers: KeyModifiers.none,
+          ),
+        );
+      }
+
+      expect(merged.sampleCount, totalSamples);
+
+      final samples = merged.samples();
+      expect(samples.first, DrawPoint.zero);
+      expect(samples.last, DrawPoint(x: (totalSamples - 1).toDouble(), y: 0));
+    });
   });
 }

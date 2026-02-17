@@ -144,10 +144,37 @@ class UpdateCreatingElement extends DrawAction {
 class UpdateCreatingElementBatch extends DrawAction {
   UpdateCreatingElementBatch({
     required List<DrawPoint> positions,
-    this.maintainAspectRatio = false,
-    this.createFromCenter = false,
-    this.snapOverride = false,
-  }) : positions = _freezePoints(positions);
+    bool maintainAspectRatio = false,
+    bool createFromCenter = false,
+    bool snapOverride = false,
+  }) : this._(
+         positions: _freezePoints(positions),
+         maintainAspectRatio: maintainAspectRatio,
+         createFromCenter: createFromCenter,
+         snapOverride: snapOverride,
+       );
+
+  /// Creates a batch action using an already-frozen positions list.
+  ///
+  /// Callers must ensure [positions] will not be mutated after dispatch.
+  UpdateCreatingElementBatch.frozen({
+    required List<DrawPoint> positions,
+    bool maintainAspectRatio = false,
+    bool createFromCenter = false,
+    bool snapOverride = false,
+  }) : this._(
+         positions: positions,
+         maintainAspectRatio: maintainAspectRatio,
+         createFromCenter: createFromCenter,
+         snapOverride: snapOverride,
+       );
+
+  UpdateCreatingElementBatch._({
+    required this.positions,
+    required this.maintainAspectRatio,
+    required this.createFromCenter,
+    required this.snapOverride,
+  });
 
   /// Ordered pointer positions represented by this batched update.
   final List<DrawPoint> positions;

@@ -72,80 +72,168 @@ class PointerDownInputEvent extends InputEvent {
 }
 
 class PointerMoveInputEvent extends InputEvent {
-  PointerMoveInputEvent({
+  factory PointerMoveInputEvent({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+    double pressure = 0.0,
+    List<DrawPoint> sampledPoints = const <DrawPoint>[],
+  }) {
+    final normalizedSamples = _normalizePointerMoveSamples(
+      sampledPoints: sampledPoints,
+      position: position,
+    );
+    final frozenSamples = List<DrawPoint>.unmodifiable(normalizedSamples);
+    final sampledPointsCache = frozenSamples.length <= 1
+        ? const <DrawPoint>[]
+        : frozenSamples;
+
+    return PointerMoveInputEvent._internal(
+      position: position,
+      modifiers: modifiers,
+      pressure: pressure,
+      sampleNode: _PointerSampleLeaf(frozenSamples),
+      sampledPointsCache: sampledPointsCache,
+    );
+  }
+
+  PointerMoveInputEvent._internal({
     required super.position,
     required super.modifiers,
-    super.pressure,
-    List<DrawPoint> sampledPoints = const <DrawPoint>[],
-  }) : sampledPoints = _freezeSampledPoints(
-         sampledPoints: sampledPoints,
-         position: position,
-       );
+    required _PointerSampleNode sampleNode,
+    super.pressure = 0.0,
+    List<DrawPoint>? sampledPointsCache,
+  }) : _sampleNode = sampleNode,
+       _sampledPointsCache = sampledPointsCache;
+
+  final _PointerSampleNode _sampleNode;
+  List<DrawPoint>? _sampledPointsCache;
 
   /// Coalesced pointer samples represented by this event.
   ///
   /// When empty, [position] is the sole sample.
-  final List<DrawPoint> sampledPoints;
+  List<DrawPoint> get sampledPoints {
+    final cached = _sampledPointsCache;
+    if (cached != null) {
+      return cached;
+    }
+
+    final resolved = samples().toList(growable: false);
+    if (resolved.length <= 1) {
+      _sampledPointsCache = const <DrawPoint>[];
+      return _sampledPointsCache!;
+    }
+
+    final frozen = List<DrawPoint>.unmodifiable(resolved);
+    _sampledPointsCache = frozen;
+    return frozen;
+  }
 
   /// Total number of pointer samples represented by this event.
-  int get sampleCount => sampledPoints.isEmpty ? 1 : sampledPoints.length;
+  int get sampleCount => _sampleNode.sampleCount;
 
   /// Returns all pointer samples in draw order.
   Iterable<DrawPoint> samples() sync* {
-    if (sampledPoints.isEmpty) {
-      yield position;
-      return;
+    final stack = <_PointerSampleNode>[_sampleNode];
+    DrawPoint? previous;
+
+    while (stack.isNotEmpty) {
+      final node = stack.removeLast();
+      if (node is _PointerSampleMerged) {
+        stack
+          ..add(node.right)
+          ..add(node.left);
+        continue;
+      }
+
+      final leaf = node as _PointerSampleLeaf;
+      for (final point in leaf.points) {
+        if (previous == point) {
+          continue;
+        }
+        previous = point;
+        yield point;
+      }
     }
-    yield* sampledPoints;
   }
 
   /// Merges this event with [next], preserving sample order.
   ///
   /// The merged event uses [next]'s position/modifiers/pressure and keeps all
   /// intermediate samples from both events.
-  PointerMoveInputEvent mergeWith(PointerMoveInputEvent next) {
-    final merged = <DrawPoint>[];
-
-    void appendSample(DrawPoint point) {
-      if (merged.isEmpty || merged.last != point) {
-        merged.add(point);
-      }
-    }
-
-    void appendEventSamples(PointerMoveInputEvent event) {
-      for (final point in event.samples()) {
-        appendSample(point);
-      }
-    }
-
-    appendEventSamples(this);
-    appendEventSamples(next);
-
-    return PointerMoveInputEvent(
-      position: next.position,
-      modifiers: next.modifiers,
-      pressure: next.pressure,
-      sampledPoints: merged,
-    );
-  }
+  PointerMoveInputEvent mergeWith(PointerMoveInputEvent next) =>
+      PointerMoveInputEvent._internal(
+        position: next.position,
+        modifiers: next.modifiers,
+        pressure: next.pressure,
+        sampleNode: _PointerSampleMerged(_sampleNode, next._sampleNode),
+      );
 
   @override
   String toString() =>
       'PointerMoveInputEvent($position, $modifiers, samples: $sampleCount)';
 }
 
-List<DrawPoint> _freezeSampledPoints({
+List<DrawPoint> _normalizePointerMoveSamples({
   required List<DrawPoint> sampledPoints,
   required DrawPoint position,
 }) {
+  final normalized = <DrawPoint>[];
+
+  void appendSample(DrawPoint point) {
+    if (normalized.isEmpty || normalized.last != point) {
+      normalized.add(point);
+    }
+  }
+
   if (sampledPoints.isEmpty) {
-    return const <DrawPoint>[];
+    normalized.add(position);
+    return normalized;
   }
-  if (sampledPoints.last == position) {
-    return List<DrawPoint>.unmodifiable(sampledPoints);
+
+  for (final point in sampledPoints) {
+    appendSample(point);
   }
-  final normalized = List<DrawPoint>.of(sampledPoints)..add(position);
-  return List<DrawPoint>.unmodifiable(normalized);
+  appendSample(position);
+  return normalized;
+}
+
+sealed class _PointerSampleNode {
+  const _PointerSampleNode({
+    required this.sampleCount,
+    required this.firstPoint,
+    required this.lastPoint,
+  });
+
+  final int sampleCount;
+  final DrawPoint firstPoint;
+  final DrawPoint lastPoint;
+}
+
+final class _PointerSampleLeaf extends _PointerSampleNode {
+  _PointerSampleLeaf(this.points)
+    : assert(points.isNotEmpty, 'Pointer sample leaf cannot be empty'),
+      super(
+        sampleCount: points.length,
+        firstPoint: points.first,
+        lastPoint: points.last,
+      );
+
+  final List<DrawPoint> points;
+}
+
+final class _PointerSampleMerged extends _PointerSampleNode {
+  _PointerSampleMerged(this.left, this.right)
+    : super(
+        sampleCount:
+            left.sampleCount +
+            right.sampleCount -
+            (left.lastPoint == right.firstPoint ? 1 : 0),
+        firstPoint: left.firstPoint,
+        lastPoint: right.lastPoint,
+      );
+
+  final _PointerSampleNode left;
+  final _PointerSampleNode right;
 }
 
 class PointerHoverInputEvent extends InputEvent {
