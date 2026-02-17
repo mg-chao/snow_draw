@@ -13,6 +13,7 @@ import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_visual_cache.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
+import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
@@ -1246,6 +1247,14 @@ class DynamicCanvasPainter extends CustomPainter {
     if (data is! ArrowLikeData) {
       return;
     }
+    if (_drawLineHoverOutlineFastPath(
+      canvas: canvas,
+      element: element,
+      data: data,
+      scale: scale,
+    )) {
+      return;
+    }
 
     final rect = element.rect;
     final cached = arrowVisualCache.resolve(element: element, data: data);
@@ -1279,6 +1288,51 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  bool _drawLineHoverOutlineFastPath({
+    required Canvas canvas,
+    required ElementState element,
+    required ArrowLikeData data,
+    required double scale,
+  }) {
+    if (data is! LineData || data.points.length != 2) {
+      return false;
+    }
+
+    final rect = element.rect;
+    if (!rect.width.isFinite || !rect.height.isFinite) {
+      return false;
+    }
+    final startPoint = data.points.first;
+    final endPoint = data.points.last;
+    final start = Offset(startPoint.x * rect.width, startPoint.y * rect.height);
+    final end = Offset(endPoint.x * rect.width, endPoint.y * rect.height);
+    if (!start.dx.isFinite ||
+        !start.dy.isFinite ||
+        !end.dx.isFinite ||
+        !end.dy.isFinite) {
+      return false;
+    }
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final strokePaint = _arrowHoverStrokePaint
+      ..strokeWidth = hoverStrokeWidth / scale
+      ..color = hoverColor;
+    canvas
+      ..drawLine(start, end, strokePaint)
+      ..restore();
+    return true;
   }
 
   void _drawTextHoverUnderlines({

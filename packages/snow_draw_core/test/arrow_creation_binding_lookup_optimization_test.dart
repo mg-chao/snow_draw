@@ -446,6 +446,22 @@ class _CountingDocumentState extends DocumentState {
     counter.value++;
     super.visitElementsAtPointTopDown(point, tolerance, visitor);
   }
+
+  @override
+  void visitArrowBindableElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor, {
+    String? excludedElementId,
+  }) {
+    counter.value++;
+    super.visitArrowBindableElementsAtPoint(
+      point,
+      tolerance,
+      visitor,
+      excludedElementId: excludedElementId,
+    );
+  }
 }
 
 class _HitTestCounter {

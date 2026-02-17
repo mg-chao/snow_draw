@@ -315,15 +315,10 @@ List<ElementState> _resolveBindingTargets({
 }) {
   final document = state.domain.document;
   final targets = <ElementState>[];
-  document.visitElementsAtPoint(position, distance, (element) {
-    if (element.opacity <= 0 ||
-        element.id == excludedElementId ||
-        !ArrowBindingUtils.isBindableTarget(element)) {
-      return true;
-    }
+  document.visitArrowBindableElementsAtPoint(position, distance, (element) {
     targets.add(element);
     return true;
-  });
+  }, excludedElementId: excludedElementId);
   return targets;
 }
 

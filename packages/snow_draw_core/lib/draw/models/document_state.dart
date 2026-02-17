@@ -42,6 +42,14 @@ class DocumentState {
 
   late final _spatialIndex = SpatialIndex.fromElements(elements);
 
+  late final _arrowBindableElements = List<ElementState>.unmodifiable(
+    _buildArrowBindableElements(),
+  );
+
+  late final _arrowBindableSpatialIndex = SpatialIndex.fromElements(
+    _arrowBindableElements,
+  );
+
   /// Cached set of text element IDs bound to serial numbers.
   ///
   /// Avoids an O(n) scan of all elements on every hit test when
@@ -52,7 +60,7 @@ class DocumentState {
   ///
   /// This lets arrow create/edit flows skip spatial queries entirely when no
   /// rectangle/text/serial-number elements are present.
-  late final bool hasArrowBindableElements = _buildHasArrowBindableElements();
+  late final bool hasArrowBindableElements = _arrowBindableElements.isNotEmpty;
 
   /// Cached highlight elements in document z-order.
   ///
@@ -117,11 +125,46 @@ class DocumentState {
 
   SpatialIndex get spatialIndex => _spatialIndex;
 
+  /// Visits bindable arrow targets in arbitrary order.
+  ///
+  /// This uses the bindable-only spatial index to avoid scanning unrelated
+  /// elements during endpoint binding lookups.
+  void visitArrowBindableElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor, {
+    String? excludedElementId,
+  }) {
+    if (!hasArrowBindableElements) {
+      return;
+    }
+
+    final entries = _arrowBindableSpatialIndex.searchPointEntries(
+      point,
+      tolerance,
+      sortByZ: false,
+    );
+    for (final entry in entries) {
+      final elementId = entry.id;
+      if (excludedElementId != null && elementId == excludedElementId) {
+        continue;
+      }
+      final element = _elementMap[elementId];
+      if (element == null || element.opacity <= 0) {
+        continue;
+      }
+      if (!visitor(element)) {
+        return;
+      }
+    }
+  }
+
   /// Touch lazy caches eagerly to avoid stalls during interactive work.
   int warmCaches() =>
       _elementMap.length +
       _orderIndex.length +
       _spatialIndex.size +
+      _arrowBindableSpatialIndex.size +
       highlightElements.length +
       _blendSensitiveSuffix.length +
       _visibleBlendSensitiveSuffix.length;
@@ -271,16 +314,17 @@ class DocumentState {
     return ids;
   }
 
-  bool _buildHasArrowBindableElements() {
+  List<ElementState> _buildArrowBindableElements() {
+    final bindable = <ElementState>[];
     for (final element in elements) {
       if (element.opacity <= 0) {
         continue;
       }
       if (ArrowBindingUtils.isBindableTarget(element)) {
-        return true;
+        bindable.add(element);
       }
     }
-    return false;
+    return bindable;
   }
 
   List<ElementState> _buildHighlightElements() {
