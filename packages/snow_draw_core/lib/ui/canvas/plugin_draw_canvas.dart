@@ -1181,8 +1181,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         !_isPointerInside) {
       return;
     }
-    _updateCursorAndHoverForPosition(event.position);
-    _refreshDynamicLayerSnapshot(widget.store.state);
+    final hoverChanged = _updateCursorAndHoverForPosition(event.position);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
     if (!event.dispatchPluginHover || widget.isEraserToolActive) {
       return;
     }
@@ -1333,8 +1335,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _isPointerInside = true;
     final position = _recordPointerPosition(event.localPosition);
     _hoverMoveDispatcher.reset();
-    _updateCursorAndHoverForPosition(position);
-    _refreshDynamicLayerSnapshot(widget.store.state);
+    final hoverChanged = _updateCursorAndHoverForPosition(position);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
@@ -1350,10 +1354,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastPointerPosition = null;
     _eraserCursorPositionNotifier.value = null;
     _hoverMoveDispatcher.reset();
-    _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
+    final hoverChanged = _applyHoverState(
+      selectionId: null,
+      bindingId: null,
+      arrowHandle: null,
+    );
     final nextCursor = _resolveCursorForState(widget.store.state, null);
     _updateCursorIfChanged(nextCursor);
-    _refreshDynamicLayerSnapshot(widget.store.state);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
   }
 
   void _queueHoverUpdate({
@@ -2411,8 +2421,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    final interaction = state.application.interaction;
-    if (interaction is TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(state);
+    if (interaction != null) {
       if (_isInsideRect(interaction.rect, interaction.rotation, position)) {
         return true;
       }
@@ -2479,8 +2489,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required draw_hit_test.HitTestResult hitResult,
     required SelectionConfig selectionConfig,
   }) {
-    final interaction = state.application.interaction;
-    if (interaction is! TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(state);
+    if (interaction == null) {
       return false;
     }
 
@@ -3105,20 +3115,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return Positioned(
         left: topLeft.x,
         top: topLeft.y,
-        child: RepaintBoundary(
-          child: Transform.scale(
-            scale: scaleFactor,
-            alignment: Alignment.topLeft,
-            child: Transform.rotate(
-              angle: snapshot.rotation,
-              child: SizedBox(
-                width: layoutWidth,
-                height: height,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    if (shouldPaintTextDecorations)
-                      Positioned.fill(
+        child: Transform.scale(
+          scale: scaleFactor,
+          alignment: Alignment.topLeft,
+          child: Transform.rotate(
+            angle: snapshot.rotation,
+            child: SizedBox(
+              width: layoutWidth,
+              height: height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (shouldPaintTextDecorations)
+                    Positioned.fill(
+                      child: RepaintBoundary(
                         child: IgnorePointer(
                           child: CustomPaint(
                             painter: _EditingTextOverlayPainter(
@@ -3135,11 +3145,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                           ),
                         ),
                       ),
-                    Positioned(
-                      left: 0,
-                      top: verticalOffset,
-                      width: fieldWidth,
-                      height: textHeight,
+                    ),
+                  Positioned(
+                    left: 0,
+                    top: verticalOffset,
+                    width: fieldWidth,
+                    height: textHeight,
+                    child: RepaintBoundary(
                       child: MediaQuery(
                         data: MediaQuery.of(
                           context,
@@ -3150,8 +3162,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                         ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -3239,16 +3251,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     _syncTextEditor(interaction);
     var nextSnapshot = _TextEditingOverlaySnapshot.fromInteraction(interaction);
-    final pending = _pendingTextDraftSync;
+    var pending = _pendingTextDraftSync;
     if (pending != null) {
       if (pending.elementId != interaction.elementId) {
         _pendingTextDraftSync = null;
+        pending = null;
       } else if (interaction.draftData.text == pending.text) {
         _pendingTextDraftSync = null;
+        pending = null;
       } else {
+        final mergedPreviewRect = _resolveTextEditRectForDraft(
+          interaction: interaction,
+          text: pending.text,
+        );
+        if (mergedPreviewRect != pending.previewRect) {
+          pending = pending.copyWith(previewRect: mergedPreviewRect);
+          _pendingTextDraftSync = pending;
+        }
+        final mergedPending = pending;
         nextSnapshot = nextSnapshot.copyWith(
-          data: nextSnapshot.data.copyWith(text: pending.text),
-          rect: pending.previewRect,
+          data: nextSnapshot.data.copyWith(text: mergedPending.text),
+          rect: mergedPending.previewRect,
         );
       }
     }
@@ -3277,9 +3300,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _editingPainterLayout = null;
   }
 
-  PainterTextLayoutMetrics? _resolveEditingPainterLayout() {
-    final interaction = widget.store.state.application.interaction;
+  TextEditingState? _resolveVisibleTextEditingInteraction(DrawState state) {
+    final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
+      return null;
+    }
+    final overlay = _textOverlayNotifier.value;
+    if (overlay == null || overlay.elementId != interaction.elementId) {
+      return interaction;
+    }
+    return overlay.toInteractionState();
+  }
+
+  PainterTextLayoutMetrics? _resolveEditingPainterLayout() {
+    final interaction = _resolveVisibleTextEditingInteraction(
+      widget.store.state,
+    );
+    if (interaction == null) {
       return null;
     }
     final layoutWidth = interaction.rect.width;
@@ -3406,6 +3443,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       interaction: interaction,
       text: pending.text,
     );
+    if (_pendingTextDraftSync == pending && pending.previewRect != nextRect) {
+      _pendingTextDraftSync = pending.copyWith(previewRect: nextRect);
+    }
+
     await widget.store.dispatch(
       UpdateTextEdit(text: pending.text, rect: nextRect),
     );
@@ -3657,8 +3698,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     _syncTextEditingOverlayState(state);
-    _syncFreeDrawPreviewLayerState(state);
-    _syncWatermarkLayerState(state);
     // Keystrokes in text editing mutate only the draft payload and trigger
     // very high-frequency state updates. Skip cursor hit-testing work and
     // canvas tree rebuilds; the dedicated text overlay updates itself via
@@ -3667,6 +3706,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
       return;
     }
+    _syncFreeDrawPreviewLayerState(state);
+    _syncWatermarkLayerState(state);
     if (previousState != null &&
         isSerialNumberInteractionMutationOnly(
           previous: previousState,
@@ -4117,6 +4158,16 @@ class _PendingTextDraftSync {
   final String elementId;
   final String text;
   final DrawRect previewRect;
+
+  _PendingTextDraftSync copyWith({
+    String? elementId,
+    String? text,
+    DrawRect? previewRect,
+  }) => _PendingTextDraftSync(
+    elementId: elementId ?? this.elementId,
+    text: text ?? this.text,
+    previewRect: previewRect ?? this.previewRect,
+  );
 }
 
 @immutable
