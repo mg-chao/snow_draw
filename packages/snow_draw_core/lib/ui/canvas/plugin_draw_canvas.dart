@@ -56,6 +56,7 @@ import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
 import 'lightweight_line_edit_state_change.dart';
 import 'pointer_move_dispatch_policy.dart';
+import 'rectangle_interaction_state_change.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'serial_number_interaction_classifier.dart';
@@ -3680,6 +3681,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleLightweightLineEditMutation(state);
       return;
     }
+    if (previousState != null &&
+        isRectangleInteractionMutationOnly(
+          previous: previousState,
+          next: state,
+        )) {
+      _handleRectangleInteractionMutation(state);
+      return;
+    }
     final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
@@ -3758,6 +3767,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleLightweightLineEditMutation(DrawState state) {
+    final cursor = _resolveCursorForState(state, _lastPointerPosition);
+    if (!mounted) {
+      _cursor = cursor;
+      _hoveredSelectionElementId = null;
+      _hoveredBindingElementId = null;
+      _hoveredArrowHandle = null;
+      return;
+    }
+    _updateCursorIfChanged(cursor);
+    _clearHoverState();
+    _refreshDynamicLayerSnapshot(state, assumeChanged: true);
+  }
+
+  void _handleRectangleInteractionMutation(DrawState state) {
     final cursor = _resolveCursorForState(state, _lastPointerPosition);
     if (!mounted) {
       _cursor = cursor;

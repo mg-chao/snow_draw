@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/filter/filter_data.dart';
 import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
@@ -55,6 +56,14 @@ class DocumentState {
   /// Avoids an O(n) scan of all elements on every hit test when
   /// the serial-number tool is active.
   late final boundTextIds = Set<String>.unmodifiable(_buildBoundTextIds());
+
+  /// Cached set of element IDs currently used by bound arrow endpoints.
+  ///
+  /// This lets interaction fast paths cheaply determine whether moving a target
+  /// element can implicitly preview-update dependent arrows.
+  late final boundArrowTargetIds = Set<String>.unmodifiable(
+    _buildBoundArrowTargetIds(),
+  );
 
   /// Whether the document currently contains any bindable arrow targets.
   ///
@@ -205,11 +214,25 @@ class DocumentState {
       _orderIndex.length +
       _spatialIndex.size +
       _arrowBindableSpatialIndex.size +
+      boundArrowTargetIds.length +
       highlightElements.length +
       _blendSensitiveSuffix.length +
       _visibleBlendSensitiveSuffix.length +
       _filterSuffix.length +
       _visibleFilterSuffix.length;
+
+  /// Returns true when any element in [elementIds] has bound arrow endpoints.
+  bool hasArrowBoundToAny(Iterable<String> elementIds) {
+    if (boundArrowTargetIds.isEmpty) {
+      return false;
+    }
+    for (final elementId in elementIds) {
+      if (boundArrowTargetIds.contains(elementId)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
     final result = <ElementState>[];
@@ -351,6 +374,25 @@ class DocumentState {
       final data = element.data;
       if (data is SerialNumberData && data.textElementId != null) {
         ids.add(data.textElementId!);
+      }
+    }
+    return ids;
+  }
+
+  Set<String> _buildBoundArrowTargetIds() {
+    final ids = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is! ArrowLikeData) {
+        continue;
+      }
+      final startTargetId = data.startBinding?.elementId;
+      if (startTargetId != null) {
+        ids.add(startTargetId);
+      }
+      final endTargetId = data.endBinding?.elementId;
+      if (endTargetId != null) {
+        ids.add(endTargetId);
       }
     }
     return ids;
