@@ -697,6 +697,8 @@ class DynamicCanvasPainter extends CustomPainter {
           'batchCount': diagnostics.batchCount,
           'batchCacheHits': diagnostics.batchCacheHits,
           'batchCacheMisses': diagnostics.batchCacheMisses,
+          'prefixSceneCacheHits': diagnostics.prefixSceneCacheHits,
+          'prefixSceneCacheMisses': diagnostics.prefixSceneCacheMisses,
         });
       }
     }
@@ -709,6 +711,10 @@ class DynamicCanvasPainter extends CustomPainter {
     final previewElements = renderKey.previewElementsById;
     final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
     final creatingFilterId = _resolveCreatingFilterId();
+    final selectedFilterIds = _resolveSelectedFilterDynamicIds(
+      document: document,
+      previewElementsById: previewElements,
+    );
     final serialConnectorPreviewElements =
         _extractSerialConnectorPreviewElements(previewElements);
     final cached = _sceneRenderContextCache;
@@ -718,6 +724,7 @@ class DynamicCanvasPainter extends CustomPainter {
           elements: elements,
           dynamicPreviewIds: dynamicPreviewIds,
           creatingFilterId: creatingFilterId,
+          selectedFilterIds: selectedFilterIds,
           serialConnectorPreviewElements: serialConnectorPreviewElements,
         )) {
       return cached.context;
@@ -761,14 +768,19 @@ class DynamicCanvasPainter extends CustomPainter {
             connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
             dynamicTextElementIds: <String>{},
           );
-    final dynamicElementIds = _resolveDynamicElementIds(
+    final interactionDynamicElementIds = _resolveDynamicElementIds(
       dynamicPreviewIds: dynamicPreviewIds,
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
+    final dynamicElementIds = _mergeDynamicElementIds(
+      baseDynamicIds: interactionDynamicElementIds,
+      additionalDynamicIds: selectedFilterIds,
+    );
     var hasDynamicFilterElement = false;
-    if (dynamicElementIds.isNotEmpty && filterElementIds.isNotEmpty) {
-      for (final dynamicId in dynamicElementIds) {
+    if (interactionDynamicElementIds.isNotEmpty &&
+        filterElementIds.isNotEmpty) {
+      for (final dynamicId in interactionDynamicElementIds) {
         if (!filterElementIds.contains(dynamicId)) {
           continue;
         }
@@ -789,6 +801,7 @@ class DynamicCanvasPainter extends CustomPainter {
       elements: elements,
       dynamicPreviewIds: dynamicPreviewIds,
       creatingFilterId: creatingFilterId,
+      selectedFilterIds: selectedFilterIds,
       serialConnectorPreviewElements: serialConnectorPreviewElements,
       context: context,
     );
@@ -937,6 +950,43 @@ class DynamicCanvasPainter extends CustomPainter {
       dynamicElementIds.addAll(serialConnectorTextIds);
     }
     return dynamicElementIds;
+  }
+
+  Set<String> _resolveSelectedFilterDynamicIds({
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    final selectedIds = renderKey.selectedIds;
+    if (selectedIds.isEmpty) {
+      return const <String>{};
+    }
+
+    Set<String>? selectedFilterIds;
+    for (final selectedId in selectedIds) {
+      final effective =
+          previewElementsById[selectedId] ??
+          document.getElementById(selectedId);
+      if (effective == null || effective.data is! FilterData) {
+        continue;
+      }
+      (selectedFilterIds ??= <String>{}).add(selectedId);
+    }
+    return selectedFilterIds == null
+        ? const <String>{}
+        : Set<String>.unmodifiable(selectedFilterIds);
+  }
+
+  Set<String> _mergeDynamicElementIds({
+    required Set<String> baseDynamicIds,
+    required Set<String> additionalDynamicIds,
+  }) {
+    if (additionalDynamicIds.isEmpty) {
+      return baseDynamicIds;
+    }
+    if (baseDynamicIds.isEmpty) {
+      return additionalDynamicIds;
+    }
+    return <String>{...baseDynamicIds, ...additionalDynamicIds};
   }
 
   Set<String> _resolveDynamicPreviewElementIds(
@@ -1997,9 +2047,11 @@ class _SceneRenderContextCacheEntry {
     required this.elements,
     required Set<String> dynamicPreviewIds,
     required this.creatingFilterId,
+    required Set<String> selectedFilterIds,
     required Map<String, ElementState> serialConnectorPreviewElements,
     required this.context,
   }) : dynamicPreviewIds = Set<String>.unmodifiable(dynamicPreviewIds),
+       selectedFilterIds = Set<String>.unmodifiable(selectedFilterIds),
        serialConnectorPreviewElements = Map<String, ElementState>.unmodifiable(
          serialConnectorPreviewElements,
        );
@@ -2008,6 +2060,7 @@ class _SceneRenderContextCacheEntry {
   final List<ElementState> elements;
   final Set<String> dynamicPreviewIds;
   final String? creatingFilterId;
+  final Set<String> selectedFilterIds;
   final Map<String, ElementState> serialConnectorPreviewElements;
   final _SceneRenderContext context;
 
@@ -2016,12 +2069,14 @@ class _SceneRenderContextCacheEntry {
     required List<ElementState> elements,
     required Set<String> dynamicPreviewIds,
     required String? creatingFilterId,
+    required Set<String> selectedFilterIds,
     required Map<String, ElementState> serialConnectorPreviewElements,
   }) =>
       identical(this.document, document) &&
       identical(this.elements, elements) &&
       this.creatingFilterId == creatingFilterId &&
       _setEquals(this.dynamicPreviewIds, dynamicPreviewIds) &&
+      _setEquals(this.selectedFilterIds, selectedFilterIds) &&
       _mapsEqual(
         this.serialConnectorPreviewElements,
         serialConnectorPreviewElements,

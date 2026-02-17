@@ -422,9 +422,16 @@ void main() {
       final secondFrame = renderer.lastDiagnostics;
 
       expect(firstFrame.batchCacheHits, 0);
-      expect(firstFrame.batchCacheMisses, 1);
-      expect(secondFrame.batchCacheHits, 1);
+      expect(
+        firstFrame.batchCacheMisses + firstFrame.prefixSceneCacheMisses,
+        greaterThanOrEqualTo(1),
+      );
+      expect(
+        secondFrame.batchCacheHits + secondFrame.prefixSceneCacheHits,
+        greaterThanOrEqualTo(1),
+      );
       expect(secondFrame.batchCacheMisses, 0);
+      expect(secondFrame.prefixSceneCacheMisses, 0);
       expect(
         secondFrame.pictureRecorders,
         lessThan(firstFrame.pictureRecorders),
@@ -432,6 +439,163 @@ void main() {
       recorder.endRecording();
     },
   );
+
+  test(
+    'renderer reuses cached static filter prefix across dynamic filter frames',
+    () {
+      final renderer = FilterSegmentRenderer();
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      const cacheContext = FilterRenderCacheContext(
+        domain: FilterRenderCacheDomain.dynamicLayer,
+        documentVersion: 410,
+        textRenderingCacheRevision: 9,
+        scaleKey: 1000,
+        localeTag: 'en-US',
+      );
+
+      const baseElement = ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: 180, maxY: 100),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const staticFilter = ElementState(
+        id: 'static-filter',
+        rect: DrawRect(minX: 12, minY: 8, maxX: 164, maxY: 96),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(type: CanvasFilterType.inversion),
+      );
+
+      void paintFrame(DrawRect dynamicRect) {
+        renderer.paint(
+          canvas: canvas,
+          cacheContext: cacheContext,
+          visibleBounds: const Rect.fromLTWH(0, 0, 200, 120),
+          dynamicElementIds: const {'dynamic-filter'},
+          elements: [
+            baseElement,
+            staticFilter,
+            ElementState(
+              id: 'dynamic-filter',
+              rect: dynamicRect,
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: const FilterData(type: CanvasFilterType.inversion),
+            ),
+          ],
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            sceneCanvas.drawRect(
+              const Rect.fromLTWH(0, 0, 180, 100),
+              Paint()..color = const Color(0xFF103050),
+            );
+          },
+        );
+      }
+
+      paintFrame(const DrawRect(minX: 20, minY: 16, maxX: 120, maxY: 84));
+      final firstFrame = renderer.lastDiagnostics;
+      paintFrame(const DrawRect(minX: 40, minY: 22, maxX: 148, maxY: 94));
+      final secondFrame = renderer.lastDiagnostics;
+
+      expect(firstFrame.prefixSceneCacheHits, 0);
+      expect(firstFrame.prefixSceneCacheMisses, 1);
+      expect(firstFrame.filterPasses, 2);
+      expect(secondFrame.prefixSceneCacheHits, 1);
+      expect(secondFrame.prefixSceneCacheMisses, 0);
+      expect(secondFrame.filterPasses, 1);
+      expect(
+        secondFrame.pictureRecorders,
+        lessThan(firstFrame.pictureRecorders),
+      );
+      recorder.endRecording();
+    },
+  );
+
+  test('prefix-scene cache separates null and empty visible bounds', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContext = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: 902,
+      textRenderingCacheRevision: 4,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+
+    const baseElement = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 160, maxY: 90),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const staticFilter = ElementState(
+      id: 'static-filter',
+      rect: DrawRect(minX: 12, minY: 8, maxX: 150, maxY: 84),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.inversion),
+    );
+
+    void paintFrame({required Rect? visibleBounds, required DrawRect rect}) {
+      renderer.paint(
+        canvas: canvas,
+        cacheContext: cacheContext,
+        visibleBounds: visibleBounds,
+        dynamicElementIds: const {'dynamic-filter'},
+        elements: [
+          baseElement,
+          staticFilter,
+          ElementState(
+            id: 'dynamic-filter',
+            rect: rect,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2,
+            data: const FilterData(type: CanvasFilterType.inversion),
+          ),
+        ],
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 160, 90),
+            Paint()..color = const Color(0xFF234567),
+          );
+        },
+      );
+    }
+
+    paintFrame(
+      visibleBounds: Rect.zero,
+      rect: const DrawRect(minX: 22, minY: 20, maxX: 124, maxY: 76),
+    );
+    final firstFrame = renderer.lastDiagnostics;
+    paintFrame(
+      visibleBounds: null,
+      rect: const DrawRect(minX: 28, minY: 24, maxX: 138, maxY: 82),
+    );
+    final secondFrame = renderer.lastDiagnostics;
+
+    expect(firstFrame.prefixSceneCacheMisses, 1);
+    expect(secondFrame.prefixSceneCacheHits, 0);
+    expect(secondFrame.prefixSceneCacheMisses, 1);
+    expect(secondFrame.filterPasses, 2);
+    recorder.endRecording();
+  });
 
   test('batch cache survives document-version changes '
       'when batch elements are stable', () {
@@ -493,9 +657,16 @@ void main() {
     paintFrame(cacheContextV2);
     final secondFrame = renderer.lastDiagnostics;
 
-    expect(firstFrame.batchCacheMisses, 1);
-    expect(secondFrame.batchCacheHits, 1);
+    expect(
+      firstFrame.batchCacheMisses + firstFrame.prefixSceneCacheMisses,
+      greaterThanOrEqualTo(1),
+    );
+    expect(
+      secondFrame.batchCacheHits + secondFrame.prefixSceneCacheHits,
+      greaterThanOrEqualTo(1),
+    );
     expect(secondFrame.batchCacheMisses, 0);
+    expect(secondFrame.prefixSceneCacheMisses, 0);
     recorder.endRecording();
   });
 

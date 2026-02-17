@@ -138,6 +138,7 @@ class FilterSegmentRenderer {
   static const _filterImageCacheLimit = 256;
   static const _clipInfoCacheLimit = 512;
   static const _batchPictureCacheLimit = 96;
+  static const _prefixSceneCacheLimit = 48;
   static const _maxViewportOutset = 72.0;
   static const _interactiveMosaicMinSigma = 2.5;
   static const _interactiveMosaicMaxSigma = 20.0;
@@ -153,6 +154,11 @@ class FilterSegmentRenderer {
   final _batchPictureCache =
       LruCache<_BatchPictureCacheKey, _CachedBatchPicture>(
         maxEntries: _batchPictureCacheLimit,
+        onEvict: (entry) => entry.markEvicted(),
+      );
+  final _prefixSceneCache =
+      LruCache<_PrefixSceneCacheKey, _CachedPrefixScenePicture>(
+        maxEntries: _prefixSceneCacheLimit,
         onEvict: (entry) => entry.markEvicted(),
       );
   final _diagnostics = FilterRenderDiagnosticsCollector();
@@ -178,11 +184,18 @@ class FilterSegmentRenderer {
   @visibleForTesting
   int get debugBatchPictureCacheLimit => _batchPictureCacheLimit;
 
+  @visibleForTesting
+  int get debugPrefixSceneCacheSize => _prefixSceneCache.length;
+
+  @visibleForTesting
+  int get debugPrefixSceneCacheLimit => _prefixSceneCacheLimit;
+
   /// Clears internal caches.
   void clearCaches() {
     _clipInfoCache.clear();
     _filterCache.clear();
     _batchPictureCache.clear();
+    _prefixSceneCache.clear();
   }
 
   /// Paints [elements] in z-order using segmented filter
@@ -202,7 +215,13 @@ class FilterSegmentRenderer {
       return;
     }
 
-    final segments = _segmentBuilder.build(elements);
+    final baseSegments = _segmentBuilder.build(elements);
+    final segments = dynamicElementIds.isEmpty
+        ? baseSegments
+        : _expandMergedSegmentsForDynamicElements(
+            baseSegments,
+            dynamicElementIds: dynamicElementIds,
+          );
     if (segments.isEmpty) {
       _diagnostics.endFrame();
       return;
@@ -223,37 +242,38 @@ class FilterSegmentRenderer {
       _diagnostics.endFrame();
       return;
     }
-    var lastFilterSegmentIndex = -1;
-    for (var index = 0; index < segments.length; index++) {
-      final segment = segments[index];
-      if (segment is FilterSegment || segment is MergedFilterSegment) {
-        lastFilterSegmentIndex = index;
-      }
-    }
+    final lastFilterSegmentIndex = _findLastFilterSegmentIndex(segments);
 
     // Accumulate batch pictures and only flatten into a single
     // scene when a filter needs to read the composited result.
     // This avoids creating intermediate PictureRecorder merges
     // between consecutive batches.
     final pending = <_ScenePictureRef>[];
-
-    _ScenePictureRef flattenPending() {
-      assert(pending.isNotEmpty, 'pending must not be empty');
-      if (pending.length == 1) {
-        return pending.removeLast();
+    var startSegmentIndex = 0;
+    final firstDynamicSegmentIndex = _findFirstDynamicSegmentIndex(
+      segments,
+      dynamicElementIds: dynamicElementIds,
+    );
+    if (cacheContext != null && firstDynamicSegmentIndex > 0) {
+      final prefixScene = _resolveCachedPrefixScene(
+        segments: segments,
+        endSegmentIndex: firstDynamicSegmentIndex,
+        paintElement: paintElement,
+        cacheContext: cacheContext,
+        visibleBounds: visibleBounds,
+        renderHints: renderHints,
+      );
+      if (prefixScene != null) {
+        pending.add(prefixScene);
+        startSegmentIndex = firstDynamicSegmentIndex;
       }
-      _diagnostics.markPictureRecorder();
-      final recorder = PictureRecorder();
-      final mergeCanvas = Canvas(recorder);
-      for (final scene in pending) {
-        mergeCanvas.drawPicture(scene.picture);
-        scene.release();
-      }
-      pending.clear();
-      return _ScenePictureRef.owned(recorder.endRecording());
     }
 
-    for (var segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
+    for (
+      var segmentIndex = startSegmentIndex;
+      segmentIndex < segments.length;
+      segmentIndex++
+    ) {
       final segment = segments[segmentIndex];
       if (segment is ElementBatchSegment) {
         if (segment.elements.isEmpty) {
@@ -276,7 +296,10 @@ class FilterSegmentRenderer {
         continue;
       }
 
-      final scene = flattenPending();
+      final scene = _flattenPendingScenes(pending);
+      if (scene == null) {
+        continue;
+      }
 
       if (segment is FilterSegment) {
         if (segmentIndex == lastFilterSegmentIndex) {
@@ -326,11 +349,362 @@ class FilterSegmentRenderer {
       }
     }
 
+    _drawPendingScenes(canvas: canvas, pending: pending);
+    _diagnostics.endFrame();
+  }
+
+  List<RenderSegment> _expandMergedSegmentsForDynamicElements(
+    List<RenderSegment> segments, {
+    required Set<String> dynamicElementIds,
+  }) {
+    if (segments.isEmpty || dynamicElementIds.isEmpty) {
+      return segments;
+    }
+
+    List<RenderSegment>? expanded;
+    for (var index = 0; index < segments.length; index++) {
+      final segment = segments[index];
+      if (segment is! MergedFilterSegment || segment.filters.length < 2) {
+        if (expanded != null) {
+          expanded.add(segment);
+        }
+        continue;
+      }
+
+      final groups = _splitMergedSegmentByDynamicMembership(
+        segment,
+        dynamicElementIds: dynamicElementIds,
+      );
+      if (groups.length == 1 && identical(groups.first, segment)) {
+        if (expanded != null) {
+          expanded.add(segment);
+        }
+        continue;
+      }
+
+      expanded ??= <RenderSegment>[
+        for (var existingIndex = 0; existingIndex < index; existingIndex++)
+          segments[existingIndex],
+      ];
+      expanded.addAll(groups);
+    }
+
+    return expanded ?? segments;
+  }
+
+  List<RenderSegment> _splitMergedSegmentByDynamicMembership(
+    MergedFilterSegment segment, {
+    required Set<String> dynamicElementIds,
+  }) {
+    final filters = segment.filters;
+    var hasDynamicFilter = false;
+    var hasStaticFilter = false;
+    for (final filter in filters) {
+      if (dynamicElementIds.contains(filter.filterElement.id)) {
+        hasDynamicFilter = true;
+      } else {
+        hasStaticFilter = true;
+      }
+      if (hasDynamicFilter && hasStaticFilter) {
+        break;
+      }
+    }
+    if (!hasDynamicFilter || !hasStaticFilter) {
+      return <RenderSegment>[segment];
+    }
+
+    final split = <RenderSegment>[];
+    final run = <FilterSegment>[];
+    bool? currentIsDynamic;
+
+    void flushRun() {
+      if (run.isEmpty) {
+        return;
+      }
+      if (run.length == 1) {
+        split.add(run.first);
+      } else {
+        split.add(
+          MergedFilterSegment(filters: List<FilterSegment>.unmodifiable(run)),
+        );
+      }
+      run.clear();
+    }
+
+    for (final filter in filters) {
+      final isDynamic = dynamicElementIds.contains(filter.filterElement.id);
+      if (currentIsDynamic != null && currentIsDynamic != isDynamic) {
+        flushRun();
+      }
+      currentIsDynamic = isDynamic;
+      run.add(filter);
+    }
+    flushRun();
+    return split;
+  }
+
+  int _findLastFilterSegmentIndex(List<RenderSegment> segments) {
+    for (var index = segments.length - 1; index >= 0; index--) {
+      final segment = segments[index];
+      if (segment is FilterSegment || segment is MergedFilterSegment) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  int _findFirstDynamicSegmentIndex(
+    List<RenderSegment> segments, {
+    required Set<String> dynamicElementIds,
+  }) {
+    if (segments.isEmpty || dynamicElementIds.isEmpty) {
+      return -1;
+    }
+    for (var index = 0; index < segments.length; index++) {
+      if (_segmentContainsDynamicElement(
+        segments[index],
+        dynamicElementIds: dynamicElementIds,
+      )) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  bool _segmentContainsDynamicElement(
+    RenderSegment segment, {
+    required Set<String> dynamicElementIds,
+  }) {
+    if (dynamicElementIds.isEmpty) {
+      return false;
+    }
+    if (segment is ElementBatchSegment) {
+      for (final element in segment.elements) {
+        if (dynamicElementIds.contains(element.id)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (segment is FilterSegment) {
+      return dynamicElementIds.contains(segment.filterElement.id);
+    }
+    if (segment is MergedFilterSegment) {
+      for (final filter in segment.filters) {
+        if (dynamicElementIds.contains(filter.filterElement.id)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  _ScenePictureRef? _resolveCachedPrefixScene({
+    required List<RenderSegment> segments,
+    required int endSegmentIndex,
+    required SceneElementPainter paintElement,
+    required FilterRenderCacheContext cacheContext,
+    required Rect? visibleBounds,
+    required FilterRenderHints renderHints,
+  }) {
+    if (endSegmentIndex <= 0) {
+      return null;
+    }
+
+    final prefixElements = _collectElementsInSegmentRange(
+      segments: segments,
+      start: 0,
+      end: endSegmentIndex,
+    );
+    if (prefixElements.isEmpty) {
+      return null;
+    }
+
+    final cacheKey = _PrefixSceneCacheKey(
+      contextSignature: _BatchPictureContextSignature.fromContext(cacheContext),
+      fingerprint: _batchFingerprint(prefixElements),
+      length: prefixElements.length,
+      visibleBoundsSignature: _VisibleBoundsSignature.fromRect(visibleBounds),
+      interactionPreview: renderHints.interactionPreview,
+    );
+    final cached = _prefixSceneCache.get(cacheKey);
+    if (cached != null && cached.matches(prefixElements)) {
+      _diagnostics.markPrefixSceneCacheHit();
+      cached.retain();
+      return _ScenePictureRef.shared(
+        picture: cached.picture,
+        onRelease: cached.release,
+      );
+    }
+
+    _diagnostics.markPrefixSceneCacheMiss();
+    final picture = _composeScenePictureForSegmentRange(
+      segments: segments,
+      startSegmentIndex: 0,
+      endSegmentIndex: endSegmentIndex,
+      paintElement: paintElement,
+      cacheContext: cacheContext,
+      visibleBounds: visibleBounds,
+      dynamicElementIds: const <String>{},
+      renderHints: renderHints,
+    );
+    final cachedEntry = _CachedPrefixScenePicture(
+      picture: picture,
+      elementRefs: prefixElements,
+    )..retain();
+    _prefixSceneCache.put(cacheKey, cachedEntry);
+    return _ScenePictureRef.shared(
+      picture: picture,
+      onRelease: cachedEntry.release,
+    );
+  }
+
+  Picture _composeScenePictureForSegmentRange({
+    required List<RenderSegment> segments,
+    required int startSegmentIndex,
+    required int endSegmentIndex,
+    required SceneElementPainter paintElement,
+    required FilterRenderCacheContext? cacheContext,
+    required Rect? visibleBounds,
+    required Set<String> dynamicElementIds,
+    required FilterRenderHints renderHints,
+  }) {
+    if (startSegmentIndex >= endSegmentIndex) {
+      return _recordEmptyPicture();
+    }
+
+    final pending = <_ScenePictureRef>[];
+    for (
+      var segmentIndex = startSegmentIndex;
+      segmentIndex < endSegmentIndex;
+      segmentIndex++
+    ) {
+      final segment = segments[segmentIndex];
+      if (segment is ElementBatchSegment) {
+        if (segment.elements.isEmpty) {
+          continue;
+        }
+        _diagnostics.markBatch();
+        pending.add(
+          _recordBatch(
+            segment.elements,
+            paintElement,
+            idFingerprint: segment.idFingerprint,
+            cacheContext: cacheContext,
+            dynamicElementIds: dynamicElementIds,
+          ),
+        );
+        continue;
+      }
+
+      if (pending.isEmpty) {
+        continue;
+      }
+
+      final scene = _flattenPendingScenes(pending);
+      if (scene == null) {
+        continue;
+      }
+
+      if (segment is FilterSegment) {
+        final filtered = _applyFilter(
+          scene: scene.picture,
+          filterElement: segment.filterElement,
+          data: segment.filterData,
+          visibleBounds: visibleBounds,
+          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+          renderHints: renderHints,
+        );
+        if (identical(filtered, scene.picture)) {
+          pending.add(scene);
+        } else {
+          scene.release();
+          pending.add(_ScenePictureRef.owned(filtered));
+        }
+        continue;
+      }
+
+      if (segment is MergedFilterSegment) {
+        final filtered = _applyMergedFilter(
+          scene: scene.picture,
+          merged: segment,
+          visibleBounds: visibleBounds,
+          dynamicElementIds: dynamicElementIds,
+          renderHints: renderHints,
+        );
+        if (identical(filtered, scene.picture)) {
+          pending.add(scene);
+        } else {
+          scene.release();
+          pending.add(_ScenePictureRef.owned(filtered));
+        }
+      }
+    }
+
+    final flattened = _flattenPendingScenes(pending, forceOwned: true);
+    if (flattened == null) {
+      return _recordEmptyPicture();
+    }
+    return flattened.picture;
+  }
+
+  List<ElementState> _collectElementsInSegmentRange({
+    required List<RenderSegment> segments,
+    required int start,
+    required int end,
+  }) {
+    final collected = <ElementState>[];
+    for (var index = start; index < end; index++) {
+      final segment = segments[index];
+      if (segment is ElementBatchSegment) {
+        collected.addAll(segment.elements);
+      } else if (segment is FilterSegment) {
+        collected.add(segment.filterElement);
+      } else if (segment is MergedFilterSegment) {
+        for (final filter in segment.filters) {
+          collected.add(filter.filterElement);
+        }
+      }
+    }
+    return List<ElementState>.unmodifiable(collected);
+  }
+
+  _ScenePictureRef? _flattenPendingScenes(
+    List<_ScenePictureRef> pending, {
+    bool forceOwned = false,
+  }) {
+    if (pending.isEmpty) {
+      return null;
+    }
+    if (!forceOwned && pending.length == 1) {
+      return pending.removeLast();
+    }
+
+    _diagnostics.markPictureRecorder();
+    final recorder = PictureRecorder();
+    final mergeCanvas = Canvas(recorder);
+    for (final scene in pending) {
+      mergeCanvas.drawPicture(scene.picture);
+      scene.release();
+    }
+    pending.clear();
+    return _ScenePictureRef.owned(recorder.endRecording());
+  }
+
+  void _drawPendingScenes({
+    required Canvas canvas,
+    required List<_ScenePictureRef> pending,
+  }) {
     for (final scene in pending) {
       canvas.drawPicture(scene.picture);
       scene.release();
     }
-    _diagnostics.endFrame();
+    pending.clear();
+  }
+
+  Picture _recordEmptyPicture() {
+    _diagnostics.markPictureRecorder();
+    return PictureRecorder().endRecording();
   }
 
   _ScenePictureRef _recordBatch(
@@ -1111,8 +1485,144 @@ class _BatchPictureCacheKey {
   int get hashCode => Object.hash(contextSignature, fingerprint, length);
 }
 
+@immutable
+class _VisibleBoundsSignature {
+  const _VisibleBoundsSignature._({
+    required this.hasBounds,
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  factory _VisibleBoundsSignature.fromRect(Rect? bounds) {
+    if (bounds == null) {
+      return const _VisibleBoundsSignature._(
+        hasBounds: false,
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+      );
+    }
+    return _VisibleBoundsSignature._(
+      hasBounds: true,
+      left: (bounds.left * 100).round(),
+      top: (bounds.top * 100).round(),
+      right: (bounds.right * 100).round(),
+      bottom: (bounds.bottom * 100).round(),
+    );
+  }
+
+  final bool hasBounds;
+  final int left;
+  final int top;
+  final int right;
+  final int bottom;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _VisibleBoundsSignature &&
+          other.hasBounds == hasBounds &&
+          other.left == left &&
+          other.top == top &&
+          other.right == right &&
+          other.bottom == bottom;
+
+  @override
+  int get hashCode => Object.hash(hasBounds, left, top, right, bottom);
+}
+
+@immutable
+class _PrefixSceneCacheKey {
+  const _PrefixSceneCacheKey({
+    required this.contextSignature,
+    required this.fingerprint,
+    required this.length,
+    required this.visibleBoundsSignature,
+    required this.interactionPreview,
+  });
+
+  final _BatchPictureContextSignature contextSignature;
+  final int fingerprint;
+  final int length;
+  final _VisibleBoundsSignature visibleBoundsSignature;
+  final bool interactionPreview;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _PrefixSceneCacheKey &&
+          other.contextSignature == contextSignature &&
+          other.fingerprint == fingerprint &&
+          other.length == length &&
+          other.visibleBoundsSignature == visibleBoundsSignature &&
+          other.interactionPreview == interactionPreview;
+
+  @override
+  int get hashCode => Object.hash(
+    contextSignature,
+    fingerprint,
+    length,
+    visibleBoundsSignature,
+    interactionPreview,
+  );
+}
+
 class _CachedBatchPicture {
   _CachedBatchPicture({required this.picture, required this.elementRefs});
+
+  final Picture picture;
+  final List<ElementState> elementRefs;
+  var _activeReaders = 0;
+  var _evicted = false;
+  var _disposed = false;
+
+  bool matches(List<ElementState> elements) {
+    if (elements.length != elementRefs.length) {
+      return false;
+    }
+    for (var index = 0; index < elements.length; index++) {
+      if (!identical(elements[index], elementRefs[index])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void retain() {
+    _activeReaders += 1;
+  }
+
+  void release() {
+    if (_activeReaders == 0) {
+      return;
+    }
+    _activeReaders -= 1;
+    if (_activeReaders == 0 && _evicted) {
+      _dispose();
+    }
+  }
+
+  void markEvicted() {
+    _evicted = true;
+    if (_activeReaders == 0) {
+      _dispose();
+    }
+  }
+
+  void _dispose() {
+    if (_disposed) {
+      return;
+    }
+    picture.dispose();
+    _disposed = true;
+  }
+}
+
+class _CachedPrefixScenePicture {
+  _CachedPrefixScenePicture({required this.picture, required this.elementRefs});
 
   final Picture picture;
   final List<ElementState> elementRefs;
