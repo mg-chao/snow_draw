@@ -996,26 +996,33 @@ _ArrowPointComputation? _tryComputeTwoPointFastPath({
     nextEndBinding = null;
   }
 
-  final updatedPoints = List<DrawPoint>.from(basePoints);
-  updatedPoints[index] = target;
-  if (updatedPoints.first.distanceSquared(updatedPoints.last) <=
-      loopThreshold * loopThreshold) {
+  var first = basePoints.first;
+  var second = basePoints.last;
+  if (index == 0) {
+    first = target;
+  } else {
+    second = target;
+  }
+  if (first.distanceSquared(second) <= loopThreshold * loopThreshold) {
     if (index == 0) {
-      updatedPoints[0] = updatedPoints[1];
+      first = second;
     } else {
-      updatedPoints[1] = updatedPoints[0];
+      second = first;
     }
   }
 
-  final hasChanges = !pointListEquals(basePoints, updatedPoints);
+  final pointsChanged = first != basePoints.first || second != basePoints.last;
   final bindingChanged =
       nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final resolvedPoints = pointsChanged
+      ? List<DrawPoint>.unmodifiable([first, second])
+      : basePoints;
   return _ArrowPointComputation(
-    points: List<DrawPoint>.unmodifiable(updatedPoints),
+    points: resolvedPoints,
     didInsert: didInsert,
     shouldDelete: false,
     activeIndex: index,
-    hasChanges: hasChanges || bindingChanged,
+    hasChanges: pointsChanged || bindingChanged,
     startBinding: nextStartBinding,
     endBinding: nextEndBinding,
     fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,

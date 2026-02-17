@@ -495,20 +495,20 @@ CreationUpdateResult _updateLine({
     }
   }
 
-  final worldPoints = _appendCurrentPoint(
-    fixedPoints: lineEndpoints.fixedPoints,
-    currentPoint: adjustedCurrent,
-  );
   late final DrawRect lineRect;
   late final List<DrawPoint> normalizedPoints;
-  if (worldPoints.length == 2) {
+  if (lineEndpoints.fixedPoints.length == 1) {
     final layout = computeArrowTwoPointLayout(
-      first: worldPoints.first,
-      second: worldPoints.last,
+      first: lineEndpoints.fixedPoints.first,
+      second: adjustedCurrent,
     );
     lineRect = layout.rect;
     normalizedPoints = layout.normalizedPoints;
   } else {
+    final worldPoints = _appendCurrentPoint(
+      fixedPoints: lineEndpoints.fixedPoints,
+      currentPoint: adjustedCurrent,
+    );
     lineRect = _calculateArrowRect(
       points: worldPoints,
       arrowType: data.arrowType,

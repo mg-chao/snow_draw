@@ -52,6 +52,7 @@ import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
+import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'static_canvas_painter.dart';
@@ -1189,37 +1190,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   bool _shouldFrameCoalescePointerMove() {
     final interaction = widget.store.state.application.interaction;
-    if (interaction is CreatingState &&
-        interaction.creationMode is FreeDrawCreationMode) {
-      final mode = interaction.creationMode as FreeDrawCreationMode;
-      if (mode.isLineActive) {
-        return true;
-      }
-    }
-
-    if (_shouldBatchFreeDrawMoves()) {
-      return true;
-    }
-
-    if (interaction is CreatingState) {
-      return interaction.creationMode is! FreeDrawCreationMode;
-    }
-
-    return interaction is EditingState ||
-        interaction is BoxSelectingState ||
-        interaction is DragPendingState;
+    return PointerMoveDispatchPolicy.shouldCoalesce(
+      interaction: interaction,
+      currentToolTypeId: widget.currentToolTypeId,
+      isShiftPressed: _isShiftPressed,
+    );
   }
 
   bool _shouldBatchFreeDrawMoves() {
-    if (_isShiftPressed) {
-      return false;
-    }
-    if (widget.currentToolTypeId == FreeDrawData.typeIdToken) {
-      return true;
-    }
     final interaction = widget.store.state.application.interaction;
-    return interaction is CreatingState &&
-        interaction.elementData is FreeDrawData;
+    return PointerMoveDispatchPolicy.shouldBatchFreeDrawSamples(
+      interaction: interaction,
+      currentToolTypeId: widget.currentToolTypeId,
+      isShiftPressed: _isShiftPressed,
+    );
   }
 
   PointerMoveInputEvent _mergeCoalescedPointerMoveEvents(
