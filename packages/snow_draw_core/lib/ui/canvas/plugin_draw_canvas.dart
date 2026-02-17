@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +44,7 @@ import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
 import 'dynamic_scene_optimization.dart';
+import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
@@ -202,7 +201,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
-  final _lastEraserProcessedPositions = <int, DrawPoint>{};
   final _eraserHitTesterByType =
       <ElementTypeId<ElementData>, ElementHitTester?>{};
   final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
@@ -218,6 +216,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final FrameAlignedEventDispatcher<_HoverFrameEvent> _hoverMoveDispatcher;
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
+  late final EraserStrokeProcessor _eraserStrokeProcessor;
   DrawState? _lastObservedState;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
@@ -355,6 +354,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
       dispatchEvent: _dispatchEraserMove,
       shouldCoalesce: () => _eraserPointerIds.length <= 1,
+    );
+    _eraserStrokeProcessor = EraserStrokeProcessor(
+      hitTesterResolver: _resolveEraserHitTester,
     );
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
@@ -987,9 +989,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _eraserPointerIds.add(event.pointer);
       if (isFirstEraserPointer) {
         _eraserMoveDispatcher.reset();
-        _lastEraserProcessedPositions.clear();
+        _eraserStrokeProcessor.reset();
       }
-      _lastEraserProcessedPositions.remove(event.pointer);
+      _eraserStrokeProcessor.clearPointer(event.pointer);
       final previewChanged = _markElementsForErase(
         pointerId: event.pointer,
         position: position,
@@ -1123,7 +1125,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   Future<void> _finishEraserStroke() async {
     await _eraserMoveDispatcher.flush();
-    _lastEraserProcessedPositions.clear();
+    _eraserStrokeProcessor.reset();
     await _commitPendingErase();
   }
 
@@ -1314,126 +1316,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _markElementsForErase({
     required int pointerId,
     required DrawPoint position,
-  }) {
-    final stateView = _buildStateView(widget.store.state);
-    final tolerance = _eraserCursorRadius / _effectiveScaleFactor();
-
-    final previous = _lastEraserProcessedPositions[pointerId];
-    _lastEraserProcessedPositions[pointerId] = position;
-    final strokeStart = previous ?? position;
-    final samplePoints = _buildEraserStrokeSamples(
-      start: strokeStart,
-      end: position,
-      tolerance: tolerance,
-      includeStart: previous == null,
-    );
-    if (samplePoints.isEmpty) {
-      return false;
-    }
-    final queryRect = _buildEraserStrokeQueryRect(
-      start: strokeStart,
-      end: position,
-      tolerance: tolerance,
-    );
-    return _markElementsForEraseAcrossStroke(
-      stateView: stateView,
-      samplePoints: samplePoints,
-      queryRect: queryRect,
-      tolerance: tolerance,
-    );
-  }
-
-  List<DrawPoint> _buildEraserStrokeSamples({
-    required DrawPoint start,
-    required DrawPoint end,
-    required double tolerance,
-    required bool includeStart,
-  }) {
-    final dx = end.x - start.x;
-    final dy = end.y - start.y;
-    final distanceSquared = dx * dx + dy * dy;
-    if (_doubleEquals(distanceSquared, 0)) {
-      return includeStart ? <DrawPoint>[end] : const <DrawPoint>[];
-    }
-
-    final sampleStep = tolerance * 0.5;
-    if (sampleStep <= 0) {
-      return includeStart ? <DrawPoint>[start, end] : <DrawPoint>[end];
-    }
-
-    final distance = math.sqrt(distanceSquared);
-    final sampleCount = math.max(1, (distance / sampleStep).ceil());
-    final samples = <DrawPoint>[if (includeStart) start];
-    for (var i = 1; i <= sampleCount; i++) {
-      final t = i / sampleCount;
-      samples.add(DrawPoint(x: start.x + dx * t, y: start.y + dy * t));
-    }
-    return samples;
-  }
-
-  DrawRect _buildEraserStrokeQueryRect({
-    required DrawPoint start,
-    required DrawPoint end,
-    required double tolerance,
-  }) => DrawRect(
-    minX: math.min(start.x, end.x) - tolerance,
-    minY: math.min(start.y, end.y) - tolerance,
-    maxX: math.max(start.x, end.x) + tolerance,
-    maxY: math.max(start.y, end.y) + tolerance,
+  }) => _eraserStrokeProcessor.markElementsForErase(
+    pointerId: pointerId,
+    position: position,
+    stateView: _buildStateView(widget.store.state),
+    tolerance: _eraserCursorRadius / _effectiveScaleFactor(),
+    isQueuedForPreview: _pendingErasePreviewElementsById.containsKey,
+    queuePreview: _queueElementForErasePreview,
   );
-
-  bool _markElementsForEraseAcrossStroke({
-    required DrawStateView stateView,
-    required List<DrawPoint> samplePoints,
-    required DrawRect queryRect,
-    required double tolerance,
-  }) {
-    final document = stateView.state.domain.document;
-    var hasNewHits = false;
-    document.visitElementsInRect(queryRect, (candidate) {
-      if (_pendingErasePreviewElementsById.containsKey(candidate.id)) {
-        return true;
-      }
-      final element = stateView.effectiveElement(candidate);
-      if (_isElementHitByAnyEraserSample(
-        element: element,
-        samplePoints: samplePoints,
-        tolerance: tolerance,
-      )) {
-        if (_queueElementForErasePreview(element)) {
-          hasNewHits = true;
-        }
-      }
-      return true;
-    });
-    return hasNewHits;
-  }
-
-  bool _isElementHitByAnyEraserSample({
-    required ElementState element,
-    required List<DrawPoint> samplePoints,
-    required double tolerance,
-  }) {
-    final hitTester = _resolveEraserHitTester(element);
-    for (final sample in samplePoints) {
-      final isHit =
-          hitTester?.hitTest(
-            element: element,
-            position: sample,
-            tolerance: tolerance,
-          ) ??
-          _isInsideRectWithTolerance(
-            rect: element.rect,
-            rotation: element.rotation,
-            position: sample,
-            tolerance: tolerance,
-          );
-      if (isHit) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
     final typeId = element.typeId;
@@ -1459,24 +1349,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return true;
   }
 
-  bool _isInsideRectWithTolerance({
-    required DrawRect rect,
-    required double rotation,
-    required DrawPoint position,
-    required double tolerance,
-  }) {
-    final local = rotation == 0
-        ? position
-        : ElementSpace(
-            rotation: rotation,
-            origin: rect.center,
-          ).fromWorld(position);
-    return local.x >= rect.minX - tolerance &&
-        local.x <= rect.maxX + tolerance &&
-        local.y >= rect.minY - tolerance &&
-        local.y <= rect.maxY + tolerance;
-  }
-
   Future<void> _commitPendingErase() async {
     if (_pendingErasePreviewElementsById.isEmpty) {
       return;
@@ -1500,7 +1372,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _clearEraserStrokeState() {
     _eraserMoveDispatcher.reset();
-    _lastEraserProcessedPositions.clear();
+    _eraserStrokeProcessor.reset();
     if (_eraserPointerIds.isNotEmpty) {
       _activePointerIds.removeAll(_eraserPointerIds);
       _eraserPointerIds.clear();
