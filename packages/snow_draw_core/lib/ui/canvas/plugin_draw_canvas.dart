@@ -42,6 +42,7 @@ import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import '../../draw/utils/snapping_mode.dart';
+import 'arrow_interaction_state_change.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
@@ -3689,6 +3690,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleRectangleInteractionMutation(state);
       return;
     }
+    if (previousState != null &&
+        isArrowInteractionMutationOnly(previous: previousState, next: state)) {
+      _handleArrowInteractionMutation(state);
+      return;
+    }
     final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
@@ -3767,20 +3773,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleLightweightLineEditMutation(DrawState state) {
-    final cursor = _resolveCursorForState(state, _lastPointerPosition);
-    if (!mounted) {
-      _cursor = cursor;
-      _hoveredSelectionElementId = null;
-      _hoveredBindingElementId = null;
-      _hoveredArrowHandle = null;
-      return;
-    }
-    _updateCursorIfChanged(cursor);
-    _clearHoverState();
-    _refreshDynamicLayerSnapshot(state, assumeChanged: true);
+    _handleDynamicOnlyInteractionMutation(state);
   }
 
   void _handleRectangleInteractionMutation(DrawState state) {
+    _handleDynamicOnlyInteractionMutation(state);
+  }
+
+  void _handleArrowInteractionMutation(DrawState state) {
+    _handleDynamicOnlyInteractionMutation(state);
+  }
+
+  void _handleDynamicOnlyInteractionMutation(DrawState state) {
     final cursor = _resolveCursorForState(state, _lastPointerPosition);
     if (!mounted) {
       _cursor = cursor;
