@@ -4,6 +4,20 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
   group('PointerMoveInputEvent', () {
+    test('stores single-sample moves without exposing sampled points', () {
+      final event = PointerMoveInputEvent(
+        position: const DrawPoint(x: 5, y: 7),
+        modifiers: KeyModifiers.none,
+      );
+
+      expect(event.sampleCount, 1);
+      expect(event.sampledPoints, isEmpty);
+      expect(
+        event.samples().toList(growable: false),
+        equals(const [DrawPoint(x: 5, y: 7)]),
+      );
+    });
+
     test('keeps an immutable snapshot of sampled points', () {
       final sampledPoints = <DrawPoint>[
         const DrawPoint(x: 1, y: 2),

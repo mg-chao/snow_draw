@@ -1,4 +1,6 @@
+import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_rect.dart';
@@ -31,6 +33,14 @@ class EditComputePipeline {
   }) {
     if (updatedById.isEmpty) {
       return null;
+    }
+
+    if (!_requiresArrowBindingPipeline(updatedById.values)) {
+      return EditComputedResult(
+        updatedElements: Map<String, ElementState>.unmodifiable(updatedById),
+        multiSelectBounds: multiSelectBounds,
+        multiSelectRotation: multiSelectRotation,
+      );
     }
 
     var merged = updatedById;
@@ -76,5 +86,18 @@ class EditComputePipeline {
       multiSelectBounds: multiSelectBounds,
       multiSelectRotation: multiSelectRotation,
     );
+  }
+
+  static bool _requiresArrowBindingPipeline(
+    Iterable<ElementState> updatedElements,
+  ) {
+    for (final element in updatedElements) {
+      final data = element.data;
+      if (data is ArrowLikeData ||
+          ArrowBindingUtils.isBindableTarget(element)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

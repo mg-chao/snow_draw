@@ -78,14 +78,32 @@ class PointerMoveInputEvent extends InputEvent {
     double pressure = 0.0,
     List<DrawPoint> sampledPoints = const <DrawPoint>[],
   }) {
+    if (sampledPoints.isEmpty) {
+      return PointerMoveInputEvent._internal(
+        position: position,
+        modifiers: modifiers,
+        pressure: pressure,
+        sampleNode: _PointerSampleSingle(position),
+        sampledPointsCache: const <DrawPoint>[],
+      );
+    }
+
     final normalizedSamples = _normalizePointerMoveSamples(
       sampledPoints: sampledPoints,
       position: position,
     );
+    if (normalizedSamples.length == 1) {
+      return PointerMoveInputEvent._internal(
+        position: position,
+        modifiers: modifiers,
+        pressure: pressure,
+        sampleNode: _PointerSampleSingle(normalizedSamples.first),
+        sampledPointsCache: const <DrawPoint>[],
+      );
+    }
+
     final frozenSamples = List<DrawPoint>.unmodifiable(normalizedSamples);
-    final sampledPointsCache = frozenSamples.length <= 1
-        ? const <DrawPoint>[]
-        : frozenSamples;
+    final sampledPointsCache = frozenSamples;
 
     return PointerMoveInputEvent._internal(
       position: position,
@@ -142,6 +160,16 @@ class PointerMoveInputEvent extends InputEvent {
         stack
           ..add(node.right)
           ..add(node.left);
+        continue;
+      }
+
+      if (node is _PointerSampleSingle) {
+        final point = node.point;
+        if (previous == point) {
+          continue;
+        }
+        previous = point;
+        yield point;
         continue;
       }
 
@@ -207,6 +235,13 @@ sealed class _PointerSampleNode {
   final int sampleCount;
   final DrawPoint firstPoint;
   final DrawPoint lastPoint;
+}
+
+final class _PointerSampleSingle extends _PointerSampleNode {
+  _PointerSampleSingle(this.point)
+    : super(sampleCount: 1, firstPoint: point, lastPoint: point);
+
+  final DrawPoint point;
 }
 
 final class _PointerSampleLeaf extends _PointerSampleNode {

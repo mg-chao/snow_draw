@@ -4,6 +4,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -277,6 +278,42 @@ void main() {
       // The bound arrow should appear in the result because the
       // resolver updated it.
       expect(result!.updatedElements.containsKey('boundArrow'), isTrue);
+    });
+
+    test('skips unrelated arrow binding updates for non-bindable elements', () {
+      final target = rect0(
+        id: 'target',
+        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
+      );
+      const binding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0, y: 0.5),
+      );
+      final arrow = arrow0(
+        id: 'boundArrow',
+        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
+        startBinding: binding,
+      );
+      const freeDraw = ElementState(
+        id: 'free',
+        rect: DrawRect(minX: 20, minY: 20, maxX: 60, maxY: 60),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: FreeDrawData(),
+      );
+      final state = stateWith([target, arrow, freeDraw]);
+
+      final movedFreeDraw = freeDraw.copyWith(
+        rect: const DrawRect(minX: 40, minY: 24, maxX: 80, maxY: 64),
+      );
+      final result = EditComputePipeline.finalize(
+        state: state,
+        updatedById: {'free': movedFreeDraw},
+      );
+
+      expect(result, isNotNull);
+      expect(result!.updatedElements.keys.toSet(), equals(const {'free'}));
     });
 
     test('result updatedElements is unmodifiable', () {

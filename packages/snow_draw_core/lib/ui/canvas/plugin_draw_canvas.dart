@@ -54,6 +54,7 @@ import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
+import 'lightweight_line_edit_state_change.dart';
 import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
@@ -3671,6 +3672,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleSerialNumberInteractionMutation(state);
       return;
     }
+    if (previousState != null &&
+        isLightweightLineEditMutationOnly(
+          previous: previousState,
+          next: state,
+        )) {
+      _handleLightweightLineEditMutation(state);
+      return;
+    }
     final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
@@ -3746,6 +3755,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(cursor);
     _clearHoverState();
     _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+  }
+
+  void _handleLightweightLineEditMutation(DrawState state) {
+    final cursor = _resolveCursorForState(state, _lastPointerPosition);
+    if (!mounted) {
+      _cursor = cursor;
+      _hoveredSelectionElementId = null;
+      _hoveredBindingElementId = null;
+      _hoveredArrowHandle = null;
+      return;
+    }
+    _updateCursorIfChanged(cursor);
+    _clearHoverState();
+    _refreshDynamicLayerSnapshot(state, assumeChanged: true);
   }
 
   void _handleConfigChange(DrawConfig _) {
