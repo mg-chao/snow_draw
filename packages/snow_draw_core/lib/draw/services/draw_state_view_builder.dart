@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../edit/preview/edit_preview.dart';
 import '../edit/preview/edit_preview_engine.dart';
+import '../elements/types/free_draw/free_draw_data.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/element_state.dart';
@@ -89,6 +90,10 @@ class DrawStateViewBuilder {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return null;
+    }
+
+    if (interaction.elementData is FreeDrawData) {
+      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
     }
 
     final element = interaction.element;

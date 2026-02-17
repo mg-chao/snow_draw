@@ -60,6 +60,15 @@ class DynamicCanvasPainter extends CustomPainter {
   static final _interactionSceneCache = InteractionSceneCache();
   static final _visibleSceneCache = VisibleElementSceneCache();
   static final _freeDrawPreviewCache = FreeDrawCreationPreviewCache();
+  static final _freeDrawStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true;
+  static final _freeDrawDotPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..isAntiAlias = true;
   static final _arrowOverlayPaints = _ArrowOverlayPaints();
   static final _arrowHoverStrokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -1107,33 +1116,38 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final strokeColor = data.color.withValues(alpha: strokeOpacity);
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final strokePaint = _freeDrawStrokePaint
       ..strokeWidth = data.strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
       ..color = strokeColor
       ..isAntiAlias = true;
 
-    final useChunkedSolidPreview =
-        data.strokeStyle == StrokeStyle.solid && !mode.isLineActive;
+    final useChunkedSolidPreview = data.strokeStyle == StrokeStyle.solid;
     if (useChunkedSolidPreview) {
-      _freeDrawPreviewCache
-        ..sync(
-          elementId: interaction.elementId,
-          points: points,
-          signature: FreeDrawPreviewStrokeSignature(
-            strokeStyle: data.strokeStyle,
-            strokeWidth: data.strokeWidth,
-            strokeColor: strokeColor,
-          ),
-          strokePaint: strokePaint,
-        )
-        ..paint(
-          canvas: canvas,
-          viewportRect: viewportRect,
-          strokePaint: strokePaint,
-        );
+      final cachedPointCount = _resolveSolidPreviewPointCount(
+        mode: mode,
+        points: points,
+      );
+      if (cachedPointCount > 1) {
+        _freeDrawPreviewCache
+          ..sync(
+            elementId: interaction.elementId,
+            points: points,
+            visiblePointCount: cachedPointCount,
+            signature: FreeDrawPreviewStrokeSignature(
+              strokeStyle: data.strokeStyle,
+              strokeWidth: data.strokeWidth,
+              strokeColor: strokeColor,
+            ),
+            strokePaint: strokePaint,
+          )
+          ..paint(
+            canvas: canvas,
+            viewportRect: viewportRect,
+            strokePaint: strokePaint,
+          );
+      } else {
+        _freeDrawPreviewCache.clear();
+      }
     } else {
       _freeDrawPreviewCache.clear();
       final previewPath = mode.previewPath;
@@ -1152,16 +1166,26 @@ class DynamicCanvasPainter extends CustomPainter {
     if (mode.isLineActive &&
         mode.lineAnchor != null &&
         mode.lineCurrent != null) {
-      final activeLinePath = Path()
-        ..moveTo(mode.lineAnchor!.x, mode.lineAnchor!.y)
-        ..lineTo(mode.lineCurrent!.x, mode.lineCurrent!.y);
-      _drawFreeDrawStrokePath(
-        canvas: canvas,
-        path: activeLinePath,
-        data: data,
-        strokePaint: strokePaint,
-        strokeColor: strokeColor,
-      );
+      final anchor = mode.lineAnchor!;
+      final current = mode.lineCurrent!;
+      if (data.strokeStyle == StrokeStyle.solid) {
+        canvas.drawLine(
+          Offset(anchor.x, anchor.y),
+          Offset(current.x, current.y),
+          strokePaint,
+        );
+      } else {
+        final activeLinePath = Path()
+          ..moveTo(anchor.x, anchor.y)
+          ..lineTo(current.x, current.y);
+        _drawFreeDrawStrokePath(
+          canvas: canvas,
+          path: activeLinePath,
+          data: data,
+          strokePaint: strokePaint,
+          strokeColor: strokeColor,
+        );
+      }
     }
 
     final isSinglePointStroke =
@@ -1183,6 +1207,25 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     return true;
+  }
+
+  int _resolveSolidPreviewPointCount({
+    required FreeDrawCreationMode mode,
+    required List<DrawPoint> points,
+  }) {
+    if (points.isEmpty) {
+      return 0;
+    }
+    if (!mode.isLineActive) {
+      return points.length;
+    }
+    // While drawing a constrained line segment, the trailing endpoint keeps
+    // moving every frame. Keep only the committed prefix in the cache so the
+    // cached picture does not churn when dragging the active endpoint.
+    if (points.length <= 2) {
+      return 0;
+    }
+    return points.length - 1;
   }
 
   void _drawFreeDrawStrokePath({
@@ -1207,10 +1250,8 @@ class DynamicCanvasPainter extends CustomPainter {
         if (dotPositions.isEmpty) {
           return;
         }
-        final dotPaint = Paint()
-          ..style = PaintingStyle.stroke
+        final dotPaint = _freeDrawDotPaint
           ..strokeWidth = dotRadius * 2
-          ..strokeCap = StrokeCap.round
           ..color = strokeColor
           ..isAntiAlias = true;
         canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);

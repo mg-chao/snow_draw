@@ -95,8 +95,13 @@ class FreeDrawCreationPreviewCache {
     required List<DrawPoint> points,
     required FreeDrawPreviewStrokeSignature signature,
     required Paint strokePaint,
+    int? visiblePointCount,
   }) {
-    if (points.isEmpty) {
+    final effectivePointCount = _resolveVisiblePointCount(
+      points: points,
+      visiblePointCount: visiblePointCount,
+    );
+    if (effectivePointCount <= 0) {
       clear();
       return;
     }
@@ -104,6 +109,7 @@ class FreeDrawCreationPreviewCache {
     if (_needsReset(
       elementId: elementId,
       points: points,
+      pointCount: effectivePointCount,
       signature: signature,
     )) {
       _resetForSession(elementId: elementId, signature: signature);
@@ -113,12 +119,12 @@ class FreeDrawCreationPreviewCache {
       _startTail(points.first);
     }
 
-    for (var i = _processedPointCount; i < points.length; i++) {
+    for (var i = _processedPointCount; i < effectivePointCount; i++) {
       _appendPoint(points[i], strokePaint);
     }
 
-    _processedPointCount = points.length;
-    _lastProcessedPoint = points.last;
+    _processedPointCount = effectivePointCount;
+    _lastProcessedPoint = points[effectivePointCount - 1];
   }
 
   void paint({
@@ -145,6 +151,7 @@ class FreeDrawCreationPreviewCache {
   bool _needsReset({
     required String elementId,
     required List<DrawPoint> points,
+    required int pointCount,
     required FreeDrawPreviewStrokeSignature signature,
   }) {
     if (_elementId != elementId || _signature != signature) {
@@ -153,7 +160,7 @@ class FreeDrawCreationPreviewCache {
     if (_processedPointCount == 0) {
       return false;
     }
-    if (_processedPointCount > points.length) {
+    if (_processedPointCount > pointCount) {
       return true;
     }
     final lastProcessedPoint = _lastProcessedPoint;
@@ -161,6 +168,22 @@ class FreeDrawCreationPreviewCache {
       return true;
     }
     return points[_processedPointCount - 1] != lastProcessedPoint;
+  }
+
+  int _resolveVisiblePointCount({
+    required List<DrawPoint> points,
+    required int? visiblePointCount,
+  }) {
+    if (visiblePointCount == null) {
+      return points.length;
+    }
+    if (visiblePointCount <= 0) {
+      return 0;
+    }
+    if (visiblePointCount > points.length) {
+      return points.length;
+    }
+    return visiblePointCount;
   }
 
   void _resetForSession({

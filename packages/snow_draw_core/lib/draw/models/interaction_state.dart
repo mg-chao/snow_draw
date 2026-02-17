@@ -293,11 +293,7 @@ class CreatingState extends InteractionState {
   final List<SnapGuide> snapGuides;
   final CreationMode creationMode;
 
-  /// Backward-compatible access to the draft element.
-  ///
-  /// This is synthesized from creation context fields to avoid storing a
-  /// full ElementState in application state.
-  ElementState get element => ElementState(
+  late final _element = ElementState(
     id: elementId,
     rect: elementRect,
     rotation: elementRotation,
@@ -305,6 +301,12 @@ class CreatingState extends InteractionState {
     zIndex: elementZIndex,
     data: elementData,
   );
+
+  /// Backward-compatible access to the draft element.
+  ///
+  /// This is synthesized from creation context fields to avoid storing a
+  /// full ElementState in application state.
+  ElementState get element => _element;
 
   /// Fixed points for point-based creation (arrows).
   List<DrawPoint> get fixedPoints => switch (creationMode) {

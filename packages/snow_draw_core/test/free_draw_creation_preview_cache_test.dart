@@ -69,6 +69,35 @@ void main() {
       expect(cache.sealedSegmentCount, 0);
     });
 
+    test('sync keeps cache stable when active line endpoint is excluded', () {
+      final cache = FreeDrawCreationPreviewCache();
+      final points = _buildPoints(32);
+      final committedCount = points.length - 1;
+
+      cache.sync(
+        elementId: 'stroke-line',
+        points: points,
+        visiblePointCount: committedCount,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      expect(cache.processedPointCount, committedCount);
+
+      final movedTail = List<DrawPoint>.of(points)
+        ..[points.length - 1] = const DrawPoint(x: 4096, y: 2048);
+      cache.sync(
+        elementId: 'stroke-line',
+        points: movedTail,
+        visiblePointCount: committedCount,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      expect(cache.processedPointCount, committedCount);
+      expect(cache.sealedSegmentCount, 0);
+    });
+
     test('sync resets when stroke signature changes', () {
       final cache = FreeDrawCreationPreviewCache();
       final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
