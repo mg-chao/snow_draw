@@ -944,6 +944,132 @@ void main() {
     recorder.endRecording();
   });
 
+  test('aggressive CPU fallback skips mosaic filter creation '
+      'without explicit interaction preview', () {
+    final kernelFactory = _TestKernelFactory(canUseMosaicShader: false);
+    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
+    const elements = [
+      ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: 128, maxY: 96),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      ),
+      ElementState(
+        id: 'filter',
+        rect: DrawRect(minX: 16, minY: 16, maxX: 112, maxY: 80),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(strength: 0.8),
+      ),
+    ];
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    renderer.paint(
+      canvas: canvas,
+      elements: elements,
+      renderHints: const FilterRenderHints(aggressiveCpuFallback: true),
+      paintElement: (sceneCanvas, element) {
+        if (element.id != 'base') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          const Rect.fromLTWH(0, 0, 128, 96),
+          Paint()..color = const Color(0xFF778899),
+        );
+      },
+    );
+
+    expect(kernelFactory.createMosaicCalls, 0);
+    expect(kernelFactory.resolveMosaicCalls, 0);
+
+    renderer.paint(
+      canvas: canvas,
+      elements: elements,
+      paintElement: (sceneCanvas, element) {
+        if (element.id != 'base') {
+          return;
+        }
+        sceneCanvas.drawRect(
+          const Rect.fromLTWH(0, 0, 128, 96),
+          Paint()..color = const Color(0xFF778899),
+        );
+      },
+    );
+
+    expect(kernelFactory.createMosaicCalls, 1);
+    expect(kernelFactory.resolveMosaicCalls, 1);
+    recorder.endRecording();
+  });
+
+  test('mosaic cache normalizes quantized offsets at block boundaries', () {
+    final kernelFactory = _TestKernelFactory(
+      canUseMosaicShader: true,
+      resolvedBlockSize: 2,
+    );
+    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
+    const base = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 256, maxY: 128),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+
+    List<ElementState> elementsForOffset(double filterMinX) => [
+      base,
+      ElementState(
+        id: 'filter',
+        rect: DrawRect(minX: filterMinX, maxX: filterMinX + 128, maxY: 96),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: const FilterData(strength: 0.8),
+      ),
+    ];
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    renderer
+      ..paint(
+        canvas: canvas,
+        elements: elementsForOffset(1.9),
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 256, 128),
+            Paint()..color = const Color(0xFF556677),
+          );
+        },
+      )
+      ..paint(
+        canvas: canvas,
+        elements: elementsForOffset(0.1),
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 256, 128),
+            Paint()..color = const Color(0xFF556677),
+          );
+        },
+      );
+
+    expect(kernelFactory.resolveMosaicCalls, 2);
+    expect(kernelFactory.createMosaicCalls, 1);
+    recorder.endRecording();
+  });
+
   test('interaction-preview mosaic fallback remains stable '
       'when visible bounds cull the layer', () async {
     final kernelFactory = _TestKernelFactory(

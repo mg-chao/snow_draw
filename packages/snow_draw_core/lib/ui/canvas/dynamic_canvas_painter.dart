@@ -685,7 +685,8 @@ class DynamicCanvasPainter extends CustomPainter {
       ),
       dynamicElementIds: sceneContext.dynamicElementIds,
       renderHints: FilterRenderHints(
-        interactionPreview: sceneContext.hasDynamicFilterElement,
+        interactionPreview: sceneContext.hasInteractiveFilterElement,
+        aggressiveCpuFallback: sceneContext.useAggressiveCpuFallback,
       ),
     );
     if (renderKey.performanceMonitoringEnabled) {
@@ -778,21 +779,21 @@ class DynamicCanvasPainter extends CustomPainter {
       baseDynamicIds: interactionDynamicElementIds,
       additionalDynamicIds: selectedFilterIds,
     );
-    var hasDynamicFilterElement = false;
-    if (interactionDynamicElementIds.isNotEmpty &&
-        filterElementIds.isNotEmpty) {
-      for (final dynamicId in interactionDynamicElementIds) {
-        if (!filterElementIds.contains(dynamicId)) {
-          continue;
-        }
-        hasDynamicFilterElement = true;
-        break;
-      }
-    }
+    final hasPreviewDynamicFilterElement = _hasSharedElementId(
+      interactionDynamicElementIds,
+      filterElementIds,
+    );
+    final hasInteractiveFilterElement = _hasSharedElementId(
+      dynamicElementIds,
+      filterElementIds,
+    );
+    final useAggressiveCpuFallback =
+        hasInteractiveFilterElement && !hasPreviewDynamicFilterElement;
 
     final context = _SceneRenderContext(
       hasFilterElement: hasFilterElement,
-      hasDynamicFilterElement: hasDynamicFilterElement,
+      hasInteractiveFilterElement: hasInteractiveFilterElement,
+      useAggressiveCpuFallback: useAggressiveCpuFallback,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       dynamicElementIds: dynamicElementIds,
@@ -988,6 +989,18 @@ class DynamicCanvasPainter extends CustomPainter {
       return additionalDynamicIds;
     }
     return <String>{...baseDynamicIds, ...additionalDynamicIds};
+  }
+
+  bool _hasSharedElementId(Set<String> candidateIds, Set<String> filterIds) {
+    if (candidateIds.isEmpty || filterIds.isEmpty) {
+      return false;
+    }
+    for (final id in candidateIds) {
+      if (filterIds.contains(id)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _resolveDynamicPreviewElementIds(
@@ -2082,14 +2095,16 @@ class _ArrowBindingHighlight {
 class _SceneRenderContext {
   const _SceneRenderContext({
     required this.hasFilterElement,
-    required this.hasDynamicFilterElement,
+    required this.hasInteractiveFilterElement,
+    required this.useAggressiveCpuFallback,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.dynamicElementIds,
   });
 
   final bool hasFilterElement;
-  final bool hasDynamicFilterElement;
+  final bool hasInteractiveFilterElement;
+  final bool useAggressiveCpuFallback;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> dynamicElementIds;

@@ -62,10 +62,20 @@ class FilterRenderCacheContext {
 /// frame rate on backends that do not support shader-based filters.
 @immutable
 class FilterRenderHints {
-  const FilterRenderHints({this.interactionPreview = false});
+  const FilterRenderHints({
+    this.interactionPreview = false,
+    this.aggressiveCpuFallback = false,
+  });
 
   /// Whether this frame is a high-frequency interaction preview.
   final bool interactionPreview;
+
+  /// Whether CPU-backed filters should prioritize frame rate over fidelity.
+  ///
+  /// This is intended for sustained interactions (for example dragging a
+  /// filter-strength slider on backends without shader support) where keeping
+  /// input latency low is more important than precise filter output.
+  final bool aggressiveCpuFallback;
 }
 
 /// Factory interface for creating filter kernels.
@@ -140,8 +150,23 @@ class FilterSegmentRenderer {
   static const _batchPictureCacheLimit = 96;
   static const _prefixSceneCacheLimit = 48;
   static const _maxViewportOutset = 72.0;
-  static const _interactiveMosaicMinSigma = 2.5;
-  static const _interactiveMosaicMaxSigma = 20.0;
+  static const _interactiveViewportOutset = 48.0;
+  static const _aggressiveViewportOutset = 36.0;
+  static const _interactiveGaussianMinSigma = 0.35;
+  static const _interactiveGaussianMaxSigma = 7.5;
+  static const _aggressiveGaussianMaxSigma = 5.5;
+  static const _interactiveMosaicMinSigma = 1.5;
+  static const _interactiveMosaicMaxSigma = 9.0;
+  static const _aggressiveMosaicMaxSigma = 6.5;
+  static const _fullQualitySigmaQuantization = 0.125;
+  static const _interactiveSigmaQuantization = 0.25;
+  static const _aggressiveSigmaQuantization = 0.5;
+  static const _fullQualityMosaicQuantization = 0.25;
+  static const _interactiveMosaicQuantization = 0.5;
+  static const _aggressiveMosaicQuantization = 1.0;
+  static const _fullQualityOffsetQuantization = 0.25;
+  static const _interactiveOffsetQuantization = 0.5;
+  static const _aggressiveOffsetQuantization = 1.0;
 
   final FilterSegmentBuilder _segmentBuilder;
   final FilterKernelFactory _kernelFactory;
@@ -1032,6 +1057,7 @@ class FilterSegmentRenderer {
     required FilterRenderHints renderHints,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
+    final runtimePolicy = _resolveRuntimePolicy(renderHints);
     switch (data.type) {
       case CanvasFilterType.mosaic:
         _paintMosaicFilter(
@@ -1041,7 +1067,7 @@ class FilterSegmentRenderer {
           filterBounds,
           layerBounds,
           opacity,
-          renderHints: renderHints,
+          runtimePolicy: runtimePolicy,
           blendMode: blendMode,
         );
       case CanvasFilterType.gaussianBlur:
@@ -1051,6 +1077,9 @@ class FilterSegmentRenderer {
           layerBounds,
           opacity,
           data,
+          runtimePolicy: runtimePolicy,
+          minSigma: runtimePolicy.gaussianMinSigma,
+          maxSigma: runtimePolicy.gaussianMaxSigma,
           blendMode: blendMode,
         );
       case CanvasFilterType.grayscale:
@@ -1083,32 +1112,43 @@ class FilterSegmentRenderer {
     Rect filterBounds,
     Rect layerBounds,
     double opacity, {
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final shouldUseFastInteractionApproximation =
-        renderHints.interactionPreview && !_kernelFactory.canUseMosaicShader;
-    if (shouldUseFastInteractionApproximation) {
+    if (runtimePolicy.useFastMosaicApproximation) {
       _paintBlurFilter(
         canvas,
         scene,
         layerBounds,
         opacity,
         data,
-        minSigma: _interactiveMosaicMinSigma,
-        maxSigma: _interactiveMosaicMaxSigma,
+        runtimePolicy: runtimePolicy,
+        minSigma: runtimePolicy.mosaicPreviewMinSigma,
+        maxSigma: runtimePolicy.mosaicPreviewMaxSigma,
         blendMode: blendMode,
       );
       return;
     }
 
-    final mosaicBlockSize = _kernelFactory.resolveMosaicBlockSize(
-      strength: data.strength,
-      regionSize: filterBounds.size,
+    final mosaicBlockSize = runtimePolicy.quantizeMosaicBlockSize(
+      _kernelFactory.resolveMosaicBlockSize(
+        strength: data.strength,
+        regionSize: filterBounds.size,
+      ),
     );
     final mosaicOrigin = filterBounds.topLeft;
-    final normalizedOffsetX = _positiveModulo(mosaicOrigin.dx, mosaicBlockSize);
-    final normalizedOffsetY = _positiveModulo(mosaicOrigin.dy, mosaicBlockSize);
+    final normalizedOffsetX = _positiveModulo(
+      runtimePolicy.quantizeMosaicOffset(
+        _positiveModulo(mosaicOrigin.dx, mosaicBlockSize),
+      ),
+      mosaicBlockSize,
+    );
+    final normalizedOffsetY = _positiveModulo(
+      runtimePolicy.quantizeMosaicOffset(
+        _positiveModulo(mosaicOrigin.dy, mosaicBlockSize),
+      ),
+      mosaicBlockSize,
+    );
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.mosaic,
       param0: mosaicBlockSize,
@@ -1146,6 +1186,7 @@ class FilterSegmentRenderer {
       layerBounds,
       opacity,
       data,
+      runtimePolicy: runtimePolicy,
       minSigma: 4,
       maxSigma: 24,
       blendMode: blendMode,
@@ -1158,14 +1199,17 @@ class FilterSegmentRenderer {
     Rect layerBounds,
     double opacity,
     FilterData data, {
+    required _FilterRuntimePolicy runtimePolicy,
     double minSigma = 0.5,
     double maxSigma = 12,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final sigma = _mapStrength(
-      strength: data.strength,
-      minValue: minSigma,
-      maxValue: maxSigma,
+    final sigma = runtimePolicy.quantizeSigma(
+      _mapStrength(
+        strength: data.strength,
+        minValue: minSigma,
+        maxValue: maxSigma,
+      ),
     );
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.gaussianBlur,
@@ -1239,10 +1283,11 @@ class FilterSegmentRenderer {
     if (visibleBounds == null) {
       return clipBounds;
     }
+    final runtimePolicy = _resolveRuntimePolicy(renderHints);
     final viewportOutset = _resolveFilterViewportOutset(
       data: data,
       clipBounds: clipBounds,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     final expandedVisible = Rect.fromLTRB(
       visibleBounds.left - viewportOutset,
@@ -1261,39 +1306,95 @@ class FilterSegmentRenderer {
   double _resolveFilterViewportOutset({
     required FilterData data,
     required Rect clipBounds,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     switch (data.type) {
       case CanvasFilterType.gaussianBlur:
-        final sigma = _mapStrength(
-          strength: data.strength,
-          minValue: 0.5,
-          maxValue: 12,
+        final sigma = runtimePolicy.quantizeSigma(
+          _mapStrength(
+            strength: data.strength,
+            minValue: runtimePolicy.gaussianMinSigma,
+            maxValue: runtimePolicy.gaussianMaxSigma,
+          ),
         );
         final blurRadius = (sigma * 3) + 2;
-        return math.min(blurRadius, _maxViewportOutset);
+        return math.min(blurRadius, runtimePolicy.maxViewportOutset);
       case CanvasFilterType.mosaic:
-        final shouldUseFastInteractionApproximation =
-            renderHints.interactionPreview &&
-            !_kernelFactory.canUseMosaicShader;
-        if (shouldUseFastInteractionApproximation) {
-          final sigma = _mapStrength(
-            strength: data.strength,
-            minValue: _interactiveMosaicMinSigma,
-            maxValue: _interactiveMosaicMaxSigma,
+        if (runtimePolicy.useFastMosaicApproximation) {
+          final sigma = runtimePolicy.quantizeSigma(
+            _mapStrength(
+              strength: data.strength,
+              minValue: runtimePolicy.mosaicPreviewMinSigma,
+              maxValue: runtimePolicy.mosaicPreviewMaxSigma,
+            ),
           );
           final blurRadius = (sigma * 3) + 2;
-          return math.min(blurRadius, _maxViewportOutset);
+          return math.min(blurRadius, runtimePolicy.maxViewportOutset);
         }
-        final blockSize = _kernelFactory.resolveMosaicBlockSize(
-          strength: data.strength,
-          regionSize: clipBounds.size,
+        final blockSize = runtimePolicy.quantizeMosaicBlockSize(
+          _kernelFactory.resolveMosaicBlockSize(
+            strength: data.strength,
+            regionSize: clipBounds.size,
+          ),
         );
-        return math.min(math.max(blockSize, 8), _maxViewportOutset);
+        return math.min(
+          math.max(blockSize, 8),
+          runtimePolicy.maxViewportOutset,
+        );
       case CanvasFilterType.grayscale:
       case CanvasFilterType.inversion:
         return 0;
     }
+  }
+
+  _FilterRuntimePolicy _resolveRuntimePolicy(FilterRenderHints renderHints) {
+    final preferFastCpuFallback =
+        renderHints.interactionPreview || renderHints.aggressiveCpuFallback;
+    final aggressiveCpuFallback =
+        preferFastCpuFallback && renderHints.aggressiveCpuFallback;
+    final sigmaQuantizationStep = aggressiveCpuFallback
+        ? _aggressiveSigmaQuantization
+        : preferFastCpuFallback
+        ? _interactiveSigmaQuantization
+        : _fullQualitySigmaQuantization;
+    final mosaicQuantizationStep = aggressiveCpuFallback
+        ? _aggressiveMosaicQuantization
+        : preferFastCpuFallback
+        ? _interactiveMosaicQuantization
+        : _fullQualityMosaicQuantization;
+    final offsetQuantizationStep = aggressiveCpuFallback
+        ? _aggressiveOffsetQuantization
+        : preferFastCpuFallback
+        ? _interactiveOffsetQuantization
+        : _fullQualityOffsetQuantization;
+    final gaussianMaxSigma = aggressiveCpuFallback
+        ? _aggressiveGaussianMaxSigma
+        : preferFastCpuFallback
+        ? _interactiveGaussianMaxSigma
+        : 12.0;
+    final mosaicMaxSigma = aggressiveCpuFallback
+        ? _aggressiveMosaicMaxSigma
+        : _interactiveMosaicMaxSigma;
+    final maxViewportOutset = aggressiveCpuFallback
+        ? _aggressiveViewportOutset
+        : preferFastCpuFallback
+        ? _interactiveViewportOutset
+        : _maxViewportOutset;
+
+    return _FilterRuntimePolicy(
+      preferFastCpuFallback: preferFastCpuFallback,
+      canUseMosaicShader: _kernelFactory.canUseMosaicShader,
+      gaussianMinSigma: preferFastCpuFallback
+          ? _interactiveGaussianMinSigma
+          : 0.5,
+      gaussianMaxSigma: gaussianMaxSigma,
+      mosaicPreviewMinSigma: _interactiveMosaicMinSigma,
+      mosaicPreviewMaxSigma: mosaicMaxSigma,
+      maxViewportOutset: maxViewportOutset,
+      sigmaQuantizationStep: sigmaQuantizationStep,
+      mosaicSizeQuantizationStep: mosaicQuantizationStep,
+      mosaicOffsetQuantizationStep: offsetQuantizationStep,
+    );
   }
 
   _ClipInfo _resolveClipInfo(ElementState element, {required bool useCache}) {
@@ -1388,6 +1489,63 @@ class FilterSegmentRenderer {
       return remainder + period;
     }
     return remainder;
+  }
+}
+
+@immutable
+class _FilterRuntimePolicy {
+  const _FilterRuntimePolicy({
+    required this.preferFastCpuFallback,
+    required this.canUseMosaicShader,
+    required this.gaussianMinSigma,
+    required this.gaussianMaxSigma,
+    required this.mosaicPreviewMinSigma,
+    required this.mosaicPreviewMaxSigma,
+    required this.maxViewportOutset,
+    required this.sigmaQuantizationStep,
+    required this.mosaicSizeQuantizationStep,
+    required this.mosaicOffsetQuantizationStep,
+  });
+
+  final bool preferFastCpuFallback;
+  final bool canUseMosaicShader;
+  final double gaussianMinSigma;
+  final double gaussianMaxSigma;
+  final double mosaicPreviewMinSigma;
+  final double mosaicPreviewMaxSigma;
+  final double maxViewportOutset;
+  final double sigmaQuantizationStep;
+  final double mosaicSizeQuantizationStep;
+  final double mosaicOffsetQuantizationStep;
+
+  bool get useFastMosaicApproximation =>
+      preferFastCpuFallback && !canUseMosaicShader;
+
+  double quantizeSigma(double sigma) => _quantize(sigma, sigmaQuantizationStep);
+
+  double quantizeMosaicBlockSize(double value) {
+    final quantized = _quantize(value, mosaicSizeQuantizationStep);
+    if (quantized.isFinite && quantized > 0) {
+      return quantized;
+    }
+    if (value.isFinite && value > 0) {
+      return value;
+    }
+    return 1;
+  }
+
+  double quantizeMosaicOffset(double value) =>
+      _quantize(value, mosaicOffsetQuantizationStep);
+
+  double _quantize(double value, double step) {
+    if (step <= 0 || !value.isFinite) {
+      return value;
+    }
+    final quantized = (value / step).roundToDouble() * step;
+    if (quantized == 0) {
+      return 0;
+    }
+    return quantized;
   }
 }
 
