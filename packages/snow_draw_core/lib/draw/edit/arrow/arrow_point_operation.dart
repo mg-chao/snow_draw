@@ -14,6 +14,7 @@ import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import '../../elements/types/line/line_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -37,6 +38,9 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/standard_finish_mixin.dart';
+
+const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _linePointBindingCacheTargetThresholdFactor = 0.9;
 
 class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   const ArrowPointOperation();
@@ -142,6 +146,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       dragOffset: dragOffset,
       releaseFixedSegment: shouldReleaseSegment,
       deletePointOnStart: shouldDeletePoint,
+      isLineElement: data is LineData,
       bindingTargetCache: ArrowBindingTargetCache(),
     );
   }
@@ -297,6 +302,10 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       bindingDistance: bindingDistance,
       allowNewBinding: allowNewBinding,
     );
+
+    if (_isNoOpArrowTransformUpdate(previous: typedTransform, next: result)) {
+      return EditUpdateResult<EditTransform>(transform: typedTransform);
+    }
 
     final nextTransform = typedTransform.copyWith(
       currentPosition: localPosition,
@@ -513,6 +522,7 @@ final class ArrowPointEditContext extends EditContext {
     required this.releaseFixedSegment,
     required this.deletePointOnStart,
     required ArrowBindingTargetCache bindingTargetCache,
+    this.isLineElement = false,
   }) : _bindingTargetCache = bindingTargetCache;
 
   final String elementId;
@@ -526,6 +536,7 @@ final class ArrowPointEditContext extends EditContext {
   final DrawPoint dragOffset;
   final bool releaseFixedSegment;
   final bool deletePointOnStart;
+  final bool isLineElement;
   final ArrowBindingTargetCache _bindingTargetCache;
 
   @override
@@ -566,6 +577,19 @@ final class _BoundarySegmentDragResult {
   final List<ElbowFixedSegment> fixedSegments;
 }
 
+bool _isNoOpArrowTransformUpdate({
+  required ArrowPointTransform previous,
+  required _ArrowPointComputation next,
+}) =>
+    previous.didInsert == next.didInsert &&
+    previous.shouldDelete == next.shouldDelete &&
+    previous.hasChanges == next.hasChanges &&
+    previous.activeIndex == next.activeIndex &&
+    previous.startBinding == next.startBinding &&
+    previous.endBinding == next.endBinding &&
+    pointListEquals(previous.points, next.points) &&
+    fixedSegmentStructureEquals(previous.fixedSegments, next.fixedSegments);
+
 _ArrowPointComputation _compute({
   required DrawState state,
   required ArrowPointEditContext context,
@@ -580,7 +604,7 @@ _ArrowPointComputation _compute({
   required double bindingDistance,
   required bool allowNewBinding,
 }) {
-  final basePoints = List<DrawPoint>.from(context.initialPoints);
+  final basePoints = context.initialPoints;
   final baseFixedSegments = context.initialFixedSegments;
   final zoom = state.application.view.camera.zoom;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
@@ -1058,12 +1082,16 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
   final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
     snapDistance,
   );
+  final targetCacheThresholdFactor = context.isLineElement
+      ? _linePointBindingCacheTargetThresholdFactor
+      : _defaultBindingCacheTargetThresholdFactor;
   final targets = ArrowBindingSnapper.resolveBindingTargetsCached(
     state: state,
     position: worldTarget,
     distance: searchDistance,
     cache: context._bindingTargetCache,
     excludedElementId: context.elementId,
+    targetCacheThresholdFactor: targetCacheThresholdFactor,
   );
   if (targets.isEmpty) {
     return null;

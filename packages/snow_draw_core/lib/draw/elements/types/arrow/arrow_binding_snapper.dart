@@ -162,7 +162,17 @@ class ArrowBindingSnapper {
     required double distance,
     ArrowBindingTargetCache? cache,
     String? excludedElementId,
+    double targetCacheThresholdFactor = _bindingCacheTargetThresholdFactor,
+    double emptyCacheThresholdFactor = _bindingCacheEmptyThresholdFactor,
   }) {
+    assert(
+      targetCacheThresholdFactor >= 0,
+      'targetCacheThresholdFactor must be non-negative',
+    );
+    assert(
+      emptyCacheThresholdFactor >= 0,
+      'emptyCacheThresholdFactor must be non-negative',
+    );
     if (cache == null) {
       return _resolveBindingTargets(
         state: state,
@@ -173,8 +183,8 @@ class ArrowBindingSnapper {
     }
     final elementsVersion = state.domain.document.elementsVersion;
     final thresholdFactor = cache.targets.isEmpty
-        ? _bindingCacheEmptyThresholdFactor
-        : _bindingCacheTargetThresholdFactor;
+        ? emptyCacheThresholdFactor
+        : targetCacheThresholdFactor;
     final threshold = distance * thresholdFactor;
     if (cache.isValid(
       position: position,

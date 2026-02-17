@@ -3,6 +3,7 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -172,6 +173,126 @@ void main() {
 
         expect(callsAfterFirstUpdate, greaterThan(0));
         expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+      },
+    );
+
+    test('line creation reuses target cache for medium pointer moves', () {
+      const target = ElementState(
+        id: 'target',
+        rect: DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      final counter = _HitTestCounter();
+      final document = _CountingDocumentState(
+        elements: const [target],
+        counter: counter,
+      );
+      final state = _stateWith(document);
+
+      const strategy = ArrowCreationStrategy();
+      const start = DrawPoint(x: 80, y: 80);
+      final startResult = strategy.start(
+        data: const LineData(),
+        startPosition: start,
+      );
+      var creating = _creatingState(
+        elementId: 'line',
+        startPosition: start,
+        startResult: startResult,
+      );
+
+      counter.reset();
+      final firstUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 209, y: 160),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, firstUpdate);
+      final callsAfterFirstUpdate = counter.value;
+
+      final secondUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 217, y: 160),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, secondUpdate);
+      final callsAfterSecondUpdate = counter.value;
+      expect(creating.currentRect, isNotNull);
+
+      expect(callsAfterFirstUpdate, greaterThan(0));
+      expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+    });
+
+    test(
+      'line creation refreshes empty target cache when entering bind range',
+      () {
+        const target = ElementState(
+          id: 'target',
+          rect: DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: const [target],
+          counter: counter,
+        );
+        final state = _stateWith(document);
+
+        const strategy = ArrowCreationStrategy();
+        const start = DrawPoint(x: 80, y: 80);
+        final startResult = strategy.start(
+          data: const LineData(),
+          startPosition: start,
+        );
+        var creating = _creatingState(
+          elementId: 'line',
+          startPosition: start,
+          startResult: startResult,
+        );
+
+        counter.reset();
+        final firstUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 180, y: 170),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        creating = _applyUpdate(creating, firstUpdate);
+        final callsAfterFirstUpdate = counter.value;
+
+        final secondUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 192, y: 170),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        creating = _applyUpdate(creating, secondUpdate);
+        final callsAfterSecondUpdate = counter.value;
+        final lineData = secondUpdate.data as LineData;
+
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, greaterThan(0));
+        expect(lineData.endBinding, isNotNull);
       },
     );
   });

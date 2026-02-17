@@ -429,6 +429,99 @@ CreationUpdateResult _updateLine({
   required LineData data,
 }) {
   final sessionData = _resolveSessionData(creatingState.creationMode);
+  final lineEndpoints = _resolveLineEndpoints(
+    state: state,
+    config: config,
+    creatingState: creatingState,
+    data: data,
+    currentPosition: currentPosition,
+    snappingMode: snappingMode,
+    sessionData: sessionData,
+  );
+
+  final snapResult = _snapCreatePoint(
+    state: state,
+    config: config,
+    position: lineEndpoints.currentPosition,
+    snappingMode: snappingMode,
+    sessionData: sessionData,
+  );
+  var adjustedCurrent = snapResult.position;
+
+  final bindingResult = _snapBindingPoint(
+    state: state,
+    config: config,
+    position: adjustedCurrent,
+    snappingMode: snappingMode,
+    arrowType: data.arrowType,
+    arrowheadStyle: data.endArrowhead,
+    preferredBinding: data.endBinding,
+    referencePoint: lineEndpoints.segmentStart,
+    targetCache: sessionData.endTargetCache,
+    targetCacheThresholdFactor: _lineBindingCacheTargetThresholdFactor,
+  );
+  adjustedCurrent = bindingResult.position;
+  var endBinding = bindingResult.binding;
+
+  final closeTolerance =
+      config.selection.interaction.handleTolerance *
+      _loopCloseToleranceMultiplier;
+  if (lineEndpoints.fixedPoints.length >= 2) {
+    final firstPoint = lineEndpoints.fixedPoints.first;
+    if (adjustedCurrent.distanceSquared(firstPoint) <=
+        closeTolerance * closeTolerance) {
+      adjustedCurrent = firstPoint;
+      endBinding = lineEndpoints.startBinding;
+    }
+  }
+
+  final worldPoints = _appendCurrentPoint(
+    fixedPoints: lineEndpoints.fixedPoints,
+    currentPoint: adjustedCurrent,
+  );
+  final lineRect = worldPoints.length > 2
+      ? _calculateArrowRect(
+          points: worldPoints,
+          arrowType: data.arrowType,
+          strokeWidth: data.strokeWidth,
+        )
+      : _calculateStraightBounds(worldPoints);
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: lineRect,
+  );
+  final updatedData = data.copyWith(
+    points: normalizedPoints,
+    startBinding: lineEndpoints.startBinding,
+    endBinding: endBinding,
+  );
+
+  return CreationUpdateResult(
+    data: updatedData,
+    rect: lineRect,
+    snapGuides: snapResult.guides,
+    creationMode: PointCreationMode(
+      fixedPoints: lineEndpoints.fixedPoints,
+      currentPoint: adjustedCurrent,
+      sessionData: sessionData,
+    ),
+  );
+}
+
+const _loopCloseToleranceMultiplier = 1.5;
+const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _defaultBindingCacheEmptyThresholdFactor = 0.75;
+const _lineBindingCacheTargetThresholdFactor = 0.9;
+
+_LineEndpointResolution _resolveLineEndpoints({
+  required DrawState state,
+  required DrawConfig config,
+  required CreatingState creatingState,
+  required LineData data,
+  required DrawPoint currentPosition,
+  required SnappingMode snappingMode,
+  required _ArrowCreationSessionData sessionData,
+}) {
   final gridConfig = config.grid;
   final snapToGrid = snappingMode == SnappingMode.grid;
   var startPosition = snapToGrid
@@ -454,6 +547,7 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.startBinding,
     referencePoint: adjustedCurrent,
     targetCache: sessionData.startTargetCache,
+    targetCacheThresholdFactor: _lineBindingCacheTargetThresholdFactor,
   );
   startPosition = startBindingResult.position;
 
@@ -469,75 +563,13 @@ CreationUpdateResult _updateLine({
     currentPosition: adjustedCurrent,
   );
 
-  final snapResult = _snapCreatePoint(
-    state: state,
-    config: config,
-    position: adjustedCurrent,
-    snappingMode: snappingMode,
-    sessionData: sessionData,
-  );
-  adjustedCurrent = snapResult.position;
-
-  final bindingResult = _snapBindingPoint(
-    state: state,
-    config: config,
-    position: adjustedCurrent,
-    snappingMode: snappingMode,
-    arrowType: data.arrowType,
-    arrowheadStyle: data.endArrowhead,
-    preferredBinding: data.endBinding,
-    referencePoint: segmentStart,
-    targetCache: sessionData.endTargetCache,
-  );
-  adjustedCurrent = bindingResult.position;
-  var endBinding = bindingResult.binding;
-
-  final closeTolerance =
-      config.selection.interaction.handleTolerance *
-      _loopCloseToleranceMultiplier;
-  if (fixedPoints.length >= 2) {
-    final firstPoint = fixedPoints.first;
-    if (adjustedCurrent.distanceSquared(firstPoint) <=
-        closeTolerance * closeTolerance) {
-      adjustedCurrent = firstPoint;
-      endBinding = startBindingResult.binding;
-    }
-  }
-
-  final worldPoints = _appendCurrentPoint(
+  return _LineEndpointResolution(
     fixedPoints: fixedPoints,
-    currentPoint: adjustedCurrent,
-  );
-  final lineRect = worldPoints.length > 2
-      ? _calculateArrowRect(
-          points: worldPoints,
-          arrowType: data.arrowType,
-          strokeWidth: data.strokeWidth,
-        )
-      : _calculateStraightBounds(worldPoints);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: worldPoints,
-    rect: lineRect,
-  );
-  final updatedData = data.copyWith(
-    points: normalizedPoints,
+    segmentStart: segmentStart,
+    currentPosition: adjustedCurrent,
     startBinding: startBindingResult.binding,
-    endBinding: endBinding,
-  );
-
-  return CreationUpdateResult(
-    data: updatedData,
-    rect: lineRect,
-    snapGuides: snapResult.guides,
-    creationMode: PointCreationMode(
-      fixedPoints: fixedPoints,
-      currentPoint: adjustedCurrent,
-      sessionData: sessionData,
-    ),
   );
 }
-
-const _loopCloseToleranceMultiplier = 1.5;
 
 /// Calculates accurate bounding rect for arrow, accounting for curved paths.
 DrawRect _calculateArrowRect({
@@ -714,6 +746,8 @@ _BindingSnapResult _snapBindingPoint({
   ArrowBinding? preferredBinding,
   DrawPoint? referencePoint,
   ArrowBindingTargetCache? targetCache,
+  double targetCacheThresholdFactor = _defaultBindingCacheTargetThresholdFactor,
+  double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
 }) {
   final snapConfig = config.snap;
   final bindingEnabled = ArrowBindingSnapper.shouldAttemptBinding(
@@ -764,6 +798,8 @@ _BindingSnapResult _snapBindingPoint({
     position: position,
     distance: bindingSearchDistance,
     cache: targetCache,
+    targetCacheThresholdFactor: targetCacheThresholdFactor,
+    emptyCacheThresholdFactor: emptyCacheThresholdFactor,
   );
   if (targets.isEmpty) {
     return _BindingSnapResult(position: position);
@@ -847,6 +883,21 @@ class _ArrowCreationSessionData {
         .where((element) => element.opacity > 0)
         .toList(growable: false);
   }
+}
+
+@immutable
+class _LineEndpointResolution {
+  const _LineEndpointResolution({
+    required this.fixedPoints,
+    required this.segmentStart,
+    required this.currentPosition,
+    required this.startBinding,
+  });
+
+  final List<DrawPoint> fixedPoints;
+  final DrawPoint segmentStart;
+  final DrawPoint currentPosition;
+  final ArrowBinding? startBinding;
 }
 
 @immutable

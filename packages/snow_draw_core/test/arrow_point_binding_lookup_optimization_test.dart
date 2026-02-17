@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -17,6 +18,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/types/edit_transform.dart';
 
 void main() {
   group('ArrowPointOperation binding target lookup optimization', () {
@@ -252,6 +254,130 @@ void main() {
 
       expect(counter.value, 0);
     });
+
+    test(
+      'line endpoint drag reuses binding target cache on medium movement',
+      () {
+        final line = _lineElement(
+          id: 'line',
+          points: const [DrawPoint(x: 120, y: 160), DrawPoint(x: 320, y: 160)],
+        );
+        final target = _rectangleElement(
+          id: 'target',
+          rect: const DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: [target, line],
+          counter: counter,
+        );
+        final state = _stateWith(document, selectedIds: const {'line'});
+
+        const operation = ArrowPointOperation();
+        final context = operation.createContext(
+          state: state,
+          position: const DrawPoint(x: 120, y: 160),
+          params: const ArrowPointOperationParams(
+            elementId: 'line',
+            pointKind: ArrowPointKind.turning,
+            pointIndex: 0,
+          ),
+        );
+        final initialTransform = operation.initialTransform(
+          state: state,
+          context: context,
+          startPosition: const DrawPoint(x: 120, y: 160),
+        );
+
+        counter.reset();
+        final first = operation.update(
+          state: state,
+          context: context,
+          transform: initialTransform,
+          currentPosition: const DrawPoint(x: 209, y: 160),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final firstTransform = first.transform as ArrowPointTransform;
+        final callsAfterFirstUpdate = counter.value;
+
+        operation.update(
+          state: state,
+          context: context,
+          transform: firstTransform,
+          currentPosition: const DrawPoint(x: 217, y: 160),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final callsAfterSecondUpdate = counter.value;
+
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+      },
+    );
+
+    test(
+      'line endpoint drag refreshes empty cache when entering bind range',
+      () {
+        final line = _lineElement(
+          id: 'line',
+          points: const [DrawPoint(x: 120, y: 160), DrawPoint(x: 320, y: 160)],
+        );
+        final target = _rectangleElement(
+          id: 'target',
+          rect: const DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: [target, line],
+          counter: counter,
+        );
+        final state = _stateWith(document, selectedIds: const {'line'});
+
+        const operation = ArrowPointOperation();
+        final context = operation.createContext(
+          state: state,
+          position: const DrawPoint(x: 120, y: 160),
+          params: const ArrowPointOperationParams(
+            elementId: 'line',
+            pointKind: ArrowPointKind.turning,
+            pointIndex: 0,
+          ),
+        );
+        final initialTransform = operation.initialTransform(
+          state: state,
+          context: context,
+          startPosition: const DrawPoint(x: 120, y: 160),
+        );
+
+        counter.reset();
+        final first = operation.update(
+          state: state,
+          context: context,
+          transform: initialTransform,
+          currentPosition: const DrawPoint(x: 180, y: 170),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final firstTransform = first.transform as ArrowPointTransform;
+        final callsAfterFirstUpdate = counter.value;
+
+        final second = operation.update(
+          state: state,
+          context: context,
+          transform: firstTransform,
+          currentPosition: const DrawPoint(x: 192, y: 170),
+          modifiers: const EditModifiers(),
+          config: DrawConfig.defaultConfig,
+        );
+        final callsAfterSecondUpdate = counter.value;
+        final secondTransform = second.transform as ArrowPointTransform;
+
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, greaterThan(0));
+        expect(secondTransform.startBinding, isNotNull);
+      },
+    );
   });
 }
 
@@ -331,6 +457,25 @@ ElementState _arrowElement({
       startBinding: startBinding,
       endBinding: endBinding,
     ),
+  );
+}
+
+ElementState _lineElement({
+  required String id,
+  required List<DrawPoint> points,
+}) {
+  final rect = _rectForPoints(points);
+  final normalized = ArrowGeometry.normalizePoints(
+    worldPoints: points,
+    rect: rect,
+  );
+  return ElementState(
+    id: id,
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 1,
+    data: LineData(points: normalized),
   );
 }
 
