@@ -731,24 +731,25 @@ class DynamicCanvasPainter extends CustomPainter {
           previewElementsById: previewElements,
           visibleTextIds: visibleTextIds,
         );
-    final serialConnectors = shouldPaintSerialConnectors
-        ? resolveSerialNumberConnectorMap(
+    final serialConnectorSnapshot = shouldPaintSerialConnectors
+        ? resolveSerialNumberConnectorSnapshot(
             stateView,
             previewElementsById: previewElements,
             visibleTextElementIds: visibleTextIds,
           )
-        : const <String, List<SerialNumberTextConnector>>{};
+        : const SerialNumberConnectorSnapshot(
+            connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
+            dynamicTextElementIds: <String>{},
+          );
     final dynamicElementIds = _resolveDynamicElementIds(
       creatingFilterId: _resolveCreatingFilterId(),
-      serialConnectorTextIds: shouldPaintSerialConnectors
-          ? serialConnectors.keys
-          : const <String>{},
+      serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
 
     return _SceneRenderContext(
       hasFilterElement: hasFilterElement,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
-      serialConnectors: serialConnectors,
+      serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       dynamicElementIds: dynamicElementIds,
     );
   }
@@ -874,7 +875,8 @@ class DynamicCanvasPainter extends CustomPainter {
     Iterable<String> serialConnectorTextIds = const <String>{},
   }) {
     final previewElements = renderKey.previewElementsById;
-    final hasPreviewElements = previewElements.isNotEmpty;
+    final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
+    final hasPreviewElements = dynamicPreviewIds.isNotEmpty;
     final hasCreatingFilter = creatingFilterId != null;
     final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
     if (!hasPreviewElements && !hasCreatingFilter && !hasSerialConnectorTexts) {
@@ -883,7 +885,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final dynamicElementIds = <String>{};
     if (hasPreviewElements) {
-      dynamicElementIds.addAll(previewElements.keys);
+      dynamicElementIds.addAll(dynamicPreviewIds);
     }
     if (creatingFilterId != null) {
       dynamicElementIds.add(creatingFilterId);
@@ -892,6 +894,24 @@ class DynamicCanvasPainter extends CustomPainter {
       dynamicElementIds.addAll(serialConnectorTextIds);
     }
     return dynamicElementIds;
+  }
+
+  Set<String> _resolveDynamicPreviewElementIds(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+
+    final document = stateView.state.domain.document;
+    final dynamicIds = <String>{};
+    for (final entry in previewElementsById.entries) {
+      final persisted = document.getElementById(entry.key);
+      if (persisted == null || persisted != entry.value) {
+        dynamicIds.add(entry.key);
+      }
+    }
+    return dynamicIds;
   }
 
   String? _resolveCreatingFilterId() {

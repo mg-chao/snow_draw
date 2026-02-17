@@ -182,6 +182,98 @@ void main() {
     expect(counter.count, 2);
   });
 
+  test('keeps unaffected serial connector texts on cached static segments', () {
+    final counter = _RenderCounter();
+    final registry = _buildRegistryWithSerialSupport(counter);
+    final elements = <ElementState>[
+      const ElementState(
+        id: 'text-a',
+        rect: DrawRect(minX: 180, minY: 80, maxX: 260, maxY: 120),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: TextData(text: 'connector A'),
+      ),
+      const ElementState(
+        id: 'serial-a',
+        rect: DrawRect(minX: 60, minY: 84, maxX: 96, maxY: 120),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: SerialNumberData(textElementId: 'text-a'),
+      ),
+      const ElementState(
+        id: 'text-b',
+        rect: DrawRect(minX: 20, minY: 150, maxX: 100, maxY: 190),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: TextData(text: 'connector B'),
+      ),
+      const ElementState(
+        id: 'serial-b',
+        rect: DrawRect(minX: 110, minY: 154, maxX: 146, maxY: 190),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 3,
+        data: SerialNumberData(textElementId: 'text-b'),
+      ),
+      const ElementState(
+        id: 'cache-static',
+        rect: DrawRect(minX: 200, minY: 30, maxX: 260, maxY: 90),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 4,
+        data: _CacheTestData(),
+      ),
+    ];
+    final state = DrawState.fromLayers(
+      domain: DomainState(
+        document: DocumentState(elements: elements, elementsVersion: 271828),
+      ),
+      application: ApplicationState.initial(),
+    );
+
+    final firstPreview = elements[1].copyWith(
+      rect: const DrawRect(minX: 72, minY: 96, maxX: 108, maxY: 132),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {firstPreview.id: firstPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {firstPreview.id: firstPreview},
+      ),
+    );
+    expect(counter.count, 5);
+
+    counter.reset();
+    final secondPreview = firstPreview.copyWith(
+      rect: const DrawRect(minX: 96, minY: 112, maxX: 132, maxY: 148),
+    );
+    _paintFrame(
+      stateView: DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {secondPreview.id: secondPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+      renderKey: _buildRenderKey(
+        state: state,
+        registry: registry,
+        previewElementsById: {secondPreview.id: secondPreview},
+      ),
+    );
+
+    // Only the moved serial and its own bound text should be dynamic.
+    expect(counter.count, 2);
+  });
+
   test('whole-scene highlight preview keeps cached static scene '
       'when preview exits viewport', () {
     final counter = _RenderCounter();

@@ -23,18 +23,22 @@ class SerialNumberConnectorCache {
   SerialNumberConnectorCache._();
 
   static final instance = SerialNumberConnectorCache._();
+  static const _emptySnapshot = SerialNumberConnectorSnapshot(
+    connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
+    dynamicTextElementIds: <String>{},
+  );
 
   var _cachedDocumentVersion = -1;
   Map<String, String> _bindingIndex = const {};
   Map<String, Set<String>> _reverseBindingIndex = const {};
   Map<String, _CachedConnectorEntry> _connectorCache = const {};
 
-  /// Resolves the connector map for rendering.
+  /// Resolves connector data for rendering and interaction caching.
   ///
   /// Uses cached data when possible, rebuilding only when:
   /// - Document version changes
   /// - Preview elements affect bound serial numbers or text elements
-  SerialNumberConnectorMap resolve(
+  SerialNumberConnectorSnapshot resolve(
     DrawStateView stateView, {
     Map<String, ElementState>? previewElementsById,
     Set<String>? visibleTextElementIds,
@@ -45,7 +49,7 @@ class SerialNumberConnectorCache {
 
     // Fast path: no elements
     if (document.elements.isEmpty && effectivePreviewElements.isEmpty) {
-      return const <String, List<SerialNumberTextConnector>>{};
+      return _emptySnapshot;
     }
 
     // Check if we need to rebuild the binding index
@@ -58,7 +62,7 @@ class SerialNumberConnectorCache {
     // If no bindings exist, return empty
     if (_bindingIndex.isEmpty &&
         !_containsPreviewSerialBinding(effectivePreviewElements)) {
-      return const <String, List<SerialNumberTextConnector>>{};
+      return _emptySnapshot;
     }
 
     final visibleTextIds = _normalizeVisibleTextIds(
@@ -68,7 +72,7 @@ class SerialNumberConnectorCache {
     );
 
     if (visibleTextIds.isEmpty) {
-      return const <String, List<SerialNumberTextConnector>>{};
+      return _emptySnapshot;
     }
 
     final candidateSerialIds = _resolveCandidateSerialIds(
@@ -76,22 +80,30 @@ class SerialNumberConnectorCache {
       visibleTextIds: visibleTextIds,
     );
     if (candidateSerialIds.isEmpty) {
-      return const <String, List<SerialNumberTextConnector>>{};
+      return _emptySnapshot;
     }
 
-    // Determine which connectors need recomputation
+    // Determine which connectors need recomputation and dynamic redraw.
     final affectedSerialIds = _resolveAffectedSerialIds(
+      document: document,
       previewElementsById: effectivePreviewElements,
-      candidateSerialIds: candidateSerialIds,
     );
 
-    // Build the result map
-    return _buildConnectorMap(
+    final dynamicTextElementIds = _resolveDynamicConnectorTextIds(
+      affectedSerialIds: affectedSerialIds,
+      document: document,
+      previewElementsById: effectivePreviewElements,
+      visibleTextIds: visibleTextIds,
+    );
+
+    // Build the connector snapshot.
+    return _buildConnectorSnapshot(
       document: document,
       previewElementsById: effectivePreviewElements,
       affectedSerialIds: affectedSerialIds,
       candidateSerialIds: candidateSerialIds,
       visibleTextIds: visibleTextIds,
+      dynamicTextElementIds: dynamicTextElementIds,
     );
   }
 
@@ -160,42 +172,49 @@ class SerialNumberConnectorCache {
   }
 
   Set<String> _resolveAffectedSerialIds({
+    required DocumentState document,
     required Map<String, ElementState> previewElementsById,
-    required Set<String> candidateSerialIds,
   }) {
-    if (previewElementsById.isEmpty || candidateSerialIds.isEmpty) {
+    if (previewElementsById.isEmpty) {
       return const {};
     }
 
     final affected = <String>{};
 
-    for (final previewId in previewElementsById.keys) {
-      // If the preview is a serial number with a binding, it's affected
-      if (_bindingIndex.containsKey(previewId) &&
-          candidateSerialIds.contains(previewId)) {
+    for (final preview in previewElementsById.values) {
+      final previewId = preview.id;
+      final persisted = document.getElementById(previewId);
+      if (persisted != null && persisted == preview) {
+        continue;
+      }
+      final previewData = preview.data;
+      // Any preview serial with a binding can change connector output.
+      if (previewData is SerialNumberData &&
+          previewData.textElementId != null &&
+          previewData.textElementId!.isNotEmpty) {
+        affected.add(previewId);
+      } else if (_bindingIndex.containsKey(previewId)) {
+        // If the preview updates a persisted serial, mark it affected.
         affected.add(previewId);
       }
 
       // O(1) reverse lookup: text element -> bound serial numbers
       final boundSerials = _reverseBindingIndex[previewId];
       if (boundSerials != null) {
-        for (final serialId in boundSerials) {
-          if (candidateSerialIds.contains(serialId)) {
-            affected.add(serialId);
-          }
-        }
+        affected.addAll(boundSerials);
       }
     }
 
     return affected;
   }
 
-  SerialNumberConnectorMap _buildConnectorMap({
+  SerialNumberConnectorSnapshot _buildConnectorSnapshot({
     required DocumentState document,
     required Map<String, ElementState> previewElementsById,
     required Set<String> affectedSerialIds,
     required Set<String> candidateSerialIds,
     required Set<String> visibleTextIds,
+    required Set<String> dynamicTextElementIds,
   }) {
     final result = <String, List<SerialNumberTextConnector>>{};
 
@@ -245,6 +264,7 @@ class SerialNumberConnectorCache {
         // Cache only in stable document state.
         if (!isAffected && previewElementsById.isEmpty && connector != null) {
           _connectorCache[serialId] = _CachedConnectorEntry(
+            textId: textId,
             connector: connector,
           );
         }
@@ -257,7 +277,60 @@ class SerialNumberConnectorCache {
       }
     }
 
-    return result;
+    if (result.isEmpty) {
+      if (dynamicTextElementIds.isEmpty) {
+        return _emptySnapshot;
+      }
+      return SerialNumberConnectorSnapshot(
+        connectorsByTextId: const <String, List<SerialNumberTextConnector>>{},
+        dynamicTextElementIds: dynamicTextElementIds,
+      );
+    }
+
+    return SerialNumberConnectorSnapshot(
+      connectorsByTextId: result,
+      dynamicTextElementIds: dynamicTextElementIds,
+    );
+  }
+
+  Set<String> _resolveDynamicConnectorTextIds({
+    required Set<String> affectedSerialIds,
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    if (affectedSerialIds.isEmpty || visibleTextIds.isEmpty) {
+      return const <String>{};
+    }
+
+    final dynamicTextIds = <String>{};
+
+    for (final serialId in affectedSerialIds) {
+      final previousTextId =
+          _connectorCache[serialId]?.textId ?? _bindingIndex[serialId];
+      if (previousTextId != null && visibleTextIds.contains(previousTextId)) {
+        dynamicTextIds.add(previousTextId);
+      }
+
+      final effectiveSerial =
+          previewElementsById[serialId] ?? document.getElementById(serialId);
+      final data = effectiveSerial?.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final textId = data.textElementId;
+      if (textId == null ||
+          textId.isEmpty ||
+          !visibleTextIds.contains(textId)) {
+        continue;
+      }
+      dynamicTextIds.add(textId);
+    }
+
+    if (dynamicTextIds.isEmpty) {
+      return const <String>{};
+    }
+    return dynamicTextIds;
   }
 
   Set<String> _normalizeVisibleTextIds({
@@ -384,8 +457,9 @@ class SerialNumberConnectorCache {
 }
 
 class _CachedConnectorEntry {
-  const _CachedConnectorEntry({required this.connector});
+  const _CachedConnectorEntry({required this.textId, required this.connector});
 
+  final String textId;
   final SerialNumberTextConnector connector;
 }
 

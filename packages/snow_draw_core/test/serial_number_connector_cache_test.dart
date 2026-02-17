@@ -78,6 +78,103 @@ void main() {
     expect(identical(affectedAfter, affectedBefore), isFalse);
   });
 
+  test('marks only affected text connectors as dynamic', () {
+    const textA = ElementState(
+      id: 'text-a',
+      rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: TextData(text: 'A'),
+    );
+    const serialA = ElementState(
+      id: 'serial-a',
+      rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: SerialNumberData(textElementId: 'text-a'),
+    );
+    const textB = ElementState(
+      id: 'text-b',
+      rect: DrawRect(minX: 320, minY: 180, maxX: 420, maxY: 220),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 2,
+      data: TextData(text: 'B'),
+    );
+    const serialB = ElementState(
+      id: 'serial-b',
+      rect: DrawRect(minX: 240, minY: 190, maxX: 272, maxY: 222),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 3,
+      data: SerialNumberData(textElementId: 'text-b'),
+    );
+
+    final state = _stateWithElements([textA, serialA, textB, serialB]);
+    final view = DrawStateView.withPreview(
+      state: state,
+      previewElementsById: const {},
+      effectiveSelection: EffectiveSelection.none,
+      snapGuides: const [],
+    );
+
+    // Warm stable connector cache first.
+    resolveSerialNumberConnectorSnapshot(view);
+
+    final movedSerialA = serialA.copyWith(
+      rect: const DrawRect(minX: 60, minY: 110, maxX: 92, maxY: 142),
+    );
+    final snapshot = resolveSerialNumberConnectorSnapshot(
+      DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {movedSerialA.id: movedSerialA},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+    );
+
+    expect(snapshot.dynamicTextElementIds, {'text-a'});
+    expect(snapshot.connectorsByTextId.keys, {'text-a', 'text-b'});
+  });
+
+  test(
+    'ignores value-equal preview elements for dynamic connector tracking',
+    () {
+      const text = ElementState(
+        id: 'text',
+        rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: TextData(text: 'A'),
+      );
+      const serial = ElementState(
+        id: 'serial',
+        rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: SerialNumberData(textElementId: 'text'),
+      );
+
+      final state = _stateWithElements([text, serial]);
+      final unchangedPreview = serial.copyWith();
+      final snapshot = resolveSerialNumberConnectorSnapshot(
+        DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {unchangedPreview.id: unchangedPreview},
+          effectiveSelection: EffectiveSelection.none,
+          snapGuides: const [],
+        ),
+      );
+
+      expect(snapshot.dynamicTextElementIds, isEmpty);
+      expect(snapshot.connectorsByTextId.keys, {'text'});
+    },
+  );
+
   test('limits connector resolution to visible text ids', () {
     const textA = ElementState(
       id: 'text-a',
@@ -245,6 +342,16 @@ void main() {
     );
 
     expect(connectors, isEmpty);
+
+    final snapshot = resolveSerialNumberConnectorSnapshot(
+      DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {unboundSerial.id: unboundSerial},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+    );
+    expect(snapshot.dynamicTextElementIds, {'text'});
   });
 
   test('includes preview-only serial bindings', () {
