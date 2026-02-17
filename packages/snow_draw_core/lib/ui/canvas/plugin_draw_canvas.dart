@@ -134,6 +134,24 @@ class _EraserMoveEvent {
   final DrawPoint position;
 }
 
+class _HoverFrameEvent {
+  const _HoverFrameEvent({
+    required this.position,
+    required this.modifiers,
+    required this.dispatchPluginHover,
+  });
+
+  final DrawPoint position;
+  final KeyModifiers modifiers;
+  final bool dispatchPluginHover;
+
+  _HoverFrameEvent mergeWith(_HoverFrameEvent incoming) => _HoverFrameEvent(
+    position: incoming.position,
+    modifiers: incoming.modifiers,
+    dispatchPluginHover: dispatchPluginHover || incoming.dispatchPluginHover,
+  );
+}
+
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
@@ -196,11 +214,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final WatermarkCanvasLayerController _watermarkLayerController;
   late final WatermarkCanvasPainter _watermarkCanvasPainter;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
+  late final FrameAlignedEventDispatcher<_HoverFrameEvent> _hoverMoveDispatcher;
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
   DrawState? _lastObservedState;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
+  SelectionConfig? _cachedInputSelectionConfigSource;
+  SelectionConfig? _cachedInputSelectionConfig;
+  double? _cachedInputSelectionScale;
   var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
 
   CoordinateService get _coords {
@@ -324,6 +346,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       shouldCoalesce: _shouldFrameCoalescePointerMove,
       mergeCoalescedEvents: _mergeCoalescedPointerMoveEvents,
     );
+    _hoverMoveDispatcher = FrameAlignedEventDispatcher<_HoverFrameEvent>(
+      dispatchEvent: _dispatchHoverFrameEvent,
+      shouldCoalesce: () => _activePointerIds.isEmpty,
+      mergePendingEvents: (pending, incoming) => pending.mergeWith(incoming),
+    );
     _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
       dispatchEvent: _dispatchEraserMove,
       shouldCoalesce: () => _eraserPointerIds.length <= 1,
@@ -381,6 +408,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     if (shouldRecreateCoordinator) {
       _pointerMoveDispatcher.reset();
+      _hoverMoveDispatcher.reset();
       // Dispose old coordinator
       unawaited(_pluginCoordinator.dispose());
 
@@ -391,6 +419,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _lastObservedState = widget.store.state;
         _cachedState = null;
         _cachedStateView = null;
+        _cachedInputSelectionConfigSource = null;
+        _cachedInputSelectionConfig = null;
+        _cachedInputSelectionScale = null;
 
         _stateUnsubscribe = widget.store.listen(
           _handleStateChange,
@@ -447,6 +478,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _eraserCursorPositionNotifier.dispose();
     _watermarkLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
+    unawaited(_hoverMoveDispatcher.dispose());
     unawaited(_eraserMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
     super.dispose();
@@ -938,6 +970,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final position = _recordPointerPosition(event.localPosition);
     if (_isMousePointer(event)) {
       if (_isMiddleMouseButton(event.buttons)) {
+        _hoverMoveDispatcher.reset();
         _startMiddlePan(event);
         return;
       }
@@ -947,6 +980,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _activePointerIds.add(event.pointer);
     _pointerMoveDispatcher.reset();
+    _hoverMoveDispatcher.reset();
     if (widget.isEraserToolActive) {
       final isFirstEraserPointer = _eraserPointerIds.isEmpty;
       _eraserPointerIds.add(event.pointer);
@@ -979,7 +1013,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final position = _recordPointerPosition(event.localPosition);
     final hasActivePointer = _activePointerIds.contains(event.pointer);
     if (!hasActivePointer) {
-      _updateCursorAndHoverForPosition(position);
+      _queueHoverUpdate(position: position);
     }
     if (_handleMiddlePanMove(event)) {
       return;
@@ -1053,6 +1087,24 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   Future<void> _dispatchPointerMoveEvent(PointerMoveInputEvent event) async {
     await _pluginCoordinator.handleEvent(event);
+  }
+
+  Future<void> _dispatchHoverFrameEvent(_HoverFrameEvent event) async {
+    if (_activePointerIds.isNotEmpty ||
+        _middlePanPointerId != null ||
+        !_isPointerInside) {
+      return;
+    }
+    _updateCursorAndHoverForPosition(event.position);
+    if (!event.dispatchPluginHover || widget.isEraserToolActive) {
+      return;
+    }
+    await _pluginCoordinator.handleEvent(
+      PointerHoverInputEvent(
+        position: event.position,
+        modifiers: event.modifiers,
+      ),
+    );
   }
 
   Future<void> _dispatchEraserMove(_EraserMoveEvent event) async {
@@ -1203,22 +1255,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerEnter(PointerEnterEvent event) {
     _isPointerInside = true;
     final position = _recordPointerPosition(event.localPosition);
+    _hoverMoveDispatcher.reset();
     _updateCursorAndHoverForPosition(position);
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorAndHoverForPosition(position);
-    if (widget.isEraserToolActive) {
-      return;
-    }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerHoverInputEvent(
-          position: position,
-          modifiers: _currentModifiers,
-        ),
-      ),
+    _queueHoverUpdate(
+      position: position,
+      dispatchPluginHover: !widget.isEraserToolActive,
     );
   }
 
@@ -1226,6 +1271,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _isPointerInside = false;
     _lastPointerPosition = null;
     _eraserCursorPositionNotifier.value = null;
+    _hoverMoveDispatcher.reset();
     if (_hoveredSelectionElementId != null ||
         _hoveredBindingElementId != null ||
         _hoveredArrowHandle != null) {
@@ -1237,6 +1283,22 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final nextCursor = _resolveCursorForState(widget.store.state, null);
     _updateCursorIfChanged(nextCursor);
+  }
+
+  void _queueHoverUpdate({
+    required DrawPoint position,
+    bool dispatchPluginHover = false,
+  }) {
+    if (_middlePanPointerId != null || _activePointerIds.isNotEmpty) {
+      return;
+    }
+    _hoverMoveDispatcher.dispatch(
+      _HoverFrameEvent(
+        position: position,
+        modifiers: _currentModifiers,
+        dispatchPluginHover: dispatchPluginHover,
+      ),
+    );
   }
 
   DrawPoint _recordPointerPosition(Offset localPosition) {
@@ -1485,6 +1547,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _stopMiddlePan() {
+    _hoverMoveDispatcher.reset();
     _middlePanPointerId = null;
     _lastMiddlePanPosition = null;
     final position = _lastPointerPosition;
@@ -2349,10 +2412,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_doubleEquals(effectiveScale, 1)) {
       return selectionConfig;
     }
+    final cachedSource = _cachedInputSelectionConfigSource;
+    final cachedScale = _cachedInputSelectionScale;
+    final cachedConfig = _cachedInputSelectionConfig;
+    if (cachedConfig != null &&
+        identical(cachedSource, selectionConfig) &&
+        cachedScale != null &&
+        _doubleEquals(cachedScale, effectiveScale)) {
+      return cachedConfig;
+    }
 
     final interaction = selectionConfig.interaction;
     final render = selectionConfig.render;
-    return selectionConfig.copyWith(
+    final scaled = selectionConfig.copyWith(
       render: render.copyWith(
         strokeWidth: render.strokeWidth / effectiveScale,
         cornerRadius: render.cornerRadius / effectiveScale,
@@ -2365,6 +2437,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         dragThreshold: interaction.dragThreshold / effectiveScale,
       ),
     );
+    _cachedInputSelectionConfigSource = selectionConfig;
+    _cachedInputSelectionConfig = scaled;
+    _cachedInputSelectionScale = effectiveScale;
+    return scaled;
   }
 
   bool _isSingleTextSelection(DrawState state) {
@@ -3277,6 +3353,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       return;
     }
+    _cachedInputSelectionConfigSource = null;
+    _cachedInputSelectionConfig = null;
+    _cachedInputSelectionScale = null;
 
     final position = _lastPointerPosition;
     late final bool hoverStateChanged;
