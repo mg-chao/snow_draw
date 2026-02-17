@@ -77,6 +77,10 @@ class StyleToolbarAdapter {
   var _isDisposed = false;
   var _updateScheduled = false;
   var _pendingStyleUpdate = Future<void>.value();
+  _WatermarkOnlyStyleUpdate? _pendingWatermarkOnlyUpdate;
+  final _pendingWatermarkOnlyCompleters = <Completer<void>>[];
+  final _inFlightWatermarkOnlyCompleters = <Completer<void>>[];
+  var _isDrainingWatermarkOnlyUpdates = false;
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
 
@@ -87,6 +91,19 @@ class StyleToolbarAdapter {
     _isDisposed = true;
     _stateUnsubscribe?.call();
     unawaited(_configSubscription?.cancel());
+    for (final completer in _pendingWatermarkOnlyCompleters) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    for (final completer in _inFlightWatermarkOnlyCompleters) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+    _pendingWatermarkOnlyCompleters.clear();
+    _inFlightWatermarkOnlyCompleters.clear();
+    _pendingWatermarkOnlyUpdate = null;
     _stateNotifier.dispose();
   }
 
@@ -123,42 +140,93 @@ class StyleToolbarAdapter {
     ToolType? toolType,
     StyleUpdateScope scope = StyleUpdateScope.allSelectedElements,
     HistoryCoalescing? historyCoalescing,
-  }) => _enqueueStyleUpdate(
-    () => _applyStyleUpdateInternal(
-      color: color,
-      fillColor: fillColor,
-      strokeWidth: strokeWidth,
-      strokeStyle: strokeStyle,
-      fillStyle: fillStyle,
-      cornerRadius: cornerRadius,
-      arrowType: arrowType,
-      startArrowhead: startArrowhead,
-      endArrowhead: endArrowhead,
-      fontSize: fontSize,
-      fontFamily: fontFamily,
-      textAlign: textAlign,
-      verticalAlign: verticalAlign,
-      opacity: opacity,
-      textStrokeColor: textStrokeColor,
-      textStrokeWidth: textStrokeWidth,
-      highlightShape: highlightShape,
-      filterType: filterType,
-      filterStrength: filterStrength,
-      maskColor: maskColor,
-      maskOpacity: maskOpacity,
-      watermarkColor: watermarkColor,
-      watermarkText: watermarkText,
-      watermarkFontSize: watermarkFontSize,
-      watermarkFontFamily: watermarkFontFamily,
-      watermarkAngle: watermarkAngle,
-      watermarkGap: watermarkGap,
-      watermarkOpacity: watermarkOpacity,
-      serialNumber: serialNumber,
-      toolType: toolType,
-      scope: scope,
-      historyCoalescing: historyCoalescing,
-    ),
-  );
+  }) {
+    final hasWatermarkUpdates =
+        watermarkColor != null ||
+        watermarkText != null ||
+        watermarkFontSize != null ||
+        watermarkFontFamily != null ||
+        watermarkAngle != null ||
+        watermarkGap != null ||
+        watermarkOpacity != null;
+    final hasOtherUpdates =
+        color != null ||
+        fillColor != null ||
+        strokeWidth != null ||
+        strokeStyle != null ||
+        fillStyle != null ||
+        cornerRadius != null ||
+        arrowType != null ||
+        startArrowhead != null ||
+        endArrowhead != null ||
+        fontSize != null ||
+        fontFamily != null ||
+        textAlign != null ||
+        verticalAlign != null ||
+        opacity != null ||
+        textStrokeColor != null ||
+        textStrokeWidth != null ||
+        highlightShape != null ||
+        filterType != null ||
+        filterStrength != null ||
+        maskColor != null ||
+        maskOpacity != null ||
+        serialNumber != null ||
+        scope != StyleUpdateScope.allSelectedElements;
+
+    if (historyCoalescing != null && hasWatermarkUpdates && !hasOtherUpdates) {
+      return _enqueueWatermarkOnlyStyleUpdate(
+        _WatermarkOnlyStyleUpdate(
+          watermarkColor: watermarkColor,
+          watermarkText: watermarkText,
+          watermarkFontSize: watermarkFontSize,
+          watermarkFontFamily: watermarkFontFamily,
+          watermarkAngle: watermarkAngle,
+          watermarkGap: watermarkGap,
+          watermarkOpacity: watermarkOpacity,
+          toolType: toolType,
+          historyCoalescing: historyCoalescing,
+        ),
+      );
+    }
+
+    return _enqueueStyleUpdate(
+      () => _applyStyleUpdateInternal(
+        color: color,
+        fillColor: fillColor,
+        strokeWidth: strokeWidth,
+        strokeStyle: strokeStyle,
+        fillStyle: fillStyle,
+        cornerRadius: cornerRadius,
+        arrowType: arrowType,
+        startArrowhead: startArrowhead,
+        endArrowhead: endArrowhead,
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        textAlign: textAlign,
+        verticalAlign: verticalAlign,
+        opacity: opacity,
+        textStrokeColor: textStrokeColor,
+        textStrokeWidth: textStrokeWidth,
+        highlightShape: highlightShape,
+        filterType: filterType,
+        filterStrength: filterStrength,
+        maskColor: maskColor,
+        maskOpacity: maskOpacity,
+        watermarkColor: watermarkColor,
+        watermarkText: watermarkText,
+        watermarkFontSize: watermarkFontSize,
+        watermarkFontFamily: watermarkFontFamily,
+        watermarkAngle: watermarkAngle,
+        watermarkGap: watermarkGap,
+        watermarkOpacity: watermarkOpacity,
+        serialNumber: serialNumber,
+        toolType: toolType,
+        scope: scope,
+        historyCoalescing: historyCoalescing,
+      ),
+    );
+  }
 
   Future<void> _applyStyleUpdateInternal({
     Color? color,
@@ -336,6 +404,82 @@ class StyleToolbarAdapter {
       );
     });
     return next;
+  }
+
+  Future<void> _enqueueWatermarkOnlyStyleUpdate(
+    _WatermarkOnlyStyleUpdate update,
+  ) {
+    if (_isDisposed) {
+      return Future<void>.value();
+    }
+    _pendingWatermarkOnlyUpdate = _pendingWatermarkOnlyUpdate == null
+        ? update
+        : _pendingWatermarkOnlyUpdate!.merge(update);
+    final completer = Completer<void>();
+    _pendingWatermarkOnlyCompleters.add(completer);
+
+    if (!_isDrainingWatermarkOnlyUpdates) {
+      _isDrainingWatermarkOnlyUpdates = true;
+      unawaited(_drainWatermarkOnlyUpdates());
+    }
+    return completer.future;
+  }
+
+  Future<void> _drainWatermarkOnlyUpdates() async {
+    while (!_isDisposed) {
+      final update = _pendingWatermarkOnlyUpdate;
+      if (update == null) {
+        break;
+      }
+
+      final completers = List<Completer<void>>.of(
+        _pendingWatermarkOnlyCompleters,
+      );
+      _inFlightWatermarkOnlyCompleters.addAll(completers);
+      _pendingWatermarkOnlyUpdate = null;
+      _pendingWatermarkOnlyCompleters.clear();
+
+      try {
+        await _enqueueStyleUpdate(
+          () => _applyStyleUpdateInternal(
+            watermarkColor: update.watermarkColor,
+            watermarkText: update.watermarkText,
+            watermarkFontSize: update.watermarkFontSize,
+            watermarkFontFamily: update.watermarkFontFamily,
+            watermarkAngle: update.watermarkAngle,
+            watermarkGap: update.watermarkGap,
+            watermarkOpacity: update.watermarkOpacity,
+            toolType: update.toolType,
+            historyCoalescing: update.historyCoalescing,
+          ),
+        );
+        for (final completer in completers) {
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        }
+      } on Object catch (error, st) {
+        _store.context.log.configLog.error(
+          'Watermark style update failed',
+          error,
+          st,
+        );
+        for (final completer in completers) {
+          if (!completer.isCompleted) {
+            completer.completeError(error, st);
+          }
+        }
+      } finally {
+        for (final completer in completers) {
+          _inFlightWatermarkOnlyCompleters.remove(completer);
+        }
+      }
+    }
+    _isDrainingWatermarkOnlyUpdates = false;
+    if (!_isDisposed && _pendingWatermarkOnlyUpdate != null) {
+      _isDrainingWatermarkOnlyUpdates = true;
+      unawaited(_drainWatermarkOnlyUpdates());
+    }
   }
 
   Future<void> copySelection() async {
@@ -2056,6 +2200,44 @@ class StyleToolbarAdapter {
       ConfigDefaults.maxWatermarkGap,
     );
   }
+}
+
+@immutable
+class _WatermarkOnlyStyleUpdate {
+  const _WatermarkOnlyStyleUpdate({
+    this.watermarkColor,
+    this.watermarkText,
+    this.watermarkFontSize,
+    this.watermarkFontFamily,
+    this.watermarkAngle,
+    this.watermarkGap,
+    this.watermarkOpacity,
+    this.toolType,
+    this.historyCoalescing,
+  });
+
+  final Color? watermarkColor;
+  final String? watermarkText;
+  final double? watermarkFontSize;
+  final String? watermarkFontFamily;
+  final double? watermarkAngle;
+  final double? watermarkGap;
+  final double? watermarkOpacity;
+  final ToolType? toolType;
+  final HistoryCoalescing? historyCoalescing;
+
+  _WatermarkOnlyStyleUpdate merge(_WatermarkOnlyStyleUpdate next) =>
+      _WatermarkOnlyStyleUpdate(
+        watermarkColor: next.watermarkColor ?? watermarkColor,
+        watermarkText: next.watermarkText ?? watermarkText,
+        watermarkFontSize: next.watermarkFontSize ?? watermarkFontSize,
+        watermarkFontFamily: next.watermarkFontFamily ?? watermarkFontFamily,
+        watermarkAngle: next.watermarkAngle ?? watermarkAngle,
+        watermarkGap: next.watermarkGap ?? watermarkGap,
+        watermarkOpacity: next.watermarkOpacity ?? watermarkOpacity,
+        toolType: next.toolType ?? toolType,
+        historyCoalescing: next.historyCoalescing ?? historyCoalescing,
+      );
 }
 
 @immutable

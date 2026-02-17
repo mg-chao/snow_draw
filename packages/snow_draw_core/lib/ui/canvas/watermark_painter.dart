@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -9,14 +10,40 @@ import '../../draw/config/draw_config.dart';
 /// extreme viewport/gap combinations.
 const _maxWatermarkTiles = 6000;
 
-/// Coarse grid size for viewport snapping.
+/// Maximum tile edge used by the shader-backed cache.
 ///
-/// During interactive window resizing the viewport changes by a few
-/// pixels every frame. Recording a new picture for each unique size
-/// is wasteful; the visual difference is imperceptible. Snapping to
-/// a 64-pixel grid absorbs small fluctuations and keeps the cached
-/// picture valid across many consecutive frames.
+/// Very long labels can produce huge tile textures when combined with large
+/// gaps. Cap edge length and fall back to viewport picture tiling when the
+/// generated tile would be too large.
+const _maxWatermarkTileExtent = 4096;
+
+/// Coarse grid size for viewport snapping in picture-fallback mode.
+///
+/// During interactive window resizing the viewport changes by a few pixels
+/// every frame. Recording a new picture for each unique size is wasteful;
+/// the visual difference is imperceptible. Snapping to a 64-pixel grid
+/// absorbs small fluctuations and keeps the cached picture valid across many
+/// consecutive frames.
 const double _sizeBucket = 64;
+
+final _identityMatrix4 = Float64List.fromList(<double>[
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+]);
 
 double _snap(double value) =>
     (value / _sizeBucket).ceilToDouble() * _sizeBucket;
@@ -76,19 +103,33 @@ class _WatermarkPictureConfig {
       Object.hash(color, text, fontSize, fontFamily, gap, effectiveAlpha);
 }
 
-/// Caches the tiled watermark as a [ui.Picture] so repeated frames
-/// skip text layout and the O(n) tiling loop.
+@immutable
+class _WatermarkTileSnapshot {
+  const _WatermarkTileSnapshot({required this.image});
+
+  final ui.Image image;
+}
+
+/// Caches watermark paint resources so repeated frames avoid text layout.
 ///
-/// The cache key excludes rotation angle: the picture is recorded in
-/// unrotated screen space and the angle transform is applied at paint
-/// time. This keeps angle-drag interactions at full speed.
+/// Fast path: build a tiny shader tile and fill a rotated rect in one draw.
+/// Fallback: when a tile would be excessively large, use viewport picture
+/// tiling with coarse viewport-size bucketing.
+///
+/// The cache key excludes rotation angle because the cache is recorded in
+/// unrotated screen space and angle is applied at paint time. This keeps
+/// angle-drag interactions at full speed.
 class WatermarkPainterCache {
-  _WatermarkPictureConfig? _pictureConfig;
-  Size? _viewportSize;
+  _WatermarkPictureConfig? _tileConfig;
+  ui.Image? _tileImage;
+  Paint? _tilePaint;
+
+  _WatermarkPictureConfig? _fallbackConfig;
+  Size? _fallbackViewportSize;
   ui.Picture? _picture;
 
   /// Paints the watermark onto [canvas], reusing a cached picture when
-  /// the non-angular config and viewport size bucket have not changed.
+  /// the non-angular config has not changed.
   void paint({
     required Canvas canvas,
     required Size viewportSize,
@@ -98,6 +139,9 @@ class WatermarkPainterCache {
   }) {
     final pictureConfig = _WatermarkPictureConfig.fromConfig(config);
     if (!pictureConfig.isVisible) {
+      return;
+    }
+    if (viewportSize.isEmpty) {
       return;
     }
 
@@ -110,13 +154,17 @@ class WatermarkPainterCache {
       ..scale(1 / scale, 1 / scale)
       ..translate(-cameraPosition.dx, -cameraPosition.dy);
 
-    final picture = _resolve(
-      viewportSize: viewportSize,
-      pictureConfig: pictureConfig,
-    );
-
     final layerRect = Offset.zero & viewportSize;
     final center = layerRect.center;
+    final diagonal = math.sqrt(
+      viewportSize.width * viewportSize.width +
+          viewportSize.height * viewportSize.height,
+    );
+    final cullRect = Rect.fromCenter(
+      center: center,
+      width: diagonal,
+      height: diagonal,
+    );
 
     // Clip to the viewport so rotated tiles do not bleed outside.
     canvas
@@ -124,21 +172,74 @@ class WatermarkPainterCache {
       ..save()
       ..translate(center.dx, center.dy)
       ..rotate(config.angle * math.pi / 180)
-      ..translate(-center.dx, -center.dy)
-      ..drawPicture(picture)
+      ..translate(-center.dx, -center.dy);
+
+    final tilePaint = _resolveTilePaint(pictureConfig);
+    if (tilePaint != null) {
+      _clearFallbackPictureCache();
+      canvas.drawRect(cullRect, tilePaint);
+    } else {
+      final picture = _resolveFallbackPicture(
+        viewportSize: viewportSize,
+        pictureConfig: pictureConfig,
+      );
+      canvas.drawPicture(picture);
+    }
+
+    canvas
       ..restore()
       ..restore();
   }
 
   /// Discards the cached picture so the next [paint] call rebuilds it.
   void invalidate() {
-    _picture?.dispose();
-    _picture = null;
-    _pictureConfig = null;
-    _viewportSize = null;
+    _clearTileCache();
+    _clearFallbackPictureCache();
   }
 
-  ui.Picture _resolve({
+  Paint? _resolveTilePaint(_WatermarkPictureConfig pictureConfig) {
+    if (_tileConfig == pictureConfig) {
+      return _tilePaint;
+    }
+
+    _clearTileCache();
+
+    final snapshot = _buildTileSnapshot(pictureConfig);
+    if (snapshot == null) {
+      // Remember failed snapshots for this config so fallback mode does not
+      // retry expensive tile creation every frame.
+      _tileConfig = pictureConfig;
+      return null;
+    }
+
+    final shader = ui.ImageShader(
+      snapshot.image,
+      ui.TileMode.repeated,
+      ui.TileMode.repeated,
+      _identityMatrix4,
+    );
+    final paint = Paint()..shader = shader;
+    _tileImage = snapshot.image;
+    _tilePaint = paint;
+    _tileConfig = pictureConfig;
+    return paint;
+  }
+
+  void _clearTileCache() {
+    _tileImage?.dispose();
+    _tileImage = null;
+    _tilePaint = null;
+    _tileConfig = null;
+  }
+
+  void _clearFallbackPictureCache() {
+    _picture?.dispose();
+    _picture = null;
+    _fallbackConfig = null;
+    _fallbackViewportSize = null;
+  }
+
+  ui.Picture _resolveFallbackPicture({
     required Size viewportSize,
     required _WatermarkPictureConfig pictureConfig,
   }) {
@@ -147,19 +248,86 @@ class WatermarkPainterCache {
     final snapped = Size(_snap(viewportSize.width), _snap(viewportSize.height));
 
     if (_picture != null &&
-        _pictureConfig == pictureConfig &&
-        _viewportSize == snapped) {
+        _fallbackConfig == pictureConfig &&
+        _fallbackViewportSize == snapped) {
       return _picture!;
     }
 
     _picture?.dispose();
-    _picture = _record(viewportSize: snapped, pictureConfig: pictureConfig);
-    _pictureConfig = pictureConfig;
-    _viewportSize = snapped;
+    _picture = _recordFallbackPicture(
+      viewportSize: snapped,
+      pictureConfig: pictureConfig,
+    );
+    _fallbackConfig = pictureConfig;
+    _fallbackViewportSize = snapped;
     return _picture!;
   }
 
-  static ui.Picture _record({
+  static _WatermarkTileSnapshot? _buildTileSnapshot(
+    _WatermarkPictureConfig pictureConfig,
+  ) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: pictureConfig.text,
+        style: TextStyle(
+          color: pictureConfig.color,
+          fontSize: pictureConfig.fontSize,
+          fontFamily: pictureConfig.fontFamily.isEmpty
+              ? null
+              : pictureConfig.fontFamily,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+
+    final textWidth = textPainter.width;
+    final textHeight = textPainter.height;
+    if (textWidth <= 0 || textHeight <= 0) {
+      textPainter.dispose();
+      return null;
+    }
+
+    final stepX = math.max(1, textWidth + pictureConfig.gap).toDouble();
+    final stepY = math.max(1, textHeight + pictureConfig.gap).toDouble();
+    final tileWidth = (stepX * 2).ceil();
+    final tileHeight = (stepY * 2).ceil();
+
+    if (tileWidth > _maxWatermarkTileExtent ||
+        tileHeight > _maxWatermarkTileExtent) {
+      textPainter.dispose();
+      return null;
+    }
+
+    final tileRect = Rect.fromLTWH(
+      0,
+      0,
+      tileWidth.toDouble(),
+      tileHeight.toDouble(),
+    );
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, tileRect);
+    final secondRowOffset = stepX * 0.5;
+
+    textPainter
+      ..paint(canvas, Offset.zero)
+      ..paint(canvas, Offset(stepX, 0))
+      ..paint(canvas, Offset(secondRowOffset, stepY))
+      ..paint(canvas, Offset(secondRowOffset + stepX, stepY))
+      ..dispose();
+
+    final picture = recorder.endRecording();
+    try {
+      final image = picture.toImageSync(tileWidth, tileHeight);
+      return _WatermarkTileSnapshot(image: image);
+    } on Object {
+      return null;
+    } finally {
+      picture.dispose();
+    }
+  }
+
+  static ui.Picture _recordFallbackPicture({
     required Size viewportSize,
     required _WatermarkPictureConfig pictureConfig,
   }) {
@@ -202,8 +370,8 @@ class WatermarkPainterCache {
       return recorder.endRecording();
     }
 
-    final stepX = math.max(1, tileWidth + pictureConfig.gap);
-    final stepY = math.max(1, tileHeight + pictureConfig.gap);
+    final stepX = math.max(1, tileWidth + pictureConfig.gap).toDouble();
+    final stepY = math.max(1, tileHeight + pictureConfig.gap).toDouble();
 
     final startX = cullRect.left - stepX;
     final endX = cullRect.right + stepX;

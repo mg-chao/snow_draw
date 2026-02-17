@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,15 +46,7 @@ void main() {
     final bytes = await image.toByteData();
     expect(bytes, isNotNull);
 
-    final data = bytes!;
-    var hasVisiblePixel = false;
-    for (var i = 0; i < data.lengthInBytes; i += 4) {
-      if (data.getUint8(i + 3) > 0) {
-        hasVisiblePixel = true;
-        break;
-      }
-    }
-    expect(hasVisiblePixel, isTrue);
+    expect(_hasVisiblePixel(bytes!), isTrue);
   });
 
   test('cache reuses picture for identical config and size', () {
@@ -89,7 +82,7 @@ void main() {
     cache.paint(canvas: ui.Canvas(r1), viewportSize: size, config: configA);
     r1.endRecording();
 
-    // Paint with config B — cache should rebuild.
+    // Paint with config B - rendering should still succeed.
     final r2 = ui.PictureRecorder();
     cache.paint(canvas: ui.Canvas(r2), viewportSize: size, config: configB);
     final image = await r2.endRecording().toImage(120, 80);
@@ -97,20 +90,12 @@ void main() {
     expect(bytes, isNotNull);
 
     // Should have visible pixels from config B.
-    final data = bytes!;
-    var hasVisiblePixel = false;
-    for (var i = 0; i < data.lengthInBytes; i += 4) {
-      if (data.getUint8(i + 3) > 0) {
-        hasVisiblePixel = true;
-        break;
-      }
-    }
-    expect(hasVisiblePixel, isTrue);
+    expect(_hasVisiblePixel(bytes!), isTrue);
 
     cache.invalidate();
   });
 
-  test('cache invalidates when viewport size changes', () async {
+  test('cache handles viewport size changes', () async {
     final cache = WatermarkPainterCache();
     const config = WatermarkConfig(text: 'WM', gap: 40, opacity: 0.5);
 
@@ -123,7 +108,7 @@ void main() {
     );
     r1.endRecording();
 
-    // Paint at a different size — cache should rebuild.
+    // Paint at a different size - rendering should still succeed.
     final r2 = ui.PictureRecorder();
     cache.paint(
       canvas: ui.Canvas(r2),
@@ -134,16 +119,47 @@ void main() {
     final bytes = await image.toByteData();
     expect(bytes, isNotNull);
 
-    final data = bytes!;
-    var hasVisiblePixel = false;
-    for (var i = 0; i < data.lengthInBytes; i += 4) {
-      if (data.getUint8(i + 3) > 0) {
-        hasVisiblePixel = true;
-        break;
-      }
-    }
-    expect(hasVisiblePixel, isTrue);
+    expect(_hasVisiblePixel(bytes!), isTrue);
 
     cache.invalidate();
   });
+
+  test('cache falls back when shader tile exceeds max extent', () async {
+    final cache = WatermarkPainterCache();
+    final config = WatermarkConfig(
+      text: List<String>.filled(300, 'W').join(),
+      gap: ConfigDefaults.maxWatermarkGap,
+      opacity: 0.5,
+    );
+    const size = ui.Size(220, 160);
+
+    final r1 = ui.PictureRecorder();
+    cache.paint(canvas: ui.Canvas(r1), viewportSize: size, config: config);
+    final firstBytes = await r1
+        .endRecording()
+        .toImage(220, 160)
+        .then((image) => image.toByteData());
+    expect(firstBytes, isNotNull);
+    expect(_hasVisiblePixel(firstBytes!), isTrue);
+
+    final r2 = ui.PictureRecorder();
+    cache.paint(canvas: ui.Canvas(r2), viewportSize: size, config: config);
+    final secondBytes = await r2
+        .endRecording()
+        .toImage(220, 160)
+        .then((image) => image.toByteData());
+    expect(secondBytes, isNotNull);
+    expect(_hasVisiblePixel(secondBytes!), isTrue);
+
+    cache.invalidate();
+  });
+}
+
+bool _hasVisiblePixel(ByteData data) {
+  for (var i = 0; i < data.lengthInBytes; i += 4) {
+    if (data.getUint8(i + 3) > 0) {
+      return true;
+    }
+  }
+  return false;
 }
