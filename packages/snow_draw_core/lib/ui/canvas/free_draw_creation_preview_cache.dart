@@ -37,13 +37,13 @@ final class FreeDrawPreviewStrokeSignature {
 /// Incremental cache for low-latency free-draw creation previews.
 ///
 /// The cache records sealed stroke chunks into pictures and keeps a mutable
-/// tail path for in-flight points. Sealed chunks are compacted so the number
-/// of per-frame draw calls stays bounded, preventing frame cost from growing
-/// linearly with stroke length.
+/// tail path for in-flight points. Sealed chunks stay spatially indexed so
+/// paint can resolve only candidates intersecting the viewport.
 class FreeDrawCreationPreviewCache {
   static const _chunkPointThreshold = 128;
-  static const _compactionTrigger = 14;
-  static const _maxRecentSegments = 10;
+  static const _segmentScanThreshold = 32;
+  static const _indexTileSize = 512.0;
+  static const _maxTileToSegmentRatio = 8;
   static const _minCullPadding = 1.0;
 
   String? _elementId;
@@ -54,19 +54,22 @@ class FreeDrawCreationPreviewCache {
   DrawPoint? _tailLastPoint;
   var _tailPath = Path();
   var _tailPointCount = 0;
-  var _tailBounds = const _BoundsAccumulator();
+  final _tailBounds = _MutableBoundsAccumulator();
   double _cullPadding = _minCullPadding;
 
   final _sealedSegments = <_PreviewPictureSegment>[];
+  final _segmentIndex = <_SegmentTileKey, List<int>>{};
+  final _candidateSegmentIndices = <int>[];
+  final _candidateSegmentIndexSet = <int>{};
 
   @visibleForTesting
   static int get chunkPointThresholdForTest => _chunkPointThreshold;
 
   @visibleForTesting
-  static int get compactionTriggerForTest => _compactionTrigger;
+  static int get segmentScanThresholdForTest => _segmentScanThreshold;
 
   @visibleForTesting
-  static int get maxRecentSegmentsForTest => _maxRecentSegments;
+  static double get indexTileSizeForTest => _indexTileSize;
 
   @visibleForTesting
   int get sealedSegmentCount => _sealedSegments.length;
@@ -86,8 +89,10 @@ class FreeDrawCreationPreviewCache {
     _tailLastPoint = null;
     _tailPath = Path();
     _tailPointCount = 0;
-    _tailBounds = const _BoundsAccumulator();
+    _tailBounds.reset();
     _cullPadding = _minCullPadding;
+    _candidateSegmentIndices.clear();
+    _candidateSegmentIndexSet.clear();
   }
 
   void sync({
@@ -132,10 +137,22 @@ class FreeDrawCreationPreviewCache {
     required DrawRect viewportRect,
     required Paint strokePaint,
   }) {
-    for (final segment in _sealedSegments) {
-      if (_rectsIntersect(segment.bounds, viewportRect)) {
-        canvas.drawPicture(segment.picture);
+    if (_sealedSegments.length <= _segmentScanThreshold) {
+      for (final segment in _sealedSegments) {
+        if (_rectsIntersect(segment.bounds, viewportRect)) {
+          canvas.drawPicture(segment.picture);
+        }
       }
+    } else {
+      _collectCandidateSegmentIndices(viewportRect);
+      for (final segmentIndex in _candidateSegmentIndices) {
+        final segment = _sealedSegments[segmentIndex];
+        if (_rectsIntersect(segment.bounds, viewportRect)) {
+          canvas.drawPicture(segment.picture);
+        }
+      }
+      _candidateSegmentIndices.clear();
+      _candidateSegmentIndexSet.clear();
     }
 
     if (_tailPointCount < 2) {
@@ -198,13 +215,13 @@ class FreeDrawCreationPreviewCache {
     _tailLastPoint = null;
     _tailPath = Path();
     _tailPointCount = 0;
-    _tailBounds = const _BoundsAccumulator();
+    _tailBounds.reset();
     _cullPadding = math.max(_minCullPadding, signature.strokeWidth / 2);
   }
 
   void _startTail(DrawPoint startPoint) {
     _tailPath.moveTo(startPoint.x, startPoint.y);
-    _tailBounds = _tailBounds.includePoint(startPoint);
+    _tailBounds.includePoint(startPoint);
     _tailLastPoint = startPoint;
     _tailPointCount = 1;
   }
@@ -222,7 +239,7 @@ class FreeDrawCreationPreviewCache {
     }
 
     _tailPath.lineTo(point.x, point.y);
-    _tailBounds = _tailBounds.includePoint(point);
+    _tailBounds.includePoint(point);
     _tailLastPoint = point;
     _tailPointCount += 1;
 
@@ -240,61 +257,93 @@ class FreeDrawCreationPreviewCache {
     final recorder = PictureRecorder();
     Canvas(recorder).drawPath(_tailPath, strokePaint);
 
+    final segmentIndex = _sealedSegments.length;
     _sealedSegments.add(
       _PreviewPictureSegment(
         picture: recorder.endRecording(),
         bounds: tailBounds,
       ),
     );
-
-    _maybeCompactSealedSegments();
+    _indexSegmentBounds(segmentIndex: segmentIndex, bounds: tailBounds);
 
     final tailLastPoint = _tailLastPoint;
     _tailPath = Path();
-    _tailBounds = const _BoundsAccumulator();
+    _tailBounds.reset();
     if (tailLastPoint != null) {
       _tailPath.moveTo(tailLastPoint.x, tailLastPoint.y);
-      _tailBounds = _tailBounds.includePoint(tailLastPoint);
+      _tailBounds.includePoint(tailLastPoint);
       _tailPointCount = 1;
     } else {
       _tailPointCount = 0;
     }
   }
 
-  void _maybeCompactSealedSegments() {
-    if (_sealedSegments.length <= _compactionTrigger) {
+  void _collectCandidateSegmentIndices(DrawRect viewportRect) {
+    _candidateSegmentIndices.clear();
+    _candidateSegmentIndexSet.clear();
+
+    if (_sealedSegments.isEmpty) {
       return;
     }
 
-    final mergeCount = _sealedSegments.length - _maxRecentSegments + 1;
-    if (mergeCount < 2 || mergeCount > _sealedSegments.length) {
+    final tileMinX = _resolveTileIndex(viewportRect.minX);
+    final tileMaxX = _resolveTileIndex(viewportRect.maxX);
+    final tileMinY = _resolveTileIndex(viewportRect.minY);
+    final tileMaxY = _resolveTileIndex(viewportRect.maxY);
+    final tileSpanX = tileMaxX - tileMinX + 1;
+    final tileSpanY = tileMaxY - tileMinY + 1;
+    final tileCountEstimate = tileSpanX * tileSpanY;
+    if (tileCountEstimate > _sealedSegments.length * _maxTileToSegmentRatio) {
+      for (
+        var segmentIndex = 0;
+        segmentIndex < _sealedSegments.length;
+        segmentIndex++
+      ) {
+        _candidateSegmentIndices.add(segmentIndex);
+      }
       return;
     }
 
-    final segmentsToMerge = _sealedSegments
-        .sublist(0, mergeCount)
-        .toList(growable: false);
-
-    final recorder = PictureRecorder();
-    final mergeCanvas = Canvas(recorder);
-    var mergedBounds = const _BoundsAccumulator();
-    for (final segment in segmentsToMerge) {
-      mergeCanvas.drawPicture(segment.picture);
-      mergedBounds = mergedBounds.includeRect(segment.bounds);
+    for (var tileY = tileMinY; tileY <= tileMaxY; tileY++) {
+      for (var tileX = tileMinX; tileX <= tileMaxX; tileX++) {
+        final indices = _segmentIndex[_SegmentTileKey(x: tileX, y: tileY)];
+        if (indices == null) {
+          continue;
+        }
+        for (final segmentIndex in indices) {
+          if (_candidateSegmentIndexSet.add(segmentIndex)) {
+            _candidateSegmentIndices.add(segmentIndex);
+          }
+        }
+      }
     }
-
-    final mergedSegment = _PreviewPictureSegment(
-      picture: recorder.endRecording(),
-      bounds: mergedBounds.toRect(),
-    );
-
-    for (final segment in segmentsToMerge) {
-      segment.dispose();
+    if (_candidateSegmentIndices.length > 1) {
+      _candidateSegmentIndices.sort();
     }
+  }
 
-    _sealedSegments
-      ..removeRange(0, mergeCount)
-      ..insert(0, mergedSegment);
+  void _indexSegmentBounds({
+    required int segmentIndex,
+    required DrawRect bounds,
+  }) {
+    final tileMinX = _resolveTileIndex(bounds.minX);
+    final tileMaxX = _resolveTileIndex(bounds.maxX);
+    final tileMinY = _resolveTileIndex(bounds.minY);
+    final tileMaxY = _resolveTileIndex(bounds.maxY);
+
+    for (var tileY = tileMinY; tileY <= tileMaxY; tileY++) {
+      for (var tileX = tileMinX; tileX <= tileMaxX; tileX++) {
+        final key = _SegmentTileKey(x: tileX, y: tileY);
+        _segmentIndex.putIfAbsent(key, () => <int>[]).add(segmentIndex);
+      }
+    }
+  }
+
+  int _resolveTileIndex(double coordinate) {
+    if (coordinate.isNaN || coordinate.isInfinite) {
+      return 0;
+    }
+    return (coordinate / _indexTileSize).floor();
   }
 
   void _disposeSealedSegments() {
@@ -302,6 +351,7 @@ class FreeDrawCreationPreviewCache {
       segment.dispose();
     }
     _sealedSegments.clear();
+    _segmentIndex.clear();
   }
 }
 
@@ -317,60 +367,35 @@ final class _PreviewPictureSegment {
   }
 }
 
-@immutable
-final class _BoundsAccumulator {
-  const _BoundsAccumulator({
-    this.hasValue = false,
-    this.minX = 0,
-    this.minY = 0,
-    this.maxX = 0,
-    this.maxY = 0,
-  });
+final class _MutableBoundsAccumulator {
+  var hasValue = false;
+  var minX = 0.0;
+  var minY = 0.0;
+  var maxX = 0.0;
+  var maxY = 0.0;
 
-  final bool hasValue;
-  final double minX;
-  final double minY;
-  final double maxX;
-  final double maxY;
-
-  _BoundsAccumulator includePoint(DrawPoint point) {
-    if (!hasValue) {
-      return _BoundsAccumulator(
-        hasValue: true,
-        minX: point.x,
-        minY: point.y,
-        maxX: point.x,
-        maxY: point.y,
-      );
-    }
-
-    return _BoundsAccumulator(
-      hasValue: true,
-      minX: math.min(minX, point.x),
-      minY: math.min(minY, point.y),
-      maxX: math.max(maxX, point.x),
-      maxY: math.max(maxY, point.y),
-    );
+  void reset() {
+    hasValue = false;
+    minX = 0.0;
+    minY = 0.0;
+    maxX = 0.0;
+    maxY = 0.0;
   }
 
-  _BoundsAccumulator includeRect(DrawRect rect) {
+  void includePoint(DrawPoint point) {
     if (!hasValue) {
-      return _BoundsAccumulator(
-        hasValue: true,
-        minX: rect.minX,
-        minY: rect.minY,
-        maxX: rect.maxX,
-        maxY: rect.maxY,
-      );
+      hasValue = true;
+      minX = point.x;
+      minY = point.y;
+      maxX = point.x;
+      maxY = point.y;
+      return;
     }
 
-    return _BoundsAccumulator(
-      hasValue: true,
-      minX: math.min(minX, rect.minX),
-      minY: math.min(minY, rect.minY),
-      maxX: math.max(maxX, rect.maxX),
-      maxY: math.max(maxY, rect.maxY),
-    );
+    minX = math.min(minX, point.x);
+    minY = math.min(minY, point.y);
+    maxX = math.max(maxX, point.x);
+    maxY = math.max(maxY, point.y);
   }
 
   DrawRect toRect({double padding = 0}) {
@@ -386,6 +411,22 @@ final class _BoundsAccumulator {
       maxY: maxY + clampedPadding,
     );
   }
+}
+
+@immutable
+final class _SegmentTileKey {
+  const _SegmentTileKey({required this.x, required this.y});
+
+  final int x;
+  final int y;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SegmentTileKey && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
 }
 
 bool _rectsIntersect(DrawRect a, DrawRect b) {

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
@@ -25,8 +26,8 @@ import 'free_draw_data.dart';
 class FreeDrawCreationStrategy extends CreationStrategy {
   const FreeDrawCreationStrategy();
 
-  /// Minimum squared distance between consecutive points (world units).
-  static const _minDistanceSq = 2;
+  /// Minimum point spacing in world units before sampling the next point.
+  static const _baseMinDistance = 1.5;
 
   /// Exponential smoothing factor (0 = none, 1 = no movement).
   static const _smoothingAlpha = 0.2;
@@ -144,14 +145,15 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         previewChanged = true;
       }
 
-      final appendResult = _appendSmoothedPoint(
+      final appendedPoint = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
+        strokeWidth: elementData.strokeWidth,
       );
-      if (appendResult.hasAppendedPoint) {
+      if (appendedPoint != null) {
         _appendPreviewPoint(
           previewPath,
-          appendResult.appendedPoint!,
+          appendedPoint,
           moveTo: worldPoints.length == 1,
         );
         previewChanged = true;
@@ -267,14 +269,14 @@ class FreeDrawCreationStrategy extends CreationStrategy {
               gridSize: config.grid.size,
             )
           : rawPosition;
-      final appendResult = _appendSmoothedPoint(
+      final appendedPoint = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
+        strokeWidth: elementData.strokeWidth,
       );
-      if (!appendResult.hasAppendedPoint) {
+      if (appendedPoint == null) {
         continue;
       }
-      final appendedPoint = appendResult.appendedPoint!;
       _appendPreviewPoint(
         previewPath,
         appendedPoint,
@@ -621,35 +623,33 @@ double _pathLength(List<DrawPoint> points) {
   return length;
 }
 
-@immutable
-class _AppendPointResult {
-  const _AppendPointResult({this.appendedPoint});
-  final DrawPoint? appendedPoint;
-
-  bool get hasAppendedPoint => appendedPoint != null;
-}
-
 /// Appends a new point with smoothing and minimum-distance filtering.
 ///
 /// Mutates [worldPoints] in place to avoid O(n) list copies.
-_AppendPointResult _appendSmoothedPoint({
+DrawPoint? _appendSmoothedPoint({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
+  required double strokeWidth,
 }) {
   if (worldPoints.isEmpty) {
     worldPoints.add(currentPosition);
-    return _AppendPointResult(appendedPoint: currentPosition);
+    return currentPosition;
   }
 
   if (worldPoints.length == 1) {
     worldPoints.add(currentPosition);
-    return _AppendPointResult(appendedPoint: currentPosition);
+    return currentPosition;
   }
 
   final last = worldPoints.last;
+  final minDistance = math.max(
+    FreeDrawCreationStrategy._baseMinDistance,
+    strokeWidth * 0.75,
+  );
+  final minDistanceSq = minDistance * minDistance;
   final distSq = last.distanceSquared(currentPosition);
-  if (distSq < FreeDrawCreationStrategy._minDistanceSq) {
-    return const _AppendPointResult();
+  if (distSq < minDistanceSq) {
+    return null;
   }
 
   const alpha = FreeDrawCreationStrategy._smoothingAlpha;
@@ -661,7 +661,7 @@ _AppendPointResult _appendSmoothedPoint({
   );
 
   worldPoints.add(smoothed);
-  return _AppendPointResult(appendedPoint: smoothed);
+  return smoothed;
 }
 
 void _startLineSegment({

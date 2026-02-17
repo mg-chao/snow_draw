@@ -47,6 +47,7 @@ import 'dynamic_scene_optimization.dart';
 import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
+import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
@@ -553,6 +554,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final eraserCursorOverlay = _buildEraserCursorOverlay();
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
+    final freeDrawPreviewSnapshot = _extractFreeDrawPreviewSnapshot(stateView);
+    final freeDrawPreviewRenderKey = FreeDrawPreviewRenderKey(
+      camera: camera,
+      scaleFactor: scaleFactor,
+      preview: freeDrawPreviewSnapshot,
+    );
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
@@ -560,7 +567,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final hasDynamicContent =
         dynamicLayerStartIndex != null ||
         creatingSnapshot != null ||
-        dynamicPreviewElements.isNotEmpty;
+        dynamicPreviewElements.isNotEmpty ||
+        freeDrawPreviewRenderKey.hasPreview;
     final highlightMaskLayer = resolveHighlightMaskLayer(
       hasHighlights: hasHighlights,
       hasDynamicContent: hasDynamicContent,
@@ -631,6 +639,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
               painter: StaticCanvasPainter(
                 renderKey: staticRenderKey,
                 stateView: stateView,
+              ),
+              size: widget.size,
+            ),
+          ),
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: FreeDrawPreviewPainter(
+                renderKey: freeDrawPreviewRenderKey,
               ),
               size: widget.size,
             ),
@@ -866,6 +882,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
     final interaction = view.state.application.interaction;
     if (interaction is CreatingState) {
+      if (interaction.elementData is FreeDrawData) {
+        return null;
+      }
       return CreatingElementSnapshot(
         element: interaction.element,
         currentRect: interaction.currentRect,
@@ -880,6 +899,36 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return mode.revision;
     }
     return 0;
+  }
+
+  FreeDrawPreviewSnapshot? _extractFreeDrawPreviewSnapshot(DrawStateView view) {
+    final interaction = view.state.application.interaction;
+    if (interaction is! CreatingState) {
+      return null;
+    }
+    final data = interaction.elementData;
+    final mode = interaction.creationMode;
+    if (data is! FreeDrawData || mode is! FreeDrawCreationMode) {
+      return null;
+    }
+    final points = mode.worldPoints;
+    if (points == null || points.isEmpty) {
+      return null;
+    }
+
+    return FreeDrawPreviewSnapshot(
+      elementId: interaction.elementId,
+      points: points,
+      previewPath: mode.previewPath,
+      strokeColor: data.color,
+      strokeWidth: data.strokeWidth,
+      strokeStyle: data.strokeStyle,
+      opacity: interaction.elementOpacity,
+      isLineActive: mode.isLineActive,
+      lineAnchor: mode.lineAnchor,
+      lineCurrent: mode.lineCurrent,
+      revision: mode.revision,
+    );
   }
 
   /// Extract box selection bounds from state view.

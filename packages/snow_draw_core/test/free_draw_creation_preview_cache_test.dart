@@ -24,11 +24,12 @@ void main() {
       expect(cache.sealedSegmentCount, 0);
     });
 
-    test('sync compacts sealed segments to keep draw calls bounded', () {
+    test('sync keeps sealed segments for indexed viewport culling', () {
       final cache = FreeDrawCreationPreviewCache();
       final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
-      final trigger = FreeDrawCreationPreviewCache.compactionTriggerForTest;
-      final points = _buildPoints(chunkSize * (trigger + 4));
+      final scanThreshold =
+          FreeDrawCreationPreviewCache.segmentScanThresholdForTest;
+      final points = _buildPoints(chunkSize * (scanThreshold + 4));
 
       cache.sync(
         elementId: 'stroke-compact',
@@ -37,11 +38,7 @@ void main() {
         strokePaint: _strokePaint(strokeWidth: 3),
       );
 
-      expect(
-        cache.sealedSegmentCount <=
-            FreeDrawCreationPreviewCache.compactionTriggerForTest,
-        isTrue,
-      );
+      expect(cache.sealedSegmentCount, greaterThan(scanThreshold));
       expect(cache.processedPointCount, points.length);
     });
 
