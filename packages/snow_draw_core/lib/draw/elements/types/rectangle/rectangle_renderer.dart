@@ -10,6 +10,7 @@ import '../../../utils/lru_cache.dart';
 import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import 'rectangle_data.dart';
+import 'rectangle_render_plan.dart';
 
 class RectangleRenderer extends ElementTypeRenderer {
   const RectangleRenderer();
@@ -46,13 +47,25 @@ class RectangleRenderer extends ElementTypeRenderer {
       );
     }
 
-    // Try GPU shader rendering first (highest performance)
-    if (_renderWithShader(canvas, element, data, scaleFactor)) {
+    final renderPlan = RectangleRenderPlan.resolve(
+      data: data,
+      elementOpacity: element.opacity,
+      shaderReady: RectangleShaderManager.instance.isReady,
+    );
+
+    // Prefer the shader only for pattern-heavy styles where it provides a
+    // clear benefit over built-in Canvas primitives.
+    if (renderPlan.shouldUseShader &&
+        _renderWithShader(canvas, element, data, renderPlan, scaleFactor)) {
       return;
     }
 
-    // Fallback to CPU rendering
-    _renderFallback(canvas, element, data, scaleFactor);
+    if (renderPlan.shouldUseSolidFastPath) {
+      _renderSolidFastPath(canvas, element, data, renderPlan);
+      return;
+    }
+
+    _renderPatternFallback(canvas, element, data, renderPlan);
   }
 
   /// Renders the rectangle using the GPU fragment shader.
@@ -62,18 +75,15 @@ class RectangleRenderer extends ElementTypeRenderer {
     Canvas canvas,
     ElementState element,
     RectangleData data,
+    RectangleRenderPlan renderPlan,
     double scaleFactor,
   ) {
     final shaderManager = RectangleShaderManager.instance;
     if (!shaderManager.isReady) {
       return false;
     }
-
     final rect = element.rect;
     final rotation = element.rotation;
-    final opacity = element.opacity;
-    final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
-    final strokeOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
 
     // Calculate fill pattern parameters (matching CPU fallback logic)
     final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
@@ -101,11 +111,11 @@ class RectangleRenderer extends ElementTypeRenderer {
       rotation: rotation,
       cornerRadius: data.cornerRadius,
       fillStyle: data.fillStyle,
-      fillColor: data.fillColor.withValues(alpha: fillOpacity),
+      fillColor: renderPlan.fillColor,
       fillLineWidth: fillLineWidth,
       fillLineSpacing: fillLineSpacing,
       strokeStyle: data.strokeStyle,
-      strokeColor: data.color.withValues(alpha: strokeOpacity),
+      strokeColor: renderPlan.strokeColor,
       strokeWidth: data.strokeWidth,
       dashLength: dashLength,
       gapLength: gapLength,
@@ -115,20 +125,62 @@ class RectangleRenderer extends ElementTypeRenderer {
     );
   }
 
-  /// CPU fallback rendering for platforms without shader support.
-  void _renderFallback(
+  /// Fast path for common solid-style rectangles.
+  void _renderSolidFastPath(
     Canvas canvas,
     ElementState element,
     RectangleData data,
-    double scaleFactor,
+    RectangleRenderPlan renderPlan,
   ) {
-    final _ = scaleFactor;
+    if (!renderPlan.paintFill && !renderPlan.paintStroke) {
+      return;
+    }
 
     final rect = element.rect;
     final rotation = element.rotation;
-    final opacity = element.opacity;
-    final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
-    final strokeOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
+    final rRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height),
+      Radius.circular(data.cornerRadius),
+    );
+
+    canvas.save();
+    if (rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+
+    if (renderPlan.paintFill) {
+      _fillPaint
+        ..color = renderPlan.fillColor
+        ..shader = null
+        ..colorFilter = null;
+      canvas.drawRRect(rRect, _fillPaint);
+    }
+
+    if (renderPlan.paintStroke) {
+      _strokePaint
+        ..strokeWidth = data.strokeWidth
+        ..color = renderPlan.strokeColor
+        ..strokeCap = StrokeCap.butt
+        ..shader = null
+        ..colorFilter = null;
+      canvas.drawRRect(rRect, _strokePaint);
+    }
+
+    canvas.restore();
+  }
+
+  /// CPU fallback for pattern-heavy styles when shaders are unavailable.
+  void _renderPatternFallback(
+    Canvas canvas,
+    ElementState element,
+    RectangleData data,
+    RectangleRenderPlan renderPlan,
+  ) {
+    final rect = element.rect;
+    final rotation = element.rotation;
 
     canvas.save();
 
@@ -147,10 +199,10 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     canvas.translate(rect.minX, rect.minY);
 
-    if (fillOpacity > 0) {
+    if (renderPlan.paintFill) {
       if (data.fillStyle == FillStyle.solid) {
         _fillPaint
-          ..color = data.fillColor.withValues(alpha: fillOpacity)
+          ..color = renderPlan.fillColor
           ..shader = null
           ..colorFilter = null;
         canvas.drawRRect(rRect, _fillPaint);
@@ -164,7 +216,7 @@ class RectangleRenderer extends ElementTypeRenderer {
         const lineAngle = -math.pi / 4;
         const crossLineAngle = math.pi / 4;
         _fillPaint
-          ..color = data.fillColor.withValues(alpha: fillOpacity)
+          ..color = renderPlan.fillColor
           ..shader = lineShaderCache.getOrCreate(
             LineShaderKey(
               spacing: spacing,
@@ -178,7 +230,7 @@ class RectangleRenderer extends ElementTypeRenderer {
             ),
           )
           ..colorFilter = ColorFilter.mode(
-            data.fillColor.withValues(alpha: fillOpacity),
+            renderPlan.fillColor,
             BlendMode.modulate,
           );
         canvas.drawRRect(rRect, _fillPaint);
@@ -200,10 +252,10 @@ class RectangleRenderer extends ElementTypeRenderer {
       }
     }
 
-    if (strokeOpacity > 0 && data.strokeWidth > 0) {
+    if (renderPlan.paintStroke) {
       _strokePaint
         ..strokeWidth = data.strokeWidth
-        ..color = data.color.withValues(alpha: strokeOpacity)
+        ..color = renderPlan.strokeColor
         ..strokeCap = StrokeCap.butt;
 
       if (data.strokeStyle == StrokeStyle.solid) {

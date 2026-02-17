@@ -3,7 +3,6 @@ import 'package:meta/meta.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../edit/preview/edit_preview.dart';
 import '../edit/preview/edit_preview_engine.dart';
-import '../elements/types/free_draw/free_draw_data.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/element_state.dart';
@@ -50,9 +49,9 @@ class DrawStateViewBuilder {
 
   DrawStateView _buildUncached(DrawState state) {
     final snapGuides = _resolveSnapGuides(state);
-    final createPreview = _buildCreatePreview(state);
-    if (createPreview != null) {
-      return createPreview;
+    final interaction = state.application.interaction;
+    if (interaction is CreatingState) {
+      return DrawStateView.fromState(state, snapGuides: snapGuides);
     }
 
     final textEditingPreview = _buildTextEditingPreview(state);
@@ -83,30 +82,6 @@ class DrawStateViewBuilder {
       previewElementsById: preview.previewElementsById,
       effectiveSelection: effectiveSelection,
       snapGuides: snapGuides,
-    );
-  }
-
-  DrawStateView? _buildCreatePreview(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return null;
-    }
-
-    if (interaction.elementData is FreeDrawData) {
-      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
-    }
-
-    final element = interaction.element;
-    if (element.rect == interaction.currentRect) {
-      return null;
-    }
-
-    final previewElement = element.copyWith(rect: interaction.currentRect);
-    return DrawStateView.withPreview(
-      state: state,
-      previewElementsById: {previewElement.id: previewElement},
-      effectiveSelection: _buildSelectionFromState(state),
-      snapGuides: interaction.snapGuides,
     );
   }
 
