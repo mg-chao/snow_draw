@@ -710,6 +710,10 @@ _PointSnapResult _snapCreatePoint({
   if (referenceElements.isEmpty) {
     return _PointSnapResult(position: position);
   }
+  final referenceAabbs = sessionData?.resolveReferenceElementAabbs(
+    document: state.domain.document,
+    referenceElements: referenceElements,
+  );
   final zoom = state.application.view.camera.zoom;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
   final snapDistance = snapConfig.distance / effectiveZoom;
@@ -727,6 +731,7 @@ _PointSnapResult _snapCreatePoint({
     snapDistance: snapDistance,
     targetAnchorsX: const [SnapAxisAnchor.center],
     targetAnchorsY: const [SnapAxisAnchor.center],
+    referenceAabbs: referenceAabbs,
     enablePointSnaps: snapConfig.enablePointSnaps,
     enableGapSnaps: snapConfig.enableGapSnaps,
   );
@@ -894,6 +899,9 @@ class _ArrowCreationSessionData {
 
   var _referenceElementsVersion = -1;
   List<ElementState> _referenceElements = const [];
+  var _referenceAabbsVersion = -1;
+  List<DrawRect> _referenceElementAabbs = const [];
+  List<ElementState> _referenceAabbsSource = const [];
 
   bool canReuseStartBinding({
     required DrawPoint startPosition,
@@ -974,6 +982,21 @@ class _ArrowCreationSessionData {
     return _referenceElements = document.elements
         .where((element) => element.opacity > 0)
         .toList(growable: false);
+  }
+
+  List<DrawRect> resolveReferenceElementAabbs({
+    required DocumentState document,
+    required List<ElementState> referenceElements,
+  }) {
+    if (_referenceAabbsVersion == document.elementsVersion &&
+        identical(_referenceAabbsSource, referenceElements)) {
+      return _referenceElementAabbs;
+    }
+    _referenceAabbsVersion = document.elementsVersion;
+    _referenceAabbsSource = referenceElements;
+    return _referenceElementAabbs = ObjectSnapService.buildReferenceAabbs(
+      referenceElements,
+    );
   }
 }
 

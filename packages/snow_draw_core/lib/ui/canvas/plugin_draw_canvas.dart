@@ -3675,11 +3675,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     if (previousState != null &&
-        isLightweightLineEditMutationOnly(
+        isLightweightLineInteractionMutationOnly(
           previous: previousState,
           next: state,
         )) {
-      _handleLightweightLineEditMutation(state);
+      _handleLightweightLineInteractionMutation(state);
       return;
     }
     if (previousState != null &&
@@ -3772,7 +3772,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
 
-  void _handleLightweightLineEditMutation(DrawState state) {
+  void _handleLightweightLineInteractionMutation(DrawState state) {
     _handleDynamicOnlyInteractionMutation(state);
   }
 

@@ -17,6 +17,168 @@ import 'package:snow_draw_core/draw/types/snap_guides.dart';
 import 'package:snow_draw_core/ui/canvas/lightweight_line_edit_state_change.dart';
 
 void main() {
+  group('isLightweightLineInteractionMutationOnly', () {
+    test('returns true for line creation updates', () {
+      final base = _baseState(elements: const [_lineElement]);
+      const creatingElement = ElementState(
+        id: 'draft-line',
+        rect: DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: LineData(),
+      );
+      final previous = _withInteraction(
+        base,
+        CreatingState(
+          element: creatingElement,
+          startPosition: const DrawPoint(x: 20, y: 20),
+          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
+          creationMode: const PointCreationMode(
+            fixedPoints: [DrawPoint(x: 20, y: 20)],
+            currentPoint: DrawPoint(x: 20, y: 20),
+          ),
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        CreatingState(
+          element: creatingElement,
+          startPosition: const DrawPoint(x: 20, y: 20),
+          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 60),
+          creationMode: const PointCreationMode(
+            fixedPoints: [DrawPoint(x: 20, y: 20)],
+            currentPoint: DrawPoint(x: 80, y: 60),
+          ),
+        ),
+      );
+
+      expect(
+        isLightweightLineInteractionMutationOnly(
+          previous: previous,
+          next: next,
+        ),
+        isTrue,
+      );
+    });
+
+    test('returns false for non-line creation updates', () {
+      final base = _baseState(elements: const [_rectangleElement]);
+      const creatingElement = ElementState(
+        id: 'draft-rect',
+        rect: DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: RectangleData(),
+      );
+      final previous = _withInteraction(
+        base,
+        CreatingState(
+          element: creatingElement,
+          startPosition: const DrawPoint(x: 20, y: 20),
+          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        CreatingState(
+          element: creatingElement,
+          startPosition: const DrawPoint(x: 20, y: 20),
+          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 60),
+        ),
+      );
+
+      expect(
+        isLightweightLineInteractionMutationOnly(
+          previous: previous,
+          next: next,
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns true for lightweight line edit updates', () {
+      final base = _baseState(
+        elements: const [_lineElement],
+        selectedIds: const {'line'},
+      );
+      const context = _TestEditContext(
+        startPosition: DrawPoint(x: 20, y: 20),
+        startBounds: DrawRect(minX: 10, minY: 10, maxX: 90, maxY: 90),
+        selectedIdsAtStart: {'line'},
+        selectionVersion: 1,
+        elementsVersion: 1,
+      );
+      final previous = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'line_edit',
+          context: context,
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'line_edit',
+          context: context,
+          currentTransform: MoveTransform(dx: 6, dy: 4),
+        ),
+      );
+
+      expect(
+        isLightweightLineInteractionMutationOnly(
+          previous: previous,
+          next: next,
+        ),
+        isTrue,
+      );
+    });
+
+    test('returns false for mixed non-line edit updates', () {
+      final base = _baseState(
+        elements: const [_freeDrawElement, _rectangleElement],
+        selectedIds: const {'free', 'rect'},
+      );
+      const context = _TestEditContext(
+        startPosition: DrawPoint(x: 20, y: 20),
+        startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110),
+        selectedIdsAtStart: {'free', 'rect'},
+        selectionVersion: 1,
+        elementsVersion: 1,
+      );
+      final previous = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'mixed_edit',
+          context: context,
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'mixed_edit',
+          context: context,
+          currentTransform: MoveTransform(dx: 4, dy: 4),
+        ),
+      );
+
+      expect(
+        isLightweightLineInteractionMutationOnly(
+          previous: previous,
+          next: next,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('isLightweightLineEditMutationOnly', () {
     test('returns true for free-draw edit transform updates', () {
       final base = _baseState(
