@@ -104,9 +104,30 @@ class FreeDrawPreviewSnapshot {
   );
 }
 
+/// Mutable state holder that repaints the free-draw preview layer on demand.
+class FreeDrawPreviewLayerController extends ChangeNotifier {
+  FreeDrawPreviewLayerController({required FreeDrawPreviewRenderKey initialKey})
+    : _renderKey = initialKey;
+
+  FreeDrawPreviewRenderKey _renderKey;
+
+  /// Current snapshot used by the preview painter.
+  FreeDrawPreviewRenderKey get renderKey => _renderKey;
+
+  /// Replace the current snapshot and request repaint when it changes.
+  void update(FreeDrawPreviewRenderKey nextKey) {
+    if (_renderKey == nextKey) {
+      return;
+    }
+    _renderKey = nextKey;
+    notifyListeners();
+  }
+}
+
 /// Paints low-latency free-draw creation previews on a dedicated layer.
 class FreeDrawPreviewPainter extends CustomPainter {
-  const FreeDrawPreviewPainter({required this.renderKey});
+  const FreeDrawPreviewPainter({required this.controller})
+    : super(repaint: controller);
 
   static final _previewCache = FreeDrawCreationPreviewCache();
   static final _strokePaint = Paint()
@@ -122,10 +143,11 @@ class FreeDrawPreviewPainter extends CustomPainter {
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
 
-  final FreeDrawPreviewRenderKey renderKey;
+  final FreeDrawPreviewLayerController controller;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final renderKey = controller.renderKey;
     final preview = renderKey.preview;
     if (preview == null) {
       _previewCache.clear();
@@ -292,5 +314,5 @@ class FreeDrawPreviewPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant FreeDrawPreviewPainter oldDelegate) =>
-      oldDelegate.renderKey != renderKey;
+      oldDelegate.controller != controller;
 }

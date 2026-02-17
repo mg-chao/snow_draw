@@ -47,6 +47,7 @@ import 'dynamic_scene_optimization.dart';
 import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
+import 'free_draw_creation_state_change.dart';
 import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
@@ -211,6 +212,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CoordinateService? _coordinateService;
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
+  late final FreeDrawPreviewLayerController _freeDrawPreviewLayerController;
+  late final FreeDrawPreviewPainter _freeDrawPreviewPainter;
   late final WatermarkCanvasLayerController _watermarkLayerController;
   late final WatermarkCanvasPainter _watermarkCanvasPainter;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
@@ -364,6 +367,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       editOperations: widget.store.context.editOperations,
     );
     _lastObservedState = initialState;
+    _freeDrawPreviewLayerController = FreeDrawPreviewLayerController(
+      initialKey: FreeDrawPreviewRenderKey(
+        camera: initialState.application.view.camera,
+        scaleFactor: _effectiveScaleFactor(),
+        preview: _extractFreeDrawPreviewSnapshot(initialState),
+      ),
+    );
+    _freeDrawPreviewPainter = FreeDrawPreviewPainter(
+      controller: _freeDrawPreviewLayerController,
+    );
     _watermarkLayerController = WatermarkCanvasLayerController(
       initialState: WatermarkCanvasLayerState(
         camera: initialState.application.view.camera,
@@ -461,6 +474,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
+    _syncFreeDrawPreviewLayerState(widget.store.state);
     _syncWatermarkLayerState(widget.store.state);
   }
 
@@ -480,6 +494,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
+    _freeDrawPreviewLayerController.dispose();
     _watermarkLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_hoverMoveDispatcher.dispose());
@@ -554,12 +569,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final eraserCursorOverlay = _buildEraserCursorOverlay();
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final freeDrawPreviewSnapshot = _extractFreeDrawPreviewSnapshot(stateView);
-    final freeDrawPreviewRenderKey = FreeDrawPreviewRenderKey(
-      camera: camera,
-      scaleFactor: scaleFactor,
-      preview: freeDrawPreviewSnapshot,
-    );
+    final hasFreeDrawPreview =
+        _freeDrawPreviewLayerController.renderKey.hasPreview;
     final hasHighlights = stateView.highlightMaskScene.hasHighlights;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
@@ -568,7 +579,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         dynamicLayerStartIndex != null ||
         creatingSnapshot != null ||
         dynamicPreviewElements.isNotEmpty ||
-        freeDrawPreviewRenderKey.hasPreview;
+        hasFreeDrawPreview;
     final highlightMaskLayer = resolveHighlightMaskLayer(
       hasHighlights: hasHighlights,
       hasDynamicContent: hasDynamicContent,
@@ -645,9 +656,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           ),
           RepaintBoundary(
             child: CustomPaint(
-              painter: FreeDrawPreviewPainter(
-                renderKey: freeDrawPreviewRenderKey,
-              ),
+              painter: _freeDrawPreviewPainter,
               size: widget.size,
             ),
           ),
@@ -901,8 +910,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return 0;
   }
 
-  FreeDrawPreviewSnapshot? _extractFreeDrawPreviewSnapshot(DrawStateView view) {
-    final interaction = view.state.application.interaction;
+  FreeDrawPreviewSnapshot? _extractFreeDrawPreviewSnapshot(DrawState state) {
+    final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
       return null;
     }
@@ -2680,6 +2689,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
+  void _syncFreeDrawPreviewLayerState(DrawState state, {double? scaleFactor}) {
+    _freeDrawPreviewLayerController.update(
+      FreeDrawPreviewRenderKey(
+        camera: state.application.view.camera,
+        scaleFactor: scaleFactor ?? _effectiveScaleFactor(),
+        preview: _extractFreeDrawPreviewSnapshot(state),
+      ),
+    );
+  }
+
   bool _isWatermarkOnlyStateChange(DrawState previous, DrawState next) {
     if (identical(previous, next)) {
       return false;
@@ -3220,6 +3239,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
+    _syncFreeDrawPreviewLayerState(state);
     _syncWatermarkLayerState(state);
 
     if (previousState != null &&
@@ -3234,6 +3254,32 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       if (mounted) {
         setState(() {});
       }
+      return;
+    }
+    if (previousState != null &&
+        isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
+      final position = _lastPointerPosition;
+      if (position != null && _isPointerInside) {
+        if (!mounted) {
+          _cursor = _resolveCursorForState(state, position);
+          _hoveredSelectionElementId = null;
+          _hoveredBindingElementId = null;
+          _hoveredArrowHandle = null;
+          return;
+        }
+        _updateCursorAndHoverForPosition(position);
+        return;
+      }
+      final cursor = _resolveCursorForState(state, position);
+      if (!mounted) {
+        _cursor = cursor;
+        _hoveredSelectionElementId = null;
+        _hoveredBindingElementId = null;
+        _hoveredArrowHandle = null;
+        return;
+      }
+      _updateCursorIfChanged(cursor);
+      _clearHoverState();
       return;
     }
 
