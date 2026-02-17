@@ -115,6 +115,65 @@ void main() {
         expect(counter.value, 0);
       },
     );
+
+    test(
+      'keeps preferred binding without re-query after large pointer move',
+      () {
+        const target = ElementState(
+          id: 'target',
+          rect: DrawRect(minX: 140, minY: 140, maxX: 280, maxY: 280),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: const [target],
+          counter: counter,
+        );
+        final state = _stateWith(document);
+
+        const strategy = ArrowCreationStrategy();
+        const start = DrawPoint(x: 30, y: 30);
+        const data = ArrowData();
+        final startResult = strategy.start(data: data, startPosition: start);
+        var creating = _creatingState(
+          elementId: 'arrow',
+          startPosition: start,
+          startResult: startResult,
+        );
+
+        counter.reset();
+        final firstUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 180, y: 180),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        creating = _applyUpdate(creating, firstUpdate);
+        final callsAfterFirstUpdate = counter.value;
+
+        final secondUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 220, y: 220),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        creating = _applyUpdate(creating, secondUpdate);
+        final callsAfterSecondUpdate = counter.value;
+        expect(creating.currentRect, isNotNull);
+
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+      },
+    );
   });
 }
 
