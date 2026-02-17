@@ -290,17 +290,6 @@ class DynamicCanvasPainter extends CustomPainter {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
     final rendersWholeScene = renderKey.rendersWholeElementScene;
     final optimizedElementIds = renderKey.optimizedDynamicElementIds;
-    final canUseHighlightWholeScenePath = _tryPaintHighlightWholeScenePath(
-      canvas: canvas,
-      scale: scale,
-      viewportRect: viewportRect,
-      creatingElement: creatingElement,
-      rendersWholeScene: rendersWholeScene,
-      optimizedElementIds: optimizedElementIds,
-    );
-    if (canUseHighlightWholeScenePath) {
-      return;
-    }
 
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
       if (optimizedElementIds.isEmpty) {
@@ -338,6 +327,18 @@ class DynamicCanvasPainter extends CustomPainter {
       viewportRect: viewportRect,
       minOrderIndex: minOrderIndex,
     );
+    if (optimizedElementIds.isEmpty &&
+        _tryPaintHighlightPreviewFastPath(
+          canvas: canvas,
+          scale: scale,
+          viewportRect: viewportRect,
+          creatingElement: creatingElement,
+          baseVisibleElements: baseVisibleElements,
+          document: document,
+        )) {
+      return;
+    }
+
     final excludedElementId =
         creatingElement != null &&
             document.getElementById(creatingElement.element.id) != null
@@ -368,17 +369,15 @@ class DynamicCanvasPainter extends CustomPainter {
     );
   }
 
-  bool _tryPaintHighlightWholeScenePath({
+  bool _tryPaintHighlightPreviewFastPath({
     required Canvas canvas,
     required double scale,
     required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
-    required bool rendersWholeScene,
-    required Set<String> optimizedElementIds,
+    required List<ElementState> baseVisibleElements,
+    required DocumentState document,
   }) {
-    if (!rendersWholeScene ||
-        optimizedElementIds.isNotEmpty ||
-        !_isHighlightPreviewCacheEligible()) {
+    if (!_isHighlightPreviewCacheEligible()) {
       return false;
     }
 
@@ -387,13 +386,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return false;
     }
 
-    final state = stateView.state;
-    final document = state.domain.document;
-    final baseVisibleElements = _visibleSceneCache.resolve(
-      document: document,
-      viewportRect: viewportRect,
-    );
-    if (!_canUseHighlightWholeSceneFastPath(
+    if (!_canUseHighlightPreviewFastPath(
       baseVisibleElements: baseVisibleElements,
       viewportRect: viewportRect,
       document: document,
@@ -439,7 +432,7 @@ class DynamicCanvasPainter extends CustomPainter {
     return true;
   }
 
-  bool _canUseHighlightWholeSceneFastPath({
+  bool _canUseHighlightPreviewFastPath({
     required List<ElementState> baseVisibleElements,
     required DrawRect viewportRect,
     required DocumentState document,

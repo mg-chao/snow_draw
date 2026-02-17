@@ -53,6 +53,7 @@ import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'free_draw_creation_state_change.dart';
 import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
+import 'highlight_interaction_state_change.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
 import 'lightweight_line_edit_state_change.dart';
@@ -3691,6 +3692,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     if (previousState != null &&
+        isHighlightInteractionMutationOnly(
+          previous: previousState,
+          next: state,
+        )) {
+      _handleHighlightInteractionMutation(state);
+      return;
+    }
+    if (previousState != null &&
         isArrowInteractionMutationOnly(previous: previousState, next: state)) {
       _handleArrowInteractionMutation(state);
       return;
@@ -3777,6 +3786,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleRectangleInteractionMutation(DrawState state) {
+    _handleDynamicOnlyInteractionMutation(state);
+  }
+
+  void _handleHighlightInteractionMutation(DrawState state) {
     _handleDynamicOnlyInteractionMutation(state);
   }
 
