@@ -67,6 +67,37 @@ void main() {
     },
   );
 
+  test(
+    'transparent highlight still forces full dynamic layer for selection range',
+    () {
+      final state = _stateWith(
+        selectedIds: const {'e1'},
+        elements: const [
+          ElementState(
+            id: 'e1',
+            rect: DrawRect(maxX: 10, maxY: 10),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: RectangleData(),
+          ),
+          ElementState(
+            id: 'h1',
+            rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+            rotation: 0,
+            opacity: 0,
+            zIndex: 1,
+            data: HighlightData(),
+          ),
+        ],
+      );
+      final view = DrawStateView.fromState(state);
+
+      final splitIndex = resolveDynamicLayerStartIndex(view);
+      expect(splitIndex, 0);
+    },
+  );
+
   test('keeps earliest selected index when no highlight in dynamic range', () {
     final state = _stateWith(
       selectedIds: const {'e2'},

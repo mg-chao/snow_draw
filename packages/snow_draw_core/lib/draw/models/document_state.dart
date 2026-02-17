@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/filter/filter_data.dart';
 import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
@@ -62,11 +63,57 @@ class DocumentState {
     _buildHighlightElements(),
   );
 
+  /// Suffix cache for blend-sensitive element presence.
+  ///
+  /// Index `i` answers whether any highlight/filter element exists in
+  /// `[i, elements.length)`, regardless of opacity.
+  late final List<bool> _blendSensitiveSuffix = _buildBlendSensitiveSuffix(
+    includeTransparent: true,
+  );
+
+  /// Suffix cache for visible blend-sensitive element presence.
+  ///
+  /// Index `i` answers whether any non-transparent highlight/filter element
+  /// exists in `[i, elements.length)`.
+  late final List<bool> _visibleBlendSensitiveSuffix =
+      _buildBlendSensitiveSuffix(includeTransparent: false);
+
   Map<String, ElementState> get elementMap => _elementMap;
 
   ElementState? getElementById(String id) => _elementMap[id];
 
   int? getOrderIndex(String id) => _orderIndex[id];
+
+  /// Returns whether any blend-sensitive element exists at or above
+  /// [orderIndex].
+  ///
+  /// Blend-sensitive elements are those whose rendering depends on draw order
+  /// with surrounding pixels (currently highlight/filter).
+  ///
+  /// Set [includeTransparent] to `false` to only consider elements with
+  /// positive opacity.
+  bool hasBlendSensitiveElementFromOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) {
+    final normalizedIndex = _normalizeOrderIndex(orderIndex);
+    final suffix = includeTransparent
+        ? _blendSensitiveSuffix
+        : _visibleBlendSensitiveSuffix;
+    return suffix[normalizedIndex];
+  }
+
+  /// Returns whether any blend-sensitive element exists strictly above
+  /// [orderIndex].
+  ///
+  /// This is equivalent to querying from `orderIndex + 1`.
+  bool hasBlendSensitiveElementAboveOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) => hasBlendSensitiveElementFromOrderIndex(
+    orderIndex + 1,
+    includeTransparent: includeTransparent,
+  );
 
   SpatialIndex get spatialIndex => _spatialIndex;
 
@@ -75,7 +122,9 @@ class DocumentState {
       _elementMap.length +
       _orderIndex.length +
       _spatialIndex.size +
-      highlightElements.length;
+      highlightElements.length +
+      _blendSensitiveSuffix.length +
+      _visibleBlendSensitiveSuffix.length;
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
     final result = <ElementState>[];
@@ -242,6 +291,50 @@ class DocumentState {
       }
     }
     return highlights;
+  }
+
+  List<bool> _buildBlendSensitiveSuffix({required bool includeTransparent}) {
+    final suffix = List<bool>.filled(elements.length + 1, false);
+    var hasBlendSensitive = false;
+
+    for (var index = elements.length - 1; index >= 0; index--) {
+      final element = elements[index];
+      if (_isBlendSensitiveElement(
+        element,
+        includeTransparent: includeTransparent,
+      )) {
+        hasBlendSensitive = true;
+      }
+      suffix[index] = hasBlendSensitive;
+    }
+
+    return List<bool>.unmodifiable(suffix);
+  }
+
+  bool _isBlendSensitiveElement(
+    ElementState element, {
+    required bool includeTransparent,
+  }) {
+    final data = element.data;
+    final isBlendSensitive = data is HighlightData || data is FilterData;
+    if (!isBlendSensitive) {
+      return false;
+    }
+    if (includeTransparent) {
+      return true;
+    }
+    return element.opacity > 0;
+  }
+
+  int _normalizeOrderIndex(int orderIndex) {
+    if (orderIndex <= 0) {
+      return 0;
+    }
+    final maxIndex = elements.length;
+    if (orderIndex >= maxIndex) {
+      return maxIndex;
+    }
+    return orderIndex;
   }
 
   DocumentState copyWith({

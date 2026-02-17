@@ -101,6 +101,49 @@ void main() {
     );
 
     test(
+      'ignores transparent blend-sensitive elements above the edited element',
+      () {
+        final rectangle = _rectangle(
+          id: 'rect-1',
+          rect: const DrawRect(maxX: 120, maxY: 80),
+          zIndex: 0,
+        );
+        final transparentHighlight = _highlight(
+          id: 'hl-1',
+          rect: const DrawRect(minX: 80, maxX: 180, maxY: 80),
+          zIndex: 1,
+          opacity: 0,
+        );
+        final state = _editingState(
+          elements: [rectangle, transparentHighlight],
+          selectedIds: {'rect-1'},
+        );
+        final preview = rectangle.copyWith(
+          rect: const DrawRect(minX: 24, minY: 16, maxX: 144, maxY: 96),
+        );
+        final view = DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {'rect-1': preview},
+          effectiveSelection: EffectiveSelection(
+            bounds: preview.rect,
+            center: preview.rect.center,
+            rotation: preview.rotation,
+            hasSelection: true,
+          ),
+          snapGuides: const [],
+        );
+
+        final plan = resolveDynamicSceneOptimizationPlan(
+          view: view,
+          activeToolTypeId: RectangleData.typeIdToken,
+        );
+
+        expect(plan, isNotNull);
+        expect(plan!.optimizedElementIds, {'rect-1'});
+      },
+    );
+
+    test(
       'keeps serial-number companion text in localized optimization set',
       () {
         final text = _text(
@@ -406,11 +449,12 @@ ElementState _highlight({
   required String id,
   required DrawRect rect,
   required int zIndex,
+  double opacity = 1,
 }) => ElementState(
   id: id,
   rect: rect,
   rotation: 0,
-  opacity: 1,
+  opacity: opacity,
   zIndex: zIndex,
   data: const HighlightData(),
 );

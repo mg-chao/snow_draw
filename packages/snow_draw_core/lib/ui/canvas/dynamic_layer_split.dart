@@ -48,11 +48,8 @@ int? resolveDynamicLayerStartIndex(DrawStateView view) {
     return null;
   }
 
-  for (var i = minIndex; i < document.elements.length; i++) {
-    final element = document.elements[i];
-    if (element.data is HighlightData || element.data is FilterData) {
-      return 0;
-    }
+  if (document.hasBlendSensitiveElementFromOrderIndex(minIndex)) {
+    return 0;
   }
 
   return minIndex;

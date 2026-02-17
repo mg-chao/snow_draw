@@ -238,18 +238,11 @@ DynamicSceneOptimizationPlan? _resolveSingleSelectionEditOptimizationPlan(
   );
 }
 
-bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) {
-  for (var i = orderIndex + 1; i < document.elements.length; i++) {
-    final candidate = document.elements[i];
-    if (candidate.opacity <= 0) {
-      continue;
-    }
-    if (_isBlendSensitiveElement(candidate)) {
-      return false;
-    }
-  }
-  return true;
-}
+bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) =>
+    !document.hasBlendSensitiveElementAboveOrderIndex(
+      orderIndex,
+      includeTransparent: false,
+    );
 
 bool _isBlendSensitiveElement(ElementState element) {
   final data = element.data;
