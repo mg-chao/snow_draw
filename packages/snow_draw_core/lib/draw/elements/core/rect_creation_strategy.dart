@@ -88,10 +88,12 @@ class RectCreationStrategy extends CreationStrategy {
         creationMode: creatingState.creationMode,
       );
       final referenceElements = snapReferences.referenceElements;
+      final referenceAabbs = snapReferences.referenceAabbs;
       nextCreationMode = snapReferences.creationMode;
       final result = objectSnapService.snapRect(
         targetRect: newRect,
         referenceElements: referenceElements,
+        referenceAabbs: referenceAabbs,
         snapDistance: snapDistance,
         targetAnchorsX: anchorsX,
         targetAnchorsY: anchorsY,
@@ -156,10 +158,12 @@ class _CreateDirection {
 class _SnapReferencesResult {
   const _SnapReferencesResult({
     required this.referenceElements,
+    required this.referenceAabbs,
     required this.creationMode,
   });
 
   final List<ElementState> referenceElements;
+  final List<DrawRect> referenceAabbs;
   final CreationMode creationMode;
 }
 
@@ -167,10 +171,12 @@ class _SnapReferencesResult {
 class _CachedRectCreationMode extends CreationMode {
   const _CachedRectCreationMode({
     required this.referenceElements,
+    required this.referenceAabbs,
     required this.elementsVersion,
   });
 
   final List<ElementState> referenceElements;
+  final List<DrawRect> referenceAabbs;
   final int elementsVersion;
 }
 
@@ -203,6 +209,7 @@ _SnapReferencesResult _resolveSnapReferences({
       creationMode.elementsVersion == elementsVersion) {
     return _SnapReferencesResult(
       referenceElements: creationMode.referenceElements,
+      referenceAabbs: creationMode.referenceAabbs,
       creationMode: creationMode,
     );
   }
@@ -210,10 +217,13 @@ _SnapReferencesResult _resolveSnapReferences({
   final references = List<ElementState>.unmodifiable(
     _resolveReferenceElements(state),
   );
+  final referenceAabbs = ObjectSnapService.buildReferenceAabbs(references);
   return _SnapReferencesResult(
     referenceElements: references,
+    referenceAabbs: referenceAabbs,
     creationMode: _CachedRectCreationMode(
       referenceElements: references,
+      referenceAabbs: referenceAabbs,
       elementsVersion: elementsVersion,
     ),
   );

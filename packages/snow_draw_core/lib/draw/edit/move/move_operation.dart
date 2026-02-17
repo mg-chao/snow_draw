@@ -73,6 +73,9 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       state,
       selectedIdsAtStart,
     );
+    final referenceElementAabbs = ObjectSnapService.buildReferenceAabbs(
+      referenceElements,
+    );
     final snapBounds = _resolveSnapBounds(
       selectedElements: targetElements,
       fallback: data.startBounds,
@@ -87,6 +90,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       elementSnapshots: data.elementSnapshots,
       snapBoundsAtStart: snapBounds,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
+      referenceElementAabbs: referenceElementAabbs,
       targetElements: List<ElementState>.unmodifiable(targetElements),
     );
   }
@@ -152,12 +156,12 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       );
       final referenceElements = typedContext.referenceElements;
       if (referenceElements.isNotEmpty) {
-        final targetElements = typedContext.targetElements;
         final result = objectSnapService.snapMove(
           targetRect: targetRect,
           referenceElements: referenceElements,
+          referenceAabbs: typedContext.referenceElementAabbs,
           snapDistance: snapDistance,
-          targetElements: targetElements.isEmpty ? null : targetElements,
+          targetElements: typedContext.targetElements,
           targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
           enablePointSnaps: snapConfig.enablePointSnaps,
           enableGapSnaps: snapConfig.enableGapSnaps,
