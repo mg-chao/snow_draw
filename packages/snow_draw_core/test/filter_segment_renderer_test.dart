@@ -597,6 +597,82 @@ void main() {
     recorder.endRecording();
   });
 
+  test('prefix-scene cache separates aggressive CPU fallback hints', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContext = FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: 932,
+      textRenderingCacheRevision: 4,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+    );
+
+    const baseElement = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 160, maxY: 90),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const staticFilter = ElementState(
+      id: 'static-filter',
+      rect: DrawRect(minX: 12, minY: 8, maxX: 150, maxY: 84),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.gaussianBlur, strength: 0.8),
+    );
+
+    void paintFrame({required FilterRenderHints renderHints}) {
+      renderer.paint(
+        canvas: canvas,
+        cacheContext: cacheContext,
+        visibleBounds: const Rect.fromLTWH(0, 0, 180, 110),
+        dynamicElementIds: const {'dynamic-filter'},
+        renderHints: renderHints,
+        elements: [
+          baseElement,
+          staticFilter,
+          const ElementState(
+            id: 'dynamic-filter',
+            rect: DrawRect(minX: 28, minY: 20, maxX: 138, maxY: 82),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2,
+            data: FilterData(type: CanvasFilterType.inversion),
+          ),
+        ],
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 160, 90),
+            Paint()..color = const Color(0xFF234567),
+          );
+        },
+      );
+    }
+
+    paintFrame(renderHints: const FilterRenderHints(interactionPreview: true));
+    final firstFrame = renderer.lastDiagnostics;
+    paintFrame(
+      renderHints: const FilterRenderHints(
+        interactionPreview: true,
+        aggressiveCpuFallback: true,
+      ),
+    );
+    final secondFrame = renderer.lastDiagnostics;
+
+    expect(firstFrame.prefixSceneCacheMisses, 1);
+    expect(secondFrame.prefixSceneCacheHits, 0);
+    expect(secondFrame.prefixSceneCacheMisses, 1);
+    recorder.endRecording();
+  });
+
   test('batch cache survives document-version changes '
       'when batch elements are stable', () {
     final renderer = FilterSegmentRenderer();

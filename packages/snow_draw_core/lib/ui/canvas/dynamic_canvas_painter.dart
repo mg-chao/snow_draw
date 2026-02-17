@@ -772,16 +772,15 @@ class DynamicCanvasPainter extends CustomPainter {
       baseDynamicIds: interactionDynamicElementIds,
       additionalDynamicIds: selectedFilterIds,
     );
-    final hasPreviewDynamicFilterElement = _hasSharedElementId(
-      interactionDynamicElementIds,
-      filterElementIds,
-    );
     final hasInteractiveFilterElement = _hasSharedElementId(
       dynamicElementIds,
       filterElementIds,
     );
-    final useAggressiveCpuFallback =
-        hasInteractiveFilterElement && !hasPreviewDynamicFilterElement;
+    // Filter create/edit interactions are high-frequency and often execute on
+    // CPU fallback backends. Always request aggressive fallback so the filter
+    // pipeline favors responsiveness over full-fidelity kernels during these
+    // interactions.
+    final useAggressiveCpuFallback = hasInteractiveFilterElement;
 
     final context = _SceneRenderContext(
       hasFilterElement: hasFilterElement,

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
@@ -167,6 +168,9 @@ class FilterSegmentRenderer {
   static const _fullQualityOffsetQuantization = 0.25;
   static const _interactiveOffsetQuantization = 0.5;
   static const _aggressiveOffsetQuantization = 1.0;
+  static const _fullQualityBlurDownsampleFactor = 1.0;
+  static const _interactiveBlurDownsampleFactor = 0.75;
+  static const _aggressiveBlurDownsampleFactor = 0.55;
 
   final FilterSegmentBuilder _segmentBuilder;
   final FilterKernelFactory _kernelFactory;
@@ -239,6 +243,7 @@ class FilterSegmentRenderer {
       _diagnostics.endFrame();
       return;
     }
+    final runtimePolicy = _resolveRuntimePolicy(renderHints);
 
     final baseSegments = _segmentBuilder.build(elements);
     final segments = dynamicElementIds.isEmpty
@@ -286,7 +291,7 @@ class FilterSegmentRenderer {
         paintElement: paintElement,
         cacheContext: cacheContext,
         visibleBounds: visibleBounds,
-        renderHints: renderHints,
+        runtimePolicy: runtimePolicy,
       );
       if (prefixScene != null) {
         pending.add(prefixScene);
@@ -335,7 +340,7 @@ class FilterSegmentRenderer {
             data: segment.filterData,
             visibleBounds: visibleBounds,
             useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
-            renderHints: renderHints,
+            runtimePolicy: runtimePolicy,
           );
           scene.release();
           continue;
@@ -346,7 +351,7 @@ class FilterSegmentRenderer {
           data: segment.filterData,
           visibleBounds: visibleBounds,
           useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
-          renderHints: renderHints,
+          runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -363,7 +368,7 @@ class FilterSegmentRenderer {
           merged: segment,
           visibleBounds: visibleBounds,
           dynamicElementIds: dynamicElementIds,
-          renderHints: renderHints,
+          runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -530,7 +535,7 @@ class FilterSegmentRenderer {
     required SceneElementPainter paintElement,
     required FilterRenderCacheContext cacheContext,
     required Rect? visibleBounds,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (endSegmentIndex <= 0) {
       return null;
@@ -550,7 +555,8 @@ class FilterSegmentRenderer {
       fingerprint: _batchFingerprint(prefixElements),
       length: prefixElements.length,
       visibleBoundsSignature: _VisibleBoundsSignature.fromRect(visibleBounds),
-      interactionPreview: renderHints.interactionPreview,
+      interactionPreview: runtimePolicy.preferFastCpuFallback,
+      aggressiveCpuFallback: runtimePolicy.aggressiveCpuFallback,
     );
     final cached = _prefixSceneCache.get(cacheKey);
     if (cached != null && cached.matches(prefixElements)) {
@@ -571,7 +577,7 @@ class FilterSegmentRenderer {
       cacheContext: cacheContext,
       visibleBounds: visibleBounds,
       dynamicElementIds: const <String>{},
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     final cachedEntry = _CachedPrefixScenePicture(
       picture: picture,
@@ -592,7 +598,7 @@ class FilterSegmentRenderer {
     required FilterRenderCacheContext? cacheContext,
     required Rect? visibleBounds,
     required Set<String> dynamicElementIds,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (startSegmentIndex >= endSegmentIndex) {
       return _recordEmptyPicture();
@@ -638,7 +644,7 @@ class FilterSegmentRenderer {
           data: segment.filterData,
           visibleBounds: visibleBounds,
           useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
-          renderHints: renderHints,
+          runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -655,7 +661,7 @@ class FilterSegmentRenderer {
           merged: segment,
           visibleBounds: visibleBounds,
           dynamicElementIds: dynamicElementIds,
-          renderHints: renderHints,
+          runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
           pending.add(scene);
@@ -794,14 +800,14 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
       useClipCache: useClipCache,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     if (prepared == null) {
       return scene;
@@ -809,7 +815,7 @@ class FilterSegmentRenderer {
     return _applyPreparedFilter(
       scene: scene,
       pass: prepared,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
   }
 
@@ -818,7 +824,7 @@ class FilterSegmentRenderer {
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
     required Set<String> dynamicElementIds,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = <_PreparedFilterPass>[];
     for (final filter in merged.filters) {
@@ -827,7 +833,7 @@ class FilterSegmentRenderer {
         data: filter.filterData,
         visibleBounds: visibleBounds,
         useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
-        renderHints: renderHints,
+        runtimePolicy: runtimePolicy,
       );
       if (pass != null) {
         prepared.add(pass);
@@ -847,7 +853,7 @@ class FilterSegmentRenderer {
       final nextScene = _applyPreparedMergedGroup(
         scene: currentScene,
         group: pendingGroup,
-        renderHints: renderHints,
+        runtimePolicy: runtimePolicy,
       );
       if (!identical(nextScene, currentScene) &&
           !identical(currentScene, scene)) {
@@ -874,14 +880,14 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
       useClipCache: useClipCache,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     canvas.drawPicture(scene);
     if (prepared == null) {
@@ -894,7 +900,7 @@ class FilterSegmentRenderer {
       data: prepared.data,
       layerBounds: prepared.layerBounds,
       opacity: prepared.opacity,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     _diagnostics.markFilterPass();
   }
@@ -905,7 +911,7 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect? visibleBounds,
     required bool useClipCache,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     final rect = filterElement.rect;
     if (rect.width <= 0 || rect.height <= 0) {
@@ -922,7 +928,7 @@ class FilterSegmentRenderer {
       clipBounds: clip.bounds,
       visibleBounds: visibleBounds,
       data: data,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     if (layerBounds.isEmpty) {
       return null;
@@ -939,7 +945,7 @@ class FilterSegmentRenderer {
   Picture _applyPreparedFilter({
     required Picture scene,
     required _PreparedFilterPass pass,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     _diagnostics.markPictureRecorder();
     final recorder = PictureRecorder();
@@ -952,7 +958,7 @@ class FilterSegmentRenderer {
       data: pass.data,
       layerBounds: pass.layerBounds,
       opacity: pass.opacity,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
 
     _diagnostics.markFilterPass();
@@ -962,7 +968,7 @@ class FilterSegmentRenderer {
   Picture _applyPreparedMergedGroup({
     required Picture scene,
     required List<_PreparedFilterPass> group,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (group.isEmpty) {
       return scene;
@@ -971,7 +977,7 @@ class FilterSegmentRenderer {
       return _applyPreparedFilter(
         scene: scene,
         pass: group.first,
-        renderHints: renderHints,
+        runtimePolicy: runtimePolicy,
       );
     }
 
@@ -987,7 +993,7 @@ class FilterSegmentRenderer {
         data: pass.data,
         layerBounds: pass.layerBounds,
         opacity: pass.opacity,
-        renderHints: renderHints,
+        runtimePolicy: runtimePolicy,
       );
       _diagnostics.markFilterPass();
     }
@@ -1029,7 +1035,7 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect layerBounds,
     required double opacity,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     canvas.save();
     clip.applyTo(canvas);
@@ -1040,7 +1046,7 @@ class FilterSegmentRenderer {
       filterBounds: clip.bounds,
       layerBounds: layerBounds,
       opacity: opacity,
-      renderHints: renderHints,
+      runtimePolicy: runtimePolicy,
     );
     canvas.restore();
   }
@@ -1054,10 +1060,9 @@ class FilterSegmentRenderer {
     required Rect filterBounds,
     required Rect layerBounds,
     required double opacity,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final runtimePolicy = _resolveRuntimePolicy(renderHints);
     switch (data.type) {
       case CanvasFilterType.mosaic:
         _paintMosaicFilter(
@@ -1204,21 +1209,29 @@ class FilterSegmentRenderer {
     double maxSigma = 12,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
-    final sigma = runtimePolicy.quantizeSigma(
+    final logicalSigma = runtimePolicy.quantizeSigma(
       _mapStrength(
         strength: data.strength,
         minValue: minSigma,
         maxValue: maxSigma,
       ),
     );
+    final blurSigma = runtimePolicy.quantizeSigma(
+      runtimePolicy.resolveBlurKernelSigma(logicalSigma),
+    );
+    final downsampleFactor = runtimePolicy.blurDownsampleFactor;
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.gaussianBlur,
-      param0: sigma,
-      param1: sigma,
+      param0: logicalSigma,
+      param1: blurSigma,
+      param2: downsampleFactor,
     );
     final imageFilter = _filterCache.getOrCreate(
       cacheKey,
-      () => ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      () => _buildBlurImageFilter(
+        blurSigma: blurSigma,
+        downsampleFactor: downsampleFactor,
+      ),
     );
 
     _diagnostics.markSaveLayer();
@@ -1231,6 +1244,37 @@ class FilterSegmentRenderer {
       ..saveLayer(layerBounds, _layerPaint)
       ..drawPicture(scene)
       ..restore();
+  }
+
+  ImageFilter _buildBlurImageFilter({
+    required double blurSigma,
+    required double downsampleFactor,
+  }) {
+    final normalizedDownsample = downsampleFactor.clamp(0.1, 1.0);
+    if (normalizedDownsample >= 1) {
+      return ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
+    }
+
+    final downsampleFilter = ImageFilter.matrix(
+      _buildScaleMatrix(
+        scaleX: normalizedDownsample,
+        scaleY: normalizedDownsample,
+      ),
+      filterQuality: FilterQuality.none,
+    );
+    final blurFilter = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
+    final upsampleFilter = ImageFilter.matrix(
+      _buildScaleMatrix(
+        scaleX: 1 / normalizedDownsample,
+        scaleY: 1 / normalizedDownsample,
+      ),
+      filterQuality: FilterQuality.none,
+    );
+
+    return ImageFilter.compose(
+      outer: upsampleFilter,
+      inner: ImageFilter.compose(outer: blurFilter, inner: downsampleFilter),
+    );
   }
 
   void _paintColorMatrixFilter(
@@ -1278,12 +1322,11 @@ class FilterSegmentRenderer {
     required Rect clipBounds,
     required Rect? visibleBounds,
     required FilterData data,
-    required FilterRenderHints renderHints,
+    required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (visibleBounds == null) {
       return clipBounds;
     }
-    final runtimePolicy = _resolveRuntimePolicy(renderHints);
     final viewportOutset = _resolveFilterViewportOutset(
       data: data,
       clipBounds: clipBounds,
@@ -1380,9 +1423,15 @@ class FilterSegmentRenderer {
         : preferFastCpuFallback
         ? _interactiveViewportOutset
         : _maxViewportOutset;
+    final blurDownsampleFactor = aggressiveCpuFallback
+        ? _aggressiveBlurDownsampleFactor
+        : preferFastCpuFallback
+        ? _interactiveBlurDownsampleFactor
+        : _fullQualityBlurDownsampleFactor;
 
     return _FilterRuntimePolicy(
       preferFastCpuFallback: preferFastCpuFallback,
+      aggressiveCpuFallback: aggressiveCpuFallback,
       canUseMosaicShader: _kernelFactory.canUseMosaicShader,
       gaussianMinSigma: preferFastCpuFallback
           ? _interactiveGaussianMinSigma
@@ -1394,6 +1443,7 @@ class FilterSegmentRenderer {
       sigmaQuantizationStep: sigmaQuantizationStep,
       mosaicSizeQuantizationStep: mosaicQuantizationStep,
       mosaicOffsetQuantizationStep: offsetQuantizationStep,
+      blurDownsampleFactor: blurDownsampleFactor,
     );
   }
 
@@ -1480,6 +1530,28 @@ class FilterSegmentRenderer {
     return minValue + (maxValue - minValue) * normalized;
   }
 
+  Float64List _buildScaleMatrix({
+    required double scaleX,
+    required double scaleY,
+  }) => Float64List.fromList(<double>[
+    scaleX,
+    0,
+    0,
+    0,
+    0,
+    scaleY,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+  ]);
+
   double _positiveModulo(double value, double period) {
     if (period <= 0) {
       return value;
@@ -1496,6 +1568,7 @@ class FilterSegmentRenderer {
 class _FilterRuntimePolicy {
   const _FilterRuntimePolicy({
     required this.preferFastCpuFallback,
+    required this.aggressiveCpuFallback,
     required this.canUseMosaicShader,
     required this.gaussianMinSigma,
     required this.gaussianMaxSigma,
@@ -1505,9 +1578,11 @@ class _FilterRuntimePolicy {
     required this.sigmaQuantizationStep,
     required this.mosaicSizeQuantizationStep,
     required this.mosaicOffsetQuantizationStep,
+    required this.blurDownsampleFactor,
   });
 
   final bool preferFastCpuFallback;
+  final bool aggressiveCpuFallback;
   final bool canUseMosaicShader;
   final double gaussianMinSigma;
   final double gaussianMaxSigma;
@@ -1517,6 +1592,7 @@ class _FilterRuntimePolicy {
   final double sigmaQuantizationStep;
   final double mosaicSizeQuantizationStep;
   final double mosaicOffsetQuantizationStep;
+  final double blurDownsampleFactor;
 
   bool get useFastMosaicApproximation =>
       preferFastCpuFallback && !canUseMosaicShader;
@@ -1536,6 +1612,14 @@ class _FilterRuntimePolicy {
 
   double quantizeMosaicOffset(double value) =>
       _quantize(value, mosaicOffsetQuantizationStep);
+
+  double resolveBlurKernelSigma(double logicalSigma) {
+    final downsample = blurDownsampleFactor;
+    if (downsample >= 1 || !downsample.isFinite) {
+      return logicalSigma;
+    }
+    return logicalSigma * downsample;
+  }
 
   double _quantize(double value, double step) {
     if (step <= 0 || !value.isFinite) {
@@ -1700,6 +1784,7 @@ class _PrefixSceneCacheKey {
     required this.length,
     required this.visibleBoundsSignature,
     required this.interactionPreview,
+    required this.aggressiveCpuFallback,
   });
 
   final _BatchPictureContextSignature contextSignature;
@@ -1707,6 +1792,7 @@ class _PrefixSceneCacheKey {
   final int length;
   final _VisibleBoundsSignature visibleBoundsSignature;
   final bool interactionPreview;
+  final bool aggressiveCpuFallback;
 
   @override
   bool operator ==(Object other) =>
@@ -1716,7 +1802,8 @@ class _PrefixSceneCacheKey {
           other.fingerprint == fingerprint &&
           other.length == length &&
           other.visibleBoundsSignature == visibleBoundsSignature &&
-          other.interactionPreview == interactionPreview;
+          other.interactionPreview == interactionPreview &&
+          other.aggressiveCpuFallback == aggressiveCpuFallback;
 
   @override
   int get hashCode => Object.hash(
@@ -1725,6 +1812,7 @@ class _PrefixSceneCacheKey {
     length,
     visibleBoundsSignature,
     interactionPreview,
+    aggressiveCpuFallback,
   );
 }
 
