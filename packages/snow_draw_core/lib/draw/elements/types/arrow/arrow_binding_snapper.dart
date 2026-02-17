@@ -75,20 +75,16 @@ class ArrowBindingSnapper {
     }
 
     final candidate = arrowType == ArrowType.elbow
-        ? ArrowBindingUtils.resolveElbowBindingCandidate(
+        ? ArrowBindingUtils.resolveElbowBindingCandidateForTarget(
             worldPoint: worldPoint,
-            targets: [preferredTarget],
+            target: preferredTarget,
             snapDistance: snapDistance,
-            preferredBinding: preferredBinding,
-            allowNewBinding: false,
             hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
           )
-        : ArrowBindingUtils.resolveBindingCandidate(
+        : ArrowBindingUtils.resolveBindingCandidateForTarget(
             worldPoint: worldPoint,
-            targets: [preferredTarget],
+            target: preferredTarget,
             snapDistance: snapDistance,
-            preferredBinding: preferredBinding,
-            allowNewBinding: false,
             referencePoint: referencePoint,
           );
     if (candidate == null) {
@@ -126,20 +122,16 @@ class ArrowBindingSnapper {
       return null;
     }
     final preferredCandidate = arrowType == ArrowType.elbow
-        ? ArrowBindingUtils.resolveElbowBindingCandidate(
+        ? ArrowBindingUtils.resolveElbowBindingCandidateForTarget(
             worldPoint: worldPoint,
-            targets: [preferredTarget],
+            target: preferredTarget,
             snapDistance: snapDistance,
-            preferredBinding: preferredBinding,
-            allowNewBinding: false,
             hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
           )
-        : ArrowBindingUtils.resolveBindingCandidate(
+        : ArrowBindingUtils.resolveBindingCandidateForTarget(
             worldPoint: worldPoint,
-            targets: [preferredTarget],
+            target: preferredTarget,
             snapDistance: snapDistance,
-            preferredBinding: preferredBinding,
-            allowNewBinding: false,
             referencePoint: referencePoint,
           );
     if (preferredCandidate == null) {

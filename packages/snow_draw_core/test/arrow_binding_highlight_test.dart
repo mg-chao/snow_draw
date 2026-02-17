@@ -4,6 +4,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
@@ -90,6 +91,14 @@ ArrowPointEditContext _buildContext({
     DrawPoint(x: 0.2, y: 0.3),
     DrawPoint(x: 0.4, y: 0.3),
   ];
+  const baseElement = ElementState(
+    id: 'arrow',
+    rect: elementRect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: ArrowData(points: points, arrowType: ArrowType.elbow),
+  );
   return ArrowPointEditContext(
     startPosition: DrawPoint.zero,
     startBounds: elementRect,
@@ -105,8 +114,15 @@ ArrowPointEditContext _buildContext({
     pointKind: pointKind,
     pointIndex: pointIndex,
     dragOffset: DrawPoint.zero,
+    baseElement: baseElement,
+    elementSpace: null,
     releaseFixedSegment: false,
     deletePointOnStart: false,
+    startArrowhead: ArrowheadStyle.none,
+    endArrowhead: ArrowheadStyle.standard,
+    initialStartBinding: null,
+    initialEndBinding: null,
+    hasBindableTargets: false,
     bindingTargetCache: ArrowBindingTargetCache(),
   );
 }

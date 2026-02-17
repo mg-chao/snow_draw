@@ -226,6 +226,46 @@ class ArrowBindingUtils {
     return best;
   }
 
+  /// Resolves a single-target binding candidate without list iteration.
+  ///
+  /// Use this for hot paths that already resolved the target element.
+  static ArrowBindingResult? resolveBindingCandidateForTarget({
+    required DrawPoint worldPoint,
+    required ElementState target,
+    required double snapDistance,
+    DrawPoint? referencePoint,
+  }) {
+    if (snapDistance <= 0 || target.opacity <= 0) {
+      return null;
+    }
+    return _resolveBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      referencePoint: referencePoint,
+    );
+  }
+
+  /// Resolves a single-target elbow binding candidate without list iteration.
+  ///
+  /// Use this for hot paths that already resolved the target element.
+  static ArrowBindingResult? resolveElbowBindingCandidateForTarget({
+    required DrawPoint worldPoint,
+    required ElementState target,
+    required double snapDistance,
+    required bool hasArrowhead,
+  }) {
+    if (snapDistance <= 0 || target.opacity <= 0) {
+      return null;
+    }
+    return _resolveElbowBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      hasArrowhead: hasArrowhead,
+    );
+  }
+
   static DrawPoint? resolveBoundPoint({
     required ArrowBinding binding,
     required ElementState target,

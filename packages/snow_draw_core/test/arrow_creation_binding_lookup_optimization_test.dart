@@ -176,6 +176,72 @@ void main() {
       },
     );
 
+    test('re-evaluates cached start binding when binding config changes', () {
+      const target = ElementState(
+        id: 'target',
+        rect: DrawRect(minX: 80, minY: 80, maxX: 220, maxY: 220),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      final state = _stateWith(DocumentState(elements: const [target]));
+
+      const strategy = ArrowCreationStrategy();
+      const start = DrawPoint(x: 100, y: 100);
+      final startResult = strategy.start(
+        data: const ArrowData(),
+        startPosition: start,
+      );
+      var creating = _creatingState(
+        elementId: 'arrow',
+        startPosition: start,
+        startResult: startResult,
+      );
+
+      final firstUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 170, y: 170),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, firstUpdate);
+      final firstData = firstUpdate.data as ArrowData;
+      expect(firstData.startBinding, isNotNull);
+
+      final secondUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 172, y: 172),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      creating = _applyUpdate(creating, secondUpdate);
+      final secondData = secondUpdate.data as ArrowData;
+      expect(secondData.startBinding, isNotNull);
+
+      final bindingDisabledConfig = DrawConfig.defaultConfig.copyWith(
+        snap: DrawConfig.defaultConfig.snap.copyWith(enableArrowBinding: false),
+      );
+      final thirdUpdate = strategy.update(
+        state: state,
+        config: bindingDisabledConfig,
+        creatingState: creating,
+        currentPosition: const DrawPoint(x: 174, y: 174),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final thirdData = thirdUpdate.data as ArrowData;
+
+      expect(thirdData.startBinding, isNull);
+    });
+
     test('line creation reuses target cache for medium pointer moves', () {
       const target = ElementState(
         id: 'target',

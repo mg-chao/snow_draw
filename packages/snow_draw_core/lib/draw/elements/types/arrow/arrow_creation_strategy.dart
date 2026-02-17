@@ -20,6 +20,7 @@ import 'arrow_binding_snapper.dart';
 import 'arrow_binding_target_cache.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
+import 'arrow_two_point_layout.dart';
 import 'elbow/elbow_router.dart';
 
 /// Creation strategy for arrow elements (single- and multi-point).
@@ -115,16 +116,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
           )
         : currentPosition;
 
-    final startBindingResult = _snapBindingPoint(
+    final startBindingResult = _resolveStartBindingPoint(
       state: state,
       config: config,
-      position: startPosition,
+      startPosition: startPosition,
       snappingMode: snappingMode,
       arrowType: elementData.arrowType,
       arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedCurrent,
-      targetCache: sessionData.startTargetCache,
+      sessionData: sessionData,
     );
     startPosition = startBindingResult.position;
 
@@ -180,26 +181,45 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       fixedPoints: fixedPoints,
       currentPoint: adjustedCurrent,
     );
-    final routedPoints = elementData.arrowType == ArrowType.elbow
-        ? routeElbowArrow(
-            start: startPosition,
-            end: adjustedCurrent,
-            startBinding: startBindingResult.binding,
-            endBinding: bindingResult.binding,
-            elementsById: state.domain.document.elementMap,
-            startArrowhead: elementData.startArrowhead,
-            endArrowhead: elementData.endArrowhead,
-          ).points
-        : allPoints;
-    final arrowRect = _calculateArrowRect(
-      points: routedPoints,
-      arrowType: elementData.arrowType,
-      strokeWidth: elementData.strokeWidth,
-    );
-    final normalizedPoints = ArrowGeometry.normalizePoints(
-      worldPoints: routedPoints,
-      rect: arrowRect,
-    );
+    late final DrawRect arrowRect;
+    late final List<DrawPoint> normalizedPoints;
+    if (elementData.arrowType == ArrowType.elbow) {
+      final routedPoints = routeElbowArrow(
+        start: startPosition,
+        end: adjustedCurrent,
+        startBinding: startBindingResult.binding,
+        endBinding: bindingResult.binding,
+        elementsById: state.domain.document.elementMap,
+        startArrowhead: elementData.startArrowhead,
+        endArrowhead: elementData.endArrowhead,
+      ).points;
+      arrowRect = _calculateArrowRect(
+        points: routedPoints,
+        arrowType: elementData.arrowType,
+        strokeWidth: elementData.strokeWidth,
+      );
+      normalizedPoints = ArrowGeometry.normalizePoints(
+        worldPoints: routedPoints,
+        rect: arrowRect,
+      );
+    } else if (fixedPoints.length == 1) {
+      final layout = computeArrowTwoPointLayout(
+        first: fixedPoints.first,
+        second: adjustedCurrent,
+      );
+      arrowRect = layout.rect;
+      normalizedPoints = layout.normalizedPoints;
+    } else {
+      arrowRect = _calculateArrowRect(
+        points: allPoints,
+        arrowType: elementData.arrowType,
+        strokeWidth: elementData.strokeWidth,
+      );
+      normalizedPoints = ArrowGeometry.normalizePoints(
+        worldPoints: allPoints,
+        rect: arrowRect,
+      );
+    }
     final updatedData = elementData.copyWith(
       points: normalizedPoints,
       startBinding: startBindingResult.binding,
@@ -253,16 +273,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             gridSize: gridConfig.size,
           )
         : creatingState.startPosition;
-    final startBindingResult = _snapBindingPoint(
+    final startBindingResult = _resolveStartBindingPoint(
       state: state,
       config: config,
-      position: startPosition,
+      startPosition: startPosition,
       snappingMode: snappingMode,
       arrowType: elementData.arrowType,
       arrowheadStyle: elementData.startArrowhead,
       preferredBinding: elementData.startBinding,
       referencePoint: adjustedPosition,
-      targetCache: sessionData.startTargetCache,
+      sessionData: sessionData,
     );
     startPosition = startBindingResult.position;
 
@@ -479,17 +499,26 @@ CreationUpdateResult _updateLine({
     fixedPoints: lineEndpoints.fixedPoints,
     currentPoint: adjustedCurrent,
   );
-  final lineRect = worldPoints.length > 2
-      ? _calculateArrowRect(
-          points: worldPoints,
-          arrowType: data.arrowType,
-          strokeWidth: data.strokeWidth,
-        )
-      : _calculateStraightBounds(worldPoints);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: worldPoints,
-    rect: lineRect,
-  );
+  late final DrawRect lineRect;
+  late final List<DrawPoint> normalizedPoints;
+  if (worldPoints.length == 2) {
+    final layout = computeArrowTwoPointLayout(
+      first: worldPoints.first,
+      second: worldPoints.last,
+    );
+    lineRect = layout.rect;
+    normalizedPoints = layout.normalizedPoints;
+  } else {
+    lineRect = _calculateArrowRect(
+      points: worldPoints,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
+    normalizedPoints = ArrowGeometry.normalizePoints(
+      worldPoints: worldPoints,
+      rect: lineRect,
+    );
+  }
   final updatedData = data.copyWith(
     points: normalizedPoints,
     startBinding: lineEndpoints.startBinding,
@@ -537,16 +566,16 @@ _LineEndpointResolution _resolveLineEndpoints({
         )
       : currentPosition;
 
-  final startBindingResult = _snapBindingPoint(
+  final startBindingResult = _resolveStartBindingPoint(
     state: state,
     config: config,
-    position: startPosition,
+    startPosition: startPosition,
     snappingMode: snappingMode,
     arrowType: data.arrowType,
     arrowheadStyle: data.startArrowhead,
     preferredBinding: data.startBinding,
     referencePoint: adjustedCurrent,
-    targetCache: sessionData.startTargetCache,
+    sessionData: sessionData,
     targetCacheThresholdFactor: _lineBindingCacheTargetThresholdFactor,
   );
   startPosition = startBindingResult.position;
@@ -580,31 +609,6 @@ DrawRect _calculateArrowRect({
   worldPoints: points,
   arrowType: arrowType,
 );
-
-DrawRect _calculateStraightBounds(List<DrawPoint> points) {
-  if (points.isEmpty) {
-    return const DrawRect();
-  }
-
-  var minX = points.first.x;
-  var minY = points.first.y;
-  var maxX = points.first.x;
-  var maxY = points.first.y;
-  for (var index = 1; index < points.length; index++) {
-    final point = points[index];
-    if (point.x < minX) {
-      minX = point.x;
-    } else if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    } else if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
 
 DrawPoint _resolveArrowSegmentPosition({
   required DrawPoint segmentStart,
@@ -847,6 +851,76 @@ _BindingSnapResult _snapBindingPoint({
   );
 }
 
+_BindingSnapResult _resolveStartBindingPoint({
+  required DrawState state,
+  required DrawConfig config,
+  required DrawPoint startPosition,
+  required SnappingMode snappingMode,
+  required ArrowType arrowType,
+  required ArrowheadStyle arrowheadStyle,
+  required ArrowBinding? preferredBinding,
+  required DrawPoint referencePoint,
+  required _ArrowCreationSessionData sessionData,
+  double targetCacheThresholdFactor = _defaultBindingCacheTargetThresholdFactor,
+  double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
+}) {
+  final snapConfig = config.snap;
+  final bindingEnabled = ArrowBindingSnapper.shouldAttemptBinding(
+    snapConfig: snapConfig,
+    snappingMode: snappingMode,
+  );
+  final bindingDistance = bindingEnabled
+      ? ArrowBindingSnapper.resolveBindingDistance(
+          state: state,
+          snapConfig: snapConfig,
+        )
+      : 0.0;
+  final elementsVersion = state.domain.document.elementsVersion;
+  if (sessionData.canReuseStartBinding(
+    startPosition: startPosition,
+    preferredBinding: preferredBinding,
+    snappingMode: snappingMode,
+    elementsVersion: elementsVersion,
+    bindingEnabled: bindingEnabled,
+    bindingDistance: bindingDistance,
+  )) {
+    final cached = sessionData.resolveCachedStartBinding(
+      state: state,
+      startPosition: startPosition,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      referencePoint: referencePoint,
+    );
+    if (cached != null) {
+      return cached;
+    }
+  }
+
+  final resolved = _snapBindingPoint(
+    state: state,
+    config: config,
+    position: startPosition,
+    snappingMode: snappingMode,
+    arrowType: arrowType,
+    arrowheadStyle: arrowheadStyle,
+    preferredBinding: preferredBinding,
+    referencePoint: referencePoint,
+    targetCache: sessionData.startTargetCache,
+    targetCacheThresholdFactor: targetCacheThresholdFactor,
+    emptyCacheThresholdFactor: emptyCacheThresholdFactor,
+  );
+  sessionData.cacheStartBinding(
+    startPosition: startPosition,
+    preferredBinding: preferredBinding,
+    snappingMode: snappingMode,
+    elementsVersion: elementsVersion,
+    bindingEnabled: bindingEnabled,
+    bindingDistance: bindingDistance,
+    result: resolved,
+  );
+  return resolved;
+}
+
 List<ElementState> _resolveReferenceElements(
   DrawState state, {
   _ArrowCreationSessionData? sessionData,
@@ -871,8 +945,87 @@ class _ArrowCreationSessionData {
   final startTargetCache = ArrowBindingTargetCache();
   final endTargetCache = ArrowBindingTargetCache();
 
+  DrawPoint? _cachedStartPosition;
+  ArrowBinding? _cachedStartPreferredBinding;
+  ArrowBinding? _cachedStartBinding;
+  SnappingMode? _cachedStartSnappingMode;
+  bool? _cachedStartBindingEnabled;
+  double? _cachedStartBindingDistance;
+  var _cachedStartElementsVersion = -1;
+
   var _referenceElementsVersion = -1;
   List<ElementState> _referenceElements = const [];
+
+  bool canReuseStartBinding({
+    required DrawPoint startPosition,
+    required ArrowBinding? preferredBinding,
+    required SnappingMode snappingMode,
+    required int elementsVersion,
+    required bool bindingEnabled,
+    required double bindingDistance,
+  }) =>
+      _cachedStartPosition == startPosition &&
+      _cachedStartPreferredBinding == preferredBinding &&
+      _cachedStartSnappingMode == snappingMode &&
+      _cachedStartBindingEnabled == bindingEnabled &&
+      _cachedStartBindingDistance == bindingDistance &&
+      _cachedStartElementsVersion == elementsVersion;
+
+  _BindingSnapResult? resolveCachedStartBinding({
+    required DrawState state,
+    required DrawPoint startPosition,
+    required ArrowType arrowType,
+    required ArrowheadStyle arrowheadStyle,
+    required DrawPoint referencePoint,
+  }) {
+    final cachedBinding = _cachedStartBinding;
+    if (cachedBinding == null) {
+      return _BindingSnapResult(position: startPosition);
+    }
+
+    final target = state.domain.document.getElementById(
+      cachedBinding.elementId,
+    );
+    if (target == null ||
+        target.opacity <= 0 ||
+        !ArrowBindingUtils.isBindableTarget(target)) {
+      return null;
+    }
+
+    final boundPoint = arrowType == ArrowType.elbow
+        ? ArrowBindingUtils.resolveElbowBoundPoint(
+            binding: cachedBinding,
+            target: target,
+            hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
+          )
+        : ArrowBindingUtils.resolveBoundPoint(
+            binding: cachedBinding,
+            target: target,
+            referencePoint: referencePoint,
+          );
+    if (boundPoint == null) {
+      return null;
+    }
+    return _BindingSnapResult(position: boundPoint, binding: cachedBinding);
+  }
+
+  void cacheStartBinding({
+    required DrawPoint startPosition,
+    required ArrowBinding? preferredBinding,
+    required SnappingMode snappingMode,
+    required int elementsVersion,
+    required bool bindingEnabled,
+    required double bindingDistance,
+    required _BindingSnapResult result,
+  }) {
+    _cachedStartPosition = startPosition;
+    _cachedStartPreferredBinding = preferredBinding;
+    _cachedStartBinding = result.binding;
+    _cachedStartSnappingMode = snappingMode;
+    _cachedStartBindingEnabled = bindingEnabled;
+    _cachedStartBindingDistance = bindingDistance;
+    _cachedStartElementsVersion = elementsVersion;
+  }
 
   List<ElementState> resolveReferenceElements(DocumentState document) {
     if (_referenceElementsVersion == document.elementsVersion) {
