@@ -17,9 +17,9 @@ import 'free_draw_path_utils.dart';
 /// hit-test request and then reused.
 ///
 /// For completed (non-creating) strokes, a `Picture` is recorded
-/// on first render and replayed on subsequent frames, turning
-/// potentially hundreds of draw calls into a single
-/// `canvas.drawPicture()`.
+/// once geometry remains stable for consecutive frames and then
+/// replayed, turning potentially hundreds of draw calls into a
+/// single `canvas.drawPicture()`.
 class FreeDrawVisualEntry {
   FreeDrawVisualEntry({
     required this.data,
@@ -71,6 +71,8 @@ class FreeDrawVisualEntry {
   /// cached picture without rebuilding paths.
   Picture? _cachedPicture;
   double? _cachedPictureOpacity;
+  double? _pictureCandidateOpacity;
+  var _pictureCandidateFrameCount = 0;
 
   /// Returns cached flattened points, building them on first call.
   ///
@@ -110,11 +112,32 @@ class FreeDrawVisualEntry {
     return null;
   }
 
+  /// Returns true once this geometry has remained stable long enough
+  /// to justify recording a reusable [Picture].
+  ///
+  /// Transient geometries (for example while resizing) often live for a
+  /// single frame. Deferring picture recording avoids expensive
+  /// `PictureRecorder` churn on those one-frame entries.
+  bool shouldRecordPicture(double opacity) {
+    if (_cachedPicture != null && _cachedPictureOpacity == opacity) {
+      return false;
+    }
+    if (_pictureCandidateOpacity == opacity) {
+      _pictureCandidateFrameCount += 1;
+    } else {
+      _pictureCandidateOpacity = opacity;
+      _pictureCandidateFrameCount = 1;
+    }
+    return _pictureCandidateFrameCount >= 2;
+  }
+
   /// Stores a recorded [Picture] for the given [opacity].
   void setCachedPicture(Picture picture, double opacity) {
     _cachedPicture?.dispose();
     _cachedPicture = picture;
     _cachedPictureOpacity = opacity;
+    _pictureCandidateOpacity = opacity;
+    _pictureCandidateFrameCount = 0;
   }
 
   /// Releases any native cached resources held by this entry.
@@ -122,6 +145,8 @@ class FreeDrawVisualEntry {
     _cachedPicture?.dispose();
     _cachedPicture = null;
     _cachedPictureOpacity = null;
+    _pictureCandidateOpacity = null;
+    _pictureCandidateFrameCount = 0;
   }
 
   bool matches(FreeDrawData data, double width, double height) =>
@@ -156,6 +181,19 @@ class FreeDrawVisualCache {
     final existing = _entries.get(id);
     if (existing != null && existing.matches(data, width, height)) {
       return existing;
+    }
+
+    if (existing != null && identical(existing.data, data)) {
+      final resized = _buildEntryFromPreviousGeometry(
+        data: data,
+        previous: existing,
+        width: width,
+        height: height,
+      );
+      if (resized != null) {
+        _entries.put(id, resized);
+        return resized;
+      }
     }
 
     // Try incremental path building when only the tail changed.
@@ -203,24 +241,7 @@ class FreeDrawVisualCache {
     }
     basePath ??= buildFreeDrawSmoothPath(localPoints);
 
-    Path? strokePath;
-    Float32List? dotPositions;
-    double dotRadius = 0;
-
-    if (data.strokeWidth > 0) {
-      switch (data.strokeStyle) {
-        case StrokeStyle.solid:
-          strokePath = basePath;
-        case StrokeStyle.dashed:
-          final dashLength = data.strokeWidth * 2.0;
-          final gapLength = dashLength * 1.2;
-          strokePath = buildDashedPath(basePath, dashLength, gapLength);
-        case StrokeStyle.dotted:
-          final dotSpacing = data.strokeWidth * 2.0;
-          dotRadius = data.strokeWidth * 0.5;
-          dotPositions = buildDotPositions(basePath, dotSpacing);
-      }
-    }
+    final strokeVisuals = _buildStrokeVisuals(data: data, basePath: basePath);
 
     return FreeDrawVisualEntry(
       data: data,
@@ -228,10 +249,72 @@ class FreeDrawVisualCache {
       height: rect.height,
       pointCount: localPoints.length,
       path: basePath,
-      strokePath: strokePath,
-      dotPositions: dotPositions,
-      dotRadius: dotRadius,
+      strokePath: strokeVisuals.strokePath,
+      dotPositions: strokeVisuals.dotPositions,
+      dotRadius: strokeVisuals.dotRadius,
     );
+  }
+
+  FreeDrawVisualEntry? _buildEntryFromPreviousGeometry({
+    required FreeDrawData data,
+    required FreeDrawVisualEntry previous,
+    required double width,
+    required double height,
+  }) {
+    final previousWidth = previous.width;
+    final previousHeight = previous.height;
+    if (previousWidth <= 0 ||
+        previousHeight <= 0 ||
+        !previousWidth.isFinite ||
+        !previousHeight.isFinite) {
+      return null;
+    }
+
+    final scaleX = width / previousWidth;
+    final scaleY = height / previousHeight;
+    if (!scaleX.isFinite || !scaleY.isFinite || scaleX <= 0 || scaleY <= 0) {
+      return null;
+    }
+
+    final basePath = _scalePath(previous.path, scaleX, scaleY);
+    final strokeVisuals = _buildStrokeVisuals(data: data, basePath: basePath);
+    return FreeDrawVisualEntry(
+      data: data,
+      width: width,
+      height: height,
+      pointCount: previous.pointCount,
+      path: basePath,
+      strokePath: strokeVisuals.strokePath,
+      dotPositions: strokeVisuals.dotPositions,
+      dotRadius: strokeVisuals.dotRadius,
+    );
+  }
+
+  _StrokeVisuals _buildStrokeVisuals({
+    required FreeDrawData data,
+    required Path basePath,
+  }) {
+    if (data.strokeWidth <= 0) {
+      return const _StrokeVisuals();
+    }
+
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
+        return _StrokeVisuals(strokePath: basePath);
+      case StrokeStyle.dashed:
+        final dashLength = data.strokeWidth * 2.0;
+        final gapLength = dashLength * 1.2;
+        return _StrokeVisuals(
+          strokePath: buildDashedPath(basePath, dashLength, gapLength),
+        );
+      case StrokeStyle.dotted:
+        final dotSpacing = data.strokeWidth * 2.0;
+        final dotRadius = data.strokeWidth * 0.5;
+        return _StrokeVisuals(
+          dotPositions: buildDotPositions(basePath, dotSpacing),
+          dotRadius: dotRadius,
+        );
+    }
   }
 }
 
@@ -285,4 +368,25 @@ List<Offset> _flattenPath(Path path, double step) {
     }
   }
   return flattened;
+}
+
+Path _scalePath(Path source, double scaleX, double scaleY) {
+  final matrix = Float64List(16)
+    ..[0] = scaleX
+    ..[5] = scaleY
+    ..[10] = 1
+    ..[15] = 1;
+  return source.transform(matrix);
+}
+
+class _StrokeVisuals {
+  const _StrokeVisuals({
+    this.strokePath,
+    this.dotPositions,
+    this.dotRadius = 0,
+  });
+
+  final Path? strokePath;
+  final Float32List? dotPositions;
+  final double dotRadius;
 }

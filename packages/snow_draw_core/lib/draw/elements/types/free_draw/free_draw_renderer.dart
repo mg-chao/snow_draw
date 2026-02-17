@@ -60,17 +60,29 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     // draw calls for completed strokes.
     final existingPicture = cached.getCachedPicture(opacity);
     if (existingPicture != null) {
-      canvas.save();
-      if (element.rotation != 0) {
-        canvas
-          ..translate(rect.centerX, rect.centerY)
-          ..rotate(element.rotation)
-          ..translate(-rect.centerX, -rect.centerY);
-      }
-      canvas
-        ..translate(rect.minX, rect.minY)
-        ..drawPicture(existingPicture)
-        ..restore();
+      _paintInElementSpace(
+        canvas: canvas,
+        rect: rect,
+        rotation: element.rotation,
+        paint: (localCanvas) => localCanvas.drawPicture(existingPicture),
+      );
+      return;
+    }
+
+    if (!cached.shouldRecordPicture(opacity)) {
+      _paintInElementSpace(
+        canvas: canvas,
+        rect: rect,
+        rotation: element.rotation,
+        paint: (localCanvas) => _renderToCanvas(
+          canvas: localCanvas,
+          data: data,
+          rect: rect,
+          cached: cached,
+          strokeOpacity: strokeOpacity,
+          fillOpacity: fillOpacity,
+        ),
+      );
       return;
     }
 
@@ -94,17 +106,12 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     cached.setCachedPicture(picture, opacity);
 
     // Draw the just-recorded picture.
-    canvas.save();
-    if (element.rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(element.rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
-    canvas
-      ..translate(rect.minX, rect.minY)
-      ..drawPicture(picture)
-      ..restore();
+    _paintInElementSpace(
+      canvas: canvas,
+      rect: rect,
+      rotation: element.rotation,
+      paint: (localCanvas) => localCanvas.drawPicture(picture),
+    );
   }
 
   /// Issues the actual fill + stroke draw commands.
@@ -211,5 +218,23 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final dx = (first.x - last.x) * rect.width;
     final dy = (first.y - last.y) * rect.height;
     return (dx * dx + dy * dy) <= tolerance * tolerance;
+  }
+
+  void _paintInElementSpace({
+    required Canvas canvas,
+    required DrawRect rect,
+    required double rotation,
+    required void Function(Canvas canvas) paint,
+  }) {
+    canvas.save();
+    if (rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+    paint(canvas);
+    canvas.restore();
   }
 }

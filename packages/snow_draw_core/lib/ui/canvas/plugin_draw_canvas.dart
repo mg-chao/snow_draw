@@ -1240,7 +1240,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _shouldFrameCoalescePointerMove() {
     final state = widget.store.state;
     final interaction = state.application.interaction;
-    return PointerMoveDispatchPolicy.shouldCoalesce(
+    return PointerMoveDispatchPolicy.resolvePlan(
       interaction: interaction,
       currentToolTypeId: widget.currentToolTypeId,
       isShiftPressed: _isShiftPressed,
@@ -1249,16 +1249,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             interaction: interaction,
             document: state.domain.document,
           ),
-    );
+    ).shouldCoalesce;
   }
 
   bool _shouldBatchFreeDrawMoves() {
     final interaction = widget.store.state.application.interaction;
-    return PointerMoveDispatchPolicy.shouldBatchFreeDrawSamples(
+    return PointerMoveDispatchPolicy.resolvePlan(
       interaction: interaction,
       currentToolTypeId: widget.currentToolTypeId,
       isShiftPressed: _isShiftPressed,
-    );
+    ).shouldBatchSamples;
   }
 
   PointerMoveInputEvent _mergeCoalescedPointerMoveEvents(

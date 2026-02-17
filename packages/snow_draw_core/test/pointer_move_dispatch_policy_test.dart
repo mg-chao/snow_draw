@@ -19,7 +19,7 @@ import 'package:snow_draw_core/ui/canvas/pointer_move_dispatch_policy.dart';
 
 void main() {
   group('PointerMoveDispatchPolicy.shouldCoalesce', () {
-    test('line creation bypasses frame coalescing', () {
+    test('line creation uses frame coalescing', () {
       final interaction = CreatingState(
         element: _lineElement(id: 'line'),
         startPosition: const DrawPoint(x: 10, y: 10),
@@ -36,11 +36,11 @@ void main() {
           currentToolTypeId: LineData.typeIdToken,
           isShiftPressed: false,
         ),
-        isFalse,
+        isTrue,
       );
     });
 
-    test('line arrow-point edit bypasses frame coalescing', () {
+    test('line arrow-point edit uses frame coalescing', () {
       final baseElement = _lineElement(id: 'line');
       final context = ArrowPointEditContext(
         startPosition: const DrawPoint(x: 20, y: 20),
@@ -85,7 +85,7 @@ void main() {
           currentToolTypeId: LineData.typeIdToken,
           isShiftPressed: false,
         ),
-        isFalse,
+        isTrue,
       );
     });
 
@@ -114,7 +114,7 @@ void main() {
     });
 
     test(
-      'serial-number creation bypasses frame coalescing in low-latency mode',
+      'serial-number creation uses frame coalescing in low-latency mode',
       () {
         final interaction = CreatingState(
           element: const ElementState(
@@ -136,13 +136,13 @@ void main() {
             isShiftPressed: false,
             isLowLatencySerialInteraction: true,
           ),
-          isFalse,
+          isTrue,
         );
       },
     );
 
     test(
-      'single serial-number edit bypasses frame coalescing in low-latency mode',
+      'single serial-number edit uses frame coalescing in low-latency mode',
       () {
         const interaction = EditingState(
           operationId: EditOperationIds.move,
@@ -164,7 +164,7 @@ void main() {
             isShiftPressed: false,
             isLowLatencySerialInteraction: true,
           ),
-          isFalse,
+          isTrue,
         );
       },
     );
