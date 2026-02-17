@@ -42,7 +42,6 @@ import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/utils/hit_test.dart' as draw_hit_test;
 import '../../draw/utils/snapping_mode.dart';
-import 'arrow_interaction_state_change.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
@@ -53,16 +52,13 @@ import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'free_draw_creation_state_change.dart';
 import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
-import 'highlight_interaction_state_change.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
-import 'lightweight_line_edit_state_change.dart';
+import 'interaction_mutation_refresh_plan.dart';
 import 'pointer_move_dispatch_policy.dart';
-import 'rectangle_interaction_state_change.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 import 'serial_number_interaction_classifier.dart';
-import 'serial_number_interaction_state_change.dart';
 import 'static_canvas_painter.dart';
 import 'text_editing_state_change.dart';
 import 'watermark_canvas_painter.dart';
@@ -2790,8 +2786,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   _CanvasLayerSceneSnapshot _resolveCanvasLayerSceneSnapshot(
-    DrawStateView stateView,
-  ) {
+    DrawStateView stateView, {
+    bool includeStaticPreviewElements = true,
+  }) {
     final interaction = stateView.state.application.interaction;
     final promoteEraserPreviewToDynamicLayer =
         widget.isEraserToolActive &&
@@ -2809,12 +2806,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final dynamicLayerStartIndex = promoteEraserPreviewToDynamicLayer
         ? 0
         : baseDynamicLayerStartIndex;
-    final baseStaticPreviewElements = optimizedDynamicElementIds.isEmpty
-        ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
-        : _previewElementsForStaticOptimizedScene(
-            stateView,
-            optimizationPlan!.staticHiddenElementIds,
-          );
+    final shouldComputeStaticPreviewElements =
+        includeStaticPreviewElements || promoteEraserPreviewToDynamicLayer;
+    final baseStaticPreviewElements = shouldComputeStaticPreviewElements
+        ? optimizedDynamicElementIds.isEmpty
+              ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
+              : _previewElementsForStaticOptimizedScene(
+                  stateView,
+                  optimizationPlan!.staticHiddenElementIds,
+                )
+        : const <String, ElementState>{};
     final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
         ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
         : _previewElementsForDynamicOptimizedScene(
@@ -2836,7 +2837,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         overridePreviewElements: eraserPreviewElements,
       );
     } else {
-      staticPreviewElements = baseStaticPreviewElements;
+      staticPreviewElements = includeStaticPreviewElements
+          ? baseStaticPreviewElements
+          : const <String, ElementState>{};
       dynamicPreviewElements = baseDynamicPreviewElements;
     }
 
@@ -2931,7 +2934,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   _DynamicLayerSnapshot _createInitialDynamicLayerSnapshot(DrawState state) {
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasLayerSceneSnapshot(stateView);
+    final scene = _resolveCanvasLayerSceneSnapshot(
+      stateView,
+      includeStaticPreviewElements: false,
+    );
     final renderKey = _buildDynamicRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
@@ -2972,7 +2978,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasLayerSceneSnapshot(stateView);
+    final scene = _resolveCanvasLayerSceneSnapshot(
+      stateView,
+      includeStaticPreviewElements: refreshStaticLayer,
+    );
     final scaleFactor = _effectiveScaleFactor();
     final locale = _resolveCanvasLocale();
     final dynamicRenderKey = _buildDynamicRenderKey(
@@ -3706,45 +3715,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
       return;
     }
+    if (previousState != null) {
+      final interactionMutationPlan = resolveInteractionMutationRefreshPlan(
+        previous: previousState,
+        next: state,
+      );
+      if (interactionMutationPlan != null) {
+        _handleInteractionMutation(state, plan: interactionMutationPlan);
+        return;
+      }
+    }
+
     _syncFreeDrawPreviewLayerState(state);
     _syncWatermarkLayerState(state);
-    if (previousState != null &&
-        isSerialNumberInteractionMutationOnly(
-          previous: previousState,
-          next: state,
-        )) {
-      _handleSerialNumberInteractionMutation(state);
-      return;
-    }
-    if (previousState != null &&
-        isLightweightLineInteractionMutationOnly(
-          previous: previousState,
-          next: state,
-        )) {
-      _handleLightweightLineInteractionMutation(state);
-      return;
-    }
-    if (previousState != null &&
-        isRectangleInteractionMutationOnly(
-          previous: previousState,
-          next: state,
-        )) {
-      _handleRectangleInteractionMutation(state);
-      return;
-    }
-    if (previousState != null &&
-        isHighlightInteractionMutationOnly(
-          previous: previousState,
-          next: state,
-        )) {
-      _handleHighlightInteractionMutation(state);
-      return;
-    }
-    if (previousState != null &&
-        isArrowInteractionMutationOnly(previous: previousState, next: state)) {
-      _handleArrowInteractionMutation(state);
-      return;
-    }
     final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
@@ -3808,7 +3791,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
 
-  void _handleSerialNumberInteractionMutation(DrawState state) {
+  void _handleInteractionMutation(
+    DrawState state, {
+    required InteractionMutationRefreshPlan plan,
+  }) {
     final cursor = _resolveCursorForState(state, _lastPointerPosition);
     if (!mounted) {
       _cursor = cursor;
@@ -3819,37 +3805,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _updateCursorIfChanged(cursor);
     _clearHoverState();
-    _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
-  }
-
-  void _handleLightweightLineInteractionMutation(DrawState state) {
-    _handleDynamicOnlyInteractionMutation(state);
-  }
-
-  void _handleRectangleInteractionMutation(DrawState state) {
-    _handleDynamicOnlyInteractionMutation(state);
-  }
-
-  void _handleHighlightInteractionMutation(DrawState state) {
-    _handleDynamicOnlyInteractionMutation(state);
-  }
-
-  void _handleArrowInteractionMutation(DrawState state) {
-    _handleDynamicOnlyInteractionMutation(state);
-  }
-
-  void _handleDynamicOnlyInteractionMutation(DrawState state) {
-    final cursor = _resolveCursorForState(state, _lastPointerPosition);
-    if (!mounted) {
-      _cursor = cursor;
-      _hoveredSelectionElementId = null;
-      _hoveredBindingElementId = null;
-      _hoveredArrowHandle = null;
-      return;
+    switch (plan.refreshMode) {
+      case InteractionMutationRefreshMode.dynamicOnly:
+        _refreshDynamicLayerSnapshot(state, assumeChanged: true);
+      case InteractionMutationRefreshMode.canvasLayers:
+        _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
     }
-    _updateCursorIfChanged(cursor);
-    _clearHoverState();
-    _refreshDynamicLayerSnapshot(state, assumeChanged: true);
   }
 
   void _handleConfigChange(DrawConfig _) {
