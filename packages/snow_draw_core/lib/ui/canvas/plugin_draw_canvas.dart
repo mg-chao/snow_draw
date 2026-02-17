@@ -25,6 +25,7 @@ import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
+import '../../draw/elements/types/text/text_renderer.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
 import '../../draw/models/draw_state.dart';
@@ -190,6 +191,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
   final _cursorNotifier = ValueNotifier<MouseCursor>(_defaultCursor);
+  final _textOverlayNotifier = ValueNotifier<_TextEditingOverlaySnapshot?>(
+    null,
+  );
 
   var _isShiftPressed = false;
   var _isControlPressed = false;
@@ -368,6 +372,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       editOperations: widget.store.context.editOperations,
     );
     _lastObservedState = initialState;
+    _syncTextEditingOverlayState(initialState);
     _freeDrawPreviewLayerController = FreeDrawPreviewLayerController(
       initialKey: FreeDrawPreviewRenderKey(
         camera: initialState.application.view.camera,
@@ -440,6 +445,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cachedInputSelectionConfigSource = null;
         _cachedInputSelectionConfig = null;
         _cachedInputSelectionScale = null;
+        _syncTextEditingOverlayState(widget.store.state);
 
         _stateUnsubscribe = widget.store.listen(
           _handleStateChange,
@@ -477,6 +483,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     _syncFreeDrawPreviewLayerState(widget.store.state);
     _syncWatermarkLayerState(widget.store.state);
+    _syncTextEditingOverlayState(widget.store.state);
   }
 
   @override
@@ -491,9 +498,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _handleSystemFontsChange,
     );
     _focusNode.dispose();
-    _textController?.dispose();
+    _disposeTextEditor();
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
+    _textOverlayNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
     _freeDrawPreviewLayerController.dispose();
     _watermarkLayerController.dispose();
@@ -514,15 +522,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final elementRegistry = widget.store.context.elementRegistry;
     final locale = Localizations.maybeLocaleOf(context);
     final camera = stateView.state.application.view.camera;
+    final interaction = stateView.state.application.interaction;
     final textOverlay = _buildTextEditorOverlay(
-      state: widget.store.state,
       scaleFactor: scaleFactor,
       locale: locale,
     );
     final promoteEraserPreviewToDynamicLayer =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    final optimizationPlan = promoteEraserPreviewToDynamicLayer
+    final optimizationPlan =
+        promoteEraserPreviewToDynamicLayer || interaction is TextEditingState
         ? null
         : resolveDynamicSceneOptimizationPlan(
             view: stateView,
@@ -682,7 +691,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
               ),
             ),
           ),
-          ?textOverlay,
+          textOverlay,
           ?eraserCursorOverlay,
         ],
       ),
@@ -715,9 +724,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
     }
-    if (interaction is TextEditingState && interaction.isNew) {
-      // Avoid double-rendering the draft text (static + dynamic) while
-      // creating.
+    if (interaction is TextEditingState) {
+      if (interaction.isNew) {
+        return const <String, ElementState>{};
+      }
+      final hiddenPreview = _buildHiddenTextEditingPreview(view);
+      if (hiddenPreview == null) {
+        return const <String, ElementState>{};
+      }
+
+      if (dynamicLayerStartIndex == null) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
+
+      final orderIndex = view.state.domain.document.getOrderIndex(
+        hiddenPreview.id,
+      );
+      if (orderIndex == null || orderIndex < dynamicLayerStartIndex) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
       return const <String, ElementState>{};
     }
     if (dynamicLayerStartIndex == null) {
@@ -750,18 +775,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String, ElementState>{};
     }
 
-    // When creating a new text element, add it to the dynamic layer preview
-    // so its background is rendered on top of existing elements.
-    if (interaction is TextEditingState && interaction.isNew) {
-      final textElement = ElementState(
-        id: interaction.elementId,
-        rect: interaction.rect,
-        rotation: interaction.rotation,
-        opacity: interaction.opacity,
-        zIndex: view.state.domain.document.elements.length,
-        data: interaction.draftData,
+    if (interaction is TextEditingState) {
+      if (interaction.isNew) {
+        return const <String, ElementState>{};
+      }
+
+      final hiddenPreview = _buildHiddenTextEditingPreview(view);
+      if (hiddenPreview == null || dynamicLayerStartIndex == null) {
+        return const <String, ElementState>{};
+      }
+
+      final orderIndex = view.state.domain.document.getOrderIndex(
+        hiddenPreview.id,
       );
-      return {interaction.elementId: textElement};
+      if (orderIndex != null && orderIndex >= dynamicLayerStartIndex) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
+      return const <String, ElementState>{};
     }
 
     if (dynamicLayerStartIndex == null) {
@@ -782,6 +812,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     return filtered;
+  }
+
+  ElementState? _buildHiddenTextEditingPreview(DrawStateView view) {
+    final interaction = view.state.application.interaction;
+    if (interaction is! TextEditingState) {
+      return null;
+    }
+    final element = view.state.domain.document.getElementById(
+      interaction.elementId,
+    );
+    if (element?.data is! TextData) {
+      return null;
+    }
+    if (element!.opacity == 0) {
+      return element;
+    }
+    return element.copyWith(opacity: 0);
   }
 
   Map<String, ElementState> _previewElementsForStaticOptimizedScene(
@@ -2741,129 +2788,153 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return nextView;
   }
 
-  Widget? _buildTextEditorOverlay({
-    required DrawState state,
+  Widget _buildTextEditorOverlay({
     required double scaleFactor,
     Locale? locale,
-  }) {
-    final interaction = state.application.interaction;
-    if (interaction is! TextEditingState) {
-      _disposeTextEditor();
-      return null;
-    }
+  }) => ValueListenableBuilder<_TextEditingOverlaySnapshot?>(
+    valueListenable: _textOverlayNotifier,
+    builder: (context, snapshot, _) {
+      if (snapshot == null) {
+        _editingTextLayout = null;
+        _clearEditingPainterLayoutCache();
+        return const SizedBox.shrink();
+      }
 
-    _syncTextEditor(interaction);
+      final controller = _textController;
+      if (controller == null) {
+        return const SizedBox.shrink();
+      }
 
-    final rect = interaction.rect;
-    final topLeft = _coords.worldToScreen(
-      DrawPoint(x: rect.minX, y: rect.minY),
-    );
-    final layoutWidth = rect.width;
-    final height = rect.height;
-    if (layoutWidth <= 0 || height <= 0) {
-      _editingTextLayout = null;
-      _clearEditingPainterLayoutCache();
-      return null;
-    }
-    // RenderEditable subtracts a caret margin from maxWidth when laying out.
-    final fieldWidth = layoutWidth + textCaretMargin;
-    final data = interaction.draftData;
-    final opacity = interaction.opacity;
-    final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-    final textColor = data.color.withValues(alpha: textOpacity);
-    final textStyle = buildTextStyle(
-      data: data,
-      colorOverride: textColor,
-      locale: locale,
-    );
-    // Render text on the canvas; keep the TextField only for caret/input.
-    final inputTextStyle = textStyle.copyWith(color: Colors.transparent);
+      final rect = snapshot.rect;
+      final topLeft = _coords.worldToScreen(
+        DrawPoint(x: rect.minX, y: rect.minY),
+      );
+      final layoutWidth = rect.width;
+      final height = rect.height;
+      if (layoutWidth <= 0 || height <= 0) {
+        _editingTextLayout = null;
+        _clearEditingPainterLayoutCache();
+        return const SizedBox.shrink();
+      }
 
-    final layout = layoutText(
-      data: data,
-      maxWidth: layoutWidth,
-      minWidth: layoutWidth,
-      widthBasis: TextWidthBasis.parent,
-      locale: locale,
-    );
-    _editingTextLayout = layout;
-    _invalidateEditingPainterLayoutIfNeeded(
-      data: data,
-      layoutWidth: layoutWidth,
-      locale: locale,
-    );
-    final textHeight = layout.size.height;
-    final verticalOffset = _resolveVerticalOffset(
-      containerHeight: height,
-      textHeight: textHeight,
-      align: data.verticalAlign,
-    );
+      final text = controller.text;
+      final data = text == snapshot.data.text
+          ? snapshot.data
+          : snapshot.data.copyWith(text: text);
+      final opacity = snapshot.opacity;
+      final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
+      final textColor = data.color.withValues(alpha: textOpacity);
+      final textStyle = buildTextStyle(
+        data: data,
+        colorOverride: textColor,
+        locale: locale,
+      );
 
-    _applyInitialSelection(
-      interaction: interaction,
-      rect: rect,
-      layout: layout,
-      verticalOffset: verticalOffset,
-    );
+      final layout = layoutText(
+        data: data,
+        maxWidth: layoutWidth,
+        minWidth: layoutWidth,
+        widthBasis: TextWidthBasis.parent,
+        locale: locale,
+      );
+      _editingTextLayout = layout;
+      _invalidateEditingPainterLayoutIfNeeded(
+        data: data,
+        layoutWidth: layoutWidth,
+        locale: locale,
+      );
 
-    Widget textField = TextField(
-      controller: _textController,
-      focusNode: _textFocusNode,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      maxLines: null,
-      style: inputTextStyle,
-      strutStyle: resolveTextStrutStyle(textStyle),
-      textAlign: _toFlutterAlign(data.horizontalAlign),
-      textDirection: TextDirection.ltr,
-      clipBehavior: Clip.none,
-      // Avoid InputDecorator so RenderEditable uses tight
-      // constraints, keeping vertical caret runs valid.
-      decoration: null,
-      cursorColor: textColor,
-      cursorWidth: textCursorWidth,
-    );
-    textField = Listener(
-      onPointerDown: (_) => _resetVerticalCaretRun(),
-      child: textField,
-    );
+      final textHeight = layout.size.height;
+      final verticalOffset = _resolveVerticalOffset(
+        containerHeight: height,
+        textHeight: textHeight,
+        align: data.verticalAlign,
+      );
 
-    return Positioned(
-      left: topLeft.x,
-      top: topLeft.y,
-      child: Transform.scale(
-        scale: scaleFactor,
-        alignment: Alignment.topLeft,
-        child: Transform.rotate(
-          angle: interaction.rotation,
-          child: SizedBox(
-            width: layoutWidth,
-            height: height,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  top: verticalOffset,
-                  width: fieldWidth,
-                  height: textHeight,
-                  child: MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(textScaler: textLayoutTextScaler),
-                    child: DefaultTextHeightBehavior(
-                      textHeightBehavior: textLayoutHeightBehavior,
-                      child: textField,
+      _applyInitialSelection(
+        interaction: snapshot.toInteractionState(),
+        rect: rect,
+        layout: layout,
+        verticalOffset: verticalOffset,
+      );
+
+      // RenderEditable subtracts a caret margin from maxWidth when laying out.
+      final fieldWidth = layoutWidth + textCaretMargin;
+      Widget textField = TextField(
+        controller: controller,
+        focusNode: _textFocusNode,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+        maxLines: null,
+        style: textStyle.copyWith(color: Colors.transparent),
+        strutStyle: resolveTextStrutStyle(textStyle),
+        textAlign: _toFlutterAlign(data.horizontalAlign),
+        textDirection: TextDirection.ltr,
+        clipBehavior: Clip.none,
+        // Avoid InputDecorator so RenderEditable uses tight
+        // constraints, keeping vertical caret runs valid.
+        decoration: null,
+        cursorColor: textColor,
+        cursorWidth: textCursorWidth,
+      );
+      textField = Listener(
+        onPointerDown: (_) => _resetVerticalCaretRun(),
+        child: textField,
+      );
+
+      return Positioned(
+        left: topLeft.x,
+        top: topLeft.y,
+        child: RepaintBoundary(
+          child: Transform.scale(
+            scale: scaleFactor,
+            alignment: Alignment.topLeft,
+            child: Transform.rotate(
+              angle: snapshot.rotation,
+              child: SizedBox(
+                width: layoutWidth,
+                height: height,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _EditingTextOverlayPainter(
+                            elementId: snapshot.elementId,
+                            data: data,
+                            opacity: opacity,
+                            locale: locale,
+                            cacheRevision:
+                                textRenderingCacheRevisionListenable.value,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      left: 0,
+                      top: verticalOffset,
+                      width: fieldWidth,
+                      height: textHeight,
+                      child: MediaQuery(
+                        data: MediaQuery.of(
+                          context,
+                        ).copyWith(textScaler: textLayoutTextScaler),
+                        child: DefaultTextHeightBehavior(
+                          textHeightBehavior: textLayoutHeightBehavior,
+                          child: textField,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 
   void _syncTextEditor(TextEditingState interaction) {
     final controller = _textController;
@@ -2918,6 +2989,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _textFocusNode.requestFocus();
       }
     });
+  }
+
+  void _syncTextEditingOverlayState(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is! TextEditingState) {
+      if (_textController != null || _editingElementId != null) {
+        _disposeTextEditor();
+      }
+      if (_textOverlayNotifier.value != null) {
+        _textOverlayNotifier.value = null;
+      }
+      return;
+    }
+
+    _syncTextEditor(interaction);
+    final nextSnapshot = _TextEditingOverlaySnapshot.fromInteraction(
+      interaction,
+    );
+    if (_textOverlayNotifier.value != nextSnapshot) {
+      _textOverlayNotifier.value = nextSnapshot;
+    }
   }
 
   void _invalidateEditingPainterLayoutIfNeeded({
@@ -3226,6 +3318,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
+    _syncTextEditingOverlayState(state);
     _syncFreeDrawPreviewLayerState(state);
     _syncWatermarkLayerState(state);
 
@@ -3235,12 +3328,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     // Keystrokes in text editing mutate only the draft payload and trigger
     // very high-frequency state updates. Skip cursor hit-testing work and
-    // rebuild directly so typing stays at the display refresh rate.
+    // canvas tree rebuilds; the dedicated text overlay updates itself via
+    // [ValueListenableBuilder].
     if (previousState != null &&
         isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
-      if (mounted) {
-        setState(() {});
-      }
       return;
     }
     if (previousState != null &&
@@ -3426,6 +3517,121 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
+}
+
+@immutable
+class _TextEditingOverlaySnapshot {
+  const _TextEditingOverlaySnapshot({
+    required this.elementId,
+    required this.data,
+    required this.rect,
+    required this.isNew,
+    required this.rotation,
+    required this.opacity,
+    required this.initialCursorPosition,
+  });
+
+  factory _TextEditingOverlaySnapshot.fromInteraction(
+    TextEditingState interaction,
+  ) => _TextEditingOverlaySnapshot(
+    elementId: interaction.elementId,
+    data: interaction.draftData,
+    rect: interaction.rect,
+    isNew: interaction.isNew,
+    rotation: interaction.rotation,
+    opacity: interaction.opacity,
+    initialCursorPosition: interaction.initialCursorPosition,
+  );
+
+  final String elementId;
+  final TextData data;
+  final DrawRect rect;
+  final bool isNew;
+  final double rotation;
+  final double opacity;
+  final DrawPoint? initialCursorPosition;
+
+  TextEditingState toInteractionState() => TextEditingState(
+    elementId: elementId,
+    draftData: data,
+    rect: rect,
+    isNew: isNew,
+    opacity: opacity,
+    rotation: rotation,
+    initialCursorPosition: initialCursorPosition,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TextEditingOverlaySnapshot &&
+          other.elementId == elementId &&
+          other.data == data &&
+          other.rect == rect &&
+          other.isNew == isNew &&
+          other.rotation == rotation &&
+          other.opacity == opacity &&
+          other.initialCursorPosition == initialCursorPosition;
+
+  @override
+  int get hashCode => Object.hash(
+    elementId,
+    data,
+    rect,
+    isNew,
+    rotation,
+    opacity,
+    initialCursorPosition,
+  );
+}
+
+@immutable
+class _EditingTextOverlayPainter extends CustomPainter {
+  const _EditingTextOverlayPainter({
+    required this.elementId,
+    required this.data,
+    required this.opacity,
+    required this.cacheRevision,
+    this.locale,
+  });
+
+  static const _renderer = TextRenderer();
+
+  final String elementId;
+  final TextData data;
+  final double opacity;
+  final int cacheRevision;
+  final Locale? locale;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+
+    final element = ElementState(
+      id: elementId,
+      rect: DrawRect(maxX: size.width, maxY: size.height),
+      rotation: 0,
+      opacity: opacity,
+      zIndex: 0,
+      data: data,
+    );
+    _renderer.render(
+      canvas: canvas,
+      element: element,
+      scaleFactor: 1,
+      locale: locale,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _EditingTextOverlayPainter oldDelegate) =>
+      oldDelegate.elementId != elementId ||
+      oldDelegate.data != data ||
+      oldDelegate.opacity != opacity ||
+      oldDelegate.cacheRevision != cacheRevision ||
+      oldDelegate.locale != locale;
 }
 
 @immutable
