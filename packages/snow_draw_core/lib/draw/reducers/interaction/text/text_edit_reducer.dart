@@ -94,17 +94,22 @@ class TextEditReducer {
     if (interaction is! TextEditingState) {
       return state;
     }
-    if (action.text == interaction.draftData.text) {
+    if (action.text == interaction.draftData.text && action.rect == null) {
       return state;
     }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
-    final nextRect = resolveTextEditingRect(
-      origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
-      currentRect: interaction.rect,
-      data: nextData,
-      allowShrinkHeight: true,
-    );
+    final nextRect =
+        action.rect ??
+        resolveTextEditingRect(
+          origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+          currentRect: interaction.rect,
+          data: nextData,
+          allowShrinkHeight: true,
+        );
+    if (nextData == interaction.draftData && nextRect == interaction.rect) {
+      return state;
+    }
 
     return state.copyWith(
       application: state.application.copyWith(

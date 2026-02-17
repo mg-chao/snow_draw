@@ -33,6 +33,28 @@ void main() {
       expect(store.state, same(before));
     });
 
+    test('UpdateTextEdit applies provided draft rect override', () async {
+      final store = _createStore(
+        initialState: _stateWithActiveTextEdit(
+          elementId: 'text-1',
+          initialText: 'before',
+          draftText: 'before',
+        ),
+      );
+      addTearDown(store.dispose);
+
+      const overrideRect = DrawRect(minX: 4, minY: 5, maxX: 104, maxY: 48);
+      await store.dispatch(
+        const UpdateTextEdit(text: 'after', rect: overrideRect),
+      );
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<TextEditingState>());
+      final editing = interaction as TextEditingState;
+      expect(editing.draftData.text, 'after');
+      expect(editing.rect, overrideRect);
+    });
+
     test(
       'UpdateTextEdit shrinks fixed-width text edit bounds to fit content',
       () async {

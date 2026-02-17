@@ -24,6 +24,7 @@ import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
+import '../../draw/elements/types/text/text_editing_geometry.dart';
 import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/elements/types/text/text_renderer.dart';
 import '../../draw/input/input_event.dart';
@@ -196,6 +197,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _textOverlayNotifier = ValueNotifier<_TextEditingOverlaySnapshot?>(
     null,
   );
+  late final FrameAlignedEventDispatcher<_PendingTextDraftSync>
+  _textDraftDispatcher;
+  _PendingTextDraftSync? _pendingTextDraftSync;
 
   var _isShiftPressed = false;
   var _isControlPressed = false;
@@ -362,6 +366,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       shouldCoalesce: () => _activePointerIds.isEmpty,
       mergePendingEvents: (pending, incoming) => pending.mergeWith(incoming),
     );
+    _textDraftDispatcher = FrameAlignedEventDispatcher<_PendingTextDraftSync>(
+      dispatchEvent: _dispatchPendingTextDraftSync,
+      shouldCoalesce: () => true,
+    );
     _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
       dispatchEvent: _dispatchEraserMove,
       shouldCoalesce: () => _eraserPointerIds.length <= 1,
@@ -441,6 +449,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _stateUnsubscribe?.call();
         _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
+        _pendingTextDraftSync = null;
+        _textDraftDispatcher.reset();
         _lastObservedState = widget.store.state;
         _cachedState = null;
         _cachedStateView = null;
@@ -509,6 +519,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _watermarkLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_hoverMoveDispatcher.dispose());
+    unawaited(_textDraftDispatcher.dispose());
     unawaited(_eraserMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
     super.dispose();
@@ -1078,6 +1089,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    unawaited(_handlePointerDownAsync(event));
+  }
+
+  Future<void> _handlePointerDownAsync(PointerDownEvent event) async {
     final position = _recordPointerPosition(event.localPosition);
     if (_isMousePointer(event)) {
       if (_isMiddleMouseButton(event.buttons)) {
@@ -1109,13 +1124,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerDownInputEvent(
-          position: position.copyWith(pressure: event.pressure),
-          modifiers: _currentModifiers,
-          pressure: event.pressure,
-        ),
+    if (widget.store.state.application.interaction is TextEditingState) {
+      await _flushPendingTextDraftSync();
+    }
+    await _pluginCoordinator.handleEvent(
+      PointerDownInputEvent(
+        position: position.copyWith(pressure: event.pressure),
+        modifiers: _currentModifiers,
+        pressure: event.pressure,
       ),
     );
   }
@@ -2865,13 +2881,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
       // RenderEditable subtracts a caret margin from maxWidth when laying out.
       final fieldWidth = layoutWidth + textCaretMargin;
+      final shouldPaintTextDecorations = _shouldPaintTextDecorations(
+        data: data,
+        opacity: opacity,
+      );
       Widget textField = TextField(
         controller: controller,
         focusNode: _textFocusNode,
         keyboardType: TextInputType.multiline,
         textInputAction: TextInputAction.newline,
         maxLines: null,
-        style: textStyle.copyWith(color: Colors.transparent),
+        style: textStyle,
         strutStyle: resolveTextStrutStyle(textStyle),
         textAlign: _toFlutterAlign(data.horizontalAlign),
         textDirection: TextDirection.ltr,
@@ -2902,20 +2922,24 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _EditingTextOverlayPainter(
-                            elementId: snapshot.elementId,
-                            data: data,
-                            opacity: opacity,
-                            locale: locale,
-                            cacheRevision:
-                                textRenderingCacheRevisionListenable.value,
+                    if (shouldPaintTextDecorations)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _EditingTextOverlayPainter(
+                              elementId: snapshot.elementId,
+                              data: data.copyWith(
+                                color: data.color.withValues(alpha: 0),
+                              ),
+                              opacity: opacity,
+                              locale: locale,
+                              layout: layout,
+                              cacheRevision:
+                                  textRenderingCacheRevisionListenable.value,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     Positioned(
                       left: 0,
                       top: verticalOffset,
@@ -2951,8 +2975,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _initialSelectionApplied = false;
       _clearEditingPainterLayoutCache();
       _resetVerticalCaretRun();
+      _pendingTextDraftSync = null;
+    } else if (_pendingTextDraftSync != null &&
+        _pendingTextDraftSync!.elementId == interaction.elementId &&
+        interaction.draftData.text == _pendingTextDraftSync!.text) {
+      _pendingTextDraftSync = null;
     } else if (!_suppressTextControllerChange &&
-        controller.text != interaction.draftData.text) {
+        controller.text != interaction.draftData.text &&
+        (_pendingTextDraftSync == null ||
+            _pendingTextDraftSync!.elementId != interaction.elementId ||
+            controller.text != _pendingTextDraftSync!.text)) {
       _suppressTextControllerChange = true;
       controller.text = interaction.draftData.text;
       _suppressTextControllerChange = false;
@@ -2963,6 +2995,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _disposeTextEditor() {
+    _pendingTextDraftSync = null;
+    _textDraftDispatcher.reset();
     final controller = _textController;
     if (controller != null) {
       controller
@@ -3009,9 +3043,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     _syncTextEditor(interaction);
-    final nextSnapshot = _TextEditingOverlaySnapshot.fromInteraction(
-      interaction,
-    );
+    var nextSnapshot = _TextEditingOverlaySnapshot.fromInteraction(interaction);
+    final pending = _pendingTextDraftSync;
+    if (pending != null) {
+      if (pending.elementId != interaction.elementId) {
+        _pendingTextDraftSync = null;
+      } else if (interaction.draftData.text == pending.text) {
+        _pendingTextDraftSync = null;
+      } else {
+        nextSnapshot = nextSnapshot.copyWith(
+          data: nextSnapshot.data.copyWith(text: pending.text),
+          rect: pending.previewRect,
+        );
+      }
+    }
     if (_textOverlayNotifier.value != nextSnapshot) {
       _textOverlayNotifier.value = nextSnapshot;
     }
@@ -3095,8 +3140,83 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
-    unawaited(widget.store.dispatch(UpdateTextEdit(text: nextText)));
+    final previewRect = _resolveTextEditRectForDraft(
+      interaction: interaction,
+      text: nextText,
+    );
+    _pendingTextDraftSync = _PendingTextDraftSync(
+      elementId: interaction.elementId,
+      text: nextText,
+      previewRect: previewRect,
+    );
+    _syncPendingTextDraftOverlay(
+      text: nextText,
+      previewRect: previewRect,
+      interaction: interaction,
+    );
+    _textDraftDispatcher.dispatch(_pendingTextDraftSync!);
   }
+
+  DrawRect _resolveTextEditRectForDraft({
+    required TextEditingState interaction,
+    required String text,
+  }) {
+    final nextData = interaction.draftData.copyWith(text: text);
+    return resolveTextEditingRect(
+      origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+      currentRect: interaction.rect,
+      data: nextData,
+      allowShrinkHeight: true,
+    );
+  }
+
+  void _syncPendingTextDraftOverlay({
+    required String text,
+    required DrawRect previewRect,
+    required TextEditingState interaction,
+  }) {
+    final snapshot = _textOverlayNotifier.value;
+    if (snapshot == null || snapshot.elementId != interaction.elementId) {
+      return;
+    }
+    final nextSnapshot = snapshot.copyWith(
+      data: snapshot.data.copyWith(text: text),
+      rect: previewRect,
+    );
+    if (_textOverlayNotifier.value != nextSnapshot) {
+      _textOverlayNotifier.value = nextSnapshot;
+    }
+  }
+
+  Future<void> _dispatchPendingTextDraftSync(
+    _PendingTextDraftSync pending,
+  ) async {
+    final interaction = widget.store.state.application.interaction;
+    if (interaction is! TextEditingState ||
+        interaction.elementId != pending.elementId) {
+      if (_pendingTextDraftSync == pending) {
+        _pendingTextDraftSync = null;
+      }
+      return;
+    }
+
+    if (interaction.draftData.text == pending.text) {
+      if (_pendingTextDraftSync == pending) {
+        _pendingTextDraftSync = null;
+      }
+      return;
+    }
+
+    final nextRect = _resolveTextEditRectForDraft(
+      interaction: interaction,
+      text: pending.text,
+    );
+    await widget.store.dispatch(
+      UpdateTextEdit(text: pending.text, rect: nextRect),
+    );
+  }
+
+  Future<void> _flushPendingTextDraftSync() => _textDraftDispatcher.flush();
 
   void _resetVerticalCaretRun() {
     _lastVerticalSelection = null;
@@ -3320,6 +3440,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
+  bool _shouldPaintTextDecorations({
+    required TextData data,
+    required double opacity,
+  }) {
+    final backgroundOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
+    if (backgroundOpacity > 0) {
+      return true;
+    }
+    final strokeOpacity = (data.strokeColor.a * opacity).clamp(0.0, 1.0);
+    return data.strokeWidth > 0 && strokeOpacity > 0;
+  }
+
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
@@ -3525,6 +3657,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   Future<void> _resetInteractionForToolChange() async {
     _pointerMoveDispatcher.reset();
+    await _flushPendingTextDraftSync();
     final interaction = widget.store.state.application.interaction;
     if (interaction is TextEditingState) {
       await widget.store.dispatch(
@@ -3580,6 +3713,17 @@ class _TextEditingOverlaySnapshot {
   final double opacity;
   final DrawPoint? initialCursorPosition;
 
+  _TextEditingOverlaySnapshot copyWith({TextData? data, DrawRect? rect}) =>
+      _TextEditingOverlaySnapshot(
+        elementId: elementId,
+        data: data ?? this.data,
+        rect: rect ?? this.rect,
+        isNew: isNew,
+        rotation: rotation,
+        opacity: opacity,
+        initialCursorPosition: initialCursorPosition,
+      );
+
   TextEditingState toInteractionState() => TextEditingState(
     elementId: elementId,
     draftData: data,
@@ -3620,6 +3764,7 @@ class _EditingTextOverlayPainter extends CustomPainter {
     required this.elementId,
     required this.data,
     required this.opacity,
+    required this.layout,
     required this.cacheRevision,
     this.locale,
   });
@@ -3629,6 +3774,7 @@ class _EditingTextOverlayPainter extends CustomPainter {
   final String elementId;
   final TextData data;
   final double opacity;
+  final TextLayoutMetrics layout;
   final int cacheRevision;
   final Locale? locale;
 
@@ -3646,11 +3792,13 @@ class _EditingTextOverlayPainter extends CustomPainter {
       zIndex: 0,
       data: data,
     );
-    _renderer.render(
+    _renderer.renderWithOptions(
       canvas: canvas,
       element: element,
       scaleFactor: 1,
       locale: locale,
+      precomputedLayout: layout,
+      renderFill: false,
     );
   }
 
@@ -3659,8 +3807,22 @@ class _EditingTextOverlayPainter extends CustomPainter {
       oldDelegate.elementId != elementId ||
       oldDelegate.data != data ||
       oldDelegate.opacity != opacity ||
+      !identical(oldDelegate.layout, layout) ||
       oldDelegate.cacheRevision != cacheRevision ||
       oldDelegate.locale != locale;
+}
+
+@immutable
+class _PendingTextDraftSync {
+  const _PendingTextDraftSync({
+    required this.elementId,
+    required this.text,
+    required this.previewRect,
+  });
+
+  final String elementId;
+  final String text;
+  final DrawRect previewRect;
 }
 
 @immutable

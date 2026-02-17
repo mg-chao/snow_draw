@@ -10,6 +10,7 @@ import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/interaction_state.dart';
 import '../types/draw_point.dart';
+import '../types/draw_rect.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
 import '../utils/edit_intent_detector.dart';
@@ -440,16 +441,18 @@ class StartTextEdit extends DrawAction implements NonRecordable {
 }
 
 class UpdateTextEdit extends DrawAction implements NonRecordable {
-  const UpdateTextEdit({required this.text});
+  const UpdateTextEdit({required this.text, this.rect});
 
   final String text;
+  final DrawRect? rect;
 
   @override
   String get nonRecordableReason =>
       'UpdateTextEdit is an intermediate edit state.';
 
   @override
-  String toString() => 'UpdateTextEdit(textLength: ${text.length})';
+  String toString() =>
+      'UpdateTextEdit(textLength: ${text.length}, hasRect: ${rect != null})';
 }
 
 /// Recomputes text element bounds after runtime font availability changes.

@@ -85,6 +85,142 @@ void main() {
       expect(staticAfter, same(staticBefore));
     },
   );
+
+  testWidgets('plain text editing skips decoration overlay painter', (
+    tester,
+  ) async {
+    final store = _createStoreWithTextEditing(const TextData(text: 'plain'));
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginDrawCanvas(size: const Size(320, 240), store: store),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(_hasEditingOverlayPainter(tester), isFalse);
+  });
+
+  testWidgets(
+    'stroke or background styles keep decoration overlay painter enabled',
+    (tester) async {
+      final store = _createStoreWithTextEditing(
+        TextData(
+          text: 'decorated',
+          strokeWidth: 1,
+          fillColor: Colors.yellow.withValues(alpha: 0.3),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PluginDrawCanvas(size: const Size(320, 240), store: store),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(_hasEditingOverlayPainter(tester), isTrue);
+    },
+  );
+
+  testWidgets('store swap clears pending text draft sync events', (
+    tester,
+  ) async {
+    final primaryStore = _createStoreWithTextEditing(
+      const TextData(text: 'primary'),
+    );
+    final secondaryStore = _createStoreWithTextEditing(
+      const TextData(text: 'secondary'),
+    );
+    addTearDown(primaryStore.dispose);
+    addTearDown(secondaryStore.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginDrawCanvas(
+            size: const Size(320, 240),
+            store: primaryStore,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final textField = tester.widget<TextField>(find.byType(TextField));
+    textField.controller!.text = 'pending-primary';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginDrawCanvas(
+            size: const Size(320, 240),
+            store: secondaryStore,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final interaction = secondaryStore.state.application.interaction;
+    expect(interaction, isA<TextEditingState>());
+    final editing = interaction as TextEditingState;
+    expect(editing.draftData.text, 'secondary');
+  });
+}
+
+DefaultDrawStore _createStoreWithTextEditing(TextData textData) {
+  final registry = DefaultElementRegistry();
+  registerBuiltInElements(registry);
+  final context = DrawContext.withDefaults(elementRegistry: registry);
+  const rect = DrawRect(minX: 32, minY: 24, maxX: 180, maxY: 72);
+  final element = ElementState(
+    id: 'text-1',
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: textData,
+  );
+  final initialState = DrawState(
+    domain: DomainState(
+      document: DocumentState(elements: [element]),
+      selection: const SelectionState(selectedIds: {'text-1'}),
+    ),
+    application: ApplicationState(
+      view: const ViewState(),
+      interaction: TextEditingState(
+        elementId: 'text-1',
+        draftData: textData,
+        rect: rect,
+        isNew: false,
+        opacity: 1,
+        rotation: 0,
+      ),
+    ),
+  );
+  return DefaultDrawStore(context: context, initialState: initialState);
+}
+
+bool _hasEditingOverlayPainter(WidgetTester tester) {
+  for (final paint in tester.widgetList<CustomPaint>(
+    find.byType(CustomPaint),
+  )) {
+    final painter = paint.painter;
+    if (painter == null) {
+      continue;
+    }
+    if (painter.runtimeType.toString() == '_EditingTextOverlayPainter') {
+      return true;
+    }
+  }
+  return false;
 }
 
 DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
