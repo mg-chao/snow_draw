@@ -25,6 +25,7 @@ const _maxWatermarkTileExtent = 4096;
 /// absorbs small fluctuations and keeps the cached picture valid across many
 /// consecutive frames.
 const double _sizeBucket = 64;
+const _opaqueWhite = Color(0xFFFFFFFF);
 
 final _identityMatrix4 = Float64List.fromList(<double>[
   1,
@@ -49,18 +50,15 @@ double _snap(double value) =>
     (value / _sizeBucket).ceilToDouble() * _sizeBucket;
 
 @immutable
-class _WatermarkPictureConfig {
-  const _WatermarkPictureConfig({
-    required this.color,
+class _WatermarkLayoutConfig {
+  const _WatermarkLayoutConfig({
     required this.text,
     required this.fontSize,
     required this.fontFamily,
     required this.gap,
-    required this.effectiveAlpha,
   });
 
-  factory _WatermarkPictureConfig.fromConfig(WatermarkConfig config) {
-    final effectiveAlpha = (config.color.a * config.opacity).clamp(0.0, 1.0);
+  factory _WatermarkLayoutConfig.fromConfig(WatermarkConfig config) {
     final normalizedGap = config.gap.isFinite
         ? config.gap.clamp(
             ConfigDefaults.minWatermarkGap,
@@ -68,39 +66,65 @@ class _WatermarkPictureConfig {
           )
         : ConfigDefaults.defaultWatermarkGap;
 
-    return _WatermarkPictureConfig(
-      color: config.color.withValues(alpha: effectiveAlpha),
+    return _WatermarkLayoutConfig(
       text: config.text.trim(),
       fontSize: config.fontSize,
       fontFamily: config.fontFamily.trim(),
       gap: normalizedGap,
-      effectiveAlpha: effectiveAlpha,
     );
   }
 
-  final Color color;
   final String text;
   final double fontSize;
   final String fontFamily;
   final double gap;
-  final double effectiveAlpha;
-
-  bool get isVisible => text.isNotEmpty && effectiveAlpha >= 0.004;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _WatermarkPictureConfig &&
-          other.color == color &&
+      other is _WatermarkLayoutConfig &&
           other.text == text &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
-          other.gap == gap &&
+          other.gap == gap;
+
+  @override
+  int get hashCode => Object.hash(text, fontSize, fontFamily, gap);
+}
+
+@immutable
+class _WatermarkRenderConfig {
+  const _WatermarkRenderConfig({
+    required this.layout,
+    required this.color,
+    required this.effectiveAlpha,
+  });
+
+  factory _WatermarkRenderConfig.fromConfig(WatermarkConfig config) {
+    final effectiveAlpha = (config.color.a * config.opacity).clamp(0.0, 1.0);
+    return _WatermarkRenderConfig(
+      layout: _WatermarkLayoutConfig.fromConfig(config),
+      color: config.color.withValues(alpha: effectiveAlpha),
+      effectiveAlpha: effectiveAlpha,
+    );
+  }
+
+  final _WatermarkLayoutConfig layout;
+  final Color color;
+  final double effectiveAlpha;
+
+  bool get isVisible => layout.text.isNotEmpty && effectiveAlpha >= 0.004;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _WatermarkRenderConfig &&
+          other.layout == layout &&
+          other.color == color &&
           other.effectiveAlpha == effectiveAlpha;
 
   @override
-  int get hashCode =>
-      Object.hash(color, text, fontSize, fontFamily, gap, effectiveAlpha);
+  int get hashCode => Object.hash(layout, color, effectiveAlpha);
 }
 
 @immutable
@@ -116,15 +140,18 @@ class _WatermarkTileSnapshot {
 /// Fallback: when a tile would be excessively large, use viewport picture
 /// tiling with coarse viewport-size bucketing.
 ///
-/// The cache key excludes rotation angle because the cache is recorded in
-/// unrotated screen space and angle is applied at paint time. This keeps
-/// angle-drag interactions at full speed.
+/// The tile cache key excludes rotation angle and tint because the cache is
+/// recorded in unrotated screen space and uses a white-alpha shader tile.
+/// Angle and color/opacity are applied at paint time, which keeps drag and
+/// opacity interactions at full speed.
 class WatermarkPainterCache {
-  _WatermarkPictureConfig? _tileConfig;
+  _WatermarkLayoutConfig? _tileConfig;
   ui.Image? _tileImage;
-  Paint? _tilePaint;
+  ui.Shader? _tileShader;
+  Color? _tileTintColor;
+  Paint? _tileTintPaint;
 
-  _WatermarkPictureConfig? _fallbackConfig;
+  _WatermarkRenderConfig? _fallbackConfig;
   Size? _fallbackViewportSize;
   ui.Picture? _picture;
 
@@ -137,8 +164,8 @@ class WatermarkPainterCache {
     double scaleFactor = 1,
     Offset cameraPosition = Offset.zero,
   }) {
-    final pictureConfig = _WatermarkPictureConfig.fromConfig(config);
-    if (!pictureConfig.isVisible) {
+    final renderConfig = _WatermarkRenderConfig.fromConfig(config);
+    if (!renderConfig.isVisible) {
       return;
     }
     if (viewportSize.isEmpty) {
@@ -174,14 +201,14 @@ class WatermarkPainterCache {
       ..rotate(config.angle * math.pi / 180)
       ..translate(-center.dx, -center.dy);
 
-    final tilePaint = _resolveTilePaint(pictureConfig);
+    final tilePaint = _resolveTilePaint(renderConfig);
     if (tilePaint != null) {
       _clearFallbackPictureCache();
       canvas.drawRect(cullRect, tilePaint);
     } else {
       final picture = _resolveFallbackPicture(
         viewportSize: viewportSize,
-        pictureConfig: pictureConfig,
+        renderConfig: renderConfig,
       );
       canvas.drawPicture(picture);
     }
@@ -197,38 +224,56 @@ class WatermarkPainterCache {
     _clearFallbackPictureCache();
   }
 
-  Paint? _resolveTilePaint(_WatermarkPictureConfig pictureConfig) {
-    if (_tileConfig == pictureConfig) {
-      return _tilePaint;
+  Paint? _resolveTilePaint(_WatermarkRenderConfig renderConfig) {
+    final layoutConfig = renderConfig.layout;
+    if (_tileConfig != layoutConfig) {
+      _rebuildTileCache(layoutConfig);
     }
 
-    _clearTileCache();
-
-    final snapshot = _buildTileSnapshot(pictureConfig);
-    if (snapshot == null) {
-      // Remember failed snapshots for this config so fallback mode does not
-      // retry expensive tile creation every frame.
-      _tileConfig = pictureConfig;
+    final shader = _tileShader;
+    if (shader == null) {
       return null;
     }
 
-    final shader = ui.ImageShader(
+    final tintColor = renderConfig.color;
+    if (_tileTintPaint != null && _tileTintColor == tintColor) {
+      return _tileTintPaint;
+    }
+
+    final paint = Paint()
+      ..shader = shader
+      ..colorFilter = ColorFilter.mode(tintColor, BlendMode.srcIn);
+    _tileTintColor = tintColor;
+    _tileTintPaint = paint;
+    return paint;
+  }
+
+  void _rebuildTileCache(_WatermarkLayoutConfig layoutConfig) {
+    _clearTileCache();
+    _tileConfig = layoutConfig;
+
+    final snapshot = _buildTileSnapshot(layoutConfig);
+    if (snapshot == null) {
+      // Remember failed snapshots for this config so fallback mode does not
+      // retry expensive tile creation every frame.
+      return;
+    }
+
+    _tileImage = snapshot.image;
+    _tileShader = ui.ImageShader(
       snapshot.image,
       ui.TileMode.repeated,
       ui.TileMode.repeated,
       _identityMatrix4,
     );
-    final paint = Paint()..shader = shader;
-    _tileImage = snapshot.image;
-    _tilePaint = paint;
-    _tileConfig = pictureConfig;
-    return paint;
   }
 
   void _clearTileCache() {
     _tileImage?.dispose();
     _tileImage = null;
-    _tilePaint = null;
+    _tileShader = null;
+    _tileTintColor = null;
+    _tileTintPaint = null;
     _tileConfig = null;
   }
 
@@ -241,14 +286,14 @@ class WatermarkPainterCache {
 
   ui.Picture _resolveFallbackPicture({
     required Size viewportSize,
-    required _WatermarkPictureConfig pictureConfig,
+    required _WatermarkRenderConfig renderConfig,
   }) {
     // Snap the viewport to a coarse grid so small resize deltas
     // (for example during window drag) reuse the existing picture.
     final snapped = Size(_snap(viewportSize.width), _snap(viewportSize.height));
 
     if (_picture != null &&
-        _fallbackConfig == pictureConfig &&
+        _fallbackConfig == renderConfig &&
         _fallbackViewportSize == snapped) {
       return _picture!;
     }
@@ -256,25 +301,25 @@ class WatermarkPainterCache {
     _picture?.dispose();
     _picture = _recordFallbackPicture(
       viewportSize: snapped,
-      pictureConfig: pictureConfig,
+      renderConfig: renderConfig,
     );
-    _fallbackConfig = pictureConfig;
+    _fallbackConfig = renderConfig;
     _fallbackViewportSize = snapped;
     return _picture!;
   }
 
   static _WatermarkTileSnapshot? _buildTileSnapshot(
-    _WatermarkPictureConfig pictureConfig,
+    _WatermarkLayoutConfig layoutConfig,
   ) {
     final textPainter = TextPainter(
       text: TextSpan(
-        text: pictureConfig.text,
+        text: layoutConfig.text,
         style: TextStyle(
-          color: pictureConfig.color,
-          fontSize: pictureConfig.fontSize,
-          fontFamily: pictureConfig.fontFamily.isEmpty
+          color: _opaqueWhite,
+          fontSize: layoutConfig.fontSize,
+          fontFamily: layoutConfig.fontFamily.isEmpty
               ? null
-              : pictureConfig.fontFamily,
+              : layoutConfig.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -288,8 +333,8 @@ class WatermarkPainterCache {
       return null;
     }
 
-    final stepX = math.max(1, textWidth + pictureConfig.gap).toDouble();
-    final stepY = math.max(1, textHeight + pictureConfig.gap).toDouble();
+    final stepX = math.max(1, textWidth + layoutConfig.gap).toDouble();
+    final stepY = math.max(1, textHeight + layoutConfig.gap).toDouble();
     final tileWidth = (stepX * 2).ceil();
     final tileHeight = (stepY * 2).ceil();
 
@@ -329,7 +374,7 @@ class WatermarkPainterCache {
 
   static ui.Picture _recordFallbackPicture({
     required Size viewportSize,
-    required _WatermarkPictureConfig pictureConfig,
+    required _WatermarkRenderConfig renderConfig,
   }) {
     final layerRect = Offset.zero & viewportSize;
     final center = layerRect.center;
@@ -350,13 +395,13 @@ class WatermarkPainterCache {
 
     final textPainter = TextPainter(
       text: TextSpan(
-        text: pictureConfig.text,
+        text: renderConfig.layout.text,
         style: TextStyle(
-          color: pictureConfig.color,
-          fontSize: pictureConfig.fontSize,
-          fontFamily: pictureConfig.fontFamily.isEmpty
+          color: renderConfig.color,
+          fontSize: renderConfig.layout.fontSize,
+          fontFamily: renderConfig.layout.fontFamily.isEmpty
               ? null
-              : pictureConfig.fontFamily,
+              : renderConfig.layout.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -370,8 +415,8 @@ class WatermarkPainterCache {
       return recorder.endRecording();
     }
 
-    final stepX = math.max(1, tileWidth + pictureConfig.gap).toDouble();
-    final stepY = math.max(1, tileHeight + pictureConfig.gap).toDouble();
+    final stepX = math.max(1, tileWidth + renderConfig.layout.gap).toDouble();
+    final stepY = math.max(1, tileHeight + renderConfig.layout.gap).toDouble();
 
     final startX = cullRect.left - stepX;
     final endX = cullRect.right + stepX;

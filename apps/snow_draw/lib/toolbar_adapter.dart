@@ -74,6 +74,7 @@ class StyleToolbarAdapter {
   late SerialNumberStyleValues _serialNumberStyleValues;
   var _highlightMask = const HighlightMaskConfig();
   var _watermark = const WatermarkConfig();
+  final _watermarkPreviewNotifier = ValueNotifier<WatermarkConfig?>(null);
   var _isDisposed = false;
   var _updateScheduled = false;
   var _pendingStyleUpdate = Future<void>.value();
@@ -81,8 +82,11 @@ class StyleToolbarAdapter {
   final _pendingWatermarkOnlyCompleters = <Completer<void>>[];
   final _inFlightWatermarkOnlyCompleters = <Completer<void>>[];
   var _isDrainingWatermarkOnlyUpdates = false;
+  var _isWatermarkOnlyDrainScheduled = false;
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
+  ValueListenable<WatermarkConfig?> get watermarkPreviewListenable =>
+      _watermarkPreviewNotifier;
 
   void dispose() {
     if (_isDisposed) {
@@ -104,6 +108,7 @@ class StyleToolbarAdapter {
     _pendingWatermarkOnlyCompleters.clear();
     _inFlightWatermarkOnlyCompleters.clear();
     _pendingWatermarkOnlyUpdate = null;
+    _watermarkPreviewNotifier.dispose();
     _stateNotifier.dispose();
   }
 
@@ -415,70 +420,139 @@ class StyleToolbarAdapter {
     _pendingWatermarkOnlyUpdate = _pendingWatermarkOnlyUpdate == null
         ? update
         : _pendingWatermarkOnlyUpdate!.merge(update);
+    _syncWatermarkPreviewWithPendingUpdate();
     final completer = Completer<void>();
     _pendingWatermarkOnlyCompleters.add(completer);
-
-    if (!_isDrainingWatermarkOnlyUpdates) {
-      _isDrainingWatermarkOnlyUpdates = true;
-      unawaited(_drainWatermarkOnlyUpdates());
-    }
+    _scheduleWatermarkOnlyDrain();
     return completer.future;
   }
 
+  void _scheduleWatermarkOnlyDrain() {
+    if (_isDisposed || _isWatermarkOnlyDrainScheduled) {
+      return;
+    }
+    _isWatermarkOnlyDrainScheduled = true;
+    SchedulerBinding.instance
+      ..scheduleFrameCallback((_) {
+        _isWatermarkOnlyDrainScheduled = false;
+        if (_isDisposed) {
+          return;
+        }
+        if (_isDrainingWatermarkOnlyUpdates) {
+          if (_pendingWatermarkOnlyUpdate != null) {
+            _scheduleWatermarkOnlyDrain();
+          }
+          return;
+        }
+        unawaited(_drainWatermarkOnlyUpdates());
+      })
+      ..ensureVisualUpdate();
+  }
+
   Future<void> _drainWatermarkOnlyUpdates() async {
-    while (!_isDisposed) {
-      final update = _pendingWatermarkOnlyUpdate;
-      if (update == null) {
-        break;
-      }
+    if (_isDisposed || _isDrainingWatermarkOnlyUpdates) {
+      return;
+    }
+    final update = _pendingWatermarkOnlyUpdate;
+    if (update == null) {
+      _clearWatermarkPreviewIfSynchronized();
+      return;
+    }
 
-      final completers = List<Completer<void>>.of(
-        _pendingWatermarkOnlyCompleters,
+    final completers = List<Completer<void>>.of(
+      _pendingWatermarkOnlyCompleters,
+    );
+    _inFlightWatermarkOnlyCompleters.addAll(completers);
+    _pendingWatermarkOnlyUpdate = null;
+    _pendingWatermarkOnlyCompleters.clear();
+    _isDrainingWatermarkOnlyUpdates = true;
+
+    try {
+      await _enqueueStyleUpdate(
+        () => _applyStyleUpdateInternal(
+          watermarkColor: update.watermarkColor,
+          watermarkText: update.watermarkText,
+          watermarkFontSize: update.watermarkFontSize,
+          watermarkFontFamily: update.watermarkFontFamily,
+          watermarkAngle: update.watermarkAngle,
+          watermarkGap: update.watermarkGap,
+          watermarkOpacity: update.watermarkOpacity,
+          toolType: update.toolType,
+          historyCoalescing: update.historyCoalescing,
+        ),
       );
-      _inFlightWatermarkOnlyCompleters.addAll(completers);
-      _pendingWatermarkOnlyUpdate = null;
-      _pendingWatermarkOnlyCompleters.clear();
-
-      try {
-        await _enqueueStyleUpdate(
-          () => _applyStyleUpdateInternal(
-            watermarkColor: update.watermarkColor,
-            watermarkText: update.watermarkText,
-            watermarkFontSize: update.watermarkFontSize,
-            watermarkFontFamily: update.watermarkFontFamily,
-            watermarkAngle: update.watermarkAngle,
-            watermarkGap: update.watermarkGap,
-            watermarkOpacity: update.watermarkOpacity,
-            toolType: update.toolType,
-            historyCoalescing: update.historyCoalescing,
-          ),
-        );
-        for (final completer in completers) {
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
+      for (final completer in completers) {
+        if (!completer.isCompleted) {
+          completer.complete();
         }
-      } on Object catch (error, st) {
-        _store.context.log.configLog.error(
-          'Watermark style update failed',
-          error,
-          st,
-        );
-        for (final completer in completers) {
-          if (!completer.isCompleted) {
-            completer.completeError(error, st);
-          }
+      }
+    } on Object catch (error, st) {
+      _store.context.log.configLog.error(
+        'Watermark style update failed',
+        error,
+        st,
+      );
+      if (!_isDisposed) {
+        _watermarkPreviewNotifier.value = null;
+      }
+      for (final completer in completers) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, st);
         }
-      } finally {
-        for (final completer in completers) {
-          _inFlightWatermarkOnlyCompleters.remove(completer);
+      }
+    } finally {
+      for (final completer in completers) {
+        _inFlightWatermarkOnlyCompleters.remove(completer);
+      }
+      _isDrainingWatermarkOnlyUpdates = false;
+      if (!_isDisposed) {
+        if (_pendingWatermarkOnlyUpdate != null) {
+          _scheduleWatermarkOnlyDrain();
+        } else {
+          _clearWatermarkPreviewIfSynchronized();
         }
       }
     }
-    _isDrainingWatermarkOnlyUpdates = false;
-    if (!_isDisposed && _pendingWatermarkOnlyUpdate != null) {
-      _isDrainingWatermarkOnlyUpdates = true;
-      unawaited(_drainWatermarkOnlyUpdates());
+  }
+
+  void _syncWatermarkPreviewWithPendingUpdate() {
+    final pending = _pendingWatermarkOnlyUpdate;
+    if (pending == null) {
+      return;
+    }
+    final base =
+        _watermarkPreviewNotifier.value ??
+        _store.state.domain.document.globalElements.watermark;
+    final next = base.copyWith(
+      color: pending.watermarkColor,
+      text: pending.watermarkText,
+      fontSize: pending.watermarkFontSize,
+      fontFamily: _normalizeFontFamily(pending.watermarkFontFamily),
+      angle: pending.watermarkAngle,
+      gap: _normalizeWatermarkGap(pending.watermarkGap),
+      opacity: _clampUnit(pending.watermarkOpacity),
+    );
+    if (_watermarkPreviewNotifier.value != next) {
+      _watermarkPreviewNotifier.value = next;
+    }
+  }
+
+  void _clearWatermarkPreviewIfSynchronized() {
+    if (_isDisposed) {
+      return;
+    }
+    final preview = _watermarkPreviewNotifier.value;
+    if (preview == null) {
+      return;
+    }
+    if (_pendingWatermarkOnlyUpdate != null ||
+        _pendingWatermarkOnlyCompleters.isNotEmpty ||
+        _isDrainingWatermarkOnlyUpdates ||
+        _inFlightWatermarkOnlyCompleters.isNotEmpty) {
+      return;
+    }
+    if (_store.state.domain.document.globalElements.watermark == preview) {
+      _watermarkPreviewNotifier.value = null;
     }
   }
 
@@ -661,11 +735,13 @@ class StyleToolbarAdapter {
     final highlightMask = globals.highlightMask;
     final watermark = globals.watermark;
     if (highlightMask == _highlightMask && watermark == _watermark) {
+      _clearWatermarkPreviewIfSynchronized();
       return false;
     }
     _highlightMask = highlightMask;
     _watermark = watermark;
     _requestFontPreload(watermark.fontFamily);
+    _clearWatermarkPreviewIfSynchronized();
     return true;
   }
 

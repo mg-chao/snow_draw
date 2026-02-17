@@ -75,6 +75,7 @@ class PluginDrawCanvas extends StatefulWidget {
     this.currentToolTypeId,
     this.isSelectionToolActive = true,
     this.isEraserToolActive = false,
+    this.watermarkPreviewListenable,
     this.middlewares,
     this.customPlugins,
     this.enableDebugLogging = false,
@@ -86,6 +87,7 @@ class PluginDrawCanvas extends StatefulWidget {
   final ElementTypeId<ElementData>? currentToolTypeId;
   final bool isSelectionToolActive;
   final bool isEraserToolActive;
+  final ValueListenable<WatermarkConfig?>? watermarkPreviewListenable;
 
   /// Custom middleware (optional).
   final List<InputMiddleware>? middlewares;
@@ -122,6 +124,12 @@ class PluginDrawCanvas extends StatefulWidget {
         ),
       )
       ..add(DiagnosticsProperty<bool>('isEraserToolActive', isEraserToolActive))
+      ..add(
+        DiagnosticsProperty<ValueListenable<WatermarkConfig?>?>(
+          'watermarkPreviewListenable',
+          watermarkPreviewListenable,
+        ),
+      )
       ..add(IterableProperty<InputMiddleware>('middlewares', middlewares))
       ..add(IterableProperty<InputPlugin>('customPlugins', customPlugins))
       ..add(DiagnosticsProperty<bool>('enableDebugLogging', enableDebugLogging))
@@ -398,11 +406,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       initialState: WatermarkCanvasLayerState(
         camera: initialState.application.view.camera,
         scaleFactor: _effectiveScaleFactor(),
-        config: initialState.domain.document.globalElements.watermark,
+        config: _resolveEffectiveWatermarkConfig(initialState),
       ),
     );
     _watermarkCanvasPainter = WatermarkCanvasPainter(
       controller: _watermarkLayerController,
+    );
+    widget.watermarkPreviewListenable?.addListener(
+      _handleWatermarkPreviewChange,
     );
     _dynamicLayerSnapshotNotifier = ValueNotifier<_DynamicLayerSnapshot>(
       _createInitialDynamicLayerSnapshot(initialState),
@@ -495,6 +506,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (eraserModeChanged && !widget.isEraserToolActive) {
       _clearEraserStrokeState();
     }
+    if (oldWidget.watermarkPreviewListenable !=
+        widget.watermarkPreviewListenable) {
+      oldWidget.watermarkPreviewListenable?.removeListener(
+        _handleWatermarkPreviewChange,
+      );
+      widget.watermarkPreviewListenable?.addListener(
+        _handleWatermarkPreviewChange,
+      );
+    }
 
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
@@ -514,6 +534,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     PaintingBinding.instance.systemFonts.removeListener(
       _handleSystemFontsChange,
+    );
+    widget.watermarkPreviewListenable?.removeListener(
+      _handleWatermarkPreviewChange,
     );
     _focusNode.dispose();
     _disposeTextEditor();
@@ -2640,12 +2663,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return _cursorResolver.resolveForHitTest(hitResult);
   }
 
+  void _handleWatermarkPreviewChange() {
+    _syncWatermarkLayerState(widget.store.state);
+  }
+
+  WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
+      widget.watermarkPreviewListenable?.value ??
+      state.domain.document.globalElements.watermark;
+
   void _syncWatermarkLayerState(DrawState state, {double? scaleFactor}) {
     _watermarkLayerController.update(
       WatermarkCanvasLayerState(
         camera: state.application.view.camera,
         scaleFactor: scaleFactor ?? _effectiveScaleFactor(),
-        config: state.domain.document.globalElements.watermark,
+        config: _resolveEffectiveWatermarkConfig(state),
       ),
     );
   }
@@ -3544,14 +3575,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
+    if (previousState != null &&
+        _isWatermarkOnlyStateChange(previousState, state)) {
+      _syncWatermarkLayerState(state);
+      return;
+    }
+
     _syncTextEditingOverlayState(state);
     _syncFreeDrawPreviewLayerState(state);
     _syncWatermarkLayerState(state);
-
-    if (previousState != null &&
-        _isWatermarkOnlyStateChange(previousState, state)) {
-      return;
-    }
     // Keystrokes in text editing mutate only the draft payload and trigger
     // very high-frequency state updates. Skip cursor hit-testing work and
     // canvas tree rebuilds; the dedicated text overlay updates itself via

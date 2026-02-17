@@ -62,6 +62,46 @@ void main() {
     },
   );
 
+  testWidgets(
+    'preview listenable repaints watermark overlay without store mutation',
+    (tester) async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+      final store = DefaultDrawStore(context: context);
+      final preview = ValueNotifier<WatermarkConfig?>(null);
+      addTearDown(store.dispose);
+      addTearDown(preview.dispose);
+
+      await _pumpCanvas(
+        tester: tester,
+        store: store,
+        watermarkPreviewListenable: preview,
+      );
+
+      final staticBefore = _staticPainter(tester);
+      final dynamicBefore = _dynamicPainter(tester);
+      final watermarkBefore = _watermarkPainter(tester);
+
+      preview.value = const WatermarkConfig(text: 'LIVE', opacity: 0.25);
+      await tester.pump();
+
+      final staticAfter = _staticPainter(tester);
+      final dynamicAfter = _dynamicPainter(tester);
+      final watermarkAfter = _watermarkPainter(tester);
+
+      expect(identical(staticBefore, staticAfter), isTrue);
+      expect(identical(dynamicBefore, dynamicAfter), isTrue);
+      expect(identical(watermarkBefore, watermarkAfter), isTrue);
+      expect(watermarkAfter.controller.state.config.text, 'LIVE');
+      expect(watermarkAfter.controller.state.isVisible, isTrue);
+      expect(
+        store.state.domain.document.globalElements.watermark.text,
+        isEmpty,
+      );
+    },
+  );
+
   testWidgets('watermark visibility toggles through layer controller '
       'without scene rebuild', (tester) async {
     final registry = DefaultElementRegistry();
@@ -151,6 +191,7 @@ void main() {
 Future<void> _pumpCanvas({
   required WidgetTester tester,
   required DrawStore store,
+  ValueNotifier<WatermarkConfig?>? watermarkPreviewListenable,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -159,6 +200,7 @@ Future<void> _pumpCanvas({
           size: const Size(320, 240),
           store: store,
           isSelectionToolActive: false,
+          watermarkPreviewListenable: watermarkPreviewListenable,
         ),
       ),
     ),
