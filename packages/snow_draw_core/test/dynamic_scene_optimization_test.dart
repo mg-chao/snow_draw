@@ -49,10 +49,7 @@ void main() {
         snapGuides: const [],
       );
 
-      final plan = resolveDynamicSceneOptimizationPlan(
-        view: view,
-        activeToolTypeId: RectangleData.typeIdToken,
-      );
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'rect-1'});
@@ -91,10 +88,7 @@ void main() {
           snapGuides: const [],
         );
 
-        final plan = resolveDynamicSceneOptimizationPlan(
-          view: view,
-          activeToolTypeId: RectangleData.typeIdToken,
-        );
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
         expect(plan, isNull);
       },
@@ -133,10 +127,7 @@ void main() {
           snapGuides: const [],
         );
 
-        final plan = resolveDynamicSceneOptimizationPlan(
-          view: view,
-          activeToolTypeId: RectangleData.typeIdToken,
-        );
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
         expect(plan, isNotNull);
         expect(plan!.optimizedElementIds, {'rect-1'});
@@ -176,14 +167,71 @@ void main() {
           snapGuides: const [],
         );
 
-        final plan = resolveDynamicSceneOptimizationPlan(
-          view: view,
-          activeToolTypeId: SerialNumberData.typeIdToken,
-        );
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
         expect(plan, isNotNull);
         expect(plan!.optimizedElementIds, {'serial-1', 'text-1'});
         expect(plan.staticHiddenElementIds, {'serial-1', 'text-1'});
+      },
+    );
+
+    test(
+      'keeps serial optimization active when preview map exceeds generic limit',
+      () {
+        final text = _text(
+          id: 'text-1',
+          rect: const DrawRect(minX: 140, minY: 20, maxX: 260, maxY: 80),
+          zIndex: 0,
+        );
+        final serial = _serial(
+          id: 'serial-1',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 100, maxY: 100),
+          zIndex: 1,
+          textElementId: 'text-1',
+        );
+        final extras = List<ElementState>.generate(
+          28,
+          (index) => _rectangle(
+            id: 'extra-$index',
+            rect: DrawRect(
+              minX: 20 + index * 14,
+              minY: 140,
+              maxX: 32 + index * 14,
+              maxY: 152,
+            ),
+            zIndex: 2 + index,
+          ),
+        );
+        final state = _editingState(
+          elements: [text, serial, ...extras],
+          selectedIds: {'serial-1'},
+        );
+        final serialPreview = serial.copyWith(
+          rect: const DrawRect(minX: 40, minY: 40, maxX: 120, maxY: 120),
+        );
+        final previewElements = <String, ElementState>{
+          'serial-1': serialPreview,
+          for (final extra in extras)
+            extra.id: extra.copyWith(
+              rect: extra.rect.translate(const DrawPoint(x: 1, y: 0)),
+            ),
+        };
+        final view = DrawStateView.withPreview(
+          state: state,
+          previewElementsById: previewElements,
+          effectiveSelection: EffectiveSelection(
+            bounds: serialPreview.rect,
+            center: serialPreview.rect.center,
+            rotation: serialPreview.rotation,
+            hasSelection: true,
+          ),
+          snapGuides: const [],
+        );
+
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
+
+        expect(plan, isNotNull);
+        expect(plan!.optimizedElementIds, {'serial-1', 'text-1'});
       },
     );
 
@@ -220,10 +268,7 @@ void main() {
           snapGuides: const [],
         );
 
-        final plan = resolveDynamicSceneOptimizationPlan(
-          view: view,
-          activeToolTypeId: RectangleData.typeIdToken,
-        );
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
         expect(plan, isNotNull);
         expect(plan!.optimizedElementIds, {'serial-1', 'text-1'});
@@ -263,10 +308,7 @@ void main() {
         snapGuides: const [],
       );
 
-      final plan = resolveDynamicSceneOptimizationPlan(
-        view: view,
-        activeToolTypeId: TextData.typeIdToken,
-      );
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'text-1'});
@@ -295,10 +337,7 @@ void main() {
         snapGuides: const [],
       );
 
-      final plan = resolveDynamicSceneOptimizationPlan(
-        view: view,
-        activeToolTypeId: TextData.typeIdToken,
-      );
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
       expect(plan, isNull);
     });
@@ -327,10 +366,7 @@ void main() {
         snapGuides: const [],
       );
 
-      final plan = resolveDynamicSceneOptimizationPlan(
-        view: view,
-        activeToolTypeId: TextData.typeIdToken,
-      );
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
       expect(plan, isNull);
     });
@@ -364,10 +400,7 @@ void main() {
         snapGuides: const [],
       );
 
-      final plan = resolveDynamicSceneOptimizationPlan(
-        view: view,
-        activeToolTypeId: TextData.typeIdToken,
-      );
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
       expect(plan, isNull);
     });

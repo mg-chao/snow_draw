@@ -1,8 +1,6 @@
 import 'package:meta/meta.dart';
 
 import '../../draw/edit/arrow/arrow_point_operation.dart';
-import '../../draw/elements/core/element_data.dart';
-import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
@@ -12,6 +10,7 @@ import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
+import 'serial_number_interaction_classifier.dart';
 
 const _maxLocalizedPreviewElementCount = 24;
 
@@ -45,7 +44,6 @@ class DynamicSceneOptimizationPlan {
 /// layer split.
 DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   required DrawStateView view,
-  required ElementTypeId<ElementData>? activeToolTypeId,
 }) {
   final textEditingPlan = _resolveTextEditingOptimizationPlan(view);
   if (textEditingPlan != null) {
@@ -57,10 +55,7 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
     return linePointPlan;
   }
 
-  final serialPlan = _resolveSerialNumberOptimizationPlan(
-    view: view,
-    activeToolTypeId: activeToolTypeId,
-  );
+  final serialPlan = _resolveSerialNumberOptimizationPlan(view);
   if (serialPlan != null) {
     return serialPlan;
   }
@@ -139,21 +134,26 @@ DynamicSceneOptimizationPlan? _resolveLinePointOptimizationPlan(
   return DynamicSceneOptimizationPlan.single(elementId);
 }
 
-DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan({
-  required DrawStateView view,
-  required ElementTypeId<ElementData>? activeToolTypeId,
-}) {
-  if (activeToolTypeId != SerialNumberData.typeIdToken) {
-    return null;
-  }
-
+DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
+  DrawStateView view,
+) {
   final interaction = view.state.application.interaction;
-  if (interaction is! EditingState || view.selectedIds.length != 1) {
+  final document = view.state.domain.document;
+  if (!SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+    interaction: interaction,
+    document: document,
+  )) {
+    return null;
+  }
+  if (interaction is! EditingState) {
     return null;
   }
 
-  final selectedId = view.selectedIds.first;
-  final document = view.state.domain.document;
+  final selectedId = interaction.context.selectedIdsAtStart.first;
+  if (view.selectedIds.length != 1 || !view.selectedIds.contains(selectedId)) {
+    return null;
+  }
+
   final element = document.getElementById(selectedId);
   final preview = view.previewElementsById[selectedId];
   if (element == null ||

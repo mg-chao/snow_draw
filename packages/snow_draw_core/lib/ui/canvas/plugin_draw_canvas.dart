@@ -56,6 +56,8 @@ import 'highlight_mask_visibility.dart';
 import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
+import 'serial_number_interaction_classifier.dart';
+import 'serial_number_interaction_state_change.dart';
 import 'static_canvas_painter.dart';
 import 'text_editing_state_change.dart';
 import 'watermark_canvas_painter.dart';
@@ -533,10 +535,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final optimizationPlan =
         promoteEraserPreviewToDynamicLayer || interaction is TextEditingState
         ? null
-        : resolveDynamicSceneOptimizationPlan(
-            view: stateView,
-            activeToolTypeId: widget.currentToolTypeId,
-          );
+        : resolveDynamicSceneOptimizationPlan(view: stateView);
     final optimizedDynamicElementIds = promoteEraserPreviewToDynamicLayer
         ? const <String>{}
         : optimizationPlan?.optimizedElementIds ?? const <String>{};
@@ -1239,11 +1238,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   bool _shouldFrameCoalescePointerMove() {
-    final interaction = widget.store.state.application.interaction;
+    final state = widget.store.state;
+    final interaction = state.application.interaction;
     return PointerMoveDispatchPolicy.shouldCoalesce(
       interaction: interaction,
       currentToolTypeId: widget.currentToolTypeId,
       isShiftPressed: _isShiftPressed,
+      isLowLatencySerialInteraction:
+          SerialNumberInteractionClassifier.isLowLatencySerialInteraction(
+            interaction: interaction,
+            document: state.domain.document,
+          ),
     );
   }
 
@@ -3335,6 +3340,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     if (previousState != null &&
+        isSerialNumberInteractionMutationOnly(
+          previous: previousState,
+          next: state,
+        )) {
+      _handleSerialNumberInteractionMutation(state);
+      return;
+    }
+    if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
       final position = _lastPointerPosition;
       if (position != null && _isPointerInside) {
@@ -3400,6 +3413,22 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(cursor);
     final hoverStateChanged = _clearHoverState();
     // Rebuild unconditionally so the canvas reflects the new state.
+    if (!hoverStateChanged) {
+      setState(() {});
+    }
+  }
+
+  void _handleSerialNumberInteractionMutation(DrawState state) {
+    final cursor = _resolveCursorForState(state, _lastPointerPosition);
+    if (!mounted) {
+      _cursor = cursor;
+      _hoveredSelectionElementId = null;
+      _hoveredBindingElementId = null;
+      _hoveredArrowHandle = null;
+      return;
+    }
+    _updateCursorIfChanged(cursor);
+    final hoverStateChanged = _clearHoverState();
     if (!hoverStateChanged) {
       setState(() {});
     }

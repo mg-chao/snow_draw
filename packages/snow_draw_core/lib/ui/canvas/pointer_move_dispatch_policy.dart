@@ -9,8 +9,9 @@ import '../../draw/models/interaction_state.dart';
 /// Policy object for pointer-move dispatch behavior on the canvas.
 ///
 /// High-frequency interactions are frame-coalesced by default to keep expensive
-/// operations responsive. Lightweight line interactions bypass coalescing so
-/// they can consume raw pointer updates and reach the display refresh limit.
+/// operations responsive. Lightweight interactions (line point drags, serial
+/// low-latency sessions) bypass coalescing so they can consume raw pointer
+/// updates and reach the display refresh limit.
 class PointerMoveDispatchPolicy {
   const PointerMoveDispatchPolicy._();
 
@@ -19,8 +20,10 @@ class PointerMoveDispatchPolicy {
     required InteractionState interaction,
     required ElementTypeId<ElementData>? currentToolTypeId,
     required bool isShiftPressed,
+    bool isLowLatencySerialInteraction = false,
   }) {
-    if (_isLowLatencyLineInteraction(interaction)) {
+    if (_isLowLatencyLineInteraction(interaction) ||
+        isLowLatencySerialInteraction) {
       return false;
     }
 

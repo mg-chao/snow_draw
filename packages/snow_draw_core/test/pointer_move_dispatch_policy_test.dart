@@ -6,10 +6,12 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -110,6 +112,62 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'serial-number creation bypasses frame coalescing in low-latency mode',
+      () {
+        final interaction = CreatingState(
+          element: const ElementState(
+            id: 'serial',
+            rect: DrawRect(maxX: 1, maxY: 1),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: SerialNumberData(),
+          ),
+          startPosition: const DrawPoint(x: 10, y: 10),
+          currentRect: const DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
+        );
+
+        expect(
+          PointerMoveDispatchPolicy.shouldCoalesce(
+            interaction: interaction,
+            currentToolTypeId: SerialNumberData.typeIdToken,
+            isShiftPressed: false,
+            isLowLatencySerialInteraction: true,
+          ),
+          isFalse,
+        );
+      },
+    );
+
+    test(
+      'single serial-number edit bypasses frame coalescing in low-latency mode',
+      () {
+        const interaction = EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'edit_serial',
+          context: _TestEditContext(
+            startPosition: DrawPoint(x: 10, y: 10),
+            startBounds: DrawRect(minX: 8, minY: 8, maxX: 40, maxY: 40),
+            selectedIdsAtStart: {'serial'},
+            selectionVersion: 1,
+            elementsVersion: 1,
+          ),
+          currentTransform: MoveTransform.zero,
+        );
+
+        expect(
+          PointerMoveDispatchPolicy.shouldCoalesce(
+            interaction: interaction,
+            currentToolTypeId: SerialNumberData.typeIdToken,
+            isShiftPressed: false,
+            isLowLatencySerialInteraction: true,
+          ),
+          isFalse,
+        );
+      },
+    );
   });
 
   group('PointerMoveDispatchPolicy.shouldBatchFreeDrawSamples', () {
@@ -173,3 +231,13 @@ ElementState _lineElement({required String id}) => ElementState(
   zIndex: 0,
   data: const LineData(),
 );
+
+class _TestEditContext extends EditContext {
+  const _TestEditContext({
+    required super.startPosition,
+    required super.startBounds,
+    required super.selectedIdsAtStart,
+    required super.selectionVersion,
+    required super.elementsVersion,
+  });
+}
