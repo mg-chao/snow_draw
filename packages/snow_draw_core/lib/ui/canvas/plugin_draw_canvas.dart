@@ -197,6 +197,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _textOverlayNotifier = ValueNotifier<_TextEditingOverlaySnapshot?>(
     null,
   );
+  late final ValueNotifier<_DynamicLayerSnapshot> _dynamicLayerSnapshotNotifier;
   late final FrameAlignedEventDispatcher<_PendingTextDraftSync>
   _textDraftDispatcher;
   _PendingTextDraftSync? _pendingTextDraftSync;
@@ -403,6 +404,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _watermarkCanvasPainter = WatermarkCanvasPainter(
       controller: _watermarkLayerController,
     );
+    _dynamicLayerSnapshotNotifier = ValueNotifier<_DynamicLayerSnapshot>(
+      _createInitialDynamicLayerSnapshot(initialState),
+    );
 
     // Preload GPU shaders for optimal first-frame performance.
     unawaited(GridShaderManager.instance.load());
@@ -458,6 +462,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cachedInputSelectionConfig = null;
         _cachedInputSelectionScale = null;
         _syncTextEditingOverlayState(widget.store.state);
+        _dynamicLayerSnapshotNotifier.value =
+            _createInitialDynamicLayerSnapshot(widget.store.state);
 
         _stateUnsubscribe = widget.store.listen(
           _handleStateChange,
@@ -514,6 +520,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
     _textOverlayNotifier.dispose();
+    _dynamicLayerSnapshotNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
     _freeDrawPreviewLayerController.dispose();
     _watermarkLayerController.dispose();
@@ -528,136 +535,32 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   Widget build(BuildContext context) {
     final stateView = _buildStateView(widget.store.state);
-    final config = widget.store.config;
     final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
     _syncWatermarkLayerState(stateView.state, scaleFactor: scaleFactor);
-    final elementRegistry = widget.store.context.elementRegistry;
     final locale = Localizations.maybeLocaleOf(context);
-    final camera = stateView.state.application.view.camera;
-    final interaction = stateView.state.application.interaction;
     final textOverlay = _buildTextEditorOverlay(
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final promoteEraserPreviewToDynamicLayer =
-        widget.isEraserToolActive &&
-        _pendingErasePreviewElementsById.isNotEmpty;
-    final optimizationPlan =
-        promoteEraserPreviewToDynamicLayer || interaction is TextEditingState
-        ? null
-        : resolveDynamicSceneOptimizationPlan(view: stateView);
-    final optimizedDynamicElementIds = promoteEraserPreviewToDynamicLayer
-        ? const <String>{}
-        : optimizationPlan?.optimizedElementIds ?? const <String>{};
-    final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
-        ? _resolveDynamicLayerStartIndex(stateView)
-        : null;
-    final dynamicLayerStartIndex = promoteEraserPreviewToDynamicLayer
-        ? 0
-        : baseDynamicLayerStartIndex;
-
-    final baseStaticPreviewElements = optimizedDynamicElementIds.isEmpty
-        ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
-        : _previewElementsForStaticOptimizedScene(
-            stateView,
-            optimizationPlan!.staticHiddenElementIds,
-          );
-    final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
-        ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
-        : _previewElementsForDynamicOptimizedScene(
-            stateView,
-            optimizationPlan!.optimizedElementIds,
-          );
-
-    late final Map<String, ElementState> staticPreviewElements;
-    late final Map<String, ElementState> dynamicPreviewElements;
-    if (promoteEraserPreviewToDynamicLayer) {
-      final eraserPreviewElements = _snapshotPendingEraserPreviewElements();
-      final wholeScenePreviewElements = _mergePreviewElements(
-        basePreviewElements: baseStaticPreviewElements,
-        overridePreviewElements: baseDynamicPreviewElements,
-      );
-      staticPreviewElements = const <String, ElementState>{};
-      dynamicPreviewElements = _mergePreviewElements(
-        basePreviewElements: wholeScenePreviewElements,
-        overridePreviewElements: eraserPreviewElements,
-      );
-    } else {
-      staticPreviewElements = baseStaticPreviewElements;
-      dynamicPreviewElements = baseDynamicPreviewElements;
-    }
+    final layerScene = _resolveCanvasLayerSceneSnapshot(stateView);
     final eraserCursorOverlay = _buildEraserCursorOverlay();
-    final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final hasFreeDrawPreview =
-        _freeDrawPreviewLayerController.renderKey.hasPreview;
-    final hasHighlights = stateView.highlightMaskScene.hasHighlights;
-    final hasDynamicHighlights =
-        stateView.highlightMaskScene.hasDynamicHighlights;
-    final globalElements = stateView.globalElements;
-    final highlightMask = globalElements.highlightMask;
-    final ownsWholeScene = dynamicLayerStartIndex == 0;
-    final hasDynamicContent =
-        dynamicLayerStartIndex != null ||
-        creatingSnapshot != null ||
-        dynamicPreviewElements.isNotEmpty ||
-        hasFreeDrawPreview;
-    final highlightMaskLayer = resolveHighlightMaskLayer(
-      hasHighlights: hasHighlights,
-      hasDynamicContent: hasDynamicContent,
-      hasDynamicHighlights: hasDynamicHighlights,
-      config: highlightMask,
-    );
-    final textRenderingCacheRevision =
-        textRenderingCacheRevisionListenable.value;
 
     // Build precise render keys for each canvas layer.
-    final staticRenderKey = StaticCanvasRenderKey(
-      documentVersion: stateView.state.domain.document.elementsVersion,
-      textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: camera,
-      previewElementsById: staticPreviewElements,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      skipBaseElementScene: ownsWholeScene,
+    final staticRenderKey = _buildStaticRenderKey(
+      stateView: stateView,
       scaleFactor: scaleFactor,
-      canvasConfig: config.canvas,
-      gridConfig: config.grid,
-      highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: highlightMask,
-      elementRegistry: elementRegistry,
-      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      scene: layerScene,
       locale: locale,
     );
-
-    final dynamicRenderKey = DynamicCanvasRenderKey(
-      creatingElement: creatingSnapshot,
-      effectiveSelection: stateView.effectiveSelection,
-      boxSelectionBounds: _extractBoxSelectionBounds(stateView),
-      selectedIds: stateView.selectedIds,
-      hoveredElementId: _hoveredSelectionElementId,
-      hoveredBindingElementId: _hoveredBindingElementId,
-      hoveredArrowHandle: _hoveredArrowHandle,
-      activeArrowHandle: _resolveActiveArrowHandle(stateView),
-      arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
-      hoverSelectionConfig: _resolveHoverSelectionConfig(),
-      snapGuides: stateView.snapGuides,
-      documentVersion: stateView.state.domain.document.elementsVersion,
-      textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: camera,
-      previewElementsById: dynamicPreviewElements,
-      optimizedDynamicElementIds: optimizedDynamicElementIds,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      rendersWholeElementScene: ownsWholeScene,
-      scaleFactor: scaleFactor,
+    final dynamicRenderKey = _buildDynamicRenderKey(
+      stateView: stateView,
       selectionConfig: selectionConfig,
-      boxSelectionConfig: config.boxSelection,
-      snapConfig: config.snap,
-      highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: highlightMask,
-      elementRegistry: elementRegistry,
-      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      scaleFactor: scaleFactor,
+      scene: layerScene,
       locale: locale,
     );
+    _setDynamicLayerSnapshot(stateView: stateView, renderKey: dynamicRenderKey);
 
     final paintStack = Listener(
       onPointerDown: _handlePointerDown,
@@ -684,12 +587,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             ),
           ),
           RepaintBoundary(
-            child: CustomPaint(
-              painter: DynamicCanvasPainter(
-                renderKey: dynamicRenderKey,
-                stateView: stateView,
+            child: ValueListenableBuilder<_DynamicLayerSnapshot>(
+              valueListenable: _dynamicLayerSnapshotNotifier,
+              builder: (context, snapshot, _) => CustomPaint(
+                painter: DynamicCanvasPainter(
+                  renderKey: snapshot.renderKey,
+                  stateView: snapshot.stateView,
+                ),
+                size: widget.size,
               ),
-              size: widget.size,
             ),
           ),
           RepaintBoundary(
@@ -2809,6 +2715,189 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return nextView;
   }
 
+  _CanvasLayerSceneSnapshot _resolveCanvasLayerSceneSnapshot(
+    DrawStateView stateView,
+  ) {
+    final interaction = stateView.state.application.interaction;
+    final promoteEraserPreviewToDynamicLayer =
+        widget.isEraserToolActive &&
+        _pendingErasePreviewElementsById.isNotEmpty;
+    final optimizationPlan =
+        promoteEraserPreviewToDynamicLayer || interaction is TextEditingState
+        ? null
+        : resolveDynamicSceneOptimizationPlan(view: stateView);
+    final optimizedDynamicElementIds = promoteEraserPreviewToDynamicLayer
+        ? const <String>{}
+        : optimizationPlan?.optimizedElementIds ?? const <String>{};
+    final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
+        ? _resolveDynamicLayerStartIndex(stateView)
+        : null;
+    final dynamicLayerStartIndex = promoteEraserPreviewToDynamicLayer
+        ? 0
+        : baseDynamicLayerStartIndex;
+    final baseStaticPreviewElements = optimizedDynamicElementIds.isEmpty
+        ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
+        : _previewElementsForStaticOptimizedScene(
+            stateView,
+            optimizationPlan!.staticHiddenElementIds,
+          );
+    final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
+        ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
+        : _previewElementsForDynamicOptimizedScene(
+            stateView,
+            optimizationPlan!.optimizedElementIds,
+          );
+
+    late final Map<String, ElementState> staticPreviewElements;
+    late final Map<String, ElementState> dynamicPreviewElements;
+    if (promoteEraserPreviewToDynamicLayer) {
+      final eraserPreviewElements = _snapshotPendingEraserPreviewElements();
+      final wholeScenePreviewElements = _mergePreviewElements(
+        basePreviewElements: baseStaticPreviewElements,
+        overridePreviewElements: baseDynamicPreviewElements,
+      );
+      staticPreviewElements = const <String, ElementState>{};
+      dynamicPreviewElements = _mergePreviewElements(
+        basePreviewElements: wholeScenePreviewElements,
+        overridePreviewElements: eraserPreviewElements,
+      );
+    } else {
+      staticPreviewElements = baseStaticPreviewElements;
+      dynamicPreviewElements = baseDynamicPreviewElements;
+    }
+
+    final creatingSnapshot = _extractCreatingSnapshot(stateView);
+    final hasFreeDrawPreview =
+        _freeDrawPreviewLayerController.renderKey.hasPreview;
+    final globalElements = stateView.globalElements;
+    final highlightMask = globalElements.highlightMask;
+    final dynamicLayerOwnsWholeScene = dynamicLayerStartIndex == 0;
+    final hasDynamicContent =
+        dynamicLayerStartIndex != null ||
+        creatingSnapshot != null ||
+        dynamicPreviewElements.isNotEmpty ||
+        hasFreeDrawPreview;
+    final highlightMaskLayer = resolveHighlightMaskLayer(
+      hasHighlights: stateView.highlightMaskScene.hasHighlights,
+      hasDynamicContent: hasDynamicContent,
+      hasDynamicHighlights: stateView.highlightMaskScene.hasDynamicHighlights,
+      config: highlightMask,
+    );
+
+    return _CanvasLayerSceneSnapshot(
+      staticPreviewElements: staticPreviewElements,
+      dynamicPreviewElements: dynamicPreviewElements,
+      optimizedDynamicElementIds: optimizedDynamicElementIds,
+      dynamicLayerStartIndex: dynamicLayerStartIndex,
+      dynamicLayerOwnsWholeScene: dynamicLayerOwnsWholeScene,
+      creatingSnapshot: creatingSnapshot,
+      highlightMaskLayer: highlightMaskLayer,
+      highlightMaskConfig: highlightMask,
+      textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
+    );
+  }
+
+  StaticCanvasRenderKey _buildStaticRenderKey({
+    required DrawStateView stateView,
+    required double scaleFactor,
+    required _CanvasLayerSceneSnapshot scene,
+    required Locale? locale,
+  }) => StaticCanvasRenderKey(
+    documentVersion: stateView.state.domain.document.elementsVersion,
+    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    camera: stateView.state.application.view.camera,
+    previewElementsById: scene.staticPreviewElements,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    skipBaseElementScene: scene.dynamicLayerOwnsWholeScene,
+    scaleFactor: scaleFactor,
+    canvasConfig: widget.store.config.canvas,
+    gridConfig: widget.store.config.grid,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    elementRegistry: widget.store.context.elementRegistry,
+    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _buildDynamicRenderKey({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required _CanvasLayerSceneSnapshot scene,
+    required Locale? locale,
+  }) => DynamicCanvasRenderKey(
+    creatingElement: scene.creatingSnapshot,
+    effectiveSelection: stateView.effectiveSelection,
+    boxSelectionBounds: _extractBoxSelectionBounds(stateView),
+    selectedIds: stateView.selectedIds,
+    hoveredElementId: _hoveredSelectionElementId,
+    hoveredBindingElementId: _hoveredBindingElementId,
+    hoveredArrowHandle: _hoveredArrowHandle,
+    activeArrowHandle: _resolveActiveArrowHandle(stateView),
+    arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
+    hoverSelectionConfig: _resolveHoverSelectionConfig(),
+    snapGuides: stateView.snapGuides,
+    documentVersion: stateView.state.domain.document.elementsVersion,
+    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    camera: stateView.state.application.view.camera,
+    previewElementsById: scene.dynamicPreviewElements,
+    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
+    scaleFactor: scaleFactor,
+    selectionConfig: selectionConfig,
+    boxSelectionConfig: widget.store.config.boxSelection,
+    snapConfig: widget.store.config.snap,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    elementRegistry: widget.store.context.elementRegistry,
+    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+    locale: locale,
+  );
+
+  _DynamicLayerSnapshot _createInitialDynamicLayerSnapshot(DrawState state) {
+    final stateView = _buildStateView(state);
+    final scene = _resolveCanvasLayerSceneSnapshot(stateView);
+    final renderKey = _buildDynamicRenderKey(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: _effectiveScaleFactor(),
+      scene: scene,
+      locale: null,
+    );
+    return _DynamicLayerSnapshot(stateView: stateView, renderKey: renderKey);
+  }
+
+  void _setDynamicLayerSnapshot({
+    required DrawStateView stateView,
+    required DynamicCanvasRenderKey renderKey,
+  }) {
+    final nextSnapshot = _DynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: renderKey,
+    );
+    if (_dynamicLayerSnapshotNotifier.value == nextSnapshot) {
+      return;
+    }
+    _dynamicLayerSnapshotNotifier.value = nextSnapshot;
+  }
+
+  void _refreshDynamicLayerSnapshotForSerialInteraction(DrawState state) {
+    final stateView = _buildStateView(state);
+    final scene = _resolveCanvasLayerSceneSnapshot(stateView);
+    final locale =
+        Localizations.maybeLocaleOf(context) ??
+        _dynamicLayerSnapshotNotifier.value.renderKey.locale;
+    final renderKey = _buildDynamicRenderKey(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: _effectiveScaleFactor(),
+      scene: scene,
+      locale: locale,
+    );
+    _setDynamicLayerSnapshot(stateView: stateView, renderKey: renderKey);
+  }
+
   Widget _buildTextEditorOverlay({
     required double scaleFactor,
     Locale? locale,
@@ -3562,7 +3651,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(cursor);
     final hoverStateChanged = _clearHoverState();
     if (!hoverStateChanged) {
-      setState(() {});
+      _refreshDynamicLayerSnapshotForSerialInteraction(state);
     }
   }
 
@@ -3679,6 +3768,52 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
+}
+
+@immutable
+class _CanvasLayerSceneSnapshot {
+  const _CanvasLayerSceneSnapshot({
+    required this.staticPreviewElements,
+    required this.dynamicPreviewElements,
+    required this.optimizedDynamicElementIds,
+    required this.dynamicLayerStartIndex,
+    required this.dynamicLayerOwnsWholeScene,
+    required this.creatingSnapshot,
+    required this.highlightMaskLayer,
+    required this.highlightMaskConfig,
+    required this.textRenderingCacheRevision,
+  });
+
+  final Map<String, ElementState> staticPreviewElements;
+  final Map<String, ElementState> dynamicPreviewElements;
+  final Set<String> optimizedDynamicElementIds;
+  final int? dynamicLayerStartIndex;
+  final bool dynamicLayerOwnsWholeScene;
+  final CreatingElementSnapshot? creatingSnapshot;
+  final HighlightMaskLayer highlightMaskLayer;
+  final HighlightMaskConfig highlightMaskConfig;
+  final int textRenderingCacheRevision;
+}
+
+@immutable
+class _DynamicLayerSnapshot {
+  const _DynamicLayerSnapshot({
+    required this.stateView,
+    required this.renderKey,
+  });
+
+  final DrawStateView stateView;
+  final DynamicCanvasRenderKey renderKey;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _DynamicLayerSnapshot &&
+          identical(other.stateView, stateView) &&
+          other.renderKey == renderKey;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
 }
 
 @immutable
