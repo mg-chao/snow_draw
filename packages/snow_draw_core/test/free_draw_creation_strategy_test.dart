@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 
 void main() {
@@ -38,11 +39,80 @@ void main() {
         final mode = update.creationMode as FreeDrawCreationMode;
         expect(mode.revision, 1);
         expect(mode.worldPoints, isNotNull);
-        expect(mode.previewPath, isNotNull);
+        expect(mode.previewPath, isNull);
         expect(update.rect.maxX, greaterThan(creatingState.currentRect.maxX));
         expect(update.rect.maxY, greaterThan(creatingState.currentRect.maxY));
       },
     );
+
+    test('non-solid strokes keep incremental preview path', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData(strokeStyle: StrokeStyle.dashed);
+      const start = DrawPoint(x: 10, y: 10);
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      final creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      final update = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 40, y: 25),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final mode = update.creationMode as FreeDrawCreationMode;
+      expect(mode.previewPath, isNotNull);
+      expect(mode.revision, 1);
+    });
+
+    test('solid updates advance revision even when bounds stay unchanged', () {
+      const strategy = FreeDrawCreationStrategy();
+      const data = FreeDrawData();
+      const start = DrawPoint.zero;
+
+      final startResult = strategy.start(data: data, startPosition: start);
+      var creatingState = _toCreatingState(
+        result: startResult,
+        startPosition: start,
+      );
+
+      final firstUpdate = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 100, y: 100),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final firstMode = firstUpdate.creationMode as FreeDrawCreationMode;
+
+      creatingState = creatingState.copyWith(
+        element: creatingState.element.copyWith(data: firstUpdate.data),
+        currentRect: firstUpdate.rect,
+        creationMode: firstUpdate.creationMode,
+      );
+
+      final secondUpdate = strategy.update(
+        state: DrawState(),
+        config: DrawConfig(),
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 20, y: 20),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final secondMode = secondUpdate.creationMode as FreeDrawCreationMode;
+      expect(secondUpdate.rect, firstUpdate.rect);
+      expect(secondMode.revision, firstMode.revision + 1);
+    });
 
     test('sub-threshold updates keep creation mode stable', () {
       const strategy = FreeDrawCreationStrategy();

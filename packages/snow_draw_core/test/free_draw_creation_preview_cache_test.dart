@@ -42,6 +42,26 @@ void main() {
       expect(cache.processedPointCount, points.length);
     });
 
+    test('sync compacts old sealed segments to keep draw calls bounded', () {
+      final cache = FreeDrawCreationPreviewCache();
+      final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
+      final maxSegments =
+          FreeDrawCreationPreviewCache.maxSealedSegmentCountForTest;
+      final compactionBatch =
+          FreeDrawCreationPreviewCache.compactionBatchSizeForTest;
+      final points = _buildPoints(chunkSize * (maxSegments + compactionBatch));
+
+      cache.sync(
+        elementId: 'stroke-compaction',
+        points: points,
+        signature: _signature(strokeWidth: 4),
+        strokePaint: _strokePaint(strokeWidth: 4),
+      );
+
+      expect(cache.processedPointCount, points.length);
+      expect(cache.sealedSegmentCount, lessThanOrEqualTo(maxSegments));
+    });
+
     test('sync resets when point history rewinds', () {
       final cache = FreeDrawCreationPreviewCache();
       final initial = _buildPoints(64);

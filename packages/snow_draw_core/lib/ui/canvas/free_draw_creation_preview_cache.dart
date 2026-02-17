@@ -44,6 +44,8 @@ class FreeDrawCreationPreviewCache {
   static const _segmentScanThreshold = 32;
   static const _indexTileSize = 512.0;
   static const _maxTileToSegmentRatio = 8;
+  static const _maxSealedSegmentCount = 48;
+  static const _compactionBatchSize = 12;
   static const _minCullPadding = 1.0;
 
   String? _elementId;
@@ -70,6 +72,12 @@ class FreeDrawCreationPreviewCache {
 
   @visibleForTesting
   static double get indexTileSizeForTest => _indexTileSize;
+
+  @visibleForTesting
+  static int get maxSealedSegmentCountForTest => _maxSealedSegmentCount;
+
+  @visibleForTesting
+  static int get compactionBatchSizeForTest => _compactionBatchSize;
 
   @visibleForTesting
   int get sealedSegmentCount => _sealedSegments.length;
@@ -265,6 +273,7 @@ class FreeDrawCreationPreviewCache {
       ),
     );
     _indexSegmentBounds(segmentIndex: segmentIndex, bounds: tailBounds);
+    _compactSealedSegmentsIfNeeded();
 
     final tailLastPoint = _tailLastPoint;
     _tailPath = Path();
@@ -275,6 +284,74 @@ class FreeDrawCreationPreviewCache {
       _tailPointCount = 1;
     } else {
       _tailPointCount = 0;
+    }
+  }
+
+  void _compactSealedSegmentsIfNeeded() {
+    while (_sealedSegments.length > _maxSealedSegmentCount) {
+      if (!_compactOldestSegments()) {
+        break;
+      }
+    }
+  }
+
+  bool _compactOldestSegments() {
+    if (_sealedSegments.length < 2) {
+      return false;
+    }
+
+    final batchSize = math.min(_compactionBatchSize, _sealedSegments.length);
+    if (batchSize < 2) {
+      return false;
+    }
+
+    final merged = _mergeSegments(_sealedSegments.take(batchSize));
+    if (merged == null) {
+      return false;
+    }
+
+    for (var index = 0; index < batchSize; index++) {
+      _sealedSegments[index].dispose();
+    }
+    _sealedSegments
+      ..removeRange(0, batchSize)
+      ..insert(0, merged);
+    _rebuildSegmentIndex();
+    return true;
+  }
+
+  _PreviewPictureSegment? _mergeSegments(
+    Iterable<_PreviewPictureSegment> source,
+  ) {
+    final segments = source.toList(growable: false);
+    if (segments.length < 2) {
+      return null;
+    }
+
+    var bounds = segments.first.bounds;
+    for (var index = 1; index < segments.length; index++) {
+      bounds = _unionRect(bounds, segments[index].bounds);
+    }
+
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    for (final segment in segments) {
+      canvas.drawPicture(segment.picture);
+    }
+
+    return _PreviewPictureSegment(
+      picture: recorder.endRecording(),
+      bounds: bounds,
+    );
+  }
+
+  void _rebuildSegmentIndex() {
+    _segmentIndex.clear();
+    for (var index = 0; index < _sealedSegments.length; index++) {
+      _indexSegmentBounds(
+        segmentIndex: index,
+        bounds: _sealedSegments[index].bounds,
+      );
     }
   }
 
@@ -354,6 +431,13 @@ class FreeDrawCreationPreviewCache {
     _segmentIndex.clear();
   }
 }
+
+DrawRect _unionRect(DrawRect a, DrawRect b) => DrawRect(
+  minX: math.min(a.minX, b.minX),
+  minY: math.min(a.minY, b.minY),
+  maxX: math.max(a.maxX, b.maxX),
+  maxY: math.max(a.maxY, b.maxY),
+);
 
 @immutable
 final class _PreviewPictureSegment {

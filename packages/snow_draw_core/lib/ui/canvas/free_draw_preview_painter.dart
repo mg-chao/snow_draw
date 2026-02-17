@@ -213,7 +213,7 @@ class FreeDrawPreviewPainter extends CustomPainter {
         }
       } else {
         _previewCache.clear();
-        final previewPath = preview.previewPath;
+        final previewPath = _resolvePreviewPath(preview);
         if (previewPath != null) {
           _drawFreeDrawStrokePath(
             canvas: canvas,
@@ -281,6 +281,24 @@ class FreeDrawPreviewPainter extends CustomPainter {
       return 0;
     }
     return points.length - 1;
+  }
+
+  Path? _resolvePreviewPath(FreeDrawPreviewSnapshot snapshot) {
+    final existing = snapshot.previewPath;
+    if (existing != null) {
+      return existing;
+    }
+    if (snapshot.strokeStyle == StrokeStyle.solid ||
+        snapshot.points.length < 2) {
+      return null;
+    }
+    final path = Path()
+      ..moveTo(snapshot.points.first.x, snapshot.points.first.y);
+    for (var index = 1; index < snapshot.points.length; index++) {
+      final point = snapshot.points[index];
+      path.lineTo(point.x, point.y);
+    }
+    return path;
   }
 
   void _drawFreeDrawStrokePath({
