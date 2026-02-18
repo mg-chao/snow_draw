@@ -56,6 +56,7 @@ class FreeDrawCreationPreviewCache {
   DrawPoint? _tailLastPoint;
   var _tailPath = Path();
   var _tailPointCount = 0;
+  final _tailPoints = <DrawPoint>[];
   final _tailBounds = _MutableBoundsAccumulator();
   double _cullPadding = _minCullPadding;
 
@@ -63,6 +64,7 @@ class FreeDrawCreationPreviewCache {
   final _segmentIndex = <_SegmentTileKey, List<int>>{};
   final _candidateSegmentIndices = <int>[];
   final _candidateSegmentIndexSet = <int>{};
+  var _tailMutationCount = 0;
 
   @visibleForTesting
   static int get chunkPointThresholdForTest => _chunkPointThreshold;
@@ -88,6 +90,9 @@ class FreeDrawCreationPreviewCache {
   @visibleForTesting
   int get processedPointCount => _processedPointCount;
 
+  @visibleForTesting
+  int get tailMutationCount => _tailMutationCount;
+
   void clear() {
     _disposeSealedSegments();
     _elementId = null;
@@ -97,10 +102,12 @@ class FreeDrawCreationPreviewCache {
     _tailLastPoint = null;
     _tailPath = Path();
     _tailPointCount = 0;
+    _tailPoints.clear();
     _tailBounds.reset();
     _cullPadding = _minCullPadding;
     _candidateSegmentIndices.clear();
     _candidateSegmentIndexSet.clear();
+    _tailMutationCount = 0;
   }
 
   void sync({
@@ -121,11 +128,19 @@ class FreeDrawCreationPreviewCache {
 
     if (_needsReset(
       elementId: elementId,
-      points: points,
       pointCount: effectivePointCount,
       signature: signature,
     )) {
       _resetForSession(elementId: elementId, signature: signature);
+    }
+
+    final lastProcessedPoint = _lastProcessedPoint;
+    if (_processedPointCount > 0 && lastProcessedPoint != null) {
+      final processedTailPoint = points[_processedPointCount - 1];
+      if (processedTailPoint != lastProcessedPoint &&
+          !_tryUpdateTailLastPoint(processedTailPoint)) {
+        _resetForSession(elementId: elementId, signature: signature);
+      }
     }
 
     if (_processedPointCount == 0) {
@@ -175,7 +190,6 @@ class FreeDrawCreationPreviewCache {
 
   bool _needsReset({
     required String elementId,
-    required List<DrawPoint> points,
     required int pointCount,
     required FreeDrawPreviewStrokeSignature signature,
   }) {
@@ -188,11 +202,7 @@ class FreeDrawCreationPreviewCache {
     if (_processedPointCount > pointCount) {
       return true;
     }
-    final lastProcessedPoint = _lastProcessedPoint;
-    if (lastProcessedPoint == null) {
-      return true;
-    }
-    return points[_processedPointCount - 1] != lastProcessedPoint;
+    return _lastProcessedPoint == null;
   }
 
   int _resolveVisiblePointCount({
@@ -223,15 +233,17 @@ class FreeDrawCreationPreviewCache {
     _tailLastPoint = null;
     _tailPath = Path();
     _tailPointCount = 0;
+    _tailPoints.clear();
     _tailBounds.reset();
     _cullPadding = math.max(_minCullPadding, signature.strokeWidth / 2);
+    _tailMutationCount = 0;
   }
 
   void _startTail(DrawPoint startPoint) {
-    _tailPath.moveTo(startPoint.x, startPoint.y);
-    _tailBounds.includePoint(startPoint);
-    _tailLastPoint = startPoint;
-    _tailPointCount = 1;
+    _tailPoints
+      ..clear()
+      ..add(startPoint);
+    _rebuildTailPath();
   }
 
   void _appendPoint(DrawPoint point, Paint strokePaint) {
@@ -243,12 +255,14 @@ class FreeDrawCreationPreviewCache {
 
     if (lastPoint.x == point.x && lastPoint.y == point.y) {
       _tailLastPoint = point;
+      _tailPoints[_tailPoints.length - 1] = point;
       return;
     }
 
     _tailPath.lineTo(point.x, point.y);
     _tailBounds.includePoint(point);
     _tailLastPoint = point;
+    _tailPoints.add(point);
     _tailPointCount += 1;
 
     if (_tailPointCount >= _chunkPointThreshold) {
@@ -278,13 +292,57 @@ class FreeDrawCreationPreviewCache {
     final tailLastPoint = _tailLastPoint;
     _tailPath = Path();
     _tailBounds.reset();
+    _tailPoints.clear();
     if (tailLastPoint != null) {
-      _tailPath.moveTo(tailLastPoint.x, tailLastPoint.y);
-      _tailBounds.includePoint(tailLastPoint);
-      _tailPointCount = 1;
+      _startTail(tailLastPoint);
     } else {
       _tailPointCount = 0;
+      _tailLastPoint = null;
     }
+  }
+
+  bool _tryUpdateTailLastPoint(DrawPoint point) {
+    if (_tailPoints.isEmpty) {
+      return false;
+    }
+    if (_tailPoints.length == 1 && _sealedSegments.isNotEmpty) {
+      return false;
+    }
+    final lastProcessedPoint = _lastProcessedPoint;
+    if (lastProcessedPoint == null || _tailPoints.last != lastProcessedPoint) {
+      return false;
+    }
+    _tailPoints[_tailPoints.length - 1] = point;
+    _rebuildTailPath();
+    _lastProcessedPoint = point;
+    _tailMutationCount += 1;
+    return true;
+  }
+
+  void _rebuildTailPath() {
+    _tailPath = Path();
+    _tailBounds.reset();
+    _tailPointCount = _tailPoints.length;
+    if (_tailPoints.isEmpty) {
+      _tailLastPoint = null;
+      return;
+    }
+
+    final first = _tailPoints.first;
+    _tailPath.moveTo(first.x, first.y);
+    _tailBounds.includePoint(first);
+    var previous = first;
+    for (var index = 1; index < _tailPoints.length; index++) {
+      final point = _tailPoints[index];
+      if (point.x == previous.x && point.y == previous.y) {
+        previous = point;
+        continue;
+      }
+      _tailPath.lineTo(point.x, point.y);
+      _tailBounds.includePoint(point);
+      previous = point;
+    }
+    _tailLastPoint = _tailPoints.last;
   }
 
   void _compactSealedSegmentsIfNeeded() {

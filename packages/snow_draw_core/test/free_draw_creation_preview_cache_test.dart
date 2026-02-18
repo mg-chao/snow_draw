@@ -86,6 +86,60 @@ void main() {
       expect(cache.sealedSegmentCount, 0);
     });
 
+    test('sync mutates tail endpoint without resetting cache state', () {
+      final cache = FreeDrawCreationPreviewCache();
+      final initial = _buildPoints(48);
+
+      cache.sync(
+        elementId: 'stroke-tail-mutation',
+        points: initial,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      final mutated = List<DrawPoint>.of(initial);
+      mutated[mutated.length - 1] = const DrawPoint(x: 300, y: 120);
+      cache.sync(
+        elementId: 'stroke-tail-mutation',
+        points: mutated,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      expect(cache.processedPointCount, mutated.length);
+      expect(cache.tailPointCount, mutated.length);
+      expect(cache.tailMutationCount, 1);
+    });
+
+    test('sync resets when mutating a sealed segment endpoint', () {
+      final cache = FreeDrawCreationPreviewCache();
+      final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
+      final initial = _buildPoints(chunkSize);
+
+      cache.sync(
+        elementId: 'stroke-sealed-tail-mutation',
+        points: initial,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      expect(cache.sealedSegmentCount, greaterThan(0));
+      expect(cache.tailPointCount, 1);
+
+      final mutated = List<DrawPoint>.of(initial);
+      mutated[mutated.length - 1] = const DrawPoint(x: 2048, y: 1024);
+      cache.sync(
+        elementId: 'stroke-sealed-tail-mutation',
+        points: mutated,
+        signature: _signature(),
+        strokePaint: _strokePaint(),
+      );
+
+      expect(cache.processedPointCount, mutated.length);
+      expect(cache.sealedSegmentCount, greaterThan(0));
+      expect(cache.tailMutationCount, 0);
+    });
+
     test('sync keeps cache stable when active line endpoint is excluded', () {
       final cache = FreeDrawCreationPreviewCache();
       final points = _buildPoints(32);

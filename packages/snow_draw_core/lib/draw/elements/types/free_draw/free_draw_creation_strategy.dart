@@ -35,6 +35,9 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   /// Exponential smoothing factor (0 = none, 1 = no movement).
   static const _smoothingAlpha = 0.2;
 
+  /// Maximum direction change (sine(theta)) before we stop tail replacement.
+  static const _tailReplaceMaxTurnSin = 0.08;
+
   @override
   CreationUpdateResult start({
     required ElementData data,
@@ -155,16 +158,17 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         previewChanged = true;
       }
 
-      final appendedPoint = _appendSmoothedPoint(
+      final pointMutation = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
         strokeWidth: elementData.strokeWidth,
+        allowTailReplace: previewPath == null,
       );
-      if (appendedPoint != null) {
-        if (previewPath != null) {
+      if (pointMutation.hasChange) {
+        if (previewPath != null && pointMutation.appendedPoint != null) {
           _appendPreviewPoint(
             previewPath,
-            appendedPoint,
+            pointMutation.appendedPoint!,
             moveTo: worldPoints.length == 1,
           );
         }
@@ -285,22 +289,26 @@ class FreeDrawCreationStrategy extends CreationStrategy {
               gridSize: config.grid.size,
             )
           : rawPosition;
-      final appendedPoint = _appendSmoothedPoint(
+      final pointMutation = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
         strokeWidth: elementData.strokeWidth,
+        allowTailReplace: previewPath == null,
       );
-      if (appendedPoint == null) {
+      if (!pointMutation.hasChange) {
         continue;
       }
-      if (previewPath != null) {
+      if (previewPath != null && pointMutation.appendedPoint != null) {
         _appendPreviewPoint(
           previewPath,
-          appendedPoint,
+          pointMutation.appendedPoint!,
           moveTo: worldPoints.length == 1,
         );
       }
-      rect = _expandBoundsWithPoint(rect, appendedPoint);
+      final changedPoint = pointMutation.changedPoint;
+      if (changedPoint != null) {
+        rect = _expandBoundsWithPoint(rect, changedPoint);
+      }
       previewChanged = true;
     }
 
@@ -667,19 +675,20 @@ double _pathLength(List<DrawPoint> points) {
 /// Appends a new point with smoothing and minimum-distance filtering.
 ///
 /// Mutates [worldPoints] in place to avoid O(n) list copies.
-DrawPoint? _appendSmoothedPoint({
+_FreeDrawPointMutation _appendSmoothedPoint({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
   required double strokeWidth,
+  required bool allowTailReplace,
 }) {
   if (worldPoints.isEmpty) {
     worldPoints.add(currentPosition);
-    return currentPosition;
+    return _FreeDrawPointMutation.appended(currentPosition);
   }
 
   if (worldPoints.length == 1) {
     worldPoints.add(currentPosition);
-    return currentPosition;
+    return _FreeDrawPointMutation.appended(currentPosition);
   }
 
   final last = worldPoints.last;
@@ -690,7 +699,7 @@ DrawPoint? _appendSmoothedPoint({
   final minDistanceSq = minDistance * minDistance;
   final distSq = last.distanceSquared(currentPosition);
   if (distSq < minDistanceSq) {
-    return null;
+    return const _FreeDrawPointMutation.none();
   }
 
   const alpha = FreeDrawCreationStrategy._smoothingAlpha;
@@ -701,8 +710,82 @@ DrawPoint? _appendSmoothedPoint({
     timestamp: currentPosition.timestamp,
   );
 
+  if (allowTailReplace &&
+      _shouldReplaceTailPoint(
+        worldPoints: worldPoints,
+        candidate: smoothed,
+        strokeWidth: strokeWidth,
+      )) {
+    worldPoints[worldPoints.length - 1] = smoothed;
+    return _FreeDrawPointMutation.replaced(smoothed);
+  }
+
   worldPoints.add(smoothed);
-  return smoothed;
+  return _FreeDrawPointMutation.appended(smoothed);
+}
+
+bool _shouldReplaceTailPoint({
+  required List<DrawPoint> worldPoints,
+  required DrawPoint candidate,
+  required double strokeWidth,
+}) {
+  if (worldPoints.length < 3) {
+    return false;
+  }
+
+  final previous = worldPoints[worldPoints.length - 1];
+  final previousPrevious = worldPoints[worldPoints.length - 2];
+  final segX = previous.x - previousPrevious.x;
+  final segY = previous.y - previousPrevious.y;
+  final nextX = candidate.x - previous.x;
+  final nextY = candidate.y - previous.y;
+
+  final segLengthSq = segX * segX + segY * segY;
+  final nextLengthSq = nextX * nextX + nextY * nextY;
+  if (segLengthSq <= 1e-6 || nextLengthSq <= 1e-6) {
+    return false;
+  }
+
+  final dot = segX * nextX + segY * nextY;
+  if (dot <= 0) {
+    return false;
+  }
+
+  final segLength = math.sqrt(segLengthSq);
+  final nextLength = math.sqrt(nextLengthSq);
+  final sinTurn =
+      (segX * nextY - segY * nextX).abs() / (segLength * nextLength);
+  if (sinTurn > FreeDrawCreationStrategy._tailReplaceMaxTurnSin) {
+    return false;
+  }
+
+  final lineDistance = (segX * nextY - segY * nextX).abs() / segLength;
+  final lineDistanceTolerance = math.max(0.5, strokeWidth * 0.35);
+  if (lineDistance > lineDistanceTolerance) {
+    return false;
+  }
+
+  return true;
+}
+
+class _FreeDrawPointMutation {
+  const _FreeDrawPointMutation._({
+    required this.hasChange,
+    this.changedPoint,
+    this.appendedPoint,
+  });
+
+  const _FreeDrawPointMutation.none() : this._(hasChange: false);
+
+  const _FreeDrawPointMutation.appended(DrawPoint point)
+    : this._(hasChange: true, changedPoint: point, appendedPoint: point);
+
+  const _FreeDrawPointMutation.replaced(DrawPoint point)
+    : this._(hasChange: true, changedPoint: point);
+
+  final bool hasChange;
+  final DrawPoint? changedPoint;
+  final DrawPoint? appendedPoint;
 }
 
 void _startLineSegment({

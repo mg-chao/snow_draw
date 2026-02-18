@@ -141,6 +141,51 @@ void main() {
       expect(update.rect, creatingState.currentRect);
     });
 
+    test(
+      'long straight strokes reuse tail point instead of growing forever',
+      () {
+        const strategy = FreeDrawCreationStrategy();
+        const data = FreeDrawData();
+        const start = DrawPoint.zero;
+
+        final startResult = strategy.start(data: data, startPosition: start);
+        var creatingState = _toCreatingState(
+          result: startResult,
+          startPosition: start,
+        );
+
+        for (final point in const [
+          DrawPoint(x: 12, y: 0),
+          DrawPoint(x: 24, y: 0),
+          DrawPoint(x: 36, y: 0),
+          DrawPoint(x: 48, y: 0),
+          DrawPoint(x: 60, y: 0),
+          DrawPoint(x: 72, y: 0),
+        ]) {
+          final update = strategy.update(
+            state: DrawState(),
+            config: DrawConfig(),
+            creatingState: creatingState,
+            currentPosition: point,
+            maintainAspectRatio: false,
+            createFromCenter: false,
+            snappingMode: SnappingMode.none,
+          );
+
+          creatingState = creatingState.copyWith(
+            element: creatingState.element.copyWith(data: update.data),
+            currentRect: update.rect,
+            creationMode: update.creationMode,
+          );
+        }
+
+        final mode = creatingState.creationMode as FreeDrawCreationMode;
+        final points = mode.worldPoints!;
+        expect(points.length, lessThanOrEqualTo(4));
+        expect(points.last.x, greaterThan(60));
+      },
+    );
+
     test('releasing line mode clears transient line segment state', () {
       const strategy = FreeDrawCreationStrategy();
       const data = FreeDrawData();
