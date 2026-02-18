@@ -34,10 +34,12 @@ const int _hiBOffset = _hiAOffset + highlightMaskShaderLimit * _vec4Floats;
 /// Offset where uHiC[32] starts (after uHiB).
 const int _hiCOffset = _hiBOffset + highlightMaskShaderLimit * _vec4Floats;
 
+const _whiteMaskColor = Color(0xFFFFFFFF);
+
 /// GPU-accelerated highlight mask rendering.
 ///
-/// Replaces the `saveLayer` + `BlendMode.clear` approach with a single
-/// fragment shader draw call, eliminating the offscreen buffer allocation.
+/// Replaces the `saveLayer` + `BlendMode.clear` approach with shader draws,
+/// avoiding CPU path-combine work during high-frequency interactions.
 class HighlightMaskShaderManager {
   HighlightMaskShaderManager._();
 
@@ -45,15 +47,11 @@ class HighlightMaskShaderManager {
 
   ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
-  final _paint = Paint();
+  final _singlePassPaint = Paint();
+  final _chunkModulatePaint = Paint()..blendMode = BlendMode.modulate;
+  final _baseMaskPaint = Paint()..style = PaintingStyle.fill;
   var _isLoading = false;
   var _loadFailed = false;
-
-  /// Number of highlights written in the previous frame.
-  ///
-  /// Used to zero-fill only the delta between frames instead of
-  /// all 32 slots every time.
-  var _previousHighlightCount = 0;
 
   /// Whether the shader is ready to use.
   bool get isReady => _shader != null;
@@ -73,7 +71,6 @@ class HighlightMaskShaderManager {
         'packages/snow_draw_core/shaders/highlight_mask.frag',
       );
       _shader = _program!.fragmentShader();
-      _zeroFillShaderSlots(_shader!);
     } on Exception catch (error, stackTrace) {
       _loadFailed = true;
       _log.warning('Failed to load highlight mask shader', {
@@ -87,8 +84,8 @@ class HighlightMaskShaderManager {
 
   /// Paints the highlight mask using the fragment shader.
   ///
-  /// Returns `true` if the shader was used, `false` if the caller
-  /// should fall back to the CPU-based `saveLayer` approach.
+  /// Returns `true` if shader rendering was used. Returns `false` only when
+  /// the shader is unavailable so callers can run a CPU fallback.
   bool paintMask({
     required Canvas canvas,
     required List<ElementState> highlights,
@@ -97,11 +94,11 @@ class HighlightMaskShaderManager {
     required double scaleFactor,
     required Offset cameraPosition,
   }) {
-    if (_shader == null) {
+    final shader = _shader;
+    if (shader == null) {
       return false;
     }
 
-    final shader = _shader!;
     final effectiveAlpha = (maskConfig.maskColor.a * maskConfig.maskOpacity)
         .clamp(0.0, 1.0);
     if (effectiveAlpha <= 0) {
@@ -111,10 +108,8 @@ class HighlightMaskShaderManager {
     final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
     final screenWidth = viewportRect.width * scale;
     final screenHeight = viewportRect.height * scale;
+    final screenRect = Rect.fromLTWH(0, 0, screenWidth, screenHeight);
 
-    // Cull highlights that are entirely off-screen and collect visible
-    // ones.  This avoids sending invisible highlights to the GPU and
-    // tightens the combined AABB used for the early-out test.
     final visible = _cullHighlights(
       highlights: highlights,
       viewportRect: viewportRect,
@@ -122,123 +117,138 @@ class HighlightMaskShaderManager {
       cameraPosition: cameraPosition,
     );
 
-    if (visible.length > highlightMaskShaderLimit) {
-      return false;
+    if (visible.isEmpty) {
+      _baseMaskPaint.color = maskConfig.maskColor.withValues(
+        alpha: effectiveAlpha,
+      );
+      canvas.drawRect(screenRect, _baseMaskPaint);
+      return true;
     }
 
-    var idx = 0;
+    if (visible.length <= highlightMaskShaderLimit) {
+      _configureShaderPass(
+        shader: shader,
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        maskColor: maskConfig.maskColor,
+        alpha: effectiveAlpha,
+        highlights: visible,
+        start: 0,
+        count: visible.length,
+      );
+      _singlePassPaint.shader = shader;
+      canvas.drawRect(screenRect, _singlePassPaint);
+      return true;
+    }
 
-    // uResolution (vec2)
+    // Dense scenes: draw a base dimming layer, then modulate chunked hole
+    // masks. This avoids falling back to CPU when highlight count > 32.
+    _baseMaskPaint.color = maskConfig.maskColor.withValues(
+      alpha: effectiveAlpha,
+    );
+    canvas.drawRect(screenRect, _baseMaskPaint);
+
+    for (
+      var start = 0;
+      start < visible.length;
+      start += highlightMaskShaderLimit
+    ) {
+      final count = math.min(highlightMaskShaderLimit, visible.length - start);
+      _configureShaderPass(
+        shader: shader,
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        maskColor: _whiteMaskColor,
+        alpha: 1,
+        highlights: visible,
+        start: start,
+        count: count,
+      );
+      _chunkModulatePaint.shader = shader;
+      canvas.drawRect(screenRect, _chunkModulatePaint);
+    }
+
+    return true;
+  }
+
+  void _configureShaderPass({
+    required ui.FragmentShader shader,
+    required double screenWidth,
+    required double screenHeight,
+    required Color maskColor,
+    required double alpha,
+    required List<_VisibleHighlight> highlights,
+    required int start,
+    required int count,
+  }) {
+    var idx = 0;
     shader
       ..setFloat(idx++, screenWidth)
-      ..setFloat(idx++, screenHeight);
+      ..setFloat(idx++, screenHeight)
+      ..setFloat(idx++, maskColor.r * alpha)
+      ..setFloat(idx++, maskColor.g * alpha)
+      ..setFloat(idx++, maskColor.b * alpha)
+      ..setFloat(idx++, alpha)
+      ..setFloat(idx++, count.toDouble());
 
-    // uMaskColor (vec4) — premultiplied alpha, then uHighlightCount.
-    final color = maskConfig.maskColor;
-    shader
-      ..setFloat(idx++, color.r * effectiveAlpha)
-      ..setFloat(idx++, color.g * effectiveAlpha)
-      ..setFloat(idx++, color.b * effectiveAlpha)
-      ..setFloat(idx++, effectiveAlpha)
-      ..setFloat(idx++, visible.length.toDouble());
-
-    // uBounds (vec4) — combined screen-space AABB with AA margin.
-    // Computed on the Dart side so the shader can early-out for
-    // fragments that are clearly outside all highlights.
-    if (visible.isEmpty) {
+    if (count <= 0) {
       shader
         ..setFloat(idx++, 0)
         ..setFloat(idx++, 0)
         ..setFloat(idx++, 0)
         ..setFloat(idx++, 0);
-    } else {
-      var bMinX = visible.first.screenMinX;
-      var bMinY = visible.first.screenMinY;
-      var bMaxX = visible.first.screenMaxX;
-      var bMaxY = visible.first.screenMaxY;
-      for (var i = 1; i < visible.length; i++) {
-        final h = visible[i];
-        if (h.screenMinX < bMinX) {
-          bMinX = h.screenMinX;
-        }
-        if (h.screenMinY < bMinY) {
-          bMinY = h.screenMinY;
-        }
-        if (h.screenMaxX > bMaxX) {
-          bMaxX = h.screenMaxX;
-        }
-        if (h.screenMaxY > bMaxY) {
-          bMaxY = h.screenMaxY;
-        }
-      }
-      shader
-        ..setFloat(idx++, bMinX)
-        ..setFloat(idx++, bMinY)
-        ..setFloat(idx++, bMaxX)
-        ..setFloat(idx++, bMaxY);
+      return;
     }
 
-    // Pack each visible highlight into three vec4 arrays.
-    //
-    // The shader uses vec4 arrays (uHiA, uHiB, uHiC) indexed by the
-    // loop counter directly, which SkSL accepts as a constant-index-
-    // expression.  The previous float[288] layout used `i * 9 + n`
-    // which SkSL rejected.
-    for (var i = 0; i < visible.length; i++) {
-      final h = visible[i];
-      final aBase = _hiAOffset + i * _vec4Floats;
+    final end = start + count;
+    var bMinX = highlights[start].screenMinX;
+    var bMinY = highlights[start].screenMinY;
+    var bMaxX = highlights[start].screenMaxX;
+    var bMaxY = highlights[start].screenMaxY;
+    for (var i = start + 1; i < end; i++) {
+      final h = highlights[i];
+      if (h.screenMinX < bMinX) {
+        bMinX = h.screenMinX;
+      }
+      if (h.screenMinY < bMinY) {
+        bMinY = h.screenMinY;
+      }
+      if (h.screenMaxX > bMaxX) {
+        bMaxX = h.screenMaxX;
+      }
+      if (h.screenMaxY > bMaxY) {
+        bMaxY = h.screenMaxY;
+      }
+    }
+    shader
+      ..setFloat(idx++, bMinX)
+      ..setFloat(idx++, bMinY)
+      ..setFloat(idx++, bMaxX)
+      ..setFloat(idx++, bMaxY);
+
+    for (var slot = 0; slot < count; slot++) {
+      final h = highlights[start + slot];
+      final aBase = _hiAOffset + slot * _vec4Floats;
       shader
         ..setFloat(aBase, h.cx)
         ..setFloat(aBase + 1, h.cy)
         ..setFloat(aBase + 2, h.hw)
         ..setFloat(aBase + 3, h.hh);
 
-      final bBase = _hiBOffset + i * _vec4Floats;
+      final bBase = _hiBOffset + slot * _vec4Floats;
       shader
         ..setFloat(bBase, h.cosR)
         ..setFloat(bBase + 1, h.sinR)
         ..setFloat(bBase + 2, h.inflateX)
         ..setFloat(bBase + 3, h.inflateY);
 
-      final cBase = _hiCOffset + i * _vec4Floats;
+      final cBase = _hiCOffset + slot * _vec4Floats;
       shader
         ..setFloat(cBase, h.shape)
         ..setFloat(cBase + 1, 0)
         ..setFloat(cBase + 2, 0)
         ..setFloat(cBase + 3, 0);
     }
-
-    // Zero-fill only the slots that were active last frame but
-    // are no longer needed. The initial load already zeroed all
-    // 32 slots, so we only need to clean up the delta.
-    for (var i = visible.length; i < _previousHighlightCount; i++) {
-      final aBase = _hiAOffset + i * _vec4Floats;
-      shader
-        ..setFloat(aBase, 0)
-        ..setFloat(aBase + 1, 0)
-        ..setFloat(aBase + 2, 0)
-        ..setFloat(aBase + 3, 0);
-
-      final bBase = _hiBOffset + i * _vec4Floats;
-      shader
-        ..setFloat(bBase, 0)
-        ..setFloat(bBase + 1, 0)
-        ..setFloat(bBase + 2, 0)
-        ..setFloat(bBase + 3, 0);
-
-      final cBase = _hiCOffset + i * _vec4Floats;
-      shader
-        ..setFloat(cBase, 0)
-        ..setFloat(cBase + 1, 0)
-        ..setFloat(cBase + 2, 0)
-        ..setFloat(cBase + 3, 0);
-    }
-    _previousHighlightCount = visible.length;
-
-    _paint.shader = shader;
-    canvas.drawRect(Rect.fromLTWH(0, 0, screenWidth, screenHeight), _paint);
-
-    return true;
   }
 
   /// Disposes of the shader resources.
@@ -246,36 +256,6 @@ class HighlightMaskShaderManager {
     _shader?.dispose();
     _shader = null;
     _program = null;
-    _previousHighlightCount = 0;
-  }
-
-  /// Writes zeros to all highlight uniform slots once at load time.
-  ///
-  /// After this, per-frame updates only need to zero-fill the delta
-  /// between the previous and current highlight count.
-  static void _zeroFillShaderSlots(ui.FragmentShader shader) {
-    for (var i = 0; i < highlightMaskShaderLimit; i++) {
-      final aBase = _hiAOffset + i * _vec4Floats;
-      shader
-        ..setFloat(aBase, 0)
-        ..setFloat(aBase + 1, 0)
-        ..setFloat(aBase + 2, 0)
-        ..setFloat(aBase + 3, 0);
-
-      final bBase = _hiBOffset + i * _vec4Floats;
-      shader
-        ..setFloat(bBase, 0)
-        ..setFloat(bBase + 1, 0)
-        ..setFloat(bBase + 2, 0)
-        ..setFloat(bBase + 3, 0);
-
-      final cBase = _hiCOffset + i * _vec4Floats;
-      shader
-        ..setFloat(cBase, 0)
-        ..setFloat(cBase + 1, 0)
-        ..setFloat(cBase + 2, 0)
-        ..setFloat(cBase + 3, 0);
-    }
   }
 }
 
@@ -316,12 +296,8 @@ class _VisibleHighlight {
 
 /// Culls off-screen highlights and precomputes screen-space data.
 ///
-/// Precomputes cos/sin on the Dart side so the shader avoids
-/// per-fragment trigonometry.  Also computes a tight screen-space
-/// AABB per highlight for the combined early-out bounds.
-///
-/// Reuses a module-level list to avoid allocating a new growable
-/// list on every frame.
+/// Precomputes cos/sin on the Dart side so the shader avoids per-fragment
+/// trigonometry. Also computes a tight screen-space AABB per highlight.
 final _visibleHighlightBuffer = <_VisibleHighlight>[];
 
 List<_VisibleHighlight> _cullHighlights({
@@ -346,7 +322,6 @@ List<_VisibleHighlight> _cullHighlights({
     final inflateX = inflate * scale;
     final inflateY = inflate * scale;
 
-    // Compute screen-space AABB accounting for rotation.
     final rotation = element.rotation;
     final cosR = math.cos(-rotation);
     final sinR = math.sin(-rotation);
@@ -362,7 +337,6 @@ List<_VisibleHighlight> _cullHighlights({
     final maxX = cx + rotHW + aaMargin;
     final maxY = cy + rotHH + aaMargin;
 
-    // Skip highlights entirely outside the screen.
     if (maxX < 0 || minX > screenW || maxY < 0 || minY > screenH) {
       continue;
     }

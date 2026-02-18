@@ -66,6 +66,11 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
     return serialPlan;
   }
 
+  final highlightPlan = _resolveHighlightEditOptimizationPlan(view);
+  if (highlightPlan != null) {
+    return highlightPlan;
+  }
+
   return _resolveSingleSelectionEditOptimizationPlan(view);
 }
 
@@ -242,6 +247,68 @@ DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
   return DynamicSceneOptimizationPlan(
     optimizedElementIds: companionIds,
     staticHiddenElementIds: companionIds,
+  );
+}
+
+DynamicSceneOptimizationPlan? _resolveHighlightEditOptimizationPlan(
+  DrawStateView view,
+) {
+  final interaction = view.state.application.interaction;
+  if (interaction is! EditingState) {
+    return null;
+  }
+
+  final previewElements = view.previewElementsById;
+  if (previewElements.isEmpty ||
+      previewElements.length > _maxLocalizedPreviewElementCount) {
+    return null;
+  }
+
+  final document = view.state.domain.document;
+  final candidateIds = <String>{};
+  for (final entry in previewElements.entries) {
+    final persisted = document.getElementById(entry.key);
+    if (persisted == null) {
+      continue;
+    }
+    final previewIsHighlight = entry.value.data is HighlightData;
+    final persistedIsHighlight = persisted.data is HighlightData;
+    if (!previewIsHighlight || !persistedIsHighlight) {
+      return null;
+    }
+    candidateIds.add(entry.key);
+  }
+  if (candidateIds.isEmpty) {
+    return null;
+  }
+
+  final selectedIds = view.selectedIds;
+  if (selectedIds.isEmpty) {
+    return null;
+  }
+  for (final selectedId in selectedIds) {
+    final selected = document.getElementById(selectedId);
+    if (selected == null || selected.data is! HighlightData) {
+      return null;
+    }
+    candidateIds.add(selectedId);
+    if (candidateIds.length > _maxLocalizedPreviewElementCount) {
+      return null;
+    }
+  }
+
+  final orderIndex = _resolveLowestOrderIndex(
+    document: document,
+    elementIds: candidateIds,
+  );
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan(
+    optimizedElementIds: candidateIds,
+    staticHiddenElementIds: candidateIds,
   );
 }
 

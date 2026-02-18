@@ -172,6 +172,81 @@ void main() {
       expect(plan.staticHiddenElementIds, {'free-1'});
     });
 
+    test('optimizes highlight edit previews to a localized scene', () {
+      final highlight = _highlight(
+        id: 'hl-1',
+        rect: const DrawRect(minX: 20, minY: 20, maxX: 140, maxY: 100),
+        zIndex: 0,
+      );
+      final background = _rectangle(
+        id: 'rect-1',
+        rect: const DrawRect(minX: 220, minY: 40, maxX: 340, maxY: 140),
+        zIndex: 1,
+      );
+      final state = _editingState(
+        elements: [highlight, background],
+        selectedIds: {'hl-1'},
+      );
+      final preview = highlight.copyWith(
+        rect: const DrawRect(minX: 48, minY: 56, maxX: 168, maxY: 136),
+      );
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {'hl-1': preview},
+        effectiveSelection: EffectiveSelection(
+          bounds: preview.rect,
+          center: preview.rect.center,
+          rotation: preview.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
+
+      expect(plan, isNotNull);
+      expect(plan!.optimizedElementIds, {'hl-1'});
+      expect(plan.staticHiddenElementIds, {'hl-1'});
+    });
+
+    test(
+      'falls back when highlight edit has blend-sensitive occluders above',
+      () {
+        final editedHighlight = _highlight(
+          id: 'hl-1',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 140, maxY: 100),
+          zIndex: 0,
+        );
+        final topHighlight = _highlight(
+          id: 'hl-2',
+          rect: const DrawRect(minX: 180, minY: 20, maxX: 320, maxY: 120),
+          zIndex: 1,
+        );
+        final state = _editingState(
+          elements: [editedHighlight, topHighlight],
+          selectedIds: {'hl-1'},
+        );
+        final preview = editedHighlight.copyWith(
+          rect: const DrawRect(minX: 32, minY: 32, maxX: 152, maxY: 112),
+        );
+        final view = DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {'hl-1': preview},
+          effectiveSelection: EffectiveSelection(
+            bounds: preview.rect,
+            center: preview.rect.center,
+            rotation: preview.rotation,
+            hasSelection: true,
+          ),
+          snapGuides: const [],
+        );
+
+        final plan = resolveDynamicSceneOptimizationPlan(view: view);
+
+        expect(plan, isNull);
+      },
+    );
+
     test(
       'skips localized optimization when blend-sensitive elements overlap',
       () {
