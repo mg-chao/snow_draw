@@ -131,6 +131,41 @@ void main() {
         await plugin.onUnload();
       },
     );
+
+    test(
+      'ignores pressure-only deltas during constrained free-draw line updates',
+      () async {
+        final dispatched = <DrawAction>[];
+        final state = _creatingFreeDrawState();
+        final context = _pluginContext(
+          stateProvider: () => state,
+          dispatched: dispatched,
+        );
+        final plugin = CreatePlugin(
+          currentToolTypeId: FreeDrawData.typeIdToken,
+        );
+        await plugin.onLoad(context);
+
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 64, y: 48, pressure: 0.2),
+            modifiers: const KeyModifiers(shift: true),
+            pressure: 0.2,
+          ),
+        );
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 64, y: 48, pressure: 0.9),
+            modifiers: const KeyModifiers(shift: true),
+            pressure: 0.9,
+          ),
+        );
+
+        expect(dispatched.whereType<UpdateCreatingElement>(), hasLength(1));
+
+        await plugin.onUnload();
+      },
+    );
   });
 
   group('EditPlugin update deduplication', () {

@@ -4,6 +4,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_ca
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -99,7 +100,7 @@ void main() {
       expect(plan.staticHiddenElementIds, {'arrow-1'});
     });
 
-    test('skips localized optimization for lightweight line point edits', () {
+    test('optimizes lightweight line point edits to a localized scene', () {
       final line = _line(
         id: 'line-1',
         points: const [DrawPoint(x: 40, y: 40), DrawPoint(x: 180, y: 120)],
@@ -129,7 +130,46 @@ void main() {
 
       final plan = resolveDynamicSceneOptimizationPlan(view: view);
 
-      expect(plan, isNull);
+      expect(plan, isNotNull);
+      expect(plan!.optimizedElementIds, {'line-1'});
+      expect(plan.staticHiddenElementIds, {'line-1'});
+    });
+
+    test('optimizes free-draw move edits to a localized scene', () {
+      final freeDraw = _freeDraw(
+        id: 'free-1',
+        points: const [DrawPoint(x: 40, y: 40), DrawPoint(x: 180, y: 120)],
+        zIndex: 0,
+      );
+      final background = _rectangle(
+        id: 'rect-2',
+        rect: const DrawRect(minX: 220, minY: 20, maxX: 340, maxY: 120),
+        zIndex: 1,
+      );
+      final state = _editingState(
+        elements: [freeDraw, background],
+        selectedIds: {'free-1'},
+      );
+      final preview = freeDraw.copyWith(
+        rect: const DrawRect(minX: 56, minY: 52, maxX: 196, maxY: 132),
+      );
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {'free-1': preview},
+        effectiveSelection: EffectiveSelection(
+          bounds: preview.rect,
+          center: preview.rect.center,
+          rotation: preview.rotation,
+          hasSelection: true,
+        ),
+        snapGuides: const [],
+      );
+
+      final plan = resolveDynamicSceneOptimizationPlan(view: view);
+
+      expect(plan, isNotNull);
+      expect(plan!.optimizedElementIds, {'free-1'});
+      expect(plan.staticHiddenElementIds, {'free-1'});
     });
 
     test(
@@ -658,6 +698,39 @@ ElementState _line({
     opacity: 1,
     zIndex: zIndex,
     data: LineData(points: normalizedPoints),
+  );
+}
+
+ElementState _freeDraw({
+  required String id,
+  required List<DrawPoint> points,
+  required int zIndex,
+}) {
+  final minX = points
+      .map((point) => point.x)
+      .reduce((value, element) => value < element ? value : element);
+  final maxX = points
+      .map((point) => point.x)
+      .reduce((value, element) => value > element ? value : element);
+  final minY = points
+      .map((point) => point.y)
+      .reduce((value, element) => value < element ? value : element);
+  final maxY = points
+      .map((point) => point.y)
+      .reduce((value, element) => value > element ? value : element);
+  final rect = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: points,
+    rect: rect,
+  );
+
+  return ElementState(
+    id: id,
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: zIndex,
+    data: FreeDrawData(points: normalizedPoints),
   );
 }
 

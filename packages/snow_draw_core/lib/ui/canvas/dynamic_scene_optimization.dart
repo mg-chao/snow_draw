@@ -51,14 +51,9 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
     return textEditingPlan;
   }
 
-  // Lightweight line edits (line + free-draw selections) repaint at pointer
-  // frame rate and benefit more from stable dynamic-layer caches than from
-  // per-frame localized occluder resolution. Keep them on the standard split.
-  if (isLightweightLineEditingInteraction(
-    interaction: view.state.application.interaction,
-    document: view.state.domain.document,
-  )) {
-    return null;
+  final lightweightLinePlan = _resolveLightweightLineOptimizationPlan(view);
+  if (lightweightLinePlan != null) {
+    return lightweightLinePlan;
   }
 
   final arrowPointPlan = _resolveArrowPointOptimizationPlan(view);
@@ -72,6 +67,57 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   }
 
   return _resolveSingleSelectionEditOptimizationPlan(view);
+}
+
+DynamicSceneOptimizationPlan? _resolveLightweightLineOptimizationPlan(
+  DrawStateView view,
+) {
+  final interaction = view.state.application.interaction;
+  final document = view.state.domain.document;
+  if (!isLightweightLineEditingInteraction(
+    interaction: interaction,
+    document: document,
+  )) {
+    return null;
+  }
+  if (interaction is! EditingState) {
+    return null;
+  }
+
+  final selectedIds = interaction.context.selectedIdsAtStart;
+  if (selectedIds.isEmpty ||
+      selectedIds.length > _maxLocalizedPreviewElementCount) {
+    return null;
+  }
+
+  final previewElementsById = view.previewElementsById;
+  final candidateIds = <String>{};
+  for (final elementId in selectedIds) {
+    final effective =
+        previewElementsById[elementId] ?? document.getElementById(elementId);
+    if (effective == null || _isBlendSensitiveElement(effective)) {
+      return null;
+    }
+    candidateIds.add(elementId);
+  }
+
+  if (candidateIds.isEmpty) {
+    return null;
+  }
+
+  final orderIndex = _resolveLowestOrderIndex(
+    document: document,
+    elementIds: candidateIds,
+  );
+  if (orderIndex == null ||
+      !_canApplyLocalizedOptimization(document, orderIndex)) {
+    return null;
+  }
+
+  return DynamicSceneOptimizationPlan(
+    optimizedElementIds: candidateIds,
+    staticHiddenElementIds: candidateIds,
+  );
 }
 
 DynamicSceneOptimizationPlan? _resolveTextEditingOptimizationPlan(

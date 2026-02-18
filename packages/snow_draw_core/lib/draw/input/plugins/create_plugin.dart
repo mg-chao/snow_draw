@@ -363,8 +363,9 @@ class CreatePlugin extends DrawInputPlugin {
     KeyModifiers modifiers, {
     bool hasBatchedSamples = false,
   }) {
+    final isFreeDrawCreating = _isFreeDrawCreating(state);
     final shouldIgnorePressureForDedup =
-        !hasBatchedSamples && !_isFreeDrawCreating(state);
+        !hasBatchedSamples && (!isFreeDrawCreating || modifiers.shift);
     if (!hasBatchedSamples &&
         _positionsMatchForDedup(
           previous: _lastUpdatePosition,
