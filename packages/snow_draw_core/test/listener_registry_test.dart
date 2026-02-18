@@ -2,10 +2,12 @@ import 'dart:collection';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/listener_registry.dart';
@@ -488,6 +490,68 @@ void main() {
       expect(states, hasLength(1));
     },
   );
+
+  test(
+    'interaction listeners detect text draft mutations via identity fast path',
+    () {
+      final states = <DrawState>[];
+      registry.register(states.add, changeTypes: {DrawStateChange.interaction});
+
+      const previousInteraction = TextEditingState(
+        elementId: 'text-1',
+        draftData: TextData(text: 'a'),
+        rect: DrawRect(minX: 10, minY: 20, maxX: 70, maxY: 52),
+        isNew: false,
+        opacity: 1,
+        rotation: 0,
+      );
+      final base = DrawState();
+      final previous = base.copyWith(
+        application: base.application.copyWith(
+          interaction: previousInteraction,
+        ),
+      );
+      final nextInteraction = previousInteraction.copyWith(
+        draftData: previousInteraction.draftData.copyWith(text: 'ab'),
+        rect: const DrawRect(minX: 10, minY: 20, maxX: 84, maxY: 52),
+      );
+      final next = previous.copyWith(
+        application: previous.application.copyWith(
+          interaction: nextInteraction,
+        ),
+      );
+
+      registry.notify(previous, next);
+      expect(states, hasLength(1));
+    },
+  );
+
+  test('interaction listeners ignore equivalent text wrappers with shared '
+      'draft data', () {
+    final states = <DrawState>[];
+    registry.register(states.add, changeTypes: {DrawStateChange.interaction});
+
+    const interaction = TextEditingState(
+      elementId: 'text-1',
+      draftData: TextData(text: 'stable'),
+      rect: DrawRect(minX: 10, minY: 20, maxX: 90, maxY: 52),
+      isNew: false,
+      opacity: 1,
+      rotation: 0,
+    );
+    final base = DrawState();
+    final previous = base.copyWith(
+      application: base.application.copyWith(interaction: interaction),
+    );
+    final next = previous.copyWith(
+      application: previous.application.copyWith(
+        interaction: interaction.copyWith(),
+      ),
+    );
+
+    registry.notify(previous, next);
+    expect(states, isEmpty);
+  });
 }
 
 class _CountingSet<E> extends SetBase<E> {

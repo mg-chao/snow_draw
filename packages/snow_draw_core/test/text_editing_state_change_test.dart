@@ -106,6 +106,29 @@ void main() {
         isFalse,
       );
     });
+
+    test('returns false when only interaction wrapper instance changes', () {
+      final base = DrawState();
+      const interaction = TextEditingState(
+        elementId: 'text-1',
+        draftData: TextData(text: 'stable'),
+        rect: DrawRect(maxX: 40, maxY: 30),
+        isNew: false,
+        opacity: 1,
+        rotation: 0,
+      );
+      final previous = _stateWithTextInteraction(base, interaction);
+      final next = previous.copyWith(
+        application: previous.application.copyWith(
+          interaction: interaction.copyWith(),
+        ),
+      );
+
+      expect(
+        isTextEditingDraftMutationOnly(previous: previous, next: next),
+        isFalse,
+      );
+    });
   });
 
   test('TextEditingState uses value equality', () {

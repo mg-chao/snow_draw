@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 
 import '../models/draw_state.dart';
+import '../models/interaction_state.dart';
 import 'draw_store_interface.dart';
 
 /// Callback invoked when a listener throws during notification.
@@ -255,8 +256,28 @@ bool _viewChanged(DrawState previous, DrawState next) {
 bool _interactionChanged(DrawState previous, DrawState next) {
   final previousInteraction = previous.application.interaction;
   final nextInteraction = next.application.interaction;
-  return !identical(previousInteraction, nextInteraction) &&
-      previousInteraction != nextInteraction;
+  if (identical(previousInteraction, nextInteraction)) {
+    return false;
+  }
+
+  if (previousInteraction is TextEditingState &&
+      nextInteraction is TextEditingState) {
+    if (previousInteraction.elementId != nextInteraction.elementId ||
+        previousInteraction.isNew != nextInteraction.isNew ||
+        previousInteraction.opacity != nextInteraction.opacity ||
+        previousInteraction.rotation != nextInteraction.rotation ||
+        previousInteraction.initialCursorPosition !=
+            nextInteraction.initialCursorPosition) {
+      return true;
+    }
+    return !identical(
+          previousInteraction.draftData,
+          nextInteraction.draftData,
+        ) ||
+        previousInteraction.rect != nextInteraction.rect;
+  }
+
+  return previousInteraction != nextInteraction;
 }
 
 int _maskForChange(DrawStateChange change) => switch (change) {

@@ -35,7 +35,7 @@ bool isTextEditingDraftMutationOnly({
     return false;
   }
 
-  return previousInteraction.draftData != nextInteraction.draftData ||
+  return !identical(previousInteraction.draftData, nextInteraction.draftData) ||
       previousInteraction.rect != nextInteraction.rect;
 }
 

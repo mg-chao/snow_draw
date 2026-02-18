@@ -172,7 +172,9 @@ class _HoverFrameEvent {
 
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
-  static const _textDraftSyncMinInterval = Duration(milliseconds: 16);
+  // Keep store synchronization responsive while reducing high-frequency
+  // interaction churn that can compete with text overlay rendering.
+  static const _textDraftSyncMinInterval = Duration(milliseconds: 24);
   static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
@@ -3555,7 +3557,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _lastTextDraftSyncAt = null;
     } else if (_pendingTextDraftSync != null &&
         _pendingTextDraftSync!.elementId == interaction.elementId &&
-        interaction.draftData.text == _pendingTextDraftSync!.text) {
+        _isSameTextValue(
+          interaction.draftData.text,
+          _pendingTextDraftSync!.text,
+        )) {
       _pendingTextDraftSync = null;
       _cancelPendingTextDraftSyncDispatch();
     } else if (!_suppressTextControllerChange &&
@@ -3631,7 +3636,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _pendingTextDraftSync = null;
         _cancelPendingTextDraftSyncDispatch();
         pending = null;
-      } else if (interaction.draftData.text == pending.text) {
+      } else if (_isSameTextValue(interaction.draftData.text, pending.text)) {
         _pendingTextDraftSync = null;
         _cancelPendingTextDraftSyncDispatch();
         pending = null;
@@ -3651,10 +3656,38 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         );
       }
     }
-    if (_textOverlayNotifier.value != nextSnapshot) {
-      _textOverlayNotifier.value = nextSnapshot;
-    }
+    _setTextOverlaySnapshot(nextSnapshot);
   }
+
+  void _setTextOverlaySnapshot(_TextEditingOverlaySnapshot nextSnapshot) {
+    final current = _textOverlayNotifier.value;
+    if (_isSameTextOverlaySnapshot(current, nextSnapshot)) {
+      return;
+    }
+    _textOverlayNotifier.value = nextSnapshot;
+  }
+
+  bool _isSameTextOverlaySnapshot(
+    _TextEditingOverlaySnapshot? current,
+    _TextEditingOverlaySnapshot next,
+  ) {
+    if (current == null) {
+      return false;
+    }
+    if (identical(current, next)) {
+      return true;
+    }
+    return current.elementId == next.elementId &&
+        identical(current.data, next.data) &&
+        current.rect == next.rect &&
+        current.isNew == next.isNew &&
+        current.rotation == next.rotation &&
+        current.opacity == next.opacity &&
+        current.initialCursorPosition == next.initialCursorPosition;
+  }
+
+  bool _isSameTextValue(String left, String right) =>
+      identical(left, right) || left == right;
 
   TextLayoutMetrics _resolveEditingTextLayout({
     required TextData data,
@@ -3687,7 +3720,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required double layoutWidth,
     required Locale? locale,
   }) => _EditingLayoutIdentity(
-    text: data.text,
+    textToken: data.text,
     fontSize: data.fontSize,
     fontFamily: data.fontFamily,
     horizontalAlign: data.horizontalAlign,
@@ -3840,7 +3873,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required _PendingTextDraftSync pending,
   }) {
     if (pending.sourceRect == interaction.rect &&
-        pending.sourceData == interaction.draftData) {
+        identical(pending.sourceData, interaction.draftData)) {
       return pending;
     }
     final locale = Localizations.maybeLocaleOf(context);
@@ -3876,9 +3909,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       data: snapshot.data.copyWith(text: text),
       rect: previewRect,
     );
-    if (_textOverlayNotifier.value != nextSnapshot) {
-      _textOverlayNotifier.value = nextSnapshot;
-    }
+    _setTextOverlaySnapshot(nextSnapshot);
   }
 
   void _schedulePendingTextDraftSyncDispatch() {
@@ -3928,7 +3959,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
 
-    if (interaction.draftData.text == pending.text) {
+    if (_isSameTextValue(interaction.draftData.text, pending.text)) {
       if (_pendingTextDraftSync == pending) {
         _pendingTextDraftSync = null;
         _cancelPendingTextDraftSyncDispatch();
@@ -4543,7 +4574,7 @@ class _TextEditingOverlaySnapshot {
       identical(this, other) ||
       other is _TextEditingOverlaySnapshot &&
           other.elementId == elementId &&
-          other.data == data &&
+          identical(other.data, data) &&
           other.rect == rect &&
           other.isNew == isNew &&
           other.rotation == rotation &&
@@ -4553,7 +4584,7 @@ class _TextEditingOverlaySnapshot {
   @override
   int get hashCode => Object.hash(
     elementId,
-    data,
+    identityHashCode(data),
     rect,
     isNew,
     rotation,
@@ -4663,7 +4694,7 @@ class _TextDraftGeometry {
 @immutable
 class _EditingLayoutIdentity {
   const _EditingLayoutIdentity({
-    required this.text,
+    required this.textToken,
     required this.fontSize,
     required this.fontFamily,
     required this.horizontalAlign,
@@ -4671,7 +4702,7 @@ class _EditingLayoutIdentity {
     required this.localeTag,
   });
 
-  final String text;
+  final String textToken;
   final double fontSize;
   final String? fontFamily;
   final TextHorizontalAlign horizontalAlign;
@@ -4682,7 +4713,7 @@ class _EditingLayoutIdentity {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _EditingLayoutIdentity &&
-          other.text == text &&
+          identical(other.textToken, textToken) &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
           other.horizontalAlign == horizontalAlign &&
@@ -4691,7 +4722,7 @@ class _EditingLayoutIdentity {
 
   @override
   int get hashCode => Object.hash(
-    text,
+    identityHashCode(textToken),
     fontSize,
     fontFamily,
     horizontalAlign,
