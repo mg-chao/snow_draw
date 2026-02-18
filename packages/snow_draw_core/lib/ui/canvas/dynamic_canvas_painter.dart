@@ -541,6 +541,17 @@ class DynamicCanvasPainter extends CustomPainter {
       return const <ElementState>[];
     }
 
+    if (!_hasNonOptimizedElementsAboveSeeds(
+      document: document,
+      optimizedElementIds: optimizedElementIds,
+      seedOrderIndexById: seedOrderIndexById,
+    )) {
+      return _sortElementsByOrder(
+        elements: effectiveById.values,
+        resolveOrderIndex: document.getOrderIndex,
+      );
+    }
+
     final orderIndexCache = <String, int?>{};
     int? resolveOrderIndex(String elementId) {
       if (orderIndexCache.containsKey(elementId)) {
@@ -599,12 +610,47 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
-    final optimized = effectiveById.values.toList(growable: false);
-    if (optimized.length < 2) {
-      return optimized;
+    return _sortElementsByOrder(
+      elements: effectiveById.values,
+      resolveOrderIndex: resolveOrderIndex,
+    );
+  }
+
+  bool _hasNonOptimizedElementsAboveSeeds({
+    required DocumentState document,
+    required Set<String> optimizedElementIds,
+    required Map<String, int> seedOrderIndexById,
+  }) {
+    if (seedOrderIndexById.isEmpty) {
+      return false;
     }
 
-    optimized.sort((a, b) {
+    var minSeedOrder = seedOrderIndexById.values.first;
+    for (final orderIndex in seedOrderIndexById.values.skip(1)) {
+      if (orderIndex < minSeedOrder) {
+        minSeedOrder = orderIndex;
+      }
+    }
+
+    final elements = document.elements;
+    for (var index = minSeedOrder + 1; index < elements.length; index++) {
+      final elementId = elements[index].id;
+      if (!optimizedElementIds.contains(elementId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<ElementState> _sortElementsByOrder({
+    required Iterable<ElementState> elements,
+    required int? Function(String elementId) resolveOrderIndex,
+  }) {
+    final sorted = elements.toList(growable: false);
+    if (sorted.length < 2) {
+      return sorted;
+    }
+    sorted.sort((a, b) {
       final orderA = resolveOrderIndex(a.id) ?? a.zIndex;
       final orderB = resolveOrderIndex(b.id) ?? b.zIndex;
       final orderComparison = orderA.compareTo(orderB);
@@ -613,7 +659,7 @@ class DynamicCanvasPainter extends CustomPainter {
       }
       return a.id.compareTo(b.id);
     });
-    return optimized;
+    return sorted;
   }
 
   void _paintElementScene({

@@ -116,5 +116,73 @@ void main() {
 
       expect(rects, [seedAabb]);
     });
+
+    test('splits long diagonal lines into segmented query rects', () {
+      const seedAabb = DrawRect(maxX: 1000, maxY: 1000);
+      final rects = resolveOptimizedOccluderQueryRects(
+        seedElement: const ElementState(
+          id: 'line',
+          rect: seedAabb,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: LineData(strokeWidth: 4),
+        ),
+        seedAabb: seedAabb,
+        maxLineQueryRects: 6,
+        lineTargetSegmentLength: 200,
+      );
+
+      expect(rects, hasLength(6));
+      for (final rect in rects) {
+        expect(rect.width, lessThan(seedAabb.width));
+        expect(rect.height, lessThan(seedAabb.height));
+      }
+    });
+
+    test('falls back to seed aabb when query-rect budget is exhausted', () {
+      const seedAabb = DrawRect(maxX: 1000, maxY: 1000);
+      final rects = resolveOptimizedOccluderQueryRects(
+        seedElement: const ElementState(
+          id: 'line',
+          rect: seedAabb,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: LineData(strokeWidth: 4),
+        ),
+        seedAabb: seedAabb,
+        maxLineQueryRects: 0,
+      );
+
+      expect(rects, [seedAabb]);
+    });
+
+    test('normalizes non-finite line planner tuning values', () {
+      const seedAabb = DrawRect(maxX: 1000, maxY: 1000);
+      final rects = resolveOptimizedOccluderQueryRects(
+        seedElement: const ElementState(
+          id: 'line',
+          rect: seedAabb,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: LineData(strokeWidth: 4),
+        ),
+        seedAabb: seedAabb,
+        maxLineQueryRects: 6,
+        linePaddingFloor: double.nan,
+        linePaddingStrokeFactor: double.nan,
+        lineTargetSegmentLength: double.nan,
+      );
+
+      expect(rects, hasLength(6));
+      for (final rect in rects) {
+        expect(rect.minX.isFinite, isTrue);
+        expect(rect.minY.isFinite, isTrue);
+        expect(rect.maxX.isFinite, isTrue);
+        expect(rect.maxY.isFinite, isTrue);
+      }
+    });
   });
 }
