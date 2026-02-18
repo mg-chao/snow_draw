@@ -171,6 +171,18 @@ class FilterSegmentRenderer {
   static const _fullQualityBlurDownsampleFactor = 1.0;
   static const _interactiveBlurDownsampleFactor = 0.75;
   static const _aggressiveBlurDownsampleFactor = 0.55;
+  static const _largeFilterCoverageThreshold = 0.35;
+  static const _hugeFilterCoverageThreshold = 0.72;
+  static const _largeCoverageViewportOutsetScale = 0.8;
+  static const _hugeCoverageViewportOutsetScale = 0.65;
+  static const _largeCoverageSigmaScale = 0.82;
+  static const _hugeCoverageSigmaScale = 0.66;
+  static const _largeCoverageBlurDownsampleScale = 0.82;
+  static const _hugeCoverageBlurDownsampleScale = 0.64;
+  static const _largeCoverageColorMatrixDownsample = 0.72;
+  static const _hugeCoverageColorMatrixDownsample = 0.58;
+  static const _largeCoverageQuantizationScale = 1.5;
+  static const _hugeCoverageQuantizationScale = 2.0;
 
   final FilterSegmentBuilder _segmentBuilder;
   final FilterKernelFactory _kernelFactory;
@@ -363,6 +375,18 @@ class FilterSegmentRenderer {
       }
 
       if (segment is MergedFilterSegment) {
+        if (segmentIndex == lastFilterSegmentIndex) {
+          _paintMergedFilterDirectlyToCanvas(
+            canvas: canvas,
+            scene: scene.picture,
+            merged: segment,
+            visibleBounds: visibleBounds,
+            dynamicElementIds: dynamicElementIds,
+            runtimePolicy: runtimePolicy,
+          );
+          scene.release();
+          continue;
+        }
         final filtered = _applyMergedFilter(
           scene: scene.picture,
           merged: segment,
@@ -900,9 +924,64 @@ class FilterSegmentRenderer {
       data: prepared.data,
       layerBounds: prepared.layerBounds,
       opacity: prepared.opacity,
+      coverageRatio: prepared.coverageRatio,
       runtimePolicy: runtimePolicy,
     );
     _diagnostics.markFilterPass();
+  }
+
+  void _paintMergedFilterDirectlyToCanvas({
+    required Canvas canvas,
+    required Picture scene,
+    required MergedFilterSegment merged,
+    required Rect? visibleBounds,
+    required Set<String> dynamicElementIds,
+    required _FilterRuntimePolicy runtimePolicy,
+  }) {
+    final prepared = <_PreparedFilterPass>[];
+    for (final filter in merged.filters) {
+      final pass = _prepareFilterPass(
+        filterElement: filter.filterElement,
+        data: filter.filterData,
+        visibleBounds: visibleBounds,
+        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
+        runtimePolicy: runtimePolicy,
+      );
+      if (pass != null) {
+        prepared.add(pass);
+      }
+    }
+    if (prepared.isEmpty) {
+      canvas.drawPicture(scene);
+      return;
+    }
+    if (_hasOverlappingPreparedPasses(prepared)) {
+      final filteredScene = _applyPreparedFilterSequence(
+        scene: scene,
+        passes: prepared,
+        runtimePolicy: runtimePolicy,
+      );
+      canvas.drawPicture(filteredScene);
+      if (!identical(filteredScene, scene)) {
+        filteredScene.dispose();
+      }
+      return;
+    }
+
+    canvas.drawPicture(scene);
+    for (final pass in prepared) {
+      _applyClippedFilter(
+        canvas: canvas,
+        scene: scene,
+        clip: pass.clip,
+        data: pass.data,
+        layerBounds: pass.layerBounds,
+        opacity: pass.opacity,
+        coverageRatio: pass.coverageRatio,
+        runtimePolicy: runtimePolicy,
+      );
+      _diagnostics.markFilterPass();
+    }
   }
 
   // Prepared filter passes.
@@ -924,10 +1003,15 @@ class FilterSegmentRenderer {
     }
 
     final clip = _resolveClipInfo(filterElement, useCache: useClipCache);
+    final clipCoverageRatio = _resolveCoverageRatio(
+      region: clip.bounds,
+      visibleBounds: visibleBounds,
+    );
     final layerBounds = _resolveVisibleLayerBounds(
       clipBounds: clip.bounds,
       visibleBounds: visibleBounds,
       data: data,
+      coverageRatio: clipCoverageRatio,
       runtimePolicy: runtimePolicy,
     );
     if (layerBounds.isEmpty) {
@@ -939,6 +1023,7 @@ class FilterSegmentRenderer {
       clip: clip,
       layerBounds: layerBounds,
       opacity: opacity,
+      coverageRatio: clipCoverageRatio,
     );
   }
 
@@ -958,6 +1043,7 @@ class FilterSegmentRenderer {
       data: pass.data,
       layerBounds: pass.layerBounds,
       opacity: pass.opacity,
+      coverageRatio: pass.coverageRatio,
       runtimePolicy: runtimePolicy,
     );
 
@@ -993,12 +1079,55 @@ class FilterSegmentRenderer {
         data: pass.data,
         layerBounds: pass.layerBounds,
         opacity: pass.opacity,
+        coverageRatio: pass.coverageRatio,
         runtimePolicy: runtimePolicy,
       );
       _diagnostics.markFilterPass();
     }
 
     return recorder.endRecording();
+  }
+
+  Picture _applyPreparedFilterSequence({
+    required Picture scene,
+    required List<_PreparedFilterPass> passes,
+    required _FilterRuntimePolicy runtimePolicy,
+  }) {
+    if (passes.isEmpty) {
+      return scene;
+    }
+    var currentScene = scene;
+    for (final pass in passes) {
+      final nextScene = _applyPreparedFilter(
+        scene: currentScene,
+        pass: pass,
+        runtimePolicy: runtimePolicy,
+      );
+      if (!identical(nextScene, currentScene) &&
+          !identical(currentScene, scene)) {
+        currentScene.dispose();
+      }
+      currentScene = nextScene;
+    }
+    return currentScene;
+  }
+
+  bool _hasOverlappingPreparedPasses(List<_PreparedFilterPass> passes) {
+    if (passes.length < 2) {
+      return false;
+    }
+    for (var index = 1; index < passes.length; index++) {
+      final candidate = passes[index];
+      for (var previous = 0; previous < index; previous++) {
+        if (_boundsOverlap(
+          candidate.layerBounds,
+          passes[previous].layerBounds,
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   bool _overlapsAny(_PreparedFilterPass pass, List<_PreparedFilterPass> group) {
@@ -1035,6 +1164,7 @@ class FilterSegmentRenderer {
     required FilterData data,
     required Rect layerBounds,
     required double opacity,
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     canvas.save();
@@ -1046,6 +1176,7 @@ class FilterSegmentRenderer {
       filterBounds: clip.bounds,
       layerBounds: layerBounds,
       opacity: opacity,
+      coverageRatio: coverageRatio,
       runtimePolicy: runtimePolicy,
     );
     canvas.restore();
@@ -1060,6 +1191,7 @@ class FilterSegmentRenderer {
     required Rect filterBounds,
     required Rect layerBounds,
     required double opacity,
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
@@ -1072,6 +1204,7 @@ class FilterSegmentRenderer {
           filterBounds,
           layerBounds,
           opacity,
+          coverageRatio: coverageRatio,
           runtimePolicy: runtimePolicy,
           blendMode: blendMode,
         );
@@ -1082,6 +1215,7 @@ class FilterSegmentRenderer {
           layerBounds,
           opacity,
           data,
+          coverageRatio: coverageRatio,
           runtimePolicy: runtimePolicy,
           minSigma: runtimePolicy.gaussianMinSigma,
           maxSigma: runtimePolicy.gaussianMaxSigma,
@@ -1094,6 +1228,9 @@ class FilterSegmentRenderer {
           _grayscaleColorFilter,
           layerBounds,
           opacity,
+          coverageRatio: coverageRatio,
+          runtimePolicy: runtimePolicy,
+          cacheType: CanvasFilterType.grayscale,
           blendMode: blendMode,
         );
       case CanvasFilterType.inversion:
@@ -1103,6 +1240,9 @@ class FilterSegmentRenderer {
           _inversionColorFilter,
           layerBounds,
           opacity,
+          coverageRatio: coverageRatio,
+          runtimePolicy: runtimePolicy,
+          cacheType: CanvasFilterType.inversion,
           blendMode: blendMode,
         );
     }
@@ -1117,6 +1257,7 @@ class FilterSegmentRenderer {
     Rect filterBounds,
     Rect layerBounds,
     double opacity, {
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
@@ -1127,6 +1268,7 @@ class FilterSegmentRenderer {
         layerBounds,
         opacity,
         data,
+        coverageRatio: coverageRatio,
         runtimePolicy: runtimePolicy,
         minSigma: runtimePolicy.mosaicPreviewMinSigma,
         maxSigma: runtimePolicy.mosaicPreviewMaxSigma,
@@ -1140,17 +1282,20 @@ class FilterSegmentRenderer {
         strength: data.strength,
         regionSize: filterBounds.size,
       ),
+      coverageRatio: coverageRatio,
     );
     final mosaicOrigin = filterBounds.topLeft;
     final normalizedOffsetX = _positiveModulo(
       runtimePolicy.quantizeMosaicOffset(
         _positiveModulo(mosaicOrigin.dx, mosaicBlockSize),
+        coverageRatio: coverageRatio,
       ),
       mosaicBlockSize,
     );
     final normalizedOffsetY = _positiveModulo(
       runtimePolicy.quantizeMosaicOffset(
         _positiveModulo(mosaicOrigin.dy, mosaicBlockSize),
+        coverageRatio: coverageRatio,
       ),
       mosaicBlockSize,
     );
@@ -1191,6 +1336,7 @@ class FilterSegmentRenderer {
       layerBounds,
       opacity,
       data,
+      coverageRatio: coverageRatio,
       runtimePolicy: runtimePolicy,
       minSigma: 4,
       maxSigma: 24,
@@ -1204,22 +1350,38 @@ class FilterSegmentRenderer {
     Rect layerBounds,
     double opacity,
     FilterData data, {
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
     double minSigma = 0.5,
     double maxSigma = 12,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
+    final effectiveMinSigma = runtimePolicy.resolveAdaptiveMinSigma(
+      baseMinSigma: minSigma,
+      coverageRatio: coverageRatio,
+    );
+    final effectiveMaxSigma = runtimePolicy.resolveAdaptiveMaxSigma(
+      baseMaxSigma: maxSigma,
+      coverageRatio: coverageRatio,
+    );
     final logicalSigma = runtimePolicy.quantizeSigma(
       _mapStrength(
         strength: data.strength,
-        minValue: minSigma,
-        maxValue: maxSigma,
+        minValue: effectiveMinSigma,
+        maxValue: effectiveMaxSigma,
       ),
+      coverageRatio: coverageRatio,
     );
     final blurSigma = runtimePolicy.quantizeSigma(
-      runtimePolicy.resolveBlurKernelSigma(logicalSigma),
+      runtimePolicy.resolveBlurKernelSigma(
+        logicalSigma,
+        coverageRatio: coverageRatio,
+      ),
+      coverageRatio: coverageRatio,
     );
-    final downsampleFactor = runtimePolicy.blurDownsampleFactor;
+    final downsampleFactor = runtimePolicy.resolveBlurDownsampleFactor(
+      coverageRatio: coverageRatio,
+    );
     final cacheKey = _FilterImageCacheKey(
       type: CanvasFilterType.gaussianBlur,
       param0: logicalSigma,
@@ -1255,27 +1417,45 @@ class FilterSegmentRenderer {
       return ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
     }
 
-    final downsampleFilter = ImageFilter.matrix(
-      _buildScaleMatrix(
-        scaleX: normalizedDownsample,
-        scaleY: normalizedDownsample,
-      ),
-      filterQuality: FilterQuality.none,
+    final downsampleFilter = _buildScaleImageFilter(
+      scaleX: normalizedDownsample,
+      scaleY: normalizedDownsample,
     );
     final blurFilter = ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma);
-    final upsampleFilter = ImageFilter.matrix(
-      _buildScaleMatrix(
-        scaleX: 1 / normalizedDownsample,
-        scaleY: 1 / normalizedDownsample,
-      ),
-      filterQuality: FilterQuality.none,
+    final upsampleFilter = _buildScaleImageFilter(
+      scaleX: 1 / normalizedDownsample,
+      scaleY: 1 / normalizedDownsample,
     );
-
     return ImageFilter.compose(
       outer: upsampleFilter,
       inner: ImageFilter.compose(outer: blurFilter, inner: downsampleFilter),
     );
   }
+
+  ImageFilter _buildResampleImageFilter({required double downsampleFactor}) {
+    final normalizedDownsample = downsampleFactor.clamp(0.1, 1.0);
+    if (normalizedDownsample >= 1) {
+      return _buildScaleImageFilter(scaleX: 1, scaleY: 1);
+    }
+
+    final downsampleFilter = _buildScaleImageFilter(
+      scaleX: normalizedDownsample,
+      scaleY: normalizedDownsample,
+    );
+    final upsampleFilter = _buildScaleImageFilter(
+      scaleX: 1 / normalizedDownsample,
+      scaleY: 1 / normalizedDownsample,
+    );
+    return ImageFilter.compose(outer: upsampleFilter, inner: downsampleFilter);
+  }
+
+  ImageFilter _buildScaleImageFilter({
+    required double scaleX,
+    required double scaleY,
+  }) => ImageFilter.matrix(
+    _buildScaleMatrix(scaleX: scaleX, scaleY: scaleY),
+    filterQuality: FilterQuality.none,
+  );
 
   void _paintColorMatrixFilter(
     Canvas canvas,
@@ -1283,12 +1463,30 @@ class FilterSegmentRenderer {
     ColorFilter colorFilter,
     Rect layerBounds,
     double opacity, {
+    required double coverageRatio,
+    required _FilterRuntimePolicy runtimePolicy,
+    required CanvasFilterType cacheType,
     BlendMode blendMode = BlendMode.srcOver,
   }) {
+    final downsampleFactor = runtimePolicy.resolveColorMatrixDownsampleFactor(
+      coverageRatio: coverageRatio,
+    );
+    final imageFilter = downsampleFactor >= 1
+        ? null
+        : _filterCache.getOrCreate(
+            _FilterImageCacheKey(
+              type: cacheType,
+              param0: downsampleFactor,
+              param1: -1,
+            ),
+            () => _buildResampleImageFilter(downsampleFactor: downsampleFactor),
+          );
+
     _diagnostics.markSaveLayer();
     _resetLayerPaint(
       opacity: opacity,
       colorFilter: colorFilter,
+      imageFilter: imageFilter,
       blendMode: blendMode,
     );
     canvas
@@ -1322,6 +1520,7 @@ class FilterSegmentRenderer {
     required Rect clipBounds,
     required Rect? visibleBounds,
     required FilterData data,
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (visibleBounds == null) {
@@ -1330,6 +1529,7 @@ class FilterSegmentRenderer {
     final viewportOutset = _resolveFilterViewportOutset(
       data: data,
       clipBounds: clipBounds,
+      coverageRatio: coverageRatio,
       runtimePolicy: runtimePolicy,
     );
     final expandedVisible = Rect.fromLTRB(
@@ -1349,8 +1549,12 @@ class FilterSegmentRenderer {
   double _resolveFilterViewportOutset({
     required FilterData data,
     required Rect clipBounds,
+    required double coverageRatio,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
+    final maxViewportOutset = runtimePolicy.resolveViewportOutsetCap(
+      coverageRatio: coverageRatio,
+    );
     switch (data.type) {
       case CanvasFilterType.gaussianBlur:
         final sigma = runtimePolicy.quantizeSigma(
@@ -1359,9 +1563,10 @@ class FilterSegmentRenderer {
             minValue: runtimePolicy.gaussianMinSigma,
             maxValue: runtimePolicy.gaussianMaxSigma,
           ),
+          coverageRatio: coverageRatio,
         );
         final blurRadius = (sigma * 3) + 2;
-        return math.min(blurRadius, runtimePolicy.maxViewportOutset);
+        return math.min(blurRadius, maxViewportOutset);
       case CanvasFilterType.mosaic:
         if (runtimePolicy.useFastMosaicApproximation) {
           final sigma = runtimePolicy.quantizeSigma(
@@ -1370,20 +1575,19 @@ class FilterSegmentRenderer {
               minValue: runtimePolicy.mosaicPreviewMinSigma,
               maxValue: runtimePolicy.mosaicPreviewMaxSigma,
             ),
+            coverageRatio: coverageRatio,
           );
           final blurRadius = (sigma * 3) + 2;
-          return math.min(blurRadius, runtimePolicy.maxViewportOutset);
+          return math.min(blurRadius, maxViewportOutset);
         }
         final blockSize = runtimePolicy.quantizeMosaicBlockSize(
           _kernelFactory.resolveMosaicBlockSize(
             strength: data.strength,
             regionSize: clipBounds.size,
           ),
+          coverageRatio: coverageRatio,
         );
-        return math.min(
-          math.max(blockSize, 8),
-          runtimePolicy.maxViewportOutset,
-        );
+        return math.min(math.max(blockSize, 8), maxViewportOutset);
       case CanvasFilterType.grayscale:
       case CanvasFilterType.inversion:
         return 0;
@@ -1444,6 +1648,18 @@ class FilterSegmentRenderer {
       mosaicSizeQuantizationStep: mosaicQuantizationStep,
       mosaicOffsetQuantizationStep: offsetQuantizationStep,
       blurDownsampleFactor: blurDownsampleFactor,
+      largeCoverageThreshold: _largeFilterCoverageThreshold,
+      hugeCoverageThreshold: _hugeFilterCoverageThreshold,
+      largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
+      hugeCoverageViewportOutsetScale: _hugeCoverageViewportOutsetScale,
+      largeCoverageSigmaScale: _largeCoverageSigmaScale,
+      hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
+      largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
+      hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
+      largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
+      hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
+      largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
+      hugeCoverageQuantizationScale: _hugeCoverageQuantizationScale,
     );
   }
 
@@ -1521,6 +1737,28 @@ class FilterSegmentRenderer {
     return hash;
   }
 
+  double _resolveCoverageRatio({
+    required Rect region,
+    required Rect? visibleBounds,
+  }) {
+    if (region.isEmpty) {
+      return 0;
+    }
+    final regionArea = region.width * region.height;
+    if (regionArea <= 0) {
+      return 0;
+    }
+    if (visibleBounds == null || visibleBounds.isEmpty) {
+      return 1;
+    }
+    final visibleArea = visibleBounds.width * visibleBounds.height;
+    if (visibleArea <= 0) {
+      return 1;
+    }
+    final referenceArea = math.max(regionArea, visibleArea);
+    return (regionArea / referenceArea).clamp(0.0, 1.0);
+  }
+
   double _mapStrength({
     required double strength,
     required double minValue,
@@ -1564,6 +1802,8 @@ class FilterSegmentRenderer {
   }
 }
 
+enum _FilterCoverageTier { compact, large, huge }
+
 @immutable
 class _FilterRuntimePolicy {
   const _FilterRuntimePolicy({
@@ -1579,6 +1819,18 @@ class _FilterRuntimePolicy {
     required this.mosaicSizeQuantizationStep,
     required this.mosaicOffsetQuantizationStep,
     required this.blurDownsampleFactor,
+    required this.largeCoverageThreshold,
+    required this.hugeCoverageThreshold,
+    required this.largeCoverageViewportOutsetScale,
+    required this.hugeCoverageViewportOutsetScale,
+    required this.largeCoverageSigmaScale,
+    required this.hugeCoverageSigmaScale,
+    required this.largeCoverageBlurDownsampleScale,
+    required this.hugeCoverageBlurDownsampleScale,
+    required this.largeCoverageColorMatrixDownsample,
+    required this.hugeCoverageColorMatrixDownsample,
+    required this.largeCoverageQuantizationScale,
+    required this.hugeCoverageQuantizationScale,
   });
 
   final bool preferFastCpuFallback;
@@ -1593,14 +1845,102 @@ class _FilterRuntimePolicy {
   final double mosaicSizeQuantizationStep;
   final double mosaicOffsetQuantizationStep;
   final double blurDownsampleFactor;
+  final double largeCoverageThreshold;
+  final double hugeCoverageThreshold;
+  final double largeCoverageViewportOutsetScale;
+  final double hugeCoverageViewportOutsetScale;
+  final double largeCoverageSigmaScale;
+  final double hugeCoverageSigmaScale;
+  final double largeCoverageBlurDownsampleScale;
+  final double hugeCoverageBlurDownsampleScale;
+  final double largeCoverageColorMatrixDownsample;
+  final double hugeCoverageColorMatrixDownsample;
+  final double largeCoverageQuantizationScale;
+  final double hugeCoverageQuantizationScale;
 
   bool get useFastMosaicApproximation =>
       preferFastCpuFallback && !canUseMosaicShader;
 
-  double quantizeSigma(double sigma) => _quantize(sigma, sigmaQuantizationStep);
+  double resolveViewportOutsetCap({required double coverageRatio}) {
+    if (!preferFastCpuFallback) {
+      return maxViewportOutset;
+    }
+    final scale = switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1.0,
+      _FilterCoverageTier.large => largeCoverageViewportOutsetScale,
+      _FilterCoverageTier.huge => hugeCoverageViewportOutsetScale,
+    };
+    return _clampPositive(
+      maxViewportOutset * scale,
+      fallback: maxViewportOutset,
+    );
+  }
 
-  double quantizeMosaicBlockSize(double value) {
-    final quantized = _quantize(value, mosaicSizeQuantizationStep);
+  double resolveAdaptiveMinSigma({
+    required double baseMinSigma,
+    required double coverageRatio,
+  }) {
+    final maxSigma = resolveAdaptiveMaxSigma(
+      baseMaxSigma: baseMinSigma,
+      coverageRatio: coverageRatio,
+    );
+    return math.min(baseMinSigma, maxSigma);
+  }
+
+  double resolveAdaptiveMaxSigma({
+    required double baseMaxSigma,
+    required double coverageRatio,
+  }) {
+    if (!preferFastCpuFallback) {
+      return baseMaxSigma;
+    }
+    final scale = switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1.0,
+      _FilterCoverageTier.large => largeCoverageSigmaScale,
+      _FilterCoverageTier.huge => hugeCoverageSigmaScale,
+    };
+    return _clampPositive(baseMaxSigma * scale, fallback: baseMaxSigma);
+  }
+
+  double resolveBlurDownsampleFactor({required double coverageRatio}) {
+    if (!preferFastCpuFallback) {
+      return blurDownsampleFactor.clamp(0.1, 1.0);
+    }
+    final scale = switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1.0,
+      _FilterCoverageTier.large => largeCoverageBlurDownsampleScale,
+      _FilterCoverageTier.huge => hugeCoverageBlurDownsampleScale,
+    };
+    final scaled = blurDownsampleFactor * scale;
+    final lowerBound = aggressiveCpuFallback
+        ? 0.25
+        : preferFastCpuFallback
+        ? 0.4
+        : 0.8;
+    return scaled.clamp(lowerBound, 1.0);
+  }
+
+  double resolveColorMatrixDownsampleFactor({required double coverageRatio}) {
+    if (!preferFastCpuFallback) {
+      return 1;
+    }
+    return switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1,
+      _FilterCoverageTier.large => largeCoverageColorMatrixDownsample,
+      _FilterCoverageTier.huge => hugeCoverageColorMatrixDownsample,
+    };
+  }
+
+  double quantizeSigma(double sigma, {double coverageRatio = 0}) => _quantize(
+    sigma,
+    sigmaQuantizationStep * _resolveQuantizationScale(coverageRatio),
+  );
+
+  double quantizeMosaicBlockSize(double value, {double coverageRatio = 0}) {
+    final quantized = _quantize(
+      value,
+      mosaicSizeQuantizationStep * _resolveQuantizationScale(coverageRatio),
+    );
     if (quantized.isFinite && quantized > 0) {
       return quantized;
     }
@@ -1610,15 +1950,51 @@ class _FilterRuntimePolicy {
     return 1;
   }
 
-  double quantizeMosaicOffset(double value) =>
-      _quantize(value, mosaicOffsetQuantizationStep);
+  double quantizeMosaicOffset(double value, {double coverageRatio = 0}) =>
+      _quantize(
+        value,
+        mosaicOffsetQuantizationStep * _resolveQuantizationScale(coverageRatio),
+      );
 
-  double resolveBlurKernelSigma(double logicalSigma) {
-    final downsample = blurDownsampleFactor;
+  double resolveBlurKernelSigma(
+    double logicalSigma, {
+    double coverageRatio = 0,
+  }) {
+    final downsample = resolveBlurDownsampleFactor(
+      coverageRatio: coverageRatio,
+    );
     if (downsample >= 1 || !downsample.isFinite) {
       return logicalSigma;
     }
     return logicalSigma * downsample;
+  }
+
+  _FilterCoverageTier _resolveCoverageTier(double coverageRatio) {
+    if (coverageRatio >= hugeCoverageThreshold) {
+      return _FilterCoverageTier.huge;
+    }
+    if (coverageRatio >= largeCoverageThreshold) {
+      return _FilterCoverageTier.large;
+    }
+    return _FilterCoverageTier.compact;
+  }
+
+  double _resolveQuantizationScale(double coverageRatio) {
+    if (!preferFastCpuFallback) {
+      return 1;
+    }
+    return switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1,
+      _FilterCoverageTier.large => largeCoverageQuantizationScale,
+      _FilterCoverageTier.huge => hugeCoverageQuantizationScale,
+    };
+  }
+
+  double _clampPositive(double value, {required double fallback}) {
+    if (value.isFinite && value > 0) {
+      return value;
+    }
+    return fallback;
   }
 
   double _quantize(double value, double step) {
@@ -1925,12 +2301,14 @@ class _PreparedFilterPass {
     required this.clip,
     required this.layerBounds,
     required this.opacity,
+    required this.coverageRatio,
   });
 
   final FilterData data;
   final _ClipInfo clip;
   final Rect layerBounds;
   final double opacity;
+  final double coverageRatio;
 }
 
 @immutable

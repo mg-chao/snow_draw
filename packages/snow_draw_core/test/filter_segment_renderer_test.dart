@@ -362,7 +362,7 @@ void main() {
 
       final diagnostics = renderer.lastDiagnostics;
       expect(diagnostics.filterPasses, 2);
-      expect(diagnostics.pictureRecorders, greaterThanOrEqualTo(2));
+      expect(diagnostics.pictureRecorders, greaterThanOrEqualTo(1));
     },
   );
 
@@ -956,6 +956,158 @@ void main() {
     expect(second.batchCacheHits, 1);
     recorder.endRecording();
   });
+
+  test(
+    'tail merged-filter pass avoids additional picture recording on cache hit',
+    () {
+      final renderer = FilterSegmentRenderer();
+      final recorder = PictureRecorder();
+      final canvas = Canvas(recorder);
+      const cacheContext = FilterRenderCacheContext(
+        domain: FilterRenderCacheDomain.dynamicLayer,
+        documentVersion: 8,
+        textRenderingCacheRevision: 2,
+        scaleKey: 1000,
+        localeTag: 'en-US',
+      );
+      const base = ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: 128, maxY: 96),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const firstFilter = ElementState(
+        id: 'filter-1',
+        rect: DrawRect(minX: 12, minY: 12, maxX: 60, maxY: 84),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(type: CanvasFilterType.inversion),
+      );
+      const secondFilter = ElementState(
+        id: 'filter-2',
+        rect: DrawRect(minX: 68, minY: 12, maxX: 116, maxY: 84),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: FilterData(type: CanvasFilterType.inversion),
+      );
+
+      void paintFrame() {
+        renderer.paint(
+          canvas: canvas,
+          elements: const [base, firstFilter, secondFilter],
+          cacheContext: cacheContext,
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            sceneCanvas.drawRect(
+              const Rect.fromLTWH(0, 0, 128, 96),
+              Paint()..color = const Color(0xFF425A70),
+            );
+          },
+        );
+      }
+
+      paintFrame();
+      final first = renderer.lastDiagnostics;
+      paintFrame();
+      final second = renderer.lastDiagnostics;
+
+      expect(first.pictureRecorders, greaterThanOrEqualTo(1));
+      expect(second.pictureRecorders, 0);
+      expect(second.batchCacheHits, 1);
+      expect(second.filterPasses, 2);
+      recorder.endRecording();
+    },
+  );
+
+  test(
+    'tail merged-filter pass preserves overlapping filter semantics',
+    () async {
+      const imageWidth = 96.0;
+      const imageHeight = 96.0;
+      const base = ElementState(
+        id: 'base',
+        rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const firstFilter = ElementState(
+        id: 'filter-1',
+        rect: DrawRect(minX: 8, minY: 8, maxX: 88, maxY: 88),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: FilterData(type: CanvasFilterType.inversion),
+      );
+      const secondFilter = ElementState(
+        id: 'filter-2',
+        rect: DrawRect(minX: 20, minY: 16, maxX: 92, maxY: 92),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: FilterData(type: CanvasFilterType.inversion),
+      );
+
+      Future<Color> renderSample({
+        required Set<String> dynamicElementIds,
+      }) async {
+        final renderer = FilterSegmentRenderer();
+        final recorder = PictureRecorder();
+        final canvas = Canvas(recorder);
+        renderer.paint(
+          canvas: canvas,
+          elements: const [base, firstFilter, secondFilter],
+          dynamicElementIds: dynamicElementIds,
+          paintElement: (sceneCanvas, element) {
+            if (element.id != 'base') {
+              return;
+            }
+            sceneCanvas.drawRect(
+              const Rect.fromLTWH(0, 0, imageWidth, imageHeight),
+              Paint()..color = const Color(0x806699CC),
+            );
+          },
+        );
+
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(
+          imageWidth.toInt(),
+          imageHeight.toInt(),
+        );
+        final bytes = await image.toByteData();
+        expect(bytes, isNotNull);
+        return _readPixel(bytes!, imageWidth.toInt(), const Offset(48, 48));
+      }
+
+      final mergedOutput = await renderSample(dynamicElementIds: const {});
+      final splitOutput = await renderSample(
+        dynamicElementIds: const {'filter-1'},
+      );
+
+      expect(
+        (_channelFromUnit(mergedOutput.r) - _channelFromUnit(splitOutput.r))
+            .abs(),
+        lessThanOrEqualTo(2),
+      );
+      expect(
+        (_channelFromUnit(mergedOutput.g) - _channelFromUnit(splitOutput.g))
+            .abs(),
+        lessThanOrEqualTo(2),
+      );
+      expect(
+        (_channelFromUnit(mergedOutput.b) - _channelFromUnit(splitOutput.b))
+            .abs(),
+        lessThanOrEqualTo(2),
+      );
+    },
+  );
 
   test('interaction preview skips mosaic filter creation '
       'when shader path is unavailable', () {
