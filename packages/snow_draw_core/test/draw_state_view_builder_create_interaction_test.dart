@@ -3,6 +3,7 @@ import 'package:snow_draw_core/draw/edit/edit_operations.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/services/draw_state_view_builder.dart';
@@ -45,5 +46,6 @@ void main() {
 
     expect(view.previewElementsById, isEmpty);
     expect(view.snapGuides, guides);
+    expect(identical(view.effectiveSelection, EffectiveSelection.none), isTrue);
   });
 }

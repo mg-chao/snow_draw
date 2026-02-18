@@ -2841,9 +2841,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       staticPreviewElements = const <String, ElementState>{};
       dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
     } else {
-      final optimizationPlan = interaction is TextEditingState
-          ? null
-          : resolveDynamicSceneOptimizationPlan(view: stateView);
+      final shouldResolveOptimization =
+          interaction is EditingState || interaction is TextEditingState;
+      final optimizationPlan = shouldResolveOptimization
+          ? resolveDynamicSceneOptimizationPlan(view: stateView)
+          : null;
       optimizedDynamicElementIds =
           optimizationPlan?.optimizedElementIds ?? const <String>{};
       final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty

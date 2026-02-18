@@ -94,8 +94,7 @@ bool _isRectangleEditingMutationOnly({
   if (!_isSameEditSession(previous, next)) {
     return false;
   }
-  if (!_isRectangleEditContext(context: previous.context, document: document) ||
-      !_isRectangleEditContext(context: next.context, document: document)) {
+  if (!_isRectangleEditContext(context: next.context, document: document)) {
     return false;
   }
   return previous.currentTransform != next.currentTransform ||
@@ -108,6 +107,34 @@ bool _isSameEditSession(EditingState previous, EditingState next) =>
     identical(previous.context, next.context);
 
 bool _isRectangleEditContext({
+  required EditContext context,
+  required DocumentState document,
+}) => _resolveRectangleEditContextEligibility(
+  context: context,
+  document: document,
+);
+
+bool _resolveRectangleEditContextEligibility({
+  required EditContext context,
+  required DocumentState document,
+}) {
+  final cachedProfile = _rectangleEditContextProfileCache[context];
+  if (cachedProfile != null && identical(cachedProfile.document, document)) {
+    return cachedProfile.isEligible;
+  }
+
+  final isEligible = _computeRectangleEditContextEligibility(
+    context: context,
+    document: document,
+  );
+  _rectangleEditContextProfileCache[context] = _RectangleEditContextProfile(
+    document: document,
+    isEligible: isEligible,
+  );
+  return isEligible;
+}
+
+bool _computeRectangleEditContextEligibility({
   required EditContext context,
   required DocumentState document,
 }) {
@@ -124,6 +151,20 @@ bool _isRectangleEditContext({
     }
   }
   return true;
+}
+
+final _rectangleEditContextProfileCache = Expando<_RectangleEditContextProfile>(
+  'rectangle_interaction_edit_context_profile',
+);
+
+class _RectangleEditContextProfile {
+  const _RectangleEditContextProfile({
+    required this.document,
+    required this.isEligible,
+  });
+
+  final DocumentState document;
+  final bool isEligible;
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {

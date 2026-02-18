@@ -101,6 +101,15 @@ class DrawStateView {
     DrawState state, {
     List<SnapGuide> snapGuides = const [],
   }) {
+    if (!state.domain.selection.hasSelection) {
+      return DrawStateView._(
+        state: state,
+        previewElementsById: const {},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: snapGuides,
+      );
+    }
+
     final selection = SelectionDataComputer.compute(state);
     return DrawStateView._(
       state: state,
