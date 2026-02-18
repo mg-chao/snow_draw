@@ -59,6 +59,11 @@ class EraserStrokeProcessor {
 
     final document = stateView.state.domain.document;
     final elementById = document.elementMap;
+    if (elementById.isEmpty) {
+      _effectiveElementCache.clear();
+      _cachedEffectiveStateView = null;
+      return false;
+    }
     final hasPreviewOverrides = stateView.previewElementsById.isNotEmpty;
     if (!hasPreviewOverrides) {
       _effectiveElementCache.clear();

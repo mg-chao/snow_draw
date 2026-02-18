@@ -709,12 +709,14 @@ class DynamicCanvasPainter extends CustomPainter {
     final previewElements = renderKey.previewElementsById;
     final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
     final creatingFilterId = _resolveCreatingFilterId();
+    final previewTopologyHint = renderKey.previewElementsRevision == null
+        ? _PreviewTopologyHint.general
+        : _PreviewTopologyHint.stableDocumentBacked;
     final staticContext = _resolveSceneRenderContextStaticData(
       document: document,
       elements: elements,
       previewElementsById: previewElements,
-      dynamicPreviewIds: dynamicPreviewIds,
-      creatingFilterId: creatingFilterId,
+      previewTopologyHint: previewTopologyHint,
     );
 
     final serialConnectorSnapshot = staticContext.shouldPaintSerialConnectors
@@ -757,21 +759,33 @@ class DynamicCanvasPainter extends CustomPainter {
     required DocumentState document,
     required List<ElementState> elements,
     required Map<String, ElementState> previewElementsById,
-    required Set<String> dynamicPreviewIds,
-    required String? creatingFilterId,
+    required _PreviewTopologyHint previewTopologyHint,
   }) {
-    final elementSignature = _buildSceneElementStructureSignature(elements);
-    final serialPreviewSignature = _buildSerialPreviewSignature(
-      previewElementsById,
-    );
+    // Eraser preview mode only applies document-backed opacity overrides.
+    // Once the visible element list is stable, static scene metadata stays
+    // valid across frames even as the preview override map grows.
     final cached = _sceneRenderContextCache;
     if (cached != null &&
-        cached.matches(
+        cached.matchesFast(
+          document: document,
+          elements: elements,
+          previewElementsById: previewElementsById,
+          previewTopologyHint: previewTopologyHint,
+        )) {
+      return cached.staticData;
+    }
+
+    final elementSignature = _buildSceneElementStructureSignature(elements);
+    final serialPreviewSignature =
+        previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked
+        ? _SerialPreviewSignature.empty
+        : _buildSerialPreviewSignature(previewElementsById);
+    if (cached != null &&
+        cached.matchesBySignature(
           document: document,
           elementSignature: elementSignature,
           serialPreviewSignature: serialPreviewSignature,
-          dynamicPreviewIds: dynamicPreviewIds,
-          creatingFilterId: creatingFilterId,
+          previewTopologyHint: previewTopologyHint,
         )) {
       return cached.staticData;
     }
@@ -811,10 +825,11 @@ class DynamicCanvasPainter extends CustomPainter {
     );
     _sceneRenderContextCache = _SceneRenderContextCacheEntry(
       document: document,
+      elements: elements,
+      previewElementsById: previewElementsById,
+      previewTopologyHint: previewTopologyHint,
       elementSignature: elementSignature,
       serialPreviewSignature: serialPreviewSignature,
-      dynamicPreviewIds: dynamicPreviewIds,
-      creatingFilterId: creatingFilterId,
       staticData: staticData,
     );
     return staticData;
@@ -851,7 +866,7 @@ class DynamicCanvasPainter extends CustomPainter {
     Map<String, ElementState> previewElementsById,
   ) {
     if (previewElementsById.isEmpty) {
-      return const _SerialPreviewSignature(hash: 0, count: 0);
+      return _SerialPreviewSignature.empty;
     }
 
     var hash = 0;
@@ -2098,6 +2113,8 @@ class _ArrowBindingHighlight {
   final String elementId;
 }
 
+enum _PreviewTopologyHint { general, stableDocumentBacked }
+
 class _SceneRenderContext {
   const _SceneRenderContext({
     required this.hasFilterElement,
@@ -2134,47 +2151,44 @@ class _SceneRenderContextStaticData {
 class _SceneRenderContextCacheEntry {
   _SceneRenderContextCacheEntry({
     required this.document,
+    required this.elements,
+    required this.previewElementsById,
+    required this.previewTopologyHint,
     required this.elementSignature,
     required this.serialPreviewSignature,
-    required Set<String> dynamicPreviewIds,
-    required this.creatingFilterId,
     required this.staticData,
-  }) : dynamicPreviewIds = Set<String>.unmodifiable(dynamicPreviewIds);
+  });
 
   final DocumentState document;
+  final List<ElementState> elements;
+  final Map<String, ElementState> previewElementsById;
+  final _PreviewTopologyHint previewTopologyHint;
   final _SceneElementStructureSignature elementSignature;
   final _SerialPreviewSignature serialPreviewSignature;
-  final Set<String> dynamicPreviewIds;
-  final String? creatingFilterId;
   final _SceneRenderContextStaticData staticData;
 
-  bool matches({
+  bool matchesFast({
+    required DocumentState document,
+    required List<ElementState> elements,
+    required Map<String, ElementState> previewElementsById,
+    required _PreviewTopologyHint previewTopologyHint,
+  }) =>
+      identical(this.document, document) &&
+      identical(this.elements, elements) &&
+      this.previewTopologyHint == previewTopologyHint &&
+      (previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked ||
+          identical(this.previewElementsById, previewElementsById));
+
+  bool matchesBySignature({
     required DocumentState document,
     required _SceneElementStructureSignature elementSignature,
     required _SerialPreviewSignature serialPreviewSignature,
-    required Set<String> dynamicPreviewIds,
-    required String? creatingFilterId,
+    required _PreviewTopologyHint previewTopologyHint,
   }) =>
       identical(this.document, document) &&
+      this.previewTopologyHint == previewTopologyHint &&
       this.elementSignature == elementSignature &&
-      this.serialPreviewSignature == serialPreviewSignature &&
-      this.creatingFilterId == creatingFilterId &&
-      _setEquals(this.dynamicPreviewIds, dynamicPreviewIds);
-
-  static bool _setEquals<T>(Set<T> a, Set<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final value in a) {
-      if (!b.contains(value)) {
-        return false;
-      }
-    }
-    return true;
-  }
+      this.serialPreviewSignature == serialPreviewSignature;
 }
 
 @immutable
@@ -2208,6 +2222,8 @@ class _SceneElementStructureSignature {
 @immutable
 class _SerialPreviewSignature {
   const _SerialPreviewSignature({required this.hash, required this.count});
+
+  static const empty = _SerialPreviewSignature(hash: 0, count: 0);
 
   final int hash;
   final int count;

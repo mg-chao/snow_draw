@@ -231,7 +231,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
-  final _eraserVolatilePreviewElementIds = <String>{};
+  var _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
@@ -898,7 +898,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_eraserVolatilePreviewElementIds.isEmpty) {
       return const <String>{};
     }
-    return Set<String>.unmodifiable(_eraserVolatilePreviewElementIds);
+    return _eraserVolatilePreviewElementIds;
+  }
+
+  void _resetEraserVolatilePreviewElementIds() {
+    if (_eraserVolatilePreviewElementIds.isEmpty) {
+      return;
+    }
+    _eraserVolatilePreviewElementIds = <String>{};
   }
 
   Set<String> _resolveDynamicPreviewElementIdsForScene(
@@ -1489,7 +1496,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       assumeDynamicChanged: true,
       refreshStaticLayer: requiresStaticRefresh,
     );
-    _eraserVolatilePreviewElementIds.clear();
+    _resetEraserVolatilePreviewElementIds();
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -1524,7 +1531,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
-    _eraserVolatilePreviewElementIds.clear();
+    _resetEraserVolatilePreviewElementIds();
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
@@ -1546,11 +1553,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _eraserPointerIds.clear();
     }
     if (_pendingErasePreviewElementsById.isEmpty) {
-      _eraserVolatilePreviewElementIds.clear();
+      _resetEraserVolatilePreviewElementIds();
       return;
     }
     _pendingErasePreviewElementsById.clear();
-    _eraserVolatilePreviewElementIds.clear();
+    _resetEraserVolatilePreviewElementIds();
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
