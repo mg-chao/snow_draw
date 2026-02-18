@@ -12,6 +12,9 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/types/edit_context.dart';
+import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
+import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/ui/canvas/interaction_mutation_refresh_plan.dart';
 
 void main() {
@@ -169,6 +172,49 @@ void main() {
       expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
+    test('resolves arrow edit as dynamic-only and defers pointer refresh', () {
+      final base = _baseState(
+        elements: const [_arrowElement],
+        selectedIds: const {'arrow'},
+      );
+      const context = _TestEditContext(
+        startPosition: DrawPoint(x: 18, y: 18),
+        startBounds: DrawRect(minX: 18, minY: 18, maxX: 78, maxY: 48),
+        selectedIdsAtStart: {'arrow'},
+        selectionVersion: 1,
+        elementsVersion: 1,
+      );
+      final previous = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'arrow_edit',
+          context: context,
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'arrow_edit',
+          context: context,
+          currentTransform: MoveTransform(dx: 10, dy: 6),
+        ),
+      );
+
+      final plan = resolveInteractionMutationRefreshPlan(
+        previous: previous,
+        next: next,
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.kind, InteractionMutationKind.arrow);
+      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
+      expect(plan.shouldRefreshPointerVisuals(hasActivePointer: true), isFalse);
+      expect(plan.shouldRefreshPointerVisuals(hasActivePointer: false), isTrue);
+    });
+
     test('returns null when domain changes', () {
       final base = _baseState(elements: const [_serialElement]);
       final previous = _withInteraction(
@@ -267,3 +313,13 @@ DrawState _baseState({
 
 DrawState _withInteraction(DrawState base, InteractionState interaction) => base
     .copyWith(application: base.application.copyWith(interaction: interaction));
+
+class _TestEditContext extends EditContext {
+  const _TestEditContext({
+    required super.startPosition,
+    required super.startBounds,
+    required super.selectedIdsAtStart,
+    required super.selectionVersion,
+    required super.elementsVersion,
+  });
+}

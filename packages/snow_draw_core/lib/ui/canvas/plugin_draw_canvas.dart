@@ -3727,6 +3727,42 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return data.strokeWidth > 0 && strokeOpacity > 0;
   }
 
+  void _refreshPointerVisualsForState(DrawState state) {
+    final position = _lastPointerPosition;
+    if (position != null && _isPointerInside) {
+      if (!mounted) {
+        _cursor = _resolveCursorForState(state, position);
+        _hoveredSelectionElementId = null;
+        _hoveredBindingElementId = _resolveHoverBindingElementId(
+          state: state,
+          position: position,
+        );
+        _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
+          state: state,
+          position: position,
+        );
+        return;
+      }
+      _updateCursorAndHoverForPosition(position);
+      return;
+    }
+
+    _refreshCursorAndClearHoverForState(state);
+  }
+
+  void _refreshCursorAndClearHoverForState(DrawState state) {
+    final cursor = _resolveCursorForState(state, _lastPointerPosition);
+    if (!mounted) {
+      _cursor = cursor;
+      _hoveredSelectionElementId = null;
+      _hoveredBindingElementId = null;
+      _hoveredArrowHandle = null;
+      return;
+    }
+    _updateCursorIfChanged(cursor);
+    _clearHoverState();
+  }
+
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
@@ -3758,66 +3794,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     _syncFreeDrawPreviewLayerState(state);
     _syncWatermarkLayerState(state);
-    final position = _lastPointerPosition;
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
-      if (position != null && _isPointerInside) {
-        if (!mounted) {
-          _cursor = _resolveCursorForState(state, position);
-          _hoveredSelectionElementId = null;
-          _hoveredBindingElementId = null;
-          _hoveredArrowHandle = null;
-          return;
-        }
-        _updateCursorAndHoverForPosition(position);
-      } else {
-        final cursor = _resolveCursorForState(state, position);
-        if (!mounted) {
-          _cursor = cursor;
-          _hoveredSelectionElementId = null;
-          _hoveredBindingElementId = null;
-          _hoveredArrowHandle = null;
-          return;
-        }
-        _updateCursorIfChanged(cursor);
-        _clearHoverState();
-      }
+      _refreshPointerVisualsForState(state);
       // The dedicated free-draw preview layer already repaints from
       // [_syncFreeDrawPreviewLayerState], so avoid rebuilding canvas snapshots
       // on every point.
       return;
     }
-
-    if (position != null && _isPointerInside) {
-      // Use the combined path when a pointer position is available.
-      if (!mounted) {
-        _cursor = _resolveCursorForState(state, position);
-        _hoveredSelectionElementId = null;
-        _hoveredBindingElementId = _resolveHoverBindingElementId(
-          state: state,
-          position: position,
-        );
-        _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
-          state: state,
-          position: position,
-        );
-        return;
-      }
-      _updateCursorAndHoverForPosition(position);
-      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
-      return;
-    }
-
-    final cursor = _resolveCursorForState(state, position);
-    if (!mounted) {
-      _cursor = cursor;
-      _hoveredSelectionElementId = null;
-      _hoveredBindingElementId = null;
-      _hoveredArrowHandle = null;
-      return;
-    }
-    _updateCursorIfChanged(cursor);
-    _clearHoverState();
+    _refreshPointerVisualsForState(state);
     _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
 
@@ -3825,16 +3810,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawState state, {
     required InteractionMutationRefreshPlan plan,
   }) {
-    final cursor = _resolveCursorForState(state, _lastPointerPosition);
-    if (!mounted) {
-      _cursor = cursor;
-      _hoveredSelectionElementId = null;
-      _hoveredBindingElementId = null;
-      _hoveredArrowHandle = null;
-      return;
+    if (plan.shouldRefreshPointerVisuals(
+      hasActivePointer: _activePointerIds.isNotEmpty,
+    )) {
+      _refreshPointerVisualsForState(state);
+    } else {
+      _refreshCursorAndClearHoverForState(state);
     }
-    _updateCursorIfChanged(cursor);
-    _clearHoverState();
+
     switch (plan.refreshMode) {
       case InteractionMutationRefreshMode.dynamicOnly:
         _refreshDynamicLayerSnapshot(state, assumeChanged: true);
@@ -3851,15 +3834,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _cachedInputSelectionConfig = null;
     _cachedInputSelectionScale = null;
 
-    final position = _lastPointerPosition;
-    if (position != null && _isPointerInside) {
-      _updateCursorAndHoverForPosition(position);
-    } else {
-      _updateCursorIfChanged(
-        _resolveCursorForState(widget.store.state, position),
-      );
-      _clearHoverState();
-    }
+    _refreshPointerVisualsForState(widget.store.state);
     _refreshCanvasLayerSnapshots(
       widget.store.state,
       assumeDynamicChanged: true,
