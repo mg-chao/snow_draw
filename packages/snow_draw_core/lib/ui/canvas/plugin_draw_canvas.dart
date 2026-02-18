@@ -2942,8 +2942,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     late final Map<String, ElementState> dynamicPreviewElements;
     late final int? dynamicPreviewElementsRevision;
     late final Set<String>? dynamicPreviewElementIds;
+    late final bool optimizedSceneHasPotentialOccluders;
     if (promoteEraserPreviewToDynamicLayer) {
       optimizedDynamicElementIds = const <String>{};
+      optimizedSceneHasPotentialOccluders = false;
       dynamicLayerStartIndex = 0;
       staticPreviewElements = const <String, ElementState>{};
       dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
@@ -2965,6 +2967,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           : null;
       optimizedDynamicElementIds =
           optimizationPlan?.optimizedElementIds ?? const <String>{};
+      optimizedSceneHasPotentialOccluders =
+          optimizationPlan != null &&
+          _resolveOptimizedSceneHasPotentialOccluders(
+            stateView: stateView,
+            optimizedElementIds: optimizedDynamicElementIds,
+          );
       final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
           ? _resolveDynamicLayerStartIndex(stateView)
           : null;
@@ -3018,6 +3026,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
       dynamicPreviewElementIds: dynamicPreviewElementIds,
       optimizedDynamicElementIds: optimizedDynamicElementIds,
+      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       dynamicLayerOwnsWholeScene: dynamicLayerOwnsWholeScene,
       creatingSnapshot: creatingSnapshot,
@@ -3091,6 +3100,37 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
+  bool _resolveOptimizedSceneHasPotentialOccluders({
+    required DrawStateView stateView,
+    required Set<String> optimizedElementIds,
+  }) {
+    if (optimizedElementIds.isEmpty) {
+      return false;
+    }
+    final document = stateView.state.domain.document;
+    int? minOrderIndex;
+    for (final elementId in optimizedElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null) {
+        continue;
+      }
+      if (minOrderIndex == null || orderIndex < minOrderIndex) {
+        minOrderIndex = orderIndex;
+      }
+    }
+    if (minOrderIndex == null) {
+      return false;
+    }
+
+    final elements = document.elements;
+    for (var index = minOrderIndex + 1; index < elements.length; index++) {
+      if (!optimizedElementIds.contains(elements[index].id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   HighlightMaskLayer _resolveHighlightMaskLayer({
     required DrawStateView stateView,
     required bool hasDynamicContent,
@@ -3148,6 +3188,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
     dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders:
+        scene.optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
     rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
     highlightMaskLayer: scene.highlightMaskLayer,
@@ -3173,6 +3215,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     previewElementsRevision: previewElementsRevision,
     dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders:
+        scene.optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
     rendersWholeElementScene: scene.rendersWholeElementScene,
     highlightMaskLayer: scene.highlightMaskLayer,
@@ -3188,6 +3232,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required int textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required Set<String> optimizedDynamicElementIds,
+    required bool optimizedSceneHasPotentialOccluders,
     required int? dynamicLayerStartIndex,
     required bool rendersWholeElementScene,
     required HighlightMaskLayer highlightMaskLayer,
@@ -3214,6 +3259,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     previewElementsRevision: previewElementsRevision,
     dynamicPreviewElementIds: dynamicPreviewElementIds,
     optimizedDynamicElementIds: optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: dynamicLayerStartIndex,
     rendersWholeElementScene: rendersWholeElementScene,
     scaleFactor: scaleFactor,
@@ -4474,6 +4520,7 @@ class _CanvasLayerSceneSnapshot {
     required this.dynamicPreviewElementsRevision,
     required this.dynamicPreviewElementIds,
     required this.optimizedDynamicElementIds,
+    required this.optimizedSceneHasPotentialOccluders,
     required this.dynamicLayerStartIndex,
     required this.dynamicLayerOwnsWholeScene,
     required this.creatingSnapshot,
@@ -4487,6 +4534,7 @@ class _CanvasLayerSceneSnapshot {
   final int? dynamicPreviewElementsRevision;
   final Set<String>? dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
+  final bool optimizedSceneHasPotentialOccluders;
   final int? dynamicLayerStartIndex;
   final bool dynamicLayerOwnsWholeScene;
   final CreatingElementSnapshot? creatingSnapshot;

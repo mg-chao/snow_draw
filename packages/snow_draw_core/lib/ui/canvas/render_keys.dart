@@ -205,6 +205,7 @@ class DynamicCanvasRenderKey {
     required this.camera,
     required this.previewElementsById,
     required this.optimizedDynamicElementIds,
+    required this.optimizedSceneHasPotentialOccluders,
     required this.dynamicLayerStartIndex,
     required this.rendersWholeElementScene,
     required this.scaleFactor,
@@ -281,6 +282,13 @@ class DynamicCanvasRenderKey {
   /// above the selection.
   final Set<String> optimizedDynamicElementIds;
 
+  /// Whether optimized-scene rendering has any non-optimized element above
+  /// the optimized seed range.
+  ///
+  /// When `false`, dynamic painters can skip expensive occluder-resolution
+  /// queries and render optimized elements directly in z-order.
+  final bool optimizedSceneHasPotentialOccluders;
+
   /// First element index that renders on the dynamic layer.
   final int? dynamicLayerStartIndex;
 
@@ -337,6 +345,8 @@ class DynamicCanvasRenderKey {
             other.optimizedDynamicElementIds,
             optimizedDynamicElementIds,
           ) &&
+          other.optimizedSceneHasPotentialOccluders ==
+              optimizedSceneHasPotentialOccluders &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
           other.rendersWholeElementScene == rendersWholeElementScene &&
           other.scaleFactor == scaleFactor &&
@@ -367,6 +377,7 @@ class DynamicCanvasRenderKey {
     camera,
     _previewMapHash(),
     Object.hashAllUnordered(optimizedDynamicElementIds),
+    optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex,
     rendersWholeElementScene,
     scaleFactor,

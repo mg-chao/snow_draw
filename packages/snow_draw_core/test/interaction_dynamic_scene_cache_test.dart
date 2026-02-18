@@ -19,6 +19,7 @@ void main() {
       final stateView = _buildStateView();
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
+        optimizedSceneHasPotentialOccluders: true,
         dynamicLayerStartIndex: null,
         rendersWholeElementScene: false,
         highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
@@ -51,6 +52,7 @@ void main() {
       expect(scene.previewElementsById.keys, contains('rect'));
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, {'rect'});
+      expect(scene.optimizedSceneHasPotentialOccluders, isTrue);
       expect(scene.dynamicLayerStartIndex, isNull);
       expect(scene.rendersWholeElementScene, isFalse);
       expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
@@ -87,15 +89,42 @@ void main() {
       expect(scene.previewElementsById.keys, contains('rect'));
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, isEmpty);
+      expect(scene.optimizedSceneHasPotentialOccluders, isFalse);
       expect(scene.dynamicLayerStartIndex, 8);
       expect(scene.rendersWholeElementScene, isTrue);
       expect(scene.highlightMaskLayer, HighlightMaskLayer.staticLayer);
+    });
+
+    test('clears occluder hint when optimized ids are empty', () {
+      final stateView = _buildStateView();
+      final previousRenderKey = _buildDynamicRenderKey(
+        optimizedDynamicElementIds: const <String>{},
+        optimizedSceneHasPotentialOccluders: true,
+        dynamicLayerStartIndex: 4,
+        rendersWholeElementScene: true,
+        highlightMaskLayer: HighlightMaskLayer.staticLayer,
+      );
+
+      final scene = resolveInteractionDynamicSceneFromCachedKey(
+        stateView: stateView,
+        previousRenderKey: previousRenderKey,
+        resolvePreviewByLayerStart: (view, dynamicLayerStartIndex) =>
+            const <String, ElementState>{},
+        resolvePreviewByOptimizedIds: (view, optimizedElementIds) =>
+            const <String, ElementState>{},
+        resolveDynamicPreviewElementIds: (view, previewElementsById) =>
+            const <String>{},
+      );
+
+      expect(scene.optimizedDynamicElementIds, isEmpty);
+      expect(scene.optimizedSceneHasPotentialOccluders, isFalse);
     });
 
     test('returns immutable snapshot collections', () {
       final stateView = _buildStateView();
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
+        optimizedSceneHasPotentialOccluders: true,
         dynamicLayerStartIndex: null,
         rendersWholeElementScene: false,
         highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
@@ -155,6 +184,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required int? dynamicLayerStartIndex,
   required bool rendersWholeElementScene,
   required HighlightMaskLayer highlightMaskLayer,
+  bool optimizedSceneHasPotentialOccluders = false,
 }) {
   final config = DrawConfig.defaultConfig;
   return DynamicCanvasRenderKey(
@@ -174,6 +204,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
     camera: CameraState.initial,
     previewElementsById: const <String, ElementState>{},
     optimizedDynamicElementIds: optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: dynamicLayerStartIndex,
     rendersWholeElementScene: rendersWholeElementScene,
     scaleFactor: 1,

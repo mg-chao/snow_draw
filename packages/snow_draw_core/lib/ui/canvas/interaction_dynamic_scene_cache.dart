@@ -39,6 +39,7 @@ class InteractionDynamicSceneSnapshot {
     required Map<String, ElementState> previewElementsById,
     required Set<String>? dynamicPreviewElementIds,
     required Set<String> optimizedDynamicElementIds,
+    required this.optimizedSceneHasPotentialOccluders,
     required this.dynamicLayerStartIndex,
     required this.rendersWholeElementScene,
     required this.highlightMaskLayer,
@@ -56,6 +57,7 @@ class InteractionDynamicSceneSnapshot {
   final Map<String, ElementState> previewElementsById;
   final Set<String>? dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
+  final bool optimizedSceneHasPotentialOccluders;
   final int? dynamicLayerStartIndex;
   final bool rendersWholeElementScene;
   final HighlightMaskLayer highlightMaskLayer;
@@ -77,6 +79,9 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
 }) {
   final optimizedDynamicElementIds =
       previousRenderKey.optimizedDynamicElementIds;
+  final optimizedSceneHasPotentialOccluders =
+      optimizedDynamicElementIds.isNotEmpty &&
+      previousRenderKey.optimizedSceneHasPotentialOccluders;
   final previewElementsById = optimizedDynamicElementIds.isEmpty
       ? resolvePreviewByLayerStart(
           stateView,
@@ -91,6 +96,7 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
     previewElementsById: previewElementsById,
     dynamicPreviewElementIds: dynamicPreviewElementIds,
     optimizedDynamicElementIds: optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: previousRenderKey.dynamicLayerStartIndex,
     rendersWholeElementScene: previousRenderKey.rendersWholeElementScene,
     highlightMaskLayer: previousRenderKey.highlightMaskLayer,

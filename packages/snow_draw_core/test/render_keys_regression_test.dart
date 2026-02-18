@@ -59,6 +59,24 @@ void main() {
       expect(baseline.hashCode, isNot(optimized.hashCode));
     });
 
+    test('optimized occluder hint participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        optimizedDynamicElementIds: {'line-1'},
+      );
+      final withOccluders = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        optimizedDynamicElementIds: {'line-1'},
+        optimizedSceneHasPotentialOccluders: true,
+      );
+
+      expect(baseline, isNot(withOccluders));
+      expect(baseline.hashCode, isNot(withOccluders.hashCode));
+    });
+
     test('preview revision participates with map-identity fast path', () {
       final registry = DefaultElementRegistry();
       final sharedPreviewMap = <String, ElementState>{};
@@ -131,6 +149,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   Map<String, ElementState> previewElementsById = const {},
   int? previewElementsRevision,
   Set<String>? dynamicPreviewElementIds,
+  bool optimizedSceneHasPotentialOccluders = false,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -150,6 +169,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   previewElementsRevision: previewElementsRevision,
   dynamicPreviewElementIds: dynamicPreviewElementIds,
   optimizedDynamicElementIds: optimizedDynamicElementIds,
+  optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
   dynamicLayerStartIndex: null,
   rendersWholeElementScene: false,
   scaleFactor: 1,

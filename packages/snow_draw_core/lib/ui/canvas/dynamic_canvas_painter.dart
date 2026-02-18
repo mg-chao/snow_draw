@@ -670,11 +670,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return const <ElementState>[];
     }
 
-    if (!_hasNonOptimizedElementsAboveSeeds(
-      document: document,
-      optimizedElementIds: optimizedElementIds,
-      seedOrderIndexById: seedOrderIndexById,
-    )) {
+    if (!renderKey.optimizedSceneHasPotentialOccluders) {
       return _sortElementsByOrder(
         elements: effectiveById.values,
         resolveOrderIndex: document.getOrderIndex,
@@ -743,32 +739,6 @@ class DynamicCanvasPainter extends CustomPainter {
       elements: effectiveById.values,
       resolveOrderIndex: resolveOrderIndex,
     );
-  }
-
-  bool _hasNonOptimizedElementsAboveSeeds({
-    required DocumentState document,
-    required Set<String> optimizedElementIds,
-    required Map<String, int> seedOrderIndexById,
-  }) {
-    if (seedOrderIndexById.isEmpty) {
-      return false;
-    }
-
-    var minSeedOrder = seedOrderIndexById.values.first;
-    for (final orderIndex in seedOrderIndexById.values.skip(1)) {
-      if (orderIndex < minSeedOrder) {
-        minSeedOrder = orderIndex;
-      }
-    }
-
-    final elements = document.elements;
-    for (var index = minSeedOrder + 1; index < elements.length; index++) {
-      final elementId = elements[index].id;
-      if (!optimizedElementIds.contains(elementId)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   List<ElementState> _sortElementsByOrder({
