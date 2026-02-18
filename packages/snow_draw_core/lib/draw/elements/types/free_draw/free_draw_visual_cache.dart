@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:meta/meta.dart';
+
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
@@ -169,6 +171,14 @@ class FreeDrawVisualCache {
     maxEntries: 256,
     onEvict: (entry) => entry.dispose(),
   );
+
+  /// Clears all cached entries and disposes native resources.
+  void clear() {
+    _entries.clear();
+  }
+
+  @visibleForTesting
+  int get entryCount => _entries.length;
 
   /// Resolves (or builds) the visual entry for [element].
   FreeDrawVisualEntry resolve({

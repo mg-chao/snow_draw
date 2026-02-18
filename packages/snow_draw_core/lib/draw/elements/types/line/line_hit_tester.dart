@@ -7,6 +7,7 @@ import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import '../arrow/arrow_hit_tester.dart';
 import '../arrow/arrow_visual_cache.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'line_data.dart';
 
 class LineHitTester implements ElementHitTester {
@@ -99,9 +100,6 @@ class LineHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    if (!rect.width.isFinite || !rect.height.isFinite) {
-      return false;
-    }
     final localPosition = _toLocalPosition(element, position);
     if (!localPosition.x.isFinite || !localPosition.y.isFinite) {
       return false;
@@ -114,52 +112,21 @@ class LineHitTester implements ElementHitTester {
       return false;
     }
 
-    final startPoint = data.points.first;
-    final endPoint = data.points.last;
-    final start = Offset(
-      rect.minX + startPoint.x * rect.width,
-      rect.minY + startPoint.y * rect.height,
+    final segment = resolveTwoPointStrokeSegmentWorld(
+      rect: rect,
+      startPoint: data.points.first,
+      endPoint: data.points.last,
     );
-    final end = Offset(
-      rect.minX + endPoint.x * rect.width,
-      rect.minY + endPoint.y * rect.height,
-    );
-    if (!_isFiniteOffset(start) || !_isFiniteOffset(end)) {
+    if (segment == null) {
       return false;
     }
-    final test = Offset(localPosition.x, localPosition.y);
-    return _distanceSquaredToSegment(test, start, end) <= radius * radius;
-  }
-
-  double _distanceSquaredToSegment(Offset point, Offset start, Offset end) {
-    final segment = end - start;
-    final toPoint = point - start;
-    final segmentLengthSq = segment.dx * segment.dx + segment.dy * segment.dy;
-    if (segmentLengthSq == 0) {
-      final dx = toPoint.dx;
-      final dy = toPoint.dy;
-      return dx * dx + dy * dy;
-    }
-
-    var t =
-        (toPoint.dx * segment.dx + toPoint.dy * segment.dy) / segmentLengthSq;
-    if (t < 0) {
-      t = 0;
-    } else if (t > 1) {
-      t = 1;
-    }
-
-    final closest = Offset(
-      start.dx + segment.dx * t,
-      start.dy + segment.dy * t,
+    return hitTestTwoPointStrokeSegment(
+      segment: segment,
+      point: Offset(localPosition.x, localPosition.y),
+      radius: radius,
     );
-    final dx = point.dx - closest.dx;
-    final dy = point.dy - closest.dy;
-    return dx * dx + dy * dy;
   }
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;
-
-  bool _isFiniteOffset(Offset value) => value.dx.isFinite && value.dy.isFinite;
 }

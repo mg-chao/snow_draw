@@ -7,6 +7,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'free_draw_data.dart';
 import 'free_draw_visual_cache.dart';
 
@@ -21,6 +22,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
   /// Call when switching documents or under memory pressure.
   static void clearCaches() {
     clearStrokePatternCaches();
+    FreeDrawVisualCache.instance.clear();
   }
 
   @override
@@ -45,6 +47,21 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
     if (strokeOpacity <= 0 && fillOpacity <= 0) {
       return;
+    }
+
+    if (_canUseTwoPointStrokeFastPath(
+      data: data,
+      strokeOpacity: strokeOpacity,
+      fillOpacity: fillOpacity,
+    )) {
+      if (_renderTwoPointStrokeFastPath(
+        canvas: canvas,
+        element: element,
+        data: data,
+        strokeOpacity: strokeOpacity,
+      )) {
+        return;
+      }
     }
 
     final cached = FreeDrawVisualCache.instance.resolve(
@@ -219,6 +236,33 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final dy = (first.y - last.y) * rect.height;
     return (dx * dx + dy * dy) <= tolerance * tolerance;
   }
+
+  bool _canUseTwoPointStrokeFastPath({
+    required FreeDrawData data,
+    required double strokeOpacity,
+    required double fillOpacity,
+  }) => canUseTwoPointStrokeFastPath(
+    pointCount: data.points.length,
+    strokeOpacity: strokeOpacity,
+    fillOpacity: fillOpacity,
+    strokeWidth: data.strokeWidth,
+  );
+
+  bool _renderTwoPointStrokeFastPath({
+    required Canvas canvas,
+    required ElementState element,
+    required FreeDrawData data,
+    required double strokeOpacity,
+  }) => renderTwoPointNormalizedStroke(
+    canvas: canvas,
+    rect: element.rect,
+    rotation: element.rotation,
+    startPoint: data.points.first,
+    endPoint: data.points.last,
+    strokeWidth: data.strokeWidth,
+    strokeStyle: data.strokeStyle,
+    strokeColor: data.color.withValues(alpha: strokeOpacity),
+  );
 
   void _paintInElementSpace({
     required Canvas canvas,

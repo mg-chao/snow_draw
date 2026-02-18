@@ -129,6 +129,7 @@ class FreeDrawPreviewPainter extends CustomPainter {
   const FreeDrawPreviewPainter({required this.controller})
     : super(repaint: controller);
 
+  static const _directSolidPreviewPointThreshold = 32;
   static final _previewCache = FreeDrawCreationPreviewCache();
   static final _strokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -191,23 +192,33 @@ class FreeDrawPreviewPainter extends CustomPainter {
       if (preview.strokeStyle == StrokeStyle.solid) {
         final cachedPointCount = _resolveSolidPreviewPointCount(preview);
         if (cachedPointCount > 1) {
-          _previewCache
-            ..sync(
-              elementId: preview.elementId,
+          if (cachedPointCount <= _directSolidPreviewPointThreshold) {
+            _previewCache.clear();
+            _drawSolidPreviewDirect(
+              canvas: canvas,
               points: points,
               visiblePointCount: cachedPointCount,
-              signature: FreeDrawPreviewStrokeSignature(
-                strokeStyle: preview.strokeStyle,
-                strokeWidth: preview.strokeWidth,
-                strokeColor: strokeColor,
-              ),
-              strokePaint: strokePaint,
-            )
-            ..paint(
-              canvas: canvas,
-              viewportRect: viewportRect,
               strokePaint: strokePaint,
             );
+          } else {
+            _previewCache
+              ..sync(
+                elementId: preview.elementId,
+                points: points,
+                visiblePointCount: cachedPointCount,
+                signature: FreeDrawPreviewStrokeSignature(
+                  strokeStyle: preview.strokeStyle,
+                  strokeWidth: preview.strokeWidth,
+                  strokeColor: strokeColor,
+                ),
+                strokePaint: strokePaint,
+              )
+              ..paint(
+                canvas: canvas,
+                viewportRect: viewportRect,
+                strokePaint: strokePaint,
+              );
+          }
         } else {
           _previewCache.clear();
         }
@@ -281,6 +292,37 @@ class FreeDrawPreviewPainter extends CustomPainter {
       return 0;
     }
     return points.length - 1;
+  }
+
+  void _drawSolidPreviewDirect({
+    required Canvas canvas,
+    required List<DrawPoint> points,
+    required int visiblePointCount,
+    required Paint strokePaint,
+  }) {
+    final clampedCount = visiblePointCount.clamp(0, points.length);
+    if (clampedCount < 2) {
+      return;
+    }
+
+    final first = points.first;
+    final path = Path()..moveTo(first.x, first.y);
+    var previous = first;
+    var hasSegment = false;
+    for (var index = 1; index < clampedCount; index++) {
+      final point = points[index];
+      if (point.x == previous.x && point.y == previous.y) {
+        previous = point;
+        continue;
+      }
+      path.lineTo(point.x, point.y);
+      previous = point;
+      hasSegment = true;
+    }
+
+    if (hasSegment) {
+      canvas.drawPath(path, strokePaint);
+    }
   }
 
   Path? _resolvePreviewPath(FreeDrawPreviewSnapshot snapshot) {
