@@ -173,6 +173,35 @@ void main() {
     final editing = interaction as TextEditingState;
     expect(editing.draftData.text, 'secondary');
   });
+
+  testWidgets(
+    'rapid local draft edits stay aligned with the latest visible text',
+    (tester) async {
+      final store = _createStoreWithTextEditing(const TextData(text: 'a'));
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PluginDrawCanvas(size: const Size(320, 240), store: store),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      textField.controller!
+        ..text = 'ab'
+        ..text = 'a';
+
+      await tester.pump();
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<TextEditingState>());
+      final editing = interaction as TextEditingState;
+      expect(editing.draftData.text, 'a');
+    },
+  );
 }
 
 DefaultDrawStore _createStoreWithTextEditing(TextData textData) {

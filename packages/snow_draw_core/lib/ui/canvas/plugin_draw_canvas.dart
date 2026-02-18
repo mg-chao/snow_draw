@@ -170,6 +170,7 @@ class _HoverFrameEvent {
 
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
+  static const _textDraftSyncMinInterval = Duration(milliseconds: 16);
   static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
@@ -213,6 +214,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final FrameAlignedEventDispatcher<_PendingTextDraftSync>
   _textDraftDispatcher;
   _PendingTextDraftSync? _pendingTextDraftSync;
+  Timer? _textDraftSyncTimer;
+  DateTime? _lastTextDraftSyncAt;
 
   var _isShiftPressed = false;
   var _isControlPressed = false;
@@ -505,6 +508,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
         _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+        _lastTextDraftSyncAt = null;
         _textDraftDispatcher.reset();
         _lastObservedState = widget.store.state;
         _cachedState = null;
@@ -3362,6 +3367,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         keyboardType: TextInputType.multiline,
         textInputAction: TextInputAction.newline,
         maxLines: null,
+        enableSuggestions: false,
+        autocorrect: false,
+        smartDashesType: SmartDashesType.disabled,
+        smartQuotesType: SmartQuotesType.disabled,
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
         style: textStyle,
         strutStyle: resolveTextStrutStyle(textStyle),
         textAlign: _toFlutterAlign(data.horizontalAlign),
@@ -3450,10 +3460,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _clearEditingPainterLayoutCache();
       _resetVerticalCaretRun();
       _pendingTextDraftSync = null;
+      _cancelPendingTextDraftSyncDispatch();
+      _lastTextDraftSyncAt = null;
     } else if (_pendingTextDraftSync != null &&
         _pendingTextDraftSync!.elementId == interaction.elementId &&
         interaction.draftData.text == _pendingTextDraftSync!.text) {
       _pendingTextDraftSync = null;
+      _cancelPendingTextDraftSyncDispatch();
     } else if (!_suppressTextControllerChange &&
         controller.text != interaction.draftData.text &&
         (_pendingTextDraftSync == null ||
@@ -3471,6 +3484,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _disposeTextEditor() {
     _pendingTextDraftSync = null;
+    _cancelPendingTextDraftSyncDispatch();
+    _lastTextDraftSyncAt = null;
     _textDraftDispatcher.reset();
     final controller = _textController;
     if (controller != null) {
@@ -3523,9 +3538,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (pending != null) {
       if (pending.elementId != interaction.elementId) {
         _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
         pending = null;
       } else if (interaction.draftData.text == pending.text) {
         _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
         pending = null;
       } else {
         pending = _resolvePendingTextDraftSyncForInteraction(
@@ -3534,6 +3551,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         );
         if (_pendingTextDraftSync != pending) {
           _pendingTextDraftSync = pending;
+          _schedulePendingTextDraftSyncDispatch();
         }
         final mergedPending = pending;
         nextSnapshot = nextSnapshot.copyWith(
@@ -3667,8 +3685,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (controller == null) {
       return;
     }
-    final interaction = widget.store.state.application.interaction;
-    if (interaction is! TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(
+      widget.store.state,
+    );
+    if (interaction == null) {
       return;
     }
     final nextText = controller.text;
@@ -3701,7 +3721,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       previewRect: geometry.rect,
       interaction: interaction,
     );
-    _textDraftDispatcher.dispatch(_pendingTextDraftSync!);
+    _schedulePendingTextDraftSyncDispatch();
   }
 
   _TextDraftGeometry _resolveTextEditGeometryForDraft({
@@ -3770,6 +3790,40 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
   }
 
+  void _schedulePendingTextDraftSyncDispatch() {
+    final pending = _pendingTextDraftSync;
+    if (pending == null) {
+      _cancelPendingTextDraftSyncDispatch();
+      return;
+    }
+
+    final now = DateTime.now();
+    final last = _lastTextDraftSyncAt;
+    if (last == null || now.difference(last) >= _textDraftSyncMinInterval) {
+      _cancelPendingTextDraftSyncDispatch();
+      _textDraftDispatcher.dispatch(pending);
+      return;
+    }
+
+    final delay = _textDraftSyncMinInterval - now.difference(last);
+    final timer = _textDraftSyncTimer;
+    if (timer != null && timer.isActive) {
+      return;
+    }
+    _textDraftSyncTimer = Timer(delay, () {
+      _textDraftSyncTimer = null;
+      if (!mounted || _pendingTextDraftSync == null) {
+        return;
+      }
+      _textDraftDispatcher.dispatch(_pendingTextDraftSync!);
+    });
+  }
+
+  void _cancelPendingTextDraftSyncDispatch() {
+    _textDraftSyncTimer?.cancel();
+    _textDraftSyncTimer = null;
+  }
+
   Future<void> _dispatchPendingTextDraftSync(
     _PendingTextDraftSync pending,
   ) async {
@@ -3778,6 +3832,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         interaction.elementId != pending.elementId) {
       if (_pendingTextDraftSync == pending) {
         _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
       }
       return;
     }
@@ -3785,6 +3840,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (interaction.draftData.text == pending.text) {
       if (_pendingTextDraftSync == pending) {
         _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
       }
       return;
     }
@@ -3795,8 +3851,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     if (_pendingTextDraftSync == pending && resolvedPending != pending) {
       _pendingTextDraftSync = resolvedPending;
+      _schedulePendingTextDraftSyncDispatch();
     }
 
+    _lastTextDraftSyncAt = DateTime.now();
     await widget.store.dispatch(
       UpdateTextEdit(
         text: resolvedPending.text,
@@ -3805,7 +3863,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
-  Future<void> _flushPendingTextDraftSync() => _textDraftDispatcher.flush();
+  Future<void> _flushPendingTextDraftSync() async {
+    _cancelPendingTextDraftSyncDispatch();
+    await _textDraftDispatcher.flush();
+    final pending = _pendingTextDraftSync;
+    if (pending == null) {
+      return;
+    }
+    await _dispatchPendingTextDraftSync(pending);
+  }
 
   void _resetVerticalCaretRun() {
     _lastVerticalSelection = null;
