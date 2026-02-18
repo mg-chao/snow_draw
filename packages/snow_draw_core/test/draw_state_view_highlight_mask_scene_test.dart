@@ -44,6 +44,8 @@ void main() {
 
     expect(highlights.map((e) => e.id).toList(), ['h1', 'h2']);
     expect(view.highlightMaskScene.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('applies preview override precedence over document elements', () {
@@ -74,6 +76,8 @@ void main() {
 
     expect(view.highlightMaskScene.elements, isEmpty);
     expect(view.highlightMaskScene.hasHighlights, isFalse);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isFalse);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test(
@@ -120,6 +124,8 @@ void main() {
             .toList(),
         ['h_preview'],
       );
+      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
     },
   );
 
@@ -172,6 +178,8 @@ void main() {
       ['creating'],
     );
     expect(view.highlightMaskScene.hasDynamicHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
   });
 
   test(
@@ -231,6 +239,8 @@ void main() {
         hasLength(1),
       );
       expect(highlights.last.rect, currentRect);
+      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
     },
   );
 
@@ -266,6 +276,8 @@ void main() {
       'h1',
     ]);
     expect(view.highlightMaskScene.dynamicElements, isEmpty);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('marks edited highlight previews as dynamic', () {
@@ -309,6 +321,8 @@ void main() {
           .toList(),
       ['h2'],
     );
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
   });
 }
 

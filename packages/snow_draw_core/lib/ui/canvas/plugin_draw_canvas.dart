@@ -2913,10 +2913,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         creatingSnapshot != null ||
         dynamicPreviewElements.isNotEmpty ||
         hasFreeDrawPreview;
-    final highlightMaskLayer = resolveHighlightMaskLayer(
-      hasHighlights: stateView.highlightMaskScene.hasHighlights,
+    final highlightMaskLayer = _resolveHighlightMaskLayer(
+      stateView: stateView,
       hasDynamicContent: hasDynamicContent,
-      hasDynamicHighlights: stateView.highlightMaskScene.hasDynamicHighlights,
       config: highlightMask,
     );
 
@@ -2930,6 +2929,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
+    );
+  }
+
+  HighlightMaskLayer _resolveHighlightMaskLayer({
+    required DrawStateView stateView,
+    required bool hasDynamicContent,
+    required HighlightMaskConfig config,
+  }) {
+    if (config.maskOpacity <= 0) {
+      return HighlightMaskLayer.none;
+    }
+    final summary = stateView.highlightMaskSceneSummary;
+    return resolveHighlightMaskLayer(
+      hasHighlights: summary.hasHighlights,
+      hasDynamicContent: hasDynamicContent,
+      hasDynamicHighlights: summary.hasDynamicHighlights,
+      config: config,
     );
   }
 

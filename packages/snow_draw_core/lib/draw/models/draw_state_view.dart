@@ -77,6 +77,32 @@ class HighlightMaskSceneSnapshot {
 
   /// Whether any highlight is dynamic for the active interaction.
   bool get hasDynamicHighlights => _dynamicElements.isNotEmpty;
+
+  /// Reusable empty snapshot.
+  static final empty = HighlightMaskSceneSnapshot(
+    elements: const [],
+    staticElements: const [],
+    dynamicElements: const [],
+  );
+}
+
+/// Lightweight metadata for highlight-mask routing decisions.
+///
+/// This summary intentionally avoids materializing full highlight element lists
+/// so callers can decide whether to render the mask without paying for the
+/// heavier scene snapshot on every frame.
+@immutable
+class HighlightMaskSceneSummary {
+  const HighlightMaskSceneSummary({
+    required this.hasHighlights,
+    required this.hasDynamicHighlights,
+  });
+
+  /// Whether at least one highlight is present in the effective scene.
+  final bool hasHighlights;
+
+  /// Whether at least one highlight can change this frame.
+  final bool hasDynamicHighlights;
 }
 
 /// A unified "effective state" view for rendering and hit-testing.
@@ -150,6 +176,13 @@ class DrawStateView {
   late final HighlightMaskSceneSnapshot highlightMaskScene =
       _buildHighlightMaskScene();
 
+  /// Lightweight highlight-scene metadata.
+  ///
+  /// Use this summary for layer routing decisions when full highlight element
+  /// lists are not required.
+  late final HighlightMaskSceneSummary highlightMaskSceneSummary =
+      _buildHighlightMaskSceneSummary();
+
   /// Map of element IDs to their preview states.
   Map<String, ElementState> get previewElementsById => _previewElementsById;
 
@@ -193,15 +226,43 @@ class DrawStateView {
   }
 
   HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
+    final summary = highlightMaskSceneSummary;
+    if (!summary.hasHighlights) {
+      return HighlightMaskSceneSnapshot.empty;
+    }
+
     final document = state.domain.document;
+    if (!summary.hasDynamicHighlights &&
+        !_hasPreviewHighlightRemoval(document)) {
+      final highlights = document.highlightElements;
+      if (highlights.isEmpty) {
+        return HighlightMaskSceneSnapshot.empty;
+      }
+      return HighlightMaskSceneSnapshot(
+        elements: highlights,
+        staticElements: highlights,
+        dynamicElements: const [],
+      );
+    }
+
+    final creatingHighlight = _resolveCreatingHighlightElement();
+    final creatingHighlightId = creatingHighlight?.id;
     final dynamicHighlightIds = _resolveDynamicHighlightIds(document);
     final highlights = <ElementState>[];
     final staticHighlights = <ElementState>[];
     final dynamicHighlights = <ElementState>[];
+    var includedCreatingHighlight = false;
 
     for (final element in document.highlightElements) {
-      final effective = _previewElementsById[element.id] ?? element;
+      final isCreatingReplacement =
+          creatingHighlightId != null && element.id == creatingHighlightId;
+      final effective = isCreatingReplacement
+          ? creatingHighlight!
+          : (_previewElementsById[element.id] ?? element);
       if (effective.data is HighlightData) {
+        if (isCreatingReplacement) {
+          includedCreatingHighlight = true;
+        }
         highlights.add(effective);
         if (dynamicHighlightIds.contains(effective.id)) {
           dynamicHighlights.add(effective);
@@ -216,6 +277,9 @@ class DrawStateView {
         if (document.getElementById(preview.id) != null) {
           continue;
         }
+        if (creatingHighlightId != null && preview.id == creatingHighlightId) {
+          continue;
+        }
         if (preview.data is HighlightData) {
           highlights.add(preview);
           dynamicHighlights.add(preview);
@@ -223,21 +287,9 @@ class DrawStateView {
       }
     }
 
-    final interaction = state.application.interaction;
-    if (interaction is CreatingState &&
-        interaction.elementData is HighlightData) {
-      final creatingElement = interaction.element.copyWith(
-        rect: interaction.currentRect,
-      );
-      highlights.removeWhere((element) => element.id == creatingElement.id);
-      staticHighlights.removeWhere(
-        (element) => element.id == creatingElement.id,
-      );
-      dynamicHighlights.removeWhere(
-        (element) => element.id == creatingElement.id,
-      );
-      highlights.add(creatingElement);
-      dynamicHighlights.add(creatingElement);
+    if (creatingHighlight != null && !includedCreatingHighlight) {
+      highlights.add(creatingHighlight);
+      dynamicHighlights.add(creatingHighlight);
     }
 
     return HighlightMaskSceneSnapshot(
@@ -245,6 +297,73 @@ class DrawStateView {
       staticElements: staticHighlights,
       dynamicElements: dynamicHighlights,
     );
+  }
+
+  HighlightMaskSceneSummary _buildHighlightMaskSceneSummary() {
+    final document = state.domain.document;
+    var remainingDocumentHighlightCount = document.highlightElements.length;
+    var hasDynamicHighlights = false;
+    var previewAddsHighlight = false;
+
+    if (_previewElementsById.isNotEmpty) {
+      for (final entry in _previewElementsById.entries) {
+        final persisted = document.getElementById(entry.key);
+        final preview = entry.value;
+        final persistedIsHighlight = persisted?.data is HighlightData;
+        final previewIsHighlight = preview.data is HighlightData;
+
+        if (persistedIsHighlight && !previewIsHighlight) {
+          remainingDocumentHighlightCount -= 1;
+          continue;
+        }
+
+        if (!previewIsHighlight) {
+          continue;
+        }
+
+        if (!persistedIsHighlight) {
+          previewAddsHighlight = true;
+        }
+        if (persisted == null || persisted != preview) {
+          hasDynamicHighlights = true;
+        }
+      }
+    }
+
+    var hasHighlights =
+        remainingDocumentHighlightCount > 0 || previewAddsHighlight;
+    if (_resolveCreatingHighlightElement() != null) {
+      hasHighlights = true;
+      hasDynamicHighlights = true;
+    }
+
+    return HighlightMaskSceneSummary(
+      hasHighlights: hasHighlights,
+      hasDynamicHighlights: hasDynamicHighlights,
+    );
+  }
+
+  ElementState? _resolveCreatingHighlightElement() {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState ||
+        interaction.elementData is! HighlightData) {
+      return null;
+    }
+    return interaction.element.copyWith(rect: interaction.currentRect);
+  }
+
+  bool _hasPreviewHighlightRemoval(DocumentState document) {
+    if (_previewElementsById.isEmpty) {
+      return false;
+    }
+    for (final entry in _previewElementsById.entries) {
+      final persisted = document.getElementById(entry.key);
+      if (persisted?.data is HighlightData &&
+          entry.value.data is! HighlightData) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Set<String> _resolveDynamicHighlightIds(DocumentState document) {
