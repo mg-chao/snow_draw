@@ -13,6 +13,7 @@ import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
+import '../pointer_sample_resampler.dart';
 
 /// Plugin that handles element creation via the current tool.
 class CreatePlugin extends DrawInputPlugin {
@@ -35,6 +36,7 @@ class CreatePlugin extends DrawInputPlugin {
 
   static const _doubleClickThreshold = Duration(milliseconds: 500);
   static const double _doubleClickToleranceMultiplier = 2;
+  static const _maxFreeDrawBatchSamples = 96;
 
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
@@ -156,9 +158,13 @@ class CreatePlugin extends DrawInputPlugin {
     }
 
     if (hasBatchedSamples) {
+      final sampledPoints = resamplePointerSamples(
+        sampledPoints: event.sampledPoints,
+        maxSamples: _maxFreeDrawBatchSamples,
+      );
       await dispatch(
         UpdateCreatingElementBatch.frozen(
-          positions: event.sampledPoints,
+          positions: sampledPoints,
           createFromCenter: event.modifiers.alt,
           snapOverride: event.modifiers.control,
         ),

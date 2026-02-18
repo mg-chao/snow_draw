@@ -36,9 +36,12 @@ final class FreeDrawPreviewStrokeSignature {
 
 /// Incremental cache for low-latency free-draw creation previews.
 ///
-/// The cache records sealed stroke chunks into pictures and keeps a mutable
-/// tail path for in-flight points. Sealed chunks stay spatially indexed so
-/// paint can resolve only candidates intersecting the viewport.
+/// The cache records sealed stroke chunks and keeps a mutable tail path for
+/// in-flight points. Older chunks are compacted into raster snapshots when
+/// feasible so paint cost remains stable as the stroke grows.
+///
+/// Sealed chunks stay spatially indexed so paint can resolve only candidates
+/// intersecting the viewport.
 ///
 /// To avoid full-cache rebuilds during smoothing tail replacements, each seal
 /// operation keeps a small point overlap in the mutable tail. The overlap
@@ -50,8 +53,15 @@ class FreeDrawCreationPreviewCache {
   static const _indexTileSize = 512.0;
   static const _maxTileToSegmentRatio = 8;
   static const _maxSealedSegmentCount = 48;
-  static const _compactionBatchSize = 12;
+  static const _compactionBatchSize = 8;
   static const _minCullPadding = 1.0;
+  static const _maxRasterExtent = 1536;
+  static const int _maxRasterPixels = 1024 * 1024;
+  static const _minRasterExtent = 1;
+
+  static final _segmentImagePaint = Paint()
+    ..isAntiAlias = false
+    ..filterQuality = FilterQuality.low;
 
   String? _elementId;
   FreeDrawPreviewStrokeSignature? _signature;
@@ -65,7 +75,7 @@ class FreeDrawCreationPreviewCache {
   final _tailBounds = _MutableBoundsAccumulator();
   double _cullPadding = _minCullPadding;
 
-  final _sealedSegments = <_PreviewPictureSegment>[];
+  final _sealedSegments = <_PreviewSegment>[];
   final _segmentIndex = <_SegmentTileKey, List<int>>{};
   final _candidateSegmentIndices = <int>[];
   final _candidateSegmentIndexSet = <int>{};
@@ -168,7 +178,7 @@ class FreeDrawCreationPreviewCache {
     if (_sealedSegments.length <= _segmentScanThreshold) {
       for (final segment in _sealedSegments) {
         if (_rectsIntersect(segment.bounds, viewportRect)) {
-          canvas.drawPicture(segment.picture);
+          segment.paint(canvas, imagePaint: _segmentImagePaint);
         }
       }
     } else {
@@ -176,7 +186,7 @@ class FreeDrawCreationPreviewCache {
       for (final segmentIndex in _candidateSegmentIndices) {
         final segment = _sealedSegments[segmentIndex];
         if (_rectsIntersect(segment.bounds, viewportRect)) {
-          canvas.drawPicture(segment.picture);
+          segment.paint(canvas, imagePaint: _segmentImagePaint);
         }
       }
       _candidateSegmentIndices.clear();
@@ -311,14 +321,14 @@ class FreeDrawCreationPreviewCache {
 
     final tailBounds = sealedBounds.toRect(padding: _cullPadding);
     final recorder = PictureRecorder();
-    Canvas(recorder).drawPath(sealedPath, strokePaint);
+    Canvas(recorder, Rect.fromLTWH(0, 0, tailBounds.width, tailBounds.height))
+      ..translate(-tailBounds.minX, -tailBounds.minY)
+      ..drawPath(sealedPath, strokePaint);
 
     final segmentIndex = _sealedSegments.length;
+    final picture = recorder.endRecording();
     _sealedSegments.add(
-      _PreviewPictureSegment(
-        picture: recorder.endRecording(),
-        bounds: tailBounds,
-      ),
+      _PreviewSegment.vector(bounds: tailBounds, picture: picture),
     );
     _indexSegmentBounds(segmentIndex: segmentIndex, bounds: tailBounds);
     _compactSealedSegmentsIfNeeded();
@@ -422,9 +432,7 @@ class FreeDrawCreationPreviewCache {
     return true;
   }
 
-  _PreviewPictureSegment? _mergeSegments(
-    Iterable<_PreviewPictureSegment> source,
-  ) {
+  _PreviewSegment? _mergeSegments(Iterable<_PreviewSegment> source) {
     final segments = source.toList(growable: false);
     if (segments.length < 2) {
       return null;
@@ -436,15 +444,58 @@ class FreeDrawCreationPreviewCache {
     }
 
     final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
+    final canvas = Canvas(
+      recorder,
+      Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+    );
     for (final segment in segments) {
-      canvas.drawPicture(segment.picture);
+      segment.paintTranslated(
+        canvas,
+        dx: segment.bounds.minX - bounds.minX,
+        dy: segment.bounds.minY - bounds.minY,
+        imagePaint: _segmentImagePaint,
+      );
     }
 
-    return _PreviewPictureSegment(
-      picture: recorder.endRecording(),
-      bounds: bounds,
+    final picture = recorder.endRecording();
+    final rasterized = _tryRasterizeSegmentPicture(
+      picture: picture,
+      width: bounds.width,
+      height: bounds.height,
     );
+    if (rasterized != null) {
+      picture.dispose();
+      return _PreviewSegment.raster(bounds: bounds, image: rasterized);
+    }
+    return _PreviewSegment.vector(bounds: bounds, picture: picture);
+  }
+
+  Image? _tryRasterizeSegmentPicture({
+    required Picture picture,
+    required double width,
+    required double height,
+  }) {
+    if (width <= 0 || height <= 0 || !width.isFinite || !height.isFinite) {
+      return null;
+    }
+
+    final pixelWidth = width.ceil();
+    final pixelHeight = height.ceil();
+    if (pixelWidth < _minRasterExtent ||
+        pixelHeight < _minRasterExtent ||
+        pixelWidth > _maxRasterExtent ||
+        pixelHeight > _maxRasterExtent) {
+      return null;
+    }
+    if (pixelWidth * pixelHeight > _maxRasterPixels) {
+      return null;
+    }
+
+    try {
+      return picture.toImageSync(pixelWidth, pixelHeight);
+    } on Object {
+      return null;
+    }
   }
 
   void _rebuildSegmentIndex() {
@@ -542,14 +593,62 @@ DrawRect _unionRect(DrawRect a, DrawRect b) => DrawRect(
 );
 
 @immutable
-final class _PreviewPictureSegment {
-  const _PreviewPictureSegment({required this.picture, required this.bounds});
+final class _PreviewSegment {
+  const _PreviewSegment._({required this.bounds, this.picture, this.image});
 
-  final Picture picture;
+  const _PreviewSegment.vector({
+    required DrawRect bounds,
+    required Picture picture,
+  }) : this._(bounds: bounds, picture: picture);
+
+  const _PreviewSegment.raster({required DrawRect bounds, required Image image})
+    : this._(bounds: bounds, image: image);
+
   final DrawRect bounds;
+  final Picture? picture;
+  final Image? image;
+
+  void paint(Canvas canvas, {required Paint imagePaint}) {
+    paintTranslated(
+      canvas,
+      dx: bounds.minX,
+      dy: bounds.minY,
+      imagePaint: imagePaint,
+    );
+  }
+
+  void paintTranslated(
+    Canvas canvas, {
+    required double dx,
+    required double dy,
+    required Paint imagePaint,
+  }) {
+    final raster = image;
+    if (raster != null) {
+      final destination = Rect.fromLTWH(dx, dy, bounds.width, bounds.height);
+      canvas.drawImageRect(
+        raster,
+        Rect.fromLTWH(0, 0, raster.width.toDouble(), raster.height.toDouble()),
+        destination,
+        imagePaint,
+      );
+      return;
+    }
+
+    final vector = picture;
+    if (vector == null) {
+      return;
+    }
+    canvas
+      ..save()
+      ..translate(dx, dy)
+      ..drawPicture(vector)
+      ..restore();
+  }
 
   void dispose() {
-    picture.dispose();
+    picture?.dispose();
+    image?.dispose();
   }
 }
 

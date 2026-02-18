@@ -100,6 +100,45 @@ void main() {
     );
 
     test(
+      'caps coalesced free-draw batches to keep reducer work bounded',
+      () async {
+        final dispatched = <DrawAction>[];
+        final state = _creatingFreeDrawState();
+        final context = _pluginContext(
+          stateProvider: () => state,
+          dispatched: dispatched,
+        );
+        final plugin = CreatePlugin(
+          currentToolTypeId: FreeDrawData.typeIdToken,
+        );
+        await plugin.onLoad(context);
+
+        final sampledPoints = List<DrawPoint>.generate(
+          240,
+          (index) => DrawPoint(x: index.toDouble(), y: index / 2),
+          growable: false,
+        );
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: sampledPoints.last,
+            modifiers: KeyModifiers.none,
+            sampledPoints: sampledPoints,
+          ),
+        );
+
+        final batched = dispatched
+            .whereType<UpdateCreatingElementBatch>()
+            .toList();
+        expect(batched, hasLength(1));
+        expect(batched.single.positions.length, lessThanOrEqualTo(96));
+        expect(batched.single.positions.first, sampledPoints.first);
+        expect(batched.single.positions.last, sampledPoints.last);
+
+        await plugin.onUnload();
+      },
+    );
+
+    test(
       'ignores pressure-only move deltas for non-free-draw creation',
       () async {
         final dispatched = <DrawAction>[];
