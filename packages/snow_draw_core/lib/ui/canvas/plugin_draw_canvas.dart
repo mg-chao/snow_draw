@@ -54,6 +54,7 @@ import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
+import 'interaction_dynamic_scene_cache.dart';
 import 'interaction_mutation_refresh_plan.dart';
 import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
@@ -3042,8 +3043,63 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required double scaleFactor,
     required _CanvasLayerSceneSnapshot scene,
     required Locale? locale,
-  }) => DynamicCanvasRenderKey(
+  }) => _createDynamicRenderKey(
+    stateView: stateView,
+    selectionConfig: selectionConfig,
+    scaleFactor: scaleFactor,
     creatingElement: scene.creatingSnapshot,
+    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    previewElementsById: scene.dynamicPreviewElements,
+    previewElementsRevision: scene.dynamicPreviewElementsRevision,
+    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
+    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _buildDynamicRenderKeyFromCachedScene({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required CreatingElementSnapshot? creatingElement,
+    required InteractionDynamicSceneSnapshot scene,
+    required Locale? locale,
+  }) => _createDynamicRenderKey(
+    stateView: stateView,
+    selectionConfig: selectionConfig,
+    scaleFactor: scaleFactor,
+    creatingElement: creatingElement,
+    textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
+    previewElementsById: scene.previewElementsById,
+    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
+    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    rendersWholeElementScene: scene.rendersWholeElementScene,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _createDynamicRenderKey({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required CreatingElementSnapshot? creatingElement,
+    required int textRenderingCacheRevision,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> optimizedDynamicElementIds,
+    required int? dynamicLayerStartIndex,
+    required bool rendersWholeElementScene,
+    required HighlightMaskLayer highlightMaskLayer,
+    required HighlightMaskConfig highlightMaskConfig,
+    required Locale? locale,
+    int? previewElementsRevision,
+    Set<String>? dynamicPreviewElementIds,
+  }) => DynamicCanvasRenderKey(
+    creatingElement: creatingElement,
     effectiveSelection: stateView.effectiveSelection,
     boxSelectionBounds: _extractBoxSelectionBounds(stateView),
     selectedIds: stateView.selectedIds,
@@ -3055,20 +3111,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     hoverSelectionConfig: _resolveHoverSelectionConfig(),
     snapGuides: stateView.snapGuides,
     documentVersion: stateView.state.domain.document.elementsVersion,
-    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    textRenderingCacheRevision: textRenderingCacheRevision,
     camera: stateView.state.application.view.camera,
-    previewElementsById: scene.dynamicPreviewElements,
-    previewElementsRevision: scene.dynamicPreviewElementsRevision,
-    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
-    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
-    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
-    rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
+    previewElementsById: previewElementsById,
+    previewElementsRevision: previewElementsRevision,
+    dynamicPreviewElementIds: dynamicPreviewElementIds,
+    optimizedDynamicElementIds: optimizedDynamicElementIds,
+    dynamicLayerStartIndex: dynamicLayerStartIndex,
+    rendersWholeElementScene: rendersWholeElementScene,
     scaleFactor: scaleFactor,
     selectionConfig: selectionConfig,
     boxSelectionConfig: widget.store.config.boxSelection,
     snapConfig: widget.store.config.snap,
-    highlightMaskLayer: scene.highlightMaskLayer,
-    highlightMaskConfig: scene.highlightMaskConfig,
+    highlightMaskLayer: highlightMaskLayer,
+    highlightMaskConfig: highlightMaskConfig,
     elementRegistry: widget.store.context.elementRegistry,
     performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
     locale: locale,
@@ -3164,6 +3220,48 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     assumeDynamicChanged: assumeChanged,
     refreshStaticLayer: false,
   );
+
+  bool _tryRefreshCachedRectangleDynamicLayerSnapshot(
+    DrawState state, {
+    required DrawState previousState,
+    required InteractionMutationRefreshPlan plan,
+  }) {
+    if (plan.kind != InteractionMutationKind.rectangle ||
+        !identical(previousState.domain, state.domain) ||
+        !mounted) {
+      return false;
+    }
+
+    final previousDynamicSnapshot = _dynamicLayerSnapshotNotifier.value;
+    final previousRenderKey = previousDynamicSnapshot.renderKey;
+    if (previousRenderKey.documentVersion !=
+        state.domain.document.elementsVersion) {
+      return false;
+    }
+
+    final stateView = _buildStateView(state);
+    final scene = resolveInteractionDynamicSceneFromCachedKey(
+      stateView: stateView,
+      previousRenderKey: previousRenderKey,
+      resolvePreviewByLayerStart: _previewElementsForDynamic,
+      resolvePreviewByOptimizedIds: _previewElementsForDynamicOptimizedScene,
+      resolveDynamicPreviewElementIds: _resolveDynamicPreviewElementIdsForScene,
+    );
+    final dynamicRenderKey = _buildDynamicRenderKeyFromCachedScene(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: _effectiveScaleFactor(),
+      creatingElement: _extractCreatingSnapshot(stateView),
+      scene: scene,
+      locale: _resolveCanvasLocale(),
+    );
+    _setDynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: dynamicRenderKey,
+      assumeChanged: true,
+    );
+    return true;
+  }
 
   Widget _buildTextEditorOverlay({
     required double scaleFactor,
@@ -3986,7 +4084,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         next: state,
       );
       if (interactionMutationPlan != null) {
-        _handleInteractionMutation(state, plan: interactionMutationPlan);
+        _handleInteractionMutation(
+          state,
+          previousState: previousState,
+          plan: interactionMutationPlan,
+        );
         return;
       }
     }
@@ -4007,6 +4109,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _handleInteractionMutation(
     DrawState state, {
+    required DrawState previousState,
     required InteractionMutationRefreshPlan plan,
   }) {
     if (plan.shouldRefreshPointerVisuals(
@@ -4019,6 +4122,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     switch (plan.refreshMode) {
       case InteractionMutationRefreshMode.dynamicOnly:
+        if (_tryRefreshCachedRectangleDynamicLayerSnapshot(
+          state,
+          previousState: previousState,
+          plan: plan,
+        )) {
+          return;
+        }
         _refreshDynamicLayerSnapshot(state, assumeChanged: true);
       case InteractionMutationRefreshMode.canvasLayers:
         _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
