@@ -196,8 +196,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
   TextLayoutMetrics? _editingTextLayout;
+  _EditingLayoutIdentity? _editingTextLayoutKey;
   PainterTextLayoutMetrics? _editingPainterLayout;
-  _EditingPainterLayoutKey? _editingPainterLayoutKey;
+  _EditingLayoutIdentity? _editingPainterLayoutKey;
   TextSelection? _lastVerticalSelection;
   double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
@@ -3105,7 +3106,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     valueListenable: _textOverlayNotifier,
     builder: (context, snapshot, _) {
       if (snapshot == null) {
-        _editingTextLayout = null;
+        _clearEditingTextLayoutCache();
         _clearEditingPainterLayoutCache();
         return const SizedBox.shrink();
       }
@@ -3122,7 +3123,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final layoutWidth = rect.width;
       final height = rect.height;
       if (layoutWidth <= 0 || height <= 0) {
-        _editingTextLayout = null;
+        _clearEditingTextLayoutCache();
         _clearEditingPainterLayoutCache();
         return const SizedBox.shrink();
       }
@@ -3140,14 +3141,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         locale: locale,
       );
 
-      final layout = layoutText(
+      final layout = _resolveEditingTextLayout(
         data: data,
-        maxWidth: layoutWidth,
-        minWidth: layoutWidth,
-        widthBasis: TextWidthBasis.parent,
+        layoutWidth: layoutWidth,
         locale: locale,
       );
-      _editingTextLayout = layout;
       _invalidateEditingPainterLayoutIfNeeded(
         data: data,
         layoutWidth: layoutWidth,
@@ -3264,6 +3262,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ..addListener(_handleTextControllerChanged);
       _editingElementId = interaction.elementId;
       _initialSelectionApplied = false;
+      _clearEditingTextLayoutCache();
       _clearEditingPainterLayoutCache();
       _resetVerticalCaretRun();
       _pendingTextDraftSync = null;
@@ -3279,6 +3278,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _suppressTextControllerChange = true;
       controller.text = interaction.draftData.text;
       _suppressTextControllerChange = false;
+      _clearEditingTextLayoutCache();
       _clearEditingPainterLayoutCache();
     }
 
@@ -3297,7 +3297,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _editingElementId = null;
     _initialSelectionApplied = false;
-    _editingTextLayout = null;
+    _clearEditingTextLayoutCache();
     _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
@@ -3344,12 +3344,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _pendingTextDraftSync = null;
         pending = null;
       } else {
-        final mergedPreviewRect = _resolveTextEditRectForDraft(
+        pending = _resolvePendingTextDraftSyncForInteraction(
           interaction: interaction,
-          text: pending.text,
+          pending: pending,
         );
-        if (mergedPreviewRect != pending.previewRect) {
-          pending = pending.copyWith(previewRect: mergedPreviewRect);
+        if (_pendingTextDraftSync != pending) {
           _pendingTextDraftSync = pending;
         }
         final mergedPending = pending;
@@ -3364,18 +3363,59 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
   }
 
+  TextLayoutMetrics _resolveEditingTextLayout({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) {
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: data,
+      layoutWidth: layoutWidth,
+      locale: locale,
+    );
+    final cachedLayout = _editingTextLayout;
+    if (cachedLayout != null && _editingTextLayoutKey == nextKey) {
+      return cachedLayout;
+    }
+    final layout = layoutText(
+      data: data,
+      maxWidth: layoutWidth,
+      minWidth: layoutWidth,
+      widthBasis: TextWidthBasis.parent,
+      locale: locale,
+    );
+    _editingTextLayout = layout;
+    _editingTextLayoutKey = nextKey;
+    return layout;
+  }
+
+  _EditingLayoutIdentity _resolveEditingLayoutIdentity({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) => _EditingLayoutIdentity(
+    text: data.text,
+    fontSize: data.fontSize,
+    fontFamily: data.fontFamily,
+    horizontalAlign: data.horizontalAlign,
+    layoutWidth: _quantizeEditingLayoutWidth(layoutWidth),
+    localeTag: locale?.toLanguageTag(),
+  );
+
+  void _clearEditingTextLayoutCache() {
+    _editingTextLayout = null;
+    _editingTextLayoutKey = null;
+  }
+
   void _invalidateEditingPainterLayoutIfNeeded({
     required TextData data,
     required double layoutWidth,
     required Locale? locale,
   }) {
-    final nextKey = _EditingPainterLayoutKey(
-      text: data.text,
-      fontSize: data.fontSize,
-      fontFamily: data.fontFamily,
-      horizontalAlign: data.horizontalAlign,
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: data,
       layoutWidth: layoutWidth,
-      localeTag: locale?.toLanguageTag(),
+      locale: locale,
     );
     if (_editingPainterLayoutKey == nextKey) {
       return;
@@ -3408,13 +3448,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final locale = Localizations.maybeLocaleOf(context);
-    final nextKey = _EditingPainterLayoutKey(
-      text: interaction.draftData.text,
-      fontSize: interaction.draftData.fontSize,
-      fontFamily: interaction.draftData.fontFamily,
-      horizontalAlign: interaction.draftData.horizontalAlign,
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: interaction.draftData,
       layoutWidth: layoutWidth,
-      localeTag: locale?.toLanguageTag(),
+      locale: locale,
     );
     final cachedLayout = _editingPainterLayout;
     if (cachedLayout != null && _editingPainterLayoutKey == nextKey) {
@@ -3454,35 +3491,80 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (nextText == interaction.draftData.text) {
       return;
     }
-    _clearEditingPainterLayoutCache();
-    _resetVerticalCaretRun();
-    final previewRect = _resolveTextEditRectForDraft(
+    final locale = Localizations.maybeLocaleOf(context);
+    final geometry = _resolveTextEditGeometryForDraft(
       interaction: interaction,
       text: nextText,
+      locale: locale,
     );
+    _editingTextLayout = geometry.layout;
+    _editingTextLayoutKey = _resolveEditingLayoutIdentity(
+      data: geometry.data,
+      layoutWidth: geometry.rect.width,
+      locale: locale,
+    );
+    _clearEditingPainterLayoutCache();
+    _resetVerticalCaretRun();
     _pendingTextDraftSync = _PendingTextDraftSync(
       elementId: interaction.elementId,
       text: nextText,
-      previewRect: previewRect,
+      previewRect: geometry.rect,
+      sourceRect: interaction.rect,
+      sourceData: interaction.draftData,
     );
     _syncPendingTextDraftOverlay(
       text: nextText,
-      previewRect: previewRect,
+      previewRect: geometry.rect,
       interaction: interaction,
     );
     _textDraftDispatcher.dispatch(_pendingTextDraftSync!);
   }
 
-  DrawRect _resolveTextEditRectForDraft({
+  _TextDraftGeometry _resolveTextEditGeometryForDraft({
     required TextEditingState interaction,
     required String text,
+    required Locale? locale,
   }) {
     final nextData = interaction.draftData.copyWith(text: text);
-    return resolveTextEditingRect(
+    final geometry = resolveTextEditingGeometry(
       origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
       currentRect: interaction.rect,
       data: nextData,
       allowShrinkHeight: true,
+      locale: locale,
+    );
+    return _TextDraftGeometry(
+      data: nextData,
+      rect: geometry.rect,
+      layout: geometry.layout,
+    );
+  }
+
+  _PendingTextDraftSync _resolvePendingTextDraftSyncForInteraction({
+    required TextEditingState interaction,
+    required _PendingTextDraftSync pending,
+  }) {
+    if (pending.sourceRect == interaction.rect &&
+        pending.sourceData == interaction.draftData) {
+      return pending;
+    }
+    final locale = Localizations.maybeLocaleOf(context);
+    final geometry = _resolveTextEditGeometryForDraft(
+      interaction: interaction,
+      text: pending.text,
+      locale: locale,
+    );
+    _editingTextLayout = geometry.layout;
+    _editingTextLayoutKey = _resolveEditingLayoutIdentity(
+      data: geometry.data,
+      layoutWidth: geometry.rect.width,
+      locale: locale,
+    );
+    _clearEditingPainterLayoutCache();
+    return pending.copyWith(
+      previewRect: geometry.rect,
+      sourceRect: interaction.rect,
+      sourceData: interaction.draftData,
     );
   }
 
@@ -3523,16 +3605,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
 
-    final nextRect = _resolveTextEditRectForDraft(
+    final resolvedPending = _resolvePendingTextDraftSyncForInteraction(
       interaction: interaction,
-      text: pending.text,
+      pending: pending,
     );
-    if (_pendingTextDraftSync == pending && pending.previewRect != nextRect) {
-      _pendingTextDraftSync = pending.copyWith(previewRect: nextRect);
+    if (_pendingTextDraftSync == pending && resolvedPending != pending) {
+      _pendingTextDraftSync = resolvedPending;
     }
 
     await widget.store.dispatch(
-      UpdateTextEdit(text: pending.text, rect: nextRect),
+      UpdateTextEdit(
+        text: resolvedPending.text,
+        rect: resolvedPending.previewRect,
+      ),
     );
   }
 
@@ -3760,6 +3845,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
+  double _quantizeEditingLayoutWidth(double width) =>
+      (width * 10).roundToDouble() / 10;
+
   bool _shouldPaintTextDecorations({
     required TextData data,
     required double opacity,
@@ -3890,7 +3978,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       return;
     }
-    _editingTextLayout = null;
+    _clearEditingTextLayoutCache();
     _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
     _refreshCanvasLayerSnapshots(
@@ -4164,26 +4252,47 @@ class _PendingTextDraftSync {
     required this.elementId,
     required this.text,
     required this.previewRect,
+    required this.sourceRect,
+    required this.sourceData,
   });
 
   final String elementId;
   final String text;
   final DrawRect previewRect;
+  final DrawRect sourceRect;
+  final TextData sourceData;
 
   _PendingTextDraftSync copyWith({
     String? elementId,
     String? text,
     DrawRect? previewRect,
+    DrawRect? sourceRect,
+    TextData? sourceData,
   }) => _PendingTextDraftSync(
     elementId: elementId ?? this.elementId,
     text: text ?? this.text,
     previewRect: previewRect ?? this.previewRect,
+    sourceRect: sourceRect ?? this.sourceRect,
+    sourceData: sourceData ?? this.sourceData,
   );
 }
 
 @immutable
-class _EditingPainterLayoutKey {
-  const _EditingPainterLayoutKey({
+class _TextDraftGeometry {
+  const _TextDraftGeometry({
+    required this.data,
+    required this.rect,
+    required this.layout,
+  });
+
+  final TextData data;
+  final DrawRect rect;
+  final TextLayoutMetrics layout;
+}
+
+@immutable
+class _EditingLayoutIdentity {
+  const _EditingLayoutIdentity({
     required this.text,
     required this.fontSize,
     required this.fontFamily,
@@ -4202,7 +4311,7 @@ class _EditingPainterLayoutKey {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _EditingPainterLayoutKey &&
+      other is _EditingLayoutIdentity &&
           other.text == text &&
           other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
