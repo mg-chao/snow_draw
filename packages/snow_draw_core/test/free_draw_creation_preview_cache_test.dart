@@ -111,33 +111,70 @@ void main() {
       expect(cache.tailMutationCount, 1);
     });
 
-    test('sync resets when mutating a sealed segment endpoint', () {
+    test(
+      'sync keeps cache incremental when mutating a sealed boundary endpoint',
+      () {
+        final cache = FreeDrawCreationPreviewCache();
+        final chunkSize =
+            FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
+        final initial = _buildPoints(chunkSize);
+
+        cache.sync(
+          elementId: 'stroke-sealed-tail-mutation',
+          points: initial,
+          signature: _signature(),
+          strokePaint: _strokePaint(),
+        );
+
+        final sealedBeforeMutation = cache.sealedSegmentCount;
+        expect(cache.sealedSegmentCount, greaterThan(0));
+        expect(cache.tailPointCount, 2);
+
+        final mutated = List<DrawPoint>.of(initial);
+        mutated[mutated.length - 1] = const DrawPoint(x: 2048, y: 1024);
+        cache.sync(
+          elementId: 'stroke-sealed-tail-mutation',
+          points: mutated,
+          signature: _signature(),
+          strokePaint: _strokePaint(),
+        );
+
+        expect(cache.processedPointCount, mutated.length);
+        expect(cache.sealedSegmentCount, sealedBeforeMutation);
+        expect(cache.tailMutationCount, 1);
+      },
+    );
+
+    test('sync avoids replay storms on repeated sealed boundary mutations', () {
       final cache = FreeDrawCreationPreviewCache();
       final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
-      final initial = _buildPoints(chunkSize);
+      final points = _buildPoints(chunkSize);
 
       cache.sync(
-        elementId: 'stroke-sealed-tail-mutation',
-        points: initial,
+        elementId: 'stroke-sealed-tail-mutation-loop',
+        points: points,
         signature: _signature(),
         strokePaint: _strokePaint(),
       );
 
-      expect(cache.sealedSegmentCount, greaterThan(0));
-      expect(cache.tailPointCount, 1);
+      final sealedSegmentCount = cache.sealedSegmentCount;
+      final mutatedPoints = List<DrawPoint>.of(points);
+      for (var index = 0; index < 24; index++) {
+        mutatedPoints[mutatedPoints.length - 1] = DrawPoint(
+          x: 2048 + index.toDouble(),
+          y: 1024 + index.toDouble(),
+        );
+        cache.sync(
+          elementId: 'stroke-sealed-tail-mutation-loop',
+          points: mutatedPoints,
+          signature: _signature(),
+          strokePaint: _strokePaint(),
+        );
+      }
 
-      final mutated = List<DrawPoint>.of(initial);
-      mutated[mutated.length - 1] = const DrawPoint(x: 2048, y: 1024);
-      cache.sync(
-        elementId: 'stroke-sealed-tail-mutation',
-        points: mutated,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
-
-      expect(cache.processedPointCount, mutated.length);
-      expect(cache.sealedSegmentCount, greaterThan(0));
-      expect(cache.tailMutationCount, 0);
+      expect(cache.processedPointCount, mutatedPoints.length);
+      expect(cache.sealedSegmentCount, sealedSegmentCount);
+      expect(cache.tailMutationCount, 24);
     });
 
     test('sync keeps cache stable when active line endpoint is excluded', () {

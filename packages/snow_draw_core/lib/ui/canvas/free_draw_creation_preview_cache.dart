@@ -39,8 +39,13 @@ final class FreeDrawPreviewStrokeSignature {
 /// The cache records sealed stroke chunks into pictures and keeps a mutable
 /// tail path for in-flight points. Sealed chunks stay spatially indexed so
 /// paint can resolve only candidates intersecting the viewport.
+///
+/// To avoid full-cache rebuilds during smoothing tail replacements, each seal
+/// operation keeps a small point overlap in the mutable tail. The overlap
+/// ensures the latest endpoint remains editable even after a chunk is sealed.
 class FreeDrawCreationPreviewCache {
   static const _chunkPointThreshold = 128;
+  static const _retainedTailPointCount = 2;
   static const _segmentScanThreshold = 32;
   static const _indexTileSize = 512.0;
   static const _maxTileToSegmentRatio = 8;
@@ -263,7 +268,7 @@ class FreeDrawCreationPreviewCache {
     _tailBounds.includePoint(point);
     _tailLastPoint = point;
     _tailPoints.add(point);
-    _tailPointCount += 1;
+    _tailPointCount = _tailPoints.length;
 
     if (_tailPointCount >= _chunkPointThreshold) {
       _sealTail(strokePaint);
@@ -271,13 +276,42 @@ class FreeDrawCreationPreviewCache {
   }
 
   void _sealTail(Paint strokePaint) {
-    if (_tailPointCount < 2) {
+    if (_tailPointCount < _chunkPointThreshold || _tailPoints.length < 2) {
       return;
     }
 
-    final tailBounds = _tailBounds.toRect(padding: _cullPadding);
+    final retainedCount = _resolveRetainedTailPointCount();
+    final sealedPointCount = _tailPoints.length - retainedCount + 1;
+    if (sealedPointCount < 2) {
+      return;
+    }
+
+    final sealedPath = Path();
+    final sealedBounds = _MutableBoundsAccumulator();
+    final first = _tailPoints.first;
+    sealedPath.moveTo(first.x, first.y);
+    sealedBounds.includePoint(first);
+
+    var previous = first;
+    var hasSegment = false;
+    for (var index = 1; index < sealedPointCount; index++) {
+      final point = _tailPoints[index];
+      if (point.x == previous.x && point.y == previous.y) {
+        previous = point;
+        continue;
+      }
+      sealedPath.lineTo(point.x, point.y);
+      sealedBounds.includePoint(point);
+      previous = point;
+      hasSegment = true;
+    }
+    if (!hasSegment) {
+      return;
+    }
+
+    final tailBounds = sealedBounds.toRect(padding: _cullPadding);
     final recorder = PictureRecorder();
-    Canvas(recorder).drawPath(_tailPath, strokePaint);
+    Canvas(recorder).drawPath(sealedPath, strokePaint);
 
     final segmentIndex = _sealedSegments.length;
     _sealedSegments.add(
@@ -289,16 +323,22 @@ class FreeDrawCreationPreviewCache {
     _indexSegmentBounds(segmentIndex: segmentIndex, bounds: tailBounds);
     _compactSealedSegmentsIfNeeded();
 
-    final tailLastPoint = _tailLastPoint;
-    _tailPath = Path();
-    _tailBounds.reset();
-    _tailPoints.clear();
-    if (tailLastPoint != null) {
-      _startTail(tailLastPoint);
-    } else {
-      _tailPointCount = 0;
-      _tailLastPoint = null;
+    final retainedStartIndex = sealedPointCount - 1;
+    final retainedPoints = _tailPoints.sublist(
+      retainedStartIndex,
+      _tailPoints.length,
+    );
+    _tailPoints
+      ..clear()
+      ..addAll(retainedPoints);
+    _rebuildTailPath();
+  }
+
+  int _resolveRetainedTailPointCount() {
+    if (_tailPoints.length <= 2) {
+      return _tailPoints.length;
     }
+    return _retainedTailPointCount;
   }
 
   bool _tryUpdateTailLastPoint(DrawPoint point) {
@@ -306,7 +346,11 @@ class FreeDrawCreationPreviewCache {
       return false;
     }
     if (_tailPoints.length == 1 && _sealedSegments.isNotEmpty) {
-      return false;
+      _tailPoints.add(point);
+      _rebuildTailPath();
+      _lastProcessedPoint = point;
+      _tailMutationCount += 1;
+      return true;
     }
     final lastProcessedPoint = _lastProcessedPoint;
     if (lastProcessedPoint == null || _tailPoints.last != lastProcessedPoint) {
