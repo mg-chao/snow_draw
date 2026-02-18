@@ -826,7 +826,7 @@ class DynamicCanvasPainter extends CustomPainter {
       ),
       dynamicElementIds: sceneContext.dynamicElementIds,
       renderHints: FilterRenderHints(
-        interactionPreview: sceneContext.hasInteractiveFilterElement,
+        interactionPreview: sceneContext.useAggressiveCpuFallback,
         aggressiveCpuFallback: sceneContext.useAggressiveCpuFallback,
       ),
     );
@@ -886,11 +886,9 @@ class DynamicCanvasPainter extends CustomPainter {
     );
     final preferFastFilterFallback =
         renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
-    // Filter create/edit and high-frequency style updates are often
-    // CPU-fallback bound. Prefer aggressive runtime policy so latency stays
-    // stable during interaction.
-    final useAggressiveCpuFallback =
-        hasInteractiveFilterElement || preferFastFilterFallback;
+    // Keep drag previews visually consistent with settled frames. Reserve
+    // fast fallback for explicit high-frequency style mutations only.
+    final useAggressiveCpuFallback = preferFastFilterFallback;
 
     return _SceneRenderContext(
       hasFilterElement: staticContext.hasFilterElement,
@@ -970,6 +968,13 @@ class DynamicCanvasPainter extends CustomPainter {
           element.data is TextData) {
         visibleTextIds.add(element.id);
       }
+    }
+    if (canHaveSerialConnectors) {
+      _includeEditingTextIdForSerialConnectors(
+        document: document,
+        previewElementsById: previewElementsById,
+        visibleTextIds: visibleTextIds,
+      );
     }
 
     final shouldPaintSerialConnectors =
@@ -1225,6 +1230,31 @@ class DynamicCanvasPainter extends CustomPainter {
       return null;
     }
     return creatingElement.id;
+  }
+
+  void _includeEditingTextIdForSerialConnectors({
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! TextEditingState || interaction.isNew) {
+      return;
+    }
+
+    final editingTextId = interaction.elementId;
+    final previewElement = previewElementsById[editingTextId];
+    if (previewElement != null) {
+      if (previewElement.data is TextData) {
+        visibleTextIds.add(editingTextId);
+      }
+      return;
+    }
+
+    final persistedElement = document.getElementById(editingTextId);
+    if (persistedElement?.data is TextData) {
+      visibleTextIds.add(editingTextId);
+    }
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

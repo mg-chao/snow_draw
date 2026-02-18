@@ -821,13 +821,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (interaction is! TextEditingState) {
       return null;
     }
-    final element = view.state.domain.document.getElementById(
-      interaction.elementId,
-    );
-    if (element?.data is! TextData) {
+    final previewElement = view.previewElementsById[interaction.elementId];
+    final sourceElement =
+        previewElement ??
+        view.state.domain.document.getElementById(interaction.elementId);
+    if (sourceElement?.data is! TextData) {
       return null;
     }
-    if (element!.opacity == 0) {
+    final element = sourceElement!;
+    if (element.opacity == 0) {
       return element;
     }
     return element.copyWith(opacity: 0);
@@ -4447,6 +4449,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // [ValueListenableBuilder].
     if (previousState != null &&
         isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
+      if (shouldRefreshDynamicLayerForTextEditingDraftMutation(
+        previous: previousState,
+        next: state,
+      )) {
+        _refreshDynamicLayerSnapshot(
+          state,
+          assumeChanged: true,
+          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+        );
+      }
       return;
     }
     if (previousState != null) {

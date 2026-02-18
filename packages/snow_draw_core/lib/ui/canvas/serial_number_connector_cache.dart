@@ -365,13 +365,16 @@ class SerialNumberConnectorCache {
     for (final textId in visibleTextElementIds) {
       final preview = previewElementsById[textId];
       if (preview != null) {
-        if (preview.data is TextData && preview.opacity > 0) {
+        // Callers that pass explicit text ids may intentionally include
+        // hidden editing previews so serial connectors remain visible while
+        // the text glyphs are rendered by the input overlay.
+        if (preview.data is TextData) {
           normalized.add(textId);
         }
         continue;
       }
       final element = document.getElementById(textId);
-      if (element != null && element.data is TextData && element.opacity > 0) {
+      if (element != null && element.data is TextData) {
         normalized.add(textId);
       }
     }

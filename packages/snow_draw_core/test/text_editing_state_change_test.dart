@@ -131,6 +131,113 @@ void main() {
     });
   });
 
+  group('shouldRefreshDynamicLayerForTextEditingDraftMutation', () {
+    test('returns true when existing text rect changes', () {
+      final base = DrawState();
+      final previous = _stateWithTextInteraction(
+        base,
+        const TextEditingState(
+          elementId: 'text-1',
+          draftData: TextData(text: 'a'),
+          rect: DrawRect(minX: 10, minY: 20, maxX: 80, maxY: 52),
+          isNew: false,
+          opacity: 1,
+          rotation: 0,
+        ),
+      );
+      final next = previous.copyWith(
+        application: previous.application.copyWith(
+          interaction: const TextEditingState(
+            elementId: 'text-1',
+            draftData: TextData(text: 'ab'),
+            rect: DrawRect(minX: 10, minY: 20, maxX: 98, maxY: 52),
+            isNew: false,
+            opacity: 1,
+            rotation: 0,
+          ),
+        ),
+      );
+
+      expect(
+        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+          previous: previous,
+          next: next,
+        ),
+        isTrue,
+      );
+    });
+
+    test('returns false when editing a new text draft', () {
+      final base = DrawState();
+      final previous = _stateWithTextInteraction(
+        base,
+        const TextEditingState(
+          elementId: 'text-1',
+          draftData: TextData(text: 'a'),
+          rect: DrawRect(minX: 10, minY: 20, maxX: 80, maxY: 52),
+          isNew: true,
+          opacity: 1,
+          rotation: 0,
+        ),
+      );
+      final next = previous.copyWith(
+        application: previous.application.copyWith(
+          interaction: const TextEditingState(
+            elementId: 'text-1',
+            draftData: TextData(text: 'ab'),
+            rect: DrawRect(minX: 10, minY: 20, maxX: 98, maxY: 52),
+            isNew: true,
+            opacity: 1,
+            rotation: 0,
+          ),
+        ),
+      );
+
+      expect(
+        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+          previous: previous,
+          next: next,
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns false when rect stays the same', () {
+      final base = DrawState();
+      final previous = _stateWithTextInteraction(
+        base,
+        const TextEditingState(
+          elementId: 'text-1',
+          draftData: TextData(text: 'a'),
+          rect: DrawRect(minX: 10, minY: 20, maxX: 80, maxY: 52),
+          isNew: false,
+          opacity: 1,
+          rotation: 0,
+        ),
+      );
+      final next = previous.copyWith(
+        application: previous.application.copyWith(
+          interaction: const TextEditingState(
+            elementId: 'text-1',
+            draftData: TextData(text: 'b'),
+            rect: DrawRect(minX: 10, minY: 20, maxX: 80, maxY: 52),
+            isNew: false,
+            opacity: 1,
+            rotation: 0,
+          ),
+        ),
+      );
+
+      expect(
+        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+          previous: previous,
+          next: next,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   test('TextEditingState uses value equality', () {
     const first = TextEditingState(
       elementId: 'text-1',

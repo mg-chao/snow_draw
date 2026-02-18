@@ -39,6 +39,32 @@ bool isTextEditingDraftMutationOnly({
       previousInteraction.rect != nextInteraction.rect;
 }
 
+/// Returns true when a text draft mutation should refresh dynamic canvas state.
+///
+/// Text glyphs are rendered by a dedicated editor overlay, but selection
+/// outlines and serial-number connectors depend on preview rect changes in the
+/// dynamic painter. Refresh is limited to existing text edits whose rect
+/// changed to preserve the text-draft fast path for all other cases.
+bool shouldRefreshDynamicLayerForTextEditingDraftMutation({
+  required DrawState previous,
+  required DrawState next,
+}) {
+  if (!isTextEditingDraftMutationOnly(previous: previous, next: next)) {
+    return false;
+  }
+
+  final previousInteraction = previous.application.interaction;
+  final nextInteraction = next.application.interaction;
+  if (previousInteraction is! TextEditingState ||
+      nextInteraction is! TextEditingState) {
+    return false;
+  }
+  if (nextInteraction.isNew) {
+    return false;
+  }
+  return previousInteraction.rect != nextInteraction.rect;
+}
+
 bool _isSameTextEditingSession(
   TextEditingState previous,
   TextEditingState next,

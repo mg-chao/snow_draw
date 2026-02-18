@@ -71,7 +71,7 @@ void drawSerialNumberConnectorsForText({
   required ElementState textElement,
   required SerialNumberConnectorMap connectorsByTextId,
 }) {
-  if (textElement.data is! TextData || textElement.opacity <= 0) {
+  if (textElement.data is! TextData) {
     return;
   }
 

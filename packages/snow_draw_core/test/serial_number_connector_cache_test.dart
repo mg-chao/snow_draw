@@ -227,7 +227,7 @@ void main() {
     expect(connectors['text-b'], isNull);
   });
 
-  test('treats preview-hidden text as not visible', () {
+  test('allows explicitly requested preview-hidden text ids', () {
     const text = ElementState(
       id: 'text',
       rect: DrawRect(minX: 120, minY: 80, maxX: 220, maxY: 120),
@@ -260,7 +260,8 @@ void main() {
     );
     final inferredConnectors = resolveSerialNumberConnectorMap(view);
 
-    expect(explicitConnectors, isEmpty);
+    expect(explicitConnectors['text'], isNotNull);
+    expect(explicitConnectors['text']!.length, 1);
     expect(inferredConnectors, isEmpty);
   });
 

@@ -101,6 +101,11 @@ class StaticCanvasPainter extends CustomPainter {
           visibleTextIds.add(element.id);
         }
       }
+      _includeEditingTextIdForSerialConnectors(
+        stateView: stateView,
+        previewElementsById: previewElements,
+        visibleTextIds: visibleTextIds,
+      );
       final shouldPaintSerialConnectors =
           visibleTextIds.isNotEmpty &&
           _shouldPaintSerialConnectors(
@@ -555,6 +560,33 @@ class StaticCanvasPainter extends CustomPainter {
       }
     }
     return false;
+  }
+
+  void _includeEditingTextIdForSerialConnectors({
+    required DrawStateView stateView,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! TextEditingState || interaction.isNew) {
+      return;
+    }
+
+    final editingTextId = interaction.elementId;
+    final previewElement = previewElementsById[editingTextId];
+    if (previewElement != null) {
+      if (previewElement.data is TextData) {
+        visibleTextIds.add(editingTextId);
+      }
+      return;
+    }
+
+    final persistedElement = stateView.state.domain.document.getElementById(
+      editingTextId,
+    );
+    if (persistedElement?.data is TextData) {
+      visibleTextIds.add(editingTextId);
+    }
   }
 
   @override
