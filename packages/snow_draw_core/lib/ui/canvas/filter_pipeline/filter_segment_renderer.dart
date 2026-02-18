@@ -183,6 +183,9 @@ class FilterSegmentRenderer {
   static const _hugeCoverageColorMatrixDownsample = 0.58;
   static const _largeCoverageQuantizationScale = 1.5;
   static const _hugeCoverageQuantizationScale = 2.0;
+  static const _fingerprintSeed = 17;
+  static const _identityFingerprintSeed = 23;
+  static const _hashMask = 0x1fffffff;
 
   final FilterSegmentBuilder _segmentBuilder;
   final FilterKernelFactory _kernelFactory;
@@ -327,6 +330,7 @@ class FilterSegmentRenderer {
             segment.elements,
             paintElement,
             idFingerprint: segment.idFingerprint,
+            identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
             dynamicElementIds: dynamicElementIds,
           ),
@@ -565,25 +569,27 @@ class FilterSegmentRenderer {
       return null;
     }
 
-    final prefixElements = _collectElementsInSegmentRange(
+    final rangeSignature = _buildSegmentRangeSignature(
       segments: segments,
       start: 0,
       end: endSegmentIndex,
     );
-    if (prefixElements.isEmpty) {
+    if (rangeSignature.elementCount == 0) {
       return null;
     }
 
     final cacheKey = _PrefixSceneCacheKey(
       contextSignature: _BatchPictureContextSignature.fromContext(cacheContext),
-      fingerprint: _batchFingerprint(prefixElements),
-      length: prefixElements.length,
+      idFingerprint: rangeSignature.idFingerprint,
+      identityFingerprint: rangeSignature.identityFingerprint,
+      elementCount: rangeSignature.elementCount,
+      segmentCount: rangeSignature.segmentCount,
       visibleBoundsSignature: _VisibleBoundsSignature.fromRect(visibleBounds),
       interactionPreview: runtimePolicy.preferFastCpuFallback,
       aggressiveCpuFallback: runtimePolicy.aggressiveCpuFallback,
     );
     final cached = _prefixSceneCache.get(cacheKey);
-    if (cached != null && cached.matches(prefixElements)) {
+    if (cached != null) {
       _diagnostics.markPrefixSceneCacheHit();
       cached.retain();
       return _ScenePictureRef.shared(
@@ -603,10 +609,7 @@ class FilterSegmentRenderer {
       dynamicElementIds: const <String>{},
       runtimePolicy: runtimePolicy,
     );
-    final cachedEntry = _CachedPrefixScenePicture(
-      picture: picture,
-      elementRefs: prefixElements,
-    )..retain();
+    final cachedEntry = _CachedPrefixScenePicture(picture: picture)..retain();
     _prefixSceneCache.put(cacheKey, cachedEntry);
     return _ScenePictureRef.shared(
       picture: picture,
@@ -645,6 +648,7 @@ class FilterSegmentRenderer {
             segment.elements,
             paintElement,
             idFingerprint: segment.idFingerprint,
+            identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
             dynamicElementIds: dynamicElementIds,
           ),
@@ -703,25 +707,34 @@ class FilterSegmentRenderer {
     return flattened.picture;
   }
 
-  List<ElementState> _collectElementsInSegmentRange({
+  _SegmentRangeSignature _buildSegmentRangeSignature({
     required List<RenderSegment> segments,
     required int start,
     required int end,
   }) {
-    final collected = <ElementState>[];
+    var idFingerprint = _fingerprintSeed;
+    var identityFingerprint = _identityFingerprintSeed;
+    var elementCount = 0;
+    var segmentCount = 0;
     for (var index = start; index < end; index++) {
       final segment = segments[index];
-      if (segment is ElementBatchSegment) {
-        collected.addAll(segment.elements);
-      } else if (segment is FilterSegment) {
-        collected.add(segment.filterElement);
-      } else if (segment is MergedFilterSegment) {
-        for (final filter in segment.filters) {
-          collected.add(filter.filterElement);
-        }
-      }
+      idFingerprint = _appendFingerprint(
+        idFingerprint,
+        _resolveSegmentIdFingerprint(segment),
+      );
+      identityFingerprint = _appendFingerprint(
+        identityFingerprint,
+        _resolveSegmentIdentityFingerprint(segment),
+      );
+      elementCount += _resolveSegmentElementCount(segment);
+      segmentCount += 1;
     }
-    return List<ElementState>.unmodifiable(collected);
+    return _SegmentRangeSignature(
+      idFingerprint: idFingerprint,
+      identityFingerprint: identityFingerprint,
+      elementCount: elementCount,
+      segmentCount: segmentCount,
+    );
   }
 
   _ScenePictureRef? _flattenPendingScenes(
@@ -766,6 +779,7 @@ class FilterSegmentRenderer {
     List<ElementState> elements,
     SceneElementPainter paintElement, {
     required int? idFingerprint,
+    required int? identityFingerprint,
     required FilterRenderCacheContext? cacheContext,
     required Set<String> dynamicElementIds,
   }) {
@@ -777,11 +791,13 @@ class FilterSegmentRenderer {
         contextSignature: _BatchPictureContextSignature.fromContext(
           cacheContext,
         ),
-        fingerprint: idFingerprint ?? _batchFingerprint(elements),
-        length: elements.length,
+        idFingerprint: idFingerprint ?? _batchFingerprint(elements),
+        identityFingerprint:
+            identityFingerprint ?? _batchIdentityFingerprint(elements),
+        elementCount: elements.length,
       );
       final cached = _batchPictureCache.get(cacheKey);
-      if (cached != null && cached.matches(elements)) {
+      if (cached != null) {
         _diagnostics.markBatchCacheHit();
         cached.retain();
         return _ScenePictureRef.shared(
@@ -798,10 +814,7 @@ class FilterSegmentRenderer {
         paintElement(batchCanvas, element);
       }
       final picture = recorder.endRecording();
-      final cachedEntry = _CachedBatchPicture(
-        picture: picture,
-        elementRefs: List<ElementState>.of(elements, growable: false),
-      )..retain();
+      final cachedEntry = _CachedBatchPicture(picture: picture)..retain();
       _batchPictureCache.put(cacheKey, cachedEntry);
       return _ScenePictureRef.shared(
         picture: picture,
@@ -1730,11 +1743,87 @@ class FilterSegmentRenderer {
   }
 
   int _batchFingerprint(List<ElementState> elements) {
-    var hash = 17;
+    var hash = _fingerprintSeed;
     for (final element in elements) {
-      hash = 0x1fffffff & (hash * 31 + element.id.hashCode);
+      hash = _appendFingerprint(hash, element.id.hashCode);
     }
     return hash;
+  }
+
+  int _batchIdentityFingerprint(List<ElementState> elements) {
+    var hash = _identityFingerprintSeed;
+    for (final element in elements) {
+      hash = _appendFingerprint(hash, identityHashCode(element));
+    }
+    return hash;
+  }
+
+  int _appendFingerprint(int current, int value) =>
+      _hashMask & ((current * 31) + value);
+
+  int _resolveSegmentElementCount(RenderSegment segment) {
+    if (segment is ElementBatchSegment) {
+      return segment.elements.length;
+    }
+    if (segment is FilterSegment) {
+      return 1;
+    }
+    if (segment is MergedFilterSegment) {
+      return segment.filters.length;
+    }
+    return 0;
+  }
+
+  int _resolveSegmentIdFingerprint(RenderSegment segment) {
+    if (segment is ElementBatchSegment) {
+      return segment.idFingerprint ?? _batchFingerprint(segment.elements);
+    }
+    if (segment is FilterSegment) {
+      return segment.idFingerprint ??
+          _appendFingerprint(
+            _fingerprintSeed,
+            segment.filterElement.id.hashCode,
+          );
+    }
+    if (segment is MergedFilterSegment) {
+      if (segment.idFingerprint != null) {
+        return segment.idFingerprint!;
+      }
+      var hash = _fingerprintSeed;
+      for (final filter in segment.filters) {
+        hash = _appendFingerprint(hash, _resolveSegmentIdFingerprint(filter));
+      }
+      return hash;
+    }
+    return _fingerprintSeed;
+  }
+
+  int _resolveSegmentIdentityFingerprint(RenderSegment segment) {
+    if (segment is ElementBatchSegment) {
+      return segment.identityFingerprint ??
+          _batchIdentityFingerprint(segment.elements);
+    }
+    if (segment is FilterSegment) {
+      return segment.identityFingerprint ??
+          _appendFingerprint(
+            _identityFingerprintSeed,
+            identityHashCode(segment.filterElement),
+          );
+    }
+    if (segment is MergedFilterSegment) {
+      if (segment.identityFingerprint != null) {
+        return segment.identityFingerprint!;
+      }
+      var hash = _identityFingerprintSeed;
+      for (final filter in segment.filters) {
+        hash = _appendFingerprint(
+          hash,
+          _resolveSegmentIdentityFingerprint(filter),
+        );
+      }
+      return hash;
+    }
+    return _identityFingerprintSeed;
   }
 
   double _resolveCoverageRatio({
@@ -2012,6 +2101,21 @@ class _FilterRuntimePolicy {
 // ── Cache keys ──────────────────────────────────────────
 
 @immutable
+class _SegmentRangeSignature {
+  const _SegmentRangeSignature({
+    required this.idFingerprint,
+    required this.identityFingerprint,
+    required this.elementCount,
+    required this.segmentCount,
+  });
+
+  final int idFingerprint;
+  final int identityFingerprint;
+  final int elementCount;
+  final int segmentCount;
+}
+
+@immutable
 class _ScenePictureRef {
   const _ScenePictureRef._({
     required this.picture,
@@ -2081,26 +2185,40 @@ class _BatchPictureContextSignature {
 class _BatchPictureCacheKey {
   const _BatchPictureCacheKey({
     required this.contextSignature,
-    required this.fingerprint,
-    required this.length,
+    required this.idFingerprint,
+    required this.identityFingerprint,
+    required this.elementCount,
   });
 
   /// Signature intentionally excludes document version so stable non-filter
   /// batches survive filter-only document updates (for example strength drags).
   final _BatchPictureContextSignature contextSignature;
-  final int fingerprint;
-  final int length;
+
+  /// Stable-id fingerprint for the batch element order.
+  final int idFingerprint;
+
+  /// Object-identity fingerprint for the batch element snapshots.
+  final int identityFingerprint;
+
+  /// Number of elements in the batch.
+  final int elementCount;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _BatchPictureCacheKey &&
           other.contextSignature == contextSignature &&
-          other.fingerprint == fingerprint &&
-          other.length == length;
+          other.idFingerprint == idFingerprint &&
+          other.identityFingerprint == identityFingerprint &&
+          other.elementCount == elementCount;
 
   @override
-  int get hashCode => Object.hash(contextSignature, fingerprint, length);
+  int get hashCode => Object.hash(
+    contextSignature,
+    idFingerprint,
+    identityFingerprint,
+    elementCount,
+  );
 }
 
 @immutable
@@ -2156,16 +2274,28 @@ class _VisibleBoundsSignature {
 class _PrefixSceneCacheKey {
   const _PrefixSceneCacheKey({
     required this.contextSignature,
-    required this.fingerprint,
-    required this.length,
+    required this.idFingerprint,
+    required this.identityFingerprint,
+    required this.elementCount,
+    required this.segmentCount,
     required this.visibleBoundsSignature,
     required this.interactionPreview,
     required this.aggressiveCpuFallback,
   });
 
   final _BatchPictureContextSignature contextSignature;
-  final int fingerprint;
-  final int length;
+
+  /// Stable-id fingerprint for all segments in the cached prefix range.
+  final int idFingerprint;
+
+  /// Object-identity fingerprint for all segments in the cached prefix range.
+  final int identityFingerprint;
+
+  /// Total number of elements represented by the prefix range.
+  final int elementCount;
+
+  /// Number of render segments represented by the prefix range.
+  final int segmentCount;
   final _VisibleBoundsSignature visibleBoundsSignature;
   final bool interactionPreview;
   final bool aggressiveCpuFallback;
@@ -2175,8 +2305,10 @@ class _PrefixSceneCacheKey {
       identical(this, other) ||
       other is _PrefixSceneCacheKey &&
           other.contextSignature == contextSignature &&
-          other.fingerprint == fingerprint &&
-          other.length == length &&
+          other.idFingerprint == idFingerprint &&
+          other.identityFingerprint == identityFingerprint &&
+          other.elementCount == elementCount &&
+          other.segmentCount == segmentCount &&
           other.visibleBoundsSignature == visibleBoundsSignature &&
           other.interactionPreview == interactionPreview &&
           other.aggressiveCpuFallback == aggressiveCpuFallback;
@@ -2184,8 +2316,10 @@ class _PrefixSceneCacheKey {
   @override
   int get hashCode => Object.hash(
     contextSignature,
-    fingerprint,
-    length,
+    idFingerprint,
+    identityFingerprint,
+    elementCount,
+    segmentCount,
     visibleBoundsSignature,
     interactionPreview,
     aggressiveCpuFallback,
@@ -2193,25 +2327,12 @@ class _PrefixSceneCacheKey {
 }
 
 class _CachedBatchPicture {
-  _CachedBatchPicture({required this.picture, required this.elementRefs});
+  _CachedBatchPicture({required this.picture});
 
   final Picture picture;
-  final List<ElementState> elementRefs;
   var _activeReaders = 0;
   var _evicted = false;
   var _disposed = false;
-
-  bool matches(List<ElementState> elements) {
-    if (elements.length != elementRefs.length) {
-      return false;
-    }
-    for (var index = 0; index < elements.length; index++) {
-      if (!identical(elements[index], elementRefs[index])) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   void retain() {
     _activeReaders += 1;
@@ -2244,25 +2365,12 @@ class _CachedBatchPicture {
 }
 
 class _CachedPrefixScenePicture {
-  _CachedPrefixScenePicture({required this.picture, required this.elementRefs});
+  _CachedPrefixScenePicture({required this.picture});
 
   final Picture picture;
-  final List<ElementState> elementRefs;
   var _activeReaders = 0;
   var _evicted = false;
   var _disposed = false;
-
-  bool matches(List<ElementState> elements) {
-    if (elements.length != elementRefs.length) {
-      return false;
-    }
-    for (var index = 0; index < elements.length; index++) {
-      if (!identical(elements[index], elementRefs[index])) {
-        return false;
-      }
-    }
-    return true;
-  }
 
   void retain() {
     _activeReaders += 1;

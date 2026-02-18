@@ -12,6 +12,7 @@ class FilterSegmentBuilder {
   const FilterSegmentBuilder();
 
   static const _batchFingerprintSeed = 17;
+  static const _identityFingerprintSeed = 23;
   static const _hashMask = 0x1fffffff;
 
   /// Builds alternating element-batch and filter segments.
@@ -23,6 +24,7 @@ class FilterSegmentBuilder {
     final segments = <RenderSegment>[];
     final currentBatch = <ElementState>[];
     var currentBatchFingerprint = _batchFingerprintSeed;
+    var currentBatchIdentityFingerprint = _identityFingerprintSeed;
 
     void flushBatch() {
       if (currentBatch.isEmpty) {
@@ -32,22 +34,34 @@ class FilterSegmentBuilder {
         ElementBatchSegment(
           List<ElementState>.unmodifiable(currentBatch),
           idFingerprint: currentBatchFingerprint,
+          identityFingerprint: currentBatchIdentityFingerprint,
         ),
       );
       currentBatch.clear();
       currentBatchFingerprint = _batchFingerprintSeed;
+      currentBatchIdentityFingerprint = _identityFingerprintSeed;
     }
 
     for (final element in elements) {
       final data = element.data;
       if (data is FilterData) {
         flushBatch();
-        segments.add(FilterSegment(filterElement: element, filterData: data));
+        segments.add(
+          FilterSegment(
+            filterElement: element,
+            filterData: data,
+            idFingerprint: _stableElementIdFingerprint(element),
+            identityFingerprint: _stableElementIdentityFingerprint(element),
+          ),
+        );
         continue;
       }
       currentBatch.add(element);
       currentBatchFingerprint =
           _hashMask & ((currentBatchFingerprint * 31) + element.id.hashCode);
+      currentBatchIdentityFingerprint =
+          _hashMask &
+          ((currentBatchIdentityFingerprint * 31) + identityHashCode(element));
     }
 
     flushBatch();
@@ -71,9 +85,22 @@ class FilterSegmentBuilder {
       if (pendingFilters.length == 1) {
         merged.add(pendingFilters.first);
       } else {
+        var idFingerprint = _batchFingerprintSeed;
+        var identityFingerprint = _identityFingerprintSeed;
+        for (final filter in pendingFilters) {
+          idFingerprint =
+              _hashMask &
+              ((idFingerprint * 31) + _resolveFilterIdFingerprint(filter));
+          identityFingerprint =
+              _hashMask &
+              ((identityFingerprint * 31) +
+                  _resolveFilterIdentityFingerprint(filter));
+        }
         merged.add(
           MergedFilterSegment(
             filters: List<FilterSegment>.unmodifiable(pendingFilters),
+            idFingerprint: idFingerprint,
+            identityFingerprint: identityFingerprint,
           ),
         );
       }
@@ -96,4 +123,18 @@ class FilterSegmentBuilder {
     flushFilters();
     return merged;
   }
+
+  int _stableElementIdFingerprint(ElementState element) =>
+      _hashMask & ((_batchFingerprintSeed * 31) + element.id.hashCode);
+
+  int _stableElementIdentityFingerprint(ElementState element) =>
+      _hashMask & ((_identityFingerprintSeed * 31) + identityHashCode(element));
+
+  int _resolveFilterIdFingerprint(FilterSegment segment) =>
+      segment.idFingerprint ??
+      _stableElementIdFingerprint(segment.filterElement);
+
+  int _resolveFilterIdentityFingerprint(FilterSegment segment) =>
+      segment.identityFingerprint ??
+      _stableElementIdentityFingerprint(segment.filterElement);
 }

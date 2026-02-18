@@ -3255,7 +3255,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   /// Reuses dynamic-scene split metadata for interaction-only updates.
   ///
-  /// Arrow/line/rectangle/highlight/serial interactions all resolve to
+  /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
   /// `dynamicOnly` refresh plans while the document topology remains stable.
   /// Rebuilding full split metadata on every pointer frame is redundant, so
   /// this fast path reuses the previous dynamic render key and only resolves

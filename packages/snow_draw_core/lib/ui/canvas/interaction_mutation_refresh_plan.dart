@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../draw/elements/types/arrow/arrow_data.dart';
+import '../../draw/elements/types/filter/filter_data.dart';
 import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
@@ -8,6 +9,7 @@ import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/interaction_state.dart';
 import 'arrow_interaction_state_change.dart';
+import 'filter_interaction_state_change.dart';
 import 'highlight_interaction_state_change.dart';
 import 'lightweight_line_edit_state_change.dart';
 import 'rectangle_interaction_state_change.dart';
@@ -48,6 +50,9 @@ enum InteractionMutationKind {
 
   /// Highlight create/edit interaction.
   highlight,
+
+  /// Filter create/edit interaction.
+  filter,
 
   /// Arrow create/edit interaction.
   arrow,
@@ -97,6 +102,11 @@ class InteractionMutationRefreshPlan {
 
   static const highlight = InteractionMutationRefreshPlan(
     kind: InteractionMutationKind.highlight,
+    refreshMode: InteractionMutationRefreshMode.dynamicOnly,
+  );
+
+  static const filter = InteractionMutationRefreshPlan(
+    kind: InteractionMutationKind.filter,
     refreshMode: InteractionMutationRefreshMode.dynamicOnly,
   );
 
@@ -160,6 +170,12 @@ InteractionMutationRefreshPlan? _resolveCreatingMutationPlan({
     }
     return null;
   }
+  if (previousData is FilterData && nextData is FilterData) {
+    if (isFilterInteractionMutationOnly(previous: previous, next: next)) {
+      return InteractionMutationRefreshPlan.filter;
+    }
+    return null;
+  }
   if (previousData is SerialNumberData && nextData is SerialNumberData) {
     if (isSerialNumberInteractionMutationOnly(previous: previous, next: next)) {
       return InteractionMutationRefreshPlan.serialNumber;
@@ -191,6 +207,9 @@ InteractionMutationRefreshPlan? _resolveEditingMutationPlan({
   if (isHighlightInteractionMutationOnly(previous: previous, next: next)) {
     return InteractionMutationRefreshPlan.highlight;
   }
+  if (isFilterInteractionMutationOnly(previous: previous, next: next)) {
+    return InteractionMutationRefreshPlan.filter;
+  }
   return null;
 }
 
@@ -215,6 +234,9 @@ InteractionMutationRefreshPlan? _resolveFallbackMutationPlan({
   }
   if (isHighlightInteractionMutationOnly(previous: previous, next: next)) {
     return InteractionMutationRefreshPlan.highlight;
+  }
+  if (isFilterInteractionMutationOnly(previous: previous, next: next)) {
+    return InteractionMutationRefreshPlan.filter;
   }
   return null;
 }

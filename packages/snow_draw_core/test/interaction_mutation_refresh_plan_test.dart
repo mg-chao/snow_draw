@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -141,6 +142,78 @@ void main() {
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.highlight);
       expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
+    });
+
+    test('resolves filter creation as dynamic-only', () {
+      final base = _baseState(elements: const [_filterElement]);
+      final previous = _withInteraction(
+        base,
+        _creatingState(
+          element: _filterElement,
+          startPosition: const DrawPoint(x: 44, y: 44),
+          currentRect: const DrawRect(minX: 44, minY: 44, maxX: 44, maxY: 44),
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        _creatingState(
+          element: _filterElement,
+          startPosition: const DrawPoint(x: 44, y: 44),
+          currentRect: const DrawRect(minX: 44, minY: 44, maxX: 120, maxY: 92),
+        ),
+      );
+
+      final plan = resolveInteractionMutationRefreshPlan(
+        previous: previous,
+        next: next,
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.kind, InteractionMutationKind.filter);
+      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
+    });
+
+    test('resolves filter edit as dynamic-only and defers pointer refresh', () {
+      final base = _baseState(
+        elements: const [_filterElement],
+        selectedIds: const {'filter'},
+      );
+      const context = _TestEditContext(
+        startPosition: DrawPoint(x: 26, y: 26),
+        startBounds: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 80),
+        selectedIdsAtStart: {'filter'},
+        selectionVersion: 1,
+        elementsVersion: 1,
+      );
+      final previous = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'filter_edit',
+          context: context,
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'filter_edit',
+          context: context,
+          currentTransform: MoveTransform(dx: -4, dy: 12),
+        ),
+      );
+
+      final plan = resolveInteractionMutationRefreshPlan(
+        previous: previous,
+        next: next,
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.kind, InteractionMutationKind.filter);
+      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
+      expect(plan.shouldRefreshPointerVisuals(hasActivePointer: true), isFalse);
+      expect(plan.shouldRefreshPointerVisuals(hasActivePointer: false), isTrue);
     });
 
     test('resolves arrow creation as dynamic-only', () {
@@ -290,6 +363,15 @@ const _highlightElement = ElementState(
   opacity: 1,
   zIndex: 0,
   data: HighlightData(),
+);
+
+const _filterElement = ElementState(
+  id: 'filter',
+  rect: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 80),
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: FilterData(),
 );
 
 const _arrowElement = ElementState(
