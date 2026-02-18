@@ -169,6 +169,7 @@ class _HoverFrameEvent {
 
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
+  static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const _eraserPreviewOpacityFactor = 0.5;
@@ -889,11 +890,32 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         Map<String, ElementState>.unmodifiable(merged);
   }
 
-  Set<String>? _snapshotEraserVolatilePreviewElementIds() {
+  Set<String> _snapshotEraserVolatilePreviewElementIds() {
     if (_eraserVolatilePreviewElementIds.isEmpty) {
-      return null;
+      return const <String>{};
     }
     return Set<String>.unmodifiable(_eraserVolatilePreviewElementIds);
+  }
+
+  Set<String> _resolveDynamicPreviewElementIdsForScene(
+    DrawStateView stateView,
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+    final document = stateView.state.domain.document;
+    final dynamicIds = <String>{};
+    for (final entry in previewElementsById.entries) {
+      final persisted = document.getElementById(entry.key);
+      if (persisted == null || !identical(persisted, entry.value)) {
+        dynamicIds.add(entry.key);
+      }
+    }
+    if (dynamicIds.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(dynamicIds);
   }
 
   void _invalidateEraserPreviewSnapshots() {
@@ -2869,8 +2891,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     } else {
       final shouldResolveOptimization =
           interaction is EditingState || interaction is TextEditingState;
-      final optimizationPlan = shouldResolveOptimization
+      final resolvedOptimizationPlan = shouldResolveOptimization
           ? resolveDynamicSceneOptimizationPlan(view: stateView)
+          : null;
+      final optimizationPlan =
+          _shouldApplyDynamicSceneOptimizationPlan(
+            stateView: stateView,
+            plan: resolvedOptimizationPlan,
+          )
+          ? resolvedOptimizationPlan
           : null;
       optimizedDynamicElementIds =
           optimizationPlan?.optimizedElementIds ?? const <String>{};
@@ -2898,7 +2927,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       staticPreviewElements = baseStaticPreviewElements;
       dynamicPreviewElements = baseDynamicPreviewElements;
       dynamicPreviewElementsRevision = null;
-      dynamicPreviewElementIds = null;
+      dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        baseDynamicPreviewElements,
+      );
     }
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
@@ -2931,6 +2963,38 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskConfig: highlightMask,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
+  }
+
+  bool _shouldApplyDynamicSceneOptimizationPlan({
+    required DrawStateView stateView,
+    required DynamicSceneOptimizationPlan? plan,
+  }) {
+    if (plan == null) {
+      return false;
+    }
+    final optimizedElementIds = plan.optimizedElementIds;
+    if (optimizedElementIds.isEmpty) {
+      return false;
+    }
+
+    final document = stateView.state.domain.document;
+    var lowestOrderIndex = -1;
+    for (final elementId in optimizedElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null) {
+        continue;
+      }
+      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
+        lowestOrderIndex = orderIndex;
+      }
+    }
+    if (lowestOrderIndex < 0) {
+      return false;
+    }
+
+    final dynamicTailCount = document.elements.length - lowestOrderIndex;
+    final savedElementCount = dynamicTailCount - optimizedElementIds.length;
+    return savedElementCount >= _minOptimizationSavedElementCount;
   }
 
   HighlightMaskLayer _resolveHighlightMaskLayer({

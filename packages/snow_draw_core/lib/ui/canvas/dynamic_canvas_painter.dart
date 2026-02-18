@@ -967,7 +967,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final dynamicIds = <String>{};
     for (final entry in previewElementsById.entries) {
       final persisted = document.getElementById(entry.key);
-      if (persisted == null || persisted != entry.value) {
+      if (persisted == null || !identical(persisted, entry.value)) {
         dynamicIds.add(entry.key);
       }
     }
