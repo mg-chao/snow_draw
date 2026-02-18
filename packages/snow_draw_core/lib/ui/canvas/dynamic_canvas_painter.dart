@@ -327,23 +327,24 @@ class DynamicCanvasPainter extends CustomPainter {
       viewportRect: viewportRect,
       minOrderIndex: minOrderIndex,
     );
+    final excludedElementId =
+        creatingElement != null &&
+            document.getElementById(creatingElement.element.id) != null
+        ? creatingElement.element.id
+        : null;
     if (optimizedElementIds.isEmpty &&
-        _tryPaintHighlightPreviewFastPath(
+        _tryPaintPreviewFastPath(
           canvas: canvas,
           scale: scale,
           viewportRect: viewportRect,
           creatingElement: creatingElement,
+          excludedElementId: excludedElementId,
           baseVisibleElements: baseVisibleElements,
           document: document,
         )) {
       return;
     }
 
-    final excludedElementId =
-        creatingElement != null &&
-            document.getElementById(creatingElement.element.id) != null
-        ? creatingElement.element.id
-        : null;
     var effectiveElements = resolveVisibleElementScene(
       document: document,
       viewportRect: viewportRect,
@@ -369,15 +370,17 @@ class DynamicCanvasPainter extends CustomPainter {
     );
   }
 
-  bool _tryPaintHighlightPreviewFastPath({
+  bool _tryPaintPreviewFastPath({
     required Canvas canvas,
     required double scale,
     required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
+    required String? excludedElementId,
     required List<ElementState> baseVisibleElements,
     required DocumentState document,
   }) {
-    if (!_isHighlightPreviewCacheEligible()) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty || excludedElementId != null) {
       return false;
     }
 
@@ -386,7 +389,7 @@ class DynamicCanvasPainter extends CustomPainter {
       return false;
     }
 
-    if (!_canUseHighlightPreviewFastPath(
+    if (!_canUsePreviewFastPath(
       baseVisibleElements: baseVisibleElements,
       viewportRect: viewportRect,
       document: document,
@@ -402,7 +405,7 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     void paintElement(Canvas sceneCanvas, ElementState element) {
-      final effective = renderKey.previewElementsById[element.id] ?? element;
+      final effective = previewElements[element.id] ?? element;
       if (!identical(effective, element)) {
         final previewAabb = SelectionCalculator.computeElementWorldAabb(
           effective,
@@ -432,7 +435,7 @@ class DynamicCanvasPainter extends CustomPainter {
     return true;
   }
 
-  bool _canUseHighlightPreviewFastPath({
+  bool _canUsePreviewFastPath({
     required List<ElementState> baseVisibleElements,
     required DrawRect viewportRect,
     required DocumentState document,

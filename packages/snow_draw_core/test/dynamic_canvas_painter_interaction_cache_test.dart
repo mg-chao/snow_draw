@@ -105,6 +105,59 @@ void main() {
     expect(counter.count, 1);
   });
 
+  test(
+    'falls back when preview enters viewport from an offscreen base element',
+    () {
+      final counter = _RenderCounter();
+      final registry = _buildRegistry(counter);
+      final elements = <ElementState>[
+        const ElementState(
+          id: 'cache-visible',
+          rect: DrawRect(maxX: 40, maxY: 40),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: _CacheTestData(),
+        ),
+        const ElementState(
+          id: 'cache-offscreen',
+          rect: DrawRect(minX: 420, minY: 20, maxX: 460, maxY: 60),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: _CacheTestData(),
+        ),
+      ];
+      final state = DrawState.fromLayers(
+        domain: DomainState(
+          document: DocumentState(elements: elements, elementsVersion: 898989),
+        ),
+        application: ApplicationState.initial(),
+      );
+
+      final preview = elements[1].copyWith(
+        rect: const DrawRect(minX: 60, minY: 20, maxX: 100, maxY: 60),
+      );
+      _paintFrame(
+        stateView: DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {preview.id: preview},
+          effectiveSelection: EffectiveSelection.none,
+          snapGuides: const [],
+        ),
+        renderKey: _buildRenderKey(
+          state: state,
+          registry: registry,
+          previewElementsById: {preview.id: preview},
+        ),
+      );
+
+      // The offscreen persisted element must still be painted once its preview
+      // moves into the viewport.
+      expect(counter.count, 2);
+    },
+  );
+
   test('reuses static segments when serial connectors are visible', () {
     final counter = _RenderCounter();
     final registry = _buildRegistryWithSerialSupport(counter);
