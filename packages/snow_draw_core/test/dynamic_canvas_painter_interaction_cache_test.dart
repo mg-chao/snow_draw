@@ -519,6 +519,8 @@ DynamicCanvasRenderKey _buildRenderKey({
   required DefaultElementRegistry registry,
   required Map<String, ElementState> previewElementsById,
   CreatingElementSnapshot? creatingElement,
+  int? previewElementsRevision,
+  Set<String>? dynamicPreviewElementIds,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -535,6 +537,8 @@ DynamicCanvasRenderKey _buildRenderKey({
   textRenderingCacheRevision: 0,
   camera: state.application.view.camera,
   previewElementsById: previewElementsById,
+  previewElementsRevision: previewElementsRevision,
+  dynamicPreviewElementIds: dynamicPreviewElementIds,
   optimizedDynamicElementIds: const <String>{},
   dynamicLayerStartIndex: 0,
   rendersWholeElementScene: true,

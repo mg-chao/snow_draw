@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/elements/core/element_hit_tester.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_point.dart';
@@ -57,6 +58,7 @@ class EraserStrokeProcessor {
     final resolvedTolerance = _resolveSampleTolerance(tolerance);
 
     final document = stateView.state.domain.document;
+    final elementById = document.elementMap;
     final hasPreviewOverrides = stateView.previewElementsById.isNotEmpty;
     if (!hasPreviewOverrides) {
       _effectiveElementCache.clear();
@@ -73,30 +75,64 @@ class EraserStrokeProcessor {
       tolerance: resolvedTolerance,
       includeStart: includeStart,
       onSample: (sample) {
-        document.visitElementsAtPoint(sample, resolvedTolerance, (candidate) {
-          final candidateId = candidate.id;
-          if (isQueuedForPreview(candidateId)) {
-            return true;
-          }
-
-          final element = hasPreviewOverrides
-              ? (_effectiveElementCache[candidateId] ??= stateView
-                    .effectiveElement(candidate))
-              : candidate;
-          if (_isElementHitAtSample(
-            element: element,
-            sample: sample,
-            tolerance: resolvedTolerance,
-          )) {
-            if (queuePreview(element)) {
-              hasNewHits = true;
-            }
-          }
-          return true;
-        });
+        if (_visitSampleCandidates(
+          document: document,
+          elementById: elementById,
+          sample: sample,
+          tolerance: resolvedTolerance,
+          stateView: stateView,
+          hasPreviewOverrides: hasPreviewOverrides,
+          isQueuedForPreview: isQueuedForPreview,
+          queuePreview: queuePreview,
+        )) {
+          hasNewHits = true;
+        }
       },
     );
 
+    return hasNewHits;
+  }
+
+  bool _visitSampleCandidates({
+    required DocumentState document,
+    required Map<String, ElementState> elementById,
+    required DrawPoint sample,
+    required double tolerance,
+    required DrawStateView stateView,
+    required bool hasPreviewOverrides,
+    required bool Function(String elementId) isQueuedForPreview,
+    required bool Function(ElementState element) queuePreview,
+  }) {
+    final candidates = document.spatialIndex.searchPointEntries(
+      sample,
+      tolerance,
+      sortByZ: false,
+    );
+    var hasNewHits = false;
+    for (final candidateEntry in candidates) {
+      final candidateId = candidateEntry.id;
+      if (isQueuedForPreview(candidateId)) {
+        continue;
+      }
+      final candidate = elementById[candidateId];
+      if (candidate == null) {
+        continue;
+      }
+      final element = hasPreviewOverrides
+          ? (_effectiveElementCache[candidateId] ??= stateView.effectiveElement(
+              candidate,
+            ))
+          : candidate;
+      if (_isElementHitAtSample(
+        element: element,
+        sample: sample,
+        tolerance: tolerance,
+      )) {
+        if (queuePreview(element)) {
+          hasNewHits = true;
+        }
+      }
+    }
     return hasNewHits;
   }
 

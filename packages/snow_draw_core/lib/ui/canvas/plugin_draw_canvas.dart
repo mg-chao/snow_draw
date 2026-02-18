@@ -225,9 +225,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
+  final _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
-  var _pendingEraserPreviewSnapshotRevision = -1;
-  var _pendingEraserPreviewSnapshot = const <String, ElementState>{};
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -868,27 +867,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return previews;
   }
 
-  Map<String, ElementState> _snapshotPendingEraserPreviewElements() {
-    if (_pendingErasePreviewElementsById.isEmpty) {
-      _pendingEraserPreviewSnapshot = const <String, ElementState>{};
-      _pendingEraserPreviewSnapshotRevision = _eraserPreviewCacheRevision;
-      return const <String, ElementState>{};
-    }
-    if (_pendingEraserPreviewSnapshotRevision == _eraserPreviewCacheRevision) {
-      return _pendingEraserPreviewSnapshot;
-    }
-    final snapshot = Map<String, ElementState>.unmodifiable(
-      _pendingErasePreviewElementsById,
-    );
-    _pendingEraserPreviewSnapshot = snapshot;
-    _pendingEraserPreviewSnapshotRevision = _eraserPreviewCacheRevision;
-    return snapshot;
-  }
-
   Map<String, ElementState> _resolveEraserDynamicPreviewElements(
     DrawStateView stateView,
   ) {
-    final pending = _snapshotPendingEraserPreviewElements();
+    final pending = _pendingErasePreviewElementsById;
     if (pending.isEmpty) {
       return stateView.previewElementsById;
     }
@@ -907,10 +889,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         Map<String, ElementState>.unmodifiable(merged);
   }
 
+  Set<String>? _snapshotEraserVolatilePreviewElementIds() {
+    if (_eraserVolatilePreviewElementIds.isEmpty) {
+      return null;
+    }
+    return Set<String>.unmodifiable(_eraserVolatilePreviewElementIds);
+  }
+
   void _invalidateEraserPreviewSnapshots() {
     _eraserPreviewCacheRevision += 1;
-    _pendingEraserPreviewSnapshotRevision = -1;
-    _pendingEraserPreviewSnapshot = const <String, ElementState>{};
     _mergedEraserPreviewRevision = -1;
     _mergedEraserPreviewElements = const <String, ElementState>{};
     _mergedEraserPreviewStateView = null;
@@ -1476,6 +1463,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       assumeDynamicChanged: true,
       refreshStaticLayer: requiresStaticRefresh,
     );
+    _eraserVolatilePreviewElementIds.clear();
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -1499,6 +1487,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pendingErasePreviewElementsById[element.id] = element.copyWith(
       opacity: previewOpacity,
     );
+    _eraserVolatilePreviewElementIds.add(element.id);
     _invalidateEraserPreviewSnapshots();
     return true;
   }
@@ -1509,6 +1498,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
+    _eraserVolatilePreviewElementIds.clear();
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
@@ -1530,9 +1520,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _eraserPointerIds.clear();
     }
     if (_pendingErasePreviewElementsById.isEmpty) {
+      _eraserVolatilePreviewElementIds.clear();
       return;
     }
     _pendingErasePreviewElementsById.clear();
+    _eraserVolatilePreviewElementIds.clear();
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
@@ -2865,11 +2857,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     late final int? dynamicLayerStartIndex;
     late final Map<String, ElementState> staticPreviewElements;
     late final Map<String, ElementState> dynamicPreviewElements;
+    late final int? dynamicPreviewElementsRevision;
+    late final Set<String>? dynamicPreviewElementIds;
     if (promoteEraserPreviewToDynamicLayer) {
       optimizedDynamicElementIds = const <String>{};
       dynamicLayerStartIndex = 0;
       staticPreviewElements = const <String, ElementState>{};
       dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
+      dynamicPreviewElementsRevision = _eraserPreviewCacheRevision;
+      dynamicPreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
     } else {
       final shouldResolveOptimization =
           interaction is EditingState || interaction is TextEditingState;
@@ -2901,6 +2897,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             );
       staticPreviewElements = baseStaticPreviewElements;
       dynamicPreviewElements = baseDynamicPreviewElements;
+      dynamicPreviewElementsRevision = null;
+      dynamicPreviewElementIds = null;
     }
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
@@ -2923,6 +2921,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return _CanvasLayerSceneSnapshot(
       staticPreviewElements: staticPreviewElements,
       dynamicPreviewElements: dynamicPreviewElements,
+      dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
+      dynamicPreviewElementIds: dynamicPreviewElementIds,
       optimizedDynamicElementIds: optimizedDynamicElementIds,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
       dynamicLayerOwnsWholeScene: dynamicLayerOwnsWholeScene,
@@ -2994,6 +2994,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
     camera: stateView.state.application.view.camera,
     previewElementsById: scene.dynamicPreviewElements,
+    previewElementsRevision: scene.dynamicPreviewElementsRevision,
+    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
     rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
@@ -4074,6 +4076,8 @@ class _CanvasLayerSceneSnapshot {
   const _CanvasLayerSceneSnapshot({
     required this.staticPreviewElements,
     required this.dynamicPreviewElements,
+    required this.dynamicPreviewElementsRevision,
+    required this.dynamicPreviewElementIds,
     required this.optimizedDynamicElementIds,
     required this.dynamicLayerStartIndex,
     required this.dynamicLayerOwnsWholeScene,
@@ -4085,6 +4089,8 @@ class _CanvasLayerSceneSnapshot {
 
   final Map<String, ElementState> staticPreviewElements;
   final Map<String, ElementState> dynamicPreviewElements;
+  final int? dynamicPreviewElementsRevision;
+  final Set<String>? dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
   final int? dynamicLayerStartIndex;
   final bool dynamicLayerOwnsWholeScene;

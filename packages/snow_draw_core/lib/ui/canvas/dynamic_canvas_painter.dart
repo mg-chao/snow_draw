@@ -955,6 +955,10 @@ class DynamicCanvasPainter extends CustomPainter {
   Set<String> _resolveDynamicPreviewElementIds(
     Map<String, ElementState> previewElementsById,
   ) {
+    final override = renderKey.dynamicPreviewElementIds;
+    if (override != null) {
+      return override;
+    }
     if (previewElementsById.isEmpty) {
       return const <String>{};
     }

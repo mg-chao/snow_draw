@@ -215,6 +215,8 @@ class DynamicCanvasRenderKey {
     required this.highlightMaskConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    this.previewElementsRevision,
+    this.dynamicPreviewElementIds,
     this.locale,
   });
 
@@ -259,6 +261,18 @@ class DynamicCanvasRenderKey {
 
   /// Preview elements during editing.
   final Map<String, ElementState> previewElementsById;
+
+  /// Optional monotonically increasing preview-map revision.
+  ///
+  /// When provided, equality and hashing use `[previewElementsById]` identity
+  /// plus this revision instead of deep map comparisons.
+  final int? previewElementsRevision;
+
+  /// Optional dynamic-preview override used by interaction scene caching.
+  ///
+  /// When set, dynamic-layer caching treats only these preview ids as volatile.
+  /// This is a performance hint and does not change final visual output.
+  final Set<String>? dynamicPreviewElementIds;
 
   /// Element ids for localized dynamic-scene optimization.
   ///
@@ -318,7 +332,7 @@ class DynamicCanvasRenderKey {
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
-          _mapsEqual(other.previewElementsById, previewElementsById) &&
+          _previewMapsEqual(other) &&
           _setEquals(
             other.optimizedDynamicElementIds,
             optimizedDynamicElementIds,
@@ -351,7 +365,7 @@ class DynamicCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    _mapHash(previewElementsById),
+    _previewMapHash(),
     Object.hashAllUnordered(optimizedDynamicElementIds),
     dynamicLayerStartIndex,
     rendersWholeElementScene,
@@ -365,6 +379,24 @@ class DynamicCanvasRenderKey {
     performanceMonitoringEnabled,
     locale,
   ]);
+
+  bool _previewMapsEqual(DynamicCanvasRenderKey other) {
+    final revision = previewElementsRevision;
+    final otherRevision = other.previewElementsRevision;
+    if (revision != null || otherRevision != null) {
+      return revision == otherRevision &&
+          identical(other.previewElementsById, previewElementsById);
+    }
+    return _mapsEqual(other.previewElementsById, previewElementsById);
+  }
+
+  int _previewMapHash() {
+    final revision = previewElementsRevision;
+    if (revision != null) {
+      return Object.hash(identityHashCode(previewElementsById), revision);
+    }
+    return _mapHash(previewElementsById);
+  }
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
     if (identical(a, b)) {

@@ -58,6 +58,68 @@ void main() {
       expect(baseline, isNot(optimized));
       expect(baseline.hashCode, isNot(optimized.hashCode));
     });
+
+    test('preview revision participates with map-identity fast path', () {
+      final registry = DefaultElementRegistry();
+      final sharedPreviewMap = <String, ElementState>{};
+      final first = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        previewElementsById: sharedPreviewMap,
+        previewElementsRevision: 1,
+      );
+      sharedPreviewMap['preview-1'] = const ElementState(
+        id: 'preview-1',
+        rect: DrawRect(maxX: 20, maxY: 20),
+        rotation: 0,
+        opacity: 0.5,
+        zIndex: 0,
+        data: FreeDrawData(),
+      );
+      final second = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        previewElementsById: sharedPreviewMap,
+        previewElementsRevision: 2,
+      );
+
+      expect(first, isNot(second));
+      expect(first.hashCode, isNot(second.hashCode));
+    });
+
+    test('preview revision requires identical preview map identity', () {
+      final registry = DefaultElementRegistry();
+      final first = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        previewElementsById: <String, ElementState>{},
+        previewElementsRevision: 9,
+      );
+      final second = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        previewElementsById: <String, ElementState>{},
+        previewElementsRevision: 9,
+      );
+
+      expect(first, isNot(second));
+    });
+
+    test('dynamic preview hint does not affect equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+      );
+      final hinted = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        dynamicPreviewElementIds: {'line-1'},
+      );
+
+      expect(baseline, hinted);
+      expect(baseline.hashCode, hinted.hashCode);
+    });
   });
 }
 
@@ -66,6 +128,9 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
   Set<String> optimizedDynamicElementIds = const <String>{},
+  Map<String, ElementState> previewElementsById = const {},
+  int? previewElementsRevision,
+  Set<String>? dynamicPreviewElementIds,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -81,7 +146,9 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   documentVersion: 1,
   textRenderingCacheRevision: 0,
   camera: CameraState.initial,
-  previewElementsById: const {},
+  previewElementsById: previewElementsById,
+  previewElementsRevision: previewElementsRevision,
+  dynamicPreviewElementIds: dynamicPreviewElementIds,
   optimizedDynamicElementIds: optimizedDynamicElementIds,
   dynamicLayerStartIndex: null,
   rendersWholeElementScene: false,
