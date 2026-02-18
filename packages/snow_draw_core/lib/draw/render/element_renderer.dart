@@ -17,6 +17,16 @@ final ModuleLogger _renderFallbackLog = LogService.fallback.render;
 class ElementRenderer {
   const ElementRenderer();
 
+  static final _selectionOutlinePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  static final _selectionHandleFillPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  static final _selectionHandleStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+
   void _renderUnknownElement(
     Canvas canvas,
     ElementState element,
@@ -138,39 +148,66 @@ class ElementRenderer {
       maxY: paddedBounds.maxY + handleOffset,
     );
 
-    // Draw handles (keep 4 corners only).
-    final handles = [
-      Offset(handleBounds.minX, handleBounds.minY), // top-left
-      Offset(handleBounds.maxX, handleBounds.minY), // top-right
-      Offset(handleBounds.maxX, handleBounds.maxY), // bottom-right
-      Offset(handleBounds.minX, handleBounds.maxY), // bottom-left
-    ];
-
-    final handlePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = config.render.cornerFillColor
-      ..isAntiAlias = true;
-
-    final handleStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final handleFillPaint = _selectionHandleFillPaint
+      ..color = config.render.cornerFillColor;
+    final handleStrokePaint = _selectionHandleStrokePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor
-      ..isAntiAlias = true;
+      ..color = config.render.strokeColor;
 
     final handleSize = config.render.controlPointSize / scale;
     final cornerRadius = config.render.cornerRadius / scale;
 
-    for (final handle in handles) {
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: handle, width: handleSize, height: handleSize),
-        Radius.circular(cornerRadius),
-      );
-      canvas
-        ..drawRRect(rect, handlePaint)
-        ..drawRRect(rect, handleStrokePaint);
-    }
+    _drawSelectionCornerHandle(
+      canvas: canvas,
+      center: Offset(handleBounds.minX, handleBounds.minY),
+      handleSize: handleSize,
+      cornerRadius: cornerRadius,
+      fillPaint: handleFillPaint,
+      strokePaint: handleStrokePaint,
+    );
+    _drawSelectionCornerHandle(
+      canvas: canvas,
+      center: Offset(handleBounds.maxX, handleBounds.minY),
+      handleSize: handleSize,
+      cornerRadius: cornerRadius,
+      fillPaint: handleFillPaint,
+      strokePaint: handleStrokePaint,
+    );
+    _drawSelectionCornerHandle(
+      canvas: canvas,
+      center: Offset(handleBounds.maxX, handleBounds.maxY),
+      handleSize: handleSize,
+      cornerRadius: cornerRadius,
+      fillPaint: handleFillPaint,
+      strokePaint: handleStrokePaint,
+    );
+    _drawSelectionCornerHandle(
+      canvas: canvas,
+      center: Offset(handleBounds.minX, handleBounds.maxY),
+      handleSize: handleSize,
+      cornerRadius: cornerRadius,
+      fillPaint: handleFillPaint,
+      strokePaint: handleStrokePaint,
+    );
 
     canvas.restore();
+  }
+
+  void _drawSelectionCornerHandle({
+    required Canvas canvas,
+    required Offset center,
+    required double handleSize,
+    required double cornerRadius,
+    required Paint fillPaint,
+    required Paint strokePaint,
+  }) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: handleSize, height: handleSize),
+      Radius.circular(cornerRadius),
+    );
+    canvas
+      ..drawRRect(rect, fillPaint)
+      ..drawRRect(rect, strokePaint);
   }
 
   /// Renders a selection outline (no control points).
@@ -208,11 +245,9 @@ class ElementRenderer {
         ..translate(-rotationCenter.x, -rotationCenter.y);
     }
 
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
+    final paint = _selectionOutlinePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor
-      ..isAntiAlias = true;
+      ..color = config.render.strokeColor;
 
     final rect = Rect.fromLTWH(
       paddedBounds.minX,
@@ -277,17 +312,11 @@ class ElementRenderer {
       paddedBounds.minY - margin,
     );
 
-    // Draw circular handle.
-    final handlePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = config.render.cornerFillColor
-      ..isAntiAlias = true;
-
-    final handleStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final handlePaint = _selectionHandleFillPaint
+      ..color = config.render.cornerFillColor;
+    final handleStrokePaint = _selectionHandleStrokePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor
-      ..isAntiAlias = true;
+      ..color = config.render.strokeColor;
 
     final angleHandleSize = config.render.controlPointSize / (2 * scale);
     canvas

@@ -775,7 +775,23 @@ class DynamicCanvasPainter extends CustomPainter {
       return cached.staticData;
     }
 
-    final elementSignature = _buildSceneElementStructureSignature(elements);
+    final canReuseElementSignature =
+        cached != null &&
+        identical(cached.document, document) &&
+        identical(cached.elements, elements);
+    final canReuseGeneralPreviewStaticData =
+        canReuseElementSignature &&
+        cached.previewTopologyHint == previewTopologyHint &&
+        previewTopologyHint == _PreviewTopologyHint.general &&
+        cached.serialPreviewSignature.count == 0 &&
+        !_containsSerialPreviewElements(previewElementsById);
+    if (canReuseGeneralPreviewStaticData) {
+      return cached.staticData;
+    }
+
+    final elementSignature = canReuseElementSignature
+        ? cached.elementSignature
+        : _buildSceneElementStructureSignature(elements);
     final serialPreviewSignature =
         previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked
         ? _SerialPreviewSignature.empty
@@ -833,6 +849,20 @@ class DynamicCanvasPainter extends CustomPainter {
       staticData: staticData,
     );
     return staticData;
+  }
+
+  bool _containsSerialPreviewElements(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return false;
+    }
+    for (final preview in previewElementsById.values) {
+      if (preview.data is SerialNumberData) {
+        return true;
+      }
+    }
+    return false;
   }
 
   _SceneElementStructureSignature _buildSceneElementStructureSignature(

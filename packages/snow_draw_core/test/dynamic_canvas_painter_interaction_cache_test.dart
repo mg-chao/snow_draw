@@ -235,6 +235,87 @@ void main() {
     expect(counter.count, 2);
   });
 
+  test(
+    'promotes bound text when serial preview gains binding after cache warm-up',
+    () {
+      final counter = _RenderCounter();
+      final registry = _buildRegistryWithSerialSupport(counter);
+      final elements = <ElementState>[
+        const ElementState(
+          id: 'text-preview-target',
+          rect: DrawRect(minX: 180, minY: 80, maxX: 260, maxY: 120),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: TextData(text: 'connector target'),
+        ),
+        const ElementState(
+          id: 'serial-node',
+          rect: DrawRect(minX: 70, minY: 88, maxX: 106, maxY: 124),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: SerialNumberData(),
+        ),
+        const ElementState(
+          id: 'cache-static',
+          rect: DrawRect(minX: 40, minY: 50, maxX: 110, maxY: 120),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: _CacheTestData(),
+        ),
+      ];
+      final state = DrawState.fromLayers(
+        domain: DomainState(
+          document: DocumentState(elements: elements, elementsVersion: 424000),
+        ),
+        application: ApplicationState.initial(),
+      );
+
+      final unboundSerialPreview = elements[1].copyWith(
+        rect: const DrawRect(minX: 78, minY: 96, maxX: 114, maxY: 132),
+      );
+      _paintFrame(
+        stateView: DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {unboundSerialPreview.id: unboundSerialPreview},
+          effectiveSelection: EffectiveSelection.none,
+          snapGuides: const [],
+        ),
+        renderKey: _buildRenderKey(
+          state: state,
+          registry: registry,
+          previewElementsById: {unboundSerialPreview.id: unboundSerialPreview},
+        ),
+      );
+      expect(counter.count, 3);
+
+      counter.reset();
+      final serialPreview = elements[1].copyWith(
+        data: const SerialNumberData(textElementId: 'text-preview-target'),
+      );
+      _paintFrame(
+        stateView: DrawStateView.withPreview(
+          state: state,
+          previewElementsById: {serialPreview.id: serialPreview},
+          effectiveSelection: EffectiveSelection.none,
+          snapGuides: const [],
+        ),
+        renderKey: _buildRenderKey(
+          state: state,
+          registry: registry,
+          previewElementsById: {serialPreview.id: serialPreview},
+        ),
+      );
+
+      // Introducing a serial preview must invalidate the static context so the
+      // bound text is promoted to the dynamic set together with the
+      // serial node.
+      expect(counter.count, 2);
+    },
+  );
+
   test('keeps unaffected serial connector texts on cached static segments', () {
     final counter = _RenderCounter();
     final registry = _buildRegistryWithSerialSupport(counter);
