@@ -234,6 +234,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _pendingErasePreviewElementsById = <String, ElementState>{};
   var _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
+  var _interactionPreviewRevision = 0;
   var _lightweightLinePreviewRevision = 0;
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
@@ -3133,6 +3134,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required double scaleFactor,
     required _CanvasLayerSceneSnapshot scene,
     required Locale? locale,
+    int? previewElementsRevisionOverride,
   }) => _createDynamicRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
@@ -3140,7 +3142,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     creatingElement: scene.creatingSnapshot,
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
     previewElementsById: scene.dynamicPreviewElements,
-    previewElementsRevision: scene.dynamicPreviewElementsRevision,
+    previewElementsRevision:
+        previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
     dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
@@ -3262,6 +3265,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawState state, {
     bool assumeDynamicChanged = false,
     bool refreshStaticLayer = true,
+    int? forcedPreviewElementsRevision,
   }) {
     if (!mounted) {
       return;
@@ -3280,6 +3284,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       scene: scene,
       locale: locale,
+      previewElementsRevisionOverride: forcedPreviewElementsRevision,
     );
     _setDynamicLayerSnapshot(
       stateView: stateView,
@@ -3307,10 +3312,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _refreshDynamicLayerSnapshot(
     DrawState state, {
     bool assumeChanged = false,
+    int? forcedPreviewElementsRevision,
   }) => _refreshCanvasLayerSnapshots(
     state,
     assumeDynamicChanged: assumeChanged,
     refreshStaticLayer: false,
+    forcedPreviewElementsRevision: forcedPreviewElementsRevision,
   );
 
   /// Reuses dynamic-scene split metadata for interaction-only updates.
@@ -3342,7 +3349,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final previewElementsRevision =
         plan.kind == InteractionMutationKind.lightweightLine
         ? ++_lightweightLinePreviewRevision
-        : null;
+        : ++_interactionPreviewRevision;
     final scene = resolveInteractionDynamicSceneFromCachedKey(
       stateView: stateView,
       previousRenderKey: previousRenderKey,
@@ -4308,7 +4315,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         )) {
           return;
         }
-        _refreshDynamicLayerSnapshot(state, assumeChanged: true);
+        _refreshDynamicLayerSnapshot(
+          state,
+          assumeChanged: true,
+          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+        );
       case InteractionMutationRefreshMode.canvasLayers:
         _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
     }

@@ -73,6 +73,7 @@ class DefaultDrawStore implements DrawStore {
       includeSelectionInHistory: includeSelectionInHistory,
       eventBus: _eventBus,
       publishEditEvents: _publishEditEvents,
+      enableInteractionMutationFastPath: pipeline == null,
     );
 
     _actionProcessor = ActionProcessor(services: services, pipeline: _pipeline);

@@ -16,6 +16,7 @@ import '../../events/state_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
+import '../../reducers/interaction/interaction_state_machine.dart';
 import '../config_manager.dart';
 import '../history_manager.dart';
 import '../listener_registry.dart';
@@ -38,6 +39,7 @@ class ActionProcessorServices {
     required this.includeSelectionInHistory,
     required this.eventBus,
     required this.publishEditEvents,
+    required this.enableInteractionMutationFastPath,
   });
   final InteractionReducerDeps drawContext;
   final StateManager stateManager;
@@ -51,6 +53,7 @@ class ActionProcessorServices {
   final bool includeSelectionInHistory;
   final EventBus eventBus;
   final void Function(List<EditSessionEvent> events) publishEditEvents;
+  final bool enableInteractionMutationFastPath;
 }
 
 class ActionProcessor {
@@ -59,6 +62,8 @@ class ActionProcessor {
     required MiddlewarePipeline pipeline,
   }) : _services = services,
        _pipeline = pipeline,
+       _enableInteractionMutationFastPath =
+           services.enableInteractionMutationFastPath,
        _lastCanUndo = services.historyManager.canUndo,
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
@@ -66,6 +71,7 @@ class ActionProcessor {
   final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
+  final bool _enableInteractionMutationFastPath;
 
   var _isProcessing = false;
   var _isDisposed = false;
@@ -148,6 +154,11 @@ class ActionProcessor {
       return;
     }
 
+    if (_shouldUseInteractionMutationFastPath(action)) {
+      _processInteractionMutationFastPath(action);
+      return;
+    }
+
     _services.configManager.freeze();
     try {
       final initialContext = DispatchContext.initial(
@@ -187,6 +198,74 @@ class ActionProcessor {
       }
 
       _commit(initialContext: initialContext, finalContext: finalContext);
+    } finally {
+      _services.configManager.unfreeze();
+    }
+  }
+
+  bool _shouldUseInteractionMutationFastPath(DrawAction action) {
+    if (!_enableInteractionMutationFastPath) {
+      return false;
+    }
+    return action is UpdateEdit ||
+        action is UpdateCreatingElement ||
+        action is UpdateCreatingElementBatch;
+  }
+
+  void _processInteractionMutationFastPath(DrawAction action) {
+    _services.configManager.freeze();
+    try {
+      final previousState = _services.stateManager.current;
+      final transition = interactionStateMachine.reduce(
+        state: previousState,
+        action: action,
+        context: _services.drawContext,
+        editSessionService: _services.editSessionService,
+        sessionIdGenerator: _services.sessionIdGenerator,
+      );
+      final nextState = transition.nextState;
+      final stateChanged = !identical(previousState, nextState);
+
+      if (stateChanged) {
+        _services.stateManager.update(nextState);
+        if (!_services.isBatching()) {
+          _services.listenerRegistry.notify(previousState, nextState);
+        }
+      }
+
+      final events = transition.events;
+      if (events.isNotEmpty) {
+        _services.publishEditEvents(events);
+      }
+
+      _emitEditSessionEvents(
+        previousState: previousState,
+        nextState: nextState,
+        action: action,
+      );
+      _emitStateChangeEvents(
+        previousState: previousState,
+        nextState: nextState,
+      );
+    } on Object catch (error, stackTrace) {
+      _services.drawContext.log.store
+          .error('Dispatch failed', error, stackTrace, {
+            'action': action.runtimeType.toString(),
+            'criticality': action.criticality.toString(),
+            'source': 'FastInteractionMutationPath',
+          });
+      _services.eventBus.emitLazy(
+        () => ErrorEvent(
+          message:
+              'Dispatch ${action.runtimeType} failed '
+              '(source: FastInteractionMutationPath)',
+          error: error,
+          stackTrace: stackTrace,
+        ),
+      );
+      if (action.criticality == ActionCriticality.critical) {
+        Error.throwWithStackTrace(error, stackTrace);
+      }
     } finally {
       _services.configManager.unfreeze();
     }
