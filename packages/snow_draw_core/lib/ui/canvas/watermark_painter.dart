@@ -141,9 +141,10 @@ class _WatermarkTileSnapshot {
 /// tiling with coarse viewport-size bucketing.
 ///
 /// The tile cache key excludes rotation angle and tint because the cache is
-/// recorded in unrotated screen space and uses a white-alpha shader tile.
+/// recorded in unrotated screen space and uses a white-alpha source.
 /// Angle and color/opacity are applied at paint time, which keeps drag and
-/// opacity interactions at full speed.
+/// opacity interactions at full speed in both shader and picture fallback
+/// modes.
 class WatermarkPainterCache {
   _WatermarkLayoutConfig? _tileConfig;
   ui.Image? _tileImage;
@@ -151,9 +152,19 @@ class WatermarkPainterCache {
   Color? _tileTintColor;
   Paint? _tileTintPaint;
 
-  _WatermarkRenderConfig? _fallbackConfig;
+  _WatermarkLayoutConfig? _fallbackLayoutConfig;
   Size? _fallbackViewportSize;
   ui.Picture? _picture;
+  var _tileRebuildCount = 0;
+  var _fallbackPictureBuildCount = 0;
+
+  /// Number of shader tile rebuilds since the last [invalidate].
+  @visibleForTesting
+  int get debugTileRebuildCount => _tileRebuildCount;
+
+  /// Number of fallback pictures recorded since the last [invalidate].
+  @visibleForTesting
+  int get debugFallbackPictureBuildCount => _fallbackPictureBuildCount;
 
   /// Paints the watermark onto [canvas], reusing a cached picture when
   /// the non-angular config has not changed.
@@ -208,9 +219,13 @@ class WatermarkPainterCache {
     } else {
       final picture = _resolveFallbackPicture(
         viewportSize: viewportSize,
-        renderConfig: renderConfig,
+        layoutConfig: renderConfig.layout,
       );
-      canvas.drawPicture(picture);
+      canvas
+        ..saveLayer(cullRect, Paint())
+        ..drawPicture(picture)
+        ..drawColor(renderConfig.color, BlendMode.srcIn)
+        ..restore();
     }
 
     canvas
@@ -222,6 +237,8 @@ class WatermarkPainterCache {
   void invalidate() {
     _clearTileCache();
     _clearFallbackPictureCache();
+    _tileRebuildCount = 0;
+    _fallbackPictureBuildCount = 0;
   }
 
   Paint? _resolveTilePaint(_WatermarkRenderConfig renderConfig) {
@@ -251,6 +268,7 @@ class WatermarkPainterCache {
   void _rebuildTileCache(_WatermarkLayoutConfig layoutConfig) {
     _clearTileCache();
     _tileConfig = layoutConfig;
+    _tileRebuildCount += 1;
 
     final snapshot = _buildTileSnapshot(layoutConfig);
     if (snapshot == null) {
@@ -280,20 +298,20 @@ class WatermarkPainterCache {
   void _clearFallbackPictureCache() {
     _picture?.dispose();
     _picture = null;
-    _fallbackConfig = null;
+    _fallbackLayoutConfig = null;
     _fallbackViewportSize = null;
   }
 
   ui.Picture _resolveFallbackPicture({
     required Size viewportSize,
-    required _WatermarkRenderConfig renderConfig,
+    required _WatermarkLayoutConfig layoutConfig,
   }) {
     // Snap the viewport to a coarse grid so small resize deltas
     // (for example during window drag) reuse the existing picture.
     final snapped = Size(_snap(viewportSize.width), _snap(viewportSize.height));
 
     if (_picture != null &&
-        _fallbackConfig == renderConfig &&
+        _fallbackLayoutConfig == layoutConfig &&
         _fallbackViewportSize == snapped) {
       return _picture!;
     }
@@ -301,9 +319,10 @@ class WatermarkPainterCache {
     _picture?.dispose();
     _picture = _recordFallbackPicture(
       viewportSize: snapped,
-      renderConfig: renderConfig,
+      layoutConfig: layoutConfig,
     );
-    _fallbackConfig = renderConfig;
+    _fallbackPictureBuildCount += 1;
+    _fallbackLayoutConfig = layoutConfig;
     _fallbackViewportSize = snapped;
     return _picture!;
   }
@@ -374,7 +393,7 @@ class WatermarkPainterCache {
 
   static ui.Picture _recordFallbackPicture({
     required Size viewportSize,
-    required _WatermarkRenderConfig renderConfig,
+    required _WatermarkLayoutConfig layoutConfig,
   }) {
     final layerRect = Offset.zero & viewportSize;
     final center = layerRect.center;
@@ -395,13 +414,13 @@ class WatermarkPainterCache {
 
     final textPainter = TextPainter(
       text: TextSpan(
-        text: renderConfig.layout.text,
+        text: layoutConfig.text,
         style: TextStyle(
-          color: renderConfig.color,
-          fontSize: renderConfig.layout.fontSize,
-          fontFamily: renderConfig.layout.fontFamily.isEmpty
+          color: _opaqueWhite,
+          fontSize: layoutConfig.fontSize,
+          fontFamily: layoutConfig.fontFamily.isEmpty
               ? null
-              : renderConfig.layout.fontFamily,
+              : layoutConfig.fontFamily,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -415,8 +434,8 @@ class WatermarkPainterCache {
       return recorder.endRecording();
     }
 
-    final stepX = math.max(1, tileWidth + renderConfig.layout.gap).toDouble();
-    final stepY = math.max(1, tileHeight + renderConfig.layout.gap).toDouble();
+    final stepX = math.max(1, tileWidth + layoutConfig.gap).toDouble();
+    final stepY = math.max(1, tileHeight + layoutConfig.gap).toDouble();
 
     final startX = cullRect.left - stepX;
     final endX = cullRect.right + stepX;

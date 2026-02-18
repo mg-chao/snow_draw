@@ -43,6 +43,27 @@ void main() {
     expect(harness.adapter.watermarkPreviewListenable.value, isNull);
   });
 
+  testWidgets('watermark preview updates coalesce per frame', (tester) async {
+    final harness = await _pumpToolbar(tester);
+    var previewNotifications = 0;
+    harness.adapter.watermarkPreviewListenable.addListener(() {
+      previewNotifications += 1;
+    });
+
+    harness.adapter.previewWatermarkUpdate(watermarkAngle: 12);
+    harness.adapter.previewWatermarkUpdate(watermarkAngle: 24);
+    harness.adapter.previewWatermarkUpdate(watermarkAngle: 36);
+
+    expect(harness.adapter.watermarkPreviewListenable.value, isNull);
+
+    await tester.pump();
+
+    final preview = harness.adapter.watermarkPreviewListenable.value;
+    expect(preview, isNotNull);
+    expect(preview!.angle, closeTo(36, 0.0001));
+    expect(previewNotifications, 1);
+  });
+
   testWidgets(
     'pending coalesced updates keep preview in sync with direct updates',
     (tester) async {

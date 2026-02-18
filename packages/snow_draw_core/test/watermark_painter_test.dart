@@ -153,6 +153,121 @@ void main() {
 
     cache.invalidate();
   });
+
+  test('fallback picture cache ignores color and opacity changes', () {
+    final cache = WatermarkPainterCache();
+    const size = ui.Size(220, 160);
+    final longText = List<String>.filled(300, 'W').join();
+    final baseConfig = WatermarkConfig(
+      text: longText,
+      gap: ConfigDefaults.maxWatermarkGap,
+      opacity: 0.2,
+    );
+
+    final r1 = ui.PictureRecorder();
+    cache.paint(canvas: ui.Canvas(r1), viewportSize: size, config: baseConfig);
+    r1.endRecording();
+    expect(cache.debugFallbackPictureBuildCount, 1);
+
+    final r2 = ui.PictureRecorder();
+    cache.paint(
+      canvas: ui.Canvas(r2),
+      viewportSize: size,
+      config: baseConfig.copyWith(opacity: 0.6),
+    );
+    r2.endRecording();
+    expect(cache.debugFallbackPictureBuildCount, 1);
+
+    final r3 = ui.PictureRecorder();
+    cache.paint(
+      canvas: ui.Canvas(r3),
+      viewportSize: size,
+      config: baseConfig.copyWith(color: const ui.Color(0xFF1677FF)),
+    );
+    r3.endRecording();
+    expect(cache.debugFallbackPictureBuildCount, 1);
+
+    final r4 = ui.PictureRecorder();
+    cache.paint(
+      canvas: ui.Canvas(r4),
+      viewportSize: size,
+      config: baseConfig.copyWith(gap: ConfigDefaults.minWatermarkGap),
+    );
+    r4.endRecording();
+    expect(cache.debugFallbackPictureBuildCount, 2);
+  });
+
+  test('fallback tinting only applies to watermark pixels', () async {
+    final cache = WatermarkPainterCache();
+    const size = ui.Size(220, 160);
+    final longText = List<String>.filled(300, 'W').join();
+    final config = WatermarkConfig(
+      text: longText,
+      gap: ConfigDefaults.maxWatermarkGap,
+      opacity: 0.45,
+      color: const ui.Color(0xFF1677FF),
+    );
+    const background = ui.Color(0xFFFF0000);
+
+    final transparentRecorder = ui.PictureRecorder();
+    cache.paint(
+      canvas: ui.Canvas(transparentRecorder),
+      viewportSize: size,
+      config: config,
+    );
+    final transparentBytes = await transparentRecorder
+        .endRecording()
+        .toImage(size.width.toInt(), size.height.toInt())
+        .then((image) => image.toByteData());
+    expect(transparentBytes, isNotNull);
+    expect(cache.debugFallbackPictureBuildCount, 1);
+
+    final compositedRecorder = ui.PictureRecorder();
+    final compositedCanvas = ui.Canvas(compositedRecorder)
+      ..drawRect(
+        ui.Rect.fromLTWH(0, 0, size.width, size.height),
+        ui.Paint()..color = background,
+      );
+    cache.paint(canvas: compositedCanvas, viewportSize: size, config: config);
+    final compositedBytes = await compositedRecorder
+        .endRecording()
+        .toImage(size.width.toInt(), size.height.toInt())
+        .then((image) => image.toByteData());
+    expect(compositedBytes, isNotNull);
+    expect(cache.debugFallbackPictureBuildCount, 1);
+
+    final transparentData = transparentBytes!;
+    final compositedData = compositedBytes!;
+    final pixelCount = size.width.toInt() * size.height.toInt();
+    int? transparentPixelIndex;
+    for (var i = 0; i < pixelCount; i++) {
+      final alpha = transparentData.getUint8((i * 4) + 3);
+      if (alpha == 0) {
+        transparentPixelIndex = i;
+        break;
+      }
+    }
+    expect(
+      transparentPixelIndex,
+      isNotNull,
+      reason: 'Expected at least one non-watermark pixel in fallback output.',
+    );
+
+    final index = transparentPixelIndex!;
+    expect(compositedData.getUint8(index * 4), _channelFromUnit(background.r));
+    expect(
+      compositedData.getUint8((index * 4) + 1),
+      _channelFromUnit(background.g),
+    );
+    expect(
+      compositedData.getUint8((index * 4) + 2),
+      _channelFromUnit(background.b),
+    );
+    expect(
+      compositedData.getUint8((index * 4) + 3),
+      _channelFromUnit(background.a),
+    );
+  });
 }
 
 bool _hasVisiblePixel(ByteData data) {
@@ -163,3 +278,5 @@ bool _hasVisiblePixel(ByteData data) {
   }
   return false;
 }
+
+int _channelFromUnit(double channel) => (channel * 255).round();

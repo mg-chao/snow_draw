@@ -83,6 +83,8 @@ class StyleToolbarAdapter {
   final _inFlightWatermarkOnlyCompleters = <Completer<void>>[];
   var _isDrainingWatermarkOnlyUpdates = false;
   var _isWatermarkOnlyDrainScheduled = false;
+  _WatermarkPreviewUpdate? _pendingWatermarkPreviewUpdate;
+  var _isWatermarkPreviewFlushScheduled = false;
 
   ValueListenable<StyleToolbarState> get stateListenable => _stateNotifier;
   ValueListenable<WatermarkConfig?> get watermarkPreviewListenable =>
@@ -101,21 +103,7 @@ class StyleToolbarAdapter {
     double? watermarkGap,
     double? watermarkOpacity,
   }) {
-    if (_isDisposed) {
-      return;
-    }
-    final hasUpdates =
-        watermarkColor != null ||
-        watermarkText != null ||
-        watermarkFontSize != null ||
-        watermarkFontFamily != null ||
-        watermarkAngle != null ||
-        watermarkGap != null ||
-        watermarkOpacity != null;
-    if (!hasUpdates) {
-      return;
-    }
-    _previewWatermarkFromDelta(
+    final update = _WatermarkPreviewUpdate(
       watermarkColor: watermarkColor,
       watermarkText: watermarkText,
       watermarkFontSize: watermarkFontSize,
@@ -124,6 +112,10 @@ class StyleToolbarAdapter {
       watermarkGap: watermarkGap,
       watermarkOpacity: watermarkOpacity,
     );
+    if (!update.hasUpdates) {
+      return;
+    }
+    _enqueueWatermarkPreviewUpdate(update);
   }
 
   void dispose() {
@@ -146,6 +138,8 @@ class StyleToolbarAdapter {
     _pendingWatermarkOnlyCompleters.clear();
     _inFlightWatermarkOnlyCompleters.clear();
     _pendingWatermarkOnlyUpdate = null;
+    _pendingWatermarkPreviewUpdate = null;
+    _isWatermarkPreviewFlushScheduled = false;
     _watermarkPreviewNotifier.dispose();
     _stateNotifier.dispose();
   }
@@ -232,15 +226,7 @@ class StyleToolbarAdapter {
         return _enqueueWatermarkOnlyStyleUpdate(update);
       }
       if (_watermarkPreviewNotifier.value != null) {
-        _previewWatermarkFromDelta(
-          watermarkColor: watermarkColor,
-          watermarkText: watermarkText,
-          watermarkFontSize: watermarkFontSize,
-          watermarkFontFamily: watermarkFontFamily,
-          watermarkAngle: watermarkAngle,
-          watermarkGap: watermarkGap,
-          watermarkOpacity: watermarkOpacity,
-        );
+        _enqueueWatermarkPreviewUpdate(update.toPreviewUpdate());
       }
       return _enqueueStyleUpdate(
         () => _applyWatermarkOnlyStyleUpdateInternal(update),
@@ -479,6 +465,42 @@ class StyleToolbarAdapter {
     return completer.future;
   }
 
+  void _enqueueWatermarkPreviewUpdate(_WatermarkPreviewUpdate update) {
+    if (_isDisposed || !update.hasUpdates) {
+      return;
+    }
+    _pendingWatermarkPreviewUpdate = _pendingWatermarkPreviewUpdate == null
+        ? update
+        : _pendingWatermarkPreviewUpdate!.merge(update);
+    _scheduleWatermarkPreviewFlush();
+  }
+
+  void _scheduleWatermarkPreviewFlush() {
+    if (_isDisposed || _isWatermarkPreviewFlushScheduled) {
+      return;
+    }
+    _isWatermarkPreviewFlushScheduled = true;
+    SchedulerBinding.instance
+      ..scheduleFrameCallback((_) {
+        _isWatermarkPreviewFlushScheduled = false;
+        if (_isDisposed) {
+          return;
+        }
+        _flushPendingWatermarkPreviewUpdate();
+      })
+      ..ensureVisualUpdate();
+  }
+
+  void _flushPendingWatermarkPreviewUpdate() {
+    final pending = _pendingWatermarkPreviewUpdate;
+    if (pending == null) {
+      return;
+    }
+    _pendingWatermarkPreviewUpdate = null;
+    _previewWatermarkFromUpdate(pending);
+    _clearWatermarkPreviewIfSynchronized();
+  }
+
   void _scheduleWatermarkOnlyDrain() {
     if (_isDisposed || _isWatermarkOnlyDrainScheduled) {
       return;
@@ -562,15 +584,7 @@ class StyleToolbarAdapter {
     if (pending == null) {
       return;
     }
-    _previewWatermarkFromDelta(
-      watermarkColor: pending.watermarkColor,
-      watermarkText: pending.watermarkText,
-      watermarkFontSize: pending.watermarkFontSize,
-      watermarkFontFamily: pending.watermarkFontFamily,
-      watermarkAngle: pending.watermarkAngle,
-      watermarkGap: pending.watermarkGap,
-      watermarkOpacity: pending.watermarkOpacity,
-    );
+    _enqueueWatermarkPreviewUpdate(pending.toPreviewUpdate());
   }
 
   Future<void> _applyWatermarkOnlyStyleUpdateInternal(
@@ -618,26 +632,18 @@ class StyleToolbarAdapter {
     );
   }
 
-  void _previewWatermarkFromDelta({
-    Color? watermarkColor,
-    String? watermarkText,
-    double? watermarkFontSize,
-    String? watermarkFontFamily,
-    double? watermarkAngle,
-    double? watermarkGap,
-    double? watermarkOpacity,
-  }) {
+  void _previewWatermarkFromUpdate(_WatermarkPreviewUpdate update) {
     final base =
         _watermarkPreviewNotifier.value ??
         _store.state.domain.document.globalElements.watermark;
     final next = base.copyWith(
-      color: watermarkColor,
-      text: watermarkText,
-      fontSize: watermarkFontSize,
-      fontFamily: _normalizeFontFamily(watermarkFontFamily),
-      angle: watermarkAngle,
-      gap: _normalizeWatermarkGap(watermarkGap),
-      opacity: _clampUnit(watermarkOpacity),
+      color: update.watermarkColor,
+      text: update.watermarkText,
+      fontSize: update.watermarkFontSize,
+      fontFamily: _normalizeFontFamily(update.watermarkFontFamily),
+      angle: update.watermarkAngle,
+      gap: _normalizeWatermarkGap(update.watermarkGap),
+      opacity: _clampUnit(update.watermarkOpacity),
     );
     if (_watermarkPreviewNotifier.value != next) {
       _watermarkPreviewNotifier.value = next;
@@ -655,7 +661,9 @@ class StyleToolbarAdapter {
     if (_pendingWatermarkOnlyUpdate != null ||
         _pendingWatermarkOnlyCompleters.isNotEmpty ||
         _isDrainingWatermarkOnlyUpdates ||
-        _inFlightWatermarkOnlyCompleters.isNotEmpty) {
+        _inFlightWatermarkOnlyCompleters.isNotEmpty ||
+        _pendingWatermarkPreviewUpdate != null ||
+        _isWatermarkPreviewFlushScheduled) {
       return;
     }
     if (_store.state.domain.document.globalElements.watermark == preview) {
@@ -2407,6 +2415,16 @@ class _WatermarkOnlyStyleUpdate {
   final double? watermarkOpacity;
   final HistoryCoalescing? historyCoalescing;
 
+  _WatermarkPreviewUpdate toPreviewUpdate() => _WatermarkPreviewUpdate(
+    watermarkColor: watermarkColor,
+    watermarkText: watermarkText,
+    watermarkFontSize: watermarkFontSize,
+    watermarkFontFamily: watermarkFontFamily,
+    watermarkAngle: watermarkAngle,
+    watermarkGap: watermarkGap,
+    watermarkOpacity: watermarkOpacity,
+  );
+
   _WatermarkOnlyStyleUpdate merge(_WatermarkOnlyStyleUpdate next) =>
       _WatermarkOnlyStyleUpdate(
         watermarkColor: next.watermarkColor ?? watermarkColor,
@@ -2417,6 +2435,47 @@ class _WatermarkOnlyStyleUpdate {
         watermarkGap: next.watermarkGap ?? watermarkGap,
         watermarkOpacity: next.watermarkOpacity ?? watermarkOpacity,
         historyCoalescing: next.historyCoalescing ?? historyCoalescing,
+      );
+}
+
+@immutable
+class _WatermarkPreviewUpdate {
+  const _WatermarkPreviewUpdate({
+    this.watermarkColor,
+    this.watermarkText,
+    this.watermarkFontSize,
+    this.watermarkFontFamily,
+    this.watermarkAngle,
+    this.watermarkGap,
+    this.watermarkOpacity,
+  });
+
+  final Color? watermarkColor;
+  final String? watermarkText;
+  final double? watermarkFontSize;
+  final String? watermarkFontFamily;
+  final double? watermarkAngle;
+  final double? watermarkGap;
+  final double? watermarkOpacity;
+
+  bool get hasUpdates =>
+      watermarkColor != null ||
+      watermarkText != null ||
+      watermarkFontSize != null ||
+      watermarkFontFamily != null ||
+      watermarkAngle != null ||
+      watermarkGap != null ||
+      watermarkOpacity != null;
+
+  _WatermarkPreviewUpdate merge(_WatermarkPreviewUpdate next) =>
+      _WatermarkPreviewUpdate(
+        watermarkColor: next.watermarkColor ?? watermarkColor,
+        watermarkText: next.watermarkText ?? watermarkText,
+        watermarkFontSize: next.watermarkFontSize ?? watermarkFontSize,
+        watermarkFontFamily: next.watermarkFontFamily ?? watermarkFontFamily,
+        watermarkAngle: next.watermarkAngle ?? watermarkAngle,
+        watermarkGap: next.watermarkGap ?? watermarkGap,
+        watermarkOpacity: next.watermarkOpacity ?? watermarkOpacity,
       );
 }
 
