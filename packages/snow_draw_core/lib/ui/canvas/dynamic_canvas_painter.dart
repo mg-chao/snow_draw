@@ -35,6 +35,8 @@ import '../../draw/utils/selection_calculator.dart';
 import 'filter_scene_compositor.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
+import 'highlight_mask_shader_manager.dart';
+import 'highlight_mask_static_scene_cache.dart';
 import 'highlight_mask_visibility.dart';
 import 'optimized_scene_occlusion.dart';
 import 'render_keys.dart';
@@ -58,6 +60,7 @@ class DynamicCanvasPainter extends CustomPainter {
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
   static final _interactionSceneCache = InteractionSceneCache();
   static final _visibleSceneCache = VisibleElementSceneCache();
+  static final _highlightMaskStaticSceneCache = HighlightMaskStaticSceneCache();
   static _SceneRenderContextCacheEntry? _sceneRenderContextCache;
   static final _arrowOverlayPaints = _ArrowOverlayPaints();
   static final _arrowHoverStrokePaint = Paint()
@@ -116,14 +119,14 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
-      paintHighlightMask(
+      _paintDynamicHighlightMask(
         canvas: canvas,
-        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
-        maskConfig: renderKey.highlightMaskConfig,
-        scaleFactor: scale,
+        scale: scale,
         cameraPosition: Offset(camera.position.x, camera.position.y),
       );
+    } else {
+      _highlightMaskStaticSceneCache.clear();
     }
 
     // Draw snapping guides.
@@ -280,6 +283,132 @@ class DynamicCanvasPainter extends CustomPainter {
 
   bool _isFreeDrawCreationInteraction(InteractionState interaction) =>
       interaction is CreatingState && interaction.elementData is FreeDrawData;
+
+  void _paintDynamicHighlightMask({
+    required Canvas canvas,
+    required DrawRect viewportRect,
+    required double scale,
+    required Offset cameraPosition,
+  }) {
+    final maskConfig = renderKey.highlightMaskConfig;
+    final scene = stateView.highlightMaskScene;
+    if (!scene.hasHighlights) {
+      return;
+    }
+
+    final highlights = scene.elements;
+    final staticHighlights = scene.staticElements;
+    final dynamicHighlights = scene.dynamicElements;
+
+    // Dynamic-only scenes (for example creating a new highlight) can use the
+    // regular mask renderer directly.
+    if (staticHighlights.isEmpty) {
+      _highlightMaskStaticSceneCache.clear();
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    final shaderManager = HighlightMaskShaderManager.instance;
+    if (dynamicHighlights.isNotEmpty && !shaderManager.isReady) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    final document = stateView.state.domain.document;
+    final excludedDocumentHighlightIds = _resolveExcludedDocumentHighlightIds(
+      document: document,
+      dynamicHighlights: dynamicHighlights,
+      previewElementsById: stateView.previewElementsById,
+    );
+    final paintedStatic = _highlightMaskStaticSceneCache.paint(
+      canvas: canvas,
+      document: document,
+      staticHighlights: staticHighlights,
+      excludedDocumentHighlightIds: excludedDocumentHighlightIds,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
+    if (!paintedStatic) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    if (dynamicHighlights.isEmpty) {
+      return;
+    }
+
+    final dynamicHolePainted = shaderManager.paintHoleMaskModulate(
+      canvas: canvas,
+      highlights: dynamicHighlights,
+      viewportRect: viewportRect,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
+    if (!dynamicHolePainted) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+    }
+  }
+
+  Set<String> _resolveExcludedDocumentHighlightIds({
+    required DocumentState document,
+    required List<ElementState> dynamicHighlights,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (dynamicHighlights.isEmpty && previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+
+    final ids = <String>{};
+    for (final highlight in dynamicHighlights) {
+      final persisted = document.getElementById(highlight.id);
+      if (persisted?.data is HighlightData) {
+        ids.add(highlight.id);
+      }
+    }
+    if (previewElementsById.isNotEmpty) {
+      for (final entry in previewElementsById.entries) {
+        final persisted = document.getElementById(entry.key);
+        if (persisted?.data is HighlightData &&
+            entry.value.data is! HighlightData) {
+          ids.add(entry.key);
+        }
+      }
+    }
+    if (ids.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(ids);
+  }
 
   void _drawDynamicElements({
     required Canvas canvas,

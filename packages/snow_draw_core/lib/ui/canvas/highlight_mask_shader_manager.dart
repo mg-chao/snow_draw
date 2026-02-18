@@ -148,26 +148,57 @@ class HighlightMaskShaderManager {
     );
     canvas.drawRect(screenRect, _baseMaskPaint);
 
-    for (
-      var start = 0;
-      start < visible.length;
-      start += highlightMaskShaderLimit
-    ) {
-      final count = math.min(highlightMaskShaderLimit, visible.length - start);
-      _configureShaderPass(
-        shader: shader,
-        screenWidth: screenWidth,
-        screenHeight: screenHeight,
-        maskColor: _whiteMaskColor,
-        alpha: 1,
-        highlights: visible,
-        start: start,
-        count: count,
-      );
-      _chunkModulatePaint.shader = shader;
-      canvas.drawRect(screenRect, _chunkModulatePaint);
+    _drawHoleMaskModulate(
+      canvas: canvas,
+      shader: shader,
+      screenRect: screenRect,
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+      visibleHighlights: visible,
+    );
+
+    return true;
+  }
+
+  /// Paints highlight holes as a multiplicative pass.
+  ///
+  /// This pass outputs white outside highlight holes and transparent inside,
+  /// and is intended to be drawn with [BlendMode.modulate] over an existing
+  /// mask layer.
+  bool paintHoleMaskModulate({
+    required Canvas canvas,
+    required List<ElementState> highlights,
+    required DrawRect viewportRect,
+    required double scaleFactor,
+    required Offset cameraPosition,
+  }) {
+    final shader = _shader;
+    if (shader == null) {
+      return false;
     }
 
+    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
+    final screenWidth = viewportRect.width * scale;
+    final screenHeight = viewportRect.height * scale;
+    final screenRect = Rect.fromLTWH(0, 0, screenWidth, screenHeight);
+    final visible = _cullHighlights(
+      highlights: highlights,
+      viewportRect: viewportRect,
+      scale: scale,
+      cameraPosition: cameraPosition,
+    );
+    if (visible.isEmpty) {
+      return true;
+    }
+
+    _drawHoleMaskModulate(
+      canvas: canvas,
+      shader: shader,
+      screenRect: screenRect,
+      screenWidth: screenWidth,
+      screenHeight: screenHeight,
+      visibleHighlights: visible,
+    );
     return true;
   }
 
@@ -248,6 +279,38 @@ class HighlightMaskShaderManager {
         ..setFloat(cBase + 1, 0)
         ..setFloat(cBase + 2, 0)
         ..setFloat(cBase + 3, 0);
+    }
+  }
+
+  void _drawHoleMaskModulate({
+    required Canvas canvas,
+    required ui.FragmentShader shader,
+    required Rect screenRect,
+    required double screenWidth,
+    required double screenHeight,
+    required List<_VisibleHighlight> visibleHighlights,
+  }) {
+    for (
+      var start = 0;
+      start < visibleHighlights.length;
+      start += highlightMaskShaderLimit
+    ) {
+      final count = math.min(
+        highlightMaskShaderLimit,
+        visibleHighlights.length - start,
+      );
+      _configureShaderPass(
+        shader: shader,
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        maskColor: _whiteMaskColor,
+        alpha: 1,
+        highlights: visibleHighlights,
+        start: start,
+        count: count,
+      );
+      _chunkModulatePaint.shader = shader;
+      canvas.drawRect(screenRect, _chunkModulatePaint);
     }
   }
 
