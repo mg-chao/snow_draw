@@ -7,9 +7,15 @@ import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/models/document_state.dart';
+import 'package:snow_draw_core/draw/models/domain_state.dart';
+import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_core/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_core/ui/canvas/static_canvas_painter.dart';
@@ -121,6 +127,65 @@ void main() {
       expect(document.getElementById(middleId), isNull);
       expect(document.getElementById(rightId), isNull);
     });
+
+    testWidgets(
+      'keeps sweep precision for narrow strokes between sampled points',
+      (tester) async {
+        const lineId = 'edge-line';
+        final registry = DefaultElementRegistry();
+        registerBuiltInElements(registry);
+        final context = DrawContext.withDefaults(elementRegistry: registry);
+        final localStore = DefaultDrawStore(
+          context: context,
+          initialState: DrawState(
+            domain: DomainState(
+              document: DocumentState(
+                elements: const [
+                  ElementState(
+                    id: lineId,
+                    rect: DrawRect(
+                      minX: 54,
+                      minY: 97.9,
+                      maxX: 54.1,
+                      maxY: 97.9,
+                    ),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 0,
+                    data: LineData(strokeWidth: 0.1),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        addTearDown(localStore.dispose);
+
+        await _pumpCanvas(
+          tester: tester,
+          store: localStore,
+          currentToolTypeId: null,
+          isSelectionToolActive: false,
+          isEraserToolActive: true,
+        );
+
+        final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+        addTearDown(mouse.removePointer);
+        await mouse.addPointer(location: Offset.zero);
+        await tester.pump();
+
+        await mouse.down(const Offset(50, 90));
+        await tester.pump();
+        await mouse.moveTo(const Offset(66, 90));
+        await tester.pump();
+        await mouse.up();
+        await tester.pump();
+        await tester.pump();
+
+        final document = localStore.state.domain.document;
+        expect(document.getElementById(lineId), isNull);
+      },
+    );
 
     testWidgets(
       'keeps static layer stable while previewing additional erased elements',

@@ -20,6 +20,7 @@ class EraserStrokeProcessor {
     : _hitTesterResolver = hitTesterResolver;
 
   static const _distanceSquaredEpsilon = 1e-9;
+  static const _sampleStepFactor = 0.5;
 
   final EraserHitTesterResolver _hitTesterResolver;
   final _lastProcessedPositions = <int, DrawPoint>{};
@@ -160,7 +161,7 @@ class EraserStrokeProcessor {
       return;
     }
 
-    final sampleStep = tolerance * 0.5;
+    final sampleStep = tolerance * _sampleStepFactor;
     if (!sampleStep.isFinite || sampleStep <= 0) {
       if (includeStart) {
         onSample(start);

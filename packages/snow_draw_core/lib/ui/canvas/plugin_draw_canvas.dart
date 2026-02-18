@@ -224,6 +224,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
+  var _eraserPreviewCacheRevision = 0;
+  var _pendingEraserPreviewSnapshotRevision = -1;
+  var _pendingEraserPreviewSnapshot = const <String, ElementState>{};
+  DrawStateView? _mergedEraserPreviewStateView;
+  var _mergedEraserPreviewRevision = -1;
+  var _mergedEraserPreviewElements = const <String, ElementState>{};
   final _eraserHitTesterByType =
       <ElementTypeId<ElementData>, ElementHitTester?>{};
   final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
@@ -844,23 +850,50 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   Map<String, ElementState> _snapshotPendingEraserPreviewElements() {
     if (_pendingErasePreviewElementsById.isEmpty) {
+      _pendingEraserPreviewSnapshot = const <String, ElementState>{};
+      _pendingEraserPreviewSnapshotRevision = _eraserPreviewCacheRevision;
       return const <String, ElementState>{};
     }
-    return Map<String, ElementState>.from(_pendingErasePreviewElementsById);
+    if (_pendingEraserPreviewSnapshotRevision == _eraserPreviewCacheRevision) {
+      return _pendingEraserPreviewSnapshot;
+    }
+    final snapshot = Map<String, ElementState>.unmodifiable(
+      _pendingErasePreviewElementsById,
+    );
+    _pendingEraserPreviewSnapshot = snapshot;
+    _pendingEraserPreviewSnapshotRevision = _eraserPreviewCacheRevision;
+    return snapshot;
   }
 
-  Map<String, ElementState> _mergePreviewElements({
-    required Map<String, ElementState> basePreviewElements,
-    required Map<String, ElementState> overridePreviewElements,
-  }) {
-    if (overridePreviewElements.isEmpty) {
-      return basePreviewElements;
+  Map<String, ElementState> _resolveEraserDynamicPreviewElements(
+    DrawStateView stateView,
+  ) {
+    final pending = _snapshotPendingEraserPreviewElements();
+    if (pending.isEmpty) {
+      return stateView.previewElementsById;
     }
-    if (basePreviewElements.isEmpty) {
-      return Map<String, ElementState>.from(overridePreviewElements);
+    if (stateView.previewElementsById.isEmpty) {
+      return pending;
     }
-    return Map<String, ElementState>.from(basePreviewElements)
-      ..addAll(overridePreviewElements);
+    if (identical(_mergedEraserPreviewStateView, stateView) &&
+        _mergedEraserPreviewRevision == _eraserPreviewCacheRevision) {
+      return _mergedEraserPreviewElements;
+    }
+    final merged = Map<String, ElementState>.of(stateView.previewElementsById)
+      ..addAll(pending);
+    _mergedEraserPreviewStateView = stateView;
+    _mergedEraserPreviewRevision = _eraserPreviewCacheRevision;
+    return _mergedEraserPreviewElements =
+        Map<String, ElementState>.unmodifiable(merged);
+  }
+
+  void _invalidateEraserPreviewSnapshots() {
+    _eraserPreviewCacheRevision += 1;
+    _pendingEraserPreviewSnapshotRevision = -1;
+    _pendingEraserPreviewSnapshot = const <String, ElementState>{};
+    _mergedEraserPreviewRevision = -1;
+    _mergedEraserPreviewElements = const <String, ElementState>{};
+    _mergedEraserPreviewStateView = null;
   }
 
   Widget? _buildEraserCursorOverlay() {
@@ -1407,9 +1440,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!hasPendingPreview && !hadPendingPreview) {
       return;
     }
+    final requiresStaticRefresh = hasPendingPreview != hadPendingPreview;
     _refreshCanvasLayerSnapshots(
       widget.store.state,
       assumeDynamicChanged: true,
+      refreshStaticLayer: requiresStaticRefresh,
     );
   }
 
@@ -1434,6 +1469,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pendingErasePreviewElementsById[element.id] = element.copyWith(
       opacity: previewOpacity,
     );
+    _invalidateEraserPreviewSnapshots();
     return true;
   }
 
@@ -1443,6 +1479,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
+    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
@@ -1466,6 +1503,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _pendingErasePreviewElementsById.clear();
+    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
 
@@ -2793,53 +2831,43 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final promoteEraserPreviewToDynamicLayer =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    final optimizationPlan =
-        promoteEraserPreviewToDynamicLayer || interaction is TextEditingState
-        ? null
-        : resolveDynamicSceneOptimizationPlan(view: stateView);
-    final optimizedDynamicElementIds = promoteEraserPreviewToDynamicLayer
-        ? const <String>{}
-        : optimizationPlan?.optimizedElementIds ?? const <String>{};
-    final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
-        ? _resolveDynamicLayerStartIndex(stateView)
-        : null;
-    final dynamicLayerStartIndex = promoteEraserPreviewToDynamicLayer
-        ? 0
-        : baseDynamicLayerStartIndex;
-    final shouldComputeStaticPreviewElements =
-        includeStaticPreviewElements || promoteEraserPreviewToDynamicLayer;
-    final baseStaticPreviewElements = shouldComputeStaticPreviewElements
-        ? optimizedDynamicElementIds.isEmpty
-              ? _previewElementsForStatic(stateView, baseDynamicLayerStartIndex)
-              : _previewElementsForStaticOptimizedScene(
-                  stateView,
-                  optimizationPlan!.staticHiddenElementIds,
-                )
-        : const <String, ElementState>{};
-    final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
-        ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
-        : _previewElementsForDynamicOptimizedScene(
-            stateView,
-            optimizationPlan!.optimizedElementIds,
-          );
-
+    late final Set<String> optimizedDynamicElementIds;
+    late final int? dynamicLayerStartIndex;
     late final Map<String, ElementState> staticPreviewElements;
     late final Map<String, ElementState> dynamicPreviewElements;
     if (promoteEraserPreviewToDynamicLayer) {
-      final eraserPreviewElements = _snapshotPendingEraserPreviewElements();
-      final wholeScenePreviewElements = _mergePreviewElements(
-        basePreviewElements: baseStaticPreviewElements,
-        overridePreviewElements: baseDynamicPreviewElements,
-      );
+      optimizedDynamicElementIds = const <String>{};
+      dynamicLayerStartIndex = 0;
       staticPreviewElements = const <String, ElementState>{};
-      dynamicPreviewElements = _mergePreviewElements(
-        basePreviewElements: wholeScenePreviewElements,
-        overridePreviewElements: eraserPreviewElements,
-      );
+      dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
     } else {
-      staticPreviewElements = includeStaticPreviewElements
-          ? baseStaticPreviewElements
+      final optimizationPlan = interaction is TextEditingState
+          ? null
+          : resolveDynamicSceneOptimizationPlan(view: stateView);
+      optimizedDynamicElementIds =
+          optimizationPlan?.optimizedElementIds ?? const <String>{};
+      final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
+          ? _resolveDynamicLayerStartIndex(stateView)
+          : null;
+      dynamicLayerStartIndex = baseDynamicLayerStartIndex;
+      final baseStaticPreviewElements = includeStaticPreviewElements
+          ? optimizedDynamicElementIds.isEmpty
+                ? _previewElementsForStatic(
+                    stateView,
+                    baseDynamicLayerStartIndex,
+                  )
+                : _previewElementsForStaticOptimizedScene(
+                    stateView,
+                    optimizationPlan!.staticHiddenElementIds,
+                  )
           : const <String, ElementState>{};
+      final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
+          ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
+          : _previewElementsForDynamicOptimizedScene(
+              stateView,
+              optimizationPlan!.optimizedElementIds,
+            );
+      staticPreviewElements = baseStaticPreviewElements;
       dynamicPreviewElements = baseDynamicPreviewElements;
     }
 
