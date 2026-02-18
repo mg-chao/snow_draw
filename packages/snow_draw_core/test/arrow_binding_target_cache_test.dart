@@ -27,7 +27,7 @@ void main() {
       expect(resolved.value, isNull);
     });
 
-    test('clears cached candidate when null value is stored', () {
+    test('reuses cached miss when null value is stored', () {
       final cache = ArrowBindingTargetCache()
         ..cacheCandidate(
           position: const DrawPoint(x: 100, y: 120),
@@ -57,9 +57,25 @@ void main() {
         hasBindableTargets: true,
         preferredBinding: null,
       );
+      final resolvedFar = cache.resolveCandidate(
+        position: const DrawPoint(x: 110, y: 126),
+        referencePoint: const DrawPoint(x: 79, y: 92),
+        positionThreshold: 6,
+        referenceThreshold: 6,
+        elementsVersion: 7,
+        snapDistance: 12,
+        arrowType: ArrowType.curved,
+        arrowheadStyle: ArrowheadStyle.none,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        hasBindableTargets: true,
+        preferredBinding: null,
+      );
 
-      expect(resolved.hasValue, isFalse);
+      expect(resolved.hasValue, isTrue);
       expect(resolved.value, isNull);
+      expect(resolvedFar.hasValue, isFalse);
+      expect(resolvedFar.value, isNull);
     });
 
     test('invalidates when preferred binding changes', () {
@@ -167,6 +183,81 @@ void main() {
       expect(resolvedFar.hasValue, isFalse);
       expect(resolvedNear.hasValue, isTrue);
       expect(resolvedNear.value, same(expected));
+    });
+
+    test('cached miss uses a tighter reuse threshold than cached hits', () {
+      final cache = ArrowBindingTargetCache();
+      const binding = ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0.2, y: 0.2),
+      );
+      const hit = ArrowBindingResult(
+        binding: binding,
+        snapPoint: DrawPoint(x: 10, y: 10),
+        distance: 1,
+        zIndex: 1,
+      );
+
+      cache.cacheCandidate(
+        position: const DrawPoint(x: 10, y: 10),
+        referencePoint: null,
+        elementsVersion: 5,
+        snapDistance: 10,
+        arrowType: ArrowType.curved,
+        arrowheadStyle: ArrowheadStyle.none,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        hasBindableTargets: true,
+        preferredBinding: binding,
+        value: hit,
+      );
+      final hitResolution = cache.resolveCandidate(
+        position: const DrawPoint(x: 15, y: 10),
+        referencePoint: null,
+        positionThreshold: 6,
+        referenceThreshold: 6,
+        elementsVersion: 5,
+        snapDistance: 10,
+        arrowType: ArrowType.curved,
+        arrowheadStyle: ArrowheadStyle.none,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        hasBindableTargets: true,
+        preferredBinding: binding,
+      );
+
+      cache.cacheCandidate(
+        position: const DrawPoint(x: 10, y: 10),
+        referencePoint: null,
+        elementsVersion: 5,
+        snapDistance: 10,
+        arrowType: ArrowType.curved,
+        arrowheadStyle: ArrowheadStyle.none,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        hasBindableTargets: true,
+        preferredBinding: binding,
+        value: null,
+      );
+      final missResolution = cache.resolveCandidate(
+        position: const DrawPoint(x: 15, y: 10),
+        referencePoint: null,
+        positionThreshold: 6,
+        referenceThreshold: 6,
+        elementsVersion: 5,
+        snapDistance: 10,
+        arrowType: ArrowType.curved,
+        arrowheadStyle: ArrowheadStyle.none,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        hasBindableTargets: true,
+        preferredBinding: binding,
+      );
+
+      expect(hitResolution.hasValue, isTrue);
+      expect(hitResolution.value, same(hit));
+      expect(missResolution.hasValue, isFalse);
+      expect(missResolution.value, isNull);
     });
   });
 }

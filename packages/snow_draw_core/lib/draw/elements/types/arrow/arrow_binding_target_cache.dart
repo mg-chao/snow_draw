@@ -8,6 +8,10 @@ import 'arrow_binding.dart';
 /// Stores the last spatial query result and reuses it while the pointer stays
 /// within a small threshold and the document version remains unchanged.
 class ArrowBindingTargetCache {
+  // Cached misses use tighter thresholds to avoid stale "no target" states
+  // while still de-duplicating repeated queries from tiny pointer jitter.
+  static const _missThresholdScale = 0.75;
+
   DrawPoint? _lastPosition;
   double _lastDistance = 0;
   var _elementsVersion = -1;
@@ -23,7 +27,7 @@ class ArrowBindingTargetCache {
   ArrowheadStyle? _candidateArrowheadStyle;
   String? _candidateExcludedElementId;
   var _candidateElementsVersion = -1;
-  var _hasCandidateValue = false;
+  var _hasCachedCandidate = false;
   ArrowBindingResult? _candidateValue;
 
   List<ElementState> get targets => _targets;
@@ -65,6 +69,10 @@ class ArrowBindingTargetCache {
   ///
   /// Returns `(hasValue: false, value: null)` when no reusable candidate is
   /// available.
+  ///
+  /// `hasValue == true` means the cache has a definitive result for the query.
+  /// The cached value itself can still be `null`, which represents a
+  /// previously computed "no candidate" outcome.
   ({bool hasValue, ArrowBindingResult? value}) resolveCandidate({
     required DrawPoint position,
     required DrawPoint? referencePoint,
@@ -80,7 +88,7 @@ class ArrowBindingTargetCache {
     required ArrowBinding? preferredBinding,
     String? excludedElementId,
   }) {
-    if (!_hasCandidateValue || _candidatePosition == null) {
+    if (!_hasCachedCandidate || _candidatePosition == null) {
       return (hasValue: false, value: null);
     }
     if (_candidateElementsVersion != elementsVersion ||
@@ -95,11 +103,15 @@ class ArrowBindingTargetCache {
       return (hasValue: false, value: null);
     }
 
-    if (positionThreshold <= 0) {
+    final candidateIsMiss = _candidateValue == null;
+    final effectivePositionThreshold = candidateIsMiss
+        ? positionThreshold * _missThresholdScale
+        : positionThreshold;
+    if (effectivePositionThreshold <= 0) {
       return (hasValue: false, value: null);
     }
     if (_candidatePosition!.distanceSquared(position) >
-        positionThreshold * positionThreshold) {
+        effectivePositionThreshold * effectivePositionThreshold) {
       return (hasValue: false, value: null);
     }
 
@@ -109,11 +121,14 @@ class ArrowBindingTargetCache {
         return (hasValue: false, value: null);
       }
     } else {
-      if (referenceThreshold <= 0) {
+      final effectiveReferenceThreshold = candidateIsMiss
+          ? referenceThreshold * _missThresholdScale
+          : referenceThreshold;
+      if (effectiveReferenceThreshold <= 0) {
         return (hasValue: false, value: null);
       }
       if (cachedReference.distanceSquared(referencePoint) >
-          referenceThreshold * referenceThreshold) {
+          effectiveReferenceThreshold * effectiveReferenceThreshold) {
         return (hasValue: false, value: null);
       }
     }
@@ -136,10 +151,6 @@ class ArrowBindingTargetCache {
     required ArrowBindingResult? value,
     String? excludedElementId,
   }) {
-    if (value == null) {
-      clearCandidate();
-      return;
-    }
     _candidatePosition = position;
     _candidateReferencePoint = referencePoint;
     _candidateElementsVersion = elementsVersion;
@@ -151,7 +162,7 @@ class ArrowBindingTargetCache {
     _candidateHasBindableTargets = hasBindableTargets;
     _candidatePreferredBinding = preferredBinding;
     _candidateExcludedElementId = excludedElementId;
-    _hasCandidateValue = true;
+    _hasCachedCandidate = true;
     _candidateValue = value;
   }
 
@@ -169,7 +180,7 @@ class ArrowBindingTargetCache {
     _candidateArrowheadStyle = null;
     _candidateExcludedElementId = null;
     _candidateElementsVersion = -1;
-    _hasCandidateValue = false;
+    _hasCachedCandidate = false;
     _candidateValue = null;
   }
 
