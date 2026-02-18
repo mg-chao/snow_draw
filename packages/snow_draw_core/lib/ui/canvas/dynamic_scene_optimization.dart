@@ -10,6 +10,7 @@ import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
+import 'lightweight_line_edit_state_change.dart';
 import 'serial_number_interaction_classifier.dart';
 
 const _maxLocalizedPreviewElementCount = 24;
@@ -48,6 +49,16 @@ DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   final textEditingPlan = _resolveTextEditingOptimizationPlan(view);
   if (textEditingPlan != null) {
     return textEditingPlan;
+  }
+
+  // Lightweight line edits (line + free-draw selections) repaint at pointer
+  // frame rate and benefit more from stable dynamic-layer caches than from
+  // per-frame localized occluder resolution. Keep them on the standard split.
+  if (isLightweightLineEditingInteraction(
+    interaction: view.state.application.interaction,
+    document: view.state.domain.document,
+  )) {
+    return null;
   }
 
   final arrowPointPlan = _resolveArrowPointOptimizationPlan(view);

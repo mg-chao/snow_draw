@@ -363,14 +363,34 @@ class CreatePlugin extends DrawInputPlugin {
     KeyModifiers modifiers, {
     bool hasBatchedSamples = false,
   }) {
+    final shouldIgnorePressureForDedup =
+        !hasBatchedSamples && !_isFreeDrawCreating(state);
     if (!hasBatchedSamples &&
-        _lastUpdatePosition == position &&
+        _positionsMatchForDedup(
+          previous: _lastUpdatePosition,
+          next: position,
+          ignorePressure: shouldIgnorePressureForDedup,
+        ) &&
         _lastUpdateModifiers == modifiers) {
       return false;
     }
     _lastUpdatePosition = position;
     _lastUpdateModifiers = modifiers;
     return true;
+  }
+
+  bool _positionsMatchForDedup({
+    required DrawPoint? previous,
+    required DrawPoint next,
+    required bool ignorePressure,
+  }) {
+    if (previous == null) {
+      return false;
+    }
+    if (ignorePressure) {
+      return previous.x == next.x && previous.y == next.y;
+    }
+    return previous == next;
   }
 
   void _syncInternalState() {

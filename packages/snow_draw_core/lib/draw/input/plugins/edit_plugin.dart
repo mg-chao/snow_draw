@@ -77,13 +77,22 @@ class EditPlugin extends DrawInputPlugin {
   }
 
   bool _shouldDispatchUpdate(DrawPoint position, KeyModifiers modifiers) {
-    if (_lastUpdatePosition == position && _lastUpdateModifiers == modifiers) {
+    if (_positionsMatchForDedup(
+          previous: _lastUpdatePosition,
+          next: position,
+        ) &&
+        _lastUpdateModifiers == modifiers) {
       return false;
     }
     _lastUpdatePosition = position;
     _lastUpdateModifiers = modifiers;
     return true;
   }
+
+  bool _positionsMatchForDedup({
+    required DrawPoint? previous,
+    required DrawPoint next,
+  }) => previous != null && previous.x == next.x && previous.y == next.y;
 
   void _clearUpdateSignature() {
     _lastUpdatePosition = null;

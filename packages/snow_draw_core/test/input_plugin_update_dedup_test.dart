@@ -3,6 +3,7 @@ import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/plugin_core.dart';
 import 'package:snow_draw_core/draw/input/plugins/create_plugin.dart';
@@ -97,6 +98,39 @@ void main() {
         await plugin.onUnload();
       },
     );
+
+    test(
+      'ignores pressure-only move deltas for non-free-draw creation',
+      () async {
+        final dispatched = <DrawAction>[];
+        final state = _creatingLineState();
+        final context = _pluginContext(
+          stateProvider: () => state,
+          dispatched: dispatched,
+        );
+        final plugin = CreatePlugin(currentToolTypeId: LineData.typeIdToken);
+        await plugin.onLoad(context);
+
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 40, y: 48, pressure: 0.2),
+            modifiers: KeyModifiers.none,
+            pressure: 0.2,
+          ),
+        );
+        await plugin.handleEvent(
+          PointerMoveInputEvent(
+            position: const DrawPoint(x: 40, y: 48, pressure: 0.8),
+            modifiers: KeyModifiers.none,
+            pressure: 0.8,
+          ),
+        );
+
+        expect(dispatched.whereType<UpdateCreatingElement>(), hasLength(1));
+
+        await plugin.onUnload();
+      },
+    );
   });
 
   group('EditPlugin update deduplication', () {
@@ -132,6 +166,36 @@ void main() {
         await plugin.onUnload();
       },
     );
+
+    test('ignores pressure-only move deltas during edit updates', () async {
+      final dispatched = <DrawAction>[];
+      final state = _editingState();
+      final context = _pluginContext(
+        stateProvider: () => state,
+        dispatched: dispatched,
+      );
+      final plugin = EditPlugin();
+      await plugin.onLoad(context);
+
+      await plugin.handleEvent(
+        PointerMoveInputEvent(
+          position: const DrawPoint(x: 80, y: 48, pressure: 0.2),
+          modifiers: KeyModifiers.none,
+          pressure: 0.2,
+        ),
+      );
+      await plugin.handleEvent(
+        PointerMoveInputEvent(
+          position: const DrawPoint(x: 80, y: 48, pressure: 0.9),
+          modifiers: KeyModifiers.none,
+          pressure: 0.9,
+        ),
+      );
+
+      expect(dispatched.whereType<UpdateEdit>(), hasLength(1));
+
+      await plugin.onUnload();
+    });
   });
 }
 
@@ -165,6 +229,30 @@ DrawState _creatingFreeDrawState() {
     startPosition: const DrawPoint(x: 10, y: 10),
     currentRect: element.rect,
     creationMode: const FreeDrawCreationMode(),
+  );
+  return baseState.copyWith(
+    application: baseState.application.copyWith(interaction: creating),
+  );
+}
+
+DrawState _creatingLineState() {
+  final baseState = DrawState();
+  const element = ElementState(
+    id: 'creating_line',
+    rect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: LineData(),
+  );
+  final creating = CreatingState(
+    element: element,
+    startPosition: const DrawPoint(x: 10, y: 10),
+    currentRect: element.rect,
+    creationMode: const PointCreationMode(
+      fixedPoints: [DrawPoint(x: 10, y: 10)],
+      currentPoint: DrawPoint(x: 10, y: 10),
+    ),
   );
   return baseState.copyWith(
     application: baseState.application.copyWith(interaction: creating),

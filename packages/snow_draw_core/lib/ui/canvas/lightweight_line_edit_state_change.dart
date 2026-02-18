@@ -46,6 +46,28 @@ bool isLightweightLineInteractionMutationOnly({
   return false;
 }
 
+/// Returns true when [interaction] is an editing session limited to
+/// lightweight line-compatible element types.
+///
+/// Lightweight line contexts include only [LineData] and [FreeDrawData]
+/// selections, which can use the dynamic-layer fast path safely.
+bool isLightweightLineEditingInteraction({
+  required InteractionState interaction,
+  required DocumentState document,
+}) =>
+    interaction is EditingState &&
+    isLightweightLineEditContext(
+      context: interaction.context,
+      document: document,
+    );
+
+/// Returns true when [context] selects only lightweight line-compatible
+/// element types in [document].
+bool isLightweightLineEditContext({
+  required EditContext context,
+  required DocumentState document,
+}) => _isLightweightLineContext(context: context, document: document);
+
 /// Returns true when only an in-progress lightweight line edit changed.
 ///
 /// Prefer [isLightweightLineInteractionMutationOnly] for create+edit flows.

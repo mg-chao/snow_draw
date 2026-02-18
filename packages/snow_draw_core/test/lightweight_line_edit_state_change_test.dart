@@ -336,6 +336,63 @@ void main() {
       );
     });
   });
+
+  group('isLightweightLineEditingInteraction', () {
+    test('returns true when editing context contains only line elements', () {
+      final state = _withInteraction(
+        _baseState(elements: const [_lineElement], selectedIds: const {'line'}),
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'line_edit',
+          context: _TestEditContext(
+            startPosition: DrawPoint(x: 20, y: 20),
+            startBounds: DrawRect(minX: 10, minY: 10, maxX: 90, maxY: 90),
+            selectedIdsAtStart: {'line'},
+            selectionVersion: 1,
+            elementsVersion: 1,
+          ),
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+
+      expect(
+        isLightweightLineEditingInteraction(
+          interaction: state.application.interaction,
+          document: state.domain.document,
+        ),
+        isTrue,
+      );
+    });
+
+    test('returns false when editing context contains non-line elements', () {
+      final state = _withInteraction(
+        _baseState(
+          elements: const [_lineElement, _rectangleElement],
+          selectedIds: const {'line', 'rect'},
+        ),
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'mixed_edit',
+          context: _TestEditContext(
+            startPosition: DrawPoint(x: 20, y: 20),
+            startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110),
+            selectedIdsAtStart: {'line', 'rect'},
+            selectionVersion: 1,
+            elementsVersion: 1,
+          ),
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+
+      expect(
+        isLightweightLineEditingInteraction(
+          interaction: state.application.interaction,
+          document: state.domain.document,
+        ),
+        isFalse,
+      );
+    });
+  });
 }
 
 const _freeDrawElement = ElementState(
