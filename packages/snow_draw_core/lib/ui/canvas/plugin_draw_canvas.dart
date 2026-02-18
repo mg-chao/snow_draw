@@ -2898,6 +2898,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final optimizationPlan =
           _shouldApplyDynamicSceneOptimizationPlan(
             stateView: stateView,
+            interaction: interaction,
             plan: resolvedOptimizationPlan,
           )
           ? resolvedOptimizationPlan
@@ -2968,6 +2969,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   bool _shouldApplyDynamicSceneOptimizationPlan({
     required DrawStateView stateView,
+    required InteractionState interaction,
     required DynamicSceneOptimizationPlan? plan,
   }) {
     if (plan == null) {
@@ -2993,9 +2995,22 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
+    if (_shouldForceLocalizedOptimization(interaction)) {
+      return true;
+    }
+
     final dynamicTailCount = document.elements.length - lowestOrderIndex;
     final savedElementCount = dynamicTailCount - optimizedElementIds.length;
     return savedElementCount >= _minOptimizationSavedElementCount;
+  }
+
+  bool _shouldForceLocalizedOptimization(InteractionState interaction) {
+    if (interaction is! EditingState ||
+        interaction.context is! ArrowPointEditContext) {
+      return false;
+    }
+    final context = interaction.context as ArrowPointEditContext;
+    return !context.isLineElement;
   }
 
   HighlightMaskLayer _resolveHighlightMaskLayer({
@@ -3221,12 +3236,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     refreshStaticLayer: false,
   );
 
-  bool _tryRefreshCachedRectangleDynamicLayerSnapshot(
+  /// Reuses dynamic-scene split metadata for interaction-only updates.
+  ///
+  /// Arrow/line/rectangle/highlight/serial interactions all resolve to
+  /// `dynamicOnly` refresh plans while the document topology remains stable.
+  /// Rebuilding full split metadata on every pointer frame is redundant, so
+  /// this fast path reuses the previous dynamic render key and only resolves
+  /// the latest preview subset.
+  bool _tryRefreshCachedInteractionDynamicLayerSnapshot(
     DrawState state, {
     required DrawState previousState,
     required InteractionMutationRefreshPlan plan,
   }) {
-    if (plan.kind != InteractionMutationKind.rectangle ||
+    if (plan.refreshMode != InteractionMutationRefreshMode.dynamicOnly ||
         !identical(previousState.domain, state.domain) ||
         !mounted) {
       return false;
@@ -4122,7 +4144,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     switch (plan.refreshMode) {
       case InteractionMutationRefreshMode.dynamicOnly:
-        if (_tryRefreshCachedRectangleDynamicLayerSnapshot(
+        if (_tryRefreshCachedInteractionDynamicLayerSnapshot(
           state,
           previousState: previousState,
           plan: plan,
