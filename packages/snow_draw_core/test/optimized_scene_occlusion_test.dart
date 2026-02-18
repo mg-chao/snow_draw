@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
@@ -37,6 +38,28 @@ void main() {
           opacity: 1,
           zIndex: 1,
           data: LineData(strokeWidth: 8),
+        ),
+        seedAabb: seedAabb,
+      );
+
+      expect(rects, hasLength(1));
+      final query = rects.single;
+      expect(query.minX, equals(4));
+      expect(query.minY, equals(14));
+      expect(query.maxX, equals(76));
+      expect(query.maxY, equals(66));
+    });
+
+    test('treats two-point free-draw strokes as line occluders', () {
+      const seedAabb = DrawRect(minX: 10, minY: 20, maxX: 70, maxY: 60);
+      final rects = resolveOptimizedOccluderQueryRects(
+        seedElement: const ElementState(
+          id: 'free_line',
+          rect: seedAabb,
+          rotation: 0,
+          opacity: 1,
+          zIndex: 1,
+          data: FreeDrawData(strokeWidth: 8),
         ),
         seedAabb: seedAabb,
       );

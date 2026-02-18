@@ -57,6 +57,7 @@ import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
 import 'interaction_dynamic_scene_cache.dart';
 import 'interaction_mutation_refresh_plan.dart';
+import 'lightweight_line_edit_state_change.dart';
 import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
@@ -233,6 +234,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _pendingErasePreviewElementsById = <String, ElementState>{};
   var _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
+  var _lightweightLinePreviewRevision = 0;
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -921,6 +923,53 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       final persisted = document.getElementById(entry.key);
       if (persisted == null || !identical(persisted, entry.value)) {
         dynamicIds.add(entry.key);
+      }
+    }
+    if (dynamicIds.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(dynamicIds);
+  }
+
+  Set<String> _resolveInteractionDynamicPreviewElementIds({
+    required DrawStateView stateView,
+    required Map<String, ElementState> previewElementsById,
+    required InteractionMutationRefreshPlan plan,
+  }) {
+    if (plan.kind != InteractionMutationKind.lightweightLine) {
+      return _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        previewElementsById,
+      );
+    }
+
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState ||
+        !isLightweightLineEditContext(
+          context: interaction.context,
+          document: stateView.state.domain.document,
+        )) {
+      return _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        previewElementsById,
+      );
+    }
+
+    final selectedIds = interaction.context.selectedIdsAtStart;
+    if (selectedIds.isEmpty || previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+
+    final document = stateView.state.domain.document;
+    final dynamicIds = <String>{};
+    for (final id in selectedIds) {
+      final preview = previewElementsById[id];
+      if (preview == null) {
+        continue;
+      }
+      final persisted = document.getElementById(id);
+      if (persisted == null || !identical(persisted, preview)) {
+        dynamicIds.add(id);
       }
     }
     if (dynamicIds.isEmpty) {
@@ -3015,13 +3064,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return savedElementCount >= _minOptimizationSavedElementCount;
   }
 
-  // Arrow/line point edits and single serial-number edits mutate a very small
-  // dynamic subset. Forcing localized optimization avoids repeatedly painting
-  // large dynamic tails when the selected element sits low in z.
+  // Arrow-point, lightweight-line, and single serial-number edits mutate a
+  // very small dynamic subset. Forcing localized optimization avoids
+  // repeatedly painting large dynamic tails when the selected element sits low
+  // in z.
   bool _shouldForceLocalizedOptimization({
     required InteractionState interaction,
     required DocumentState document,
   }) {
+    if (isLightweightLineEditingInteraction(
+      interaction: interaction,
+      document: document,
+    )) {
+      return true;
+    }
     if (interaction is EditingState &&
         interaction.context is ArrowPointEditContext) {
       return true;
@@ -3101,6 +3157,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required CreatingElementSnapshot? creatingElement,
     required InteractionDynamicSceneSnapshot scene,
     required Locale? locale,
+    int? previewElementsRevision,
   }) => _createDynamicRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
@@ -3108,6 +3165,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     creatingElement: creatingElement,
     textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     previewElementsById: scene.previewElementsById,
+    previewElementsRevision: previewElementsRevision,
     dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
@@ -3281,12 +3339,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final stateView = _buildStateView(state);
+    final previewElementsRevision =
+        plan.kind == InteractionMutationKind.lightweightLine
+        ? ++_lightweightLinePreviewRevision
+        : null;
     final scene = resolveInteractionDynamicSceneFromCachedKey(
       stateView: stateView,
       previousRenderKey: previousRenderKey,
       resolvePreviewByLayerStart: _previewElementsForDynamic,
       resolvePreviewByOptimizedIds: _previewElementsForDynamicOptimizedScene,
-      resolveDynamicPreviewElementIds: _resolveDynamicPreviewElementIdsForScene,
+      resolveDynamicPreviewElementIds: (view, previewElementsById) =>
+          _resolveInteractionDynamicPreviewElementIds(
+            stateView: view,
+            previewElementsById: previewElementsById,
+            plan: plan,
+          ),
     );
     final dynamicRenderKey = _buildDynamicRenderKeyFromCachedScene(
       stateView: stateView,
@@ -3295,6 +3362,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       creatingElement: _extractCreatingSnapshot(stateView),
       scene: scene,
       locale: _resolveCanvasLocale(),
+      previewElementsRevision: previewElementsRevision,
     );
     _setDynamicLayerSnapshot(
       stateView: stateView,
@@ -4206,7 +4274,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
-      _refreshPointerVisualsForState(state);
+      if (_activePointerIds.isEmpty) {
+        _refreshPointerVisualsForState(state);
+      }
       // The dedicated free-draw preview layer already repaints from
       // [_syncFreeDrawPreviewLayerState], so avoid rebuilding canvas snapshots
       // on every point.
