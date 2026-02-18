@@ -1313,6 +1313,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     required double defaultValue,
     required ValueChanged<double> onChanged,
     double? pendingValue,
+    int? divisions,
     ValueChanged<double>? onChangeEnd,
   }) {
     final baseValue = value.valueOr(defaultValue);
@@ -1340,6 +1341,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
                   value: resolvedValue.clamp(min, max),
                   min: min,
                   max: max,
+                  divisions: divisions,
                   onChanged: onChanged,
                   onChangeEnd: onChangeEnd,
                 ),
@@ -2337,15 +2339,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
           defaultValue: defaultValue,
           min: -90,
           max: 90,
+          divisions: 180,
           pendingValue: _pendingWatermarkAngle,
           onChanged: (next) {
             setState(() => _pendingWatermarkAngle = next);
-            unawaited(
-              _applyStyleUpdate(
-                watermarkAngle: next,
-                historyCoalescing: coalescing,
-              ),
-            );
+            widget.adapter.previewWatermarkUpdate(watermarkAngle: next);
           },
           onChangeEnd: (next) async {
             setState(() => _pendingWatermarkAngle = null);
@@ -2368,15 +2366,13 @@ class _StyleToolbarState extends State<StyleToolbar> {
           defaultValue: defaultValue,
           min: ConfigDefaults.minWatermarkGap,
           max: ConfigDefaults.maxWatermarkGap,
+          divisions:
+              (ConfigDefaults.maxWatermarkGap - ConfigDefaults.minWatermarkGap)
+                  .round(),
           pendingValue: _pendingWatermarkGap,
           onChanged: (next) {
             setState(() => _pendingWatermarkGap = next);
-            unawaited(
-              _applyStyleUpdate(
-                watermarkGap: next,
-                historyCoalescing: coalescing,
-              ),
-            );
+            widget.adapter.previewWatermarkUpdate(watermarkGap: next);
           },
           onChangeEnd: (next) async {
             setState(() => _pendingWatermarkGap = null);
@@ -2399,15 +2395,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
           defaultValue: defaultValue,
           min: 0,
           max: 1,
+          divisions: 100,
           pendingValue: _pendingWatermarkOpacity,
           onChanged: (next) {
             setState(() => _pendingWatermarkOpacity = next);
-            unawaited(
-              _applyStyleUpdate(
-                watermarkOpacity: next,
-                historyCoalescing: coalescing,
-              ),
-            );
+            widget.adapter.previewWatermarkUpdate(watermarkOpacity: next);
           },
           onChangeEnd: (next) async {
             setState(() => _pendingWatermarkOpacity = null);
