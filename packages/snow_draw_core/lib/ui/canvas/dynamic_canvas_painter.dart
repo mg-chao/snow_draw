@@ -709,24 +709,75 @@ class DynamicCanvasPainter extends CustomPainter {
     final previewElements = renderKey.previewElementsById;
     final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
     final creatingFilterId = _resolveCreatingFilterId();
-    final serialConnectorPreviewElements =
-        _extractSerialConnectorPreviewElements(previewElements);
+    final staticContext = _resolveSceneRenderContextStaticData(
+      document: document,
+      elements: elements,
+      previewElementsById: previewElements,
+      dynamicPreviewIds: dynamicPreviewIds,
+      creatingFilterId: creatingFilterId,
+    );
+
+    final serialConnectorSnapshot = staticContext.shouldPaintSerialConnectors
+        ? resolveSerialNumberConnectorSnapshot(
+            stateView,
+            previewElementsById: previewElements,
+            visibleTextElementIds: staticContext.visibleTextIds,
+          )
+        : const SerialNumberConnectorSnapshot(
+            connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
+            dynamicTextElementIds: <String>{},
+          );
+    final interactionDynamicElementIds = _resolveDynamicElementIds(
+      dynamicPreviewIds: dynamicPreviewIds,
+      creatingFilterId: creatingFilterId,
+      serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
+    );
+    final dynamicElementIds = interactionDynamicElementIds;
+    final hasInteractiveFilterElement = _hasSharedElementId(
+      interactionDynamicElementIds,
+      staticContext.filterElementIds,
+    );
+    // Filter create/edit interactions are high-frequency and often execute on
+    // CPU fallback backends. Always request aggressive fallback so the filter
+    // pipeline favors responsiveness over full-fidelity kernels during these
+    // interactions.
+    final useAggressiveCpuFallback = hasInteractiveFilterElement;
+
+    return _SceneRenderContext(
+      hasFilterElement: staticContext.hasFilterElement,
+      hasInteractiveFilterElement: hasInteractiveFilterElement,
+      useAggressiveCpuFallback: useAggressiveCpuFallback,
+      shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
+      serialConnectors: serialConnectorSnapshot.connectorsByTextId,
+      dynamicElementIds: dynamicElementIds,
+    );
+  }
+
+  _SceneRenderContextStaticData _resolveSceneRenderContextStaticData({
+    required DocumentState document,
+    required List<ElementState> elements,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> dynamicPreviewIds,
+    required String? creatingFilterId,
+  }) {
+    final elementSignature = _buildSceneElementStructureSignature(elements);
+    final serialPreviewSignature = _buildSerialPreviewSignature(
+      previewElementsById,
+    );
     final cached = _sceneRenderContextCache;
     if (cached != null &&
         cached.matches(
           document: document,
-          elements: elements,
+          elementSignature: elementSignature,
+          serialPreviewSignature: serialPreviewSignature,
           dynamicPreviewIds: dynamicPreviewIds,
           creatingFilterId: creatingFilterId,
-          serialConnectorPreviewElements: serialConnectorPreviewElements,
         )) {
-      return cached.context;
+      return cached.staticData;
     }
 
     final canHaveSerialConnectors =
-        document.boundTextIds.isNotEmpty ||
-        serialConnectorPreviewElements.isNotEmpty;
-
+        document.boundTextIds.isNotEmpty || serialPreviewSignature.count > 0;
     var hasFilterElement = false;
     final filterElementIds = <String>{};
     final visibleTextIds = <String>{};
@@ -748,52 +799,72 @@ class DynamicCanvasPainter extends CustomPainter {
         visibleTextIds.isNotEmpty &&
         _shouldPaintSerialConnectors(
           boundTextIds: document.boundTextIds,
-          previewElementsById: previewElements,
+          previewElementsById: previewElementsById,
           visibleTextIds: visibleTextIds,
         );
-    final serialConnectorSnapshot = shouldPaintSerialConnectors
-        ? resolveSerialNumberConnectorSnapshot(
-            stateView,
-            previewElementsById: previewElements,
-            visibleTextElementIds: visibleTextIds,
-          )
-        : const SerialNumberConnectorSnapshot(
-            connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
-            dynamicTextElementIds: <String>{},
-          );
-    final interactionDynamicElementIds = _resolveDynamicElementIds(
-      dynamicPreviewIds: dynamicPreviewIds,
-      creatingFilterId: creatingFilterId,
-      serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
-    );
-    final dynamicElementIds = interactionDynamicElementIds;
-    final hasInteractiveFilterElement = _hasSharedElementId(
-      interactionDynamicElementIds,
-      filterElementIds,
-    );
-    // Filter create/edit interactions are high-frequency and often execute on
-    // CPU fallback backends. Always request aggressive fallback so the filter
-    // pipeline favors responsiveness over full-fidelity kernels during these
-    // interactions.
-    final useAggressiveCpuFallback = hasInteractiveFilterElement;
 
-    final context = _SceneRenderContext(
+    final staticData = _SceneRenderContextStaticData(
       hasFilterElement: hasFilterElement,
-      hasInteractiveFilterElement: hasInteractiveFilterElement,
-      useAggressiveCpuFallback: useAggressiveCpuFallback,
+      filterElementIds: filterElementIds,
+      visibleTextIds: visibleTextIds,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
-      serialConnectors: serialConnectorSnapshot.connectorsByTextId,
-      dynamicElementIds: dynamicElementIds,
     );
     _sceneRenderContextCache = _SceneRenderContextCacheEntry(
       document: document,
-      elements: elements,
+      elementSignature: elementSignature,
+      serialPreviewSignature: serialPreviewSignature,
       dynamicPreviewIds: dynamicPreviewIds,
       creatingFilterId: creatingFilterId,
-      serialConnectorPreviewElements: serialConnectorPreviewElements,
-      context: context,
+      staticData: staticData,
     );
-    return context;
+    return staticData;
+  }
+
+  _SceneElementStructureSignature _buildSceneElementStructureSignature(
+    List<ElementState> elements,
+  ) {
+    var hash = 0;
+    var filterCount = 0;
+    var visibleTextCount = 0;
+    for (final element in elements) {
+      final data = element.data;
+      final isFilter = data is FilterData;
+      final isVisibleText = data is TextData && element.opacity > 0;
+      if (isFilter) {
+        filterCount += 1;
+      }
+      if (isVisibleText) {
+        visibleTextCount += 1;
+      }
+      final flags = (isFilter ? 1 : 0) | (isVisibleText ? 2 : 0);
+      hash ^= Object.hash(element.id, flags);
+    }
+    return _SceneElementStructureSignature(
+      hash: hash,
+      elementCount: elements.length,
+      filterCount: filterCount,
+      visibleTextCount: visibleTextCount,
+    );
+  }
+
+  _SerialPreviewSignature _buildSerialPreviewSignature(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return const _SerialPreviewSignature(hash: 0, count: 0);
+    }
+
+    var hash = 0;
+    var count = 0;
+    for (final entry in previewElementsById.entries) {
+      final data = entry.value.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      hash ^= Object.hash(entry.key, data.textElementId ?? '');
+      count += 1;
+    }
+    return _SerialPreviewSignature(hash: hash, count: count);
   }
 
   void _paintSceneElement({
@@ -816,24 +887,6 @@ class DynamicCanvasPainter extends CustomPainter {
         connectorsByTextId: sceneContext.serialConnectors,
       );
     }
-  }
-
-  Map<String, ElementState> _extractSerialConnectorPreviewElements(
-    Map<String, ElementState> previewElementsById,
-  ) {
-    if (previewElementsById.isEmpty) {
-      return const <String, ElementState>{};
-    }
-
-    Map<String, ElementState>? relevant;
-    for (final entry in previewElementsById.entries) {
-      final preview = entry.value;
-      final data = preview.data;
-      if (data is SerialNumberData || data is TextData) {
-        (relevant ??= <String, ElementState>{})[entry.key] = preview;
-      }
-    }
-    return relevant ?? const <String, ElementState>{};
   }
 
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
@@ -2063,41 +2116,50 @@ class _SceneRenderContext {
   final Set<String> dynamicElementIds;
 }
 
+class _SceneRenderContextStaticData {
+  _SceneRenderContextStaticData({
+    required this.hasFilterElement,
+    required Set<String> filterElementIds,
+    required Set<String> visibleTextIds,
+    required this.shouldPaintSerialConnectors,
+  }) : filterElementIds = Set<String>.unmodifiable(filterElementIds),
+       visibleTextIds = Set<String>.unmodifiable(visibleTextIds);
+
+  final bool hasFilterElement;
+  final Set<String> filterElementIds;
+  final Set<String> visibleTextIds;
+  final bool shouldPaintSerialConnectors;
+}
+
 class _SceneRenderContextCacheEntry {
   _SceneRenderContextCacheEntry({
     required this.document,
-    required this.elements,
+    required this.elementSignature,
+    required this.serialPreviewSignature,
     required Set<String> dynamicPreviewIds,
     required this.creatingFilterId,
-    required Map<String, ElementState> serialConnectorPreviewElements,
-    required this.context,
-  }) : dynamicPreviewIds = Set<String>.unmodifiable(dynamicPreviewIds),
-       serialConnectorPreviewElements = Map<String, ElementState>.unmodifiable(
-         serialConnectorPreviewElements,
-       );
+    required this.staticData,
+  }) : dynamicPreviewIds = Set<String>.unmodifiable(dynamicPreviewIds);
 
   final DocumentState document;
-  final List<ElementState> elements;
+  final _SceneElementStructureSignature elementSignature;
+  final _SerialPreviewSignature serialPreviewSignature;
   final Set<String> dynamicPreviewIds;
   final String? creatingFilterId;
-  final Map<String, ElementState> serialConnectorPreviewElements;
-  final _SceneRenderContext context;
+  final _SceneRenderContextStaticData staticData;
 
   bool matches({
     required DocumentState document,
-    required List<ElementState> elements,
+    required _SceneElementStructureSignature elementSignature,
+    required _SerialPreviewSignature serialPreviewSignature,
     required Set<String> dynamicPreviewIds,
     required String? creatingFilterId,
-    required Map<String, ElementState> serialConnectorPreviewElements,
   }) =>
       identical(this.document, document) &&
-      identical(this.elements, elements) &&
+      this.elementSignature == elementSignature &&
+      this.serialPreviewSignature == serialPreviewSignature &&
       this.creatingFilterId == creatingFilterId &&
-      _setEquals(this.dynamicPreviewIds, dynamicPreviewIds) &&
-      _mapsEqual(
-        this.serialConnectorPreviewElements,
-        serialConnectorPreviewElements,
-      );
+      _setEquals(this.dynamicPreviewIds, dynamicPreviewIds);
 
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
     if (identical(a, b)) {
@@ -2113,19 +2175,50 @@ class _SceneRenderContextCacheEntry {
     }
     return true;
   }
+}
 
-  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
+@immutable
+class _SceneElementStructureSignature {
+  const _SceneElementStructureSignature({
+    required this.hash,
+    required this.elementCount,
+    required this.filterCount,
+    required this.visibleTextCount,
+  });
+
+  final int hash;
+  final int elementCount;
+  final int filterCount;
+  final int visibleTextCount;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SceneElementStructureSignature &&
+          other.hash == hash &&
+          other.elementCount == elementCount &&
+          other.filterCount == filterCount &&
+          other.visibleTextCount == visibleTextCount;
+
+  @override
+  int get hashCode =>
+      Object.hash(hash, elementCount, filterCount, visibleTextCount);
+}
+
+@immutable
+class _SerialPreviewSignature {
+  const _SerialPreviewSignature({required this.hash, required this.count});
+
+  final int hash;
+  final int count;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SerialPreviewSignature &&
+          other.hash == hash &&
+          other.count == count;
+
+  @override
+  int get hashCode => Object.hash(hash, count);
 }

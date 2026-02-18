@@ -29,6 +29,7 @@ import '../../draw/elements/types/text/text_layout.dart';
 import '../../draw/elements/types/text/text_renderer.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
@@ -3000,7 +3001,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    if (_shouldForceLocalizedOptimization(interaction)) {
+    if (_shouldForceLocalizedOptimization(
+      interaction: interaction,
+      document: document,
+    )) {
       return true;
     }
 
@@ -3009,12 +3013,22 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return savedElementCount >= _minOptimizationSavedElementCount;
   }
 
-  // Arrow-point interactions (including line-point edits) mutate a very small
+  // Arrow/line point edits and single serial-number edits mutate a very small
   // dynamic subset. Forcing localized optimization avoids repeatedly painting
   // large dynamic tails when the selected element sits low in z.
-  bool _shouldForceLocalizedOptimization(InteractionState interaction) =>
-      interaction is EditingState &&
-      interaction.context is ArrowPointEditContext;
+  bool _shouldForceLocalizedOptimization({
+    required InteractionState interaction,
+    required DocumentState document,
+  }) {
+    if (interaction is EditingState &&
+        interaction.context is ArrowPointEditContext) {
+      return true;
+    }
+    return SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+      interaction: interaction,
+      document: document,
+    );
+  }
 
   HighlightMaskLayer _resolveHighlightMaskLayer({
     required DrawStateView stateView,
