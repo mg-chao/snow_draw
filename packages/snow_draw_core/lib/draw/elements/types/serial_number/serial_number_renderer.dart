@@ -198,7 +198,18 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       circleRect.center.dx - visualCenter.dx,
       circleRect.center.dy - visualCenter.dy,
     );
-    layout.painter.paint(canvas, offset);
+    final paintScale = layout.paintScale;
+    if (paintScale <= 0) {
+      return;
+    }
+    canvas
+      ..save()
+      ..translate(offset.dx, offset.dy);
+    if (!_doubleEquals(paintScale, 1)) {
+      canvas.scale(paintScale, paintScale);
+    }
+    layout.painter.paint(canvas, Offset.zero);
+    canvas.restore();
   }
 }
 
@@ -233,3 +244,5 @@ class _StrokePathKey {
   int get hashCode =>
       Object.hash(diameter, strokeStyle, patternPrimary, patternSecondary);
 }
+
+bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;

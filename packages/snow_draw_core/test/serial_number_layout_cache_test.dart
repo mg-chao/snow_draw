@@ -57,4 +57,38 @@ void main() {
     expect(afterAll.painterBuildCount, 2);
     expect(identical(repeatedFirstLayout.painter, firstLayout.painter), isTrue);
   });
+
+  test('reuses canonical geometry and painter across font-size changes', () {
+    const baseData = SerialNumberData(number: 7, color: Color(0xFF222222));
+    const scaledData = SerialNumberData(
+      number: 7,
+      color: Color(0xFF222222),
+      fontSize: 32,
+    );
+    final expectedScale = scaledData.fontSize / baseData.fontSize;
+
+    final baseLayout = layoutSerialNumberText(data: baseData);
+    final statsAfterBase = debugSerialNumberLayoutCacheStats();
+    expect(statsAfterBase.geometryBuildCount, 1);
+    expect(statsAfterBase.painterBuildCount, 1);
+
+    final scaledLayout = layoutSerialNumberText(data: scaledData);
+    final statsAfterScaled = debugSerialNumberLayoutCacheStats();
+    expect(statsAfterScaled.geometryBuildCount, 1);
+    expect(statsAfterScaled.painterBuildCount, 1);
+    expect(identical(scaledLayout.painter, baseLayout.painter), isTrue);
+    expect(scaledLayout.paintScale, closeTo(expectedScale, 0.0001));
+    expect(
+      scaledLayout.size.width,
+      closeTo(baseLayout.size.width * expectedScale, 0.0001),
+    );
+    expect(
+      scaledLayout.size.height,
+      closeTo(baseLayout.size.height * expectedScale, 0.0001),
+    );
+    expect(
+      scaledLayout.lineHeight,
+      closeTo(baseLayout.lineHeight * expectedScale, 0.0001),
+    );
+  });
 }

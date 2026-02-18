@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
@@ -24,14 +26,19 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     final serialData = data is SerialNumberData
         ? data
         : const SerialNumberData();
-    final diameter = resolveSerialNumberDiameter(
-      data: serialData,
+    final layoutSignature = _SerialNumberLayoutSignature.fromData(serialData);
+    final baseDiameter = _resolveBaseDiameter(serialData);
+    final diameter = _resolveDiameterWithMin(
+      baseDiameter: baseDiameter,
       minDiameter: ConfigDefaults.minCreateElementSize,
     );
     return CreationUpdateResult(
       data: serialData,
       rect: _rectFromCenter(startPosition, diameter),
-      creationMode: const RectCreationMode(),
+      creationMode: _SerialNumberCreationMode(
+        baseDiameter: baseDiameter,
+        layoutSignature: layoutSignature,
+      ),
     );
   }
 
@@ -54,14 +61,29 @@ class SerialNumberCreationStrategy extends CreationStrategy {
             gridSize: config.grid.size,
           )
         : currentPosition;
-    final diameter = resolveSerialNumberDiameter(
-      data: serialData,
+    final layoutSignature = _SerialNumberLayoutSignature.fromData(serialData);
+    final cachedMode = creatingState.creationMode;
+    final serialCreationMode =
+        cachedMode is _SerialNumberCreationMode &&
+            cachedMode.layoutSignature == layoutSignature
+        ? cachedMode
+        : null;
+    final baseDiameter =
+        serialCreationMode?.baseDiameter ?? _resolveBaseDiameter(serialData);
+    final diameter = _resolveDiameterWithMin(
+      baseDiameter: baseDiameter,
       minDiameter: config.element.minCreateSize,
     );
+    final nextCreationMode =
+        serialCreationMode ??
+        _SerialNumberCreationMode(
+          baseDiameter: baseDiameter,
+          layoutSignature: layoutSignature,
+        );
     return CreationUpdateResult(
       data: serialData,
       rect: _rectFromCenter(snappedPosition, diameter),
-      creationMode: creatingState.creationMode,
+      creationMode: nextCreationMode,
     );
   }
 
@@ -85,9 +107,82 @@ class SerialNumberCreationStrategy extends CreationStrategy {
   }
 }
 
+double _resolveBaseDiameter(SerialNumberData data) =>
+    resolveSerialNumberDiameter(data: data);
+
+double _resolveDiameterWithMin({
+  required double baseDiameter,
+  required double minDiameter,
+}) {
+  if (!baseDiameter.isFinite) {
+    return minDiameter;
+  }
+  return math.max(baseDiameter, minDiameter);
+}
+
 DrawRect _rectFromCenter(DrawPoint center, double size) => DrawRect(
   minX: center.x - size / 2,
   minY: center.y - size / 2,
   maxX: center.x + size / 2,
   maxY: center.y + size / 2,
 );
+
+@immutable
+class _SerialNumberCreationMode extends CreationMode {
+  const _SerialNumberCreationMode({
+    required this.baseDiameter,
+    required this.layoutSignature,
+  });
+
+  final double baseDiameter;
+  final _SerialNumberLayoutSignature layoutSignature;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SerialNumberCreationMode &&
+          other.baseDiameter == baseDiameter &&
+          other.layoutSignature == layoutSignature;
+
+  @override
+  int get hashCode => Object.hash(baseDiameter, layoutSignature);
+}
+
+@immutable
+class _SerialNumberLayoutSignature {
+  const _SerialNumberLayoutSignature({
+    required this.number,
+    required this.fontSize,
+    required this.fontFamily,
+  });
+
+  factory _SerialNumberLayoutSignature.fromData(SerialNumberData data) =>
+      _SerialNumberLayoutSignature(
+        number: data.number,
+        fontSize: data.fontSize,
+        fontFamily: _normalizeFontFamily(data.fontFamily),
+      );
+
+  final int number;
+  final double fontSize;
+  final String? fontFamily;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SerialNumberLayoutSignature &&
+          other.number == number &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily;
+
+  @override
+  int get hashCode => Object.hash(number, fontSize, fontFamily);
+}
+
+String? _normalizeFontFamily(String? fontFamily) {
+  final trimmed = fontFamily?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed;
+}

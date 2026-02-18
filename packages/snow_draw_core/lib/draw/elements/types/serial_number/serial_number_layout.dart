@@ -14,6 +14,8 @@ const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
 const _serialNumberPaddingFactor = 0.26;
 const _textGeometryCacheMaxEntries = 64;
 const _textPainterCacheMaxEntries = 192;
+const double _canonicalSerialNumberFontSize =
+    ConfigDefaults.defaultSerialNumberFontSize;
 
 @immutable
 class SerialNumberTextLayout {
@@ -22,28 +24,29 @@ class SerialNumberTextLayout {
     required this.size,
     required this.lineHeight,
     required this.visualBounds,
+    required this.paintScale,
   });
 
   final TextPainter painter;
   final Size size;
   final double lineHeight;
   final Rect? visualBounds;
+  final double paintScale;
 }
 
 /// Cache key for serial-number text geometry.
 ///
-/// Color is intentionally excluded because it does not affect shaping metrics.
+/// Color and font-size are intentionally excluded because neither affects the
+/// canonical glyph geometry. Font-size is applied as a paint-time scale.
 @immutable
 class _TextGeometryKey {
   const _TextGeometryKey({
     required this.number,
-    required this.fontSize,
     required this.fontFamily,
     required this.locale,
   });
 
   final int number;
-  final double fontSize;
   final String? fontFamily;
   final Locale? locale;
 
@@ -52,12 +55,11 @@ class _TextGeometryKey {
       identical(this, other) ||
       other is _TextGeometryKey &&
           other.number == number &&
-          other.fontSize == fontSize &&
           other.fontFamily == fontFamily &&
           other.locale == locale;
 
   @override
-  int get hashCode => Object.hash(number, fontSize, fontFamily, locale);
+  int get hashCode => Object.hash(number, fontFamily, locale);
 }
 
 /// Cache key for color-specific [TextPainter] instances.
@@ -147,9 +149,9 @@ SerialNumberTextLayout layoutSerialNumberText({
   Locale? locale,
 }) {
   final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
+  final fontScale = _resolveSerialNumberFontScale(data.fontSize);
   final geometryKey = _TextGeometryKey(
     number: data.number,
-    fontSize: data.fontSize,
     fontFamily: sanitizedFamily,
     locale: locale,
   );
@@ -159,11 +161,10 @@ SerialNumberTextLayout layoutSerialNumberText({
   final cachedGeometry = _textGeometryCache.get(geometryKey);
   final cachedPainter = _textPainterCache.get(painterKey);
   if (cachedGeometry != null && cachedPainter != null) {
-    return SerialNumberTextLayout(
+    return _buildScaledTextLayout(
       painter: cachedPainter,
-      size: cachedGeometry.size,
-      lineHeight: cachedGeometry.lineHeight,
-      visualBounds: cachedGeometry.visualBounds,
+      geometry: cachedGeometry,
+      fontScale: fontScale,
     );
   }
 
@@ -173,7 +174,6 @@ SerialNumberTextLayout layoutSerialNumberText({
       _cacheTextPainter(
         key: painterKey,
         text: text,
-        fontSize: geometryKey.fontSize,
         sanitizedFamily: sanitizedFamily,
         locale: geometryKey.locale,
         color: color,
@@ -182,11 +182,49 @@ SerialNumberTextLayout layoutSerialNumberText({
       cachedGeometry ??
       _cacheTextGeometry(key: geometryKey, text: text, painter: painter);
 
+  return _buildScaledTextLayout(
+    painter: painter,
+    geometry: geometry,
+    fontScale: fontScale,
+  );
+}
+
+SerialNumberTextLayout _buildScaledTextLayout({
+  required TextPainter painter,
+  required _TextGeometry geometry,
+  required double fontScale,
+}) {
+  if (_doubleEquals(fontScale, 1)) {
+    return SerialNumberTextLayout(
+      painter: painter,
+      size: geometry.size,
+      lineHeight: geometry.lineHeight,
+      visualBounds: geometry.visualBounds,
+      paintScale: 1,
+    );
+  }
+
   return SerialNumberTextLayout(
     painter: painter,
-    size: geometry.size,
-    lineHeight: geometry.lineHeight,
-    visualBounds: geometry.visualBounds,
+    size: _scaleSize(geometry.size, fontScale),
+    lineHeight: geometry.lineHeight * fontScale,
+    visualBounds: _scaleRect(geometry.visualBounds, fontScale),
+    paintScale: fontScale,
+  );
+}
+
+Size _scaleSize(Size size, double scale) =>
+    Size(size.width * scale, size.height * scale);
+
+Rect? _scaleRect(Rect? rect, double scale) {
+  if (rect == null) {
+    return null;
+  }
+  return Rect.fromLTRB(
+    rect.left * scale,
+    rect.top * scale,
+    rect.right * scale,
+    rect.bottom * scale,
   );
 }
 
@@ -204,7 +242,6 @@ _TextGeometry _cacheTextGeometry({
 TextPainter _cacheTextPainter({
   required _TextPainterKey key,
   required String text,
-  required double fontSize,
   required String? sanitizedFamily,
   required Locale? locale,
   required Color color,
@@ -212,7 +249,6 @@ TextPainter _cacheTextPainter({
   _textPainterBuildCount += 1;
   final painter = _buildTextPainter(
     text: text,
-    fontSize: fontSize,
     sanitizedFamily: sanitizedFamily,
     locale: locale,
     color: color,
@@ -238,7 +274,6 @@ _TextGeometry _buildTextGeometry({
 
 TextPainter _buildTextPainter({
   required String text,
-  required double fontSize,
   required String? sanitizedFamily,
   required Locale? locale,
   required Color color,
@@ -246,7 +281,7 @@ TextPainter _buildTextPainter({
   final style = TextStyle(
     inherit: false,
     color: color,
-    fontSize: fontSize,
+    fontSize: _canonicalSerialNumberFontSize,
     fontFamily: sanitizedFamily,
     locale: locale,
     textBaseline: TextBaseline.alphabetic,
@@ -261,6 +296,19 @@ TextPainter _buildTextPainter({
     locale: locale,
   )..layout();
 }
+
+double _resolveSerialNumberFontScale(double fontSize) {
+  const baseSize = _canonicalSerialNumberFontSize;
+  if (baseSize <= 0 || !baseSize.isFinite) {
+    return 1;
+  }
+  if (!fontSize.isFinite || fontSize <= 0) {
+    return 0;
+  }
+  return fontSize / baseSize;
+}
+
+bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
 double resolveSerialNumberDiameter({
   required SerialNumberData data,
