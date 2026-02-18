@@ -49,6 +49,7 @@ import 'dynamic_layer_split.dart';
 import 'dynamic_scene_optimization.dart';
 import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
+import 'filter_style_state_change.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'free_draw_creation_state_change.dart';
 import 'free_draw_preview_painter.dart';
@@ -237,7 +238,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
   var _interactionPreviewRevision = 0;
+  var _filterStyleQualityRestoreRevision = 0;
   var _lightweightLinePreviewRevision = 0;
+  var _transientDynamicFilterElementIds = const <String>{};
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -932,6 +935,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String>{};
     }
     return Set<String>.unmodifiable(dynamicIds);
+  }
+
+  Set<String>? _mergeDynamicPreviewElementIds(
+    Set<String>? baseIds,
+    Set<String> transientIds,
+  ) {
+    if (transientIds.isEmpty) {
+      return baseIds;
+    }
+    if (baseIds == null || baseIds.isEmpty) {
+      return Set<String>.unmodifiable(transientIds);
+    }
+    final merged = <String>{...baseIds, ...transientIds};
+    return Set<String>.unmodifiable(merged);
   }
 
   Set<String> _resolveInteractionDynamicPreviewElementIds({
@@ -3002,6 +3019,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         baseDynamicPreviewElements,
       );
     }
+    final mergedDynamicPreviewElementIds = _mergeDynamicPreviewElementIds(
+      dynamicPreviewElementIds,
+      _transientDynamicFilterElementIds,
+    );
+    final preferFastFilterFallback =
+        _transientDynamicFilterElementIds.isNotEmpty;
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final hasFreeDrawPreview =
@@ -3024,7 +3047,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       staticPreviewElements: staticPreviewElements,
       dynamicPreviewElements: dynamicPreviewElements,
       dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
-      dynamicPreviewElementIds: dynamicPreviewElementIds,
+      dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
       optimizedDynamicElementIds: optimizedDynamicElementIds,
       optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
       dynamicLayerStartIndex: dynamicLayerStartIndex,
@@ -3032,6 +3055,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       creatingSnapshot: creatingSnapshot,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
+      preferFastFilterFallback: preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
   }
@@ -3192,6 +3216,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         scene.optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
     rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
+    preferFastFilterFallback: scene.preferFastFilterFallback,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
     locale: locale,
@@ -3219,6 +3244,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         scene.optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
     rendersWholeElementScene: scene.rendersWholeElementScene,
+    preferFastFilterFallback: false,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
     locale: locale,
@@ -3235,6 +3261,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required bool optimizedSceneHasPotentialOccluders,
     required int? dynamicLayerStartIndex,
     required bool rendersWholeElementScene,
+    required bool preferFastFilterFallback,
     required HighlightMaskLayer highlightMaskLayer,
     required HighlightMaskConfig highlightMaskConfig,
     required Locale? locale,
@@ -3262,6 +3289,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: dynamicLayerStartIndex,
     rendersWholeElementScene: rendersWholeElementScene,
+    preferFastFilterFallback: preferFastFilterFallback,
     scaleFactor: scaleFactor,
     selectionConfig: selectionConfig,
     boxSelectionConfig: widget.store.config.boxSelection,
@@ -3367,6 +3395,90 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     refreshStaticLayer: false,
     forcedPreviewElementsRevision: forcedPreviewElementsRevision,
   );
+
+  void _refreshDynamicLayerSnapshotForFilterStyleMutation(
+    DrawState state, {
+    required Set<String> changedFilterElementIds,
+  }) {
+    if (changedFilterElementIds.isEmpty) {
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+      return;
+    }
+    if (!_canRefreshFilterStyleMutationDynamically(
+      state: state,
+      changedFilterElementIds: changedFilterElementIds,
+    )) {
+      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+      return;
+    }
+    _transientDynamicFilterElementIds = Set<String>.unmodifiable(
+      changedFilterElementIds,
+    );
+    try {
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+    } finally {
+      _transientDynamicFilterElementIds = const <String>{};
+    }
+    _scheduleFilterStyleQualityRestore(state);
+  }
+
+  bool _canRefreshFilterStyleMutationDynamically({
+    required DrawState state,
+    required Set<String> changedFilterElementIds,
+  }) {
+    final renderKey = _dynamicLayerSnapshotNotifier.value.renderKey;
+    if (renderKey.rendersWholeElementScene) {
+      return true;
+    }
+
+    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
+    if (optimizedElementIds.isNotEmpty) {
+      for (final elementId in changedFilterElementIds) {
+        if (!optimizedElementIds.contains(elementId)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
+    if (dynamicLayerStartIndex == null) {
+      return false;
+    }
+
+    final document = state.domain.document;
+    for (final elementId in changedFilterElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null || orderIndex < dynamicLayerStartIndex) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _scheduleFilterStyleQualityRestore(DrawState state) {
+    final revision = ++_filterStyleQualityRestoreRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          revision != _filterStyleQualityRestoreRevision ||
+          !identical(_lastObservedState, state)) {
+        return;
+      }
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+    });
+  }
 
   /// Reuses dynamic-scene split metadata for interaction-only updates.
   ///
@@ -4366,6 +4478,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       // on every point.
       return;
     }
+    if (previousState != null) {
+      final filterStyleMutation = resolveFilterStyleMutation(
+        previous: previousState,
+        next: state,
+      );
+      if (filterStyleMutation != null) {
+        _refreshPointerVisualsForState(state);
+        _refreshDynamicLayerSnapshotForFilterStyleMutation(
+          state,
+          changedFilterElementIds: filterStyleMutation.changedFilterElementIds,
+        );
+        return;
+      }
+    }
     _refreshPointerVisualsForState(state);
     _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
   }
@@ -4526,6 +4652,7 @@ class _CanvasLayerSceneSnapshot {
     required this.creatingSnapshot,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.preferFastFilterFallback,
     required this.textRenderingCacheRevision,
   });
 
@@ -4540,6 +4667,7 @@ class _CanvasLayerSceneSnapshot {
   final CreatingElementSnapshot? creatingSnapshot;
   final HighlightMaskLayer highlightMaskLayer;
   final HighlightMaskConfig highlightMaskConfig;
+  final bool preferFastFilterFallback;
   final int textRenderingCacheRevision;
 }
 

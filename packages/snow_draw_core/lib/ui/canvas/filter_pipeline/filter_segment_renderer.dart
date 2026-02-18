@@ -171,6 +171,12 @@ class FilterSegmentRenderer {
   static const _fullQualityBlurDownsampleFactor = 1.0;
   static const _interactiveBlurDownsampleFactor = 0.75;
   static const _aggressiveBlurDownsampleFactor = 0.55;
+  static const _fullQualityBlurPixelBudget = 1073741824.0;
+  static const _interactiveBlurPixelBudget = 420000;
+  static const _aggressiveBlurPixelBudget = 240000;
+  static const _fullQualityColorMatrixPixelBudget = 1073741824.0;
+  static const _interactiveColorMatrixPixelBudget = 640000;
+  static const _aggressiveColorMatrixPixelBudget = 360000;
   static const _largeFilterCoverageThreshold = 0.35;
   static const _hugeFilterCoverageThreshold = 0.72;
   static const _largeCoverageViewportOutsetScale = 0.8;
@@ -179,6 +185,8 @@ class FilterSegmentRenderer {
   static const _hugeCoverageSigmaScale = 0.66;
   static const _largeCoverageBlurDownsampleScale = 0.82;
   static const _hugeCoverageBlurDownsampleScale = 0.64;
+  static const _largeCoveragePixelBudgetScale = 0.86;
+  static const _hugeCoveragePixelBudgetScale = 0.62;
   static const _largeCoverageColorMatrixDownsample = 0.72;
   static const _hugeCoverageColorMatrixDownsample = 0.58;
   static const _largeCoverageQuantizationScale = 1.5;
@@ -1385,14 +1393,15 @@ class FilterSegmentRenderer {
       ),
       coverageRatio: coverageRatio,
     );
+    final downsampleFactor = runtimePolicy.resolveBlurDownsampleFactor(
+      coverageRatio: coverageRatio,
+      layerBounds: layerBounds,
+    );
     final blurSigma = runtimePolicy.quantizeSigma(
       runtimePolicy.resolveBlurKernelSigma(
         logicalSigma,
-        coverageRatio: coverageRatio,
+        downsampleFactor: downsampleFactor,
       ),
-      coverageRatio: coverageRatio,
-    );
-    final downsampleFactor = runtimePolicy.resolveBlurDownsampleFactor(
       coverageRatio: coverageRatio,
     );
     final cacheKey = _FilterImageCacheKey(
@@ -1483,6 +1492,7 @@ class FilterSegmentRenderer {
   }) {
     final downsampleFactor = runtimePolicy.resolveColorMatrixDownsampleFactor(
       coverageRatio: coverageRatio,
+      layerBounds: layerBounds,
     );
     final imageFilter = downsampleFactor >= 1
         ? null
@@ -1645,6 +1655,16 @@ class FilterSegmentRenderer {
         : preferFastCpuFallback
         ? _interactiveBlurDownsampleFactor
         : _fullQualityBlurDownsampleFactor;
+    final blurPixelBudget = aggressiveCpuFallback
+        ? _aggressiveBlurPixelBudget.toDouble()
+        : preferFastCpuFallback
+        ? _interactiveBlurPixelBudget.toDouble()
+        : _fullQualityBlurPixelBudget;
+    final colorMatrixPixelBudget = aggressiveCpuFallback
+        ? _aggressiveColorMatrixPixelBudget.toDouble()
+        : preferFastCpuFallback
+        ? _interactiveColorMatrixPixelBudget.toDouble()
+        : _fullQualityColorMatrixPixelBudget;
 
     return _FilterRuntimePolicy(
       preferFastCpuFallback: preferFastCpuFallback,
@@ -1661,6 +1681,8 @@ class FilterSegmentRenderer {
       mosaicSizeQuantizationStep: mosaicQuantizationStep,
       mosaicOffsetQuantizationStep: offsetQuantizationStep,
       blurDownsampleFactor: blurDownsampleFactor,
+      blurPixelBudget: blurPixelBudget,
+      colorMatrixPixelBudget: colorMatrixPixelBudget,
       largeCoverageThreshold: _largeFilterCoverageThreshold,
       hugeCoverageThreshold: _hugeFilterCoverageThreshold,
       largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
@@ -1669,6 +1691,8 @@ class FilterSegmentRenderer {
       hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
       largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
       hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
+      largeCoveragePixelBudgetScale: _largeCoveragePixelBudgetScale,
+      hugeCoveragePixelBudgetScale: _hugeCoveragePixelBudgetScale,
       largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
       hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
       largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
@@ -1908,6 +1932,8 @@ class _FilterRuntimePolicy {
     required this.mosaicSizeQuantizationStep,
     required this.mosaicOffsetQuantizationStep,
     required this.blurDownsampleFactor,
+    required this.blurPixelBudget,
+    required this.colorMatrixPixelBudget,
     required this.largeCoverageThreshold,
     required this.hugeCoverageThreshold,
     required this.largeCoverageViewportOutsetScale,
@@ -1916,6 +1942,8 @@ class _FilterRuntimePolicy {
     required this.hugeCoverageSigmaScale,
     required this.largeCoverageBlurDownsampleScale,
     required this.hugeCoverageBlurDownsampleScale,
+    required this.largeCoveragePixelBudgetScale,
+    required this.hugeCoveragePixelBudgetScale,
     required this.largeCoverageColorMatrixDownsample,
     required this.hugeCoverageColorMatrixDownsample,
     required this.largeCoverageQuantizationScale,
@@ -1934,6 +1962,8 @@ class _FilterRuntimePolicy {
   final double mosaicSizeQuantizationStep;
   final double mosaicOffsetQuantizationStep;
   final double blurDownsampleFactor;
+  final double blurPixelBudget;
+  final double colorMatrixPixelBudget;
   final double largeCoverageThreshold;
   final double hugeCoverageThreshold;
   final double largeCoverageViewportOutsetScale;
@@ -1942,6 +1972,8 @@ class _FilterRuntimePolicy {
   final double hugeCoverageSigmaScale;
   final double largeCoverageBlurDownsampleScale;
   final double hugeCoverageBlurDownsampleScale;
+  final double largeCoveragePixelBudgetScale;
+  final double hugeCoveragePixelBudgetScale;
   final double largeCoverageColorMatrixDownsample;
   final double hugeCoverageColorMatrixDownsample;
   final double largeCoverageQuantizationScale;
@@ -1991,33 +2023,40 @@ class _FilterRuntimePolicy {
     return _clampPositive(baseMaxSigma * scale, fallback: baseMaxSigma);
   }
 
-  double resolveBlurDownsampleFactor({required double coverageRatio}) {
-    if (!preferFastCpuFallback) {
-      return blurDownsampleFactor.clamp(0.1, 1.0);
-    }
-    final scale = switch (_resolveCoverageTier(coverageRatio)) {
-      _FilterCoverageTier.compact => 1.0,
-      _FilterCoverageTier.large => largeCoverageBlurDownsampleScale,
-      _FilterCoverageTier.huge => hugeCoverageBlurDownsampleScale,
-    };
-    final scaled = blurDownsampleFactor * scale;
-    final lowerBound = aggressiveCpuFallback
-        ? 0.25
-        : preferFastCpuFallback
-        ? 0.4
-        : 0.8;
-    return scaled.clamp(lowerBound, 1.0);
+  double resolveBlurDownsampleFactor({
+    required double coverageRatio,
+    Rect? layerBounds,
+  }) {
+    final baseFactor = _resolveBlurDownsampleFactorBase(
+      coverageRatio: coverageRatio,
+    );
+    final targetPixels = _resolveTargetPixels(
+      coverageRatio: coverageRatio,
+      baseBudget: blurPixelBudget,
+    );
+    return _applyAreaDownsampleBudget(
+      downsampleFactor: baseFactor,
+      layerBounds: layerBounds,
+      targetPixels: targetPixels,
+    );
   }
 
-  double resolveColorMatrixDownsampleFactor({required double coverageRatio}) {
-    if (!preferFastCpuFallback) {
-      return 1;
-    }
-    return switch (_resolveCoverageTier(coverageRatio)) {
-      _FilterCoverageTier.compact => 1,
-      _FilterCoverageTier.large => largeCoverageColorMatrixDownsample,
-      _FilterCoverageTier.huge => hugeCoverageColorMatrixDownsample,
-    };
+  double resolveColorMatrixDownsampleFactor({
+    required double coverageRatio,
+    Rect? layerBounds,
+  }) {
+    final baseFactor = _resolveColorMatrixDownsampleFactorBase(
+      coverageRatio: coverageRatio,
+    );
+    final targetPixels = _resolveTargetPixels(
+      coverageRatio: coverageRatio,
+      baseBudget: colorMatrixPixelBudget,
+    );
+    return _applyAreaDownsampleBudget(
+      downsampleFactor: baseFactor,
+      layerBounds: layerBounds,
+      targetPixels: targetPixels,
+    );
   }
 
   double quantizeSigma(double sigma, {double coverageRatio = 0}) => _quantize(
@@ -2047,11 +2086,9 @@ class _FilterRuntimePolicy {
 
   double resolveBlurKernelSigma(
     double logicalSigma, {
-    double coverageRatio = 0,
+    required double downsampleFactor,
   }) {
-    final downsample = resolveBlurDownsampleFactor(
-      coverageRatio: coverageRatio,
-    );
+    final downsample = downsampleFactor;
     if (downsample >= 1 || !downsample.isFinite) {
       return logicalSigma;
     }
@@ -2077,6 +2114,77 @@ class _FilterRuntimePolicy {
       _FilterCoverageTier.large => largeCoverageQuantizationScale,
       _FilterCoverageTier.huge => hugeCoverageQuantizationScale,
     };
+  }
+
+  double _resolveBlurDownsampleFactorBase({required double coverageRatio}) {
+    if (!preferFastCpuFallback) {
+      return blurDownsampleFactor.clamp(0.1, 1.0);
+    }
+    final scale = switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1.0,
+      _FilterCoverageTier.large => largeCoverageBlurDownsampleScale,
+      _FilterCoverageTier.huge => hugeCoverageBlurDownsampleScale,
+    };
+    final scaled = blurDownsampleFactor * scale;
+    final lowerBound = aggressiveCpuFallback
+        ? 0.25
+        : preferFastCpuFallback
+        ? 0.4
+        : 0.8;
+    return scaled.clamp(lowerBound, 1.0);
+  }
+
+  double _resolveColorMatrixDownsampleFactorBase({
+    required double coverageRatio,
+  }) {
+    if (!preferFastCpuFallback) {
+      return 1;
+    }
+    return switch (_resolveCoverageTier(coverageRatio)) {
+      _FilterCoverageTier.compact => 1,
+      _FilterCoverageTier.large => largeCoverageColorMatrixDownsample,
+      _FilterCoverageTier.huge => hugeCoverageColorMatrixDownsample,
+    };
+  }
+
+  double _resolveTargetPixels({
+    required double coverageRatio,
+    required double baseBudget,
+  }) {
+    if (!baseBudget.isFinite || baseBudget <= 0) {
+      return baseBudget;
+    }
+    return baseBudget * _resolvePixelBudgetScale(coverageRatio);
+  }
+
+  double _resolvePixelBudgetScale(double coverageRatio) =>
+      switch (_resolveCoverageTier(coverageRatio)) {
+        _FilterCoverageTier.compact => 1.0,
+        _FilterCoverageTier.large => largeCoveragePixelBudgetScale,
+        _FilterCoverageTier.huge => hugeCoveragePixelBudgetScale,
+      };
+
+  double _applyAreaDownsampleBudget({
+    required double downsampleFactor,
+    required Rect? layerBounds,
+    required double targetPixels,
+  }) {
+    final normalizedFactor = downsampleFactor.clamp(0.1, 1.0);
+    if (!targetPixels.isFinite ||
+        targetPixels <= 0 ||
+        layerBounds == null ||
+        layerBounds.isEmpty) {
+      return normalizedFactor;
+    }
+    final layerArea = layerBounds.width * layerBounds.height;
+    if (!layerArea.isFinite || layerArea <= 0) {
+      return normalizedFactor;
+    }
+    final areaBudgetFactor = math.sqrt(targetPixels / layerArea);
+    if (!areaBudgetFactor.isFinite || areaBudgetFactor <= 0) {
+      return normalizedFactor;
+    }
+    return math.min(normalizedFactor, areaBudgetFactor.clamp(0.1, 1.0));
   }
 
   double _clampPositive(double value, {required double fallback}) {

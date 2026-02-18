@@ -216,6 +216,7 @@ class DynamicCanvasRenderKey {
     required this.highlightMaskConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    this.preferFastFilterFallback = false,
     this.previewElementsRevision,
     this.dynamicPreviewElementIds,
     this.locale,
@@ -295,6 +296,12 @@ class DynamicCanvasRenderKey {
   /// Whether dynamic painter renders the whole element scene.
   final bool rendersWholeElementScene;
 
+  /// Whether filter rendering should prioritize responsiveness this frame.
+  ///
+  /// This hint is used for high-frequency filter style drags where full
+  /// fidelity often falls back to CPU rendering and hurts input latency.
+  final bool preferFastFilterFallback;
+
   /// Canvas scale factor.
   final double scaleFactor;
 
@@ -349,6 +356,7 @@ class DynamicCanvasRenderKey {
               optimizedSceneHasPotentialOccluders &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
           other.rendersWholeElementScene == rendersWholeElementScene &&
+          other.preferFastFilterFallback == preferFastFilterFallback &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
           other.boxSelectionConfig == boxSelectionConfig &&
@@ -380,6 +388,7 @@ class DynamicCanvasRenderKey {
     optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex,
     rendersWholeElementScene,
+    preferFastFilterFallback,
     scaleFactor,
     selectionConfig,
     boxSelectionConfig,
