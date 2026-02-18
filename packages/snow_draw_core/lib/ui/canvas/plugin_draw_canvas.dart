@@ -3004,14 +3004,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return savedElementCount >= _minOptimizationSavedElementCount;
   }
 
-  bool _shouldForceLocalizedOptimization(InteractionState interaction) {
-    if (interaction is! EditingState ||
-        interaction.context is! ArrowPointEditContext) {
-      return false;
-    }
-    final context = interaction.context as ArrowPointEditContext;
-    return !context.isLineElement;
-  }
+  // Arrow-point interactions (including line-point edits) mutate a very small
+  // dynamic subset. Forcing localized optimization avoids repeatedly painting
+  // large dynamic tails when the selected element sits low in z.
+  bool _shouldForceLocalizedOptimization(InteractionState interaction) =>
+      interaction is EditingState &&
+      interaction.context is ArrowPointEditContext;
 
   HighlightMaskLayer _resolveHighlightMaskLayer({
     required DrawStateView stateView,

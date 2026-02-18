@@ -359,6 +359,69 @@ void main() {
     });
 
     test(
+      'line creation re-evaluates candidate when prior lookup had no match',
+      () {
+        const target = ElementState(
+          id: 'target',
+          rect: DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: RectangleData(),
+        );
+        final counter = _HitTestCounter();
+        final document = _CountingDocumentState(
+          elements: const [target],
+          counter: counter,
+        );
+        final state = _stateWith(document);
+
+        const strategy = ArrowCreationStrategy();
+        const start = DrawPoint(x: 80, y: 80);
+        final startResult = strategy.start(
+          data: const LineData(),
+          startPosition: start,
+        );
+        var creating = _creatingState(
+          elementId: 'line',
+          startPosition: start,
+          startResult: startResult,
+        );
+
+        counter.reset();
+        final firstUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 186, y: 170),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        creating = _applyUpdate(creating, firstUpdate);
+        final firstData = firstUpdate.data as LineData;
+        final callsAfterFirstUpdate = counter.value;
+
+        final secondUpdate = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creating,
+          currentPosition: const DrawPoint(x: 190, y: 170),
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        final secondData = secondUpdate.data as LineData;
+        final callsAfterSecondUpdate = counter.value;
+
+        expect(firstData.endBinding, isNull);
+        expect(secondData.endBinding, isNotNull);
+        expect(callsAfterFirstUpdate, greaterThan(0));
+        expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+      },
+    );
+
+    test(
       'line creation refreshes empty target cache when entering bind range',
       () {
         const target = ElementState(

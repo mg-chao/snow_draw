@@ -377,6 +377,68 @@ void main() {
       },
     );
 
+    test('line endpoint drag re-evaluates candidate when '
+        'prior lookup had no match', () {
+      final line = _lineElement(
+        id: 'line',
+        points: const [DrawPoint(x: 120, y: 160), DrawPoint(x: 320, y: 160)],
+      );
+      final target = _rectangleElement(
+        id: 'target',
+        rect: const DrawRect(minX: 200, minY: 120, maxX: 280, maxY: 220),
+      );
+      final counter = _HitTestCounter();
+      final document = _CountingDocumentState(
+        elements: [target, line],
+        counter: counter,
+      );
+      final state = _stateWith(document, selectedIds: const {'line'});
+
+      const operation = ArrowPointOperation();
+      final context = operation.createContext(
+        state: state,
+        position: const DrawPoint(x: 120, y: 160),
+        params: const ArrowPointOperationParams(
+          elementId: 'line',
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 0,
+        ),
+      );
+      final initialTransform = operation.initialTransform(
+        state: state,
+        context: context,
+        startPosition: const DrawPoint(x: 120, y: 160),
+      );
+
+      counter.reset();
+      final first = operation.update(
+        state: state,
+        context: context,
+        transform: initialTransform,
+        currentPosition: const DrawPoint(x: 186, y: 170),
+        modifiers: const EditModifiers(),
+        config: DrawConfig.defaultConfig,
+      );
+      final firstTransform = first.transform as ArrowPointTransform;
+      final callsAfterFirstUpdate = counter.value;
+
+      final second = operation.update(
+        state: state,
+        context: context,
+        transform: firstTransform,
+        currentPosition: const DrawPoint(x: 190, y: 170),
+        modifiers: const EditModifiers(),
+        config: DrawConfig.defaultConfig,
+      );
+      final callsAfterSecondUpdate = counter.value;
+      final secondTransform = second.transform as ArrowPointTransform;
+
+      expect(firstTransform.startBinding, isNull);
+      expect(secondTransform.startBinding, isNotNull);
+      expect(callsAfterFirstUpdate, greaterThan(0));
+      expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
+    });
+
     test(
       'line endpoint drag refreshes empty cache when entering bind range',
       () {

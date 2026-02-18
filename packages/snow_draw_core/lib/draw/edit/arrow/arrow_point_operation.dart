@@ -42,6 +42,10 @@ import '../core/standard_finish_mixin.dart';
 
 const _defaultBindingCacheTargetThresholdFactor = 0.9;
 const _linePointBindingCacheTargetThresholdFactor = 0.9;
+const _defaultBindingCandidateCacheThresholdFactor = 0.35;
+const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;
+const _linePointBindingCandidateCacheThresholdFactor = 0.45;
+const _linePointBindingCandidateReferenceCacheThresholdFactor = 0.45;
 
 class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   const ArrowPointOperation();
@@ -1056,6 +1060,12 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
   final targetCacheThresholdFactor = context.isLineElement
       ? _linePointBindingCacheTargetThresholdFactor
       : _defaultBindingCacheTargetThresholdFactor;
+  final candidateCacheThresholdFactor = context.isLineElement
+      ? _linePointBindingCandidateCacheThresholdFactor
+      : _defaultBindingCandidateCacheThresholdFactor;
+  final candidateReferenceThresholdFactor = context.isLineElement
+      ? _linePointBindingCandidateReferenceCacheThresholdFactor
+      : _defaultBindingCandidateReferenceCacheThresholdFactor;
   return ArrowBindingSnapper.resolveEndpointBindingCandidate(
     state: state,
     worldPoint: worldTarget,
@@ -1069,6 +1079,8 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
     referencePoint: referencePoint,
     cache: context._bindingTargetCache,
     targetCacheThresholdFactor: targetCacheThresholdFactor,
+    candidateCacheThresholdFactor: candidateCacheThresholdFactor,
+    candidateCacheReferenceThresholdFactor: candidateReferenceThresholdFactor,
     excludedElementId: context.elementId,
   );
 }

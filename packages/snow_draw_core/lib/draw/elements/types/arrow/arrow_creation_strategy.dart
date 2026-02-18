@@ -478,6 +478,9 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     referencePoint: lineEndpoints.segmentStart,
     targetCache: sessionData.endTargetCache,
+    candidateCacheThresholdFactor: _lineBindingCandidateCacheThresholdFactor,
+    candidateCacheReferenceThresholdFactor:
+        _lineBindingCandidateReferenceCacheThresholdFactor,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
@@ -539,6 +542,10 @@ CreationUpdateResult _updateLine({
 const _loopCloseToleranceMultiplier = 1.5;
 const _defaultBindingCacheTargetThresholdFactor = 0.9;
 const _defaultBindingCacheEmptyThresholdFactor = 0.75;
+const _defaultBindingCandidateCacheThresholdFactor = 0.35;
+const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;
+const _lineBindingCandidateCacheThresholdFactor = 0.45;
+const _lineBindingCandidateReferenceCacheThresholdFactor = 0.45;
 
 _LineEndpointResolution _resolveLineEndpoints({
   required DrawState state,
@@ -754,6 +761,10 @@ _BindingSnapResult _snapBindingPoint({
   ArrowBindingTargetCache? targetCache,
   double targetCacheThresholdFactor = _defaultBindingCacheTargetThresholdFactor,
   double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
+  double candidateCacheThresholdFactor =
+      _defaultBindingCandidateCacheThresholdFactor,
+  double candidateCacheReferenceThresholdFactor =
+      _defaultBindingCandidateReferenceCacheThresholdFactor,
 }) {
   final snapConfig = config.snap;
   final shouldLookupBindings = ArrowBindingSnapper.shouldAttemptBinding(
@@ -785,6 +796,9 @@ _BindingSnapResult _snapBindingPoint({
     cache: targetCache,
     targetCacheThresholdFactor: targetCacheThresholdFactor,
     emptyCacheThresholdFactor: emptyCacheThresholdFactor,
+    candidateCacheThresholdFactor: candidateCacheThresholdFactor,
+    candidateCacheReferenceThresholdFactor:
+        candidateCacheReferenceThresholdFactor,
   );
   if (candidate == null) {
     return _BindingSnapResult(position: position);

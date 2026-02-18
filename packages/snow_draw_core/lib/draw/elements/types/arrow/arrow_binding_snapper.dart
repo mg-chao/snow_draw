@@ -9,6 +9,8 @@ import 'arrow_binding_target_cache.dart';
 
 const _bindingCacheTargetThresholdFactor = 0.9;
 const _bindingCacheEmptyThresholdFactor = 0.75;
+const _bindingCacheCandidateThresholdFactor = 0.35;
+const _bindingCacheCandidateReferenceThresholdFactor = 0.35;
 const _preferredBindingStickinessFactor = 0.3;
 
 /// Shared arrow-binding helpers used by create and edit interactions.
@@ -170,6 +172,10 @@ class ArrowBindingSnapper {
     String? excludedElementId,
     double targetCacheThresholdFactor = _bindingCacheTargetThresholdFactor,
     double emptyCacheThresholdFactor = _bindingCacheEmptyThresholdFactor,
+    double candidateCacheThresholdFactor =
+        _bindingCacheCandidateThresholdFactor,
+    double candidateCacheReferenceThresholdFactor =
+        _bindingCacheCandidateReferenceThresholdFactor,
   }) {
     if (snapDistance <= 0 || !shouldLookupBindings) {
       cache?.reset();
@@ -178,6 +184,26 @@ class ArrowBindingSnapper {
     if (!allowNewBinding && preferredBinding == null) {
       cache?.reset();
       return null;
+    }
+
+    final elementsVersion = state.domain.document.elementsVersion;
+    final cachedCandidate = cache?.resolveCandidate(
+      position: worldPoint,
+      referencePoint: referencePoint,
+      positionThreshold: snapDistance * candidateCacheThresholdFactor,
+      referenceThreshold: snapDistance * candidateCacheReferenceThresholdFactor,
+      elementsVersion: elementsVersion,
+      snapDistance: snapDistance,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      hasBindableTargets: hasBindableTargets,
+      preferredBinding: preferredBinding,
+      excludedElementId: excludedElementId,
+    );
+    if (cachedCandidate != null && cachedCandidate.hasValue) {
+      return cachedCandidate.value;
     }
 
     final preferredDirect = resolvePreferredBindingCandidateDirect(
@@ -192,11 +218,40 @@ class ArrowBindingSnapper {
       excludedElementId: excludedElementId,
     );
     if (preferredDirect != null) {
+      _cacheEndpointCandidate(
+        cache: cache,
+        worldPoint: worldPoint,
+        referencePoint: referencePoint,
+        elementsVersion: elementsVersion,
+        snapDistance: snapDistance,
+        arrowType: arrowType,
+        arrowheadStyle: arrowheadStyle,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        hasBindableTargets: hasBindableTargets,
+        preferredBinding: preferredBinding,
+        excludedElementId: excludedElementId,
+        value: preferredDirect,
+      );
       return preferredDirect;
     }
 
     if (!hasBindableTargets) {
-      cache?.reset();
+      _cacheEndpointCandidate(
+        cache: cache,
+        worldPoint: worldPoint,
+        referencePoint: referencePoint,
+        elementsVersion: elementsVersion,
+        snapDistance: snapDistance,
+        arrowType: arrowType,
+        arrowheadStyle: arrowheadStyle,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        hasBindableTargets: hasBindableTargets,
+        preferredBinding: preferredBinding,
+        excludedElementId: excludedElementId,
+        value: null,
+      );
       return null;
     }
 
@@ -213,6 +268,21 @@ class ArrowBindingSnapper {
       emptyCacheThresholdFactor: emptyCacheThresholdFactor,
     );
     if (targets.isEmpty) {
+      _cacheEndpointCandidate(
+        cache: cache,
+        worldPoint: worldPoint,
+        referencePoint: referencePoint,
+        elementsVersion: elementsVersion,
+        snapDistance: snapDistance,
+        arrowType: arrowType,
+        arrowheadStyle: arrowheadStyle,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        hasBindableTargets: hasBindableTargets,
+        preferredBinding: preferredBinding,
+        excludedElementId: excludedElementId,
+        value: null,
+      );
       return null;
     }
 
@@ -227,11 +297,26 @@ class ArrowBindingSnapper {
       referencePoint: referencePoint,
     );
     if (preferredFromTargets != null) {
+      _cacheEndpointCandidate(
+        cache: cache,
+        worldPoint: worldPoint,
+        referencePoint: referencePoint,
+        elementsVersion: elementsVersion,
+        snapDistance: snapDistance,
+        arrowType: arrowType,
+        arrowheadStyle: arrowheadStyle,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        hasBindableTargets: hasBindableTargets,
+        preferredBinding: preferredBinding,
+        excludedElementId: excludedElementId,
+        value: preferredFromTargets,
+      );
       return preferredFromTargets;
     }
 
     if (arrowType == ArrowType.elbow) {
-      return ArrowBindingUtils.resolveElbowBindingCandidate(
+      final elbowCandidate = ArrowBindingUtils.resolveElbowBindingCandidate(
         worldPoint: worldPoint,
         targets: targets,
         snapDistance: snapDistance,
@@ -239,9 +324,25 @@ class ArrowBindingSnapper {
         allowNewBinding: allowNewBinding,
         hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
       );
+      _cacheEndpointCandidate(
+        cache: cache,
+        worldPoint: worldPoint,
+        referencePoint: referencePoint,
+        elementsVersion: elementsVersion,
+        snapDistance: snapDistance,
+        arrowType: arrowType,
+        arrowheadStyle: arrowheadStyle,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        hasBindableTargets: hasBindableTargets,
+        preferredBinding: preferredBinding,
+        excludedElementId: excludedElementId,
+        value: elbowCandidate,
+      );
+      return elbowCandidate;
     }
 
-    return ArrowBindingUtils.resolveBindingCandidate(
+    final candidate = ArrowBindingUtils.resolveBindingCandidate(
       worldPoint: worldPoint,
       targets: targets,
       snapDistance: snapDistance,
@@ -249,6 +350,22 @@ class ArrowBindingSnapper {
       allowNewBinding: allowNewBinding,
       referencePoint: referencePoint,
     );
+    _cacheEndpointCandidate(
+      cache: cache,
+      worldPoint: worldPoint,
+      referencePoint: referencePoint,
+      elementsVersion: elementsVersion,
+      snapDistance: snapDistance,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      hasBindableTargets: hasBindableTargets,
+      preferredBinding: preferredBinding,
+      excludedElementId: excludedElementId,
+      value: candidate,
+    );
+    return candidate;
   }
 
   /// Resolves nearby bindable targets using [cache] when possible.
@@ -305,6 +422,37 @@ class ArrowBindingSnapper {
     );
     return targets;
   }
+}
+
+void _cacheEndpointCandidate({
+  required ArrowBindingTargetCache? cache,
+  required DrawPoint worldPoint,
+  required DrawPoint? referencePoint,
+  required int elementsVersion,
+  required double snapDistance,
+  required ArrowType arrowType,
+  required ArrowheadStyle arrowheadStyle,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required bool hasBindableTargets,
+  required ArrowBinding? preferredBinding,
+  required ArrowBindingResult? value,
+  String? excludedElementId,
+}) {
+  cache?.cacheCandidate(
+    position: worldPoint,
+    referencePoint: referencePoint,
+    elementsVersion: elementsVersion,
+    snapDistance: snapDistance,
+    arrowType: arrowType,
+    arrowheadStyle: arrowheadStyle,
+    shouldLookupBindings: shouldLookupBindings,
+    allowNewBinding: allowNewBinding,
+    hasBindableTargets: hasBindableTargets,
+    preferredBinding: preferredBinding,
+    excludedElementId: excludedElementId,
+    value: value,
+  );
 }
 
 List<ElementState> _resolveBindingTargets({
