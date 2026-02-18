@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../draw/config/draw_config.dart';
-import '../../draw/models/camera_state.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 
 /// Snapshot consumed by the watermark overlay painter.
 @immutable
 class WatermarkCanvasLayerState {
-  const WatermarkCanvasLayerState({
-    required this.camera,
-    required this.scaleFactor,
-    required this.config,
-  });
-
-  /// Current camera transform used by the canvas.
-  final CameraState camera;
-
-  /// Effective canvas scale factor.
-  final double scaleFactor;
+  const WatermarkCanvasLayerState({required this.config});
 
   /// Watermark settings snapshot.
   final WatermarkConfig config;
@@ -29,13 +18,10 @@ class WatermarkCanvasLayerState {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is WatermarkCanvasLayerState &&
-          other.camera == camera &&
-          other.scaleFactor == scaleFactor &&
-          other.config == config;
+      other is WatermarkCanvasLayerState && other.config == config;
 
   @override
-  int get hashCode => Object.hash(camera, scaleFactor, config);
+  int get hashCode => config.hashCode;
 }
 
 /// Mutable state holder that repaints the watermark layer on demand.
@@ -79,13 +65,7 @@ class WatermarkCanvasPainter extends CustomPainter {
       return;
     }
 
-    paintWatermark(
-      canvas: canvas,
-      viewportSize: size,
-      config: state.config,
-      scaleFactor: state.scaleFactor,
-      cameraPosition: Offset(state.camera.position.x, state.camera.position.y),
-    );
+    paintWatermark(canvas: canvas, viewportSize: size, config: state.config);
   }
 
   @override

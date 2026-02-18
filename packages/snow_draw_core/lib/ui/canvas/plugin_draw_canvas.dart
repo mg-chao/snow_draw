@@ -436,8 +436,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     _watermarkLayerController = WatermarkCanvasLayerController(
       initialState: WatermarkCanvasLayerState(
-        camera: initialState.application.view.camera,
-        scaleFactor: _effectiveScaleFactor(),
         config: _resolveEffectiveWatermarkConfig(initialState),
       ),
     );
@@ -617,7 +615,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final stateView = _buildStateView(widget.store.state);
     final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
-    _syncWatermarkLayerState(stateView.state, scaleFactor: scaleFactor);
     final locale = Localizations.maybeLocaleOf(context);
     final textOverlay = _buildTextEditorOverlay(
       scaleFactor: scaleFactor,
@@ -2799,11 +2796,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widget.watermarkPreviewListenable?.value ??
       state.domain.document.globalElements.watermark;
 
-  void _syncWatermarkLayerState(DrawState state, {double? scaleFactor}) {
+  void _syncWatermarkLayerState(DrawState state) {
     _watermarkLayerController.update(
       WatermarkCanvasLayerState(
-        camera: state.application.view.camera,
-        scaleFactor: scaleFactor ?? _effectiveScaleFactor(),
         config: _resolveEffectiveWatermarkConfig(state),
       ),
     );
@@ -4163,7 +4158,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
+    final watermarkChanged =
+        previousState == null ||
+        previousState.domain.document.globalElements.watermark !=
+            state.domain.document.globalElements.watermark;
     if (previousState != null &&
+        watermarkChanged &&
         _isWatermarkOnlyStateChange(previousState, state)) {
       _syncWatermarkLayerState(state);
       return;
@@ -4194,7 +4194,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     _syncFreeDrawPreviewLayerState(state);
-    _syncWatermarkLayerState(state);
+    if (watermarkChanged) {
+      _syncWatermarkLayerState(state);
+    }
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
       _refreshPointerVisualsForState(state);

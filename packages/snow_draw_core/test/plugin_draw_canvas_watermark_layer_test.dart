@@ -137,6 +137,36 @@ void main() {
     expect(watermarkAfter.controller.state.isVisible, isFalse);
   });
 
+  testWidgets('camera-only updates do not mutate watermark layer state', (
+    tester,
+  ) async {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+    final context = DrawContext.withDefaults(elementRegistry: registry);
+    final store = DefaultDrawStore(context: context);
+    addTearDown(store.dispose);
+
+    await store.dispatch(
+      const UpdateGlobalElements(
+        watermark: WatermarkConfig(text: 'LOCKED', opacity: 0.2),
+      ),
+    );
+    await _pumpCanvas(tester: tester, store: store);
+
+    final watermarkBefore = _watermarkPainter(tester);
+    final stateBefore = watermarkBefore.controller.state;
+
+    await store.dispatch(const MoveCamera(dx: 32, dy: -24));
+    await tester.pump();
+
+    final watermarkAfter = _watermarkPainter(tester);
+    final stateAfter = watermarkAfter.controller.state;
+
+    expect(identical(watermarkBefore, watermarkAfter), isTrue);
+    expect(identical(stateBefore, stateAfter), isTrue);
+    expect(stateAfter.config.text, 'LOCKED');
+  });
+
   testWidgets('watermark updates keep static scene stable '
       'while refreshing dynamic overlays for selection changes', (
     tester,

@@ -26,6 +26,7 @@ const _maxWatermarkTileExtent = 4096;
 /// consecutive frames.
 const double _sizeBucket = 64;
 const _opaqueWhite = Color(0xFFFFFFFF);
+const _minVisibleAlpha = 0.004;
 
 final _identityMatrix4 = Float64List.fromList(<double>[
   1,
@@ -98,6 +99,7 @@ class _WatermarkRenderConfig {
     required this.layout,
     required this.color,
     required this.effectiveAlpha,
+    required this.rotationRadians,
   });
 
   factory _WatermarkRenderConfig.fromConfig(WatermarkConfig config) {
@@ -106,14 +108,17 @@ class _WatermarkRenderConfig {
       layout: _WatermarkLayoutConfig.fromConfig(config),
       color: config.color.withValues(alpha: effectiveAlpha),
       effectiveAlpha: effectiveAlpha,
+      rotationRadians: config.angle * math.pi / 180,
     );
   }
 
   final _WatermarkLayoutConfig layout;
   final Color color;
   final double effectiveAlpha;
+  final double rotationRadians;
 
-  bool get isVisible => layout.text.isNotEmpty && effectiveAlpha >= 0.004;
+  bool get isVisible =>
+      layout.text.isNotEmpty && effectiveAlpha >= _minVisibleAlpha;
 
   @override
   bool operator ==(Object other) =>
@@ -121,10 +126,12 @@ class _WatermarkRenderConfig {
       other is _WatermarkRenderConfig &&
           other.layout == layout &&
           other.color == color &&
-          other.effectiveAlpha == effectiveAlpha;
+          other.effectiveAlpha == effectiveAlpha &&
+          other.rotationRadians == rotationRadians;
 
   @override
-  int get hashCode => Object.hash(layout, color, effectiveAlpha);
+  int get hashCode =>
+      Object.hash(layout, color, effectiveAlpha, rotationRadians);
 }
 
 @immutable
@@ -132,6 +139,40 @@ class _WatermarkTileSnapshot {
   const _WatermarkTileSnapshot({required this.image});
 
   final ui.Image image;
+}
+
+@immutable
+class _WatermarkViewportGeometry {
+  const _WatermarkViewportGeometry({
+    required this.viewportSize,
+    required this.layerRect,
+    required this.center,
+    required this.cullRect,
+  });
+
+  factory _WatermarkViewportGeometry.fromSize(Size viewportSize) {
+    final layerRect = Offset.zero & viewportSize;
+    final center = layerRect.center;
+    final diagonal = math.sqrt(
+      viewportSize.width * viewportSize.width +
+          viewportSize.height * viewportSize.height,
+    );
+    return _WatermarkViewportGeometry(
+      viewportSize: viewportSize,
+      layerRect: layerRect,
+      center: center,
+      cullRect: Rect.fromCenter(
+        center: center,
+        width: diagonal,
+        height: diagonal,
+      ),
+    );
+  }
+
+  final Size viewportSize;
+  final Rect layerRect;
+  final Offset center;
+  final Rect cullRect;
 }
 
 /// Caches watermark paint resources so repeated frames avoid text layout.
@@ -146,6 +187,10 @@ class _WatermarkTileSnapshot {
 /// opacity interactions at full speed in both shader and picture fallback
 /// modes.
 class WatermarkPainterCache {
+  WatermarkConfig? _renderSourceConfig;
+  _WatermarkRenderConfig? _renderConfig;
+  _WatermarkViewportGeometry? _viewportGeometry;
+
   _WatermarkLayoutConfig? _tileConfig;
   ui.Image? _tileImage;
   ui.Shader? _tileShader;
@@ -155,6 +200,8 @@ class WatermarkPainterCache {
   _WatermarkLayoutConfig? _fallbackLayoutConfig;
   Size? _fallbackViewportSize;
   ui.Picture? _picture;
+  Color? _fallbackTintColor;
+  Paint? _fallbackTintPaint;
   var _tileRebuildCount = 0;
   var _fallbackPictureBuildCount = 0;
 
@@ -172,10 +219,8 @@ class WatermarkPainterCache {
     required Canvas canvas,
     required Size viewportSize,
     required WatermarkConfig config,
-    double scaleFactor = 1,
-    Offset cameraPosition = Offset.zero,
   }) {
-    final renderConfig = _WatermarkRenderConfig.fromConfig(config);
+    final renderConfig = _resolveRenderConfig(config);
     if (!renderConfig.isVisible) {
       return;
     }
@@ -183,33 +228,18 @@ class WatermarkPainterCache {
       return;
     }
 
-    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
-
-    // The caller's canvas is in world space (translated + scaled).
-    // Undo that so the watermark renders in screen pixels.
-    canvas
-      ..save()
-      ..scale(1 / scale, 1 / scale)
-      ..translate(-cameraPosition.dx, -cameraPosition.dy);
-
-    final layerRect = Offset.zero & viewportSize;
-    final center = layerRect.center;
-    final diagonal = math.sqrt(
-      viewportSize.width * viewportSize.width +
-          viewportSize.height * viewportSize.height,
-    );
-    final cullRect = Rect.fromCenter(
-      center: center,
-      width: diagonal,
-      height: diagonal,
-    );
+    final viewportGeometry = _resolveViewportGeometry(viewportSize);
+    final layerRect = viewportGeometry.layerRect;
+    final center = viewportGeometry.center;
+    final cullRect = viewportGeometry.cullRect;
 
     // Clip to the viewport so rotated tiles do not bleed outside.
     canvas
+      ..save()
       ..clipRect(layerRect)
       ..save()
       ..translate(center.dx, center.dy)
-      ..rotate(config.angle * math.pi / 180)
+      ..rotate(renderConfig.rotationRadians)
       ..translate(-center.dx, -center.dy);
 
     final tilePaint = _resolveTilePaint(renderConfig);
@@ -222,9 +252,8 @@ class WatermarkPainterCache {
         layoutConfig: renderConfig.layout,
       );
       canvas
-        ..saveLayer(cullRect, Paint())
+        ..saveLayer(cullRect, _resolveFallbackTintPaint(renderConfig.color))
         ..drawPicture(picture)
-        ..drawColor(renderConfig.color, BlendMode.srcIn)
         ..restore();
     }
 
@@ -235,10 +264,34 @@ class WatermarkPainterCache {
 
   /// Discards the cached picture so the next [paint] call rebuilds it.
   void invalidate() {
+    _renderSourceConfig = null;
+    _renderConfig = null;
+    _viewportGeometry = null;
     _clearTileCache();
     _clearFallbackPictureCache();
     _tileRebuildCount = 0;
     _fallbackPictureBuildCount = 0;
+  }
+
+  _WatermarkRenderConfig _resolveRenderConfig(WatermarkConfig config) {
+    final cached = _renderConfig;
+    if (cached != null && _renderSourceConfig == config) {
+      return cached;
+    }
+    final resolved = _WatermarkRenderConfig.fromConfig(config);
+    _renderSourceConfig = config;
+    _renderConfig = resolved;
+    return resolved;
+  }
+
+  _WatermarkViewportGeometry _resolveViewportGeometry(Size viewportSize) {
+    final cached = _viewportGeometry;
+    if (cached != null && cached.viewportSize == viewportSize) {
+      return cached;
+    }
+    final resolved = _WatermarkViewportGeometry.fromSize(viewportSize);
+    _viewportGeometry = resolved;
+    return resolved;
   }
 
   Paint? _resolveTilePaint(_WatermarkRenderConfig renderConfig) {
@@ -262,6 +315,17 @@ class WatermarkPainterCache {
       ..colorFilter = ColorFilter.mode(tintColor, BlendMode.srcIn);
     _tileTintColor = tintColor;
     _tileTintPaint = paint;
+    return paint;
+  }
+
+  Paint _resolveFallbackTintPaint(Color tintColor) {
+    if (_fallbackTintPaint != null && _fallbackTintColor == tintColor) {
+      return _fallbackTintPaint!;
+    }
+    final paint = Paint()
+      ..colorFilter = ColorFilter.mode(tintColor, BlendMode.srcIn);
+    _fallbackTintColor = tintColor;
+    _fallbackTintPaint = paint;
     return paint;
   }
 
@@ -300,6 +364,8 @@ class WatermarkPainterCache {
     _picture = null;
     _fallbackLayoutConfig = null;
     _fallbackViewportSize = null;
+    _fallbackTintColor = null;
+    _fallbackTintPaint = null;
   }
 
   ui.Picture _resolveFallbackPicture({
@@ -475,14 +541,10 @@ void paintWatermark({
   required Canvas canvas,
   required Size viewportSize,
   required WatermarkConfig config,
-  double scaleFactor = 1,
-  Offset cameraPosition = Offset.zero,
 }) {
   watermarkPainterCache.paint(
     canvas: canvas,
     viewportSize: viewportSize,
     config: config,
-    scaleFactor: scaleFactor,
-    cameraPosition: cameraPosition,
   );
 }
