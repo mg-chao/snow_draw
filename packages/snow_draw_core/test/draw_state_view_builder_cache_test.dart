@@ -133,8 +133,7 @@ class _CountingPreviewOperation extends EditOperation {
   }) => state;
 
   @override
-  DrawState cancel({required DrawState state, required EditContext context}) =>
-      state;
+  DrawState cancel({required DrawState state}) => state;
 
   @override
   EditPreview buildPreview({

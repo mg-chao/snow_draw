@@ -217,10 +217,9 @@ class _GuideOnlyOperation extends EditOperation {
   );
 
   @override
-  DrawState cancel({required DrawState state, required EditContext context}) =>
-      state.copyWith(
-        application: state.application.copyWith(interaction: const IdleState()),
-      );
+  DrawState cancel({required DrawState state}) => state.copyWith(
+    application: state.application.copyWith(interaction: const IdleState()),
+  );
 
   @override
   EditPreview buildPreview({

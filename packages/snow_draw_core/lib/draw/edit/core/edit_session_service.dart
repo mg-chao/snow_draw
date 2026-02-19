@@ -257,11 +257,7 @@ class EditSessionService {
     final restored = _restoreOrThrow(state);
 
     return (
-      state: _cancelSession(
-        operation: restored.operation,
-        state: state,
-        editingState: restored.editingState,
-      ),
+      state: _cancelSession(operation: restored.operation, state: state),
       failureReason: null,
       operationId: restored.editingState.operationId,
     );
@@ -345,10 +341,9 @@ class EditSessionService {
   DrawState _cancelSession({
     required EditOperationBase operation,
     required DrawState state,
-    required EditingState editingState,
   }) {
     _log?.info('Edit session cancelled', {'operationId': operation.id});
-    return operation.cancel(state: state, context: editingState.context);
+    return operation.cancel(state: state);
   }
 
   void _validateVersionOrThrow({

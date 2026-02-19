@@ -597,17 +597,8 @@ void main() {
       final state = _stateWith([arrow], selectedIds: {'a1'});
 
       const op = ArrowPointOperation();
-      final ctx = op.createContext(
-        state: state,
-        position: const DrawPoint(x: 200, y: 50),
-        params: const ArrowPointOperationParams(
-          elementId: 'a1',
-          pointKind: ArrowPointKind.turning,
-          pointIndex: 1,
-        ),
-      );
 
-      final result = op.cancel(state: state, context: ctx);
+      final result = op.cancel(state: state);
       expect(result.application.interaction, isA<IdleState>());
       expect(
         result.domain.document.getElementById('a1')!.rect,

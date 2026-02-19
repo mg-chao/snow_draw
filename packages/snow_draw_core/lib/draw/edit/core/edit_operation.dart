@@ -67,8 +67,8 @@ abstract class EditOperation {
   /// Cancels the current edit session and returns to idle state.
   ///
   /// Default implementation simply transitions to idle without modifying
-  /// elements. Override if the operation needs custom cleanup.
-  DrawState cancel({required DrawState state, required EditContext context}) =>
+  /// elements.
+  DrawState cancel({required DrawState state}) =>
       state.copyWith(application: state.application.toIdle());
 
   /// Builds the effective preview used by rendering and hit-testing.
