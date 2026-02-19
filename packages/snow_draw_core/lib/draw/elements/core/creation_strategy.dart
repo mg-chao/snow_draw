@@ -92,10 +92,6 @@ abstract class CreationStrategy {
         snappingMode: snappingMode,
       );
 
-      if (_isCreationStateUnchanged(working, updateResult)) {
-        continue;
-      }
-
       final baseElement = working.element;
       final updatedElement = updateResult.data == working.elementData
           ? baseElement
@@ -135,28 +131,4 @@ abstract class CreationStrategy {
 @immutable
 abstract class PointCreationStrategy extends CreationStrategy {
   const PointCreationStrategy();
-}
-
-bool _isCreationStateUnchanged(
-  CreatingState interaction,
-  CreationUpdateResult updateResult,
-) =>
-    interaction.elementData == updateResult.data &&
-    interaction.currentRect == updateResult.rect &&
-    interaction.creationMode == updateResult.creationMode &&
-    _listEquals(interaction.snapGuides, updateResult.snapGuides);
-
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
 }
