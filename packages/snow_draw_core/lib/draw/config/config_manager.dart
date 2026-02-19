@@ -12,13 +12,12 @@ class ConfigManager {
       _controller = StreamController<DrawConfig>.broadcast();
   DrawConfig _config;
   final StreamController<DrawConfig> _controller;
-  DrawConfig? _frozenConfig;
   DrawConfig? _pendingConfig;
   var _freezeDepth = 0;
   var _isDisposed = false;
 
   /// Get the current configuration.
-  DrawConfig get current => _frozenConfig ?? _config;
+  DrawConfig get current => _config;
 
   /// Configuration change stream.
   Stream<DrawConfig> get stream => _controller.stream;
@@ -32,7 +31,8 @@ class ConfigManager {
       return false;
     }
     if (_freezeDepth > 0) {
-      if (newConfig == _configForWrites) {
+      final baseConfig = _pendingConfig ?? _config;
+      if (newConfig == baseConfig) {
         return false;
       }
       _pendingConfig = newConfig;
@@ -47,9 +47,6 @@ class ConfigManager {
       return;
     }
     _freezeDepth += 1;
-    if (_freezeDepth == 1) {
-      _frozenConfig = _config;
-    }
   }
 
   /// Unfreeze and apply any pending update.
@@ -61,23 +58,20 @@ class ConfigManager {
     if (_freezeDepth > 0) {
       return;
     }
-    _frozenConfig = null;
     final pending = _pendingConfig;
+    _pendingConfig = null;
     if (pending == null) {
       return;
     }
-    _pendingConfig = null;
     _applyUpdate(pending);
   }
 
   bool _applyUpdate(DrawConfig newConfig) {
-    if (_isDisposed || newConfig == _config) {
+    if (newConfig == _config) {
       return false;
     }
     _config = newConfig;
-    if (!_controller.isClosed) {
-      _controller.add(_config);
-    }
+    _controller.add(newConfig);
     return true;
   }
 
@@ -99,12 +93,11 @@ class ConfigManager {
 
   /// Release resources.
   Future<void> dispose() {
-    if (_isDisposed || _controller.isClosed) {
+    if (_isDisposed) {
       return Future<void>.value();
     }
     _isDisposed = true;
     _freezeDepth = 0;
-    _frozenConfig = null;
     _pendingConfig = null;
     return _controller.close();
   }
