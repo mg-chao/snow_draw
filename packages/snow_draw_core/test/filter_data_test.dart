@@ -18,7 +18,7 @@ void main() {
     );
 
     const data = FilterData();
-    final updated = data.withElementStyle(style) as FilterData;
+    final updated = data.withElementStyle(style);
 
     expect(updated.type, style.filterType);
     expect(updated.strength, style.filterStrength);
@@ -31,9 +31,23 @@ void main() {
       filterStrength: 0.3,
     );
 
-    final updated = data.withStyleUpdate(update) as FilterData;
+    final updated = data.withStyleUpdate(update);
 
     expect(updated.type, update.filterType);
     expect(updated.strength, update.filterStrength);
+  });
+
+  test('FilterData normalizes strength values into [0, 1]', () {
+    expect(const FilterData(strength: -1).strength, 0);
+    expect(const FilterData(strength: 2).strength, 1);
+    expect(const FilterData(strength: double.nan).strength, 1);
+  });
+
+  test('FilterData.fromJson normalizes out-of-range strengths', () {
+    final negative = FilterData.fromJson(const {'strength': -0.5});
+    final overflow = FilterData.fromJson(const {'strength': 1.5});
+
+    expect(negative.strength, 0);
+    expect(overflow.strength, 1);
   });
 }
