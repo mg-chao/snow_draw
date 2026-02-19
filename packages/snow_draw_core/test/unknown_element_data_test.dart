@@ -46,6 +46,54 @@ void main() {
       expect(data.rawData['list'], equals([1, 2]));
     });
 
+    test(
+      'supports deep freeze and clone for nested maps with non-string keys',
+      () {
+        final source = <String, dynamic>{
+          'map': <Object?, Object?>{
+            1: <Object?, Object?>{'inner': 2},
+          },
+          'list': <dynamic>[
+            <Object?, Object?>{'k': 1},
+          ],
+        };
+
+        final data = UnknownElementData(
+          originalType: 'legacy_shape',
+          rawData: source,
+        );
+
+        ((source['map']! as Map<Object?, Object?>)[1]!
+                as Map<Object?, Object?>)['inner'] =
+            99;
+        ((source['list']! as List<dynamic>).first
+                as Map<Object?, Object?>)['k'] =
+            7;
+
+        final frozenMap = data.rawData['map']! as Map<Object?, Object?>;
+        final frozenInner = frozenMap[1]! as Map<Object?, Object?>;
+        expect(frozenInner['inner'], 2);
+        expect(
+          () => frozenInner['inner'] = 3,
+          throwsA(isA<UnsupportedError>()),
+        );
+
+        final json = data.toJson();
+        final jsonMap = json['map']! as Map<Object?, Object?>;
+        final jsonInner = jsonMap[1]! as Map<Object?, Object?>;
+        jsonInner['inner'] = 5;
+        expect((frozenMap[1]! as Map<Object?, Object?>)['inner'], 2);
+
+        final jsonList = json['list'] as List<dynamic>;
+        (jsonList.first as Map<Object?, Object?>)['k'] = 8;
+        expect(
+          ((data.rawData['list']! as List<dynamic>).first
+              as Map<Object?, Object?>)['k'],
+          1,
+        );
+      },
+    );
+
     test('uses deep equality and stable hash regardless of map order', () {
       final first = UnknownElementData(
         originalType: 'legacy_shape',

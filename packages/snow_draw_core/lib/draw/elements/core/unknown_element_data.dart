@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 
 import 'element_data.dart';
@@ -15,6 +16,8 @@ class UnknownElementData extends ElementData {
   final ElementTypeId<ElementData> _typeId;
   final Map<String, dynamic> rawData;
 
+  static const _deepEquality = DeepCollectionEquality();
+
   @override
   ElementTypeId<ElementData> get typeId => _typeId;
 
@@ -27,10 +30,10 @@ class UnknownElementData extends ElementData {
       other is UnknownElementData &&
           runtimeType == other.runtimeType &&
           originalType == other.originalType &&
-          _deepEquals(rawData, other.rawData);
+          _deepEquality.equals(rawData, other.rawData);
 
   @override
-  int get hashCode => Object.hash(originalType, _deepHash(rawData));
+  int get hashCode => Object.hash(originalType, _deepEquality.hash(rawData));
 
   static Map<String, dynamic> _deepFreezeMap(Map<String, dynamic> source) {
     final frozen = <String, dynamic>{};
@@ -80,54 +83,5 @@ class UnknownElementData extends ElementData {
       return value.map<Object?>(_deepCloneValue).toList();
     }
     return value;
-  }
-
-  static bool _deepEquals(Object? a, Object? b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a is Map && b is Map) {
-      if (a.length != b.length) {
-        return false;
-      }
-      for (final entry in a.entries) {
-        if (!b.containsKey(entry.key)) {
-          return false;
-        }
-        if (!_deepEquals(entry.value, b[entry.key])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    if (a is List && b is List) {
-      if (a.length != b.length) {
-        return false;
-      }
-      for (var i = 0; i < a.length; i++) {
-        if (!_deepEquals(a[i], b[i])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    return a == b;
-  }
-
-  static int _deepHash(Object? value) {
-    if (value is Map) {
-      final entryHashes = <int>[];
-      for (final entry in value.entries) {
-        entryHashes.add(
-          Object.hash(_deepHash(entry.key), _deepHash(entry.value)),
-        );
-      }
-      entryHashes.sort();
-      return Object.hashAll(entryHashes);
-    }
-    if (value is List) {
-      return Object.hashAll(value.map(_deepHash));
-    }
-    return value.hashCode;
   }
 }
