@@ -19,60 +19,59 @@ ElbowRouteResult _routeElbowArrowInternal({
     startArrowhead: startArrowhead,
     endArrowhead: endArrowhead,
   );
+  final startEndpoint = endpoints.start;
+  final endEndpoint = endpoints.end;
 
-  if (!endpoints.start.isBound && !endpoints.end.isBound) {
+  if (!startEndpoint.isBound && !endEndpoint.isBound) {
     return _buildRouteResult(
-      startPoint: endpoints.start.point,
-      endPoint: endpoints.end.point,
+      startPoint: startEndpoint.point,
+      endPoint: endEndpoint.point,
       points: _fallbackPath(
-        start: endpoints.start.point,
-        end: endpoints.end.point,
-        startHeading: endpoints.start.heading,
-        endHeading: endpoints.end.heading,
+        start: startEndpoint.point,
+        end: endEndpoint.point,
+        startHeading: startEndpoint.heading,
+        endHeading: endEndpoint.heading,
       ),
     );
   }
 
-  final layout = _planObstacleLayout(
-    start: endpoints.start,
-    end: endpoints.end,
-  );
+  final layout = _planObstacleLayout(start: startEndpoint, end: endEndpoint);
   final direct = _directPathIfClear(
-    start: endpoints.start.point,
-    end: endpoints.end.point,
+    start: startEndpoint.point,
+    end: endEndpoint.point,
     obstacles: layout.obstacles,
-    startHeading: endpoints.start.heading,
-    endHeading: endpoints.end.heading,
-    startConstrained: endpoints.start.isBound,
-    endConstrained: endpoints.end.isBound,
+    startHeading: startEndpoint.heading,
+    endHeading: endEndpoint.heading,
+    startConstrained: startEndpoint.isBound,
+    endConstrained: endEndpoint.isBound,
   );
   if (direct != null) {
     return _buildRouteResult(
-      startPoint: endpoints.start.point,
-      endPoint: endpoints.end.point,
+      startPoint: startEndpoint.point,
+      endPoint: endEndpoint.point,
       points: direct,
     );
   }
 
   final routed = _routeViaGridOrFallback(
-    start: endpoints.start,
-    end: endpoints.end,
+    start: startEndpoint,
+    end: endEndpoint,
     layout: layout,
   );
   final finalized = _finalizeRoutedPath(
     points: routed,
-    startHeading: endpoints.start.heading,
+    startHeading: startEndpoint.heading,
     obstacles: layout.obstacles,
   );
   final harmonized = _harmonizeBoundSpacing(
     points: finalized,
-    start: endpoints.start,
-    end: endpoints.end,
+    start: startEndpoint,
+    end: endEndpoint,
   );
 
   return _buildRouteResult(
-    startPoint: endpoints.start.point,
-    endPoint: endpoints.end.point,
+    startPoint: startEndpoint.point,
+    endPoint: endEndpoint.point,
     points: harmonized,
   );
 }
@@ -109,9 +108,10 @@ List<DrawPoint> _routeViaGridOrFallback({
     );
   }
 
+  final points = path.map((node) => node.pos);
   return [
     if (layout.startExit != start.point) start.point,
-    for (final node in path) node.pos,
+    ...points,
     if (layout.endExit != end.point) end.point,
   ];
 }
@@ -126,10 +126,6 @@ ElbowRouteResult _buildRouteResult({
   endPoint: endPoint,
 );
 
-// ---------------------------------------------------------------------------
-// Endpoint resolution (merged from elbow_router_endpoints.dart)
-// ---------------------------------------------------------------------------
-
 /// Fully resolved endpoint for elbow routing.
 @immutable
 final class _ResolvedEndpoint {
@@ -137,7 +133,6 @@ final class _ResolvedEndpoint {
     required this.point,
     required this.heading,
     required this.hasArrowhead,
-    this.element,
     this.elementBounds,
     this.anchor,
   });
@@ -145,21 +140,14 @@ final class _ResolvedEndpoint {
   final DrawPoint point;
   final ElbowHeading heading;
   final bool hasArrowhead;
-  final ElementState? element;
   final DrawRect? elementBounds;
   final DrawPoint? anchor;
 
-  bool get isBound => element != null;
+  bool get isBound => elementBounds != null;
   DrawPoint get anchorOrPoint => anchor ?? point;
 }
 
-@immutable
-final class _ResolvedEndpoints {
-  const _ResolvedEndpoints({required this.start, required this.end});
-
-  final _ResolvedEndpoint start;
-  final _ResolvedEndpoint end;
-}
+typedef _ResolvedEndpoints = ({_ResolvedEndpoint start, _ResolvedEndpoint end});
 
 _ResolvedEndpoint _resolveEndpoint({
   required DrawPoint point,
@@ -168,16 +156,8 @@ _ResolvedEndpoint _resolveEndpoint({
   required bool hasArrowhead,
   required ElbowHeading fallbackHeading,
 }) {
-  if (binding == null) {
-    return _ResolvedEndpoint(
-      point: point,
-      heading: fallbackHeading,
-      hasArrowhead: hasArrowhead,
-    );
-  }
-
-  final element = elementsById[binding.elementId];
-  if (element == null) {
+  final element = binding == null ? null : elementsById[binding.elementId];
+  if (binding == null || element == null) {
     return _ResolvedEndpoint(
       point: point,
       heading: fallbackHeading,
@@ -205,7 +185,6 @@ _ResolvedEndpoint _resolveEndpoint({
     point: resolved,
     heading: heading,
     hasArrowhead: hasArrowhead,
-    element: element,
     elementBounds: bounds,
     anchor: anchor,
   );
@@ -240,5 +219,5 @@ _ResolvedEndpoints _resolveRouteEndpoints({
       startPoint.y - endPoint.y,
     ),
   );
-  return _ResolvedEndpoints(start: start, end: end);
+  return (start: start, end: end);
 }
