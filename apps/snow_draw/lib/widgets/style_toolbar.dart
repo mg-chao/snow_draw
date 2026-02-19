@@ -122,6 +122,8 @@ class _StyleToolbarState extends State<StyleToolbar> {
   int? _cachedPropertyRegistryRevision;
   StylePropertyContext? _cachedPropertyContext;
   List<_EvaluatedProperty<dynamic>> _cachedProperties = const [];
+  _ToolbarRenderCacheKey? _cachedToolbarRenderKey;
+  Widget? _cachedToolbarContent;
 
   @override
   void initState() {
@@ -137,6 +139,12 @@ class _StyleToolbarState extends State<StyleToolbar> {
       widget.toolController,
       widget.adapter.stateListenable,
     ]);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _clearToolbarRenderCache();
   }
 
   @override
@@ -159,6 +167,7 @@ class _StyleToolbarState extends State<StyleToolbar> {
     if (oldWidget.toolController != widget.toolController ||
         oldWidget.adapter != widget.adapter) {
       _clearPropertyEvaluationCache();
+      _clearToolbarRenderCache();
       _mergedListenable = Listenable.merge([
         widget.toolController,
         widget.adapter.stateListenable,
@@ -291,55 +300,102 @@ class _StyleToolbarState extends State<StyleToolbar> {
       final resolvedWidth = widget.width;
       final hasSelection = state.hasSelection;
 
-      if (!showToolbar) {
+      if (showToolbar) {
+        final propertyEvaluation = _resolvePropertyEvaluation(state, tool);
+        final renderKey = _ToolbarRenderCacheKey(
+          tool: tool,
+          state: state,
+          strings: widget.strings,
+          width: resolvedWidth,
+          maxHeight: maxHeight,
+          hasSelection: hasSelection,
+          propertyContext: propertyEvaluation.context,
+          properties: propertyEvaluation.properties,
+          pendingCornerRadius: _pendingCornerRadius,
+          pendingOpacity: _pendingOpacity,
+          pendingFilterStrength: _pendingFilterStrength,
+          pendingMaskOpacity: _pendingMaskOpacity,
+          pendingWatermarkAngle: _pendingWatermarkAngle,
+          pendingWatermarkGap: _pendingWatermarkGap,
+          pendingWatermarkOpacity: _pendingWatermarkOpacity,
+          pendingWatermarkText: _pendingWatermarkText,
+          pendingSerialNumber: _pendingSerialNumber,
+          systemFontFamilies: _systemFontFamilies,
+        );
+        if (_cachedToolbarRenderKey != renderKey ||
+            _cachedToolbarContent == null) {
+          final propertyWidgets = _buildPropertyWidgets(
+            propertyEvaluation.context,
+            propertyEvaluation.properties,
+          );
+          _cachedToolbarContent = _buildToolbarContent(
+            maxHeight: maxHeight,
+            width: resolvedWidth,
+            hasSelection: hasSelection,
+            propertyWidgets: propertyWidgets,
+          );
+          _cachedToolbarRenderKey = renderKey;
+        }
+      }
+      final cachedToolbarContent = _cachedToolbarContent;
+      if (cachedToolbarContent == null) {
         return const SizedBox.shrink();
       }
-      final propertyEvaluation = _resolvePropertyEvaluation(state, tool);
-      final propertyWidgets = _buildPropertyWidgets(
-        propertyEvaluation.context,
-        propertyEvaluation.properties,
-      );
 
-      return Material(
-        elevation: 3,
-        borderRadius: BorderRadius.circular(_toolbarRadius),
-        color: Colors.white,
-        child: SizedBox(
-          width: resolvedWidth,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: _persistentVerticalPadding,
-              ),
-              child: Scrollbar(
+      return Visibility(
+        visible: showToolbar,
+        maintainState: true,
+        maintainAnimation: true,
+        child: cachedToolbarContent,
+      );
+    },
+  );
+
+  Widget _buildToolbarContent({
+    required double maxHeight,
+    required double width,
+    required bool hasSelection,
+    required List<Widget> propertyWidgets,
+  }) => RepaintBoundary(
+    child: Material(
+      elevation: 3,
+      borderRadius: BorderRadius.circular(_toolbarRadius),
+      color: Colors.white,
+      child: SizedBox(
+        width: width,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: _persistentVerticalPadding,
+            ),
+            child: Scrollbar(
+              controller: _scrollController,
+              child: SingleChildScrollView(
                 controller: _scrollController,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _toolbarPadding,
-                    vertical:
-                        _toolbarVerticalPadding - _persistentVerticalPadding,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ...propertyWidgets,
-                      if (hasSelection) ...[
-                        const SizedBox(height: _sectionSpacing),
-                        _buildLayerControls(hasSelection),
-                        const SizedBox(height: _sectionSpacing),
-                        _buildSelectionActions(hasSelection),
-                      ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _toolbarPadding,
+                  vertical:
+                      _toolbarVerticalPadding - _persistentVerticalPadding,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...propertyWidgets,
+                    if (hasSelection) ...[
+                      const SizedBox(height: _sectionSpacing),
+                      _buildLayerControls(hasSelection),
+                      const SizedBox(height: _sectionSpacing),
+                      _buildSelectionActions(hasSelection),
                     ],
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
-      );
-    },
+      ),
+    ),
   );
 
   Widget _buildSelectionActions(bool hasSelection) => Column(
@@ -1578,6 +1634,11 @@ class _StyleToolbarState extends State<StyleToolbar> {
     _cachedProperties = const [];
   }
 
+  void _clearToolbarRenderCache() {
+    _cachedToolbarRenderKey = null;
+    _cachedToolbarContent = null;
+  }
+
   _PropertyEvaluationResult _resolvePropertyEvaluation(
     StyleToolbarState state,
     ToolType tool,
@@ -2654,6 +2715,94 @@ class _StyleToolbarState extends State<StyleToolbar> {
 
   Future<void> _handleZOrder(ZIndexOperation operation) =>
       widget.adapter.changeZOrder(operation);
+}
+
+@immutable
+class _ToolbarRenderCacheKey {
+  const _ToolbarRenderCacheKey({
+    required this.tool,
+    required this.state,
+    required this.strings,
+    required this.width,
+    required this.maxHeight,
+    required this.hasSelection,
+    required this.propertyContext,
+    required this.properties,
+    required this.pendingCornerRadius,
+    required this.pendingOpacity,
+    required this.pendingFilterStrength,
+    required this.pendingMaskOpacity,
+    required this.pendingWatermarkAngle,
+    required this.pendingWatermarkGap,
+    required this.pendingWatermarkOpacity,
+    required this.pendingWatermarkText,
+    required this.pendingSerialNumber,
+    required this.systemFontFamilies,
+  });
+
+  final ToolType tool;
+  final StyleToolbarState state;
+  final AppLocalizations strings;
+  final double width;
+  final double maxHeight;
+  final bool hasSelection;
+  final StylePropertyContext propertyContext;
+  final List<_EvaluatedProperty<dynamic>> properties;
+  final double? pendingCornerRadius;
+  final double? pendingOpacity;
+  final double? pendingFilterStrength;
+  final double? pendingMaskOpacity;
+  final double? pendingWatermarkAngle;
+  final double? pendingWatermarkGap;
+  final double? pendingWatermarkOpacity;
+  final String? pendingWatermarkText;
+  final int? pendingSerialNumber;
+  final List<String> systemFontFamilies;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ToolbarRenderCacheKey &&
+          other.tool == tool &&
+          other.state == state &&
+          other.strings == strings &&
+          other.width == width &&
+          other.maxHeight == maxHeight &&
+          other.hasSelection == hasSelection &&
+          identical(other.propertyContext, propertyContext) &&
+          identical(other.properties, properties) &&
+          other.pendingCornerRadius == pendingCornerRadius &&
+          other.pendingOpacity == pendingOpacity &&
+          other.pendingFilterStrength == pendingFilterStrength &&
+          other.pendingMaskOpacity == pendingMaskOpacity &&
+          other.pendingWatermarkAngle == pendingWatermarkAngle &&
+          other.pendingWatermarkGap == pendingWatermarkGap &&
+          other.pendingWatermarkOpacity == pendingWatermarkOpacity &&
+          other.pendingWatermarkText == pendingWatermarkText &&
+          other.pendingSerialNumber == pendingSerialNumber &&
+          listEquals(other.systemFontFamilies, systemFontFamilies);
+
+  @override
+  int get hashCode => Object.hash(
+    tool,
+    state,
+    strings,
+    width,
+    maxHeight,
+    hasSelection,
+    identityHashCode(propertyContext),
+    identityHashCode(properties),
+    pendingCornerRadius,
+    pendingOpacity,
+    pendingFilterStrength,
+    pendingMaskOpacity,
+    pendingWatermarkAngle,
+    pendingWatermarkGap,
+    pendingWatermarkOpacity,
+    pendingWatermarkText,
+    pendingSerialNumber,
+    Object.hashAll(systemFontFamilies),
+  );
 }
 
 @immutable
