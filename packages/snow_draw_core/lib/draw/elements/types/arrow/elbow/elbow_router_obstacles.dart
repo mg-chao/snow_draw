@@ -195,89 +195,87 @@ DrawRect _dynamicAabbFor({
   required DrawRect other,
   required DrawRect common,
   required _BoundsPadding padding,
-  DrawRect? selfElementBounds,
-  DrawRect? otherElementBounds,
 }) {
-  final selfEl = selfElementBounds ?? self;
-  final otherEl = otherElementBounds ?? other;
-  final sepY = self.minY > other.maxY || self.maxY < other.minY;
-  final sepX = self.minX > other.maxX || self.maxX < other.minX;
+  final separatedVertically = self.minY > other.maxY || self.maxY < other.minY;
+  final separatedHorizontally =
+      self.minX > other.maxX || self.maxX < other.minX;
 
   return DrawRect(
-    minX: _aabbEdge(
-      selfNear: self.minX,
-      selfFar: self.maxX,
-      otherNear: other.minX,
-      otherFar: other.maxX,
-      commonEdge: common.minX,
+    minX: _dynamicMinEdge(
+      selfMin: self.minX,
+      otherMin: other.minX,
+      otherMax: other.maxX,
+      commonMin: common.minX,
       pad: padding.left,
-      selfEl: selfEl.minX,
-      otherEl: otherEl.maxX,
-      separated: sepY,
-      isMin: true,
+      separated: separatedVertically,
     ),
-    minY: _aabbEdge(
-      selfNear: self.minY,
-      selfFar: self.maxY,
-      otherNear: other.minY,
-      otherFar: other.maxY,
-      commonEdge: common.minY,
+    minY: _dynamicMinEdge(
+      selfMin: self.minY,
+      otherMin: other.minY,
+      otherMax: other.maxY,
+      commonMin: common.minY,
       pad: padding.top,
-      selfEl: selfEl.minY,
-      otherEl: otherEl.maxY,
-      separated: sepX,
-      isMin: true,
+      separated: separatedHorizontally,
     ),
-    maxX: _aabbEdge(
-      selfNear: self.maxX,
-      selfFar: self.minX,
-      otherNear: other.maxX,
-      otherFar: other.minX,
-      commonEdge: common.maxX,
+    maxX: _dynamicMaxEdge(
+      selfMax: self.maxX,
+      otherMin: other.minX,
+      otherMax: other.maxX,
+      commonMax: common.maxX,
       pad: padding.right,
-      selfEl: selfEl.maxX,
-      otherEl: otherEl.minX,
-      separated: sepY,
-      isMin: false,
+      separated: separatedVertically,
     ),
-    maxY: _aabbEdge(
-      selfNear: self.maxY,
-      selfFar: self.minY,
-      otherNear: other.maxY,
-      otherFar: other.minY,
-      commonEdge: common.maxY,
+    maxY: _dynamicMaxEdge(
+      selfMax: self.maxY,
+      otherMin: other.minY,
+      otherMax: other.maxY,
+      commonMax: common.maxY,
       pad: padding.bottom,
-      selfEl: selfEl.maxY,
-      otherEl: otherEl.minY,
-      separated: sepX,
-      isMin: false,
+      separated: separatedHorizontally,
     ),
   );
 }
 
-double _aabbEdge({
-  required double selfNear,
-  required double selfFar,
-  required double otherNear,
-  required double otherFar,
-  required double commonEdge,
+double _dynamicMinEdge({
+  required double selfMin,
+  required double otherMin,
+  required double otherMax,
+  required double commonMin,
   required double pad,
-  required double selfEl,
-  required double otherEl,
   required bool separated,
-  required bool isMin,
 }) {
-  if (isMin ? selfNear > otherFar : selfNear < otherFar) {
-    final split = (selfEl + otherEl) / 2;
-    final padded = isMin ? selfNear - pad : selfNear + pad;
-    return separated
-        ? (isMin ? math.min(split, padded) : math.max(split, padded))
-        : split;
+  if (selfMin > otherMax) {
+    final split = (selfMin + otherMax) / 2;
+    if (!separated) {
+      return split;
+    }
+    return math.min(split, selfMin - pad);
   }
-  if (isMin ? selfNear > otherNear : selfNear < otherNear) {
-    return isMin ? selfNear - pad : selfNear + pad;
+  if (selfMin > otherMin) {
+    return selfMin - pad;
   }
-  return isMin ? commonEdge - pad : commonEdge + pad;
+  return commonMin - pad;
+}
+
+double _dynamicMaxEdge({
+  required double selfMax,
+  required double otherMin,
+  required double otherMax,
+  required double commonMax,
+  required double pad,
+  required bool separated,
+}) {
+  if (selfMax < otherMin) {
+    final split = (selfMax + otherMin) / 2;
+    if (!separated) {
+      return split;
+    }
+    return math.max(split, selfMax + pad);
+  }
+  if (selfMax < otherMax) {
+    return selfMax + pad;
+  }
+  return commonMax + pad;
 }
 
 _BoundsPadding _paddingFromHeading(
@@ -373,33 +371,31 @@ _ElbowObstacleLayout _planObstacleLayout({
       ? _overlapPadding(end.heading)
       : _routingPadding(heading: end.heading, hasArrowhead: end.hasArrowhead);
 
-  final startEl = overlap || !start.isBound ? null : startElbow;
-  final endEl = overlap || !end.isBound ? null : endElbow;
   final common = _unionBounds([startBase, endBase]);
-  final startDyn = _dynamicAabbFor(
-    self: startBase,
-    other: endBase,
-    common: common,
-    padding: startPad,
-    selfElementBounds: startEl,
-    otherElementBounds: endEl,
-  );
-  final endDyn = _dynamicAabbFor(
-    self: endBase,
-    other: startBase,
-    common: common,
-    padding: endPad,
-    selfElementBounds: endEl,
-    otherElementBounds: startEl,
-  );
+  final startObstacle = start.isBound
+      ? _dynamicAabbFor(
+          self: startBase,
+          other: endBase,
+          common: common,
+          padding: startPad,
+        )
+      : startBase;
+  final endObstacle = end.isBound
+      ? _dynamicAabbFor(
+          self: endBase,
+          other: startBase,
+          common: common,
+          padding: endPad,
+        )
+      : endBase;
 
   final obs = _resolveObstacleBounds(
     start: start,
     end: end,
     startBaseBounds: startBase,
     endBaseBounds: endBase,
-    startDynamic: startDyn,
-    endDynamic: endDyn,
+    startObstacle: startObstacle,
+    endObstacle: endObstacle,
   );
 
   final commonBounds = _clampBounds(
@@ -430,11 +426,11 @@ _ElbowObstacleLayout _planObstacleLayout({
   required _ResolvedEndpoint end,
   required DrawRect startBaseBounds,
   required DrawRect endBaseBounds,
-  required DrawRect startDynamic,
-  required DrawRect endDynamic,
+  required DrawRect startObstacle,
+  required DrawRect endObstacle,
 }) {
-  var sObs = _clampBounds(start.isBound ? startDynamic : startBaseBounds);
-  var eObs = _clampBounds(end.isBound ? endDynamic : endBaseBounds);
+  var sObs = _clampBounds(startObstacle);
+  var eObs = _clampBounds(endObstacle);
   if (_boundsOverlap(sObs, eObs)) {
     final split = _splitOverlappingObstacles(
       startBounds: startBaseBounds,
@@ -462,16 +458,16 @@ DrawRect _clampObstacleToBoundsPadding({
   required _ResolvedEndpoint endpoint,
   required DrawRect obstacle,
 }) {
-  if (!endpoint.isBound || endpoint.elementBounds == null) {
+  final bounds = endpoint.elementBounds;
+  if (bounds == null) {
     return obstacle;
   }
-  final b = endpoint.elementBounds!;
   const p = ElbowConstants.basePadding;
   return obstacle.copyWith(
-    minX: math.max(obstacle.minX, b.minX - p),
-    minY: math.max(obstacle.minY, b.minY - p),
-    maxX: math.min(obstacle.maxX, b.maxX + p),
-    maxY: math.min(obstacle.maxY, b.maxY + p),
+    minX: math.max(obstacle.minX, bounds.minX - p),
+    minY: math.max(obstacle.minY, bounds.minY - p),
+    maxX: math.min(obstacle.maxX, bounds.maxX + p),
+    maxY: math.min(obstacle.maxY, bounds.maxY + p),
   );
 }
 
@@ -484,10 +480,7 @@ DrawRect _clampObstacleToBoundsPadding({
   final noChange = (start: startObstacle, end: endObstacle);
   final startBounds = start.elementBounds;
   final endBounds = end.elementBounds;
-  if (!start.isBound ||
-      !end.isBound ||
-      startBounds == null ||
-      endBounds == null) {
+  if (startBounds == null || endBounds == null) {
     return noChange;
   }
   final spacing = ElbowSpacing.resolveSharedSpacing(
