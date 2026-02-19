@@ -27,16 +27,26 @@ class DrawContext implements InteractionReducerDeps {
     this.editConfigProvider = StaticEditConfigProvider.defaults,
     LogService? logService,
     this.eventBus,
-  }) : configManager =
-           configManager ?? ConfigManager(config ?? DrawConfig.defaultConfig),
+  }) : configManager = _resolveConfigManager(
+         providedConfigManager: configManager,
+         providedConfig: config,
+       ),
        editIntentMapper =
            editIntentMapper ?? EditIntentToOperationMapper.withDefaults(),
-       log = logService ?? LogService() {
-    if (configManager != null &&
-        config != null &&
-        config != this.configManager.current) {
-      this.configManager.update(config);
+       log = logService ?? LogService();
+
+  static ConfigManager _resolveConfigManager({
+    required ConfigManager? providedConfigManager,
+    required DrawConfig? providedConfig,
+  }) {
+    if (providedConfigManager == null) {
+      return ConfigManager(providedConfig ?? DrawConfig.defaultConfig);
     }
+    if (providedConfig != null &&
+        providedConfig != providedConfigManager.current) {
+      providedConfigManager.update(providedConfig);
+    }
+    return providedConfigManager;
   }
 
   factory DrawContext.withDefaults({
@@ -110,13 +120,10 @@ class DrawContext implements InteractionReducerDeps {
     LogService? logService,
     EventBus? eventBus,
   }) {
-    final hasEquivalentConfig =
-        config != null && config == this.configManager.current;
-    final resolvedConfigManager =
-        configManager ??
-        (config == null || hasEquivalentConfig
-            ? this.configManager
-            : ConfigManager(config));
+    final resolvedConfigManager = _resolveCopiedConfigManager(
+      providedConfigManager: configManager,
+      providedConfig: config,
+    );
     return DrawContext(
       elementRegistry: elementRegistry ?? this.elementRegistry,
       editOperations: editOperations ?? this.editOperations,
@@ -128,5 +135,18 @@ class DrawContext implements InteractionReducerDeps {
       logService: logService ?? log,
       eventBus: eventBus ?? this.eventBus,
     );
+  }
+
+  ConfigManager _resolveCopiedConfigManager({
+    required ConfigManager? providedConfigManager,
+    required DrawConfig? providedConfig,
+  }) {
+    if (providedConfigManager != null) {
+      return providedConfigManager;
+    }
+    if (providedConfig == null || providedConfig == configManager.current) {
+      return configManager;
+    }
+    return ConfigManager(providedConfig);
   }
 }
