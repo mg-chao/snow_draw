@@ -55,6 +55,52 @@ void main() {
     expect(pixelAt(10, 10, 3), 0);
   });
 
+  test('overlapping highlights keep overlap region transparent', () async {
+    const first = ElementState(
+      id: 'h1',
+      rect: DrawRect(minX: 4, minY: 4, maxX: 14, maxY: 14),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: HighlightData(),
+    );
+    const second = ElementState(
+      id: 'h2',
+      rect: DrawRect(minX: 10, minY: 4, maxX: 20, maxY: 14),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: HighlightData(),
+    );
+
+    final initial = DrawState.initial();
+    final state = DrawState(
+      domain: initial.domain.copyWith(
+        document: initial.domain.document.copyWith(elements: [first, second]),
+      ),
+      application: initial.application.copyWith(interaction: const IdleState()),
+    );
+    final view = DrawStateView.fromState(state);
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+
+    paintHighlightMask(
+      canvas: canvas,
+      highlights: view.highlightMaskScene.elements,
+      viewportRect: const DrawRect(maxX: 24, maxY: 24),
+      maskConfig: const HighlightMaskConfig(maskOpacity: 1),
+    );
+
+    final image = await recorder.endRecording().toImage(24, 24);
+    final bytes = await image.toByteData();
+    expect(bytes, isNotNull);
+
+    final data = bytes!;
+    int alphaAt(int x, int y) => data.getUint8(((y * 24) + x) * 4 + 3);
+
+    expect(alphaAt(12, 8), 0);
+  });
+
   test(
     'highlight mask culling keeps rotated highlights near viewport edge',
     () async {

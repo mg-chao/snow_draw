@@ -8,6 +8,7 @@ import '../../../utils/lru_cache.dart';
 import 'text_data.dart';
 
 const _fallbackText = ' ';
+const _fontMetricsProbeText = 'Mg';
 const textLayoutHeightBehavior = TextHeightBehavior();
 const TextScaler textLayoutTextScaler = TextScaler.noScaling;
 const textCursorWidth = 1.2;
@@ -22,26 +23,30 @@ const _textBackgroundVerticalPaddingFactor = 0.1;
 /// Avoids the overhead of `TextPainter` for callers that only need
 /// metrics (size, line height, baseline). The [paragraph] can still
 /// be drawn with `canvas.drawParagraph` or queried for positions.
+///
+/// [lineMetrics] is computed lazily to keep the hot render/layout path cheap.
 @immutable
 class TextLayoutMetrics {
-  const TextLayoutMetrics({
+  TextLayoutMetrics({
     required this.paragraph,
     required this.size,
     required this.lineHeight,
-    required this.lineMetrics,
+    required List<ui.LineMetrics>? lineMetrics,
     required this.baseline,
     required this.ascent,
     required this.descent,
     required this.unscaledAscent,
     required this.leading,
-  });
+  }) : _lineMetrics = lineMetrics;
 
   /// The laid-out paragraph. Use for painting via
   /// `canvas.drawParagraph` or querying glyph positions.
   final ui.Paragraph paragraph;
   final Size size;
   final double lineHeight;
-  final List<ui.LineMetrics> lineMetrics;
+  final List<ui.LineMetrics>? _lineMetrics;
+  late final List<ui.LineMetrics> lineMetrics =
+      _lineMetrics ?? paragraph.computeLineMetrics();
   final double baseline;
   final double ascent;
   final double descent;
@@ -77,7 +82,7 @@ class TextLayoutMetrics {
 /// for all other cases.
 @immutable
 class PainterTextLayoutMetrics extends TextLayoutMetrics {
-  const PainterTextLayoutMetrics({
+  PainterTextLayoutMetrics({
     required this.painter,
     required super.paragraph,
     required super.size,
@@ -225,8 +230,6 @@ TextLayoutMetrics layoutText({
       maxWidth: safeMaxWidth,
     );
 
-    final lineMetrics = paragraph.computeLineMetrics();
-
     final fontMetricsKey = _FontMetricsCacheKey(
       fontSize: resolvedStyle.fontSize ?? data.fontSize,
       fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
@@ -240,14 +243,14 @@ TextLayoutMetrics layoutText({
 
     final fontMetrics = _fontMetricsCache.getOrCreate(
       fontMetricsKey,
-      () => _extractFontMetrics(paragraph, lineMetrics),
+      () => _measureFontMetrics(style: resolvedStyle, locale: locale),
     );
 
     return TextLayoutMetrics(
       paragraph: paragraph,
       size: Size(paragraph.longestLine, paragraph.height),
       lineHeight: fontMetrics.lineHeight,
-      lineMetrics: lineMetrics,
+      lineMetrics: null,
       baseline: fontMetrics.baseline,
       ascent: fontMetrics.ascent,
       descent: fontMetrics.descent,
@@ -391,6 +394,23 @@ ui.Paragraph _buildParagraph({
   final paragraph = builder.build()
     ..layout(ui.ParagraphConstraints(width: maxWidth));
   return paragraph;
+}
+
+_FontMetrics _measureFontMetrics({
+  required TextStyle style,
+  required Locale? locale,
+}) {
+  final probeParagraph = _buildParagraph(
+    text: _fontMetricsProbeText,
+    style: style,
+    align: TextHorizontalAlign.left,
+    widthBasis: TextWidthBasis.longestLine,
+    locale: locale,
+    minWidth: 0,
+    maxWidth: 4096,
+  );
+  final probeLineMetrics = probeParagraph.computeLineMetrics();
+  return _extractFontMetrics(probeParagraph, probeLineMetrics);
 }
 
 _FontMetrics _extractFontMetrics(

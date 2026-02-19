@@ -7,6 +7,7 @@ import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import '../arrow/arrow_hit_tester.dart';
 import '../arrow/arrow_visual_cache.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'line_data.dart';
 
 class LineHitTester implements ElementHitTester {
@@ -25,6 +26,16 @@ class LineHitTester implements ElementHitTester {
       throw StateError(
         'LineHitTester can only hit test LineData (got ${data.runtimeType})',
       );
+    }
+
+    if (data.strokeWidth > 0 &&
+        _hitTestTwoPointStrokeFast(
+          element: element,
+          data: data,
+          position: position,
+          tolerance: tolerance,
+        )) {
+      return true;
     }
 
     if (data.strokeWidth > 0 &&
@@ -77,6 +88,44 @@ class LineHitTester implements ElementHitTester {
 
   bool _isClosed(LineData data) =>
       data.points.length > 2 && data.points.first == data.points.last;
+
+  bool _hitTestTwoPointStrokeFast({
+    required ElementState element,
+    required LineData data,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
+    if (data.points.length != 2 || _isClosed(data)) {
+      return false;
+    }
+
+    final rect = element.rect;
+    final localPosition = _toLocalPosition(element, position);
+    if (!localPosition.x.isFinite || !localPosition.y.isFinite) {
+      return false;
+    }
+    final radius = (data.strokeWidth / 2) + tolerance;
+    if (!radius.isFinite || radius <= 0) {
+      return false;
+    }
+    if (!_isInsideRect(rect, localPosition, radius)) {
+      return false;
+    }
+
+    final segment = resolveTwoPointStrokeSegmentWorld(
+      rect: rect,
+      startPoint: data.points.first,
+      endPoint: data.points.last,
+    );
+    if (segment == null) {
+      return false;
+    }
+    return hitTestTwoPointStrokeSegment(
+      segment: segment,
+      point: Offset(localPosition.x, localPosition.y),
+      radius: radius,
+    );
+  }
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;

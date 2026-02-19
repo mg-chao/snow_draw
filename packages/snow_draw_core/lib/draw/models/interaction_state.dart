@@ -195,7 +195,13 @@ class RectCreationMode extends CreationMode {
 /// Point-based creation mode (for arrows).
 @immutable
 class PointCreationMode extends CreationMode {
-  const PointCreationMode({this.fixedPoints = const [], this.currentPoint});
+  static const _sessionDataUnset = Object();
+
+  const PointCreationMode({
+    this.fixedPoints = const [],
+    this.currentPoint,
+    this.sessionData,
+  });
 
   /// Fixed turning points in world coordinates.
   final List<DrawPoint> fixedPoints;
@@ -203,12 +209,22 @@ class PointCreationMode extends CreationMode {
   /// Current (preview) point in world coordinates.
   final DrawPoint? currentPoint;
 
+  /// Optional transient session payload.
+  ///
+  /// This is intentionally excluded from equality/hashCode so reducers can
+  /// attach mutable caches without forcing state churn.
+  final Object? sessionData;
+
   PointCreationMode copyWith({
     List<DrawPoint>? fixedPoints,
     DrawPoint? currentPoint,
+    Object? sessionData = _sessionDataUnset,
   }) => PointCreationMode(
     fixedPoints: fixedPoints ?? this.fixedPoints,
     currentPoint: currentPoint ?? this.currentPoint,
+    sessionData: sessionData == _sessionDataUnset
+        ? this.sessionData
+        : sessionData,
   );
 
   @override
@@ -277,11 +293,7 @@ class CreatingState extends InteractionState {
   final List<SnapGuide> snapGuides;
   final CreationMode creationMode;
 
-  /// Backward-compatible access to the draft element.
-  ///
-  /// This is synthesized from creation context fields to avoid storing a
-  /// full ElementState in application state.
-  ElementState get element => ElementState(
+  late final _element = ElementState(
     id: elementId,
     rect: elementRect,
     rotation: elementRotation,
@@ -289,6 +301,12 @@ class CreatingState extends InteractionState {
     zIndex: elementZIndex,
     data: elementData,
   );
+
+  /// Backward-compatible access to the draft element.
+  ///
+  /// This is synthesized from creation context fields to avoid storing a
+  /// full ElementState in application state.
+  ElementState get element => _element;
 
   /// Fixed points for point-based creation (arrows).
   List<DrawPoint> get fixedPoints => switch (creationMode) {
@@ -398,6 +416,29 @@ class TextEditingState extends InteractionState {
     opacity: opacity ?? this.opacity,
     rotation: rotation ?? this.rotation,
     initialCursorPosition: initialCursorPosition ?? this.initialCursorPosition,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextEditingState &&
+          other.elementId == elementId &&
+          other.draftData == draftData &&
+          other.rect == rect &&
+          other.isNew == isNew &&
+          other.opacity == opacity &&
+          other.rotation == rotation &&
+          other.initialCursorPosition == initialCursorPosition;
+
+  @override
+  int get hashCode => Object.hash(
+    elementId,
+    draftData,
+    rect,
+    isNew,
+    opacity,
+    rotation,
+    initialCursorPosition,
   );
 
   @override

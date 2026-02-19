@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/services/draw_state_view_builder.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
@@ -109,6 +110,11 @@ class _SerialNumberOperationsToolbarState
   _ToolbarProjection _selectProjection(DrawState state) {
     final selection = state.domain.selection;
     if (!selection.hasSelection || selection.selectedIds.length != 1) {
+      return _ToolbarProjection.empty;
+    }
+    final selectedId = selection.selectedIds.first;
+    final selectedElement = state.domain.document.getElementById(selectedId);
+    if (selectedElement?.data is! SerialNumberData) {
       return _ToolbarProjection.empty;
     }
 

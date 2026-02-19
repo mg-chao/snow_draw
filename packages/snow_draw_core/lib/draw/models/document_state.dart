@@ -1,5 +1,9 @@
 import 'package:meta/meta.dart';
 
+import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/arrow/arrow_like_data.dart';
+import '../elements/types/filter/filter_data.dart';
+import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
@@ -19,7 +23,11 @@ class DocumentState {
   /// All elements on the canvas, ordered by z-index.
   final List<ElementState> elements;
 
-  /// Version counter for document changes.
+  /// Version counter for persisted element changes.
+  ///
+  /// Includes both regular element-list mutations and global element updates
+  /// (for example highlight-mask and watermark config changes) so downstream
+  /// scene/event consumers can treat them uniformly.
   final int elementsVersion;
 
   /// Persistent global document elements.
@@ -35,11 +43,73 @@ class DocumentState {
 
   late final _spatialIndex = SpatialIndex.fromElements(elements);
 
+  late final _arrowBindableElements = List<ElementState>.unmodifiable(
+    _buildArrowBindableElements(),
+  );
+
+  late final _arrowBindableSpatialIndex = SpatialIndex.fromElements(
+    _arrowBindableElements,
+  );
+
   /// Cached set of text element IDs bound to serial numbers.
   ///
   /// Avoids an O(n) scan of all elements on every hit test when
   /// the serial-number tool is active.
   late final boundTextIds = Set<String>.unmodifiable(_buildBoundTextIds());
+
+  /// Cached set of element IDs currently used by bound arrow endpoints.
+  ///
+  /// This lets interaction fast paths cheaply determine whether moving a target
+  /// element can implicitly preview-update dependent arrows.
+  late final boundArrowTargetIds = Set<String>.unmodifiable(
+    _buildBoundArrowTargetIds(),
+  );
+
+  /// Whether the document currently contains any bindable arrow targets.
+  ///
+  /// This lets arrow create/edit flows skip spatial queries entirely when no
+  /// rectangle/text/serial-number elements are present.
+  late final bool hasArrowBindableElements = _arrowBindableElements.isNotEmpty;
+
+  /// Cached highlight elements in document z-order.
+  ///
+  /// The list is computed lazily once per [DocumentState] instance and reused
+  /// by highlight-mask rendering paths to avoid repeated O(n) scans during
+  /// high-frequency interactions.
+  late final highlightElements = List<ElementState>.unmodifiable(
+    _buildHighlightElements(),
+  );
+
+  /// Suffix cache for blend-sensitive element presence.
+  ///
+  /// Index `i` answers whether any highlight/filter element exists in
+  /// `[i, elements.length)`, regardless of opacity.
+  late final List<bool> _blendSensitiveSuffix = _buildBlendSensitiveSuffix(
+    includeTransparent: true,
+  );
+
+  /// Suffix cache for visible blend-sensitive element presence.
+  ///
+  /// Index `i` answers whether any non-transparent highlight/filter element
+  /// exists in `[i, elements.length)`.
+  late final List<bool> _visibleBlendSensitiveSuffix =
+      _buildBlendSensitiveSuffix(includeTransparent: false);
+
+  /// Suffix cache for filter element presence.
+  ///
+  /// Index `i` answers whether any filter element exists in
+  /// `[i, elements.length)`, regardless of opacity.
+  late final List<bool> _filterSuffix = _buildFilterSuffix(
+    includeTransparent: true,
+  );
+
+  /// Suffix cache for visible filter element presence.
+  ///
+  /// Index `i` answers whether any non-transparent filter element exists in
+  /// `[i, elements.length)`.
+  late final List<bool> _visibleFilterSuffix = _buildFilterSuffix(
+    includeTransparent: false,
+  );
 
   Map<String, ElementState> get elementMap => _elementMap;
 
@@ -47,11 +117,122 @@ class DocumentState {
 
   int? getOrderIndex(String id) => _orderIndex[id];
 
+  /// Returns whether any blend-sensitive element exists at or above
+  /// [orderIndex].
+  ///
+  /// Blend-sensitive elements are those whose rendering depends on draw order
+  /// with surrounding pixels (currently highlight/filter).
+  ///
+  /// Set [includeTransparent] to `false` to only consider elements with
+  /// positive opacity.
+  bool hasBlendSensitiveElementFromOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) {
+    final normalizedIndex = _normalizeOrderIndex(orderIndex);
+    final suffix = includeTransparent
+        ? _blendSensitiveSuffix
+        : _visibleBlendSensitiveSuffix;
+    return suffix[normalizedIndex];
+  }
+
+  /// Returns whether any blend-sensitive element exists strictly above
+  /// [orderIndex].
+  ///
+  /// This is equivalent to querying from `orderIndex + 1`.
+  bool hasBlendSensitiveElementAboveOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) => hasBlendSensitiveElementFromOrderIndex(
+    orderIndex + 1,
+    includeTransparent: includeTransparent,
+  );
+
+  /// Returns whether any filter element exists at or above [orderIndex].
+  ///
+  /// Set [includeTransparent] to `false` to only consider filters with
+  /// positive opacity.
+  bool hasFilterElementFromOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) {
+    final normalizedIndex = _normalizeOrderIndex(orderIndex);
+    final suffix = includeTransparent ? _filterSuffix : _visibleFilterSuffix;
+    return suffix[normalizedIndex];
+  }
+
+  /// Returns whether any filter element exists strictly above [orderIndex].
+  ///
+  /// This is equivalent to querying from `orderIndex + 1`.
+  bool hasFilterElementAboveOrderIndex(
+    int orderIndex, {
+    bool includeTransparent = true,
+  }) => hasFilterElementFromOrderIndex(
+    orderIndex + 1,
+    includeTransparent: includeTransparent,
+  );
+
   SpatialIndex get spatialIndex => _spatialIndex;
+
+  /// Visits bindable arrow targets in arbitrary order.
+  ///
+  /// This uses the bindable-only spatial index to avoid scanning unrelated
+  /// elements during endpoint binding lookups.
+  void visitArrowBindableElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor, {
+    String? excludedElementId,
+  }) {
+    if (!hasArrowBindableElements) {
+      return;
+    }
+
+    final entries = _arrowBindableSpatialIndex.searchPointEntries(
+      point,
+      tolerance,
+      sortByZ: false,
+    );
+    for (final entry in entries) {
+      final elementId = entry.id;
+      if (excludedElementId != null && elementId == excludedElementId) {
+        continue;
+      }
+      final element = _elementMap[elementId];
+      if (element == null || element.opacity <= 0) {
+        continue;
+      }
+      if (!visitor(element)) {
+        return;
+      }
+    }
+  }
 
   /// Touch lazy caches eagerly to avoid stalls during interactive work.
   int warmCaches() =>
-      _elementMap.length + _orderIndex.length + _spatialIndex.size;
+      _elementMap.length +
+      _orderIndex.length +
+      _spatialIndex.size +
+      _arrowBindableSpatialIndex.size +
+      boundArrowTargetIds.length +
+      highlightElements.length +
+      _blendSensitiveSuffix.length +
+      _visibleBlendSensitiveSuffix.length +
+      _filterSuffix.length +
+      _visibleFilterSuffix.length;
+
+  /// Returns true when any element in [elementIds] has bound arrow endpoints.
+  bool hasArrowBoundToAny(Iterable<String> elementIds) {
+    if (boundArrowTargetIds.isEmpty) {
+      return false;
+    }
+    for (final elementId in elementIds) {
+      if (boundArrowTargetIds.contains(elementId)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
     final result = <ElementState>[];
@@ -62,8 +243,9 @@ class DocumentState {
     return result;
   }
 
-  bool hasElementAtPoint(DrawPoint point, double tolerance) =>
-      _spatialIndex.searchPointEntries(point, tolerance).isNotEmpty;
+  bool hasElementAtPoint(DrawPoint point, double tolerance) => _spatialIndex
+      .searchPointEntries(point, tolerance, sortByZ: false)
+      .isNotEmpty;
 
   List<ElementState> getElementsInRect(DrawRect rect) {
     final entries = _spatialIndex.searchRectEntries(rect);
@@ -132,6 +314,49 @@ class DocumentState {
     }
   }
 
+  /// Visits point candidates in arbitrary order.
+  ///
+  /// This skips z-order sorting and is suitable for callers that only need
+  /// geometric candidates (for example arrow binding resolution).
+  void visitElementsAtPoint(
+    DrawPoint point,
+    double tolerance,
+    bool Function(ElementState element) visitor,
+  ) {
+    final entries = _spatialIndex.searchPointEntries(
+      point,
+      tolerance,
+      sortByZ: false,
+    );
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        if (!visitor(element)) {
+          return;
+        }
+      }
+    }
+  }
+
+  /// Visits rect-intersecting candidates in arbitrary order.
+  ///
+  /// This skips z-order sorting and is suitable for broad-phase queries where
+  /// callers perform their own geometric checks.
+  void visitElementsInRect(
+    DrawRect rect,
+    bool Function(ElementState element) visitor,
+  ) {
+    final entries = _spatialIndex.searchRectEntries(rect, sortByZ: false);
+    for (final entry in entries) {
+      final element = getElementById(entry.id);
+      if (element != null) {
+        if (!visitor(element)) {
+          return;
+        }
+      }
+    }
+  }
+
   List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
     final elements = <ElementState>[];
     for (final entry in entries) {
@@ -152,6 +377,110 @@ class DocumentState {
       }
     }
     return ids;
+  }
+
+  Set<String> _buildBoundArrowTargetIds() {
+    final ids = <String>{};
+    for (final element in elements) {
+      final data = element.data;
+      if (data is! ArrowLikeData) {
+        continue;
+      }
+      final startTargetId = data.startBinding?.elementId;
+      if (startTargetId != null) {
+        ids.add(startTargetId);
+      }
+      final endTargetId = data.endBinding?.elementId;
+      if (endTargetId != null) {
+        ids.add(endTargetId);
+      }
+    }
+    return ids;
+  }
+
+  List<ElementState> _buildArrowBindableElements() {
+    final bindable = <ElementState>[];
+    for (final element in elements) {
+      if (element.opacity <= 0) {
+        continue;
+      }
+      if (ArrowBindingUtils.isBindableTarget(element)) {
+        bindable.add(element);
+      }
+    }
+    return bindable;
+  }
+
+  List<ElementState> _buildHighlightElements() {
+    final highlights = <ElementState>[];
+    for (final element in elements) {
+      if (element.data is HighlightData) {
+        highlights.add(element);
+      }
+    }
+    return highlights;
+  }
+
+  List<bool> _buildBlendSensitiveSuffix({required bool includeTransparent}) {
+    final suffix = List<bool>.filled(elements.length + 1, false);
+    var hasBlendSensitive = false;
+
+    for (var index = elements.length - 1; index >= 0; index--) {
+      final element = elements[index];
+      if (_isBlendSensitiveElement(
+        element,
+        includeTransparent: includeTransparent,
+      )) {
+        hasBlendSensitive = true;
+      }
+      suffix[index] = hasBlendSensitive;
+    }
+
+    return List<bool>.unmodifiable(suffix);
+  }
+
+  List<bool> _buildFilterSuffix({required bool includeTransparent}) {
+    final suffix = List<bool>.filled(elements.length + 1, false);
+    var hasFilter = false;
+
+    for (var index = elements.length - 1; index >= 0; index--) {
+      final element = elements[index];
+      final data = element.data;
+      final isFilter = data is FilterData;
+      final isVisible = includeTransparent || element.opacity > 0;
+      if (isFilter && isVisible) {
+        hasFilter = true;
+      }
+      suffix[index] = hasFilter;
+    }
+
+    return List<bool>.unmodifiable(suffix);
+  }
+
+  bool _isBlendSensitiveElement(
+    ElementState element, {
+    required bool includeTransparent,
+  }) {
+    final data = element.data;
+    final isBlendSensitive = data is HighlightData || data is FilterData;
+    if (!isBlendSensitive) {
+      return false;
+    }
+    if (includeTransparent) {
+      return true;
+    }
+    return element.opacity > 0;
+  }
+
+  int _normalizeOrderIndex(int orderIndex) {
+    if (orderIndex <= 0) {
+      return 0;
+    }
+    final maxIndex = elements.length;
+    if (orderIndex >= maxIndex) {
+      return maxIndex;
+    }
+    return orderIndex;
   }
 
   DocumentState copyWith({

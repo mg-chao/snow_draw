@@ -7,6 +7,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'free_draw_data.dart';
 import 'free_draw_visual_cache.dart';
 
@@ -21,6 +22,7 @@ class FreeDrawRenderer extends ElementTypeRenderer {
   /// Call when switching documents or under memory pressure.
   static void clearCaches() {
     clearStrokePatternCaches();
+    FreeDrawVisualCache.instance.clear();
   }
 
   @override
@@ -47,6 +49,21 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       return;
     }
 
+    if (_canUseTwoPointStrokeFastPath(
+      data: data,
+      strokeOpacity: strokeOpacity,
+      fillOpacity: fillOpacity,
+    )) {
+      if (_renderTwoPointStrokeFastPath(
+        canvas: canvas,
+        element: element,
+        data: data,
+        strokeOpacity: strokeOpacity,
+      )) {
+        return;
+      }
+    }
+
     final cached = FreeDrawVisualCache.instance.resolve(
       element: element,
       data: data,
@@ -60,17 +77,29 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     // draw calls for completed strokes.
     final existingPicture = cached.getCachedPicture(opacity);
     if (existingPicture != null) {
-      canvas.save();
-      if (element.rotation != 0) {
-        canvas
-          ..translate(rect.centerX, rect.centerY)
-          ..rotate(element.rotation)
-          ..translate(-rect.centerX, -rect.centerY);
-      }
-      canvas
-        ..translate(rect.minX, rect.minY)
-        ..drawPicture(existingPicture)
-        ..restore();
+      _paintInElementSpace(
+        canvas: canvas,
+        rect: rect,
+        rotation: element.rotation,
+        paint: (localCanvas) => localCanvas.drawPicture(existingPicture),
+      );
+      return;
+    }
+
+    if (!cached.shouldRecordPicture(opacity)) {
+      _paintInElementSpace(
+        canvas: canvas,
+        rect: rect,
+        rotation: element.rotation,
+        paint: (localCanvas) => _renderToCanvas(
+          canvas: localCanvas,
+          data: data,
+          rect: rect,
+          cached: cached,
+          strokeOpacity: strokeOpacity,
+          fillOpacity: fillOpacity,
+        ),
+      );
       return;
     }
 
@@ -94,17 +123,12 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     cached.setCachedPicture(picture, opacity);
 
     // Draw the just-recorded picture.
-    canvas.save();
-    if (element.rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(element.rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
-    canvas
-      ..translate(rect.minX, rect.minY)
-      ..drawPicture(picture)
-      ..restore();
+    _paintInElementSpace(
+      canvas: canvas,
+      rect: rect,
+      rotation: element.rotation,
+      paint: (localCanvas) => localCanvas.drawPicture(picture),
+    );
   }
 
   /// Issues the actual fill + stroke draw commands.
@@ -211,5 +235,50 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final dx = (first.x - last.x) * rect.width;
     final dy = (first.y - last.y) * rect.height;
     return (dx * dx + dy * dy) <= tolerance * tolerance;
+  }
+
+  bool _canUseTwoPointStrokeFastPath({
+    required FreeDrawData data,
+    required double strokeOpacity,
+    required double fillOpacity,
+  }) => canUseTwoPointStrokeFastPath(
+    pointCount: data.points.length,
+    strokeOpacity: strokeOpacity,
+    fillOpacity: fillOpacity,
+    strokeWidth: data.strokeWidth,
+  );
+
+  bool _renderTwoPointStrokeFastPath({
+    required Canvas canvas,
+    required ElementState element,
+    required FreeDrawData data,
+    required double strokeOpacity,
+  }) => renderTwoPointNormalizedStroke(
+    canvas: canvas,
+    rect: element.rect,
+    rotation: element.rotation,
+    startPoint: data.points.first,
+    endPoint: data.points.last,
+    strokeWidth: data.strokeWidth,
+    strokeStyle: data.strokeStyle,
+    strokeColor: data.color.withValues(alpha: strokeOpacity),
+  );
+
+  void _paintInElementSpace({
+    required Canvas canvas,
+    required DrawRect rect,
+    required double rotation,
+    required void Function(Canvas canvas) paint,
+  }) {
+    canvas.save();
+    if (rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+    paint(canvas);
+    canvas.restore();
   }
 }

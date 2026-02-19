@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
   group('Collection-backed actions', () {
@@ -71,5 +72,21 @@ void main() {
         throwsA(isA<UnsupportedError>()),
       );
     });
+
+    test(
+      'UpdateCreatingElementBatch keeps an immutable snapshot of points',
+      () {
+        final points = <DrawPoint>[const DrawPoint(x: 1, y: 2)];
+        final action = UpdateCreatingElementBatch(positions: points);
+
+        points.add(const DrawPoint(x: 3, y: 4));
+
+        expect(action.positions, hasLength(1));
+        expect(
+          () => action.positions.add(const DrawPoint(x: 5, y: 6)),
+          throwsA(isA<UnsupportedError>()),
+        );
+      },
+    );
   });
 }

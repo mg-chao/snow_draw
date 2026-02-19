@@ -206,6 +206,70 @@ void main() {
       },
     );
 
+    test('coalesced watermark updates preserve unrelated elements', () async {
+      final store = _createStore(
+        initialState: DrawState(
+          domain: DomainState(
+            document: DocumentState(
+              elements: const [
+                ElementState(
+                  id: 'a',
+                  rect: DrawRect(maxX: 20, maxY: 20),
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 0,
+                  data: FilterData(),
+                ),
+                ElementState(
+                  id: 'b',
+                  rect: DrawRect(maxX: 30, maxY: 20),
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 1,
+                  data: FilterData(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      const coalescing = HistoryCoalescing(
+        key: 'style_toolbar:watermarkOpacity',
+        window: Duration(seconds: 1),
+      );
+
+      await store.dispatch(
+        const UpdateGlobalElements(
+          watermark: WatermarkConfig(opacity: 0.1),
+          historyCoalescing: coalescing,
+        ),
+      );
+      await store.dispatch(
+        const UpdateGlobalElements(
+          watermark: WatermarkConfig(opacity: 0.3),
+          historyCoalescing: coalescing,
+        ),
+      );
+
+      expect(
+        store.state.domain.document.elements.map((element) => element.id),
+        ['a', 'b'],
+      );
+      expect(store.state.domain.document.globalElements.watermark.opacity, 0.3);
+
+      await store.dispatch(const Undo());
+      expect(
+        store.state.domain.document.elements.map((element) => element.id),
+        ['a', 'b'],
+      );
+      expect(
+        store.state.domain.document.globalElements.watermark.opacity,
+        ConfigDefaults.defaultWatermarkOpacity,
+      );
+    });
+
     test(
       'coalesces rapid UpdateElementsStyle serial number history entries',
       () async {
@@ -268,6 +332,69 @@ void main() {
         expect((redone!.data as SerialNumberData).number, 12);
       },
     );
+
+    test('coalesced style updates preserve unrelated elements', () async {
+      final store = _createStore(
+        initialState: DrawState(
+          domain: DomainState(
+            document: DocumentState(
+              elements: const [
+                ElementState(
+                  id: 'styled',
+                  rect: DrawRect(maxX: 20, maxY: 20),
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 0,
+                  data: FilterData(),
+                ),
+                ElementState(
+                  id: 'other',
+                  rect: DrawRect(maxX: 40, maxY: 20),
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 1,
+                  data: FilterData(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      const coalescing = HistoryCoalescing(
+        key: 'style_toolbar:opacity',
+        window: Duration(seconds: 1),
+      );
+
+      await store.dispatch(
+        UpdateElementsStyle(
+          elementIds: ['styled'],
+          opacity: 0.7,
+          historyCoalescing: coalescing,
+        ),
+      );
+      await store.dispatch(
+        UpdateElementsStyle(
+          elementIds: ['styled'],
+          opacity: 0.2,
+          historyCoalescing: coalescing,
+        ),
+      );
+
+      expect(
+        store.state.domain.document.getElementById('styled')?.opacity,
+        0.2,
+      );
+      expect(store.state.domain.document.getElementById('other')?.opacity, 1.0);
+
+      await store.dispatch(const Undo());
+      expect(
+        store.state.domain.document.getElementById('styled')?.opacity,
+        1.0,
+      );
+      expect(store.state.domain.document.getElementById('other')?.opacity, 1.0);
+    });
 
     test(
       'coalesces rapid UpdateGlobalElements watermark text history entries',

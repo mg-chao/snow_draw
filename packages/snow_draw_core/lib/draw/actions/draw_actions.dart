@@ -10,6 +10,7 @@ import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/interaction_state.dart';
 import '../types/draw_point.dart';
+import '../types/draw_rect.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
 import '../utils/edit_intent_detector.dart';
@@ -43,6 +44,9 @@ abstract class DrawAction
 List<String> _freezeElementIds(List<String> elementIds) => elementIds.isEmpty
     ? const <String>[]
     : List<String>.unmodifiable(elementIds);
+
+List<DrawPoint> _freezePoints(List<DrawPoint> points) =>
+    points.isEmpty ? const <DrawPoint>[] : List<DrawPoint>.unmodifiable(points);
 
 // ============================================================================
 // Selection actions
@@ -134,6 +138,56 @@ class UpdateCreatingElement extends DrawAction {
   @override
   String toString() =>
       'UpdateCreatingElement(position: $currentPosition, '
+      'snapOverride: $snapOverride)';
+}
+
+class UpdateCreatingElementBatch extends DrawAction {
+  UpdateCreatingElementBatch({
+    required List<DrawPoint> positions,
+    bool maintainAspectRatio = false,
+    bool createFromCenter = false,
+    bool snapOverride = false,
+  }) : this._(
+         positions: _freezePoints(positions),
+         maintainAspectRatio: maintainAspectRatio,
+         createFromCenter: createFromCenter,
+         snapOverride: snapOverride,
+       );
+
+  /// Creates a batch action using an already-frozen positions list.
+  ///
+  /// Callers must ensure [positions] will not be mutated after dispatch.
+  UpdateCreatingElementBatch.frozen({
+    required List<DrawPoint> positions,
+    bool maintainAspectRatio = false,
+    bool createFromCenter = false,
+    bool snapOverride = false,
+  }) : this._(
+         positions: positions,
+         maintainAspectRatio: maintainAspectRatio,
+         createFromCenter: createFromCenter,
+         snapOverride: snapOverride,
+       );
+
+  UpdateCreatingElementBatch._({
+    required this.positions,
+    required this.maintainAspectRatio,
+    required this.createFromCenter,
+    required this.snapOverride,
+  });
+
+  /// Ordered pointer positions represented by this batched update.
+  final List<DrawPoint> positions;
+  final bool maintainAspectRatio;
+  final bool createFromCenter;
+  final bool snapOverride;
+
+  @override
+  bool get conflictsWithEditing => true;
+
+  @override
+  String toString() =>
+      'UpdateCreatingElementBatch(count: ${positions.length}, '
       'snapOverride: $snapOverride)';
 }
 
@@ -414,16 +468,18 @@ class StartTextEdit extends DrawAction implements NonRecordable {
 }
 
 class UpdateTextEdit extends DrawAction implements NonRecordable {
-  const UpdateTextEdit({required this.text});
+  const UpdateTextEdit({required this.text, this.rect});
 
   final String text;
+  final DrawRect? rect;
 
   @override
   String get nonRecordableReason =>
       'UpdateTextEdit is an intermediate edit state.';
 
   @override
-  String toString() => 'UpdateTextEdit(textLength: ${text.length})';
+  String toString() =>
+      'UpdateTextEdit(textLength: ${text.length}, hasRect: ${rect != null})';
 }
 
 /// Recomputes text element bounds after runtime font availability changes.

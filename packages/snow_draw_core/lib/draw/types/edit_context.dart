@@ -70,6 +70,7 @@ final class MoveEditContext extends EditContext {
     required this.elementSnapshots,
     this.snapBoundsAtStart,
     this.referenceElements = const [],
+    this.referenceElementAabbs = const [],
     this.targetElements = const [],
   });
 
@@ -86,6 +87,9 @@ final class MoveEditContext extends EditContext {
 
   /// Non-selected visible elements captured at edit start for object snapping.
   final List<ElementState> referenceElements;
+
+  /// Precomputed axis-aligned bounds for [referenceElements].
+  final List<DrawRect> referenceElementAabbs;
 
   /// Selected elements captured at edit start for precise target snap points.
   final List<ElementState> targetElements;
@@ -118,6 +122,7 @@ final class ResizeEditContext extends EditContext {
     required this.elementSnapshots,
     this.selectionPadding = 0.0,
     this.referenceElements = const [],
+    this.referenceElementAabbs = const [],
     this.forceSerialNumberAspectRatio = false,
   });
   final ResizeMode resizeMode;
@@ -130,6 +135,9 @@ final class ResizeEditContext extends EditContext {
 
   /// Non-selected visible elements captured at edit start for object snapping.
   final List<ElementState> referenceElements;
+
+  /// Precomputed axis-aligned bounds for [referenceElements].
+  final List<DrawRect> referenceElementAabbs;
 
   /// Whether resize should always preserve aspect ratio for this session.
   final bool forceSerialNumberAspectRatio;

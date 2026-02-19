@@ -5,13 +5,17 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_binding_snapper.dart';
+import '../../elements/types/arrow/arrow_binding_target_cache.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/arrow/arrow_two_point_layout.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import '../../elements/types/line/line_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -35,6 +39,13 @@ import '../core/edit_operation_helpers.dart';
 import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/standard_finish_mixin.dart';
+
+const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _linePointBindingCacheTargetThresholdFactor = 0.4;
+const _defaultBindingCandidateCacheThresholdFactor = 0.35;
+const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;
+const _linePointBindingCandidateCacheThresholdFactor = 0.45;
+const _linePointBindingCandidateReferenceCacheThresholdFactor = 0.45;
 
 class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   const ArrowPointOperation();
@@ -108,12 +119,11 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
       operationName: 'ArrowPointOperation.createContext',
     );
+    final elementSpace = element.rotation == 0
+        ? null
+        : ElementSpace(rotation: element.rotation, origin: element.rect.center);
 
-    final localStartPosition = _toLocalPosition(
-      element.rect,
-      element.rotation,
-      position,
-    );
+    final localStartPosition = elementSpace?.fromWorld(position) ?? position;
     final pointPosition = _resolvePointPosition(
       points: points,
       kind: typedParams.pointKind,
@@ -138,9 +148,17 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       pointKind: typedParams.pointKind,
       pointIndex: typedParams.pointIndex,
       dragOffset: dragOffset,
+      baseElement: element,
+      elementSpace: elementSpace,
       releaseFixedSegment: shouldReleaseSegment,
       deletePointOnStart: shouldDeletePoint,
-      bindingTargetCache: BindingTargetCache(),
+      isLineElement: data is LineData,
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+      initialStartBinding: data.startBinding,
+      initialEndBinding: data.endBinding,
+      hasBindableTargets: state.domain.document.hasArrowBindableElements,
+      bindingTargetCache: ArrowBindingTargetCache(),
     );
   }
 
@@ -154,11 +172,9 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       context,
       operationName: 'ArrowPointOperation.initialTransform',
     );
-    final element = state.domain.document.getElementById(
-      typedContext.elementId,
-    );
-    final elementData = element?.data;
-    if (element == null || elementData is! ArrowLikeData) {
+    final baseElement = typedContext.baseElement;
+    final elementData = baseElement.data;
+    if (elementData is! ArrowLikeData) {
       return ArrowPointTransform(
         currentPosition: startPosition,
         points: typedContext.initialPoints,
@@ -189,7 +205,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
           .where((segment) => segment.index != segmentIndex)
           .toList(growable: false);
       final updated = computeElbowEdit(
-        element: element,
+        element: baseElement,
         data: arrowData,
         lookup: CombinedElementLookup(base: state.domain.document.elementMap),
         localPointsOverride: points,
@@ -235,11 +251,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       return EditUpdateResult<EditTransform>(transform: typedTransform);
     }
 
-    var localPosition = _toLocalPosition(
-      typedContext.elementRect,
-      typedContext.rotation,
-      currentPosition,
-    );
+    var localPosition = typedContext.toLocal(currentPosition);
     final snapConfig = config.snap;
     final gridConfig = config.grid;
     final snappingMode = resolveEffectiveSnappingModeForConfig(
@@ -251,60 +263,50 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       final target = localPosition.translate(typedContext.dragOffset);
       final snappedTarget = _snapTargetToGrid(
         target: target,
-        rect: typedContext.elementRect,
-        rotation: typedContext.rotation,
+        context: typedContext,
         gridSize: gridConfig.size,
       );
       localPosition = snappedTarget - typedContext.dragOffset;
     }
 
-    final element = state.domain.document.getElementById(
-      typedContext.elementId,
-    );
-    final data = element?.data is ArrowLikeData
-        ? element!.data as ArrowLikeData
-        : null;
-    final zoom = state.application.view.camera.zoom;
-    var bindingDistance = 0.0;
-    var allowNewBinding = false;
-    var bindingTargets = const <ElementState>[];
-    if (_requiresBindingLookup(typedContext)) {
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      bindingDistance = snapConfig.arrowBindingDistance / effectiveZoom;
-      allowNewBinding =
-          snapConfig.enableArrowBinding &&
-          !modifiers.snapOverride &&
-          snappingMode != SnappingMode.grid;
-      if (element != null && bindingDistance > 0) {
-        final bindingSearchDistance =
-            ArrowBindingUtils.resolveBindingSearchDistance(bindingDistance);
-        final bindingSearchPoint = _toWorldPosition(
-          typedContext.elementRect,
-          typedContext.rotation,
-          localPosition.translate(typedContext.dragOffset),
-        );
-        bindingTargets = _resolveBindingTargetsCached(
-          state: state,
-          context: typedContext,
-          position: bindingSearchPoint,
-          distance: bindingSearchDistance,
-        );
-      }
-    }
+    final startBinding =
+        typedTransform.startBinding ?? typedContext.initialStartBinding;
+    final endBinding =
+        typedTransform.endBinding ?? typedContext.initialEndBinding;
+    final shouldLookupBindings =
+        _requiresBindingLookup(typedContext) &&
+        (typedContext.hasBindableTargets ||
+            startBinding != null ||
+            endBinding != null);
+    final allowNewBinding =
+        snapConfig.enableArrowBinding &&
+        !modifiers.snapOverride &&
+        snappingMode != SnappingMode.grid;
+    final bindingDistance = shouldLookupBindings
+        ? ArrowBindingSnapper.resolveBindingDistance(
+            state: state,
+            snapConfig: snapConfig,
+          )
+        : 0.0;
+
     final result = _compute(
+      state: state,
       context: typedContext,
       currentPosition: localPosition,
       didInsert: typedTransform.didInsert,
       config: config,
-      zoom: zoom,
-      startBinding: typedTransform.startBinding ?? data?.startBinding,
-      endBinding: typedTransform.endBinding ?? data?.endBinding,
-      startArrowhead: data?.startArrowhead ?? ArrowheadStyle.none,
-      endArrowhead: data?.endArrowhead ?? ArrowheadStyle.none,
-      bindingTargets: bindingTargets,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      startArrowhead: typedContext.startArrowhead,
+      endArrowhead: typedContext.endArrowhead,
+      shouldLookupBindings: shouldLookupBindings,
       bindingDistance: bindingDistance,
       allowNewBinding: allowNewBinding,
     );
+
+    if (_isNoOpArrowTransformUpdate(previous: typedTransform, next: result)) {
+      return EditUpdateResult<EditTransform>(transform: typedTransform);
+    }
 
     final nextTransform = typedTransform.copyWith(
       currentPosition: localPosition,
@@ -377,15 +379,8 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       return null;
     }
 
-    final element = state.domain.document.getElementById(
-      typedContext.elementId,
-    );
-    if (element == null || element.data is! ArrowLikeData) {
-      return null;
-    }
-
     final updatedElement = _buildUpdatedElement(
-      element: element,
+      element: typedContext.baseElement,
       context: typedContext,
       transform: typedTransform,
       elementMap: state.domain.document.elementMap,
@@ -429,6 +424,18 @@ ElementState _buildUpdatedElement({
     startBinding: transform.startBinding,
     endBinding: transform.endBinding,
   );
+  if (data.arrowType != ArrowType.elbow &&
+      context.rotation == 0 &&
+      localPoints.length == 2) {
+    final layout = computeArrowTwoPointLayout(
+      first: localPoints.first,
+      second: localPoints.last,
+    );
+    final updatedData = dataWithBindings.copyWith(
+      points: layout.normalizedPoints,
+    );
+    return element.copyWith(rect: layout.rect, data: updatedData);
+  }
 
   // Transform local-space points to world space, then back to local space
   // with the new rect center. This preserves world-space positions while
@@ -518,10 +525,19 @@ final class ArrowPointEditContext extends EditContext {
     required this.pointKind,
     required this.pointIndex,
     required this.dragOffset,
+    required this.baseElement,
+    required ElementSpace? elementSpace,
     required this.releaseFixedSegment,
     required this.deletePointOnStart,
-    required BindingTargetCache bindingTargetCache,
-  }) : _bindingTargetCache = bindingTargetCache;
+    required ArrowBindingTargetCache bindingTargetCache,
+    required this.startArrowhead,
+    required this.endArrowhead,
+    required this.initialStartBinding,
+    required this.initialEndBinding,
+    required this.hasBindableTargets,
+    this.isLineElement = false,
+  }) : _bindingTargetCache = bindingTargetCache,
+       _elementSpace = elementSpace;
 
   final String elementId;
   final DrawRect elementRect;
@@ -532,12 +548,30 @@ final class ArrowPointEditContext extends EditContext {
   final ArrowPointKind pointKind;
   final int pointIndex;
   final DrawPoint dragOffset;
+  final ElementState baseElement;
   final bool releaseFixedSegment;
   final bool deletePointOnStart;
-  final BindingTargetCache _bindingTargetCache;
+  final bool isLineElement;
+  final ArrowheadStyle startArrowhead;
+  final ArrowheadStyle endArrowhead;
+  final ArrowBinding? initialStartBinding;
+  final ArrowBinding? initialEndBinding;
+  final bool hasBindableTargets;
+  final ArrowBindingTargetCache _bindingTargetCache;
+  final ElementSpace? _elementSpace;
 
   @override
   bool get hasSnapshots => initialPoints.length >= 2;
+
+  DrawPoint toLocal(DrawPoint position) {
+    final space = _elementSpace;
+    return space == null ? position : space.fromWorld(position);
+  }
+
+  DrawPoint toWorld(DrawPoint position) {
+    final space = _elementSpace;
+    return space == null ? position : space.toWorld(position);
+  }
 }
 
 @immutable
@@ -574,28 +608,62 @@ final class _BoundarySegmentDragResult {
   final List<ElbowFixedSegment> fixedSegments;
 }
 
+bool _isNoOpArrowTransformUpdate({
+  required ArrowPointTransform previous,
+  required _ArrowPointComputation next,
+}) =>
+    previous.didInsert == next.didInsert &&
+    previous.shouldDelete == next.shouldDelete &&
+    previous.hasChanges == next.hasChanges &&
+    previous.activeIndex == next.activeIndex &&
+    previous.startBinding == next.startBinding &&
+    previous.endBinding == next.endBinding &&
+    pointListEquals(previous.points, next.points) &&
+    fixedSegmentStructureEquals(previous.fixedSegments, next.fixedSegments);
+
 _ArrowPointComputation _compute({
+  required DrawState state,
   required ArrowPointEditContext context,
   required DrawPoint currentPosition,
   required bool didInsert,
   required DrawConfig config,
-  required double zoom,
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
   required ArrowheadStyle startArrowhead,
   required ArrowheadStyle endArrowhead,
-  required List<ElementState> bindingTargets,
+  required bool shouldLookupBindings,
   required double bindingDistance,
   required bool allowNewBinding,
 }) {
-  final basePoints = List<DrawPoint>.from(context.initialPoints);
+  final basePoints = context.initialPoints;
   final baseFixedSegments = context.initialFixedSegments;
+  final zoom = state.application.view.camera.zoom;
   final effectiveZoom = zoom == 0 ? 1.0 : zoom;
   final handleTolerance =
       config.selection.interaction.handleTolerance / effectiveZoom;
   final addThreshold = handleTolerance;
   final deleteThreshold = handleTolerance;
   final loopThreshold = handleTolerance * 1.5;
+
+  final twoPointFastPath = _tryComputeTwoPointFastPath(
+    state: state,
+    context: context,
+    basePoints: basePoints,
+    baseFixedSegments: baseFixedSegments,
+    currentPosition: currentPosition,
+    didInsert: didInsert,
+    loopThreshold: loopThreshold,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+    shouldLookupBindings: shouldLookupBindings,
+    bindingDistance: bindingDistance,
+    allowNewBinding: allowNewBinding,
+  );
+  if (twoPointFastPath != null) {
+    return twoPointFastPath;
+  }
 
   var target = currentPosition.translate(context.dragOffset);
   var updatedPoints = basePoints;
@@ -778,43 +846,25 @@ _ArrowPointComputation _compute({
     if (isEndpoint) {
       final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
       final referencePoint = basePoints.length > 1
-          ? _toWorldPosition(
-              context.elementRect,
-              context.rotation,
-              basePoints[index == 0 ? 1 : basePoints.length - 2],
-            )
+          ? context.toWorld(basePoints[index == 0 ? 1 : basePoints.length - 2])
           : null;
-      final worldTarget = _toWorldPosition(
-        context.elementRect,
-        context.rotation,
-        target,
-      );
+      final worldTarget = context.toWorld(target);
       final hasArrowhead = index == 0
           ? startArrowhead != ArrowheadStyle.none
           : endArrowhead != ArrowheadStyle.none;
-      final candidate = context.arrowType == ArrowType.elbow
-          ? ArrowBindingUtils.resolveElbowBindingCandidate(
-              worldPoint: worldTarget,
-              targets: bindingTargets,
-              snapDistance: bindingDistance,
-              preferredBinding: existingBinding,
-              allowNewBinding: allowNewBinding,
-              hasArrowhead: hasArrowhead,
-            )
-          : ArrowBindingUtils.resolveBindingCandidate(
-              worldPoint: worldTarget,
-              targets: bindingTargets,
-              snapDistance: bindingDistance,
-              preferredBinding: existingBinding,
-              allowNewBinding: allowNewBinding,
-              referencePoint: referencePoint,
-            );
+      final candidate = _resolveEndpointBindingCandidate(
+        state: state,
+        context: context,
+        worldTarget: worldTarget,
+        existingBinding: existingBinding,
+        hasArrowhead: hasArrowhead,
+        shouldLookupBindings: shouldLookupBindings,
+        snapDistance: bindingDistance,
+        allowNewBinding: allowNewBinding,
+        referencePoint: referencePoint,
+      );
       if (candidate != null) {
-        target = _toLocalPosition(
-          context.elementRect,
-          context.rotation,
-          candidate.snapPoint,
-        );
+        target = context.toLocal(candidate.snapPoint);
         if (index == 0) {
           nextStartBinding = candidate.binding;
         } else {
@@ -879,6 +929,110 @@ _ArrowPointComputation _compute({
   );
 }
 
+_ArrowPointComputation? _tryComputeTwoPointFastPath({
+  required DrawState state,
+  required ArrowPointEditContext context,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment> baseFixedSegments,
+  required DrawPoint currentPosition,
+  required bool didInsert,
+  required double loopThreshold,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  required bool shouldLookupBindings,
+  required double bindingDistance,
+  required bool allowNewBinding,
+}) {
+  if (basePoints.length != 2 || context.pointKind == ArrowPointKind.addable) {
+    return null;
+  }
+
+  final index = switch (context.pointKind) {
+    ArrowPointKind.loopStart => 0,
+    ArrowPointKind.loopEnd => 1,
+    _ => context.pointIndex,
+  };
+  if (index < 0 || index >= 2) {
+    return _ArrowPointComputation(
+      points: basePoints,
+      didInsert: didInsert,
+      shouldDelete: false,
+      activeIndex: null,
+      hasChanges: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,
+    );
+  }
+
+  var target = currentPosition.translate(context.dragOffset);
+  var nextStartBinding = startBinding;
+  var nextEndBinding = endBinding;
+  final existingBinding = index == 0 ? nextStartBinding : nextEndBinding;
+  final referencePoint = context.toWorld(basePoints[index == 0 ? 1 : 0]);
+  final worldTarget = context.toWorld(target);
+  final hasArrowhead = index == 0
+      ? startArrowhead != ArrowheadStyle.none
+      : endArrowhead != ArrowheadStyle.none;
+  final candidate = _resolveEndpointBindingCandidate(
+    state: state,
+    context: context,
+    worldTarget: worldTarget,
+    existingBinding: existingBinding,
+    hasArrowhead: hasArrowhead,
+    shouldLookupBindings: shouldLookupBindings,
+    snapDistance: bindingDistance,
+    allowNewBinding: allowNewBinding,
+    referencePoint: referencePoint,
+  );
+  if (candidate != null) {
+    target = context.toLocal(candidate.snapPoint);
+    if (index == 0) {
+      nextStartBinding = candidate.binding;
+    } else {
+      nextEndBinding = candidate.binding;
+    }
+  } else if (index == 0) {
+    nextStartBinding = null;
+  } else {
+    nextEndBinding = null;
+  }
+
+  var first = basePoints.first;
+  var second = basePoints.last;
+  if (index == 0) {
+    first = target;
+  } else {
+    second = target;
+  }
+  if (first.distanceSquared(second) <= loopThreshold * loopThreshold) {
+    if (index == 0) {
+      first = second;
+    } else {
+      second = first;
+    }
+  }
+
+  final pointsChanged = first != basePoints.first || second != basePoints.last;
+  final bindingChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final resolvedPoints = pointsChanged
+      ? List<DrawPoint>.unmodifiable([first, second])
+      : basePoints;
+  return _ArrowPointComputation(
+    points: resolvedPoints,
+    didInsert: didInsert,
+    shouldDelete: false,
+    activeIndex: index,
+    hasChanges: pointsChanged || bindingChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: baseFixedSegments.isEmpty ? null : baseFixedSegments,
+  );
+}
+
 bool _requiresBindingLookup(ArrowPointEditContext context) =>
     switch (context.pointKind) {
       ArrowPointKind.loopStart => true,
@@ -889,99 +1043,46 @@ bool _requiresBindingLookup(ArrowPointEditContext context) =>
       ArrowPointKind.addable => false,
     };
 
-List<ElementState> _resolveBindingTargets(
-  DrawState state,
-  String excludeId,
-  DrawPoint position,
-  double distance,
-) {
-  final document = state.domain.document;
-  final targets = <ElementState>[];
-  document.visitElementsAtPointTopDown(position, distance, (element) {
-    if (element.opacity <= 0 ||
-        element.id == excludeId ||
-        !ArrowBindingUtils.isBindableTarget(element)) {
-      return true;
-    }
-    targets.add(element);
-    return true;
-  });
-  return targets;
-}
-
-List<ElementState> _resolveBindingTargetsCached({
+ArrowBindingResult? _resolveEndpointBindingCandidate({
   required DrawState state,
   required ArrowPointEditContext context,
-  required DrawPoint position,
-  required double distance,
+  required DrawPoint worldTarget,
+  required ArrowBinding? existingBinding,
+  required bool hasArrowhead,
+  required bool shouldLookupBindings,
+  required double snapDistance,
+  required bool allowNewBinding,
+  DrawPoint? referencePoint,
 }) {
-  final cache = context._bindingTargetCache;
-  final elementsVersion = state.domain.document.elementsVersion;
-  final threshold = distance * 0.4;
-  if (cache.isValid(
-    position: position,
-    threshold: threshold,
-    distance: distance,
-    elementsVersion: elementsVersion,
-  )) {
-    return cache.targets;
-  }
-
-  final targets = _resolveBindingTargets(
-    state,
-    context.elementId,
-    position,
-    distance,
+  final preferredArrowheadStyle = hasArrowhead
+      ? ArrowheadStyle.standard
+      : ArrowheadStyle.none;
+  final targetCacheThresholdFactor = context.isLineElement
+      ? _linePointBindingCacheTargetThresholdFactor
+      : _defaultBindingCacheTargetThresholdFactor;
+  final candidateCacheThresholdFactor = context.isLineElement
+      ? _linePointBindingCandidateCacheThresholdFactor
+      : _defaultBindingCandidateCacheThresholdFactor;
+  final candidateReferenceThresholdFactor = context.isLineElement
+      ? _linePointBindingCandidateReferenceCacheThresholdFactor
+      : _defaultBindingCandidateReferenceCacheThresholdFactor;
+  return ArrowBindingSnapper.resolveEndpointBindingCandidate(
+    state: state,
+    worldPoint: worldTarget,
+    arrowType: context.arrowType,
+    arrowheadStyle: preferredArrowheadStyle,
+    shouldLookupBindings: shouldLookupBindings,
+    snapDistance: snapDistance,
+    allowNewBinding: allowNewBinding,
+    hasBindableTargets: context.hasBindableTargets,
+    preferredBinding: existingBinding,
+    referencePoint: referencePoint,
+    cache: context._bindingTargetCache,
+    targetCacheThresholdFactor: targetCacheThresholdFactor,
+    candidateCacheThresholdFactor: candidateCacheThresholdFactor,
+    candidateCacheReferenceThresholdFactor: candidateReferenceThresholdFactor,
+    excludedElementId: context.elementId,
   );
-  cache.update(
-    position: position,
-    distance: distance,
-    elementsVersion: elementsVersion,
-    targets: targets,
-  );
-  return targets;
-}
-
-class BindingTargetCache {
-  DrawPoint? _lastPosition;
-  double _lastDistance = 0;
-  var _elementsVersion = -1;
-  List<ElementState> _targets = const [];
-
-  List<ElementState> get targets => _targets;
-
-  bool isValid({
-    required DrawPoint position,
-    required double threshold,
-    required double distance,
-    required int elementsVersion,
-  }) {
-    if (_lastPosition == null) {
-      return false;
-    }
-    if (_elementsVersion != elementsVersion) {
-      return false;
-    }
-    if (_lastDistance != distance) {
-      return false;
-    }
-    if (threshold <= 0) {
-      return false;
-    }
-    return _lastPosition!.distanceSquared(position) <= threshold * threshold;
-  }
-
-  void update({
-    required DrawPoint position,
-    required double distance,
-    required int elementsVersion,
-    required List<ElementState> targets,
-  }) {
-    _lastPosition = position;
-    _lastDistance = distance;
-    _elementsVersion = elementsVersion;
-    _targets = targets;
-  }
 }
 
 DrawPoint _resolvePointPosition({
@@ -1023,37 +1124,20 @@ DrawPoint _resolvePointPosition({
   return points[resolvedIndex.clamp(0, points.length - 1)];
 }
 
-DrawPoint _toLocalPosition(DrawRect rect, double rotation, DrawPoint position) {
-  if (rotation == 0) {
-    return position;
-  }
-  final space = ElementSpace(rotation: rotation, origin: rect.center);
-  return space.fromWorld(position);
-}
-
-DrawPoint _toWorldPosition(DrawRect rect, double rotation, DrawPoint position) {
-  if (rotation == 0) {
-    return position;
-  }
-  final space = ElementSpace(rotation: rotation, origin: rect.center);
-  return space.toWorld(position);
-}
-
 DrawPoint _snapTargetToGrid({
   required DrawPoint target,
-  required DrawRect rect,
-  required double rotation,
+  required ArrowPointEditContext context,
   required double gridSize,
 }) {
   if (gridSize <= 0) {
     return target;
   }
-  final worldTarget = _toWorldPosition(rect, rotation, target);
+  final worldTarget = context.toWorld(target);
   final snappedWorld = gridSnapService.snapPoint(
     point: worldTarget,
     gridSize: gridSize,
   );
-  return _toLocalPosition(rect, rotation, snappedWorld);
+  return context.toLocal(snappedWorld);
 }
 
 _BoundarySegmentDragResult _applyBoundarySegmentDrag({

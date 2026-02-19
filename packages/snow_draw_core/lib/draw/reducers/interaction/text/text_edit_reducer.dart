@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
@@ -7,7 +5,7 @@ import '../../../core/dependency_interfaces.dart';
 import '../../../elements/types/arrow/arrow_like_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../elements/types/text/text_data.dart';
-import '../../../elements/types/text/text_layout.dart';
+import '../../../elements/types/text/text_editing_geometry.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
@@ -63,7 +61,10 @@ class TextEditReducer {
     } else {
       final defaults = context.config.textStyle;
       draftData = const TextData().withElementStyle(defaults) as TextData;
-      rect = _initialTextRect(action.position, draftData);
+      rect = resolveInitialTextEditingRect(
+        position: action.position,
+        data: draftData,
+      );
       opacity = defaults.opacity;
       rotation = 0;
       isNew = true;
@@ -93,17 +94,22 @@ class TextEditReducer {
     if (interaction is! TextEditingState) {
       return state;
     }
-    if (action.text == interaction.draftData.text) {
+    if (action.text == interaction.draftData.text && action.rect == null) {
       return state;
     }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
-    final nextRect = _resolveTextRect(
-      origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
-      currentRect: interaction.rect,
-      data: nextData,
-      autoResize: nextData.autoResize,
-    );
+    final nextRect =
+        action.rect ??
+        resolveTextEditingRect(
+          origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+          currentRect: interaction.rect,
+          data: nextData,
+          allowShrinkHeight: true,
+        );
+    if (nextData == interaction.draftData && nextRect == interaction.rect) {
+      return state;
+    }
 
     return state.copyWith(
       application: state.application.copyWith(
@@ -159,12 +165,11 @@ class TextEditReducer {
     }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
-    final nextRect = _resolveTextRect(
+    final nextRect = resolveTextEditingRect(
       origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
       currentRect: interaction.rect,
       data: nextData,
-      autoResize: nextData.autoResize,
-      allowShrinkHeight: nextData.autoResize,
+      allowShrinkHeight: true,
     );
 
     if (interaction.isNew) {
@@ -222,49 +227,6 @@ class TextEditReducer {
       return state;
     }
     return state.copyWith(application: state.application.toIdle());
-  }
-
-  DrawRect _initialTextRect(DrawPoint position, TextData data) {
-    final layout = layoutText(data: data, maxWidth: double.infinity);
-    final horizontalPadding = resolveTextLayoutHorizontalPadding(
-      layout.lineHeight,
-    );
-    final width = layout.size.width + horizontalPadding * 2;
-    final height = math.max(layout.size.height, layout.lineHeight);
-    return DrawRect(
-      minX: position.x,
-      minY: position.y,
-      maxX: position.x + width,
-      maxY: position.y + height,
-    );
-  }
-
-  DrawRect _resolveTextRect({
-    required DrawPoint origin,
-    required DrawRect currentRect,
-    required TextData data,
-    required bool autoResize,
-    bool allowShrinkHeight = false,
-  }) {
-    final maxWidth = autoResize ? double.infinity : currentRect.width;
-    final layout = layoutText(data: data, maxWidth: maxWidth);
-    final horizontalPadding = resolveTextLayoutHorizontalPadding(
-      layout.lineHeight,
-    );
-    final minHeight = math.max(layout.lineHeight, layout.size.height);
-
-    final nextWidth = autoResize
-        ? layout.size.width + horizontalPadding * 2
-        : currentRect.width;
-    // Always adjust height to match actual content during text editing
-    final desiredHeight = minHeight;
-
-    return DrawRect(
-      minX: origin.x,
-      minY: origin.y,
-      maxX: origin.x + nextWidth,
-      maxY: origin.y + desiredHeight,
-    );
   }
 
   ElementState? _resolveSerialUnbindUpdate({

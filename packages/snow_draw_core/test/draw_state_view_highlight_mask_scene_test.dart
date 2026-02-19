@@ -44,6 +44,8 @@ void main() {
 
     expect(highlights.map((e) => e.id).toList(), ['h1', 'h2']);
     expect(view.highlightMaskScene.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('applies preview override precedence over document elements', () {
@@ -74,6 +76,8 @@ void main() {
 
     expect(view.highlightMaskScene.elements, isEmpty);
     expect(view.highlightMaskScene.hasHighlights, isFalse);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isFalse);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test(
@@ -108,6 +112,20 @@ void main() {
         view.highlightMaskScene.elements.map((element) => element.id).toList(),
         ['h1', 'h_preview'],
       );
+      expect(
+        view.highlightMaskScene.staticElements
+            .map((element) => element.id)
+            .toList(),
+        ['h1'],
+      );
+      expect(
+        view.highlightMaskScene.dynamicElements
+            .map((element) => element.id)
+            .toList(),
+        ['h_preview'],
+      );
+      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
     },
   );
 
@@ -147,7 +165,84 @@ void main() {
       'creating',
     ]);
     expect(highlights.last.rect, creatingRect);
+    expect(
+      view.highlightMaskScene.staticElements
+          .map((element) => element.id)
+          .toList(),
+      ['h1'],
+    );
+    expect(
+      view.highlightMaskScene.dynamicElements
+          .map((element) => element.id)
+          .toList(),
+      ['creating'],
+    );
+    expect(view.highlightMaskScene.hasDynamicHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
   });
+
+  test(
+    'deduplicates creating highlight when preview map already contains it',
+    () {
+      const creatingId = 'creating';
+      const currentRect = DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90);
+      const previewRect = DrawRect(minX: 1, minY: 2, maxX: 3, maxY: 4);
+      final creatingInteraction = CreatingState(
+        element: const ElementState(
+          id: creatingId,
+          rect: DrawRect(maxX: 10, maxY: 10),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 5,
+          data: HighlightData(),
+        ),
+        startPosition: DrawPoint.zero,
+        currentRect: currentRect,
+      );
+      final state = _buildState(
+        elements: const [
+          ElementState(
+            id: 'h1',
+            rect: DrawRect(maxX: 10, maxY: 10),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: HighlightData(),
+          ),
+        ],
+        interaction: creatingInteraction,
+      );
+      const previewHighlight = ElementState(
+        id: creatingId,
+        rect: previewRect,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 5,
+        data: HighlightData(),
+      );
+
+      final view = DrawStateView.withPreview(
+        state: state,
+        previewElementsById: const {creatingId: previewHighlight},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      );
+
+      final highlights = view.highlightMaskScene.elements;
+      expect(highlights.map((element) => element.id).toList(), [
+        'h1',
+        creatingId,
+      ]);
+      expect(
+        highlights.where((element) => element.id == creatingId),
+        hasLength(1),
+      );
+      expect(highlights.last.rect, currentRect);
+      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
+    },
+  );
 
   test('excludes creating element when it is not a highlight', () {
     final creatingInteraction = CreatingState(
@@ -180,6 +275,54 @@ void main() {
     expect(view.highlightMaskScene.elements.map((element) => element.id), [
       'h1',
     ]);
+    expect(view.highlightMaskScene.dynamicElements, isEmpty);
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
+  });
+
+  test('marks edited highlight previews as dynamic', () {
+    const h1 = ElementState(
+      id: 'h1',
+      rect: DrawRect(maxX: 10, maxY: 10),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: HighlightData(),
+    );
+    const h2 = ElementState(
+      id: 'h2',
+      rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: HighlightData(),
+    );
+    final movedH2 = h2.copyWith(
+      rect: const DrawRect(minX: 24, minY: 2, maxX: 34, maxY: 12),
+    );
+
+    final state = _buildState(elements: const [h1, h2]);
+    final view = DrawStateView.withPreview(
+      state: state,
+      previewElementsById: {h2.id: movedH2},
+      effectiveSelection: EffectiveSelection.none,
+      snapGuides: const [],
+    );
+
+    expect(
+      view.highlightMaskScene.staticElements
+          .map((element) => element.id)
+          .toList(),
+      ['h1'],
+    );
+    expect(
+      view.highlightMaskScene.dynamicElements
+          .map((element) => element.id)
+          .toList(),
+      ['h2'],
+    );
+    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
+    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
   });
 }
 

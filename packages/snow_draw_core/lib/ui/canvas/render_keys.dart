@@ -19,6 +19,7 @@ class CreatingElementSnapshot {
   const CreatingElementSnapshot({
     required this.element,
     required this.currentRect,
+    this.creationRevision = 0,
   });
 
   /// The element being created.
@@ -27,15 +28,22 @@ class CreatingElementSnapshot {
   /// Current rect of the element being created.
   final DrawRect currentRect;
 
+  /// Monotonic revision for in-progress creation previews.
+  ///
+  /// Used by high-frequency tools (such as free draw) whose visual preview can
+  /// change without changing [element] or [currentRect].
+  final int creationRevision;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CreatingElementSnapshot &&
           other.element == element &&
-          other.currentRect == currentRect;
+          other.currentRect == currentRect &&
+          other.creationRevision == creationRevision;
 
   @override
-  int get hashCode => Object.hash(element, currentRect);
+  int get hashCode => Object.hash(element, currentRect, creationRevision);
 }
 
 /// Render key for static canvas.
@@ -145,9 +153,7 @@ class StaticCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    Object.hashAll(
-      previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    _mapHash(previewElementsById),
     dynamicLayerStartIndex,
     skipBaseElementScene,
     scaleFactor,
@@ -163,6 +169,9 @@ class StaticCanvasRenderKey {
   );
 
   static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -173,6 +182,10 @@ class StaticCanvasRenderKey {
     }
     return true;
   }
+
+  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
+    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
 }
 
 /// Render key for dynamic canvas.
@@ -182,6 +195,7 @@ class StaticCanvasRenderKey {
 /// - Effective selection (bounds, center, rotation)
 /// - Box selection bounds
 /// - Selected/hovered element IDs (for selection outlines)
+/// - Arrow handle interaction state (including delete indicator visibility)
 /// - Document version (for selection outline refresh)
 /// - Preview elements and dynamic layer split index
 /// - Camera state (position/zoom), selection/box selection config, scale factor
@@ -196,12 +210,15 @@ class DynamicCanvasRenderKey {
     required this.hoveredBindingElementId,
     required this.hoveredArrowHandle,
     required this.activeArrowHandle,
+    required this.arrowDeleteIndicatorVisible,
     required this.hoverSelectionConfig,
     required this.snapGuides,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
     required this.camera,
     required this.previewElementsById,
+    required this.optimizedDynamicElementIds,
+    required this.optimizedSceneHasPotentialOccluders,
     required this.dynamicLayerStartIndex,
     required this.rendersWholeElementScene,
     required this.scaleFactor,
@@ -214,6 +231,9 @@ class DynamicCanvasRenderKey {
     required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    this.preferFastFilterFallback = false,
+    this.previewElementsRevision,
+    this.dynamicPreviewElementIds,
     this.locale,
   });
 
@@ -234,6 +254,9 @@ class DynamicCanvasRenderKey {
   final String? hoveredBindingElementId;
   final ArrowPointHandle? hoveredArrowHandle;
   final ArrowPointHandle? activeArrowHandle;
+
+  /// Whether the arrow-point delete indicator should be painted.
+  final bool arrowDeleteIndicatorVisible;
 
   /// Selection config for hover outlines.
   final SelectionConfig hoverSelectionConfig;
@@ -256,11 +279,43 @@ class DynamicCanvasRenderKey {
   /// Preview elements during editing.
   final Map<String, ElementState> previewElementsById;
 
+  /// Optional monotonically increasing preview-map revision.
+  ///
+  /// When provided, equality and hashing use `[previewElementsById]` identity
+  /// plus this revision instead of deep map comparisons.
+  final int? previewElementsRevision;
+
+  /// Optional dynamic-preview override used by interaction scene caching.
+  ///
+  /// When set, dynamic-layer caching treats only these preview ids as volatile.
+  /// This is a performance hint and does not change final visual output.
+  final Set<String>? dynamicPreviewElementIds;
+
+  /// Element ids for localized dynamic-scene optimization.
+  ///
+  /// When non-empty, the dynamic painter renders only these optimized
+  /// elements and overlapping top-order occluders instead of every element
+  /// above the selection.
+  final Set<String> optimizedDynamicElementIds;
+
+  /// Whether optimized-scene rendering has any non-optimized element above
+  /// the optimized seed range.
+  ///
+  /// When `false`, dynamic painters can skip expensive occluder-resolution
+  /// queries and render optimized elements directly in z-order.
+  final bool optimizedSceneHasPotentialOccluders;
+
   /// First element index that renders on the dynamic layer.
   final int? dynamicLayerStartIndex;
 
   /// Whether dynamic painter renders the whole element scene.
   final bool rendersWholeElementScene;
+
+  /// Whether filter rendering should prioritize responsiveness this frame.
+  ///
+  /// This hint is used for high-frequency filter style drags where full
+  /// fidelity often falls back to CPU rendering and hurts input latency.
+  final bool preferFastFilterFallback;
 
   /// Canvas scale factor.
   final double scaleFactor;
@@ -307,14 +362,22 @@ class DynamicCanvasRenderKey {
           other.hoveredBindingElementId == hoveredBindingElementId &&
           other.hoveredArrowHandle == hoveredArrowHandle &&
           other.activeArrowHandle == activeArrowHandle &&
+          other.arrowDeleteIndicatorVisible == arrowDeleteIndicatorVisible &&
           other.hoverSelectionConfig == hoverSelectionConfig &&
           _listEquals(other.snapGuides, snapGuides) &&
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
-          _mapsEqual(other.previewElementsById, previewElementsById) &&
+          _previewMapsEqual(other) &&
+          _setEquals(
+            other.optimizedDynamicElementIds,
+            optimizedDynamicElementIds,
+          ) &&
+          other.optimizedSceneHasPotentialOccluders ==
+              optimizedSceneHasPotentialOccluders &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
           other.rendersWholeElementScene == rendersWholeElementScene &&
+          other.preferFastFilterFallback == preferFastFilterFallback &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
           other.boxSelectionConfig == boxSelectionConfig &&
@@ -337,16 +400,18 @@ class DynamicCanvasRenderKey {
     hoveredBindingElementId,
     hoveredArrowHandle,
     activeArrowHandle,
+    arrowDeleteIndicatorVisible,
     hoverSelectionConfig,
     Object.hashAll(snapGuides),
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    Object.hashAll(
-      previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    _previewMapHash(),
+    Object.hashAllUnordered(optimizedDynamicElementIds),
+    optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex,
     rendersWholeElementScene,
+    preferFastFilterFallback,
     scaleFactor,
     selectionConfig,
     boxSelectionConfig,
@@ -360,7 +425,28 @@ class DynamicCanvasRenderKey {
     locale,
   ]);
 
+  bool _previewMapsEqual(DynamicCanvasRenderKey other) {
+    final revision = previewElementsRevision;
+    final otherRevision = other.previewElementsRevision;
+    if (revision != null || otherRevision != null) {
+      return revision == otherRevision &&
+          identical(other.previewElementsById, previewElementsById);
+    }
+    return _mapsEqual(other.previewElementsById, previewElementsById);
+  }
+
+  int _previewMapHash() {
+    final revision = previewElementsRevision;
+    if (revision != null) {
+      return Object.hash(identityHashCode(previewElementsById), revision);
+    }
+    return _mapHash(previewElementsById);
+  }
+
   static bool _setEquals<T>(Set<T> a, Set<T> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -373,6 +459,9 @@ class DynamicCanvasRenderKey {
   }
 
   static bool _listEquals(List<SnapGuide> a, List<SnapGuide> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -385,6 +474,9 @@ class DynamicCanvasRenderKey {
   }
 
   static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -395,4 +487,8 @@ class DynamicCanvasRenderKey {
     }
     return true;
   }
+
+  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
+    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
 }

@@ -10,12 +10,16 @@ import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
 import '../../draw/elements/types/arrow/arrow_visual_cache.dart';
 import '../../draw/elements/types/filter/filter_data.dart';
+import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
 import '../../draw/elements/types/free_draw/free_draw_visual_cache.dart';
+import '../../draw/elements/types/highlight/highlight_data.dart';
+import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/elements/types/text/text_layout.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
@@ -23,18 +27,25 @@ import '../../draw/render/element_renderer.dart';
 import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_point.dart';
 import '../../draw/types/draw_rect.dart';
-import '../../draw/types/edit_transform.dart';
 import '../../draw/types/element_style.dart';
 import '../../draw/types/snap_guides.dart';
 import '../../draw/utils/arrow_binding_highlight.dart';
 import '../../draw/utils/binding_highlight_style.dart';
 import '../../draw/utils/binding_highlight_visibility.dart';
 import '../../draw/utils/selection_calculator.dart';
+import '../../draw/utils/stroke_pattern_utils.dart';
 import 'filter_scene_compositor.dart';
+import 'free_draw_creation_preview_cache.dart';
+import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
+import 'highlight_mask_shader_manager.dart';
+import 'highlight_mask_static_scene_cache.dart';
 import 'highlight_mask_visibility.dart';
+import 'optimized_scene_occlusion.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'visible_element_scene_cache.dart';
+import 'visible_element_scene_resolver.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 
@@ -51,6 +62,32 @@ class DynamicCanvasPainter extends CustomPainter {
     required this.stateView,
   });
 
+  static const _directSolidPreviewPointThreshold = 32;
+  static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
+  static final _interactionSceneCache = InteractionSceneCache();
+  static final _visibleSceneCache = VisibleElementSceneCache();
+  static final _highlightMaskStaticSceneCache = HighlightMaskStaticSceneCache();
+  static final _freeDrawPreviewCache = FreeDrawCreationPreviewCache();
+  static final _freeDrawStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true;
+  static final _freeDrawDotPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..isAntiAlias = true;
+  static final _freeDrawPointPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  static _SceneRenderContextCacheEntry? _sceneRenderContextCache;
+  static final _arrowOverlayPaints = _ArrowOverlayPaints();
+  static final _arrowHoverStrokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true;
+
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
 
@@ -60,7 +97,10 @@ class DynamicCanvasPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final state = stateView.state;
-    final camera = state.application.view.camera;
+    if (!_isFreeDrawCreationInteraction(state.application.interaction)) {
+      _freeDrawPreviewCache.clear();
+    }
+    final camera = renderKey.camera;
     final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
     final viewportRect = DrawRect(
       minX: -camera.position.x / scale,
@@ -79,45 +119,55 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw elements at or above the selected element to preserve z-order.
     _drawDynamicElements(
       canvas: canvas,
-      size: size,
       scale: scale,
+      viewportRect: viewportRect,
       creatingElement: creatingElement,
     );
 
     // Draw creating element preview above the static layer.
     if (creatingElement != null &&
         creatingElement.element.data is! FilterData) {
-      final previewElement = creatingElement.element.copyWith(
-        rect: creatingElement.currentRect,
-      );
-      elementRenderer.renderElement(
+      final renderedWithLowLatencyPath = _renderFreeDrawCreatingPreview(
         canvas: canvas,
-        element: previewElement,
-        scaleFactor: scale,
-        registry: renderKey.elementRegistry,
-        locale: renderKey.locale,
+        interaction: state.application.interaction,
+        viewportRect: viewportRect,
       );
+      if (!renderedWithLowLatencyPath) {
+        final previewElement = creatingElement.element.copyWith(
+          rect: creatingElement.currentRect,
+        );
+        elementRenderer.renderElement(
+          canvas: canvas,
+          element: previewElement,
+          scaleFactor: scale,
+          registry: renderKey.elementRegistry,
+          locale: renderKey.locale,
+        );
+      }
     }
 
     if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
-      paintHighlightMask(
+      _paintDynamicHighlightMask(
         canvas: canvas,
-        highlights: stateView.highlightMaskScene.elements,
         viewportRect: viewportRect,
-        maskConfig: renderKey.highlightMaskConfig,
-        scaleFactor: scale,
+        scale: scale,
         cameraPosition: Offset(camera.position.x, camera.position.y),
       );
+    } else {
+      _highlightMaskStaticSceneCache.clear();
     }
 
     if (renderKey.watermarkLayer == WatermarkLayer.dynamicLayer) {
+      canvas
+        ..save()
+        ..scale(1 / scale, 1 / scale)
+        ..translate(-camera.position.x, -camera.position.y);
       paintWatermark(
         canvas: canvas,
         viewportSize: size,
         config: renderKey.watermarkConfig,
-        scaleFactor: scale,
-        cameraPosition: Offset(camera.position.x, camera.position.y),
       );
+      canvas.restore();
     }
 
     // Draw snapping guides.
@@ -272,93 +322,789 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.restore();
   }
 
+  bool _isFreeDrawCreationInteraction(InteractionState interaction) =>
+      interaction is CreatingState && interaction.elementData is FreeDrawData;
+
+  bool _renderFreeDrawCreatingPreview({
+    required Canvas canvas,
+    required InteractionState interaction,
+    required DrawRect viewportRect,
+  }) {
+    if (interaction is! CreatingState) {
+      return false;
+    }
+
+    final data = interaction.elementData;
+    final mode = interaction.creationMode;
+    if (data is! FreeDrawData || mode is! FreeDrawCreationMode) {
+      return false;
+    }
+
+    final points = mode.worldPoints;
+    if (points == null || points.isEmpty) {
+      _freeDrawPreviewCache.clear();
+      return false;
+    }
+
+    final strokeOpacity = (data.color.a * interaction.elementOpacity).clamp(
+      0.0,
+      1.0,
+    );
+    if (strokeOpacity <= 0 || data.strokeWidth <= 0) {
+      _freeDrawPreviewCache.clear();
+      return true;
+    }
+
+    final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    final strokePaint = _freeDrawStrokePaint
+      ..strokeWidth = data.strokeWidth
+      ..color = strokeColor;
+
+    if (data.strokeStyle == StrokeStyle.solid) {
+      final cachedPointCount = _resolveSolidPreviewPointCount(
+        mode: mode,
+        points: points,
+      );
+      if (cachedPointCount > 1) {
+        if (cachedPointCount <= _directSolidPreviewPointThreshold) {
+          _freeDrawPreviewCache.clear();
+          _drawSolidPreviewDirect(
+            canvas: canvas,
+            points: points,
+            visiblePointCount: cachedPointCount,
+            strokePaint: strokePaint,
+          );
+        } else {
+          _freeDrawPreviewCache
+            ..sync(
+              elementId: interaction.elementId,
+              points: points,
+              visiblePointCount: cachedPointCount,
+              signature: FreeDrawPreviewStrokeSignature(
+                strokeStyle: data.strokeStyle,
+                strokeWidth: data.strokeWidth,
+                strokeColor: strokeColor,
+              ),
+              strokePaint: strokePaint,
+            )
+            ..paint(
+              canvas: canvas,
+              viewportRect: viewportRect,
+              strokePaint: strokePaint,
+            );
+        }
+      } else {
+        _freeDrawPreviewCache.clear();
+      }
+    } else {
+      _freeDrawPreviewCache.clear();
+      final previewPath = _resolvePreviewPath(mode: mode, points: points);
+      if (previewPath != null) {
+        _drawFreeDrawStrokePath(
+          canvas: canvas,
+          path: previewPath,
+          data: data,
+          strokePaint: strokePaint,
+          strokeColor: strokeColor,
+        );
+      }
+    }
+
+    if (mode.isLineActive &&
+        mode.lineAnchor != null &&
+        mode.lineCurrent != null) {
+      final anchor = mode.lineAnchor!;
+      final current = mode.lineCurrent!;
+      if (data.strokeStyle == StrokeStyle.solid) {
+        canvas.drawLine(
+          Offset(anchor.x, anchor.y),
+          Offset(current.x, current.y),
+          strokePaint,
+        );
+      } else {
+        final activeLinePath = Path()
+          ..moveTo(anchor.x, anchor.y)
+          ..lineTo(current.x, current.y);
+        _drawFreeDrawStrokePath(
+          canvas: canvas,
+          path: activeLinePath,
+          data: data,
+          strokePaint: strokePaint,
+          strokeColor: strokeColor,
+        );
+      }
+    }
+
+    final isSinglePointStroke =
+        points.length == 1 ||
+        (points.length == 2 &&
+            points.first.x == points.last.x &&
+            points.first.y == points.last.y);
+    if (isSinglePointStroke && !mode.isLineActive) {
+      final point = points.first;
+      final pointPaint = _freeDrawPointPaint..color = strokeColor;
+      canvas.drawCircle(
+        Offset(point.x, point.y),
+        data.strokeWidth / 2,
+        pointPaint,
+      );
+    }
+
+    return true;
+  }
+
+  int _resolveSolidPreviewPointCount({
+    required FreeDrawCreationMode mode,
+    required List<DrawPoint> points,
+  }) {
+    if (points.isEmpty) {
+      return 0;
+    }
+    if (!mode.isLineActive) {
+      return points.length;
+    }
+    if (points.length <= 2) {
+      return 0;
+    }
+    return points.length - 1;
+  }
+
+  void _drawSolidPreviewDirect({
+    required Canvas canvas,
+    required List<DrawPoint> points,
+    required int visiblePointCount,
+    required Paint strokePaint,
+  }) {
+    final clampedCount = visiblePointCount < 0
+        ? 0
+        : (visiblePointCount > points.length
+              ? points.length
+              : visiblePointCount);
+    if (clampedCount < 2) {
+      return;
+    }
+
+    final first = points.first;
+    final path = Path()..moveTo(first.x, first.y);
+    var previous = first;
+    var hasSegment = false;
+    for (var index = 1; index < clampedCount; index++) {
+      final point = points[index];
+      if (point.x == previous.x && point.y == previous.y) {
+        previous = point;
+        continue;
+      }
+      path.lineTo(point.x, point.y);
+      previous = point;
+      hasSegment = true;
+    }
+    if (hasSegment) {
+      canvas.drawPath(path, strokePaint);
+    }
+  }
+
+  Path? _resolvePreviewPath({
+    required FreeDrawCreationMode mode,
+    required List<DrawPoint> points,
+  }) {
+    final existing = mode.previewPath;
+    if (existing != null) {
+      return existing;
+    }
+    if (points.length < 2) {
+      return null;
+    }
+    final path = Path()..moveTo(points.first.x, points.first.y);
+    for (var index = 1; index < points.length; index++) {
+      final point = points[index];
+      path.lineTo(point.x, point.y);
+    }
+    return path;
+  }
+
+  void _drawFreeDrawStrokePath({
+    required Canvas canvas,
+    required Path path,
+    required FreeDrawData data,
+    required Paint strokePaint,
+    required Color strokeColor,
+  }) {
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
+        canvas.drawPath(path, strokePaint);
+      case StrokeStyle.dashed:
+        final dashLength = data.strokeWidth * 2.0;
+        final gapLength = dashLength * 1.2;
+        final dashedPath = buildDashedPath(path, dashLength, gapLength);
+        canvas.drawPath(dashedPath, strokePaint);
+      case StrokeStyle.dotted:
+        final dotSpacing = data.strokeWidth * 2.0;
+        final dotRadius = data.strokeWidth * 0.5;
+        final dotPositions = buildDotPositions(path, dotSpacing);
+        if (dotPositions.isEmpty) {
+          return;
+        }
+        final dotPaint = _freeDrawDotPaint
+          ..strokeWidth = dotRadius * 2
+          ..color = strokeColor;
+        canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
+    }
+  }
+
+  void _paintDynamicHighlightMask({
+    required Canvas canvas,
+    required DrawRect viewportRect,
+    required double scale,
+    required Offset cameraPosition,
+  }) {
+    final maskConfig = renderKey.highlightMaskConfig;
+    final scene = stateView.highlightMaskScene;
+    if (!scene.hasHighlights) {
+      return;
+    }
+
+    final highlights = scene.elements;
+    final staticHighlights = scene.staticElements;
+    final dynamicHighlights = scene.dynamicElements;
+
+    // Dynamic-only scenes (for example creating a new highlight) can use the
+    // regular mask renderer directly.
+    if (staticHighlights.isEmpty) {
+      _highlightMaskStaticSceneCache.clear();
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    final shaderManager = HighlightMaskShaderManager.instance;
+    if (dynamicHighlights.isNotEmpty && !shaderManager.isReady) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    final document = stateView.state.domain.document;
+    final excludedDocumentHighlightIds = _resolveExcludedDocumentHighlightIds(
+      document: document,
+      dynamicHighlights: dynamicHighlights,
+      previewElementsById: stateView.previewElementsById,
+    );
+    final paintedStatic = _highlightMaskStaticSceneCache.paint(
+      canvas: canvas,
+      document: document,
+      staticHighlights: staticHighlights,
+      excludedDocumentHighlightIds: excludedDocumentHighlightIds,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
+    if (!paintedStatic) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      return;
+    }
+
+    if (dynamicHighlights.isEmpty) {
+      return;
+    }
+
+    // `paintHoleMaskModulate` is a screen-space shader pass. The dynamic
+    // canvas is currently transformed to world space (camera + scale), so
+    // undo that transform before issuing the shader draw to keep hole
+    // coordinates aligned with the settled mask rendering path.
+    canvas
+      ..save()
+      ..scale(1 / scale, 1 / scale)
+      ..translate(-cameraPosition.dx, -cameraPosition.dy);
+    final dynamicHolePainted = shaderManager.paintHoleMaskModulate(
+      canvas: canvas,
+      highlights: dynamicHighlights,
+      viewportRect: viewportRect,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
+    canvas.restore();
+    if (!dynamicHolePainted) {
+      paintHighlightMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+    }
+  }
+
+  Set<String> _resolveExcludedDocumentHighlightIds({
+    required DocumentState document,
+    required List<ElementState> dynamicHighlights,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (dynamicHighlights.isEmpty && previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+
+    final ids = <String>{};
+    for (final highlight in dynamicHighlights) {
+      final persisted = document.getElementById(highlight.id);
+      if (persisted?.data is HighlightData) {
+        ids.add(highlight.id);
+      }
+    }
+    if (previewElementsById.isNotEmpty) {
+      for (final entry in previewElementsById.entries) {
+        final persisted = document.getElementById(entry.key);
+        if (persisted?.data is HighlightData &&
+            entry.value.data is! HighlightData) {
+          ids.add(entry.key);
+        }
+      }
+    }
+    if (ids.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(ids);
+  }
+
   void _drawDynamicElements({
     required Canvas canvas,
-    required Size size,
     required double scale,
+    required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
   }) {
     final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
     final rendersWholeScene = renderKey.rendersWholeElementScene;
+    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
+
     if (dynamicLayerStartIndex == null && !rendersWholeScene) {
+      if (optimizedElementIds.isEmpty) {
+        final previewOnlyElements = _resolvePreviewOnlyScene(
+          viewportRect: viewportRect,
+        );
+        _paintElementScene(
+          canvas: canvas,
+          scale: scale,
+          viewportRect: viewportRect,
+          effectiveElements: previewOnlyElements,
+        );
+        return;
+      }
+      final optimizedElements = _resolveOptimizedScene(
+        viewportRect: viewportRect,
+        optimizedElementIds: optimizedElementIds,
+      );
+      _paintElementScene(
+        canvas: canvas,
+        scale: scale,
+        viewportRect: viewportRect,
+        effectiveElements: optimizedElements,
+      );
       return;
     }
 
     final state = stateView.state;
     final document = state.domain.document;
-    final camera = renderKey.camera;
-    final viewportRect = DrawRect(
-      minX: -camera.position.x / scale,
-      minY: -camera.position.y / scale,
-      maxX: (size.width - camera.position.x) / scale,
-      maxY: (size.height - camera.position.y) / scale,
+    final minOrderIndex = rendersWholeScene
+        ? null
+        : (dynamicLayerStartIndex ?? 0);
+    final baseVisibleElements = _visibleSceneCache.resolve(
+      document: document,
+      viewportRect: viewportRect,
+      minOrderIndex: minOrderIndex,
     );
-
-    final visibleElements = document.queryElementsInRectOrdered(
-      viewportRect,
-      minOrderIndex: rendersWholeScene ? null : (dynamicLayerStartIndex ?? 0),
-    );
-
-    final previewElements = renderKey.previewElementsById;
-    if (previewElements.isNotEmpty) {
-      final visibleIds = {for (final element in visibleElements) element.id};
-      for (final preview in previewElements.values) {
-        if (visibleIds.contains(preview.id)) {
-          continue;
-        }
-        final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-        if (_rectsIntersect(aabb, viewportRect)) {
-          visibleElements.add(preview);
-          visibleIds.add(preview.id);
-        }
-      }
+    final excludedElementId =
+        creatingElement != null &&
+            document.getElementById(creatingElement.element.id) != null
+        ? creatingElement.element.id
+        : null;
+    if (optimizedElementIds.isEmpty &&
+        _tryPaintPreviewFastPath(
+          canvas: canvas,
+          scale: scale,
+          viewportRect: viewportRect,
+          creatingElement: creatingElement,
+          excludedElementId: excludedElementId,
+          baseVisibleElements: baseVisibleElements,
+          document: document,
+        )) {
+      return;
     }
 
-    final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
-    final effectiveElements = <ElementState>[];
-    if (previewElements.isEmpty) {
-      effectiveElements.addAll(visibleElements);
-    } else {
-      for (final element in visibleElements) {
-        final preview = previewElements[element.id];
-        final effectiveElement = preview ?? element;
-        if (preview != null) {
-          final aabb = SelectionCalculator.computeElementWorldAabb(
-            effectiveElement,
-          );
-          if (!_rectsIntersect(aabb, viewportRect)) {
-            continue;
-          }
-        }
-        effectiveElements.add(effectiveElement);
-      }
-    }
+    var effectiveElements = resolveVisibleElementScene(
+      document: document,
+      viewportRect: viewportRect,
+      baseVisibleElements: baseVisibleElements,
+      minOrderIndex: minOrderIndex,
+      previewElementsById: renderKey.previewElementsById,
+      excludedElementId: excludedElementId,
+    );
 
     if (creatingElement != null && creatingElement.element.data is FilterData) {
       final previewFilter = creatingElement.element.copyWith(
         rect: creatingElement.currentRect,
       );
-      effectiveElements.add(previewFilter);
+      effectiveElements = List<ElementState>.of(effectiveElements)
+        ..add(previewFilter);
     }
 
+    _paintElementScene(
+      canvas: canvas,
+      scale: scale,
+      viewportRect: viewportRect,
+      effectiveElements: effectiveElements,
+    );
+  }
+
+  bool _tryPaintPreviewFastPath({
+    required Canvas canvas,
+    required double scale,
+    required DrawRect viewportRect,
+    required CreatingElementSnapshot? creatingElement,
+    required String? excludedElementId,
+    required List<ElementState> baseVisibleElements,
+    required DocumentState document,
+  }) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty || excludedElementId != null) {
+      return false;
+    }
+
+    final creatingData = creatingElement?.element.data;
+    if (creatingData is FilterData) {
+      return false;
+    }
+
+    if (!_canUsePreviewFastPath(
+      baseVisibleElements: baseVisibleElements,
+      viewportRect: viewportRect,
+      document: document,
+    )) {
+      return false;
+    }
+
+    final sceneContext = _resolveSceneRenderContext(
+      elements: baseVisibleElements,
+    );
+    if (sceneContext.hasFilterElement) {
+      return false;
+    }
+
+    void paintElement(Canvas sceneCanvas, ElementState element) {
+      final effective = previewElements[element.id] ?? element;
+      if (!identical(effective, element)) {
+        final previewAabb = SelectionCalculator.computeElementWorldAabb(
+          effective,
+        );
+        if (!_rectsIntersect(previewAabb, viewportRect)) {
+          return;
+        }
+      }
+      _paintSceneElement(
+        canvas: sceneCanvas,
+        element: effective,
+        scale: scale,
+        sceneContext: sceneContext,
+      );
+    }
+
+    _interactionSceneCache.paint(
+      canvas: canvas,
+      elements: baseVisibleElements,
+      dynamicElementIds: sceneContext.dynamicElementIds,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleFactor: scale,
+      locale: renderKey.locale,
+      paintElement: paintElement,
+    );
+    return true;
+  }
+
+  bool _canUsePreviewFastPath({
+    required List<ElementState> baseVisibleElements,
+    required DrawRect viewportRect,
+    required DocumentState document,
+  }) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty) {
+      return true;
+    }
+
+    for (final preview in previewElements.values) {
+      if (document.getElementById(preview.id) == null) {
+        return false;
+      }
+      var isVisibleInBase = false;
+      for (final element in baseVisibleElements) {
+        if (element.id == preview.id) {
+          isVisibleInBase = true;
+          break;
+        }
+      }
+      if (isVisibleInBase) {
+        continue;
+      }
+      final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
+      if (_rectsIntersect(previewAabb, viewportRect)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<ElementState> _resolvePreviewOnlyScene({
+    required DrawRect viewportRect,
+  }) {
+    final previewElements = renderKey.previewElementsById;
+    if (previewElements.isEmpty) {
+      return const <ElementState>[];
+    }
+
+    final visible = <ElementState>[];
+    for (final preview in previewElements.values) {
+      if (preview.opacity <= 0) {
+        continue;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(preview);
+      if (!_rectsIntersect(aabb, viewportRect)) {
+        continue;
+      }
+      visible.add(preview);
+    }
+    if (visible.length < 2) {
+      return visible;
+    }
+
+    final document = stateView.state.domain.document;
+    visible.sort((a, b) {
+      final orderA = document.getOrderIndex(a.id) ?? a.zIndex;
+      final orderB = document.getOrderIndex(b.id) ?? b.zIndex;
+      final orderComparison = orderA.compareTo(orderB);
+      if (orderComparison != 0) {
+        return orderComparison;
+      }
+      return a.id.compareTo(b.id);
+    });
+    return visible;
+  }
+
+  List<ElementState> _resolveOptimizedScene({
+    required DrawRect viewportRect,
+    required Set<String> optimizedElementIds,
+  }) {
+    final document = stateView.state.domain.document;
+    if (optimizedElementIds.isEmpty) {
+      return const <ElementState>[];
+    }
+
+    final previewElementsById = renderKey.previewElementsById;
+    final effectiveById = <String, ElementState>{};
+    final effectiveAabbsById = <String, DrawRect>{};
+    final seedAabbsById = <String, DrawRect>{};
+    final seedOrderIndexById = <String, int>{};
+
+    for (final elementId in optimizedElementIds) {
+      final effective =
+          previewElementsById[elementId] ?? document.getElementById(elementId);
+      if (effective == null || effective.opacity <= 0) {
+        continue;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(effective);
+      if (!_rectsIntersect(aabb, viewportRect)) {
+        continue;
+      }
+      effectiveById[elementId] = effective;
+      effectiveAabbsById[elementId] = aabb;
+      seedAabbsById[elementId] = aabb;
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex != null) {
+        seedOrderIndexById[elementId] = orderIndex;
+      }
+    }
+
+    if (effectiveById.isEmpty) {
+      return const <ElementState>[];
+    }
+
+    if (!renderKey.optimizedSceneHasPotentialOccluders) {
+      return _sortElementsByOrder(
+        elements: effectiveById.values,
+        resolveOrderIndex: document.getOrderIndex,
+      );
+    }
+
+    final orderIndexCache = <String, int?>{};
+    int? resolveOrderIndex(String elementId) {
+      if (orderIndexCache.containsKey(elementId)) {
+        return orderIndexCache[elementId];
+      }
+      final orderIndex = document.getOrderIndex(elementId);
+      orderIndexCache[elementId] = orderIndex;
+      return orderIndex;
+    }
+
+    DrawRect resolveAabb(ElementState element) {
+      final cached = effectiveAabbsById[element.id];
+      if (cached != null) {
+        return cached;
+      }
+      final aabb = SelectionCalculator.computeElementWorldAabb(element);
+      effectiveAabbsById[element.id] = aabb;
+      return aabb;
+    }
+
+    for (final entry in seedAabbsById.entries) {
+      final seedElement = effectiveById[entry.key];
+      final seedOrderIndex = seedOrderIndexById[entry.key];
+      if (seedElement == null || seedOrderIndex == null) {
+        continue;
+      }
+      final queryRects = resolveOptimizedOccluderQueryRects(
+        seedElement: seedElement,
+        seedAabb: entry.value,
+      );
+      for (final queryRect in queryRects) {
+        document.visitElementsInRect(queryRect, (element) {
+          final elementId = element.id;
+          if (optimizedElementIds.contains(elementId)) {
+            return true;
+          }
+          if (effectiveById.containsKey(elementId)) {
+            return true;
+          }
+          final orderIndex = resolveOrderIndex(elementId);
+          if (orderIndex == null || orderIndex <= seedOrderIndex) {
+            return true;
+          }
+          final effective = previewElementsById[elementId] ?? element;
+          if (effective.opacity <= 0) {
+            return true;
+          }
+          final aabb = resolveAabb(effective);
+          if (!_rectsIntersect(aabb, queryRect) ||
+              !_rectsIntersect(aabb, viewportRect)) {
+            return true;
+          }
+          effectiveById[elementId] = effective;
+          return true;
+        });
+      }
+    }
+
+    return _sortElementsByOrder(
+      elements: effectiveById.values,
+      resolveOrderIndex: resolveOrderIndex,
+    );
+  }
+
+  List<ElementState> _sortElementsByOrder({
+    required Iterable<ElementState> elements,
+    required int? Function(String elementId) resolveOrderIndex,
+  }) {
+    final sorted = elements.toList(growable: false);
+    if (sorted.length < 2) {
+      return sorted;
+    }
+    sorted.sort((a, b) {
+      final orderA = resolveOrderIndex(a.id) ?? a.zIndex;
+      final orderB = resolveOrderIndex(b.id) ?? b.zIndex;
+      final orderComparison = orderA.compareTo(orderB);
+      if (orderComparison != 0) {
+        return orderComparison;
+      }
+      return a.id.compareTo(b.id);
+    });
+    return sorted;
+  }
+
+  void _paintElementScene({
+    required Canvas canvas,
+    required double scale,
+    required DrawRect viewportRect,
+    required List<ElementState> effectiveElements,
+  }) {
+    if (effectiveElements.isEmpty) {
+      return;
+    }
+
+    final sceneContext = _resolveSceneRenderContext(
+      elements: effectiveElements,
+    );
+
+    void paintElement(Canvas sceneCanvas, ElementState element) =>
+        _paintSceneElement(
+          canvas: sceneCanvas,
+          element: element,
+          scale: scale,
+          sceneContext: sceneContext,
+        );
+
+    if (_canUseInteractionSceneCache(
+      hasFilterElement: sceneContext.hasFilterElement,
+      effectiveElements: effectiveElements,
+      dynamicElementIds: sceneContext.dynamicElementIds,
+    )) {
+      _interactionSceneCache.paint(
+        canvas: canvas,
+        elements: effectiveElements,
+        dynamicElementIds: sceneContext.dynamicElementIds,
+        documentVersion: renderKey.documentVersion,
+        textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+        scaleFactor: scale,
+        locale: renderKey.locale,
+        paintElement: paintElement,
+      );
+      return;
+    }
+
+    if (!sceneContext.hasFilterElement) {
+      _paintElementsDirectly(
+        canvas: canvas,
+        elements: effectiveElements,
+        paintElement: paintElement,
+      );
+      return;
+    }
+
+    final filterCacheContext = sceneContext.shouldPaintSerialConnectors
+        ? null
+        : _buildFilterCacheContext(scale: scale);
     filterSceneCompositor.paintElements(
       canvas: canvas,
       elements: effectiveElements,
-      paintElement: (sceneCanvas, element) {
-        elementRenderer.renderElement(
-          canvas: sceneCanvas,
-          element: element,
-          scaleFactor: scale,
-          registry: renderKey.elementRegistry,
-          locale: renderKey.locale,
-        );
-        drawSerialNumberConnectorsForText(
-          canvas: sceneCanvas,
-          textElement: element,
-          connectorsByTextId: serialConnectors,
-        );
-      },
+      paintElement: paintElement,
+      cacheContext: filterCacheContext,
+      visibleBounds: Rect.fromLTWH(
+        viewportRect.minX,
+        viewportRect.minY,
+        viewportRect.width,
+        viewportRect.height,
+      ),
+      dynamicElementIds: sceneContext.dynamicElementIds,
+      renderHints: FilterRenderHints(
+        interactionPreview: sceneContext.useAggressiveCpuFallback,
+        aggressiveCpuFallback: sceneContext.useAggressiveCpuFallback,
+      ),
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSceneCompositor.lastDiagnostics;
@@ -368,10 +1114,430 @@ class DynamicCanvasPainter extends CustomPainter {
           'saveLayers': diagnostics.saveLayers,
           'filterPasses': diagnostics.filterPasses,
           'batchCount': diagnostics.batchCount,
+          'batchCacheHits': diagnostics.batchCacheHits,
+          'batchCacheMisses': diagnostics.batchCacheMisses,
+          'prefixSceneCacheHits': diagnostics.prefixSceneCacheHits,
+          'prefixSceneCacheMisses': diagnostics.prefixSceneCacheMisses,
         });
       }
     }
   }
+
+  _SceneRenderContext _resolveSceneRenderContext({
+    required List<ElementState> elements,
+  }) {
+    final document = stateView.state.domain.document;
+    final previewElements = renderKey.previewElementsById;
+    final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
+    final creatingFilterId = _resolveCreatingFilterId();
+    final previewTopologyHint = renderKey.previewElementsRevision == null
+        ? _PreviewTopologyHint.general
+        : _PreviewTopologyHint.stableDocumentBacked;
+    final staticContext = _resolveSceneRenderContextStaticData(
+      document: document,
+      elements: elements,
+      previewElementsById: previewElements,
+      previewTopologyHint: previewTopologyHint,
+    );
+
+    final serialConnectorSnapshot = staticContext.shouldPaintSerialConnectors
+        ? resolveSerialNumberConnectorSnapshot(
+            stateView,
+            previewElementsById: previewElements,
+            visibleTextElementIds: staticContext.visibleTextIds,
+          )
+        : const SerialNumberConnectorSnapshot(
+            connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
+            dynamicTextElementIds: <String>{},
+          );
+    final interactionDynamicElementIds = _resolveDynamicElementIds(
+      dynamicPreviewIds: dynamicPreviewIds,
+      creatingFilterId: creatingFilterId,
+      serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
+    );
+    final dynamicElementIds = interactionDynamicElementIds;
+    final hasInteractiveFilterElement = _hasSharedElementId(
+      interactionDynamicElementIds,
+      staticContext.filterElementIds,
+    );
+    final preferFastFilterFallback =
+        renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
+    // Keep drag previews visually consistent with settled frames. Reserve
+    // fast fallback for explicit high-frequency style mutations only.
+    final useAggressiveCpuFallback = preferFastFilterFallback;
+
+    return _SceneRenderContext(
+      hasFilterElement: staticContext.hasFilterElement,
+      hasInteractiveFilterElement: hasInteractiveFilterElement,
+      useAggressiveCpuFallback: useAggressiveCpuFallback,
+      shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
+      serialConnectors: serialConnectorSnapshot.connectorsByTextId,
+      dynamicElementIds: dynamicElementIds,
+    );
+  }
+
+  _SceneRenderContextStaticData _resolveSceneRenderContextStaticData({
+    required DocumentState document,
+    required List<ElementState> elements,
+    required Map<String, ElementState> previewElementsById,
+    required _PreviewTopologyHint previewTopologyHint,
+  }) {
+    // Eraser preview mode only applies document-backed opacity overrides.
+    // Once the visible element list is stable, static scene metadata stays
+    // valid across frames even as the preview override map grows.
+    final cached = _sceneRenderContextCache;
+    if (cached != null &&
+        cached.matchesFast(
+          document: document,
+          elements: elements,
+          previewElementsById: previewElementsById,
+          previewTopologyHint: previewTopologyHint,
+        )) {
+      return cached.staticData;
+    }
+
+    final canReuseElementSignature =
+        cached != null &&
+        identical(cached.document, document) &&
+        identical(cached.elements, elements);
+    final canReuseGeneralPreviewStaticData =
+        canReuseElementSignature &&
+        cached.previewTopologyHint == previewTopologyHint &&
+        previewTopologyHint == _PreviewTopologyHint.general &&
+        cached.serialPreviewSignature.count == 0 &&
+        !_containsSerialPreviewElements(previewElementsById);
+    if (canReuseGeneralPreviewStaticData) {
+      return cached.staticData;
+    }
+
+    final elementSignature = canReuseElementSignature
+        ? cached.elementSignature
+        : _buildSceneElementStructureSignature(elements);
+    final serialPreviewSignature =
+        previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked
+        ? _SerialPreviewSignature.empty
+        : _buildSerialPreviewSignature(previewElementsById);
+    if (cached != null &&
+        cached.matchesBySignature(
+          document: document,
+          elementSignature: elementSignature,
+          serialPreviewSignature: serialPreviewSignature,
+          previewTopologyHint: previewTopologyHint,
+        )) {
+      return cached.staticData;
+    }
+
+    final canHaveSerialConnectors =
+        document.boundTextIds.isNotEmpty || serialPreviewSignature.count > 0;
+    var hasFilterElement = false;
+    final filterElementIds = <String>{};
+    final visibleTextIds = <String>{};
+    for (final element in elements) {
+      if (!hasFilterElement && element.data is FilterData) {
+        hasFilterElement = true;
+      }
+      if (element.data is FilterData) {
+        filterElementIds.add(element.id);
+      }
+      if (canHaveSerialConnectors &&
+          element.opacity > 0 &&
+          element.data is TextData) {
+        visibleTextIds.add(element.id);
+      }
+    }
+    if (canHaveSerialConnectors) {
+      _includeEditingTextIdForSerialConnectors(
+        document: document,
+        previewElementsById: previewElementsById,
+        visibleTextIds: visibleTextIds,
+      );
+    }
+
+    final shouldPaintSerialConnectors =
+        visibleTextIds.isNotEmpty &&
+        _shouldPaintSerialConnectors(
+          boundTextIds: document.boundTextIds,
+          previewElementsById: previewElementsById,
+          visibleTextIds: visibleTextIds,
+        );
+
+    final staticData = _SceneRenderContextStaticData(
+      hasFilterElement: hasFilterElement,
+      filterElementIds: filterElementIds,
+      visibleTextIds: visibleTextIds,
+      shouldPaintSerialConnectors: shouldPaintSerialConnectors,
+    );
+    _sceneRenderContextCache = _SceneRenderContextCacheEntry(
+      document: document,
+      elements: elements,
+      previewElementsById: previewElementsById,
+      previewTopologyHint: previewTopologyHint,
+      elementSignature: elementSignature,
+      serialPreviewSignature: serialPreviewSignature,
+      staticData: staticData,
+    );
+    return staticData;
+  }
+
+  bool _containsSerialPreviewElements(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return false;
+    }
+    for (final preview in previewElementsById.values) {
+      if (preview.data is SerialNumberData) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  _SceneElementStructureSignature _buildSceneElementStructureSignature(
+    List<ElementState> elements,
+  ) {
+    var hash = 0;
+    var filterCount = 0;
+    var visibleTextCount = 0;
+    for (final element in elements) {
+      final data = element.data;
+      final isFilter = data is FilterData;
+      final isVisibleText = data is TextData && element.opacity > 0;
+      if (isFilter) {
+        filterCount += 1;
+      }
+      if (isVisibleText) {
+        visibleTextCount += 1;
+      }
+      final flags = (isFilter ? 1 : 0) | (isVisibleText ? 2 : 0);
+      hash ^= Object.hash(element.id, flags);
+    }
+    return _SceneElementStructureSignature(
+      hash: hash,
+      elementCount: elements.length,
+      filterCount: filterCount,
+      visibleTextCount: visibleTextCount,
+    );
+  }
+
+  _SerialPreviewSignature _buildSerialPreviewSignature(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return _SerialPreviewSignature.empty;
+    }
+
+    var hash = 0;
+    var count = 0;
+    for (final entry in previewElementsById.entries) {
+      final data = entry.value.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      hash ^= Object.hash(entry.key, data.textElementId ?? '');
+      count += 1;
+    }
+    return _SerialPreviewSignature(hash: hash, count: count);
+  }
+
+  void _paintSceneElement({
+    required Canvas canvas,
+    required ElementState element,
+    required double scale,
+    required _SceneRenderContext sceneContext,
+  }) {
+    elementRenderer.renderElement(
+      canvas: canvas,
+      element: element,
+      scaleFactor: scale,
+      registry: renderKey.elementRegistry,
+      locale: renderKey.locale,
+    );
+    if (sceneContext.shouldPaintSerialConnectors) {
+      drawSerialNumberConnectorsForText(
+        canvas: canvas,
+        textElement: element,
+        connectorsByTextId: sceneContext.serialConnectors,
+      );
+    }
+  }
+
+  FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
+    final localeTag = renderKey.locale?.toLanguageTag() ?? '';
+    final normalizedScale = scale == 0 ? 1.0 : scale;
+    return FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.dynamicLayer,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleKey: (normalizedScale * 1000).round(),
+      localeTag: localeTag,
+    );
+  }
+
+  bool _canUseInteractionSceneCache({
+    required bool hasFilterElement,
+    required List<ElementState> effectiveElements,
+    required Set<String> dynamicElementIds,
+  }) {
+    if (hasFilterElement) {
+      return false;
+    }
+
+    if (_isHighlightPreviewCacheEligible()) {
+      return true;
+    }
+
+    if (effectiveElements.length < 2) {
+      return false;
+    }
+
+    if (dynamicElementIds.isEmpty) {
+      return true;
+    }
+
+    var visibleDynamicCount = 0;
+    for (final element in effectiveElements) {
+      if (!dynamicElementIds.contains(element.id)) {
+        continue;
+      }
+      visibleDynamicCount += 1;
+      if (visibleDynamicCount >= effectiveElements.length) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  void _paintElementsDirectly({
+    required Canvas canvas,
+    required List<ElementState> elements,
+    required void Function(Canvas sceneCanvas, ElementState element)
+    paintElement,
+  }) {
+    for (final element in elements) {
+      paintElement(canvas, element);
+    }
+  }
+
+  bool _isHighlightPreviewCacheEligible() {
+    final previewElements = renderKey.previewElementsById;
+    final creatingElement = renderKey.creatingElement;
+    if (previewElements.isEmpty) {
+      return creatingElement != null &&
+          creatingElement.element.data is HighlightData;
+    }
+
+    final document = stateView.state.domain.document;
+    for (final preview in previewElements.values) {
+      if (preview.data is! HighlightData) {
+        return false;
+      }
+      final persisted = document.getElementById(preview.id);
+      if (persisted != null && persisted.data is! HighlightData) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Set<String> _resolveDynamicElementIds({
+    required Set<String> dynamicPreviewIds,
+    String? creatingFilterId,
+    Iterable<String> serialConnectorTextIds = const <String>{},
+  }) {
+    final hasPreviewElements = dynamicPreviewIds.isNotEmpty;
+    final hasCreatingFilter = creatingFilterId != null;
+    final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
+    if (!hasPreviewElements && !hasCreatingFilter && !hasSerialConnectorTexts) {
+      return const <String>{};
+    }
+
+    final dynamicElementIds = <String>{};
+    if (hasPreviewElements) {
+      dynamicElementIds.addAll(dynamicPreviewIds);
+    }
+    if (creatingFilterId != null) {
+      dynamicElementIds.add(creatingFilterId);
+    }
+    if (hasSerialConnectorTexts) {
+      dynamicElementIds.addAll(serialConnectorTextIds);
+    }
+    return dynamicElementIds;
+  }
+
+  bool _hasSharedElementId(Set<String> candidateIds, Set<String> filterIds) {
+    if (candidateIds.isEmpty || filterIds.isEmpty) {
+      return false;
+    }
+    for (final id in candidateIds) {
+      if (filterIds.contains(id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Set<String> _resolveDynamicPreviewElementIds(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    final override = renderKey.dynamicPreviewElementIds;
+    if (override != null) {
+      return override;
+    }
+    if (previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+
+    final document = stateView.state.domain.document;
+    final dynamicIds = <String>{};
+    for (final entry in previewElementsById.entries) {
+      final persisted = document.getElementById(entry.key);
+      if (persisted == null || !identical(persisted, entry.value)) {
+        dynamicIds.add(entry.key);
+      }
+    }
+    return dynamicIds;
+  }
+
+  String? _resolveCreatingFilterId() {
+    final creatingElement = renderKey.creatingElement?.element;
+    if (creatingElement == null || creatingElement.data is! FilterData) {
+      return null;
+    }
+    return creatingElement.id;
+  }
+
+  void _includeEditingTextIdForSerialConnectors({
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! TextEditingState || interaction.isNew) {
+      return;
+    }
+
+    final editingTextId = interaction.elementId;
+    final previewElement = previewElementsById[editingTextId];
+    if (previewElement != null) {
+      if (previewElement.data is TextData) {
+        visibleTextIds.add(editingTextId);
+      }
+      return;
+    }
+
+    final persistedElement = document.getElementById(editingTextId);
+    if (persistedElement?.data is TextData) {
+      visibleTextIds.add(editingTextId);
+    }
+  }
+
+  bool _rectsIntersect(DrawRect a, DrawRect b) =>
+      a.minX <= b.maxX &&
+      a.maxX >= b.minX &&
+      a.minY <= b.maxY &&
+      a.maxY >= b.minY;
 
   void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
     if (renderKey.selectedIds.length != 1) {
@@ -410,7 +1576,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final hoveredHandle = renderKey.hoveredArrowHandle;
     final activeHandle = renderKey.activeArrowHandle;
-    final shouldDelete = _shouldShowDeleteIndicator();
+    final shouldDelete = renderKey.arrowDeleteIndicatorVisible;
     final deletePosition = activeHandle == null || !shouldDelete
         ? null
         : _resolveHandlePosition(overlay, activeHandle);
@@ -435,73 +1601,31 @@ class DynamicCanvasPainter extends CustomPainter {
     final loopOuterRadius = handleSize * 1.0;
     final loopInnerRadius = handleSize * 0.5;
     final hoverOuterRadius = loopOuterRadius;
-
-    final addableStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.35)
-      ..isAntiAlias = true;
-    final addableFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.18)
-      ..isAntiAlias = true;
-    final addableStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.85)
-      ..isAntiAlias = true;
-    final addableFillPaintHighlighted = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.55)
-      ..isAntiAlias = true;
-    final turningFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = fillColor.withValues(alpha: 0.90)
-      ..isAntiAlias = true;
-    final turningStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor
-      ..isAntiAlias = true;
-    final turningStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-    final fixedFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = fillColor.withValues(alpha: 0.90)
-      ..isAntiAlias = true;
-    final fixedStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor.withValues(alpha: 0.9)
-      ..isAntiAlias = true;
-    final fixedStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-    final hoverOuterFillPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokeColor.withValues(alpha: 0.25)
-      ..isAntiAlias = true;
+    final paints = _arrowOverlayPaints
+      ..configure(
+        strokeWidth: strokeWidth,
+        fillColor: fillColor,
+        strokeColor: strokeColor,
+        highlightStrokeColor: highlightStroke,
+      );
 
     for (final handle in overlay.addablePoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       final isFixed = handle.isFixed;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
       final fillPaint = isFixed
-          ? fixedFillPaint
-          : (isHighlighted ? addableFillPaintHighlighted : addableFillPaint);
-      final strokePaint = isFixed
-          ? (isHighlighted ? fixedStrokePaintHighlighted : fixedStrokePaint)
+          ? paints.fixedFill
           : (isHighlighted
-                ? addableStrokePaintHighlighted
-                : addableStrokePaint);
+                ? paints.addableFillHighlighted
+                : paints.addableFill);
+      final strokePaint = isFixed
+          ? (isHighlighted ? paints.fixedStrokeHighlighted : paints.fixedStroke)
+          : (isHighlighted
+                ? paints.addableStrokeHighlighted
+                : paints.addableStroke);
       final radius = addableRadius;
       canvas
         ..drawCircle(center, radius, fillPaint)
@@ -512,35 +1636,22 @@ class DynamicCanvasPainter extends CustomPainter {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
-      final fillPaint = turningFillPaint;
+      final fillPaint = paints.turningFill;
       final strokePaint = isHighlighted
-          ? turningStrokePaintHighlighted
-          : turningStrokePaint;
+          ? paints.turningStrokeHighlighted
+          : paints.turningStroke;
       canvas
         ..drawCircle(center, turnRadius, fillPaint)
         ..drawCircle(center, turnRadius, strokePaint);
     }
 
-    // Pre-build loop stroke paints outside the loop to avoid
-    // allocating a new Paint per loop-point per frame.
-    final loopStrokePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = strokeColor
-      ..isAntiAlias = true;
-    final loopStrokePaintHighlighted = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = highlightStroke
-      ..isAntiAlias = true;
-
     for (final handle in overlay.loopPoints) {
       final center = _localOffset(effectiveElement.rect, handle.position);
       final isHighlighted = handle == hoveredHandle || handle == activeHandle;
       if (isHighlighted) {
-        canvas.drawCircle(center, hoverOuterRadius, hoverOuterFillPaint);
+        canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
       final radius = handle.kind == ArrowPointKind.loopEnd
           ? loopOuterRadius
@@ -548,23 +1659,18 @@ class DynamicCanvasPainter extends CustomPainter {
 
       // Inner loop point (loopStart) has filled style like bend points
       if (handle.kind == ArrowPointKind.loopStart) {
-        canvas.drawCircle(center, radius, turningFillPaint);
+        canvas.drawCircle(center, radius, paints.turningFill);
       }
       canvas.drawCircle(
         center,
         radius,
-        isHighlighted ? loopStrokePaintHighlighted : loopStrokePaint,
+        isHighlighted ? paints.loopStrokeHighlighted : paints.loopStroke,
       );
     }
 
     if (deletePosition != null) {
       final center = _localOffset(effectiveElement.rect, deletePosition);
-      final deletePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth * 1.4
-        ..color = Colors.redAccent
-        ..isAntiAlias = true;
-      canvas.drawCircle(center, turnRadius * 1.35, deletePaint);
+      canvas.drawCircle(center, turnRadius * 1.35, paints.deleteStroke);
     }
 
     canvas.restore();
@@ -658,6 +1764,14 @@ class DynamicCanvasPainter extends CustomPainter {
     if (data is! ArrowLikeData) {
       return;
     }
+    if (_drawLineHoverOutlineFastPath(
+      canvas: canvas,
+      element: element,
+      data: data,
+      scale: scale,
+    )) {
+      return;
+    }
 
     final rect = element.rect;
     final cached = arrowVisualCache.resolve(element: element, data: data);
@@ -679,13 +1793,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     // Use hover selection color with modified appearance
     final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
-    final strokePaint = Paint()
-      ..style = PaintingStyle.stroke
+    final strokePaint = _arrowHoverStrokePaint
       ..strokeWidth = hoverStrokeWidth / scale
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = hoverColor
-      ..isAntiAlias = true;
+      ..color = hoverColor;
 
     // Draw shaft (always solid for hover outline)
     canvas.drawPath(cached.shaftPath, strokePaint);
@@ -695,6 +1805,51 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     canvas.restore();
+  }
+
+  bool _drawLineHoverOutlineFastPath({
+    required Canvas canvas,
+    required ElementState element,
+    required ArrowLikeData data,
+    required double scale,
+  }) {
+    if (data is! LineData || data.points.length != 2) {
+      return false;
+    }
+
+    final rect = element.rect;
+    if (!rect.width.isFinite || !rect.height.isFinite) {
+      return false;
+    }
+    final startPoint = data.points.first;
+    final endPoint = data.points.last;
+    final start = Offset(startPoint.x * rect.width, startPoint.y * rect.height);
+    final end = Offset(endPoint.x * rect.width, endPoint.y * rect.height);
+    if (!start.dx.isFinite ||
+        !start.dy.isFinite ||
+        !end.dx.isFinite ||
+        !end.dy.isFinite) {
+      return false;
+    }
+
+    canvas.save();
+    if (element.rotation != 0) {
+      canvas
+        ..translate(rect.centerX, rect.centerY)
+        ..rotate(element.rotation)
+        ..translate(-rect.centerX, -rect.centerY);
+    }
+    canvas.translate(rect.minX, rect.minY);
+
+    final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final strokePaint = _arrowHoverStrokePaint
+      ..strokeWidth = hoverStrokeWidth / scale
+      ..color = hoverColor;
+    canvas
+      ..drawLine(start, end, strokePaint)
+      ..restore();
+    return true;
   }
 
   void _drawTextHoverUnderlines({
@@ -856,13 +2011,26 @@ class DynamicCanvasPainter extends CustomPainter {
     return Offset(0, dy);
   }
 
-  bool _shouldShowDeleteIndicator() {
-    final interaction = stateView.state.application.interaction;
-    if (interaction is! EditingState) {
-      return false;
+  bool _shouldPaintSerialConnectors({
+    required Set<String> boundTextIds,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    for (final textId in visibleTextIds) {
+      if (boundTextIds.contains(textId)) {
+        return true;
+      }
     }
-    final transform = interaction.currentTransform;
-    return transform is ArrowPointTransform && transform.shouldDelete;
+    for (final previewElement in previewElementsById.values) {
+      final data = previewElement.data;
+      if (data is SerialNumberData &&
+          data.textElementId != null &&
+          data.textElementId!.isNotEmpty &&
+          visibleTextIds.contains(data.textElementId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   DrawPoint? _resolveHandlePosition(
@@ -1255,16 +2423,13 @@ class DynamicCanvasPainter extends CustomPainter {
     if (label == null) {
       return;
     }
-    final textPainter = TextPainter(
-      text: TextSpan(
+    final effectiveScale = scale == 0 ? 1.0 : scale;
+    final textPainter = _gapLabelPainter
+      ..text = TextSpan(
         text: label.toStringAsFixed(0),
-        style: TextStyle(
-          color: color,
-          fontSize: 10 / (scale == 0 ? 1.0 : scale),
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+        style: TextStyle(color: color, fontSize: 10 / effectiveScale),
+      )
+      ..layout();
 
     final mid = DrawPoint(
       x: (guide.start.x + guide.end.x) / 2,
@@ -1272,7 +2437,7 @@ class DynamicCanvasPainter extends CustomPainter {
     );
     final offset = Offset(
       mid.x - textPainter.width / 2,
-      mid.y - textPainter.height - (4 / (scale == 0 ? 1.0 : scale)),
+      mid.y - textPainter.height - (4 / effectiveScale),
     );
     textPainter.paint(canvas, offset);
   }
@@ -1326,12 +2491,6 @@ class DynamicCanvasPainter extends CustomPainter {
     );
   }
 
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
-
   @override
   bool shouldRepaint(covariant DynamicCanvasPainter oldDelegate) =>
       oldDelegate.renderKey != renderKey;
@@ -1345,8 +2504,220 @@ class DynamicCanvasPainter extends CustomPainter {
   int get hashCode => renderKey.hashCode;
 }
 
+class _ArrowOverlayPaints {
+  _ArrowOverlayPaints();
+
+  final addableStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final addableFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final addableStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final addableFillHighlighted = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final turningFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final turningStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final turningStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final fixedFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final fixedStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final fixedStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final hoverOuterFill = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  final loopStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final loopStrokeHighlighted = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
+  final deleteStroke = Paint()
+    ..style = PaintingStyle.stroke
+    ..color = Colors.redAccent
+    ..isAntiAlias = true;
+
+  void configure({
+    required double strokeWidth,
+    required Color fillColor,
+    required Color strokeColor,
+    required Color highlightStrokeColor,
+  }) {
+    addableStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.35);
+    addableFill.color = strokeColor.withValues(alpha: 0.18);
+    addableStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.85);
+    addableFillHighlighted.color = strokeColor.withValues(alpha: 0.55);
+    turningFill.color = fillColor.withValues(alpha: 0.90);
+    turningStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor;
+    turningStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    fixedFill.color = fillColor.withValues(alpha: 0.90);
+    fixedStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor.withValues(alpha: 0.9);
+    fixedStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    hoverOuterFill.color = strokeColor.withValues(alpha: 0.25);
+    loopStroke
+      ..strokeWidth = strokeWidth
+      ..color = strokeColor;
+    loopStrokeHighlighted
+      ..strokeWidth = strokeWidth
+      ..color = highlightStrokeColor;
+    deleteStroke.strokeWidth = strokeWidth * 1.4;
+  }
+}
+
 class _ArrowBindingHighlight {
   const _ArrowBindingHighlight({required this.elementId});
 
   final String elementId;
+}
+
+enum _PreviewTopologyHint { general, stableDocumentBacked }
+
+class _SceneRenderContext {
+  const _SceneRenderContext({
+    required this.hasFilterElement,
+    required this.hasInteractiveFilterElement,
+    required this.useAggressiveCpuFallback,
+    required this.shouldPaintSerialConnectors,
+    required this.serialConnectors,
+    required this.dynamicElementIds,
+  });
+
+  final bool hasFilterElement;
+  final bool hasInteractiveFilterElement;
+  final bool useAggressiveCpuFallback;
+  final bool shouldPaintSerialConnectors;
+  final Map<String, List<SerialNumberTextConnector>> serialConnectors;
+  final Set<String> dynamicElementIds;
+}
+
+class _SceneRenderContextStaticData {
+  _SceneRenderContextStaticData({
+    required this.hasFilterElement,
+    required Set<String> filterElementIds,
+    required Set<String> visibleTextIds,
+    required this.shouldPaintSerialConnectors,
+  }) : filterElementIds = Set<String>.unmodifiable(filterElementIds),
+       visibleTextIds = Set<String>.unmodifiable(visibleTextIds);
+
+  final bool hasFilterElement;
+  final Set<String> filterElementIds;
+  final Set<String> visibleTextIds;
+  final bool shouldPaintSerialConnectors;
+}
+
+class _SceneRenderContextCacheEntry {
+  _SceneRenderContextCacheEntry({
+    required this.document,
+    required this.elements,
+    required this.previewElementsById,
+    required this.previewTopologyHint,
+    required this.elementSignature,
+    required this.serialPreviewSignature,
+    required this.staticData,
+  });
+
+  final DocumentState document;
+  final List<ElementState> elements;
+  final Map<String, ElementState> previewElementsById;
+  final _PreviewTopologyHint previewTopologyHint;
+  final _SceneElementStructureSignature elementSignature;
+  final _SerialPreviewSignature serialPreviewSignature;
+  final _SceneRenderContextStaticData staticData;
+
+  bool matchesFast({
+    required DocumentState document,
+    required List<ElementState> elements,
+    required Map<String, ElementState> previewElementsById,
+    required _PreviewTopologyHint previewTopologyHint,
+  }) =>
+      identical(this.document, document) &&
+      identical(this.elements, elements) &&
+      this.previewTopologyHint == previewTopologyHint &&
+      (previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked ||
+          identical(this.previewElementsById, previewElementsById));
+
+  bool matchesBySignature({
+    required DocumentState document,
+    required _SceneElementStructureSignature elementSignature,
+    required _SerialPreviewSignature serialPreviewSignature,
+    required _PreviewTopologyHint previewTopologyHint,
+  }) =>
+      identical(this.document, document) &&
+      this.previewTopologyHint == previewTopologyHint &&
+      this.elementSignature == elementSignature &&
+      this.serialPreviewSignature == serialPreviewSignature;
+}
+
+@immutable
+class _SceneElementStructureSignature {
+  const _SceneElementStructureSignature({
+    required this.hash,
+    required this.elementCount,
+    required this.filterCount,
+    required this.visibleTextCount,
+  });
+
+  final int hash;
+  final int elementCount;
+  final int filterCount;
+  final int visibleTextCount;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SceneElementStructureSignature &&
+          other.hash == hash &&
+          other.elementCount == elementCount &&
+          other.filterCount == filterCount &&
+          other.visibleTextCount == visibleTextCount;
+
+  @override
+  int get hashCode =>
+      Object.hash(hash, elementCount, filterCount, visibleTextCount);
+}
+
+@immutable
+class _SerialPreviewSignature {
+  const _SerialPreviewSignature({required this.hash, required this.count});
+
+  static const empty = _SerialPreviewSignature(hash: 0, count: 0);
+
+  final int hash;
+  final int count;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _SerialPreviewSignature &&
+          other.hash == hash &&
+          other.count == count;
+
+  @override
+  int get hashCode => Object.hash(hash, count);
 }

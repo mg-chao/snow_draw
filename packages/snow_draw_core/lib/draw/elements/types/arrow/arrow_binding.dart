@@ -155,8 +155,12 @@ class ArrowBindingUtils {
         score = math.max(0, score - snapDistance * 0.25);
       }
 
-      if (score < bestScore ||
-          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+      if (_isBetterBindingCandidate(
+        candidate: result,
+        candidateScore: score,
+        currentBest: best,
+        currentBestScore: bestScore,
+      )) {
         best = result;
         bestScore = score;
       }
@@ -208,14 +212,58 @@ class ArrowBindingUtils {
         score = math.max(0, score - snapDistance * 0.25);
       }
 
-      if (score < bestScore ||
-          (score == bestScore && result.zIndex > (best?.zIndex ?? -1))) {
+      if (_isBetterBindingCandidate(
+        candidate: result,
+        candidateScore: score,
+        currentBest: best,
+        currentBestScore: bestScore,
+      )) {
         best = result;
         bestScore = score;
       }
     }
 
     return best;
+  }
+
+  /// Resolves a single-target binding candidate without list iteration.
+  ///
+  /// Use this for hot paths that already resolved the target element.
+  static ArrowBindingResult? resolveBindingCandidateForTarget({
+    required DrawPoint worldPoint,
+    required ElementState target,
+    required double snapDistance,
+    DrawPoint? referencePoint,
+  }) {
+    if (snapDistance <= 0 || target.opacity <= 0) {
+      return null;
+    }
+    return _resolveBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      referencePoint: referencePoint,
+    );
+  }
+
+  /// Resolves a single-target elbow binding candidate without list iteration.
+  ///
+  /// Use this for hot paths that already resolved the target element.
+  static ArrowBindingResult? resolveElbowBindingCandidateForTarget({
+    required DrawPoint worldPoint,
+    required ElementState target,
+    required double snapDistance,
+    required bool hasArrowhead,
+  }) {
+    if (snapDistance <= 0 || target.opacity <= 0) {
+      return null;
+    }
+    return _resolveElbowBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      hasArrowhead: hasArrowhead,
+    );
   }
 
   static DrawPoint? resolveBoundPoint({
@@ -419,6 +467,31 @@ class ArrowBindingUtils {
       zIndex: target.zIndex,
     );
   }
+}
+
+bool _isBetterBindingCandidate({
+  required ArrowBindingResult candidate,
+  required double candidateScore,
+  required ArrowBindingResult? currentBest,
+  required double currentBestScore,
+}) {
+  if (candidateScore < currentBestScore) {
+    return true;
+  }
+  if (candidateScore > currentBestScore) {
+    return false;
+  }
+  if (currentBest == null) {
+    return true;
+  }
+  if (candidate.zIndex > currentBest.zIndex) {
+    return true;
+  }
+  if (candidate.zIndex < currentBest.zIndex) {
+    return false;
+  }
+  return candidate.binding.elementId.compareTo(currentBest.binding.elementId) <
+      0;
 }
 
 @immutable

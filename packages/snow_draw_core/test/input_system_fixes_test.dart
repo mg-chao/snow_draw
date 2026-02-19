@@ -50,8 +50,8 @@ void main() {
         duration: const Duration(milliseconds: 100),
       );
       final context = MiddlewareContext(state: DrawState());
-      const event = PointerMoveInputEvent(
-        position: DrawPoint(x: 10, y: 20),
+      final event = PointerMoveInputEvent(
+        position: const DrawPoint(x: 10, y: 20),
         modifiers: KeyModifiers.none,
       );
 
@@ -70,12 +70,12 @@ void main() {
         duration: const Duration(milliseconds: 500),
       );
       final context = MiddlewareContext(state: DrawState());
-      const event1 = PointerMoveInputEvent(
-        position: DrawPoint(x: 10, y: 20),
+      final event1 = PointerMoveInputEvent(
+        position: const DrawPoint(x: 10, y: 20),
         modifiers: KeyModifiers.none,
       );
-      const event2 = PointerMoveInputEvent(
-        position: DrawPoint(x: 30, y: 40),
+      final event2 = PointerMoveInputEvent(
+        position: const DrawPoint(x: 30, y: 40),
         modifiers: KeyModifiers.none,
       );
 
@@ -100,12 +100,12 @@ void main() {
         duration: const Duration(milliseconds: 10),
       );
       final context = MiddlewareContext(state: DrawState());
-      const event1 = PointerMoveInputEvent(
-        position: DrawPoint(x: 10, y: 20),
+      final event1 = PointerMoveInputEvent(
+        position: const DrawPoint(x: 10, y: 20),
         modifiers: KeyModifiers.none,
       );
-      const event2 = PointerMoveInputEvent(
-        position: DrawPoint(x: 30, y: 40),
+      final event2 = PointerMoveInputEvent(
+        position: const DrawPoint(x: 30, y: 40),
         modifiers: KeyModifiers.none,
       );
 
@@ -129,8 +129,8 @@ void main() {
         throttledEventTypes: {PointerMoveInputEvent, PointerHoverInputEvent},
       );
       final context = MiddlewareContext(state: DrawState());
-      const moveEvent = PointerMoveInputEvent(
-        position: DrawPoint(x: 10, y: 20),
+      final moveEvent = PointerMoveInputEvent(
+        position: const DrawPoint(x: 10, y: 20),
         modifiers: KeyModifiers.none,
       );
       const hoverEvent = PointerHoverInputEvent(
@@ -368,8 +368,8 @@ void main() {
         predicate: (event, context) => event is PointerMoveInputEvent,
       );
       final context = MiddlewareContext(state: DrawState());
-      const event = PointerMoveInputEvent(
-        position: DrawPoint(x: 10, y: 20),
+      final event = PointerMoveInputEvent(
+        position: const DrawPoint(x: 10, y: 20),
         modifiers: KeyModifiers.none,
       );
 

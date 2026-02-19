@@ -7,6 +7,7 @@ void main() {
     final layer = resolveHighlightMaskLayer(
       hasHighlights: false,
       hasDynamicContent: false,
+      hasDynamicHighlights: false,
       config: const HighlightMaskConfig(maskOpacity: 1),
     );
     expect(layer, HighlightMaskLayer.none);
@@ -16,24 +17,37 @@ void main() {
     final layer = resolveHighlightMaskLayer(
       hasHighlights: true,
       hasDynamicContent: false,
+      hasDynamicHighlights: false,
       config: const HighlightMaskConfig(),
     );
     expect(layer, HighlightMaskLayer.none);
   });
 
-  test('mask layer resolves to static when no dynamic content', () {
+  test('mask layer resolves to static when no dynamic highlights', () {
     final layer = resolveHighlightMaskLayer(
       hasHighlights: true,
       hasDynamicContent: false,
+      hasDynamicHighlights: false,
       config: const HighlightMaskConfig(maskOpacity: 0.5),
     );
     expect(layer, HighlightMaskLayer.staticLayer);
   });
 
-  test('mask layer resolves to dynamic when dynamic content exists', () {
+  test('mask layer resolves to dynamic when highlights are dynamic', () {
+    final layer = resolveHighlightMaskLayer(
+      hasHighlights: true,
+      hasDynamicContent: false,
+      hasDynamicHighlights: true,
+      config: const HighlightMaskConfig(maskOpacity: 0.5),
+    );
+    expect(layer, HighlightMaskLayer.dynamicLayer);
+  });
+
+  test('mask layer resolves to dynamic when scene content is dynamic', () {
     final layer = resolveHighlightMaskLayer(
       hasHighlights: true,
       hasDynamicContent: true,
+      hasDynamicHighlights: false,
       config: const HighlightMaskConfig(maskOpacity: 0.5),
     );
     expect(layer, HighlightMaskLayer.dynamicLayer);

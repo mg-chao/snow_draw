@@ -23,6 +23,9 @@ class FilterShaderManager {
   /// Whether the mosaic shader program is ready.
   bool get isMosaicReady => _mosaicProgram != null;
 
+  /// Whether the backend can render mosaic using a fragment shader.
+  bool get canUseShaderBackedMosaic => isShaderFilterSupported && isMosaicReady;
+
   /// Preloads shader programs used for filter rendering.
   Future<void> load() async {
     await _loadMosaicProgram();
@@ -77,6 +80,7 @@ class FilterShaderManager {
     required double strength,
     required Size regionSize,
     required Offset regionOffset,
+    double? blockSize,
   }) {
     final width = regionSize.width;
     final height = regionSize.height;
@@ -84,23 +88,22 @@ class FilterShaderManager {
       return null;
     }
 
-    final blockSize = resolveMosaicBlockSize(
-      strength: strength,
-      regionSize: regionSize,
-    );
+    final resolvedBlockSize =
+        blockSize ??
+        resolveMosaicBlockSize(strength: strength, regionSize: regionSize);
 
     final shaderFilter = _createShaderBackedMosaicFilter(
       regionWidth: width,
       regionHeight: height,
       regionOffset: regionOffset,
-      blockSize: blockSize,
+      blockSize: resolvedBlockSize,
     );
     if (shaderFilter != null) {
       return shaderFilter;
     }
 
     return _createMatrixMosaicFilter(
-      blockSize: blockSize,
+      blockSize: resolvedBlockSize,
       regionOffset: regionOffset,
     );
   }

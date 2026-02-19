@@ -160,6 +160,8 @@ class _MyAppState extends State<MyApp> {
                         size: size,
                         store: store,
                         toolController: toolController,
+                        watermarkPreviewListenable:
+                            styleToolbarAdapter.watermarkPreviewListenable,
                       ),
                     ),
                     Align(

@@ -185,18 +185,23 @@ class ObjectSnapService {
   /// - [targetOffset]: Offset already applied to target elements.
   /// - [enablePointSnaps]: Whether to consider point/anchor alignment.
   /// - [enableGapSnaps]: Whether to consider gap/spacing alignment.
+  /// - [referenceAabbs]: Optional precomputed axis-aligned bounds for
+  ///   [referenceElements]. When provided, this avoids rebuilding AABBs on
+  ///   every pointer update.
   SnapResult snapMove({
     required DrawRect targetRect,
     required List<ElementState> referenceElements,
     required double snapDistance,
     List<ElementState>? targetElements,
     DrawPoint? targetOffset,
+    List<DrawRect>? referenceAabbs,
     bool enablePointSnaps = true,
     bool enableGapSnaps = true,
   }) => snapRect(
     targetRect: targetRect,
     referenceElements: referenceElements,
     snapDistance: snapDistance,
+    referenceAabbs: referenceAabbs,
     targetAnchorsX: const [
       SnapAxisAnchor.start,
       SnapAxisAnchor.center,
@@ -226,17 +231,22 @@ class ObjectSnapService {
   ///   right edge).
   /// - [targetAnchorsY]: Which Y anchors are being resized.
   /// - [enablePointSnaps]: Whether to consider point/anchor alignment.
+  /// - [referenceAabbs]: Optional precomputed axis-aligned bounds for
+  ///   [referenceElements]. When provided, this avoids rebuilding AABBs on
+  ///   every pointer update.
   SnapResult snapResize({
     required DrawRect targetRect,
     required List<ElementState> referenceElements,
     required double snapDistance,
     required List<SnapAxisAnchor> targetAnchorsX,
     required List<SnapAxisAnchor> targetAnchorsY,
+    List<DrawRect>? referenceAabbs,
     bool enablePointSnaps = true,
   }) => snapRect(
     targetRect: targetRect,
     referenceElements: referenceElements,
     snapDistance: snapDistance,
+    referenceAabbs: referenceAabbs,
     targetAnchorsX: targetAnchorsX,
     targetAnchorsY: targetAnchorsY,
     enablePointSnaps: enablePointSnaps,
@@ -263,6 +273,7 @@ class ObjectSnapService {
     required List<SnapAxisAnchor> targetAnchorsY,
     List<ElementState>? targetElements,
     DrawPoint? targetOffset,
+    List<DrawRect>? referenceAabbs,
     bool enablePointSnaps = true,
     bool enableGapSnaps = true,
   }) {
@@ -280,14 +291,19 @@ class ObjectSnapService {
     final usePointToPointSnaps =
         enablePointSnaps && targetElements != null && targetElements.isNotEmpty;
     final needsReferenceRects = enableGapSnaps || !usePointToPointSnaps;
-    final referenceAabbs = _buildElementAabbs(referenceElements);
-    final referenceRects = needsReferenceRects
+    final hasPrecomputedAabbs =
+        referenceAabbs != null &&
+        referenceAabbs.length == referenceElements.length;
+    final effectiveReferenceAabbs = hasPrecomputedAabbs
         ? referenceAabbs
+        : _buildElementAabbs(referenceElements);
+    final referenceRects = needsReferenceRects
+        ? effectiveReferenceAabbs
         : const <DrawRect>[];
     final referencePoints = usePointToPointSnaps
         ? _buildElementSnapPoints(
             referenceElements,
-            elementAabbs: referenceAabbs,
+            elementAabbs: effectiveReferenceAabbs,
           )
         : null;
     final targetPoints = usePointToPointSnaps
@@ -1600,6 +1616,15 @@ class ObjectSnapService {
     for (final element in elements)
       SelectionCalculator.computeElementWorldAabb(element),
   ];
+
+  /// Builds reusable axis-aligned bounds for [referenceElements].
+  ///
+  /// Callers running high-frequency snapping loops (create/move/resize) can
+  /// compute this once per session and pass it to [snapRect], [snapMove], or
+  /// [snapResize] via `referenceAabbs`.
+  static List<DrawRect> buildReferenceAabbs(
+    List<ElementState> referenceElements,
+  ) => List<DrawRect>.unmodifiable(_buildElementAabbs(referenceElements));
 
   static List<_SnapPoint> _buildElementSnapPoints(
     List<ElementState> elements, {
