@@ -18,25 +18,24 @@ final class ElbowFixedSegment {
   });
 
   factory ElbowFixedSegment.fromJson(Map<String, dynamic> json) {
-    final index = (json['index'] as num?)?.toInt();
+    final index = json['index'];
     final start = _decodePoint(json['start']);
     final end = _decodePoint(json['end']);
-    if (index == null || start == null || end == null) {
+    if (index is! num || start == null || end == null) {
       throw const FormatException('Invalid ElbowFixedSegment payload');
     }
-    return ElbowFixedSegment(index: index, start: start, end: end);
+    return ElbowFixedSegment(index: index.toInt(), start: start, end: end);
   }
 
   final int index;
   final DrawPoint start;
   final DrawPoint end;
 
-  /// Whether this segment runs horizontally.
-  bool get isHorizontal => ElbowGeometry.segmentIsHorizontal(start, end);
-
   /// The [ElbowAxis] of this segment.
-  ElbowAxis get axis =>
-      isHorizontal ? ElbowAxis.horizontal : ElbowAxis.vertical;
+  ElbowAxis get axis => ElbowGeometry.axisForSegment(start, end);
+
+  /// Whether this segment runs horizontally.
+  bool get isHorizontal => axis.isHorizontal;
 
   /// The shared coordinate along the perpendicular axis.
   ///
@@ -63,14 +62,17 @@ final class ElbowFixedSegment {
   };
 
   static DrawPoint? _decodePoint(Object? raw) {
-    if (raw is Map) {
-      final x = (raw['x'] as num?)?.toDouble();
-      final y = (raw['y'] as num?)?.toDouble();
-      if (x != null && y != null) {
-        return DrawPoint(x: x, y: y);
-      }
+    if (raw is! Map) {
+      return null;
     }
-    return null;
+
+    final x = raw['x'];
+    final y = raw['y'];
+    if (x is! num || y is! num) {
+      return null;
+    }
+
+    return DrawPoint(x: x.toDouble(), y: y.toDouble());
   }
 
   @override
