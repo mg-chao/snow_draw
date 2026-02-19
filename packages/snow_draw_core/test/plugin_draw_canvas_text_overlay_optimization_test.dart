@@ -24,7 +24,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'text draft updates keep canvas render keys stable during editing',
+    'text draft updates keep canvas render keys stable when geometry is unchanged',
     (tester) async {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
@@ -75,7 +75,9 @@ void main() {
       final dynamicBefore = _dynamicRenderKey(tester);
       final staticBefore = _staticRenderKey(tester);
 
-      await store.dispatch(const UpdateTextEdit(text: 'hello world'));
+      await store.dispatch(
+        const UpdateTextEdit(text: 'hello world', rect: rect),
+      );
       await tester.pump();
 
       final dynamicAfter = _dynamicRenderKey(tester);

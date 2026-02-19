@@ -5,6 +5,7 @@ import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
+import 'watermark_visibility.dart';
 
 /// Resolves dynamic preview elements based on a cached dynamic-layer split.
 typedef DynamicPreviewByLayerStartResolver =
@@ -44,6 +45,8 @@ class InteractionDynamicSceneSnapshot {
     required this.rendersWholeElementScene,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
   }) : previewElementsById = Map<String, ElementState>.unmodifiable(
          previewElementsById,
        ),
@@ -62,6 +65,8 @@ class InteractionDynamicSceneSnapshot {
   final bool rendersWholeElementScene;
   final HighlightMaskLayer highlightMaskLayer;
   final HighlightMaskConfig highlightMaskConfig;
+  final WatermarkLayer watermarkLayer;
+  final WatermarkConfig watermarkConfig;
 }
 
 /// Resolves the dynamic-scene payload for interaction-only updates by reusing
@@ -101,5 +106,7 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
     rendersWholeElementScene: previousRenderKey.rendersWholeElementScene,
     highlightMaskLayer: previousRenderKey.highlightMaskLayer,
     highlightMaskConfig: previousRenderKey.highlightMaskConfig,
+    watermarkLayer: previousRenderKey.watermarkLayer,
+    watermarkConfig: previousRenderKey.watermarkConfig,
   );
 }

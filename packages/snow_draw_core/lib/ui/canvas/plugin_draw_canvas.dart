@@ -65,7 +65,7 @@ import 'render_keys.dart';
 import 'serial_number_interaction_classifier.dart';
 import 'static_canvas_painter.dart';
 import 'text_editing_state_change.dart';
-import 'watermark_canvas_painter.dart';
+import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -255,8 +255,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late DrawStateViewBuilder _stateViewBuilder;
   late final FreeDrawPreviewLayerController _freeDrawPreviewLayerController;
   late final FreeDrawPreviewPainter _freeDrawPreviewPainter;
-  late final WatermarkCanvasLayerController _watermarkLayerController;
-  late final WatermarkCanvasPainter _watermarkCanvasPainter;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
   late final FrameAlignedEventDispatcher<_HoverFrameEvent> _hoverMoveDispatcher;
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
@@ -442,14 +440,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _freeDrawPreviewPainter = FreeDrawPreviewPainter(
       controller: _freeDrawPreviewLayerController,
     );
-    _watermarkLayerController = WatermarkCanvasLayerController(
-      initialState: WatermarkCanvasLayerState(
-        config: _resolveEffectiveWatermarkConfig(initialState),
-      ),
-    );
-    _watermarkCanvasPainter = WatermarkCanvasPainter(
-      controller: _watermarkLayerController,
-    );
     widget.watermarkPreviewListenable?.addListener(
       _handleWatermarkPreviewChange,
     );
@@ -583,7 +573,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
     _syncFreeDrawPreviewLayerState(widget.store.state);
-    _syncWatermarkLayerState(widget.store.state);
     _syncTextEditingOverlayState(widget.store.state);
   }
 
@@ -609,7 +598,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _dynamicLayerSnapshotNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
     _freeDrawPreviewLayerController.dispose();
-    _watermarkLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_hoverMoveDispatcher.dispose());
     unawaited(_textDraftDispatcher.dispose());
@@ -680,15 +668,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                   renderKey: snapshot.renderKey,
                   stateView: snapshot.stateView,
                 ),
-                size: widget.size,
-              ),
-            ),
-          ),
-          RepaintBoundary(
-            child: IgnorePointer(
-              child: CustomPaint(
-                isComplex: true,
-                painter: _watermarkCanvasPainter,
                 size: widget.size,
               ),
             ),
@@ -2867,20 +2846,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleWatermarkPreviewChange() {
-    _syncWatermarkLayerState(widget.store.state);
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
       widget.watermarkPreviewListenable?.value ??
       state.domain.document.globalElements.watermark;
-
-  void _syncWatermarkLayerState(DrawState state) {
-    _watermarkLayerController.update(
-      WatermarkCanvasLayerState(
-        config: _resolveEffectiveWatermarkConfig(state),
-      ),
-    );
-  }
 
   void _syncFreeDrawPreviewLayerState(DrawState state, {double? scaleFactor}) {
     _freeDrawPreviewLayerController.update(
@@ -2890,37 +2864,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         preview: _extractFreeDrawPreviewSnapshot(state),
       ),
     );
-  }
-
-  bool _isWatermarkOnlyStateChange(DrawState previous, DrawState next) {
-    if (identical(previous, next)) {
-      return false;
-    }
-
-    if (previous.application.view != next.application.view ||
-        previous.application.interaction != next.application.interaction ||
-        previous.application.selectionOverlay !=
-            next.application.selectionOverlay ||
-        previous.domain.selection != next.domain.selection) {
-      return false;
-    }
-
-    final previousDocument = previous.domain.document;
-    final nextDocument = next.domain.document;
-
-    if (previousDocument.elementsVersion != nextDocument.elementsVersion ||
-        !identical(previousDocument.elements, nextDocument.elements)) {
-      return false;
-    }
-
-    final previousGlobals = previousDocument.globalElements;
-    final nextGlobals = nextDocument.globalElements;
-
-    if (previousGlobals.highlightMask != nextGlobals.highlightMask) {
-      return false;
-    }
-
-    return previousGlobals.watermark != nextGlobals.watermark;
   }
 
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
@@ -3033,6 +2976,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _freeDrawPreviewLayerController.renderKey.hasPreview;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
+    final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
     final dynamicLayerOwnsWholeScene = dynamicLayerStartIndex == 0;
     final hasDynamicContent =
         dynamicLayerStartIndex != null ||
@@ -3043,6 +2987,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       stateView: stateView,
       hasDynamicContent: hasDynamicContent,
       config: highlightMask,
+    );
+    final watermarkLayer = resolveWatermarkLayer(
+      hasDynamicContent: hasDynamicContent,
+      config: watermark,
     );
 
     return _CanvasLayerSceneSnapshot(
@@ -3057,6 +3005,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       creatingSnapshot: creatingSnapshot,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
+      watermarkLayer: watermarkLayer,
+      watermarkConfig: watermark,
       preferFastFilterFallback: preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
@@ -3191,6 +3141,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     gridConfig: widget.store.config.grid,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
     elementRegistry: widget.store.context.elementRegistry,
     performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
     locale: locale,
@@ -3221,6 +3173,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     preferFastFilterFallback: scene.preferFastFilterFallback,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
     locale: locale,
   );
 
@@ -3249,6 +3203,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     preferFastFilterFallback: false,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
     locale: locale,
   );
 
@@ -3266,6 +3222,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required bool preferFastFilterFallback,
     required HighlightMaskLayer highlightMaskLayer,
     required HighlightMaskConfig highlightMaskConfig,
+    required WatermarkLayer watermarkLayer,
+    required WatermarkConfig watermarkConfig,
     required Locale? locale,
     int? previewElementsRevision,
     Set<String>? dynamicPreviewElementIds,
@@ -3298,6 +3256,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     snapConfig: widget.store.config.snap,
     highlightMaskLayer: highlightMaskLayer,
     highlightMaskConfig: highlightMaskConfig,
+    watermarkLayer: watermarkLayer,
+    watermarkConfig: watermarkConfig,
     elementRegistry: widget.store.context.elementRegistry,
     performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
     locale: locale,
@@ -4431,16 +4391,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     final previousState = _lastObservedState;
     _lastObservedState = state;
-    final watermarkChanged =
-        previousState == null ||
-        previousState.domain.document.globalElements.watermark !=
-            state.domain.document.globalElements.watermark;
-    if (previousState != null &&
-        watermarkChanged &&
-        _isWatermarkOnlyStateChange(previousState, state)) {
-      _syncWatermarkLayerState(state);
-      return;
-    }
 
     _syncTextEditingOverlayState(state);
     // Keystrokes in text editing mutate only the draft payload and trigger
@@ -4477,9 +4427,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     _syncFreeDrawPreviewLayerState(state);
-    if (watermarkChanged) {
-      _syncWatermarkLayerState(state);
-    }
     if (previousState != null &&
         isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
       if (_activePointerIds.isEmpty) {
@@ -4664,6 +4611,8 @@ class _CanvasLayerSceneSnapshot {
     required this.creatingSnapshot,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
     required this.preferFastFilterFallback,
     required this.textRenderingCacheRevision,
   });
@@ -4679,6 +4628,8 @@ class _CanvasLayerSceneSnapshot {
   final CreatingElementSnapshot? creatingSnapshot;
   final HighlightMaskLayer highlightMaskLayer;
   final HighlightMaskConfig highlightMaskConfig;
+  final WatermarkLayer watermarkLayer;
+  final WatermarkConfig watermarkConfig;
   final bool preferFastFilterFallback;
   final int textRenderingCacheRevision;
 }

@@ -43,6 +43,8 @@ import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 import 'visible_element_scene_cache.dart';
 import 'visible_element_scene_resolver.dart';
+import 'watermark_painter.dart';
+import 'watermark_visibility.dart';
 
 final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
@@ -127,6 +129,19 @@ class DynamicCanvasPainter extends CustomPainter {
       );
     } else {
       _highlightMaskStaticSceneCache.clear();
+    }
+
+    if (renderKey.watermarkLayer == WatermarkLayer.dynamicLayer) {
+      canvas
+        ..save()
+        ..scale(1 / scale, 1 / scale)
+        ..translate(-camera.position.x, -camera.position.y);
+      paintWatermark(
+        canvas: canvas,
+        viewportSize: size,
+        config: renderKey.watermarkConfig,
+      );
+      canvas.restore();
     }
 
     // Draw snapping guides.

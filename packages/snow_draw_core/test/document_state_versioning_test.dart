@@ -7,7 +7,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   group('DocumentState versioning', () {
-    test('global elements update does not bump elementsVersion', () {
+    test('global elements update bumps elementsVersion', () {
       final base = DocumentState(
         elements: const [_element],
         elementsVersion: 7,
@@ -18,7 +18,7 @@ void main() {
         ),
       );
 
-      expect(next.elementsVersion, equals(base.elementsVersion));
+      expect(next.elementsVersion, equals(8));
       expect(next.elements, same(base.elements));
       expect(next.globalElements.watermark.text, equals('INTERNAL'));
     });

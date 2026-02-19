@@ -12,6 +12,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_core/ui/canvas/interaction_dynamic_scene_cache.dart';
 import 'package:snow_draw_core/ui/canvas/render_keys.dart';
+import 'package:snow_draw_core/ui/canvas/watermark_visibility.dart';
 
 void main() {
   group('resolveInteractionDynamicSceneFromCachedKey', () {
@@ -23,6 +24,7 @@ void main() {
         dynamicLayerStartIndex: null,
         rendersWholeElementScene: false,
         highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
+        watermarkLayer: WatermarkLayer.dynamicLayer,
       );
       var optimizedResolverCalled = false;
       var layerStartResolverCalled = false;
@@ -56,6 +58,7 @@ void main() {
       expect(scene.dynamicLayerStartIndex, isNull);
       expect(scene.rendersWholeElementScene, isFalse);
       expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
+      expect(scene.watermarkLayer, WatermarkLayer.dynamicLayer);
     });
 
     test('uses layer-start preview resolver when no optimized ids exist', () {
@@ -65,6 +68,7 @@ void main() {
         dynamicLayerStartIndex: 8,
         rendersWholeElementScene: true,
         highlightMaskLayer: HighlightMaskLayer.staticLayer,
+        watermarkLayer: WatermarkLayer.staticLayer,
       );
       var optimizedResolverCalled = false;
       var layerStartResolverCalled = false;
@@ -93,6 +97,7 @@ void main() {
       expect(scene.dynamicLayerStartIndex, 8);
       expect(scene.rendersWholeElementScene, isTrue);
       expect(scene.highlightMaskLayer, HighlightMaskLayer.staticLayer);
+      expect(scene.watermarkLayer, WatermarkLayer.staticLayer);
     });
 
     test('clears occluder hint when optimized ids are empty', () {
@@ -184,6 +189,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required int? dynamicLayerStartIndex,
   required bool rendersWholeElementScene,
   required HighlightMaskLayer highlightMaskLayer,
+  WatermarkLayer watermarkLayer = WatermarkLayer.none,
   bool optimizedSceneHasPotentialOccluders = false,
 }) {
   final config = DrawConfig.defaultConfig;
@@ -213,6 +219,8 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
     snapConfig: config.snap,
     highlightMaskLayer: highlightMaskLayer,
     highlightMaskConfig: const HighlightMaskConfig(),
+    watermarkLayer: watermarkLayer,
+    watermarkConfig: const WatermarkConfig(),
     elementRegistry: DefaultElementRegistry(),
     performanceMonitoringEnabled: false,
   );

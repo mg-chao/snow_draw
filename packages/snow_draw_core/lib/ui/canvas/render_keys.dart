@@ -11,6 +11,7 @@ import '../../draw/models/element_state.dart';
 import '../../draw/types/draw_rect.dart';
 import '../../draw/types/snap_guides.dart';
 import 'highlight_mask_visibility.dart';
+import 'watermark_visibility.dart';
 
 /// Snapshot of element creation state for render key comparison.
 @immutable
@@ -67,6 +68,8 @@ class StaticCanvasRenderKey {
     required this.gridConfig,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     this.locale,
@@ -109,6 +112,12 @@ class StaticCanvasRenderKey {
   /// Highlight mask configuration.
   final HighlightMaskConfig highlightMaskConfig;
 
+  /// Watermark rendering layer.
+  final WatermarkLayer watermarkLayer;
+
+  /// Watermark configuration.
+  final WatermarkConfig watermarkConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -133,6 +142,8 @@ class StaticCanvasRenderKey {
           other.gridConfig == gridConfig &&
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
+          other.watermarkLayer == watermarkLayer &&
+          other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
@@ -150,6 +161,8 @@ class StaticCanvasRenderKey {
     gridConfig,
     highlightMaskLayer,
     highlightMaskConfig,
+    watermarkLayer,
+    watermarkConfig,
     elementRegistry,
     performanceMonitoringEnabled,
     locale,
@@ -214,6 +227,8 @@ class DynamicCanvasRenderKey {
     required this.snapConfig,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     this.preferFastFilterFallback = false,
@@ -320,6 +335,12 @@ class DynamicCanvasRenderKey {
   /// Highlight mask configuration.
   final HighlightMaskConfig highlightMaskConfig;
 
+  /// Watermark rendering layer.
+  final WatermarkLayer watermarkLayer;
+
+  /// Watermark configuration.
+  final WatermarkConfig watermarkConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -363,6 +384,8 @@ class DynamicCanvasRenderKey {
           other.snapConfig == snapConfig &&
           other.highlightMaskLayer == highlightMaskLayer &&
           other.highlightMaskConfig == highlightMaskConfig &&
+          other.watermarkLayer == watermarkLayer &&
+          other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
@@ -395,6 +418,8 @@ class DynamicCanvasRenderKey {
     snapConfig,
     highlightMaskLayer,
     highlightMaskConfig,
+    watermarkLayer,
+    watermarkConfig,
     elementRegistry,
     performanceMonitoringEnabled,
     locale,

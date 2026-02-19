@@ -8,6 +8,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_core/ui/canvas/render_keys.dart';
+import 'package:snow_draw_core/ui/canvas/watermark_visibility.dart';
 
 void main() {
   group('DynamicCanvasRenderKey', () {
@@ -138,6 +139,22 @@ void main() {
       expect(baseline, hinted);
       expect(baseline.hashCode, hinted.hashCode);
     });
+
+    test('watermark config participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+      );
+      final changedWatermark = _buildDynamicRenderKey(
+        registry: registry,
+        arrowDeleteIndicatorVisible: false,
+        watermarkConfig: const WatermarkConfig(text: 'CONFIDENTIAL'),
+      );
+
+      expect(baseline, isNot(changedWatermark));
+      expect(baseline.hashCode, isNot(changedWatermark.hashCode));
+    });
   });
 }
 
@@ -150,6 +167,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   int? previewElementsRevision,
   Set<String>? dynamicPreviewElementIds,
   bool optimizedSceneHasPotentialOccluders = false,
+  WatermarkConfig? watermarkConfig,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -178,6 +196,8 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   snapConfig: const SnapConfig(),
   highlightMaskLayer: HighlightMaskLayer.none,
   highlightMaskConfig: const HighlightMaskConfig(),
+  watermarkLayer: WatermarkLayer.none,
+  watermarkConfig: watermarkConfig ?? const WatermarkConfig(),
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
 );

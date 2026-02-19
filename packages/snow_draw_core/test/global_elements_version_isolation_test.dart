@@ -8,7 +8,7 @@ import 'package:snow_draw_core/draw/events/state_events.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 
 void main() {
-  test('global element updates do not bump elementsVersion or emit '
+  test('global element updates bump elementsVersion and emit '
       'document change events', () async {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
@@ -29,7 +29,11 @@ void main() {
     );
     await Future<void>.delayed(Duration.zero);
 
-    expect(store.state.domain.document.elementsVersion, equals(initialVersion));
-    expect(events, isEmpty);
+    expect(
+      store.state.domain.document.elementsVersion,
+      equals(initialVersion + 1),
+    );
+    expect(events, hasLength(1));
+    expect(events.single.elementsVersion, equals(initialVersion + 1));
   });
 }
