@@ -1132,11 +1132,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       await _flushPendingTextDraftSync();
     }
     await _pluginCoordinator.handleEvent(
-      PointerDownInputEvent(
-        position: position,
-        modifiers: _currentModifiers,
-        pressure: 0.0,
-      ),
+      PointerDownInputEvent(position: position, modifiers: _currentModifiers),
     );
   }
 
@@ -1161,11 +1157,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _pointerMoveDispatcher.dispatch(
-      PointerMoveInputEvent(
-        position: position,
-        modifiers: _currentModifiers,
-        pressure: 0.0,
-      ),
+      PointerMoveInputEvent(position: position, modifiers: _currentModifiers),
     );
   }
 

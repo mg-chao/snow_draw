@@ -24,7 +24,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'text draft updates keep canvas render keys stable when geometry is unchanged',
+    'text draft updates keep canvas render keys stable when geometry is '
+    'unchanged',
     (tester) async {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
