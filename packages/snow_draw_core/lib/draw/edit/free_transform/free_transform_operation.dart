@@ -51,7 +51,6 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
     final snapshots = <String, ElementFullSnapshot>{};
     for (final element in snapshotSelectedElements(state)) {
       snapshots[element.id] = ElementFullSnapshot(
-        id: element.id,
         center: element.center,
         bounds: element.rect,
         rotation: element.rotation,
