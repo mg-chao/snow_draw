@@ -645,9 +645,7 @@ Map<double, int> _buildAxisIndex(List<double> sortedAxis) => <double, int>{
 _ElbowGrid _buildGrid({
   required List<DrawRect> obstacles,
   required DrawPoint start,
-  required ElbowHeading startHeading,
   required DrawPoint end,
-  required ElbowHeading endHeading,
   required DrawRect bounds,
 }) {
   final xs = <double>{start.x, end.x, bounds.minX, bounds.maxX};
