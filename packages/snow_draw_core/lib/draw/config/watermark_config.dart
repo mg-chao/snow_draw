@@ -50,31 +50,27 @@ class WatermarkConfig {
     double? gap,
     double? opacity,
   }) {
-    final nextColor = color ?? this.color;
-    final nextText = text ?? this.text;
-    final nextFontSize = fontSize ?? this.fontSize;
-    final nextFontFamily = fontFamily ?? this.fontFamily;
-    final nextAngle = angle ?? this.angle;
-    final nextGap = gap ?? this.gap;
-    final nextOpacity = opacity ?? this.opacity;
-    if (nextColor == this.color &&
-        nextText == this.text &&
-        nextFontSize == this.fontSize &&
-        nextFontFamily == this.fontFamily &&
-        nextAngle == this.angle &&
-        nextGap == this.gap &&
-        nextOpacity == this.opacity) {
+    if (color == null &&
+        text == null &&
+        fontSize == null &&
+        fontFamily == null &&
+        angle == null &&
+        gap == null &&
+        opacity == null) {
       return this;
     }
-    return WatermarkConfig(
-      color: nextColor,
-      text: nextText,
-      fontSize: nextFontSize,
-      fontFamily: nextFontFamily,
-      angle: nextAngle,
-      gap: nextGap,
-      opacity: nextOpacity,
+
+    final next = WatermarkConfig(
+      color: color ?? this.color,
+      text: text ?? this.text,
+      fontSize: fontSize ?? this.fontSize,
+      fontFamily: fontFamily ?? this.fontFamily,
+      angle: angle ?? this.angle,
+      gap: gap ?? this.gap,
+      opacity: opacity ?? this.opacity,
     );
+
+    return next == this ? this : next;
   }
 
   @override
