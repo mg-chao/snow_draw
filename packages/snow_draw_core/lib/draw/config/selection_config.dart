@@ -28,24 +28,20 @@ class SelectionRenderConfig {
     double? cornerRadius,
     double? controlPointSize,
   }) {
-    final nextStrokeWidth = strokeWidth ?? this.strokeWidth;
-    final nextStrokeColor = strokeColor ?? this.strokeColor;
-    final nextCornerFillColor = cornerFillColor ?? this.cornerFillColor;
-    final nextCornerRadius = cornerRadius ?? this.cornerRadius;
-    final nextControlPointSize = controlPointSize ?? this.controlPointSize;
-    if (nextStrokeWidth == this.strokeWidth &&
-        nextStrokeColor == this.strokeColor &&
-        nextCornerFillColor == this.cornerFillColor &&
-        nextCornerRadius == this.cornerRadius &&
-        nextControlPointSize == this.controlPointSize) {
+    if ((strokeWidth == null || strokeWidth == this.strokeWidth) &&
+        (strokeColor == null || strokeColor == this.strokeColor) &&
+        (cornerFillColor == null || cornerFillColor == this.cornerFillColor) &&
+        (cornerRadius == null || cornerRadius == this.cornerRadius) &&
+        (controlPointSize == null ||
+            controlPointSize == this.controlPointSize)) {
       return this;
     }
     return SelectionRenderConfig(
-      strokeWidth: nextStrokeWidth,
-      strokeColor: nextStrokeColor,
-      cornerFillColor: nextCornerFillColor,
-      cornerRadius: nextCornerRadius,
-      controlPointSize: nextControlPointSize,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      strokeColor: strokeColor ?? this.strokeColor,
+      cornerFillColor: cornerFillColor ?? this.cornerFillColor,
+      cornerRadius: cornerRadius ?? this.cornerRadius,
+      controlPointSize: controlPointSize ?? this.controlPointSize,
     );
   }
 
@@ -97,15 +93,13 @@ class SelectionInteractionConfig {
     double? handleTolerance,
     double? dragThreshold,
   }) {
-    final nextHandleTolerance = handleTolerance ?? this.handleTolerance;
-    final nextDragThreshold = dragThreshold ?? this.dragThreshold;
-    if (nextHandleTolerance == this.handleTolerance &&
-        nextDragThreshold == this.dragThreshold) {
+    if ((handleTolerance == null || handleTolerance == this.handleTolerance) &&
+        (dragThreshold == null || dragThreshold == this.dragThreshold)) {
       return this;
     }
     return SelectionInteractionConfig(
-      handleTolerance: nextHandleTolerance,
-      dragThreshold: nextDragThreshold,
+      handleTolerance: handleTolerance ?? this.handleTolerance,
+      dragThreshold: dragThreshold ?? this.dragThreshold,
     );
   }
 
@@ -160,22 +154,18 @@ class SelectionConfig {
     double? padding,
     double? rotateHandleOffset,
   }) {
-    final nextRender = render ?? this.render;
-    final nextInteraction = interaction ?? this.interaction;
-    final nextPadding = padding ?? this.padding;
-    final nextRotateHandleOffset =
-        rotateHandleOffset ?? this.rotateHandleOffset;
-    if (nextRender == this.render &&
-        nextInteraction == this.interaction &&
-        nextPadding == this.padding &&
-        nextRotateHandleOffset == this.rotateHandleOffset) {
+    if ((render == null || render == this.render) &&
+        (interaction == null || interaction == this.interaction) &&
+        (padding == null || padding == this.padding) &&
+        (rotateHandleOffset == null ||
+            rotateHandleOffset == this.rotateHandleOffset)) {
       return this;
     }
     return SelectionConfig(
-      render: nextRender,
-      interaction: nextInteraction,
-      padding: nextPadding,
-      rotateHandleOffset: nextRotateHandleOffset,
+      render: render ?? this.render,
+      interaction: interaction ?? this.interaction,
+      padding: padding ?? this.padding,
+      rotateHandleOffset: rotateHandleOffset ?? this.rotateHandleOffset,
     );
   }
 
