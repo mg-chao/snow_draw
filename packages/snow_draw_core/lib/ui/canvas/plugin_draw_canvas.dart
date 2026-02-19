@@ -988,9 +988,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
     final interaction = view.state.application.interaction;
     if (interaction is CreatingState) {
-      if (interaction.elementData is FreeDrawData) {
-        return null;
-      }
       return CreatingElementSnapshot(
         element: interaction.element,
         currentRect: interaction.currentRect,
