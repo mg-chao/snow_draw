@@ -43,22 +43,13 @@ class ElementConfig {
     double? minResizeSize,
     double? rotationSnapAngle,
   }) {
-    final nextMinValidSize = minValidSize ?? this.minValidSize;
-    final nextMinCreateSize = minCreateSize ?? this.minCreateSize;
-    final nextMinResizeSize = minResizeSize ?? this.minResizeSize;
-    final nextRotationSnapAngle = rotationSnapAngle ?? this.rotationSnapAngle;
-    if (nextMinValidSize == this.minValidSize &&
-        nextMinCreateSize == this.minCreateSize &&
-        nextMinResizeSize == this.minResizeSize &&
-        nextRotationSnapAngle == this.rotationSnapAngle) {
-      return this;
-    }
-    return ElementConfig(
-      minValidSize: nextMinValidSize,
-      minCreateSize: nextMinCreateSize,
-      minResizeSize: nextMinResizeSize,
-      rotationSnapAngle: nextRotationSnapAngle,
+    final next = ElementConfig(
+      minValidSize: minValidSize ?? this.minValidSize,
+      minCreateSize: minCreateSize ?? this.minCreateSize,
+      minResizeSize: minResizeSize ?? this.minResizeSize,
+      rotationSnapAngle: rotationSnapAngle ?? this.rotationSnapAngle,
     );
+    return next == this ? this : next;
   }
 
   @override
@@ -214,95 +205,51 @@ class ElementStyleConfig {
     Color? textStrokeColor,
     double? textStrokeWidth,
   }) {
-    final nextOpacity = opacity ?? this.opacity;
-    final nextZIndex = zIndex ?? this.zIndex;
-    final nextSerialNumber = serialNumber ?? this.serialNumber;
-    final nextStrokeWidth = strokeWidth ?? this.strokeWidth;
-    final nextColor = color ?? this.color;
-    final nextFillColor = fillColor ?? this.fillColor;
-    final nextStrokeStyle = strokeStyle ?? this.strokeStyle;
-    final nextFillStyle = fillStyle ?? this.fillStyle;
-    final nextHighlightShape = highlightShape ?? this.highlightShape;
-    final nextFilterType = filterType ?? this.filterType;
-    final nextFilterStrength = filterStrength ?? this.filterStrength;
-    final nextCornerRadius = cornerRadius ?? this.cornerRadius;
-    final nextArrowType = arrowType ?? this.arrowType;
-    final nextStartArrowhead = startArrowhead ?? this.startArrowhead;
-    final nextEndArrowhead = endArrowhead ?? this.endArrowhead;
-    final nextFontSize = fontSize ?? this.fontSize;
-    // Sentinel-based detection keeps nullable semantics: omitted keeps current,
-    // while an explicit `fontFamily: null` clears the override.
-    if (!identical(fontFamily, _fontFamilyUnchanged) &&
-        fontFamily is! String?) {
-      throw ArgumentError.value(
-        fontFamily,
-        'fontFamily',
-        'must be a String, null, or omitted',
-      );
-    }
-    final nextFontFamily = identical(fontFamily, _fontFamilyUnchanged)
-        ? this.fontFamily
-        : _normalizeFontFamily(fontFamily as String?);
-    final nextTextAlign = textAlign ?? this.textAlign;
-    final nextVerticalAlign = verticalAlign ?? this.verticalAlign;
-    final nextTextStrokeColor = textStrokeColor ?? this.textStrokeColor;
-    final nextTextStrokeWidth = textStrokeWidth ?? this.textStrokeWidth;
+    final next = ElementStyleConfig(
+      opacity: opacity ?? this.opacity,
+      zIndex: zIndex ?? this.zIndex,
+      serialNumber: serialNumber ?? this.serialNumber,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
+      color: color ?? this.color,
+      fillColor: fillColor ?? this.fillColor,
+      strokeStyle: strokeStyle ?? this.strokeStyle,
+      fillStyle: fillStyle ?? this.fillStyle,
+      highlightShape: highlightShape ?? this.highlightShape,
+      filterType: filterType ?? this.filterType,
+      filterStrength: filterStrength ?? this.filterStrength,
+      cornerRadius: cornerRadius ?? this.cornerRadius,
+      arrowType: arrowType ?? this.arrowType,
+      startArrowhead: startArrowhead ?? this.startArrowhead,
+      endArrowhead: endArrowhead ?? this.endArrowhead,
+      fontSize: fontSize ?? this.fontSize,
+      fontFamily: _resolveCopyWithFontFamily(fontFamily, this.fontFamily),
+      textAlign: textAlign ?? this.textAlign,
+      verticalAlign: verticalAlign ?? this.verticalAlign,
+      textStrokeColor: textStrokeColor ?? this.textStrokeColor,
+      textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
+    );
+    return next == this ? this : next;
+  }
 
-    if (nextOpacity == this.opacity &&
-        nextZIndex == this.zIndex &&
-        nextSerialNumber == this.serialNumber &&
-        nextStrokeWidth == this.strokeWidth &&
-        nextColor == this.color &&
-        nextFillColor == this.fillColor &&
-        nextStrokeStyle == this.strokeStyle &&
-        nextFillStyle == this.fillStyle &&
-        nextHighlightShape == this.highlightShape &&
-        nextFilterType == this.filterType &&
-        nextFilterStrength == this.filterStrength &&
-        nextCornerRadius == this.cornerRadius &&
-        nextArrowType == this.arrowType &&
-        nextStartArrowhead == this.startArrowhead &&
-        nextEndArrowhead == this.endArrowhead &&
-        nextFontSize == this.fontSize &&
-        nextFontFamily == this.fontFamily &&
-        nextTextAlign == this.textAlign &&
-        nextVerticalAlign == this.verticalAlign &&
-        nextTextStrokeColor == this.textStrokeColor &&
-        nextTextStrokeWidth == this.textStrokeWidth) {
-      return this;
+  static String? _resolveCopyWithFontFamily(
+    Object? fontFamily,
+    String? currentFontFamily,
+  ) {
+    if (identical(fontFamily, _fontFamilyUnchanged)) {
+      return currentFontFamily;
     }
-
-    return ElementStyleConfig(
-      opacity: nextOpacity,
-      zIndex: nextZIndex,
-      serialNumber: nextSerialNumber,
-      strokeWidth: nextStrokeWidth,
-      color: nextColor,
-      fillColor: nextFillColor,
-      strokeStyle: nextStrokeStyle,
-      fillStyle: nextFillStyle,
-      highlightShape: nextHighlightShape,
-      filterType: nextFilterType,
-      filterStrength: nextFilterStrength,
-      cornerRadius: nextCornerRadius,
-      arrowType: nextArrowType,
-      startArrowhead: nextStartArrowhead,
-      endArrowhead: nextEndArrowhead,
-      fontSize: nextFontSize,
-      fontFamily: nextFontFamily,
-      textAlign: nextTextAlign,
-      verticalAlign: nextVerticalAlign,
-      textStrokeColor: nextTextStrokeColor,
-      textStrokeWidth: nextTextStrokeWidth,
+    if (fontFamily is String?) {
+      return _normalizeFontFamily(fontFamily);
+    }
+    throw ArgumentError.value(
+      fontFamily,
+      'fontFamily',
+      'must be a String, null, or omitted',
     );
   }
 
-  static String? _normalizeFontFamily(String? fontFamily) {
-    if (fontFamily == null) {
-      return null;
-    }
-    return fontFamily.trim().isEmpty ? null : fontFamily;
-  }
+  static String? _normalizeFontFamily(String? fontFamily) =>
+      fontFamily == null || fontFamily.trim().isEmpty ? null : fontFamily;
 
   @override
   bool operator ==(Object other) =>
