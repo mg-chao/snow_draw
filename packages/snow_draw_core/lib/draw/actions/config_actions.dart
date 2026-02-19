@@ -1,8 +1,7 @@
 import '../config/draw_config.dart';
-import '../store/draw_store_interface.dart' show DrawStore;
 import 'draw_actions.dart';
 
-/// Updates the full [DrawConfig] for a [DrawStore].
+/// Updates the full [DrawConfig] for the draw store.
 class UpdateConfig extends DrawAction {
   const UpdateConfig(this.config);
   final DrawConfig config;

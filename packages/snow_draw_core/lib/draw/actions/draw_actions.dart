@@ -41,12 +41,7 @@ abstract class DrawAction
   String toString() => runtimeType.toString();
 }
 
-List<String> _freezeElementIds(List<String> elementIds) => elementIds.isEmpty
-    ? const <String>[]
-    : List<String>.unmodifiable(elementIds);
-
-List<DrawPoint> _freezePoints(List<DrawPoint> points) =>
-    points.isEmpty ? const <DrawPoint>[] : List<DrawPoint>.unmodifiable(points);
+List<T> _freezeList<T>(List<T> values) => List<T>.unmodifiable(values);
 
 // ============================================================================
 // Selection actions
@@ -144,36 +139,19 @@ class UpdateCreatingElement extends DrawAction {
 class UpdateCreatingElementBatch extends DrawAction {
   UpdateCreatingElementBatch({
     required List<DrawPoint> positions,
-    bool maintainAspectRatio = false,
-    bool createFromCenter = false,
-    bool snapOverride = false,
-  }) : this._(
-         positions: _freezePoints(positions),
-         maintainAspectRatio: maintainAspectRatio,
-         createFromCenter: createFromCenter,
-         snapOverride: snapOverride,
-       );
+    this.maintainAspectRatio = false,
+    this.createFromCenter = false,
+    this.snapOverride = false,
+  }) : positions = _freezeList(positions);
 
   /// Creates a batch action using an already-frozen positions list.
   ///
   /// Callers must ensure [positions] will not be mutated after dispatch.
   UpdateCreatingElementBatch.frozen({
-    required List<DrawPoint> positions,
-    bool maintainAspectRatio = false,
-    bool createFromCenter = false,
-    bool snapOverride = false,
-  }) : this._(
-         positions: positions,
-         maintainAspectRatio: maintainAspectRatio,
-         createFromCenter: createFromCenter,
-         snapOverride: snapOverride,
-       );
-
-  UpdateCreatingElementBatch._({
     required this.positions,
-    required this.maintainAspectRatio,
-    required this.createFromCenter,
-    required this.snapOverride,
+    this.maintainAspectRatio = false,
+    this.createFromCenter = false,
+    this.snapOverride = false,
   });
 
   /// Ordered pointer positions represented by this batched update.
@@ -237,7 +215,7 @@ class CancelCreateElement extends DrawAction {
 
 class DeleteElements extends DrawAction {
   DeleteElements({required List<String> elementIds})
-    : elementIds = _freezeElementIds(elementIds);
+    : elementIds = _freezeList(elementIds);
   final List<String> elementIds;
 
   @override
@@ -255,7 +233,7 @@ class DuplicateElements extends DrawAction {
     required List<String> elementIds,
     this.offsetX = 10.0,
     this.offsetY = 10.0,
-  }) : elementIds = _freezeElementIds(elementIds);
+  }) : elementIds = _freezeList(elementIds);
   final List<String> elementIds;
   final double offsetX;
   final double offsetY;
@@ -291,7 +269,7 @@ class ChangeElementsZIndex extends DrawAction {
   ChangeElementsZIndex({
     required List<String> elementIds,
     required this.operation,
-  }) : elementIds = _freezeElementIds(elementIds);
+  }) : elementIds = _freezeList(elementIds);
   final List<String> elementIds;
   final ZIndexOperation operation;
 
@@ -335,7 +313,7 @@ class UpdateElementsStyle extends DrawAction {
     this.highlightShape,
     this.serialNumber,
     this.historyCoalescing,
-  }) : elementIds = _freezeElementIds(elementIds);
+  }) : elementIds = _freezeList(elementIds);
 
   final List<String> elementIds;
   final Color? color;
@@ -400,13 +378,13 @@ class UpdateGlobalElements extends DrawAction implements Recordable {
 
   @override
   String get historyDescription {
-    if (highlightMask != null && watermark != null) {
-      return 'Update global overlays';
-    }
-    if (highlightMask != null) {
+    final hasHighlightMask = highlightMask != null;
+    final hasWatermark = watermark != null;
+
+    if (hasHighlightMask && !hasWatermark) {
       return 'Update highlight mask';
     }
-    if (watermark != null) {
+    if (hasWatermark && !hasHighlightMask) {
       return 'Update watermark';
     }
     return 'Update global overlays';
@@ -425,7 +403,7 @@ class UpdateGlobalElements extends DrawAction implements Recordable {
 
 class CreateSerialNumberTextElements extends DrawAction implements Recordable {
   CreateSerialNumberTextElements({required List<String> elementIds})
-    : elementIds = _freezeElementIds(elementIds);
+    : elementIds = _freezeList(elementIds);
 
   final List<String> elementIds;
 
@@ -516,23 +494,17 @@ class FinishTextEdit extends DrawAction implements Recordable {
   @override
   bool get requiresPreActionSnapshot => true;
 
-  @override
-  String get historyDescription {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty && !isNew) {
-      return 'Delete text';
-    }
-    return isNew ? 'Create text' : 'Edit text';
-  }
+  bool get _deletesExistingText => text.trim().isEmpty && !isNew;
 
   @override
-  HistoryRecordType get recordType {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty && !isNew) {
-      return HistoryRecordType.delete;
-    }
-    return isNew ? HistoryRecordType.create : HistoryRecordType.edit;
-  }
+  String get historyDescription => _deletesExistingText
+      ? 'Delete text'
+      : (isNew ? 'Create text' : 'Edit text');
+
+  @override
+  HistoryRecordType get recordType => _deletesExistingText
+      ? HistoryRecordType.delete
+      : (isNew ? HistoryRecordType.create : HistoryRecordType.edit);
 
   @override
   String toString() => 'FinishTextEdit(elementId: $elementId, isNew: $isNew)';
