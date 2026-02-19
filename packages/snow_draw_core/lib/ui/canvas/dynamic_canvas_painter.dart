@@ -38,7 +38,6 @@ import 'filter_scene_compositor.dart';
 import 'free_draw_creation_preview_cache.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
-import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_static_scene_cache.dart';
 import 'highlight_mask_visibility.dart';
 import 'optimized_scene_occlusion.dart';
@@ -567,23 +566,11 @@ class DynamicCanvasPainter extends CustomPainter {
     final staticHighlights = scene.staticElements;
     final dynamicHighlights = scene.dynamicElements;
 
-    // Dynamic-only scenes (for example creating a new highlight) can use the
-    // regular mask renderer directly.
-    if (staticHighlights.isEmpty) {
+    // Dynamic highlight edits should use the same whole-mask composition path
+    // as settled frames. The static-mask + modulate-hole optimization can
+    // alter dynamic layer content and produce inconsistent highlight colors.
+    if (dynamicHighlights.isNotEmpty) {
       _highlightMaskStaticSceneCache.clear();
-      paintHighlightMask(
-        canvas: canvas,
-        highlights: highlights,
-        viewportRect: viewportRect,
-        maskConfig: maskConfig,
-        scaleFactor: scale,
-        cameraPosition: cameraPosition,
-      );
-      return;
-    }
-
-    final shaderManager = HighlightMaskShaderManager.instance;
-    if (dynamicHighlights.isNotEmpty && !shaderManager.isReady) {
       paintHighlightMask(
         canvas: canvas,
         highlights: highlights,
@@ -621,37 +608,6 @@ class DynamicCanvasPainter extends CustomPainter {
         cameraPosition: cameraPosition,
       );
       return;
-    }
-
-    if (dynamicHighlights.isEmpty) {
-      return;
-    }
-
-    // `paintHoleMaskModulate` is a screen-space shader pass. The dynamic
-    // canvas is currently transformed to world space (camera + scale), so
-    // undo that transform before issuing the shader draw to keep hole
-    // coordinates aligned with the settled mask rendering path.
-    canvas
-      ..save()
-      ..scale(1 / scale, 1 / scale)
-      ..translate(-cameraPosition.dx, -cameraPosition.dy);
-    final dynamicHolePainted = shaderManager.paintHoleMaskModulate(
-      canvas: canvas,
-      highlights: dynamicHighlights,
-      viewportRect: viewportRect,
-      scaleFactor: scale,
-      cameraPosition: cameraPosition,
-    );
-    canvas.restore();
-    if (!dynamicHolePainted) {
-      paintHighlightMask(
-        canvas: canvas,
-        highlights: highlights,
-        viewportRect: viewportRect,
-        maskConfig: maskConfig,
-        scaleFactor: scale,
-        cameraPosition: cameraPosition,
-      );
     }
   }
 
