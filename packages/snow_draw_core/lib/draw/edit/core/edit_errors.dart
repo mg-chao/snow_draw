@@ -7,6 +7,38 @@ import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart' show EditTransform;
 import 'edit_operation_params.dart' show EditOperationParams;
 
+String _buildTypeMismatchMessage({
+  required String errorName,
+  required String operationName,
+  required String valueName,
+  required Type expected,
+  required Type actual,
+  String? additionalInfo,
+  Iterable<String> hints = const <String>[],
+}) {
+  final lines = <String>[
+    '$errorName:',
+    '  Operation: $operationName',
+    '  Expected $valueName type: $expected',
+    '  Actual $valueName type: $actual',
+    if (additionalInfo != null) '  Additional info: $additionalInfo',
+    for (final hint in hints) '  $hint',
+  ];
+  return lines.join('\n');
+}
+
+const _contextRegistryHint =
+    'This usually indicates a bug in the edit operation registry.';
+const _contextDispatchHint =
+    'Ensure that the correct operation is being dispatched for the context '
+    'type.';
+const _transformDispatchHint =
+    'This usually indicates a state corruption or incorrect operation '
+    'dispatch.';
+const _paramsMappingHint =
+    'This usually indicates a wrong edit intent mapping or parameters '
+    'injection.';
+
 /// Edit system error base type.
 @immutable
 sealed class EditError extends AppErrorBase {
@@ -35,28 +67,15 @@ class EditContextTypeMismatchError extends EditError {
   ErrorSeverity get severity => ErrorSeverity.fatal;
 
   @override
-  String toString() {
-    final buffer = StringBuffer()
-      ..writeln('EditContextTypeMismatchError:')
-      ..writeln('  Operation: $operationName')
-      ..writeln('  Expected context type: $expected')
-      ..writeln('  Actual context type: $actual');
-
-    if (additionalInfo != null) {
-      buffer.writeln('  Additional info: $additionalInfo');
-    }
-
-    buffer
-      ..writeln(
-        '  This usually indicates a bug in the edit operation registry.',
-      )
-      ..writeln(
-        '  Ensure that the correct operation is being dispatched for the '
-        'context type.',
-      );
-
-    return buffer.toString();
-  }
+  String toString() => _buildTypeMismatchMessage(
+    errorName: 'EditContextTypeMismatchError',
+    operationName: operationName,
+    valueName: 'context',
+    expected: expected,
+    actual: actual,
+    additionalInfo: additionalInfo,
+    hints: const [_contextRegistryHint, _contextDispatchHint],
+  );
 }
 
 /// Thrown when an [EditTransform] of an unexpected type is provided to an
@@ -78,24 +97,15 @@ class EditTransformTypeMismatchError extends EditError {
   ErrorSeverity get severity => ErrorSeverity.fatal;
 
   @override
-  String toString() {
-    final buffer = StringBuffer()
-      ..writeln('EditTransformTypeMismatchError:')
-      ..writeln('  Operation: $operationName')
-      ..writeln('  Expected transform type: $expected')
-      ..writeln('  Actual transform type: $actual');
-
-    if (additionalInfo != null) {
-      buffer.writeln('  Additional info: $additionalInfo');
-    }
-
-    buffer.writeln(
-      '  This usually indicates a state corruption or incorrect operation '
-      'dispatch.',
-    );
-
-    return buffer.toString();
-  }
+  String toString() => _buildTypeMismatchMessage(
+    errorName: 'EditTransformTypeMismatchError',
+    operationName: operationName,
+    valueName: 'transform',
+    expected: expected,
+    actual: actual,
+    additionalInfo: additionalInfo,
+    hints: const [_transformDispatchHint],
+  );
 }
 
 /// Thrown when an [EditOperationParams] of an unexpected type is provided.
@@ -116,24 +126,15 @@ class EditParamsTypeMismatchError extends EditError {
   ErrorSeverity get severity => ErrorSeverity.fatal;
 
   @override
-  String toString() {
-    final buffer = StringBuffer()
-      ..writeln('EditParamsTypeMismatchError:')
-      ..writeln('  Operation: $operationName')
-      ..writeln('  Expected params type: $expected')
-      ..writeln('  Actual params type: $actual');
-
-    if (additionalInfo != null) {
-      buffer.writeln('  Additional info: $additionalInfo');
-    }
-
-    buffer.writeln(
-      '  This usually indicates a wrong edit intent mapping or parameters '
-      'injection.',
-    );
-
-    return buffer.toString();
-  }
+  String toString() => _buildTypeMismatchMessage(
+    errorName: 'EditParamsTypeMismatchError',
+    operationName: operationName,
+    valueName: 'params',
+    expected: expected,
+    actual: actual,
+    additionalInfo: additionalInfo,
+    hints: const [_paramsMappingHint],
+  );
 }
 
 /// Thrown when required edit-session data is missing.
@@ -148,10 +149,8 @@ class EditMissingDataError extends EditError {
 
   @override
   String toString() {
-    if (operationName == null) {
-      return 'EditMissingDataError: Missing required data: $dataName';
-    }
-    return 'EditMissingDataError: [$operationName] Missing required data: '
+    final operationPrefix = operationName == null ? '' : '[$operationName] ';
+    return 'EditMissingDataError: ${operationPrefix}Missing required data: '
         '$dataName';
   }
 }
@@ -174,9 +173,14 @@ class EditVersionConflictError extends EditError {
   ErrorSeverity get severity => ErrorSeverity.recoverable;
 
   @override
-  String toString() =>
-      'EditVersionConflictError: $conflictType version mismatch '
-      '(expected: $expectedVersion, actual: $actualVersion)';
+  String toString() {
+    final operationSuffix = operationId == null
+        ? ''
+        : ' (operationId: $operationId)';
+    return 'EditVersionConflictError: $conflictType version mismatch '
+        '(expected: $expectedVersion, actual: $actualVersion)'
+        '$operationSuffix';
+  }
 }
 
 enum SessionRestoreFailure { notEditing, unknownOperation, sessionDataInvalid }
@@ -197,16 +201,11 @@ class EditSessionRestoreError extends EditError {
   ErrorSeverity get severity => ErrorSeverity.fatal;
 
   @override
-  String toString() {
-    final buffer = StringBuffer('EditSessionRestoreError: $failureType');
-    if (operationId != null) {
-      buffer.write(' (operationId: $operationId)');
-    }
-    if (additionalInfo != null) {
-      buffer.write(' - $additionalInfo');
-    }
-    return buffer.toString();
-  }
+  String toString() => <String>[
+    'EditSessionRestoreError: $failureType',
+    if (operationId != null) '(operationId: $operationId)',
+    if (additionalInfo != null) '- $additionalInfo',
+  ].join(' ');
 }
 
 /// Wrapper for errors with additional context information.
