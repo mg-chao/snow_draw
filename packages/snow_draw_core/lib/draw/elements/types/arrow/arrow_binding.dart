@@ -119,55 +119,18 @@ class ArrowBindingUtils {
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
-  }) {
-    if (snapDistance <= 0) {
-      return null;
-    }
-    if (!allowNewBinding && preferredBinding == null) {
-      return null;
-    }
-
-    ArrowBindingResult? best;
-    var bestScore = double.infinity;
-
-    for (final target in targets) {
-      if (target.opacity <= 0) {
-        continue;
-      }
-      if (!allowNewBinding &&
-          preferredBinding != null &&
-          target.id != preferredBinding.elementId) {
-        continue;
-      }
-
-      final result = _resolveBindingOnTarget(
-        target: target,
-        worldPoint: worldPoint,
-        snapDistance: snapDistance,
-        referencePoint: referencePoint,
-      );
-      if (result == null) {
-        continue;
-      }
-
-      var score = result.distance;
-      if (preferredBinding != null && preferredBinding.elementId == target.id) {
-        score = math.max(0, score - snapDistance * 0.25);
-      }
-
-      if (_isBetterBindingCandidate(
-        candidate: result,
-        candidateScore: score,
-        currentBest: best,
-        currentBestScore: bestScore,
-      )) {
-        best = result;
-        bestScore = score;
-      }
-    }
-
-    return best;
-  }
+  }) => _resolveBestBindingCandidate(
+    targets: targets,
+    snapDistance: snapDistance,
+    preferredBinding: preferredBinding,
+    allowNewBinding: allowNewBinding,
+    resolver: (target) => _resolveBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      referencePoint: referencePoint,
+    ),
+  );
 
   static ArrowBindingResult? resolveElbowBindingCandidate({
     required DrawPoint worldPoint,
@@ -176,55 +139,18 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
-  }) {
-    if (snapDistance <= 0) {
-      return null;
-    }
-    if (!allowNewBinding && preferredBinding == null) {
-      return null;
-    }
-
-    ArrowBindingResult? best;
-    var bestScore = double.infinity;
-
-    for (final target in targets) {
-      if (target.opacity <= 0) {
-        continue;
-      }
-      if (!allowNewBinding &&
-          preferredBinding != null &&
-          target.id != preferredBinding.elementId) {
-        continue;
-      }
-
-      final result = _resolveElbowBindingOnTarget(
-        target: target,
-        worldPoint: worldPoint,
-        snapDistance: snapDistance,
-        hasArrowhead: hasArrowhead,
-      );
-      if (result == null) {
-        continue;
-      }
-
-      var score = result.distance;
-      if (preferredBinding != null && preferredBinding.elementId == target.id) {
-        score = math.max(0, score - snapDistance * 0.25);
-      }
-
-      if (_isBetterBindingCandidate(
-        candidate: result,
-        candidateScore: score,
-        currentBest: best,
-        currentBestScore: bestScore,
-      )) {
-        best = result;
-        bestScore = score;
-      }
-    }
-
-    return best;
-  }
+  }) => _resolveBestBindingCandidate(
+    targets: targets,
+    snapDistance: snapDistance,
+    preferredBinding: preferredBinding,
+    allowNewBinding: allowNewBinding,
+    resolver: (target) => _resolveElbowBindingOnTarget(
+      target: target,
+      worldPoint: worldPoint,
+      snapDistance: snapDistance,
+      hasArrowhead: hasArrowhead,
+    ),
+  );
 
   /// Resolves a single-target binding candidate without list iteration.
   ///
@@ -405,8 +331,8 @@ class ArrowBindingUtils {
       return null;
     }
     final normalized = DrawPoint(
-      x: rect.width == 0 ? 0.0 : (localPoint.x - rect.minX) / rect.width,
-      y: rect.height == 0 ? 0.0 : (localPoint.y - rect.minY) / rect.height,
+      x: (localPoint.x - rect.minX) / rect.width,
+      y: (localPoint.y - rect.minY) / rect.height,
     );
     return ArrowBinding(
       elementId: target.id,
@@ -469,6 +395,57 @@ class ArrowBindingUtils {
   }
 }
 
+ArrowBindingResult? _resolveBestBindingCandidate({
+  required Iterable<ElementState> targets,
+  required double snapDistance,
+  required ArrowBinding? preferredBinding,
+  required bool allowNewBinding,
+  required ArrowBindingResult? Function(ElementState target) resolver,
+}) {
+  if (snapDistance <= 0) {
+    return null;
+  }
+  final preferredElementId = preferredBinding?.elementId;
+  if (!allowNewBinding && preferredElementId == null) {
+    return null;
+  }
+
+  ArrowBindingResult? best;
+  var bestScore = double.infinity;
+  for (final target in targets) {
+    if (target.opacity <= 0) {
+      continue;
+    }
+    if (!allowNewBinding &&
+        preferredElementId != null &&
+        target.id != preferredElementId) {
+      continue;
+    }
+
+    final candidate = resolver(target);
+    if (candidate == null) {
+      continue;
+    }
+
+    var score = candidate.distance;
+    if (preferredElementId == target.id) {
+      score = math.max(0, score - snapDistance * 0.25);
+    }
+
+    if (_isBetterBindingCandidate(
+      candidate: candidate,
+      candidateScore: score,
+      currentBest: best,
+      currentBestScore: bestScore,
+    )) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
 bool _isBetterBindingCandidate({
   required ArrowBindingResult candidate,
   required double candidateScore,
@@ -521,14 +498,8 @@ double _resolveInsideBindingThreshold({
   required DrawRect rect,
   required double snapDistance,
 }) {
-  if (snapDistance <= 0) {
-    return 0;
-  }
   final maxDepth = math.min(rect.width.abs(), rect.height.abs()) / 2;
-  if (maxDepth <= 0) {
-    return 0;
-  }
-  return math.min(snapDistance, maxDepth);
+  return math.min(math.max(0, snapDistance), math.max(0, maxDepth));
 }
 
 double _resolveInsideDepth(DrawRect rect, DrawPoint point) {
@@ -542,12 +513,7 @@ double _resolveInsideDepth(DrawRect rect, DrawPoint point) {
 double _resolveCircleInsideBindingThreshold({
   required double radius,
   required double snapDistance,
-}) {
-  if (snapDistance <= 0 || radius <= 0) {
-    return 0;
-  }
-  return math.min(snapDistance, radius);
-}
+}) => math.min(math.max(0, snapDistance), math.max(0, radius));
 
 double _resolveCircleInsideDepth({
   required DrawPoint center,
@@ -623,11 +589,10 @@ double _resolveBindingGap(ElementState target) {
 }
 
 double _resolveElbowBindingGap(bool hasArrowhead) {
-  const baseGap = _elbowBindingGapBase;
   if (!hasArrowhead) {
-    return baseGap;
+    return _elbowBindingGapBase;
   }
-  return baseGap * _bindingArrowheadGapMultiplier;
+  return _elbowBindingGapBase * _bindingArrowheadGapMultiplier;
 }
 
 bool _isCircularTarget(ElementState target) => target.data is SerialNumberData;
@@ -662,10 +627,9 @@ _BindingHit? _resolveBindingHit({
       allowInside = insideDepth >= insideThreshold;
     }
     if (allowInside) {
-      final anchorPoint = _clampPointToRect(rect, localPoint);
       return _BindingHit(
-        anchorPoint: anchorPoint,
-        snapPoint: anchorPoint,
+        anchorPoint: localPoint,
+        snapPoint: localPoint,
         mode: ArrowBindingMode.inside,
         distance: 0,
       );
@@ -912,11 +876,6 @@ ArrowBindingResult? _resolveElbowBindingOnTarget({
   );
 }
 
-DrawPoint _clampPointToRect(DrawRect rect, DrawPoint point) => DrawPoint(
-  x: _clamp(point.x, rect.minX, rect.maxX),
-  y: _clamp(point.y, rect.minY, rect.maxY),
-);
-
 // Prefer the intersection closest to the pointer so penetrations can bind.
 DrawPoint _resolveOrbitAnchorPoint({
   required DrawRect rect,
@@ -1112,10 +1071,7 @@ DrawPoint? _intersectRectAlongLine({
         best = intersection;
       }
     }
-    if (best != null) {
-      return best;
-    }
-    return null;
+    return best;
   }
 
   final sortPoint = preferPoint ?? reference;
