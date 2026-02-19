@@ -35,103 +35,65 @@ class ResizeBoundsParams {
   final bool resizeFromCenter;
 }
 
-BoundsResult? calculateResizeBounds(ResizeBoundsParams params) {
+BoundsResult calculateResizeBounds(ResizeBoundsParams params) {
   final ctx = params.transformContext;
   final space = ctx.overlaySpace;
   final startRect = ctx.startBounds;
-  final startCenterWorld = ctx.center;
+  final movingBoundPointWorld =
+      ctx.transformPointerWithOffset(
+        currentPointerWorld: params.currentPointerWorld,
+        handleOffsetLocal: params.handleOffsetLocal,
+      ) -
+      ctx.getPaddingOffset(mode: params.mode, padding: params.selectionPadding);
 
-  // Transform pointer with handle offset
-  final handlePaddedWorld = ctx.transformPointerWithOffset(
-    currentPointerWorld: params.currentPointerWorld,
-    handleOffsetLocal: params.handleOffsetLocal,
-  );
-
-  // Apply padding offset
-  final paddingOffsetWorld = ctx.getPaddingOffset(
-    mode: params.mode,
-    padding: params.selectionPadding,
-  );
-  final movingBoundPointWorld = handlePaddedWorld - paddingOffsetWorld;
-
-  // Get anchor point
   final anchorWorld = ctx.getAnchorPoint(
     mode: params.mode,
     resizeFromCenter: params.resizeFromCenter,
   );
-
-  final dWorld = movingBoundPointWorld - anchorWorld;
-  final dLocal = space.rotateVectorToLocal(dWorld);
-
+  final dLocal = space.rotateVectorToLocal(movingBoundPointWorld - anchorWorld);
   final aspectRatio = ctx.aspectRatio;
 
   final (expectedDx, expectedDy) = _expectedAnchorToMovingDirectionLocal(
     params.mode,
   );
-  final affectsX = _affectsXAxis(params.mode);
-  final affectsY = _affectsYAxis(params.mode);
-
   final flipX =
       !params.resizeFromCenter &&
-      affectsX &&
       expectedDx != 0 &&
       dLocal.x != 0 &&
       dLocal.x.sign != expectedDx;
   final flipY =
       !params.resizeFromCenter &&
-      affectsY &&
       expectedDy != 0 &&
       dLocal.y != 0 &&
       dLocal.y.sign != expectedDy;
 
-  double newWidth;
-  double newHeight;
-  DrawPoint newCenterWorld;
+  final (newWidth, newHeight, newCenterWorld) = params.resizeFromCenter
+      ? _calculateFromCenterResize(
+          mode: params.mode,
+          dLocal: dLocal,
+          startRect: startRect,
+          startCenterWorld: ctx.center,
+          maintainAspectRatio: params.maintainAspectRatio,
+          aspectRatio: aspectRatio,
+        )
+      : _calculateFromAnchorResize(
+          mode: params.mode,
+          dLocal: dLocal,
+          startRect: startRect,
+          anchorWorld: anchorWorld,
+          space: space,
+          maintainAspectRatio: params.maintainAspectRatio,
+          aspectRatio: aspectRatio,
+        );
 
-  if (params.resizeFromCenter) {
-    final result = _calculateFromCenterResize(
-      mode: params.mode,
-      dLocal: dLocal,
-      startRect: startRect,
-      startCenterWorld: startCenterWorld,
-      maintainAspectRatio: params.maintainAspectRatio,
-      aspectRatio: aspectRatio,
-    );
-    if (result == null) {
-      return null;
-    }
-    newWidth = result.$1;
-    newHeight = result.$2;
-    newCenterWorld = result.$3;
-  } else {
-    final result = _calculateFromAnchorResize(
-      mode: params.mode,
-      dLocal: dLocal,
-      startRect: startRect,
-      anchorWorld: anchorWorld,
-      space: space,
-      maintainAspectRatio: params.maintainAspectRatio,
-      aspectRatio: aspectRatio,
-    );
-    if (result == null) {
-      return null;
-    }
-    newWidth = result.$1;
-    newHeight = result.$2;
-    newCenterWorld = result.$3;
-  }
-
-  final newRect = DrawRect(
-    minX: newCenterWorld.x - newWidth / 2,
-    minY: newCenterWorld.y - newHeight / 2,
-    maxX: newCenterWorld.x + newWidth / 2,
-    maxY: newCenterWorld.y + newHeight / 2,
+  return BoundsResult(
+    bounds: _rectFromCenter(newCenterWorld, newWidth, newHeight),
+    flipX: flipX,
+    flipY: flipY,
   );
-
-  return BoundsResult(bounds: newRect, flipX: flipX, flipY: flipY);
 }
 
-(double, double, DrawPoint)? _calculateFromCenterResize({
+(double, double, DrawPoint) _calculateFromCenterResize({
   required ResizeMode mode,
   required DrawPoint dLocal,
   required DrawRect startRect,
@@ -139,58 +101,39 @@ BoundsResult? calculateResizeBounds(ResizeBoundsParams params) {
   required bool maintainAspectRatio,
   required double? aspectRatio,
 }) {
-  double newWidth;
-  double newHeight;
-
-  if (_isCornerResize(mode)) {
-    var hx = dLocal.x.abs();
-    var hy = dLocal.y.abs();
-
-    if (maintainAspectRatio && aspectRatio != null) {
-      final adx = dLocal.x.abs();
-      final ady = dLocal.y.abs();
-      final widthBased = ady == 0 || (adx / ady) >= aspectRatio;
-      if (widthBased) {
-        hx = adx;
-        hy = hx / aspectRatio;
-      } else {
-        hy = ady;
-        hx = hy * aspectRatio;
+  switch (mode) {
+    case ResizeMode.topLeft:
+    case ResizeMode.topRight:
+    case ResizeMode.bottomRight:
+    case ResizeMode.bottomLeft:
+      var halfWidth = dLocal.x.abs();
+      var halfHeight = dLocal.y.abs();
+      if (maintainAspectRatio && aspectRatio != null) {
+        (halfWidth, halfHeight) = _lockCornerSizeToAspectRatio(
+          width: halfWidth,
+          height: halfHeight,
+          aspectRatio: aspectRatio,
+        );
       }
-    }
-
-    newWidth = hx * 2;
-    newHeight = hy * 2;
-  } else {
-    switch (mode) {
-      case ResizeMode.left:
-      case ResizeMode.right:
-        newWidth = dLocal.x.abs() * 2;
-        if (maintainAspectRatio && aspectRatio != null) {
-          newHeight = newWidth / aspectRatio;
-        } else {
-          newHeight = startRect.height;
-        }
-      case ResizeMode.top:
-      case ResizeMode.bottom:
-        newHeight = dLocal.y.abs() * 2;
-        if (maintainAspectRatio && aspectRatio != null) {
-          newWidth = newHeight * aspectRatio;
-        } else {
-          newWidth = startRect.width;
-        }
-      case ResizeMode.topLeft:
-      case ResizeMode.topRight:
-      case ResizeMode.bottomRight:
-      case ResizeMode.bottomLeft:
-        return null;
-    }
+      return (halfWidth * 2, halfHeight * 2, startCenterWorld);
+    case ResizeMode.left:
+    case ResizeMode.right:
+      final width = dLocal.x.abs() * 2;
+      final height = maintainAspectRatio && aspectRatio != null
+          ? width / aspectRatio
+          : startRect.height;
+      return (width, height, startCenterWorld);
+    case ResizeMode.top:
+    case ResizeMode.bottom:
+      final height = dLocal.y.abs() * 2;
+      final width = maintainAspectRatio && aspectRatio != null
+          ? height * aspectRatio
+          : startRect.width;
+      return (width, height, startCenterWorld);
   }
-
-  return (newWidth, newHeight, startCenterWorld);
 }
 
-(double, double, DrawPoint)? _calculateFromAnchorResize({
+(double, double, DrawPoint) _calculateFromAnchorResize({
   required ResizeMode mode,
   required DrawPoint dLocal,
   required DrawRect startRect,
@@ -199,119 +142,88 @@ BoundsResult? calculateResizeBounds(ResizeBoundsParams params) {
   required bool maintainAspectRatio,
   required double? aspectRatio,
 }) {
-  double newWidth;
-  double newHeight;
-  DrawPoint newCenterWorld;
-
-  if (_isCornerResize(mode)) {
-    var dx = dLocal.x;
-    var dy = dLocal.y;
-
-    if (maintainAspectRatio && aspectRatio != null) {
-      final sx = dx >= 0 ? 1.0 : -1.0;
-      final sy = dy >= 0 ? 1.0 : -1.0;
-      final adx = dx.abs();
-      final ady = dy.abs();
-      final widthBased = ady == 0 || (adx / ady) >= aspectRatio;
-      if (widthBased) {
-        final w = adx;
-        final h = w / aspectRatio;
-        dx = sx * w;
-        dy = sy * h;
-      } else {
-        final h = ady;
-        final w = h * aspectRatio;
-        dx = sx * w;
-        dy = sy * h;
+  switch (mode) {
+    case ResizeMode.topLeft:
+    case ResizeMode.topRight:
+    case ResizeMode.bottomRight:
+    case ResizeMode.bottomLeft:
+      var dx = dLocal.x;
+      var dy = dLocal.y;
+      if (maintainAspectRatio && aspectRatio != null) {
+        var absWidth = dx.abs();
+        var absHeight = dy.abs();
+        (absWidth, absHeight) = _lockCornerSizeToAspectRatio(
+          width: absWidth,
+          height: absHeight,
+          aspectRatio: aspectRatio,
+        );
+        dx = _withSign(absWidth, dx);
+        dy = _withSign(absHeight, dy);
       }
-    }
-
-    final adjustedMovingWorld =
-        anchorWorld + space.rotateVectorToWorld(DrawPoint(x: dx, y: dy));
-    newCenterWorld = DrawPoint(
-      x: (anchorWorld.x + adjustedMovingWorld.x) / 2,
-      y: (anchorWorld.y + adjustedMovingWorld.y) / 2,
-    );
-    newWidth = dx.abs();
-    newHeight = dy.abs();
-  } else {
-    switch (mode) {
-      case ResizeMode.left:
-      case ResizeMode.right:
-        final dx = dLocal.x;
-        final adjustedMovingWorld =
-            anchorWorld + space.rotateVectorToWorld(DrawPoint(x: dx, y: 0));
-        newCenterWorld = DrawPoint(
-          x: (anchorWorld.x + adjustedMovingWorld.x) / 2,
-          y: (anchorWorld.y + adjustedMovingWorld.y) / 2,
-        );
-        newWidth = dx.abs();
-        if (maintainAspectRatio && aspectRatio != null) {
-          newHeight = newWidth / aspectRatio;
-        } else {
-          newHeight = startRect.height;
-        }
-      case ResizeMode.top:
-      case ResizeMode.bottom:
-        final dy = dLocal.y;
-        final adjustedMovingWorld =
-            anchorWorld + space.rotateVectorToWorld(DrawPoint(x: 0, y: dy));
-        newCenterWorld = DrawPoint(
-          x: (anchorWorld.x + adjustedMovingWorld.x) / 2,
-          y: (anchorWorld.y + adjustedMovingWorld.y) / 2,
-        );
-        newHeight = dy.abs();
-        if (maintainAspectRatio && aspectRatio != null) {
-          newWidth = newHeight * aspectRatio;
-        } else {
-          newWidth = startRect.width;
-        }
-      case ResizeMode.topLeft:
-      case ResizeMode.topRight:
-      case ResizeMode.bottomRight:
-      case ResizeMode.bottomLeft:
-        return null;
-    }
+      final movingWorld =
+          anchorWorld + space.rotateVectorToWorld(DrawPoint(x: dx, y: dy));
+      final centerWorld = _midpoint(anchorWorld, movingWorld);
+      return (dx.abs(), dy.abs(), centerWorld);
+    case ResizeMode.left:
+    case ResizeMode.right:
+      final dx = dLocal.x;
+      final movingWorld =
+          anchorWorld + space.rotateVectorToWorld(DrawPoint(x: dx, y: 0));
+      final width = dx.abs();
+      final height = maintainAspectRatio && aspectRatio != null
+          ? width / aspectRatio
+          : startRect.height;
+      return (width, height, _midpoint(anchorWorld, movingWorld));
+    case ResizeMode.top:
+    case ResizeMode.bottom:
+      final dy = dLocal.y;
+      final movingWorld =
+          anchorWorld + space.rotateVectorToWorld(DrawPoint(x: 0, y: dy));
+      final height = dy.abs();
+      final width = maintainAspectRatio && aspectRatio != null
+          ? height * aspectRatio
+          : startRect.width;
+      return (width, height, _midpoint(anchorWorld, movingWorld));
   }
-
-  return (newWidth, newHeight, newCenterWorld);
 }
 
-bool _isCornerResize(ResizeMode mode) =>
-    mode == ResizeMode.topLeft ||
-    mode == ResizeMode.topRight ||
-    mode == ResizeMode.bottomLeft ||
-    mode == ResizeMode.bottomRight;
+(double, double) _lockCornerSizeToAspectRatio({
+  required double width,
+  required double height,
+  required double aspectRatio,
+}) {
+  if (height == 0 || (width / height) >= aspectRatio) {
+    return (width, width / aspectRatio);
+  }
+  return (height * aspectRatio, height);
+}
 
-bool _affectsXAxis(ResizeMode mode) =>
-    mode == ResizeMode.left ||
-    mode == ResizeMode.right ||
-    _isCornerResize(mode);
+double _withSign(double magnitude, double value) =>
+    value >= 0 ? magnitude : -magnitude;
 
-bool _affectsYAxis(ResizeMode mode) =>
-    mode == ResizeMode.top ||
-    mode == ResizeMode.bottom ||
-    _isCornerResize(mode);
+DrawPoint _midpoint(DrawPoint a, DrawPoint b) =>
+    DrawPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2);
+
+DrawRect _rectFromCenter(DrawPoint center, double width, double height) {
+  final halfWidth = width / 2;
+  final halfHeight = height / 2;
+  return DrawRect(
+    minX: center.x - halfWidth,
+    minY: center.y - halfHeight,
+    maxX: center.x + halfWidth,
+    maxY: center.y + halfHeight,
+  );
+}
 
 (int expectedDx, int expectedDy) _expectedAnchorToMovingDirectionLocal(
   ResizeMode mode,
-) {
-  switch (mode) {
-    case ResizeMode.topLeft:
-      return (-1, -1);
-    case ResizeMode.topRight:
-      return (1, -1);
-    case ResizeMode.bottomRight:
-      return (1, 1);
-    case ResizeMode.bottomLeft:
-      return (-1, 1);
-    case ResizeMode.top:
-      return (0, -1);
-    case ResizeMode.bottom:
-      return (0, 1);
-    case ResizeMode.left:
-      return (-1, 0);
-    case ResizeMode.right:
-      return (1, 0);
-  }
-}
+) => switch (mode) {
+  ResizeMode.topLeft => (-1, -1),
+  ResizeMode.topRight => (1, -1),
+  ResizeMode.bottomRight => (1, 1),
+  ResizeMode.bottomLeft => (-1, 1),
+  ResizeMode.top => (0, -1),
+  ResizeMode.bottom => (0, 1),
+  ResizeMode.left => (-1, 0),
+  ResizeMode.right => (1, 0),
+};

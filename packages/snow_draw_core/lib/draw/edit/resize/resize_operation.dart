@@ -179,7 +179,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         maintainAspectRatio: maintainAspectRatio,
         resizeFromCenter: modifiers.fromCenter,
       ),
-    )!;
+    );
 
     var newBounds = boundsResult.bounds;
     var snapGuides = const <SnapGuide>[];
