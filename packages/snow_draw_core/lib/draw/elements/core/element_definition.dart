@@ -8,8 +8,8 @@ import 'element_type_id.dart';
 
 /// Definition for a single element type.
 ///
-/// Bundles together all type-specific behavior: data factory, renderer and hit
-/// tester.
+/// Bundles type-specific behavior such as rendering, hit testing, and
+/// (de)serialization.
 @immutable
 class ElementDefinition<T extends ElementData> {
   const ElementDefinition({
@@ -24,10 +24,10 @@ class ElementDefinition<T extends ElementData> {
   });
   final ElementTypeId<T> typeId;
   final String displayName;
-  final IconData? icon;
   final ElementTypeRenderer renderer;
   final ElementHitTester hitTester;
   final T Function() createDefaultData;
   final T Function(Map<String, dynamic> json) fromJson;
   final CreationStrategy? creationStrategy;
+  final IconData? icon;
 }
