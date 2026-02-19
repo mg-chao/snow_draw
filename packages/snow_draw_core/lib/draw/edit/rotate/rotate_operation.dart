@@ -65,23 +65,10 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
     final startAngle =
         typedParams.startRotationAngle ??
         rawAngle(currentPosition: position, center: data.startBounds.center);
-    final rotationSnapAngle = typedParams.rotationSnapAngle ?? 0.0;
-
-    final isMulti = data.selectedIds.length > 1;
-    final double baseRotation;
-    if (isMulti) {
-      baseRotation =
-          state.application.selectionOverlay.multiSelectOverlay?.rotation ??
-          0.0;
-    } else {
-      final selectedId = data.selectedIds.isEmpty
-          ? null
-          : data.selectedIds.first;
-      final snapshot = selectedId == null
-          ? null
-          : data.elementSnapshots[selectedId];
-      baseRotation = snapshot?.rotation ?? 0.0;
-    }
+    final selectedId = data.selectedIds.isEmpty ? null : data.selectedIds.first;
+    final baseRotation = data.selectedIds.length > 1
+        ? state.application.selectionOverlay.multiSelectOverlay?.rotation ?? 0.0
+        : data.elementSnapshots[selectedId]?.rotation ?? 0.0;
 
     return RotateEditContext(
       startPosition: position,
@@ -91,7 +78,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       elementsVersion: data.elementsVersion,
       startAngle: startAngle,
       baseRotation: baseRotation,
-      rotationSnapAngle: rotationSnapAngle,
+      rotationSnapAngle: typedParams.rotationSnapAngle ?? 0.0,
       elementSnapshots: data.elementSnapshots,
     );
   }
@@ -113,41 +100,29 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       transform,
       operationName: 'RotateOperation.update',
     );
-    final currentTransform = typedTransform.lastRawAngle == null
-        ? typedTransform.copyWith(lastRawAngle: typedContext.startAngle)
-        : typedTransform;
-
-    final center = typedContext.startBounds.center;
     final rawAngleValue = rawAngle(
       currentPosition: currentPosition,
-      center: center,
+      center: typedContext.startCenter,
     );
-
-    final lastRawAngle = currentTransform.lastRawAngle;
-    final rawAccumulatedAngle = currentTransform.rawAccumulatedAngle;
-
-    final nextRawAccumulated = lastRawAngle == null
-        ? 0.0
-        : rawAccumulatedAngle + normalizeDelta(rawAngleValue - lastRawAngle);
-
-    final appliedDelta =
-        (!modifiers.discreteAngle || typedContext.rotationSnapAngle <= 0)
-        ? nextRawAccumulated
-        : applyDiscreteSnap(
+    final previousRawAngle =
+        typedTransform.lastRawAngle ?? typedContext.startAngle;
+    final nextRawAccumulated =
+        typedTransform.rawAccumulatedAngle +
+        normalizeDelta(rawAngleValue - previousRawAngle);
+    final snapInterval = typedContext.rotationSnapAngle;
+    final appliedDelta = modifiers.discreteAngle && snapInterval > 0
+        ? applyDiscreteSnap(
             delta: nextRawAccumulated,
             baseAngle: typedContext.baseRotation,
-            snapInterval: typedContext.rotationSnapAngle,
-          );
+            snapInterval: snapInterval,
+          )
+        : nextRawAccumulated;
 
-    final nextTransform = currentTransform.copyWith(
+    final nextTransform = typedTransform.copyWith(
       rawAccumulatedAngle: nextRawAccumulated,
       appliedAngle: appliedDelta,
       lastRawAngle: rawAngleValue,
     );
-    if (nextTransform == typedTransform) {
-      return EditUpdateResult<EditTransform>(transform: typedTransform);
-    }
-
     return EditUpdateResult<EditTransform>(transform: nextTransform);
   }
 
