@@ -627,6 +627,14 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
 
+    // `paintHoleMaskModulate` is a screen-space shader pass. The dynamic
+    // canvas is currently transformed to world space (camera + scale), so
+    // undo that transform before issuing the shader draw to keep hole
+    // coordinates aligned with the settled mask rendering path.
+    canvas
+      ..save()
+      ..scale(1 / scale, 1 / scale)
+      ..translate(-cameraPosition.dx, -cameraPosition.dy);
     final dynamicHolePainted = shaderManager.paintHoleMaskModulate(
       canvas: canvas,
       highlights: dynamicHighlights,
@@ -634,6 +642,7 @@ class DynamicCanvasPainter extends CustomPainter {
       scaleFactor: scale,
       cameraPosition: cameraPosition,
     );
+    canvas.restore();
     if (!dynamicHolePainted) {
       paintHighlightMask(
         canvas: canvas,
