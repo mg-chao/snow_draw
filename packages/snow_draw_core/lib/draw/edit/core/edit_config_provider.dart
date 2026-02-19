@@ -25,17 +25,11 @@ class StaticEditConfigProvider implements EditConfigProvider {
 /// Supports runtime configuration changes.
 class MutableEditConfigProvider implements EditConfigProvider {
   MutableEditConfigProvider([EditConfig? initialConfig])
-    : _config = initialConfig ?? EditConfig.defaults;
-  EditConfig _config;
+    : editConfig = initialConfig ?? EditConfig.defaults;
 
   @override
-  EditConfig get editConfig => _config;
+  EditConfig editConfig;
 
-  set editConfig(EditConfig config) {
-    _config = config;
-  }
-
-  void update(EditConfig Function(EditConfig) updater) {
-    _config = updater(_config);
-  }
+  void update(EditConfig Function(EditConfig) updater) =>
+      editConfig = updater(editConfig);
 }
