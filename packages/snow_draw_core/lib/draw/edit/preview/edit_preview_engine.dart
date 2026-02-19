@@ -1,6 +1,5 @@
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
-import '../core/edit_errors.dart';
 import '../edit_operation_registry_interface.dart';
 import 'edit_preview.dart';
 
@@ -14,7 +13,7 @@ import 'edit_preview.dart';
 ///   (dx/dy/angle/bounds...)
 /// - rendering and hit-testing should use this effective preview
 class EditPreviewEngine {
-  EditPreviewEngine();
+  const EditPreviewEngine();
 
   EditPreview build({
     required DrawState state,
@@ -30,14 +29,10 @@ class EditPreviewEngine {
       return EditPreview.none;
     }
 
-    try {
-      return operation.buildPreview(
-        state: state,
-        context: interaction.context,
-        transform: interaction.currentTransform,
-      );
-    } on EditError {
-      return EditPreview.none;
-    }
+    return operation.buildPreview(
+      state: state,
+      context: interaction.context,
+      transform: interaction.currentTransform,
+    );
   }
 }

@@ -18,12 +18,12 @@ import 'selection_geometry_resolver.dart';
 /// painters, etc.) only depend on the derived view instead of edit operations.
 @immutable
 class DrawStateViewBuilder {
-  static final _sharedPreviewEngine = EditPreviewEngine();
+  static const _sharedPreviewEngine = EditPreviewEngine();
   static final Expando<_DrawStateViewCacheEntry> _stateViewCache = Expando(
     'draw_state_view_cache',
   );
 
-  DrawStateViewBuilder({
+  const DrawStateViewBuilder({
     required this.editOperations,
     EditPreviewEngine? previewEngine,
   }) : _previewEngine = previewEngine ?? _sharedPreviewEngine;
