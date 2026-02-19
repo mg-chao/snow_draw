@@ -17,11 +17,12 @@ class RotateGeometry {
     required double baseAngle,
     required double snapInterval,
   }) {
+    assert(snapInterval > 0, 'snapInterval must be > 0');
     if (snapInterval <= 0) {
       return delta;
     }
-    final total = baseAngle + delta;
-    final snappedTotal = (total / snapInterval).round() * snapInterval;
+    final snappedTotal =
+        ((baseAngle + delta) / snapInterval).round() * snapInterval;
     return snappedTotal - baseAngle;
   }
 
