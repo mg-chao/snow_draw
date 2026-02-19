@@ -17,19 +17,12 @@ List<DrawPoint>? _directPathIfClear({
 }) {
   final alignedX = (start.x - end.x).abs() <= ElbowConstants.dedupThreshold;
   final alignedY = (start.y - end.y).abs() <= ElbowConstants.dedupThreshold;
-  if (!alignedX && !alignedY) {
+  if (alignedX == alignedY) {
     return null;
   }
 
-  // Check heading compatibility with alignment.
-  if (alignedX && alignedY) {
-    return null;
-  }
-  if (alignedY) {
-    if (!startHeading.isHorizontal || !endHeading.isHorizontal) {
-      return null;
-    }
-  } else if (startHeading.isHorizontal || endHeading.isHorizontal) {
+  if (startHeading.isHorizontal != alignedY ||
+      endHeading.isHorizontal != alignedY) {
     return null;
   }
 
@@ -59,9 +52,7 @@ bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
       innerBounds.minY >= innerBounds.maxY) {
     return false;
   }
-  final dx = (start.x - end.x).abs();
-  final dy = (start.y - end.y).abs();
-  if (dx <= ElbowConstants.dedupThreshold) {
+  if ((start.x - end.x).abs() <= ElbowConstants.dedupThreshold) {
     final x = (start.x + end.x) / 2;
     if (x < innerBounds.minX || x > innerBounds.maxX) {
       return false;
@@ -74,23 +65,20 @@ bool _segmentIntersectsBounds(DrawPoint start, DrawPoint end, DrawRect bounds) {
         ) >
         ElbowConstants.intersectionEpsilon;
   }
-  if (dy <= ElbowConstants.dedupThreshold) {
-    final y = (start.y + end.y) / 2;
-    if (y < innerBounds.minY || y > innerBounds.maxY) {
-      return false;
-    }
-    return _overlapLength(
-          math.min(start.x, end.x),
-          math.max(start.x, end.x),
-          innerBounds.minX,
-          innerBounds.maxX,
-        ) >
-        ElbowConstants.intersectionEpsilon;
+  if ((start.y - end.y).abs() > ElbowConstants.dedupThreshold) {
+    return false;
   }
-  return math.max(start.x, end.x) >= innerBounds.minX &&
-      math.min(start.x, end.x) <= innerBounds.maxX &&
-      math.max(start.y, end.y) >= innerBounds.minY &&
-      math.min(start.y, end.y) <= innerBounds.maxY;
+  final y = (start.y + end.y) / 2;
+  if (y < innerBounds.minY || y > innerBounds.maxY) {
+    return false;
+  }
+  return _overlapLength(
+        math.min(start.x, end.x),
+        math.max(start.x, end.x),
+        innerBounds.minX,
+        innerBounds.maxX,
+      ) >
+      ElbowConstants.intersectionEpsilon;
 }
 
 double _overlapLength(double minA, double maxA, double minB, double maxB) =>
@@ -517,7 +505,7 @@ void _applySegmentSpacing({
   required double spacing,
 }) {
   final i = segment.index;
-  if (i < 0 || i + 1 >= points.length) {
+  if (i + 1 >= points.length) {
     return;
   }
   final isVerticalSegment =
@@ -621,7 +609,6 @@ final class _ElbowGridNode {
   final _ElbowGridAddress addr;
   double f = 0;
   double g = 0;
-  double h = 0;
   var closed = false;
   var visited = false;
   _ElbowGridNode? parent;
@@ -716,7 +703,6 @@ final class _ElbowGridRouter {
     final bendPenalty = _BendPenalty(
       ElbowGeometry.manhattanDistance(start.pos, end.pos),
     );
-    final startHeadingFlip = startHeading.opposite;
     final endHeadingFlip = endHeading.opposite;
 
     while (openSet.isNotEmpty) {
@@ -725,7 +711,7 @@ final class _ElbowGridRouter {
         continue;
       }
       if (current.addr == end.addr) {
-        return _reconstructPath(current, start);
+        return _reconstructPath(current);
       }
 
       current.closed = true;
@@ -751,7 +737,6 @@ final class _ElbowGridRouter {
           endAddress: end.addr,
           previousHeading: previousHeading,
           neighborHeading: offset.heading,
-          startHeadingFlip: startHeadingFlip,
           endHeadingFlip: endHeadingFlip,
         )) {
           continue;
@@ -773,7 +758,6 @@ final class _ElbowGridRouter {
           next
             ..parent = current
             ..g = gScore
-            ..h = hScore
             ..f = gScore + hScore;
           if (!next.visited) {
             next.visited = true;
@@ -795,7 +779,6 @@ final class _ElbowGridRouter {
     required _ElbowGridAddress endAddress,
     required ElbowHeading previousHeading,
     required ElbowHeading neighborHeading,
-    required ElbowHeading startHeadingFlip,
     required ElbowHeading endHeadingFlip,
   }) {
     if (_segmentIntersectsAnyBounds(current.pos, next.pos, obstacles)) {
@@ -811,7 +794,6 @@ final class _ElbowGridRouter {
           constrained: startConstrained,
           neighborHeading: neighborHeading,
           startHeading: startHeading,
-          startHeadingFlip: startHeadingFlip,
         )) {
       return false;
     }
@@ -900,29 +882,20 @@ bool _allowsHeadingFromStart({
   required bool constrained,
   required ElbowHeading neighborHeading,
   required ElbowHeading startHeading,
-  required ElbowHeading startHeadingFlip,
 }) {
-  if (constrained) {
-    return neighborHeading == startHeading;
+  if (!constrained) {
+    return true;
   }
-  return neighborHeading != startHeadingFlip;
+  return neighborHeading == startHeading;
 }
 
 bool _allowsHeadingIntoEnd({
   required bool constrained,
   required ElbowHeading neighborHeading,
   required ElbowHeading endHeadingFlip,
-}) {
-  if (constrained) {
-    return neighborHeading == endHeadingFlip;
-  }
-  return true;
-}
+}) => !constrained || neighborHeading == endHeadingFlip;
 
-List<_ElbowGridNode> _reconstructPath(
-  _ElbowGridNode current,
-  _ElbowGridNode start,
-) {
+List<_ElbowGridNode> _reconstructPath(_ElbowGridNode current) {
   final reversed = <_ElbowGridNode>[];
   for (var node = current; ;) {
     reversed.add(node);
@@ -932,11 +905,7 @@ List<_ElbowGridNode> _reconstructPath(
     }
     node = parent;
   }
-  final path = reversed.reversed.toList(growable: true);
-  if (path.first.addr != start.addr) {
-    path.insert(0, start);
-  }
-  return path;
+  return reversed.reversed.toList(growable: false);
 }
 
 typedef _ElbowNeighborOffset = ({int dx, int dy, ElbowHeading heading});
