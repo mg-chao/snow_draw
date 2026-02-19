@@ -6,13 +6,13 @@ import 'arrow_data.dart';
 import 'arrow_hit_tester.dart';
 import 'arrow_renderer.dart';
 
-final arrowDefinition = ElementDefinition<ArrowData>(
+const arrowDefinition = ElementDefinition<ArrowData>(
   typeId: ArrowData.typeIdToken,
   displayName: 'Arrow',
   icon: Icons.arrow_right_alt,
-  renderer: const ArrowRenderer(),
-  hitTester: const ArrowHitTester(),
-  createDefaultData: () => const ArrowData(),
+  renderer: ArrowRenderer(),
+  hitTester: ArrowHitTester(),
+  createDefaultData: ArrowData.new,
   fromJson: ArrowData.fromJson,
-  creationStrategy: const ArrowCreationStrategy(),
+  creationStrategy: ArrowCreationStrategy(),
 );
