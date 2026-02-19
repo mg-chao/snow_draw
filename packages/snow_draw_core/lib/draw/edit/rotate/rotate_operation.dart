@@ -64,10 +64,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
     );
     final startAngle =
         typedParams.startRotationAngle ??
-        AngleCalculator.rawAngle(
-          currentPosition: position,
-          center: data.startBounds.center,
-        );
+        rawAngle(currentPosition: position, center: data.startBounds.center);
     final rotationSnapAngle = typedParams.rotationSnapAngle ?? 0.0;
 
     final isMulti = data.selectedIds.length > 1;
@@ -121,7 +118,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
         : typedTransform;
 
     final center = typedContext.startBounds.center;
-    final rawAngle = AngleCalculator.rawAngle(
+    final rawAngleValue = rawAngle(
       currentPosition: currentPosition,
       center: center,
     );
@@ -131,13 +128,12 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
 
     final nextRawAccumulated = lastRawAngle == null
         ? 0.0
-        : rawAccumulatedAngle +
-              AngleCalculator.normalizeDelta(rawAngle - lastRawAngle);
+        : rawAccumulatedAngle + normalizeDelta(rawAngleValue - lastRawAngle);
 
     final appliedDelta =
         (!modifiers.discreteAngle || typedContext.rotationSnapAngle <= 0)
         ? nextRawAccumulated
-        : AngleCalculator.applyDiscreteSnap(
+        : applyDiscreteSnap(
             delta: nextRawAccumulated,
             baseAngle: typedContext.baseRotation,
             snapInterval: typedContext.rotationSnapAngle,
@@ -146,7 +142,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
     final nextTransform = currentTransform.copyWith(
       rawAccumulatedAngle: nextRawAccumulated,
       appliedAngle: appliedDelta,
-      lastRawAngle: rawAngle,
+      lastRawAngle: rawAngleValue,
     );
     if (nextTransform == typedTransform) {
       return EditUpdateResult<EditTransform>(transform: typedTransform);
