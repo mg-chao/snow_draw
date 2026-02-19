@@ -46,22 +46,21 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
       operationName: 'FreeTransformOperation.createContext',
     );
-
-    final selectedIds = {...state.domain.selection.selectedIds};
-    final snapshots = <String, ElementFullSnapshot>{};
-    for (final element in snapshotSelectedElements(state)) {
-      snapshots[element.id] = ElementFullSnapshot(
+    final selection = state.domain.selection;
+    final snapshots = buildSnapshots(
+      snapshotSelectedElements(state),
+      (element) => ElementFullSnapshot(
         center: element.center,
         bounds: element.rect,
         rotation: element.rotation,
-      );
-    }
+      ),
+    );
 
     return FreeTransformEditContext(
       startPosition: position,
       startBounds: startBounds,
-      selectedIdsAtStart: selectedIds,
-      selectionVersion: state.domain.selection.selectionVersion,
+      selectedIdsAtStart: {...selection.selectedIds},
+      selectionVersion: selection.selectionVersion,
       elementsVersion: state.domain.document.elementsVersion,
       currentMode: typedParams.initialMode,
       elementSnapshots: snapshots,
@@ -101,7 +100,6 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
       FreeTransformMode.resize => _computeResizeTransform(
         context: typedContext,
         currentPosition: currentPosition,
-        modifiers: modifiers,
       ),
       FreeTransformMode.rotate => _computeRotateTransform(
         context: typedContext,
@@ -110,10 +108,7 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
       ),
     };
 
-    final updatedTransform = _replaceByType(
-      typedTransform,
-      modeTransform,
-    ).optimize();
+    final updatedTransform = CompositeTransform([modeTransform]).optimize();
     if (updatedTransform == typedTransform) {
       return EditUpdateResult(transform: typedTransform);
     }
@@ -135,10 +130,11 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
       transform,
       operationName: 'FreeTransformOperation.computeResult',
     );
-    if (typedTransform.isIdentity) {
-      return null;
-    }
-    if (!EditValidation.isValidContext(typedContext)) {
+    if (EditValidation.shouldSkipCompute(
+      context: typedContext,
+      transform: typedTransform,
+      requireValidBounds: false,
+    )) {
       return null;
     }
 
@@ -154,18 +150,14 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
         continue;
       }
 
-      final newCenter = typedTransform.applyToPoint(
-        snapshot.center,
-        pivot: pivot,
-      );
-      final newBounds = typedTransform.applyToRect(
+      final transformedBounds = typedTransform.applyToRect(
         snapshot.bounds,
         pivot: pivot,
       );
       final newRotation = snapshot.rotation + rotationDelta;
 
       var updated = current.copyWith(
-        rect: _rectFromCenter(newCenter, newBounds.width, newBounds.height),
+        rect: transformedBounds,
         rotation: newRotation,
       );
       final data = updated.data;
@@ -202,18 +194,12 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
     required SelectionOverlayState current,
     required EditComputedResult result,
     required EditContext context,
-  }) {
-    final typedContext = requireContext<FreeTransformEditContext>(
-      context,
-      operationName: 'FreeTransformOperation.updateOverlay',
-    );
-    return current.copyWith(
-      multiSelectOverlay: MultiSelectOverlayState(
-        bounds: result.multiSelectBounds ?? typedContext.startBounds,
-        rotation: result.multiSelectRotation ?? typedContext.selectionRotation,
-      ),
-    );
-  }
+  }) => current.copyWith(
+    multiSelectOverlay: MultiSelectOverlayState(
+      bounds: result.multiSelectBounds!,
+      rotation: result.multiSelectRotation!,
+    ),
+  );
 
   MoveTransform _computeMoveTransform(
     FreeTransformEditContext context,
@@ -226,17 +212,10 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
   ResizeTransform _computeResizeTransform({
     required FreeTransformEditContext context,
     required DrawPoint currentPosition,
-    required EditModifiers modifiers,
   }) {
     final center = context.startBounds.center;
-    final startVector = context.startPosition - center;
-    final currentVector = currentPosition - center;
-    final startDist = math.sqrt(
-      startVector.x * startVector.x + startVector.y * startVector.y,
-    );
-    final currentDist = math.sqrt(
-      currentVector.x * currentVector.x + currentVector.y * currentVector.y,
-    );
+    final startDist = context.startPosition.distance(center);
+    final currentDist = currentPosition.distance(center);
 
     if (startDist == 0) {
       return ResizeTransform.incomplete(currentPosition: currentPosition);
@@ -244,7 +223,7 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
 
     final scale = currentDist / startDist;
 
-    final newBounds = _scaleBounds(context.startBounds, center, scale, scale);
+    final newBounds = _scaleBounds(context.startBounds, center, scale);
     return ResizeTransform.complete(
       currentPosition: currentPosition,
       newSelectionBounds: newBounds,
@@ -282,56 +261,18 @@ class FreeTransformOperation extends EditOperation with StandardFinishMixin {
     );
   }
 
-  CompositeTransform _replaceByType(
-    CompositeTransform current,
-    EditTransform next,
-  ) {
-    final updated = <EditTransform>[];
-    var replaced = false;
-    for (final transform in current.transforms) {
-      if (transform.runtimeType == next.runtimeType) {
-        if (!replaced) {
-          updated.add(next);
-          replaced = true;
-        }
-        continue;
+  double _rotationDelta(CompositeTransform transform) {
+    for (final item in transform.transforms) {
+      if (item is RotateTransform) {
+        return item.appliedAngle;
       }
-      updated.add(transform);
     }
-    if (!replaced) {
-      updated.add(next);
-    }
-    return CompositeTransform(updated);
+    return 0;
   }
 
-  double _rotationDelta(EditTransform transform) => switch (transform) {
-    RotateTransform(:final appliedAngle) => appliedAngle,
-    CompositeTransform(:final transforms) => transforms.fold(
-      0,
-      (sum, t) => sum + _rotationDelta(t),
-    ),
-    _ => 0.0,
-  };
-
-  DrawRect _scaleBounds(
-    DrawRect bounds,
-    DrawPoint center,
-    double scaleX,
-    double scaleY,
-  ) {
-    final halfWidth = bounds.width * scaleX / 2;
-    final halfHeight = bounds.height * scaleY / 2;
-    return DrawRect(
-      minX: center.x - halfWidth,
-      minY: center.y - halfHeight,
-      maxX: center.x + halfWidth,
-      maxY: center.y + halfHeight,
-    );
-  }
-
-  DrawRect _rectFromCenter(DrawPoint center, double width, double height) {
-    final halfWidth = width / 2;
-    final halfHeight = height / 2;
+  DrawRect _scaleBounds(DrawRect bounds, DrawPoint center, double scale) {
+    final halfWidth = bounds.width * scale / 2;
+    final halfHeight = bounds.height * scale / 2;
     return DrawRect(
       minX: center.x - halfWidth,
       minY: center.y - halfHeight,
