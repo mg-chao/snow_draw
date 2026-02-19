@@ -14,8 +14,14 @@ import '../../core/element_type_id.dart';
 @immutable
 final class FreeDrawData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
+  static const typeIdToken = ElementTypeId<FreeDrawData>('free_draw');
+  static const List<DrawPoint> _defaultPoints = [
+    DrawPoint.zero,
+    DrawPoint(x: 1, y: 1),
+  ];
+
   const FreeDrawData({
-    this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
+    this.points = _defaultPoints,
     this.color = ConfigDefaults.defaultColor,
     this.fillColor = ConfigDefaults.defaultFillColor,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
@@ -44,8 +50,6 @@ final class FreeDrawData extends ElementData
     ),
   );
 
-  static const typeIdToken = ElementTypeId<FreeDrawData>('free_draw');
-
   /// Normalized path points in element-local space (0..1).
   final List<DrawPoint> points;
   final Color color;
@@ -65,7 +69,7 @@ final class FreeDrawData extends ElementData
     double? strokeWidth,
     StrokeStyle? strokeStyle,
   }) => FreeDrawData(
-    points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
+    points: points != null ? List<DrawPoint>.unmodifiable(points) : this.points,
     color: color ?? this.color,
     fillColor: fillColor ?? this.fillColor,
     fillStyle: fillStyle ?? this.fillStyle,
@@ -111,25 +115,33 @@ final class FreeDrawData extends ElementData
   };
 
   static List<DrawPoint> _decodePoints(Object? rawPoints) {
+    if (rawPoints is! List) {
+      return _defaultPoints;
+    }
+
     final points = <DrawPoint>[];
-    if (rawPoints is List) {
-      for (final entry in rawPoints) {
-        if (entry is Map) {
-          final x = (entry['x'] as num?)?.toDouble();
-          final y = (entry['y'] as num?)?.toDouble();
-          final p = (entry['p'] as num?)?.toDouble() ?? 0.0;
-          if (x != null && y != null) {
-            points.add(DrawPoint(x: x, y: y, pressure: p));
-          }
-        }
+    for (final entry in rawPoints.whereType<Map<Object?, Object?>>()) {
+      final point = _decodePoint(entry);
+      if (point != null) {
+        points.add(point);
       }
     }
 
     if (points.length < 2) {
-      return const [DrawPoint.zero, DrawPoint(x: 1, y: 1)];
+      return _defaultPoints;
     }
 
     return List<DrawPoint>.unmodifiable(points);
+  }
+
+  static DrawPoint? _decodePoint(Map<Object?, Object?> pointMap) {
+    final x = (pointMap['x'] as num?)?.toDouble();
+    final y = (pointMap['y'] as num?)?.toDouble();
+    if (x == null || y == null) {
+      return null;
+    }
+    final pressure = (pointMap['p'] as num?)?.toDouble() ?? 0.0;
+    return DrawPoint(x: x, y: y, pressure: pressure);
   }
 
   @override
