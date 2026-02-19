@@ -86,32 +86,22 @@ class EditSessionService {
     required DrawPoint currentPosition,
     EditModifiers modifiers = const EditModifiers(),
     EditUpdateFailurePolicy failurePolicy = EditUpdateFailurePolicy.toIdle,
-  }) {
-    final config = _toErrorConfig(failurePolicy);
-
-    return EditErrorHandlerExtension.runWithErrorHandling(
-      state: state,
-      config: config,
-      operationName: 'updateEdit',
-      log: _log,
-      operation: () {
-        // Version validation now throws EditVersionConflictError
-        final interaction = state.application.interaction;
-        if (interaction is EditingState) {
-          _validateVersionOrThrow(
-            editingState: interaction,
-            currentState: state,
-          );
-        }
-
-        return _performUpdate(
-          state: state,
-          currentPosition: currentPosition,
-          modifiers: modifiers,
-        );
-      },
-    );
-  }
+  }) => EditErrorHandlerExtension.runWithErrorHandling(
+    state: state,
+    config: _toErrorConfig(failurePolicy),
+    operationName: 'updateEdit',
+    log: _log,
+    operation: () {
+      final restored = _restoreOrThrow(state, validateVersions: true);
+      return _performUpdate(
+        state: state,
+        operation: restored.operation,
+        editingState: restored.editingState,
+        currentPosition: currentPosition,
+        modifiers: modifiers,
+      );
+    },
+  );
 
   EditOutcome finish({required DrawState state}) =>
       EditErrorHandlerExtension.runWithErrorHandling(
@@ -120,16 +110,12 @@ class EditSessionService {
         operationName: 'finishEdit',
         log: _log,
         operation: () {
-          // Version validation now throws EditVersionConflictError
-          final interaction = state.application.interaction;
-          if (interaction is EditingState) {
-            _validateVersionOrThrow(
-              editingState: interaction,
-              currentState: state,
-            );
-          }
-
-          return _performFinish(state: state);
+          final restored = _restoreOrThrow(state, validateVersions: true);
+          return _performFinish(
+            state: state,
+            operation: restored.operation,
+            editingState: restored.editingState,
+          );
         },
       );
 
@@ -139,7 +125,14 @@ class EditSessionService {
         config: EditErrorHandlerConfig.toIdle,
         operationName: 'cancelEdit',
         log: _log,
-        operation: () => _performCancel(state: state),
+        operation: () {
+          final restored = _restoreOrThrow(state);
+          return _performCancel(
+            state: state,
+            operation: restored.operation,
+            editingState: restored.editingState,
+          );
+        },
       );
 
   EditErrorHandlerConfig _toErrorConfig(EditUpdateFailurePolicy policy) =>
@@ -156,9 +149,6 @@ class EditSessionService {
     required EditOperationParams params,
     required EditSessionId sessionId,
   }) {
-    // Note: We don't pre-compute selection data here. Operations compute it
-    // themselves in createContext() since they need more than just bounds
-    // (rotation, center, etc.). This avoids redundant O(n) computation.
     final session = _createSession(
       operation: operation,
       operationId: operationId,
@@ -168,31 +158,16 @@ class EditSessionService {
       sessionId: sessionId,
     );
 
-    final newState = state.copyWith(
-      application: state.application.copyWith(interaction: session),
+    return (
+      state: state.copyWith(
+        application: state.application.copyWith(interaction: session),
+      ),
+      failureReason: null,
+      operationId: operationId,
     );
-
-    return (state: newState, failureReason: null, operationId: operationId);
   }
 
   EditOutcome _performUpdate({
-    required DrawState state,
-    required DrawPoint currentPosition,
-    required EditModifiers modifiers,
-  }) {
-    // Session restoration now throws EditSessionRestoreError
-    final restored = _restoreOrThrow(state);
-
-    return _performUpdateWithSession(
-      state: state,
-      operation: restored.operation,
-      editingState: restored.editingState,
-      currentPosition: currentPosition,
-      modifiers: modifiers,
-    );
-  }
-
-  EditOutcome _performUpdateWithSession({
     required DrawState state,
     required EditOperationBase operation,
     required EditingState editingState,
@@ -237,29 +212,33 @@ class EditSessionService {
     );
   }
 
-  EditOutcome _performFinish({required DrawState state}) {
-    // Session restoration now throws EditSessionRestoreError
-    final restored = _restoreOrThrow(state);
-
+  EditOutcome _performFinish({
+    required DrawState state,
+    required EditOperationBase operation,
+    required EditingState editingState,
+  }) {
+    _log?.info('Edit session finished', {'operationId': operation.id});
     return (
-      state: _finishSession(
-        operation: restored.operation,
+      state: operation.finish(
         state: state,
-        editingState: restored.editingState,
+        context: editingState.context,
+        transform: editingState.currentTransform,
       ),
       failureReason: null,
-      operationId: restored.editingState.operationId,
+      operationId: editingState.operationId,
     );
   }
 
-  EditOutcome _performCancel({required DrawState state}) {
-    // Session restoration now throws EditSessionRestoreError
-    final restored = _restoreOrThrow(state);
-
+  EditOutcome _performCancel({
+    required DrawState state,
+    required EditOperationBase operation,
+    required EditingState editingState,
+  }) {
+    _log?.info('Edit session cancelled', {'operationId': operation.id});
     return (
-      state: _cancelSession(operation: restored.operation, state: state),
+      state: operation.cancel(state: state),
       failureReason: null,
-      operationId: restored.editingState.operationId,
+      operationId: editingState.operationId,
     );
   }
 
@@ -294,8 +273,9 @@ class EditSessionService {
   }
 
   ({EditOperationBase operation, EditingState editingState}) _restoreOrThrow(
-    DrawState state,
-  ) {
+    DrawState state, {
+    bool validateVersions = false,
+  }) {
     final interaction = state.application.interaction;
     if (interaction is! EditingState) {
       _log?.error('Edit session restore failed', null, null, {
@@ -318,32 +298,15 @@ class EditSessionService {
       );
     }
 
+    if (validateVersions) {
+      _validateVersionOrThrow(editingState: interaction, currentState: state);
+    }
+
     _log?.trace('Edit session restored', {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
     return (operation: operation, editingState: interaction);
-  }
-
-  DrawState _finishSession({
-    required EditOperationBase operation,
-    required DrawState state,
-    required EditingState editingState,
-  }) {
-    _log?.info('Edit session finished', {'operationId': operation.id});
-    return operation.finish(
-      state: state,
-      context: editingState.context,
-      transform: editingState.currentTransform,
-    );
-  }
-
-  DrawState _cancelSession({
-    required EditOperationBase operation,
-    required DrawState state,
-  }) {
-    _log?.info('Edit session cancelled', {'operationId': operation.id});
-    return operation.cancel(state: state);
   }
 
   void _validateVersionOrThrow({
