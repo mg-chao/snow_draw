@@ -78,8 +78,8 @@ void main() {
 
 MiddlewareContext _context() => MiddlewareContext(state: DrawState());
 
-const _event = PointerMoveInputEvent(
-  position: DrawPoint(x: 12, y: 24),
+final _event = PointerMoveInputEvent(
+  position: const DrawPoint(x: 12, y: 24),
   modifiers: KeyModifiers.none,
 );
 

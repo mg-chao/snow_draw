@@ -53,6 +53,25 @@ class TextRenderer extends ElementTypeRenderer {
     required ElementState element,
     required double scaleFactor,
     Locale? locale,
+  }) => renderWithOptions(
+    canvas: canvas,
+    element: element,
+    scaleFactor: scaleFactor,
+    locale: locale,
+  );
+
+  /// Renders [element] with optional layout reuse and pass controls.
+  ///
+  /// Provide [precomputedLayout] when the caller already resolved text
+  /// layout for the same element rect. Set [renderFill] to false when glyph
+  /// fill is rendered elsewhere (for example by `TextField` during editing).
+  void renderWithOptions({
+    required Canvas canvas,
+    required ElementState element,
+    required double scaleFactor,
+    Locale? locale,
+    TextLayoutMetrics? precomputedLayout,
+    bool renderFill = true,
   }) {
     final data = element.data;
     if (data is! TextData) {
@@ -70,21 +89,23 @@ class TextRenderer extends ElementTypeRenderer {
     final backgroundOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
     final shouldDrawBackground = backgroundOpacity > 0;
     final shouldDrawStroke = data.strokeWidth > 0 && strokeOpacity > 0;
-    final shouldDrawFill = textOpacity > 0;
+    final shouldDrawFill = renderFill && textOpacity > 0;
     if (!shouldDrawBackground && !shouldDrawStroke && !shouldDrawFill) {
       return;
     }
 
     final layoutWidth = rect.width;
 
-    // Single layout call – the Paragraph cache handles dedup.
-    final layout = layoutText(
-      data: data,
-      maxWidth: layoutWidth,
-      minWidth: layoutWidth,
-      widthBasis: TextWidthBasis.parent,
-      locale: locale,
-    );
+    // Single layout call; the Paragraph cache handles dedup.
+    final layout =
+        precomputedLayout ??
+        layoutText(
+          data: data,
+          maxWidth: layoutWidth,
+          minWidth: layoutWidth,
+          widthBasis: TextWidthBasis.parent,
+          locale: locale,
+        );
 
     final textOffset = _resolveTextOffset(
       containerSize: Size(rect.width, rect.height),
@@ -173,7 +194,7 @@ class TextRenderer extends ElementTypeRenderer {
       }
     }
 
-    // Stroke pass – needs a separate Paragraph with stroke paint.
+    // Stroke pass requires a separate Paragraph with stroke paint.
     if (shouldDrawStroke) {
       final strokeParagraph = _buildStrokeParagraph(
         data: data,
@@ -186,7 +207,7 @@ class TextRenderer extends ElementTypeRenderer {
       canvas.drawParagraph(strokeParagraph, textOffset);
     }
 
-    // Fill pass – reuse the layout paragraph when the color already
+    // Fill pass reuses the layout paragraph when the color already
     // matches (opacity == 1.0), avoiding a redundant paragraph build.
     if (shouldDrawFill) {
       final fillParagraph = _resolveFillParagraph(

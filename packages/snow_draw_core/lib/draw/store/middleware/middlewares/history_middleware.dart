@@ -166,7 +166,6 @@ class HistoryMiddleware extends MiddlewareBase {
 
     try {
       final useIncremental =
-          coalescing == null &&
           changes != null &&
           !_requiresPersistentSnapshots(action: action, changes: changes);
 
@@ -214,6 +213,7 @@ class HistoryMiddleware extends MiddlewareBase {
         changes: changes,
         coalescing: coalescing,
         currentState: context.initialState,
+        nextState: context.currentState,
       );
       log.trace('History record evaluated', {
         'action': action.runtimeType.toString(),

@@ -6,6 +6,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'free_draw_data.dart';
 import 'free_draw_visual_cache.dart';
 
@@ -27,6 +28,16 @@ class FreeDrawHitTester implements ElementHitTester {
     }
 
     final localPosition = _toLocalPosition(element, position);
+
+    if (data.strokeWidth > 0 &&
+        _hitTestTwoPointStrokeFast(
+          element: element,
+          data: data,
+          localPosition: localPosition,
+          tolerance: tolerance,
+        )) {
+      return true;
+    }
 
     // Resolve the visual cache once and share it between stroke
     // and fill hit testing to avoid a redundant LRU lookup.
@@ -91,6 +102,40 @@ class FreeDrawHitTester implements ElementHitTester {
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;
+
+  bool _hitTestTwoPointStrokeFast({
+    required ElementState element,
+    required FreeDrawData data,
+    required DrawPoint localPosition,
+    required double tolerance,
+  }) {
+    if (data.points.length != 2) {
+      return false;
+    }
+    final rect = element.rect;
+    final radius = (data.strokeWidth / 2) + tolerance;
+    if (!radius.isFinite || radius <= 0) {
+      return false;
+    }
+    if (!_isInsideRect(rect, localPosition, radius)) {
+      return false;
+    }
+
+    final segment = resolveTwoPointStrokeSegmentWorld(
+      rect: rect,
+      startPoint: data.points.first,
+      endPoint: data.points.last,
+    );
+    if (segment == null) {
+      return false;
+    }
+
+    return hitTestTwoPointStrokeSegment(
+      segment: segment,
+      point: Offset(localPosition.x, localPosition.y),
+      radius: radius,
+    );
+  }
 }
 
 /// Hit-tests the stroke using the shared visual cache.

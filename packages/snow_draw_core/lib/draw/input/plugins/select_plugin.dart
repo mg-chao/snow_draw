@@ -398,15 +398,8 @@ class SelectPlugin extends DrawInputPlugin {
     return false;
   }
 
-  bool _isBoundSerialText(String textElementId) {
-    for (final element in state.domain.document.elements) {
-      final data = element.data;
-      if (data is SerialNumberData && data.textElementId == textElementId) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool _isBoundSerialText(String textElementId) =>
+      state.domain.document.boundTextIds.contains(textElementId);
 
   ArrowPointHandle? _resolveArrowHandleForIntent({
     required DrawStateView stateView,

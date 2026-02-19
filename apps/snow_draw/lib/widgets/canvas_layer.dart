@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
@@ -20,12 +21,14 @@ class CanvasLayer extends StatelessWidget {
     required this.size,
     required this.store,
     required this.toolController,
+    this.watermarkPreviewListenable,
     super.key,
   });
 
   final Size size;
   final DefaultDrawStore store;
   final ToolController toolController;
+  final ValueListenable<WatermarkConfig?>? watermarkPreviewListenable;
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
@@ -35,6 +38,12 @@ class CanvasLayer extends StatelessWidget {
       ..add(DiagnosticsProperty<DefaultDrawStore>('store', store))
       ..add(
         DiagnosticsProperty<ToolController>('toolController', toolController),
+      )
+      ..add(
+        DiagnosticsProperty<ValueListenable<WatermarkConfig?>?>(
+          'watermarkPreviewListenable',
+          watermarkPreviewListenable,
+        ),
       );
   }
 
@@ -59,6 +68,7 @@ class CanvasLayer extends StatelessWidget {
       currentToolTypeId: _toolTypeIds[tool],
       isSelectionToolActive: tool == ToolType.selection,
       isEraserToolActive: tool == ToolType.eraser,
+      watermarkPreviewListenable: watermarkPreviewListenable,
     ),
   );
 }

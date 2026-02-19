@@ -10,6 +10,7 @@ import '../../draw/config/draw_config.dart';
 import '../../draw/core/coordinates/element_space.dart';
 import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
+import '../../draw/elements/core/element_hit_tester.dart';
 import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/elements/text_rendering_cache_invalidation.dart';
 import '../../draw/elements/types/arrow/arrow_binding.dart';
@@ -17,15 +18,18 @@ import '../../draw/elements/types/arrow/arrow_data.dart';
 import '../../draw/elements/types/arrow/arrow_geometry.dart';
 import '../../draw/elements/types/arrow/arrow_like_data.dart';
 import '../../draw/elements/types/arrow/arrow_points.dart';
+import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/highlight/highlight_data.dart';
 import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/elements/types/rectangle/rectangle_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/text/text_data.dart';
+import '../../draw/elements/types/text/text_editing_geometry.dart';
 import '../../draw/elements/types/text/text_layout.dart';
+import '../../draw/elements/types/text/text_renderer.dart';
 import '../../draw/input/input_event.dart';
 import '../../draw/input/plugin_system.dart';
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
@@ -42,13 +46,23 @@ import '../../draw/utils/snapping_mode.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
+import 'dynamic_scene_optimization.dart';
+import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
+import 'filter_style_state_change.dart';
+import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
+import 'interaction_dynamic_scene_cache.dart';
+import 'interaction_mutation_refresh_plan.dart';
+import 'lightweight_line_edit_state_change.dart';
+import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
+import 'serial_number_interaction_classifier.dart';
 import 'static_canvas_painter.dart';
+import 'text_editing_state_change.dart';
 import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
@@ -63,6 +77,7 @@ class PluginDrawCanvas extends StatefulWidget {
     this.currentToolTypeId,
     this.isSelectionToolActive = true,
     this.isEraserToolActive = false,
+    this.watermarkPreviewListenable,
     this.middlewares,
     this.customPlugins,
     this.enableDebugLogging = false,
@@ -74,6 +89,7 @@ class PluginDrawCanvas extends StatefulWidget {
   final ElementTypeId<ElementData>? currentToolTypeId;
   final bool isSelectionToolActive;
   final bool isEraserToolActive;
+  final ValueListenable<WatermarkConfig?>? watermarkPreviewListenable;
 
   /// Custom middleware (optional).
   final List<InputMiddleware>? middlewares;
@@ -110,6 +126,12 @@ class PluginDrawCanvas extends StatefulWidget {
         ),
       )
       ..add(DiagnosticsProperty<bool>('isEraserToolActive', isEraserToolActive))
+      ..add(
+        DiagnosticsProperty<ValueListenable<WatermarkConfig?>?>(
+          'watermarkPreviewListenable',
+          watermarkPreviewListenable,
+        ),
+      )
       ..add(IterableProperty<InputMiddleware>('middlewares', middlewares))
       ..add(IterableProperty<InputPlugin>('customPlugins', customPlugins))
       ..add(DiagnosticsProperty<bool>('enableDebugLogging', enableDebugLogging))
@@ -122,8 +144,37 @@ class PluginDrawCanvas extends StatefulWidget {
   }
 }
 
+class _EraserMoveEvent {
+  const _EraserMoveEvent({required this.pointerId, required this.position});
+
+  final int pointerId;
+  final DrawPoint position;
+}
+
+class _HoverFrameEvent {
+  const _HoverFrameEvent({
+    required this.position,
+    required this.modifiers,
+    required this.dispatchPluginHover,
+  });
+
+  final DrawPoint position;
+  final KeyModifiers modifiers;
+  final bool dispatchPluginHover;
+
+  _HoverFrameEvent mergeWith(_HoverFrameEvent incoming) => _HoverFrameEvent(
+    position: incoming.position,
+    modifiers: incoming.modifiers,
+    dispatchPluginHover: dispatchPluginHover || incoming.dispatchPluginHover,
+  );
+}
+
 class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   static const double _textSelectionPaddingBoost = 16;
+  // Keep store synchronization responsive while reducing high-frequency
+  // interaction churn that can compete with text overlay rendering.
+  static const _textDraftSyncMinInterval = Duration(milliseconds: 24);
+  static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const _eraserPreviewOpacityFactor = 0.5;
@@ -151,11 +202,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
   TextLayoutMetrics? _editingTextLayout;
+  _EditingLayoutIdentity? _editingTextLayoutKey;
   PainterTextLayoutMetrics? _editingPainterLayout;
+  _EditingLayoutIdentity? _editingPainterLayoutKey;
   TextSelection? _lastVerticalSelection;
   double? _verticalCaretX;
   final _cursorResolver = const CursorResolver();
   final _cursorNotifier = ValueNotifier<MouseCursor>(_defaultCursor);
+  final _textOverlayNotifier = ValueNotifier<_TextEditingOverlaySnapshot?>(
+    null,
+  );
+  late final ValueNotifier<_DynamicLayerSnapshot> _dynamicLayerSnapshotNotifier;
+  StaticCanvasRenderKey? _lastStaticRenderKey;
+  late final FrameAlignedEventDispatcher<_PendingTextDraftSync>
+  _textDraftDispatcher;
+  _PendingTextDraftSync? _pendingTextDraftSync;
+  Timer? _textDraftSyncTimer;
+  DateTime? _lastTextDraftSyncAt;
 
   var _isShiftPressed = false;
   var _isControlPressed = false;
@@ -169,15 +232,36 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   ArrowPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
-  final _pendingEraseElementIds = <String>{};
+  final _pendingErasePreviewElementsById = <String, ElementState>{};
+  var _eraserVolatilePreviewElementIds = <String>{};
+  var _eraserPreviewCacheRevision = 0;
+  var _interactionPreviewRevision = 0;
+  var _filterStyleQualityRestoreRevision = 0;
+  var _lightweightLinePreviewRevision = 0;
+  var _transientDynamicFilterElementIds = const <String>{};
+  DrawStateView? _mergedEraserPreviewStateView;
+  var _mergedEraserPreviewRevision = -1;
+  var _mergedEraserPreviewElements = const <String, ElementState>{};
+  final _eraserHitTesterByType =
+      <ElementTypeId<ElementData>, ElementHitTester?>{};
+  final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
   int? _middlePanPointerId;
   Offset? _lastMiddlePanPosition;
 
   CoordinateService? _coordinateService;
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
+  late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
+  late final FrameAlignedEventDispatcher<_HoverFrameEvent> _hoverMoveDispatcher;
+  late final FrameAlignedEventDispatcher<_EraserMoveEvent>
+  _eraserMoveDispatcher;
+  late final EraserStrokeProcessor _eraserStrokeProcessor;
+  DrawState? _lastObservedState;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
+  SelectionConfig? _cachedInputSelectionConfigSource;
+  SelectionConfig? _cachedInputSelectionConfig;
+  double? _cachedInputSelectionScale;
   var _isRefreshingAutoResizeTextLayoutsAfterFontLoad = false;
 
   CoordinateService get _coords {
@@ -294,10 +378,52 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   void initState() {
     super.initState();
+    final initialState = widget.store.state;
     _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
+    _pointerMoveDispatcher = FrameAlignedPointerMoveDispatcher(
+      dispatchMove: _dispatchPointerMoveEvent,
+      shouldCoalesce: _shouldFrameCoalescePointerMove,
+      mergeCoalescedEvents: _mergeCoalescedPointerMoveEvents,
+    );
+    _hoverMoveDispatcher = FrameAlignedEventDispatcher<_HoverFrameEvent>(
+      dispatchEvent: _dispatchHoverFrameEvent,
+      shouldCoalesce: () => _activePointerIds.isEmpty,
+      mergePendingEvents: (pending, incoming) => pending.mergeWith(incoming),
+    );
+    _textDraftDispatcher = FrameAlignedEventDispatcher<_PendingTextDraftSync>(
+      dispatchEvent: _dispatchPendingTextDraftSync,
+      shouldCoalesce: () => true,
+    );
+    _eraserMoveDispatcher = FrameAlignedEventDispatcher<_EraserMoveEvent>(
+      dispatchEvent: _dispatchEraserMove,
+      shouldCoalesce: () => _eraserPointerIds.length <= 1,
+    );
+    _eraserStrokeProcessor = EraserStrokeProcessor(
+      hitTesterResolver: _resolveEraserHitTester,
+    );
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
+    );
+    _lastObservedState = initialState;
+    _syncTextEditingOverlayState(initialState);
+    widget.watermarkPreviewListenable?.addListener(
+      _handleWatermarkPreviewChange,
+    );
+    final initialDynamicSnapshot = _createInitialDynamicLayerSnapshot(
+      initialState,
+    );
+    _dynamicLayerSnapshotNotifier = ValueNotifier<_DynamicLayerSnapshot>(
+      initialDynamicSnapshot,
+    );
+    final initialScene = _resolveCanvasLayerSceneSnapshot(
+      initialDynamicSnapshot.stateView,
+    );
+    _lastStaticRenderKey = _buildStaticRenderKey(
+      stateView: initialDynamicSnapshot.stateView,
+      scaleFactor: _effectiveScaleFactor(),
+      scene: initialScene,
+      locale: null,
     );
 
     // Preload GPU shaders for optimal first-frame performance.
@@ -336,6 +462,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         oldWidget.isEraserToolActive != widget.isEraserToolActive;
 
     if (shouldRecreateCoordinator) {
+      _pointerMoveDispatcher.reset();
+      _hoverMoveDispatcher.reset();
       // Dispose old coordinator
       unawaited(_pluginCoordinator.dispose());
 
@@ -343,8 +471,30 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _stateUnsubscribe?.call();
         _stateUnsubscribe = null;
         unawaited(_configSubscription?.cancel());
+        _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+        _lastTextDraftSyncAt = null;
+        _textDraftDispatcher.reset();
+        _lastObservedState = widget.store.state;
         _cachedState = null;
         _cachedStateView = null;
+        _cachedInputSelectionConfigSource = null;
+        _cachedInputSelectionConfig = null;
+        _cachedInputSelectionScale = null;
+        _syncTextEditingOverlayState(widget.store.state);
+        final initialDynamicSnapshot = _createInitialDynamicLayerSnapshot(
+          widget.store.state,
+        );
+        _dynamicLayerSnapshotNotifier.value = initialDynamicSnapshot;
+        final initialScene = _resolveCanvasLayerSceneSnapshot(
+          initialDynamicSnapshot.stateView,
+        );
+        _lastStaticRenderKey = _buildStaticRenderKey(
+          stateView: initialDynamicSnapshot.stateView,
+          scaleFactor: _effectiveScaleFactor(),
+          scene: initialScene,
+          locale: _lastStaticRenderKey?.locale,
+        );
 
         _stateUnsubscribe = widget.store.listen(
           _handleStateChange,
@@ -359,6 +509,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           editOperations: widget.store.context.editOperations,
         );
       }
+      _eraserHitTesterByType.clear();
 
       // Recreate coordinator
       unawaited(_recreatePluginCoordinator());
@@ -375,10 +526,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (eraserModeChanged && !widget.isEraserToolActive) {
       _clearEraserStrokeState();
     }
+    if (oldWidget.watermarkPreviewListenable !=
+        widget.watermarkPreviewListenable) {
+      oldWidget.watermarkPreviewListenable?.removeListener(
+        _handleWatermarkPreviewChange,
+      );
+      widget.watermarkPreviewListenable?.addListener(
+        _handleWatermarkPreviewChange,
+      );
+    }
 
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
+    _syncTextEditingOverlayState(widget.store.state);
   }
 
   @override
@@ -392,10 +553,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     PaintingBinding.instance.systemFonts.removeListener(
       _handleSystemFontsChange,
     );
+    widget.watermarkPreviewListenable?.removeListener(
+      _handleWatermarkPreviewChange,
+    );
     _focusNode.dispose();
-    _textController?.dispose();
+    _disposeTextEditor();
     _textFocusNode.dispose();
     _cursorNotifier.dispose();
+    _textOverlayNotifier.dispose();
+    _dynamicLayerSnapshotNotifier.dispose();
+    _eraserCursorPositionNotifier.dispose();
+    unawaited(_pointerMoveDispatcher.dispose());
+    unawaited(_hoverMoveDispatcher.dispose());
+    unawaited(_textDraftDispatcher.dispose());
+    unawaited(_eraserMoveDispatcher.dispose());
     unawaited(_pluginCoordinator.dispose());
     super.dispose();
   }
@@ -403,105 +574,32 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   Widget build(BuildContext context) {
     final stateView = _buildStateView(widget.store.state);
-    final config = widget.store.config;
     final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
-    final elementRegistry = widget.store.context.elementRegistry;
     final locale = Localizations.maybeLocaleOf(context);
     final textOverlay = _buildTextEditorOverlay(
-      state: widget.store.state,
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final dynamicLayerStartIndex = _resolveDynamicLayerStartIndex(stateView);
-    final staticPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: _previewElementsForStatic(
-        stateView,
-        dynamicLayerStartIndex,
-      ),
-      stateView: stateView,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      dynamicLayer: false,
-    );
-    final dynamicPreviewElements = _withEraserLayerPreview(
-      basePreviewElements: _previewElementsForDynamic(
-        stateView,
-        dynamicLayerStartIndex,
-      ),
-      stateView: stateView,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      dynamicLayer: true,
-    );
+    final layerScene = _resolveCanvasLayerSceneSnapshot(stateView);
     final eraserCursorOverlay = _buildEraserCursorOverlay();
-    final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final hasHighlights = stateView.highlightMaskScene.hasHighlights;
-    final globalElements = stateView.globalElements;
-    final highlightMask = globalElements.highlightMask;
-    final watermark = globalElements.watermark;
-    final ownsWholeScene = _dynamicOwnsWholeElementScene(stateView);
-    final hasDynamicContent =
-        dynamicLayerStartIndex != null || creatingSnapshot != null;
-    final highlightMaskLayer = resolveHighlightMaskLayer(
-      hasHighlights: hasHighlights,
-      hasDynamicContent: hasDynamicContent,
-      config: highlightMask,
-    );
-    final watermarkLayer = resolveWatermarkLayer(
-      hasDynamicContent: hasDynamicContent,
-      config: watermark,
-    );
-    final textRenderingCacheRevision =
-        textRenderingCacheRevisionListenable.value;
 
     // Build precise render keys for each canvas layer.
-    final staticRenderKey = StaticCanvasRenderKey(
-      documentVersion: stateView.state.domain.document.elementsVersion,
-      textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: stateView.state.application.view.camera,
-      previewElementsById: staticPreviewElements,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      skipBaseElementScene: ownsWholeScene,
+    final staticRenderKey = _buildStaticRenderKey(
+      stateView: stateView,
       scaleFactor: scaleFactor,
-      canvasConfig: config.canvas,
-      gridConfig: config.grid,
-      highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: highlightMask,
-      watermarkLayer: watermarkLayer,
-      watermarkConfig: watermark,
-      elementRegistry: elementRegistry,
-      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      scene: layerScene,
       locale: locale,
     );
-
-    final dynamicRenderKey = DynamicCanvasRenderKey(
-      creatingElement: creatingSnapshot,
-      effectiveSelection: stateView.effectiveSelection,
-      boxSelectionBounds: _extractBoxSelectionBounds(stateView),
-      selectedIds: stateView.selectedIds,
-      hoveredElementId: _hoveredSelectionElementId,
-      hoveredBindingElementId: _hoveredBindingElementId,
-      hoveredArrowHandle: _hoveredArrowHandle,
-      activeArrowHandle: _resolveActiveArrowHandle(stateView),
-      hoverSelectionConfig: _resolveHoverSelectionConfig(),
-      snapGuides: stateView.snapGuides,
-      documentVersion: stateView.state.domain.document.elementsVersion,
-      textRenderingCacheRevision: textRenderingCacheRevision,
-      camera: stateView.state.application.view.camera,
-      previewElementsById: dynamicPreviewElements,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      rendersWholeElementScene: ownsWholeScene,
-      scaleFactor: scaleFactor,
+    final dynamicRenderKey = _buildDynamicRenderKey(
+      stateView: stateView,
       selectionConfig: selectionConfig,
-      boxSelectionConfig: config.boxSelection,
-      snapConfig: config.snap,
-      highlightMaskLayer: highlightMaskLayer,
-      highlightMaskConfig: highlightMask,
-      watermarkLayer: watermarkLayer,
-      watermarkConfig: watermark,
-      elementRegistry: elementRegistry,
-      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      scaleFactor: scaleFactor,
+      scene: layerScene,
       locale: locale,
     );
+    _lastStaticRenderKey = staticRenderKey;
+    _setDynamicLayerSnapshot(stateView: stateView, renderKey: dynamicRenderKey);
 
     final paintStack = Listener(
       onPointerDown: _handlePointerDown,
@@ -522,15 +620,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             ),
           ),
           RepaintBoundary(
-            child: CustomPaint(
-              painter: DynamicCanvasPainter(
-                renderKey: dynamicRenderKey,
-                stateView: stateView,
+            child: ValueListenableBuilder<_DynamicLayerSnapshot>(
+              valueListenable: _dynamicLayerSnapshotNotifier,
+              builder: (context, snapshot, _) => CustomPaint(
+                painter: DynamicCanvasPainter(
+                  renderKey: snapshot.renderKey,
+                  stateView: snapshot.stateView,
+                ),
+                size: widget.size,
               ),
-              size: widget.size,
             ),
           ),
-          ?textOverlay,
+          textOverlay,
           ?eraserCursorOverlay,
         ],
       ),
@@ -563,9 +664,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
     }
-    if (interaction is TextEditingState && interaction.isNew) {
-      // Avoid double-rendering the draft text (static + dynamic) while
-      // creating.
+    if (interaction is TextEditingState) {
+      if (interaction.isNew) {
+        return const <String, ElementState>{};
+      }
+      final hiddenPreview = _buildHiddenTextEditingPreview(view);
+      if (hiddenPreview == null) {
+        return const <String, ElementState>{};
+      }
+
+      if (dynamicLayerStartIndex == null) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
+
+      final orderIndex = view.state.domain.document.getOrderIndex(
+        hiddenPreview.id,
+      );
+      if (orderIndex == null || orderIndex < dynamicLayerStartIndex) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
       return const <String, ElementState>{};
     }
     if (dynamicLayerStartIndex == null) {
@@ -593,26 +710,32 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateView view,
     int? dynamicLayerStartIndex,
   ) {
-    if (dynamicLayerStartIndex == null) {
-      return const <String, ElementState>{};
-    }
     final interaction = view.state.application.interaction;
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
     }
 
-    // When creating a new text element, add it to the dynamic layer preview
-    // so its background is rendered on top of existing elements.
-    if (interaction is TextEditingState && interaction.isNew) {
-      final textElement = ElementState(
-        id: interaction.elementId,
-        rect: interaction.rect,
-        rotation: interaction.rotation,
-        opacity: interaction.opacity,
-        zIndex: view.state.domain.document.elements.length,
-        data: interaction.draftData,
+    if (interaction is TextEditingState) {
+      if (interaction.isNew) {
+        return const <String, ElementState>{};
+      }
+
+      final hiddenPreview = _buildHiddenTextEditingPreview(view);
+      if (hiddenPreview == null || dynamicLayerStartIndex == null) {
+        return const <String, ElementState>{};
+      }
+
+      final orderIndex = view.state.domain.document.getOrderIndex(
+        hiddenPreview.id,
       );
-      return {interaction.elementId: textElement};
+      if (orderIndex != null && orderIndex >= dynamicLayerStartIndex) {
+        return {hiddenPreview.id: hiddenPreview};
+      }
+      return const <String, ElementState>{};
+    }
+
+    if (dynamicLayerStartIndex == null) {
+      return const <String, ElementState>{};
     }
 
     final previewElements = view.previewElementsById;
@@ -631,68 +754,215 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return filtered;
   }
 
-  Map<String, ElementState> _withEraserLayerPreview({
-    required Map<String, ElementState> basePreviewElements,
+  ElementState? _buildHiddenTextEditingPreview(DrawStateView view) {
+    final interaction = view.state.application.interaction;
+    if (interaction is! TextEditingState) {
+      return null;
+    }
+    final previewElement = view.previewElementsById[interaction.elementId];
+    final sourceElement =
+        previewElement ??
+        view.state.domain.document.getElementById(interaction.elementId);
+    if (sourceElement?.data is! TextData) {
+      return null;
+    }
+    final element = sourceElement!;
+    if (element.opacity == 0) {
+      return element;
+    }
+    return element.copyWith(opacity: 0);
+  }
+
+  Map<String, ElementState> _previewElementsForStaticOptimizedScene(
+    DrawStateView view,
+    Set<String> hiddenElementIds,
+  ) {
+    if (hiddenElementIds.isEmpty) {
+      return const <String, ElementState>{};
+    }
+    final previews = <String, ElementState>{};
+    final document = view.state.domain.document;
+    for (final elementId in hiddenElementIds) {
+      final element = document.getElementById(elementId);
+      if (element == null) {
+        continue;
+      }
+      if (element.opacity == 0) {
+        previews[elementId] = element;
+      } else {
+        previews[elementId] = element.copyWith(opacity: 0);
+      }
+    }
+    return previews;
+  }
+
+  Map<String, ElementState> _previewElementsForDynamicOptimizedScene(
+    DrawStateView view,
+    Set<String> optimizedElementIds,
+  ) {
+    if (optimizedElementIds.isEmpty) {
+      return const <String, ElementState>{};
+    }
+
+    final previews = <String, ElementState>{};
+    final document = view.state.domain.document;
+    for (final elementId in optimizedElementIds) {
+      final preview = view.previewElementsById[elementId];
+      if (preview != null) {
+        previews[elementId] = preview;
+        continue;
+      }
+      final persisted = document.getElementById(elementId);
+      if (persisted != null) {
+        previews[elementId] = persisted;
+      }
+    }
+    return previews;
+  }
+
+  Map<String, ElementState> _resolveEraserDynamicPreviewElements(
+    DrawStateView stateView,
+  ) {
+    final pending = _pendingErasePreviewElementsById;
+    if (pending.isEmpty) {
+      return stateView.previewElementsById;
+    }
+    if (stateView.previewElementsById.isEmpty) {
+      return pending;
+    }
+    if (identical(_mergedEraserPreviewStateView, stateView) &&
+        _mergedEraserPreviewRevision == _eraserPreviewCacheRevision) {
+      return _mergedEraserPreviewElements;
+    }
+    final merged = Map<String, ElementState>.of(stateView.previewElementsById)
+      ..addAll(pending);
+    _mergedEraserPreviewStateView = stateView;
+    _mergedEraserPreviewRevision = _eraserPreviewCacheRevision;
+    return _mergedEraserPreviewElements =
+        Map<String, ElementState>.unmodifiable(merged);
+  }
+
+  Set<String> _snapshotEraserVolatilePreviewElementIds() {
+    if (_eraserVolatilePreviewElementIds.isEmpty) {
+      return const <String>{};
+    }
+    return _eraserVolatilePreviewElementIds;
+  }
+
+  void _resetEraserVolatilePreviewElementIds() {
+    if (_eraserVolatilePreviewElementIds.isEmpty) {
+      return;
+    }
+    _eraserVolatilePreviewElementIds = <String>{};
+  }
+
+  Set<String> _resolveDynamicPreviewElementIdsForScene(
+    DrawStateView stateView,
+    Map<String, ElementState> previewElementsById,
+  ) {
+    if (previewElementsById.isEmpty) {
+      return const <String>{};
+    }
+    final document = stateView.state.domain.document;
+    final dynamicIds = <String>{};
+    for (final entry in previewElementsById.entries) {
+      final persisted = document.getElementById(entry.key);
+      if (persisted == null || !identical(persisted, entry.value)) {
+        dynamicIds.add(entry.key);
+      }
+    }
+    if (dynamicIds.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(dynamicIds);
+  }
+
+  Set<String>? _mergeDynamicPreviewElementIds(
+    Set<String>? baseIds,
+    Set<String> transientIds,
+  ) {
+    if (transientIds.isEmpty) {
+      return baseIds;
+    }
+    if (baseIds == null || baseIds.isEmpty) {
+      return Set<String>.unmodifiable(transientIds);
+    }
+    final merged = <String>{...baseIds, ...transientIds};
+    return Set<String>.unmodifiable(merged);
+  }
+
+  Set<String> _resolveInteractionDynamicPreviewElementIds({
     required DrawStateView stateView,
-    required int? dynamicLayerStartIndex,
-    required bool dynamicLayer,
+    required Map<String, ElementState> previewElementsById,
+    required InteractionMutationRefreshPlan plan,
   }) {
-    if (!widget.isEraserToolActive || _pendingEraseElementIds.isEmpty) {
-      return basePreviewElements;
+    if (plan.kind != InteractionMutationKind.lightweightLine) {
+      return _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        previewElementsById,
+      );
+    }
+
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState ||
+        !isLightweightLineEditContext(
+          context: interaction.context,
+          document: stateView.state.domain.document,
+        )) {
+      return _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        previewElementsById,
+      );
+    }
+
+    final selectedIds = interaction.context.selectedIdsAtStart;
+    if (selectedIds.isEmpty || previewElementsById.isEmpty) {
+      return const <String>{};
     }
 
     final document = stateView.state.domain.document;
-    Map<String, ElementState>? merged;
-    for (final id in _pendingEraseElementIds) {
-      final orderIndex = document.getOrderIndex(id);
-      if (!_shouldIncludeEraserPreviewInLayer(
-        orderIndex: orderIndex,
-        dynamicLayerStartIndex: dynamicLayerStartIndex,
-        dynamicLayer: dynamicLayer,
-      )) {
+    final dynamicIds = <String>{};
+    for (final id in selectedIds) {
+      final preview = previewElementsById[id];
+      if (preview == null) {
         continue;
       }
-      final source = basePreviewElements[id] ?? document.getElementById(id);
-      if (source == null) {
-        continue;
+      final persisted = document.getElementById(id);
+      if (persisted == null || !identical(persisted, preview)) {
+        dynamicIds.add(id);
       }
-      final previewOpacity = (source.opacity * _eraserPreviewOpacityFactor)
-          .clamp(0.0, 1.0);
-      merged ??= Map<String, ElementState>.from(basePreviewElements);
-      merged[id] = source.copyWith(opacity: previewOpacity);
     }
-    return merged ?? basePreviewElements;
+    if (dynamicIds.isEmpty) {
+      return const <String>{};
+    }
+    return Set<String>.unmodifiable(dynamicIds);
   }
 
-  bool _shouldIncludeEraserPreviewInLayer({
-    required int? orderIndex,
-    required int? dynamicLayerStartIndex,
-    required bool dynamicLayer,
-  }) {
-    if (dynamicLayerStartIndex == null) {
-      return !dynamicLayer;
-    }
-    if (orderIndex == null) {
-      return false;
-    }
-    return dynamicLayer
-        ? orderIndex >= dynamicLayerStartIndex
-        : orderIndex < dynamicLayerStartIndex;
+  void _invalidateEraserPreviewSnapshots() {
+    _eraserPreviewCacheRevision += 1;
+    _mergedEraserPreviewRevision = -1;
+    _mergedEraserPreviewElements = const <String, ElementState>{};
+    _mergedEraserPreviewStateView = null;
   }
 
   Widget? _buildEraserCursorOverlay() {
-    if (!widget.isEraserToolActive || !_isPointerInside) {
+    if (!widget.isEraserToolActive) {
       return null;
     }
-    final pointer = _lastPointerPosition;
-    if (pointer == null) {
-      return null;
-    }
-    final screenPosition = _coords.worldToScreen(pointer);
     const diameter = _eraserCursorRadius * 2;
-    return Positioned(
-      left: screenPosition.x - _eraserCursorRadius,
-      top: screenPosition.y - _eraserCursorRadius,
+    return ValueListenableBuilder<DrawPoint?>(
+      valueListenable: _eraserCursorPositionNotifier,
+      builder: (context, pointer, child) {
+        if (pointer == null || !_isPointerInside) {
+          return const SizedBox.shrink();
+        }
+        final screenPosition = _coords.worldToScreen(pointer);
+        return Positioned(
+          left: screenPosition.x - _eraserCursorRadius,
+          top: screenPosition.y - _eraserCursorRadius,
+          child: child!,
+        );
+      },
       child: IgnorePointer(
         child: Container(
           key: _eraserCursorOverlayKey,
@@ -714,29 +984,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   int? _resolveDynamicLayerStartIndex(DrawStateView view) =>
       resolveDynamicLayerStartIndex(view);
 
-  bool _dynamicOwnsWholeElementScene(DrawStateView view) {
-    final split = _resolveDynamicLayerStartIndex(view);
-    if (split != 0) {
-      return false;
-    }
-
-    if (view.selectedIds.isEmpty) {
-      return false;
-    }
-    final document = view.state.domain.document;
-    final splitIndex = split ?? 0;
-    for (final element in document.elements) {
-      final orderIndex = document.getOrderIndex(element.id);
-      if (orderIndex == null || orderIndex < splitIndex) {
-        continue;
-      }
-      if (element.data is HighlightData) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
     final interaction = view.state.application.interaction;
@@ -744,9 +991,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return CreatingElementSnapshot(
         element: interaction.element,
         currentRect: interaction.currentRect,
+        creationRevision: _resolveCreationRevision(interaction.creationMode),
       );
     }
     return null;
+  }
+
+  int _resolveCreationRevision(CreationMode mode) {
+    if (mode is FreeDrawCreationMode) {
+      return mode.revision;
+    }
+    return 0;
   }
 
   /// Extract box selection bounds from state view.
@@ -772,21 +1027,52 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       case LogicalKeyboardKey.shift:
       case LogicalKeyboardKey.shiftLeft:
       case LogicalKeyboardKey.shiftRight:
-        _isShiftPressed = isPressed;
+        _setShiftPressed(isPressed);
         return;
       case LogicalKeyboardKey.control:
       case LogicalKeyboardKey.controlLeft:
       case LogicalKeyboardKey.controlRight:
-        _isControlPressed = isPressed;
+        _setControlPressed(isPressed);
         return;
       case LogicalKeyboardKey.alt:
       case LogicalKeyboardKey.altLeft:
       case LogicalKeyboardKey.altRight:
-        _isAltPressed = isPressed;
+        _setAltPressed(isPressed);
         return;
       default:
         break;
     }
+  }
+
+  void _setShiftPressed(bool isPressed) {
+    if (_isShiftPressed == isPressed) {
+      return;
+    }
+    _isShiftPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _setControlPressed(bool isPressed) {
+    if (_isControlPressed == isPressed) {
+      return;
+    }
+    _isControlPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _setAltPressed(bool isPressed) {
+    if (_isAltPressed == isPressed) {
+      return;
+    }
+    _isAltPressed = isPressed;
+    _flushPendingPointerMoveForModifierChange();
+  }
+
+  void _flushPendingPointerMoveForModifierChange() {
+    if (_activePointerIds.isEmpty) {
+      return;
+    }
+    unawaited(_pointerMoveDispatcher.flush());
   }
 
   void _syncKeyboardModifiers() {
@@ -806,9 +1092,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    unawaited(_handlePointerDownAsync(event));
+  }
+
+  Future<void> _handlePointerDownAsync(PointerDownEvent event) async {
     final position = _recordPointerPosition(event.localPosition);
     if (_isMousePointer(event)) {
       if (_isMiddleMouseButton(event.buttons)) {
+        _hoverMoveDispatcher.reset();
         _startMiddlePan(event);
         return;
       }
@@ -817,56 +1108,69 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     _activePointerIds.add(event.pointer);
+    _pointerMoveDispatcher.reset();
+    _hoverMoveDispatcher.reset();
     if (widget.isEraserToolActive) {
+      final isFirstEraserPointer = _eraserPointerIds.isEmpty;
       _eraserPointerIds.add(event.pointer);
-      _markElementsForErase(position);
-      if (mounted) {
-        setState(() {});
+      if (isFirstEraserPointer) {
+        _eraserMoveDispatcher.reset();
+        _eraserStrokeProcessor.reset();
+      }
+      _eraserStrokeProcessor.clearPointer(event.pointer);
+      final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
+      final previewChanged = _markElementsForErase(
+        pointerId: event.pointer,
+        position: position,
+      );
+      if (previewChanged) {
+        _handleEraserPreviewMutation(hadPendingPreview: hadPendingPreview);
       }
       return;
     }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerDownInputEvent(
-          position: position.copyWith(pressure: event.pressure),
-          modifiers: _currentModifiers,
-          pressure: event.pressure,
-        ),
+    if (widget.store.state.application.interaction is TextEditingState) {
+      await _flushPendingTextDraftSync();
+    }
+    await _pluginCoordinator.handleEvent(
+      PointerDownInputEvent(
+        position: position,
+        modifiers: _currentModifiers,
+        pressure: 0.0,
       ),
     );
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorAndHoverForPosition(position);
+    final hasActivePointer = _activePointerIds.contains(event.pointer);
+    if (!hasActivePointer) {
+      _queueHoverUpdate(position: position);
+    }
     if (_handleMiddlePanMove(event)) {
       return;
     }
-    if (!_activePointerIds.contains(event.pointer)) {
+    if (!hasActivePointer) {
       return;
     }
     if (widget.isEraserToolActive) {
       if (_eraserPointerIds.contains(event.pointer)) {
-        _markElementsForErase(position);
-      }
-      if (mounted) {
-        setState(() {});
+        _eraserMoveDispatcher.dispatch(
+          _EraserMoveEvent(pointerId: event.pointer, position: position),
+        );
       }
       return;
     }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerMoveInputEvent(
-          position: position.copyWith(pressure: event.pressure),
-          modifiers: _currentModifiers,
-          pressure: event.pressure,
-        ),
+    _pointerMoveDispatcher.dispatch(
+      PointerMoveInputEvent(
+        position: position,
+        modifiers: _currentModifiers,
+        pressure: 0.0,
       ),
     );
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    _recordPointerPosition(event.localPosition);
+    final position = _recordPointerPosition(event.localPosition);
     if (_middlePanPointerId == event.pointer) {
       _stopMiddlePan();
       _activePointerIds.remove(event.pointer);
@@ -878,22 +1182,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (widget.isEraserToolActive) {
       _eraserPointerIds.remove(event.pointer);
       if (_eraserPointerIds.isEmpty) {
-        unawaited(_commitPendingErase());
+        unawaited(_finishEraserStroke());
       }
       return;
     }
+    final modifiers = _currentModifiers;
     unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerUpInputEvent(
-          position: _transformPosition(event.localPosition),
-          modifiers: _currentModifiers,
-        ),
-      ),
+      _dispatchPointerUpInput(position: position, modifiers: modifiers),
     );
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
     _syncKeyboardModifiers();
+    final position = _transformPosition(event.localPosition);
+    final modifiers = _currentModifiers;
     if (_middlePanPointerId == event.pointer) {
       _stopMiddlePan();
       _activePointerIds.remove(event.pointer);
@@ -905,17 +1207,117 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (widget.isEraserToolActive) {
       _eraserPointerIds.remove(event.pointer);
       if (_eraserPointerIds.isEmpty) {
-        unawaited(_commitPendingErase());
+        unawaited(_finishEraserStroke());
       }
       return;
     }
     unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerCancelInputEvent(
-          position: _transformPosition(event.localPosition),
-          modifiers: _currentModifiers,
-        ),
+      _dispatchPointerCancelInput(position: position, modifiers: modifiers),
+    );
+  }
+
+  Future<void> _dispatchPointerMoveEvent(PointerMoveInputEvent event) async {
+    await _pluginCoordinator.handleEvent(event);
+  }
+
+  Future<void> _dispatchHoverFrameEvent(_HoverFrameEvent event) async {
+    if (_activePointerIds.isNotEmpty ||
+        _middlePanPointerId != null ||
+        !_isPointerInside) {
+      return;
+    }
+    final hoverChanged = _updateCursorAndHoverForPosition(event.position);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
+    if (!event.dispatchPluginHover || widget.isEraserToolActive) {
+      return;
+    }
+    await _pluginCoordinator.handleEvent(
+      PointerHoverInputEvent(
+        position: event.position,
+        modifiers: event.modifiers,
       ),
+    );
+  }
+
+  Future<void> _dispatchEraserMove(_EraserMoveEvent event) async {
+    if (!widget.isEraserToolActive) {
+      return;
+    }
+    final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
+    final previewChanged = _markElementsForErase(
+      pointerId: event.pointerId,
+      position: event.position,
+    );
+    if (previewChanged) {
+      _handleEraserPreviewMutation(hadPendingPreview: hadPendingPreview);
+    }
+  }
+
+  Future<void> _finishEraserStroke() async {
+    await _eraserMoveDispatcher.flush();
+    _eraserStrokeProcessor.reset();
+    await _commitPendingErase();
+  }
+
+  bool _shouldFrameCoalescePointerMove() {
+    final state = widget.store.state;
+    final interaction = state.application.interaction;
+    return PointerMoveDispatchPolicy.resolvePlan(
+      interaction: interaction,
+      currentToolTypeId: widget.currentToolTypeId,
+      isShiftPressed: _isShiftPressed,
+      isLowLatencySerialInteraction:
+          SerialNumberInteractionClassifier.isLowLatencySerialInteraction(
+            interaction: interaction,
+            document: state.domain.document,
+          ),
+    ).shouldCoalesce;
+  }
+
+  bool _shouldBatchFreeDrawMoves() {
+    final interaction = widget.store.state.application.interaction;
+    return PointerMoveDispatchPolicy.resolvePlan(
+      interaction: interaction,
+      currentToolTypeId: widget.currentToolTypeId,
+      isShiftPressed: _isShiftPressed,
+    ).shouldBatchSamples;
+  }
+
+  PointerMoveInputEvent _mergeCoalescedPointerMoveEvents(
+    PointerMoveInputEvent pending,
+    PointerMoveInputEvent incoming,
+  ) {
+    final canBatchSamples =
+        _shouldBatchFreeDrawMoves() &&
+        !pending.modifiers.shift &&
+        !incoming.modifiers.shift &&
+        pending.modifiers.control == incoming.modifiers.control &&
+        pending.modifiers.alt == incoming.modifiers.alt;
+    if (canBatchSamples) {
+      return pending.mergeWith(incoming);
+    }
+    return incoming;
+  }
+
+  Future<void> _dispatchPointerUpInput({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+  }) async {
+    await _pointerMoveDispatcher.flush();
+    await _pluginCoordinator.handleEvent(
+      PointerUpInputEvent(position: position, modifiers: modifiers),
+    );
+  }
+
+  Future<void> _dispatchPointerCancelInput({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+  }) async {
+    await _pointerMoveDispatcher.flush();
+    await _pluginCoordinator.handleEvent(
+      PointerCancelInputEvent(position: position, modifiers: modifiers),
     );
   }
 
@@ -977,132 +1379,127 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handlePointerEnter(PointerEnterEvent event) {
     _isPointerInside = true;
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorAndHoverForPosition(position);
+    _hoverMoveDispatcher.reset();
+    final hoverChanged = _updateCursorAndHoverForPosition(position);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
     final position = _recordPointerPosition(event.localPosition);
-    _updateCursorAndHoverForPosition(position);
-    if (widget.isEraserToolActive) {
-      if (mounted) {
-        setState(() {});
-      }
-      return;
-    }
-    unawaited(
-      _pluginCoordinator.handleEvent(
-        PointerHoverInputEvent(
-          position: position,
-          modifiers: _currentModifiers,
-        ),
-      ),
+    _queueHoverUpdate(
+      position: position,
+      dispatchPluginHover: !widget.isEraserToolActive,
     );
   }
 
   void _handlePointerExit(PointerExitEvent event) {
     _isPointerInside = false;
     _lastPointerPosition = null;
-    if (_hoveredSelectionElementId != null ||
-        _hoveredBindingElementId != null ||
-        _hoveredArrowHandle != null) {
-      setState(() {
-        _hoveredSelectionElementId = null;
-        _hoveredBindingElementId = null;
-        _hoveredArrowHandle = null;
-      });
-    }
+    _eraserCursorPositionNotifier.value = null;
+    _hoverMoveDispatcher.reset();
+    final hoverChanged = _applyHoverState(
+      selectionId: null,
+      bindingId: null,
+      arrowHandle: null,
+    );
     final nextCursor = _resolveCursorForState(widget.store.state, null);
     _updateCursorIfChanged(nextCursor);
+    if (hoverChanged) {
+      _refreshDynamicLayerSnapshot(widget.store.state);
+    }
+  }
+
+  void _queueHoverUpdate({
+    required DrawPoint position,
+    bool dispatchPluginHover = false,
+  }) {
+    if (_middlePanPointerId != null || _activePointerIds.isNotEmpty) {
+      return;
+    }
+    _hoverMoveDispatcher.dispatch(
+      _HoverFrameEvent(
+        position: position,
+        modifiers: _currentModifiers,
+        dispatchPluginHover: dispatchPluginHover,
+      ),
+    );
   }
 
   DrawPoint _recordPointerPosition(Offset localPosition) {
     _syncKeyboardModifiers();
     final position = _transformPosition(localPosition);
     _lastPointerPosition = position;
+    _eraserCursorPositionNotifier.value = position;
     _isPointerInside = true;
     return position;
   }
 
-  void _markElementsForErase(DrawPoint position) {
-    final hitIds = _resolveEraserHitElementIds(position);
-    if (hitIds.isEmpty) {
-      return;
-    }
-    final newIds = <String>[];
-    for (final id in hitIds) {
-      if (!_pendingEraseElementIds.contains(id)) {
-        newIds.add(id);
-      }
-    }
-    if (newIds.isEmpty) {
-      return;
-    }
-    _pendingEraseElementIds.addAll(newIds);
-  }
-
-  List<String> _resolveEraserHitElementIds(DrawPoint position) {
-    final stateView = _buildStateView(widget.store.state);
-    final state = stateView.state;
-    final tolerance = _eraserCursorRadius / _effectiveScaleFactor();
-    final candidates = state.domain.document.queryElementsAtPointTopDown(
-      position,
-      tolerance,
-    );
-    if (candidates.isEmpty) {
-      return const [];
-    }
-    final registry = widget.store.context.elementRegistry;
-    final hitIds = <String>[];
-    for (final candidate in candidates) {
-      final element = stateView.effectiveElement(candidate);
-      final definition = registry.getDefinition(element.typeId);
-      final isHit =
-          definition?.hitTester.hitTest(
-            element: element,
-            position: position,
-            tolerance: tolerance,
-          ) ??
-          _isInsideRectWithTolerance(
-            rect: element.rect,
-            rotation: element.rotation,
-            position: position,
-            tolerance: tolerance,
-          );
-      if (isHit) {
-        hitIds.add(element.id);
-      }
-    }
-    return hitIds;
-  }
-
-  bool _isInsideRectWithTolerance({
-    required DrawRect rect,
-    required double rotation,
+  bool _markElementsForErase({
+    required int pointerId,
     required DrawPoint position,
-    required double tolerance,
-  }) {
-    final local = rotation == 0
-        ? position
-        : ElementSpace(
-            rotation: rotation,
-            origin: rect.center,
-          ).fromWorld(position);
-    return local.x >= rect.minX - tolerance &&
-        local.x <= rect.maxX + tolerance &&
-        local.y >= rect.minY - tolerance &&
-        local.y <= rect.maxY + tolerance;
+  }) => _eraserStrokeProcessor.markElementsForErase(
+    pointerId: pointerId,
+    position: position,
+    stateView: _buildStateView(widget.store.state),
+    tolerance: _eraserCursorRadius / _effectiveScaleFactor(),
+    isQueuedForPreview: _pendingErasePreviewElementsById.containsKey,
+    queuePreview: _queueElementForErasePreview,
+  );
+
+  void _handleEraserPreviewMutation({required bool hadPendingPreview}) {
+    final hasPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
+    if (!mounted) {
+      return;
+    }
+    if (!hasPendingPreview && !hadPendingPreview) {
+      return;
+    }
+    final requiresStaticRefresh = hasPendingPreview != hadPendingPreview;
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+      refreshStaticLayer: requiresStaticRefresh,
+    );
+    _resetEraserVolatilePreviewElementIds();
+  }
+
+  ElementHitTester? _resolveEraserHitTester(ElementState element) {
+    final typeId = element.typeId;
+    if (_eraserHitTesterByType.containsKey(typeId)) {
+      return _eraserHitTesterByType[typeId];
+    }
+    final hitTester = widget.store.context.elementRegistry
+        .getDefinition(typeId)
+        ?.hitTester;
+    _eraserHitTesterByType[typeId] = hitTester;
+    return hitTester;
+  }
+
+  bool _queueElementForErasePreview(ElementState element) {
+    if (_pendingErasePreviewElementsById.containsKey(element.id)) {
+      return false;
+    }
+    final previewOpacity = (element.opacity * _eraserPreviewOpacityFactor)
+        .clamp(0.0, 1.0);
+    _pendingErasePreviewElementsById[element.id] = element.copyWith(
+      opacity: previewOpacity,
+    );
+    _eraserVolatilePreviewElementIds.add(element.id);
+    _invalidateEraserPreviewSnapshots();
+    return true;
   }
 
   Future<void> _commitPendingErase() async {
-    if (_pendingEraseElementIds.isEmpty) {
+    if (_pendingErasePreviewElementsById.isEmpty) {
       return;
     }
-    final ids = _pendingEraseElementIds.toList(growable: false);
-    if (mounted) {
-      setState(_pendingEraseElementIds.clear);
-    } else {
-      _pendingEraseElementIds.clear();
-    }
+    final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
+    _pendingErasePreviewElementsById.clear();
+    _resetEraserVolatilePreviewElementIds();
+    _invalidateEraserPreviewSnapshots();
+    _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
     } on Object catch (error, stackTrace) {
@@ -1115,18 +1512,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _clearEraserStrokeState() {
+    _eraserMoveDispatcher.reset();
+    _eraserStrokeProcessor.reset();
     if (_eraserPointerIds.isNotEmpty) {
       _activePointerIds.removeAll(_eraserPointerIds);
       _eraserPointerIds.clear();
     }
-    if (_pendingEraseElementIds.isEmpty) {
+    if (_pendingErasePreviewElementsById.isEmpty) {
+      _resetEraserVolatilePreviewElementIds();
       return;
     }
-    if (mounted) {
-      setState(_pendingEraseElementIds.clear);
-      return;
-    }
-    _pendingEraseElementIds.clear();
+    _pendingErasePreviewElementsById.clear();
+    _resetEraserVolatilePreviewElementIds();
+    _invalidateEraserPreviewSnapshots();
+    _handleEraserPreviewMutation(hadPendingPreview: true);
   }
 
   bool _isMousePointer(PointerEvent event) =>
@@ -1162,6 +1561,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _stopMiddlePan() {
+    _hoverMoveDispatcher.reset();
     _middlePanPointerId = null;
     _lastMiddlePanPosition = null;
     final position = _lastPointerPosition;
@@ -1173,6 +1573,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
       _clearHoverState();
     }
+    _refreshDynamicLayerSnapshot(widget.store.state);
   }
 
   double? _resolvePrimaryScrollDelta(PointerScrollEvent event) {
@@ -1632,17 +2033,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   /// hit test result and arrow-handle lookup between both paths.
   bool _updateCursorAndHoverForPosition(DrawPoint position) {
     final state = widget.store.state;
+    final interaction = state.application.interaction;
 
     // --- cursor early-outs that skip the hit test entirely ---
     if (_middlePanPointerId != null) {
       _updateCursorIfChanged(_draggingCursor);
       return _clearHoverState();
     }
-    final lockedCursor = _cursorResolver.resolveLockedCursor(
-      state.application.interaction,
-    );
+    final lockedCursor = _cursorResolver.resolveLockedCursor(interaction);
     if (lockedCursor != null) {
       _updateCursorIfChanged(lockedCursor);
+      return _clearHoverState();
+    }
+    final interactionCursor = _resolveInteractionCursorWithoutHitTest(
+      interaction,
+    );
+    if (interactionCursor != null) {
+      _updateCursorIfChanged(interactionCursor);
       return _clearHoverState();
     }
     if (!_isPointerInside) {
@@ -1709,7 +2116,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     // --- derive hover selection from shared hitResult ---
     String? hoverId;
-    final interaction = state.application.interaction;
     final canHover =
         _isPointerInside &&
         _middlePanPointerId == null &&
@@ -1740,6 +2146,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
+  MouseCursor? _resolveInteractionCursorWithoutHitTest(
+    InteractionState interaction,
+  ) {
+    if (interaction is CreatingState || interaction is BoxSelectingState) {
+      return _idleCursorForCurrentTool;
+    }
+    return null;
+  }
+
   bool _clearHoverState() =>
       _applyHoverState(selectionId: null, bindingId: null, arrowHandle: null);
 
@@ -1753,11 +2168,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _hoveredArrowHandle == arrowHandle) {
       return false;
     }
-    setState(() {
-      _hoveredSelectionElementId = selectionId;
-      _hoveredBindingElementId = bindingId;
-      _hoveredArrowHandle = arrowHandle;
-    });
+    _hoveredSelectionElementId = selectionId;
+    _hoveredBindingElementId = bindingId;
+    _hoveredArrowHandle = arrowHandle;
     return true;
   }
 
@@ -1796,6 +2209,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final effectiveZoom = _doubleEquals(zoom, 0) ? 1.0 : zoom;
     final bindingDistance = config.snap.arrowBindingDistance / effectiveZoom;
     if (bindingDistance <= 0) {
+      return null;
+    }
+    if (!state.domain.document.hasArrowBindableElements) {
       return null;
     }
 
@@ -1946,6 +2362,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
+  bool _isArrowDeleteIndicatorVisible(DrawStateView stateView) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! EditingState) {
+      return false;
+    }
+    final transform = interaction.currentTransform;
+    return transform is ArrowPointTransform && transform.shouldDelete;
+  }
+
   MouseCursor? _resolveArrowHandleCursor({
     required DrawState state,
     required ArrowPointHandle handle,
@@ -2000,10 +2425,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_doubleEquals(effectiveScale, 1)) {
       return selectionConfig;
     }
+    final cachedSource = _cachedInputSelectionConfigSource;
+    final cachedScale = _cachedInputSelectionScale;
+    final cachedConfig = _cachedInputSelectionConfig;
+    if (cachedConfig != null &&
+        identical(cachedSource, selectionConfig) &&
+        cachedScale != null &&
+        _doubleEquals(cachedScale, effectiveScale)) {
+      return cachedConfig;
+    }
 
     final interaction = selectionConfig.interaction;
     final render = selectionConfig.render;
-    return selectionConfig.copyWith(
+    final scaled = selectionConfig.copyWith(
       render: render.copyWith(
         strokeWidth: render.strokeWidth / effectiveScale,
         cornerRadius: render.cornerRadius / effectiveScale,
@@ -2016,6 +2450,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         dragThreshold: interaction.dragThreshold / effectiveScale,
       ),
     );
+    _cachedInputSelectionConfigSource = selectionConfig;
+    _cachedInputSelectionConfig = scaled;
+    _cachedInputSelectionScale = effectiveScale;
+    return scaled;
   }
 
   bool _isSingleTextSelection(DrawState state) {
@@ -2038,8 +2476,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    final interaction = state.application.interaction;
-    if (interaction is TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(state);
+    if (interaction != null) {
       if (_isInsideRect(interaction.rect, interaction.rotation, position)) {
         return true;
       }
@@ -2106,8 +2544,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required draw_hit_test.HitTestResult hitResult,
     required SelectionConfig selectionConfig,
   }) {
-    final interaction = state.application.interaction;
-    if (interaction is! TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(state);
+    if (interaction == null) {
       return false;
     }
 
@@ -2262,11 +2700,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (_middlePanPointerId != null) {
       return _draggingCursor;
     }
-    final lockedCursor = _cursorResolver.resolveLockedCursor(
-      state.application.interaction,
-    );
+    final interaction = state.application.interaction;
+    final lockedCursor = _cursorResolver.resolveLockedCursor(interaction);
     if (lockedCursor != null) {
       return lockedCursor;
+    }
+    final interactionCursor = _resolveInteractionCursorWithoutHitTest(
+      interaction,
+    );
+    if (interactionCursor != null) {
+      return interactionCursor;
     }
 
     if (!_isPointerInside || position == null) {
@@ -2318,6 +2761,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return _cursorResolver.resolveForHitTest(hitResult);
   }
 
+  void _handleWatermarkPreviewChange() {
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
+  }
+
+  WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
+      widget.watermarkPreviewListenable?.value ??
+      state.domain.document.globalElements.watermark;
+
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
   bool get _isElementInteractionDisabledForCurrentTool =>
@@ -2342,133 +2796,773 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return nextView;
   }
 
-  Widget? _buildTextEditorOverlay({
+  _CanvasLayerSceneSnapshot _resolveCanvasLayerSceneSnapshot(
+    DrawStateView stateView, {
+    bool includeStaticPreviewElements = true,
+  }) {
+    final interaction = stateView.state.application.interaction;
+    final promoteEraserPreviewToDynamicLayer =
+        widget.isEraserToolActive &&
+        _pendingErasePreviewElementsById.isNotEmpty;
+    late final Set<String> optimizedDynamicElementIds;
+    late final int? dynamicLayerStartIndex;
+    late final Map<String, ElementState> staticPreviewElements;
+    late final Map<String, ElementState> dynamicPreviewElements;
+    late final int? dynamicPreviewElementsRevision;
+    late final Set<String>? dynamicPreviewElementIds;
+    late final bool optimizedSceneHasPotentialOccluders;
+    if (promoteEraserPreviewToDynamicLayer) {
+      optimizedDynamicElementIds = const <String>{};
+      optimizedSceneHasPotentialOccluders = false;
+      dynamicLayerStartIndex = 0;
+      staticPreviewElements = const <String, ElementState>{};
+      dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
+      dynamicPreviewElementsRevision = _eraserPreviewCacheRevision;
+      dynamicPreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
+    } else {
+      final shouldResolveOptimization =
+          interaction is EditingState || interaction is TextEditingState;
+      final resolvedOptimizationPlan = shouldResolveOptimization
+          ? resolveDynamicSceneOptimizationPlan(view: stateView)
+          : null;
+      final optimizationPlan =
+          _shouldApplyDynamicSceneOptimizationPlan(
+            stateView: stateView,
+            interaction: interaction,
+            plan: resolvedOptimizationPlan,
+          )
+          ? resolvedOptimizationPlan
+          : null;
+      optimizedDynamicElementIds =
+          optimizationPlan?.optimizedElementIds ?? const <String>{};
+      optimizedSceneHasPotentialOccluders =
+          optimizationPlan != null &&
+          _resolveOptimizedSceneHasPotentialOccluders(
+            stateView: stateView,
+            optimizedElementIds: optimizedDynamicElementIds,
+          );
+      final baseDynamicLayerStartIndex = optimizedDynamicElementIds.isEmpty
+          ? _resolveDynamicLayerStartIndex(stateView)
+          : null;
+      dynamicLayerStartIndex = baseDynamicLayerStartIndex;
+      final baseStaticPreviewElements = includeStaticPreviewElements
+          ? optimizedDynamicElementIds.isEmpty
+                ? _previewElementsForStatic(
+                    stateView,
+                    baseDynamicLayerStartIndex,
+                  )
+                : _previewElementsForStaticOptimizedScene(
+                    stateView,
+                    optimizationPlan!.staticHiddenElementIds,
+                  )
+          : const <String, ElementState>{};
+      final baseDynamicPreviewElements = optimizedDynamicElementIds.isEmpty
+          ? _previewElementsForDynamic(stateView, baseDynamicLayerStartIndex)
+          : _previewElementsForDynamicOptimizedScene(
+              stateView,
+              optimizationPlan!.optimizedElementIds,
+            );
+      staticPreviewElements = baseStaticPreviewElements;
+      dynamicPreviewElements = baseDynamicPreviewElements;
+      dynamicPreviewElementsRevision = null;
+      dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
+        stateView,
+        baseDynamicPreviewElements,
+      );
+    }
+    final mergedDynamicPreviewElementIds = _mergeDynamicPreviewElementIds(
+      dynamicPreviewElementIds,
+      _transientDynamicFilterElementIds,
+    );
+    final preferFastFilterFallback =
+        _transientDynamicFilterElementIds.isNotEmpty;
+
+    final creatingSnapshot = _extractCreatingSnapshot(stateView);
+    final globalElements = stateView.globalElements;
+    final highlightMask = globalElements.highlightMask;
+    final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
+    final dynamicLayerOwnsWholeScene = dynamicLayerStartIndex == 0;
+    final hasDynamicContent =
+        dynamicLayerStartIndex != null ||
+        creatingSnapshot != null ||
+        dynamicPreviewElements.isNotEmpty;
+    final highlightMaskLayer = _resolveHighlightMaskLayer(
+      stateView: stateView,
+      hasDynamicContent: hasDynamicContent,
+      config: highlightMask,
+    );
+    final watermarkLayer = resolveWatermarkLayer(
+      hasDynamicContent: hasDynamicContent,
+      config: watermark,
+    );
+
+    return _CanvasLayerSceneSnapshot(
+      staticPreviewElements: staticPreviewElements,
+      dynamicPreviewElements: dynamicPreviewElements,
+      dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
+      dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
+      optimizedDynamicElementIds: optimizedDynamicElementIds,
+      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+      dynamicLayerStartIndex: dynamicLayerStartIndex,
+      dynamicLayerOwnsWholeScene: dynamicLayerOwnsWholeScene,
+      creatingSnapshot: creatingSnapshot,
+      highlightMaskLayer: highlightMaskLayer,
+      highlightMaskConfig: highlightMask,
+      watermarkLayer: watermarkLayer,
+      watermarkConfig: watermark,
+      preferFastFilterFallback: preferFastFilterFallback,
+      textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
+    );
+  }
+
+  bool _shouldApplyDynamicSceneOptimizationPlan({
+    required DrawStateView stateView,
+    required InteractionState interaction,
+    required DynamicSceneOptimizationPlan? plan,
+  }) {
+    if (plan == null) {
+      return false;
+    }
+    final optimizedElementIds = plan.optimizedElementIds;
+    if (optimizedElementIds.isEmpty) {
+      return false;
+    }
+
+    final document = stateView.state.domain.document;
+    var lowestOrderIndex = -1;
+    for (final elementId in optimizedElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null) {
+        continue;
+      }
+      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
+        lowestOrderIndex = orderIndex;
+      }
+    }
+    if (lowestOrderIndex < 0) {
+      return false;
+    }
+
+    if (_shouldForceLocalizedOptimization(
+      interaction: interaction,
+      document: document,
+    )) {
+      return true;
+    }
+
+    final dynamicTailCount = document.elements.length - lowestOrderIndex;
+    final savedElementCount = dynamicTailCount - optimizedElementIds.length;
+    return savedElementCount >= _minOptimizationSavedElementCount;
+  }
+
+  // Arrow-point, lightweight-line, and single serial-number edits mutate a
+  // very small dynamic subset. Forcing localized optimization avoids
+  // repeatedly painting large dynamic tails when the selected element sits low
+  // in z.
+  bool _shouldForceLocalizedOptimization({
+    required InteractionState interaction,
+    required DocumentState document,
+  }) {
+    if (isLightweightLineEditingInteraction(
+      interaction: interaction,
+      document: document,
+    )) {
+      return true;
+    }
+    if (interaction is EditingState &&
+        interaction.context is ArrowPointEditContext) {
+      return true;
+    }
+    return SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+      interaction: interaction,
+      document: document,
+    );
+  }
+
+  bool _resolveOptimizedSceneHasPotentialOccluders({
+    required DrawStateView stateView,
+    required Set<String> optimizedElementIds,
+  }) {
+    if (optimizedElementIds.isEmpty) {
+      return false;
+    }
+    final document = stateView.state.domain.document;
+    int? minOrderIndex;
+    for (final elementId in optimizedElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null) {
+        continue;
+      }
+      if (minOrderIndex == null || orderIndex < minOrderIndex) {
+        minOrderIndex = orderIndex;
+      }
+    }
+    if (minOrderIndex == null) {
+      return false;
+    }
+
+    final elements = document.elements;
+    for (var index = minOrderIndex + 1; index < elements.length; index++) {
+      if (!optimizedElementIds.contains(elements[index].id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  HighlightMaskLayer _resolveHighlightMaskLayer({
+    required DrawStateView stateView,
+    required bool hasDynamicContent,
+    required HighlightMaskConfig config,
+  }) {
+    if (config.maskOpacity <= 0) {
+      return HighlightMaskLayer.none;
+    }
+    final summary = stateView.highlightMaskSceneSummary;
+    return resolveHighlightMaskLayer(
+      hasHighlights: summary.hasHighlights,
+      hasDynamicContent: hasDynamicContent,
+      hasDynamicHighlights: summary.hasDynamicHighlights,
+      config: config,
+    );
+  }
+
+  StaticCanvasRenderKey _buildStaticRenderKey({
+    required DrawStateView stateView,
+    required double scaleFactor,
+    required _CanvasLayerSceneSnapshot scene,
+    required Locale? locale,
+  }) => StaticCanvasRenderKey(
+    documentVersion: stateView.state.domain.document.elementsVersion,
+    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    camera: stateView.state.application.view.camera,
+    previewElementsById: scene.staticPreviewElements,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    skipBaseElementScene: scene.dynamicLayerOwnsWholeScene,
+    scaleFactor: scaleFactor,
+    canvasConfig: widget.store.config.canvas,
+    gridConfig: widget.store.config.grid,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
+    elementRegistry: widget.store.context.elementRegistry,
+    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _buildDynamicRenderKey({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required _CanvasLayerSceneSnapshot scene,
+    required Locale? locale,
+    int? previewElementsRevisionOverride,
+  }) => _createDynamicRenderKey(
+    stateView: stateView,
+    selectionConfig: selectionConfig,
+    scaleFactor: scaleFactor,
+    creatingElement: scene.creatingSnapshot,
+    textRenderingCacheRevision: scene.textRenderingCacheRevision,
+    previewElementsById: scene.dynamicPreviewElements,
+    previewElementsRevision:
+        previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
+    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
+    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders:
+        scene.optimizedSceneHasPotentialOccluders,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
+    preferFastFilterFallback: scene.preferFastFilterFallback,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _buildDynamicRenderKeyFromCachedScene({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required CreatingElementSnapshot? creatingElement,
+    required InteractionDynamicSceneSnapshot scene,
+    required Locale? locale,
+    int? previewElementsRevision,
+  }) => _createDynamicRenderKey(
+    stateView: stateView,
+    selectionConfig: selectionConfig,
+    scaleFactor: scaleFactor,
+    creatingElement: creatingElement,
+    textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
+    previewElementsById: scene.previewElementsById,
+    previewElementsRevision: previewElementsRevision,
+    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
+    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders:
+        scene.optimizedSceneHasPotentialOccluders,
+    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
+    rendersWholeElementScene: scene.rendersWholeElementScene,
+    preferFastFilterFallback: false,
+    highlightMaskLayer: scene.highlightMaskLayer,
+    highlightMaskConfig: scene.highlightMaskConfig,
+    watermarkLayer: scene.watermarkLayer,
+    watermarkConfig: scene.watermarkConfig,
+    locale: locale,
+  );
+
+  DynamicCanvasRenderKey _createDynamicRenderKey({
+    required DrawStateView stateView,
+    required SelectionConfig selectionConfig,
+    required double scaleFactor,
+    required CreatingElementSnapshot? creatingElement,
+    required int textRenderingCacheRevision,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> optimizedDynamicElementIds,
+    required bool optimizedSceneHasPotentialOccluders,
+    required int? dynamicLayerStartIndex,
+    required bool rendersWholeElementScene,
+    required bool preferFastFilterFallback,
+    required HighlightMaskLayer highlightMaskLayer,
+    required HighlightMaskConfig highlightMaskConfig,
+    required WatermarkLayer watermarkLayer,
+    required WatermarkConfig watermarkConfig,
+    required Locale? locale,
+    int? previewElementsRevision,
+    Set<String>? dynamicPreviewElementIds,
+  }) => DynamicCanvasRenderKey(
+    creatingElement: creatingElement,
+    effectiveSelection: stateView.effectiveSelection,
+    boxSelectionBounds: _extractBoxSelectionBounds(stateView),
+    selectedIds: stateView.selectedIds,
+    hoveredElementId: _hoveredSelectionElementId,
+    hoveredBindingElementId: _hoveredBindingElementId,
+    hoveredArrowHandle: _hoveredArrowHandle,
+    activeArrowHandle: _resolveActiveArrowHandle(stateView),
+    arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
+    hoverSelectionConfig: _resolveHoverSelectionConfig(),
+    snapGuides: stateView.snapGuides,
+    documentVersion: stateView.state.domain.document.elementsVersion,
+    textRenderingCacheRevision: textRenderingCacheRevision,
+    camera: stateView.state.application.view.camera,
+    previewElementsById: previewElementsById,
+    previewElementsRevision: previewElementsRevision,
+    dynamicPreviewElementIds: dynamicPreviewElementIds,
+    optimizedDynamicElementIds: optimizedDynamicElementIds,
+    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+    dynamicLayerStartIndex: dynamicLayerStartIndex,
+    rendersWholeElementScene: rendersWholeElementScene,
+    preferFastFilterFallback: preferFastFilterFallback,
+    scaleFactor: scaleFactor,
+    selectionConfig: selectionConfig,
+    boxSelectionConfig: widget.store.config.boxSelection,
+    snapConfig: widget.store.config.snap,
+    highlightMaskLayer: highlightMaskLayer,
+    highlightMaskConfig: highlightMaskConfig,
+    watermarkLayer: watermarkLayer,
+    watermarkConfig: watermarkConfig,
+    elementRegistry: widget.store.context.elementRegistry,
+    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+    locale: locale,
+  );
+
+  _DynamicLayerSnapshot _createInitialDynamicLayerSnapshot(DrawState state) {
+    final stateView = _buildStateView(state);
+    final scene = _resolveCanvasLayerSceneSnapshot(
+      stateView,
+      includeStaticPreviewElements: false,
+    );
+    final renderKey = _buildDynamicRenderKey(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: _effectiveScaleFactor(),
+      scene: scene,
+      locale: null,
+    );
+    return _DynamicLayerSnapshot(stateView: stateView, renderKey: renderKey);
+  }
+
+  void _setDynamicLayerSnapshot({
+    required DrawStateView stateView,
+    required DynamicCanvasRenderKey renderKey,
+    bool assumeChanged = false,
+  }) {
+    final nextSnapshot = _DynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: renderKey,
+    );
+    if (!assumeChanged && _dynamicLayerSnapshotNotifier.value == nextSnapshot) {
+      return;
+    }
+    _dynamicLayerSnapshotNotifier.value = nextSnapshot;
+  }
+
+  Locale? _resolveCanvasLocale() =>
+      Localizations.maybeLocaleOf(context) ??
+      _dynamicLayerSnapshotNotifier.value.renderKey.locale ??
+      _lastStaticRenderKey?.locale;
+
+  void _refreshCanvasLayerSnapshots(
+    DrawState state, {
+    bool assumeDynamicChanged = false,
+    bool refreshStaticLayer = true,
+    int? forcedPreviewElementsRevision,
+  }) {
+    if (!mounted) {
+      return;
+    }
+
+    final stateView = _buildStateView(state);
+    final scene = _resolveCanvasLayerSceneSnapshot(
+      stateView,
+      includeStaticPreviewElements: refreshStaticLayer,
+    );
+    final scaleFactor = _effectiveScaleFactor();
+    final locale = _resolveCanvasLocale();
+    final dynamicRenderKey = _buildDynamicRenderKey(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: scaleFactor,
+      scene: scene,
+      locale: locale,
+      previewElementsRevisionOverride: forcedPreviewElementsRevision,
+    );
+    _setDynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: dynamicRenderKey,
+      assumeChanged: assumeDynamicChanged,
+    );
+
+    if (!refreshStaticLayer) {
+      return;
+    }
+
+    final staticRenderKey = _buildStaticRenderKey(
+      stateView: stateView,
+      scaleFactor: scaleFactor,
+      scene: scene,
+      locale: locale,
+    );
+    final staticLayerChanged = _lastStaticRenderKey != staticRenderKey;
+    _lastStaticRenderKey = staticRenderKey;
+    if (staticLayerChanged) {
+      setState(() {});
+    }
+  }
+
+  void _refreshDynamicLayerSnapshot(
+    DrawState state, {
+    bool assumeChanged = false,
+    int? forcedPreviewElementsRevision,
+  }) => _refreshCanvasLayerSnapshots(
+    state,
+    assumeDynamicChanged: assumeChanged,
+    refreshStaticLayer: false,
+    forcedPreviewElementsRevision: forcedPreviewElementsRevision,
+  );
+
+  void _refreshDynamicLayerSnapshotForFilterStyleMutation(
+    DrawState state, {
+    required Set<String> changedFilterElementIds,
+  }) {
+    if (changedFilterElementIds.isEmpty) {
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+      return;
+    }
+    if (!_canRefreshFilterStyleMutationDynamically(
+      state: state,
+      changedFilterElementIds: changedFilterElementIds,
+    )) {
+      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+      return;
+    }
+    _transientDynamicFilterElementIds = Set<String>.unmodifiable(
+      changedFilterElementIds,
+    );
+    try {
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+    } finally {
+      _transientDynamicFilterElementIds = const <String>{};
+    }
+    _scheduleFilterStyleQualityRestore(state);
+  }
+
+  bool _canRefreshFilterStyleMutationDynamically({
     required DrawState state,
+    required Set<String> changedFilterElementIds,
+  }) {
+    final renderKey = _dynamicLayerSnapshotNotifier.value.renderKey;
+    if (renderKey.rendersWholeElementScene) {
+      return true;
+    }
+
+    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
+    if (optimizedElementIds.isNotEmpty) {
+      for (final elementId in changedFilterElementIds) {
+        if (!optimizedElementIds.contains(elementId)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
+    if (dynamicLayerStartIndex == null) {
+      return false;
+    }
+
+    final document = state.domain.document;
+    for (final elementId in changedFilterElementIds) {
+      final orderIndex = document.getOrderIndex(elementId);
+      if (orderIndex == null || orderIndex < dynamicLayerStartIndex) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _scheduleFilterStyleQualityRestore(DrawState state) {
+    final revision = ++_filterStyleQualityRestoreRevision;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          revision != _filterStyleQualityRestoreRevision ||
+          !identical(_lastObservedState, state)) {
+        return;
+      }
+      _refreshDynamicLayerSnapshot(
+        state,
+        assumeChanged: true,
+        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+      );
+    });
+  }
+
+  /// Reuses dynamic-scene split metadata for interaction-only updates.
+  ///
+  /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
+  /// `dynamicOnly` refresh plans while the document topology remains stable.
+  /// Rebuilding full split metadata on every pointer frame is redundant, so
+  /// this fast path reuses the previous dynamic render key and only resolves
+  /// the latest preview subset.
+  bool _tryRefreshCachedInteractionDynamicLayerSnapshot(
+    DrawState state, {
+    required DrawState previousState,
+    required InteractionMutationRefreshPlan plan,
+  }) {
+    if (plan.refreshMode != InteractionMutationRefreshMode.dynamicOnly ||
+        !identical(previousState.domain, state.domain) ||
+        !mounted) {
+      return false;
+    }
+
+    final previousDynamicSnapshot = _dynamicLayerSnapshotNotifier.value;
+    final previousRenderKey = previousDynamicSnapshot.renderKey;
+    if (previousRenderKey.documentVersion !=
+        state.domain.document.elementsVersion) {
+      return false;
+    }
+
+    final stateView = _buildStateView(state);
+    final previewElementsRevision =
+        plan.kind == InteractionMutationKind.lightweightLine
+        ? ++_lightweightLinePreviewRevision
+        : ++_interactionPreviewRevision;
+    final scene = resolveInteractionDynamicSceneFromCachedKey(
+      stateView: stateView,
+      previousRenderKey: previousRenderKey,
+      resolvePreviewByLayerStart: _previewElementsForDynamic,
+      resolvePreviewByOptimizedIds: _previewElementsForDynamicOptimizedScene,
+      resolveDynamicPreviewElementIds: (view, previewElementsById) =>
+          _resolveInteractionDynamicPreviewElementIds(
+            stateView: view,
+            previewElementsById: previewElementsById,
+            plan: plan,
+          ),
+    );
+    final dynamicRenderKey = _buildDynamicRenderKeyFromCachedScene(
+      stateView: stateView,
+      selectionConfig: _resolveSelectionConfig(state),
+      scaleFactor: _effectiveScaleFactor(),
+      creatingElement: _extractCreatingSnapshot(stateView),
+      scene: scene,
+      locale: _resolveCanvasLocale(),
+      previewElementsRevision: previewElementsRevision,
+    );
+    _setDynamicLayerSnapshot(
+      stateView: stateView,
+      renderKey: dynamicRenderKey,
+      assumeChanged: true,
+    );
+    return true;
+  }
+
+  Widget _buildTextEditorOverlay({
     required double scaleFactor,
     Locale? locale,
-  }) {
-    final interaction = state.application.interaction;
-    if (interaction is! TextEditingState) {
-      _disposeTextEditor();
-      return null;
-    }
+  }) => ValueListenableBuilder<_TextEditingOverlaySnapshot?>(
+    valueListenable: _textOverlayNotifier,
+    builder: (context, snapshot, _) {
+      if (snapshot == null) {
+        _clearEditingTextLayoutCache();
+        _clearEditingPainterLayoutCache();
+        return const SizedBox.shrink();
+      }
 
-    _syncTextEditor(interaction);
+      final controller = _textController;
+      if (controller == null) {
+        return const SizedBox.shrink();
+      }
 
-    final rect = interaction.rect;
-    final topLeft = _coords.worldToScreen(
-      DrawPoint(x: rect.minX, y: rect.minY),
-    );
-    final layoutWidth = rect.width;
-    final height = rect.height;
-    if (layoutWidth <= 0 || height <= 0) {
-      _editingTextLayout = null;
-      _editingPainterLayout = null;
-      return null;
-    }
-    // RenderEditable subtracts a caret margin from maxWidth when laying out.
-    final fieldWidth = layoutWidth + textCaretMargin;
-    final data = interaction.draftData;
-    final opacity = interaction.opacity;
-    final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-    final textColor = data.color.withValues(alpha: textOpacity);
-    final textStyle = buildTextStyle(
-      data: data,
-      colorOverride: textColor,
-      locale: locale,
-    );
-    // Render text on the canvas; keep the TextField only for caret/input.
-    final inputTextStyle = textStyle.copyWith(color: Colors.transparent);
+      final rect = snapshot.rect;
+      final topLeft = _coords.worldToScreen(
+        DrawPoint(x: rect.minX, y: rect.minY),
+      );
+      final layoutWidth = rect.width;
+      final height = rect.height;
+      if (layoutWidth <= 0 || height <= 0) {
+        _clearEditingTextLayoutCache();
+        _clearEditingPainterLayoutCache();
+        return const SizedBox.shrink();
+      }
 
-    final layout = layoutText(
-      data: data,
-      maxWidth: layoutWidth,
-      minWidth: layoutWidth,
-      widthBasis: TextWidthBasis.parent,
-      locale: locale,
-    );
-    _editingTextLayout = layout;
+      final text = controller.text;
+      final data = text == snapshot.data.text
+          ? snapshot.data
+          : snapshot.data.copyWith(text: text);
+      final opacity = snapshot.opacity;
+      final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
+      final textColor = data.color.withValues(alpha: textOpacity);
+      final textStyle = buildTextStyle(
+        data: data,
+        colorOverride: textColor,
+        locale: locale,
+      );
 
-    // Painter-backed layout for caret navigation (getOffsetForCaret).
-    _editingPainterLayout = layoutTextWithPainter(
-      data: data,
-      maxWidth: layoutWidth,
-      minWidth: layoutWidth,
-      widthBasis: TextWidthBasis.parent,
-      locale: locale,
-    );
-    final textHeight = layout.size.height;
-    final verticalOffset = _resolveVerticalOffset(
-      containerHeight: height,
-      textHeight: textHeight,
-      align: data.verticalAlign,
-    );
+      final layout = _resolveEditingTextLayout(
+        data: data,
+        layoutWidth: layoutWidth,
+        locale: locale,
+      );
+      _invalidateEditingPainterLayoutIfNeeded(
+        data: data,
+        layoutWidth: layoutWidth,
+        locale: locale,
+      );
 
-    _applyInitialSelection(
-      interaction: interaction,
-      rect: rect,
-      layout: layout,
-      verticalOffset: verticalOffset,
-    );
+      final textHeight = layout.size.height;
+      final verticalOffset = _resolveVerticalOffset(
+        containerHeight: height,
+        textHeight: textHeight,
+        align: data.verticalAlign,
+      );
 
-    Widget textField = TextField(
-      controller: _textController,
-      focusNode: _textFocusNode,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      maxLines: null,
-      style: inputTextStyle,
-      strutStyle: resolveTextStrutStyle(textStyle),
-      textAlign: _toFlutterAlign(data.horizontalAlign),
-      textDirection: TextDirection.ltr,
-      clipBehavior: Clip.none,
-      // Avoid InputDecorator so RenderEditable uses tight
-      // constraints, keeping vertical caret runs valid.
-      decoration: null,
-      cursorColor: textColor,
-      cursorWidth: textCursorWidth,
-    );
-    textField = Listener(
-      onPointerDown: (_) => _resetVerticalCaretRun(),
-      child: textField,
-    );
+      _applyInitialSelection(
+        interaction: snapshot.toInteractionState(),
+        rect: rect,
+        layout: layout,
+        verticalOffset: verticalOffset,
+      );
 
-    return Positioned(
-      left: topLeft.x,
-      top: topLeft.y,
-      child: Transform.scale(
-        scale: scaleFactor,
-        alignment: Alignment.topLeft,
-        child: Transform.rotate(
-          angle: interaction.rotation,
-          child: SizedBox(
-            width: layoutWidth,
-            height: height,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  top: verticalOffset,
-                  width: fieldWidth,
-                  height: textHeight,
-                  child: MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(textScaler: textLayoutTextScaler),
-                    child: DefaultTextHeightBehavior(
-                      textHeightBehavior: textLayoutHeightBehavior,
-                      child: textField,
+      // RenderEditable subtracts a caret margin from maxWidth when laying out.
+      final fieldWidth = layoutWidth + textCaretMargin;
+      final shouldPaintTextDecorations = _shouldPaintTextDecorations(
+        data: data,
+        opacity: opacity,
+      );
+      Widget textField = TextField(
+        controller: controller,
+        focusNode: _textFocusNode,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+        maxLines: null,
+        enableSuggestions: false,
+        autocorrect: false,
+        smartDashesType: SmartDashesType.disabled,
+        smartQuotesType: SmartQuotesType.disabled,
+        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+        style: textStyle,
+        strutStyle: resolveTextStrutStyle(textStyle),
+        textAlign: _toFlutterAlign(data.horizontalAlign),
+        textDirection: TextDirection.ltr,
+        clipBehavior: Clip.none,
+        // Avoid InputDecorator so RenderEditable uses tight
+        // constraints, keeping vertical caret runs valid.
+        decoration: null,
+        cursorColor: textColor,
+        cursorWidth: textCursorWidth,
+      );
+      textField = Listener(
+        onPointerDown: (_) => _resetVerticalCaretRun(),
+        child: textField,
+      );
+
+      return Positioned(
+        left: topLeft.x,
+        top: topLeft.y,
+        child: Transform.scale(
+          scale: scaleFactor,
+          alignment: Alignment.topLeft,
+          child: Transform.rotate(
+            angle: snapshot.rotation,
+            child: SizedBox(
+              width: layoutWidth,
+              height: height,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (shouldPaintTextDecorations)
+                    Positioned.fill(
+                      child: RepaintBoundary(
+                        child: IgnorePointer(
+                          child: CustomPaint(
+                            painter: _EditingTextOverlayPainter(
+                              elementId: snapshot.elementId,
+                              data: data.copyWith(
+                                color: data.color.withValues(alpha: 0),
+                              ),
+                              opacity: opacity,
+                              locale: locale,
+                              layout: layout,
+                              cacheRevision:
+                                  textRenderingCacheRevisionListenable.value,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    top: verticalOffset,
+                    width: fieldWidth,
+                    height: textHeight,
+                    child: RepaintBoundary(
+                      child: MediaQuery(
+                        data: MediaQuery.of(
+                          context,
+                        ).copyWith(textScaler: textLayoutTextScaler),
+                        child: DefaultTextHeightBehavior(
+                          textHeightBehavior: textLayoutHeightBehavior,
+                          child: textField,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 
   void _syncTextEditor(TextEditingState interaction) {
     final controller = _textController;
@@ -2478,18 +3572,40 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ..addListener(_handleTextControllerChanged);
       _editingElementId = interaction.elementId;
       _initialSelectionApplied = false;
+      _clearEditingTextLayoutCache();
+      _clearEditingPainterLayoutCache();
       _resetVerticalCaretRun();
+      _pendingTextDraftSync = null;
+      _cancelPendingTextDraftSyncDispatch();
+      _lastTextDraftSyncAt = null;
+    } else if (_pendingTextDraftSync != null &&
+        _pendingTextDraftSync!.elementId == interaction.elementId &&
+        _isSameTextValue(
+          interaction.draftData.text,
+          _pendingTextDraftSync!.text,
+        )) {
+      _pendingTextDraftSync = null;
+      _cancelPendingTextDraftSyncDispatch();
     } else if (!_suppressTextControllerChange &&
-        controller.text != interaction.draftData.text) {
+        controller.text != interaction.draftData.text &&
+        (_pendingTextDraftSync == null ||
+            _pendingTextDraftSync!.elementId != interaction.elementId ||
+            controller.text != _pendingTextDraftSync!.text)) {
       _suppressTextControllerChange = true;
       controller.text = interaction.draftData.text;
       _suppressTextControllerChange = false;
+      _clearEditingTextLayoutCache();
+      _clearEditingPainterLayoutCache();
     }
 
     _scheduleTextFocus();
   }
 
   void _disposeTextEditor() {
+    _pendingTextDraftSync = null;
+    _cancelPendingTextDraftSyncDispatch();
+    _lastTextDraftSyncAt = null;
+    _textDraftDispatcher.reset();
     final controller = _textController;
     if (controller != null) {
       controller
@@ -2499,8 +3615,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _editingElementId = null;
     _initialSelectionApplied = false;
-    _editingTextLayout = null;
-    _editingPainterLayout = null;
+    _clearEditingTextLayoutCache();
+    _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
     if (_textFocusNode.hasFocus) {
       _textFocusNode.unfocus();
@@ -2523,6 +3639,191 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     });
   }
 
+  void _syncTextEditingOverlayState(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is! TextEditingState) {
+      if (_textController != null || _editingElementId != null) {
+        _disposeTextEditor();
+      }
+      if (_textOverlayNotifier.value != null) {
+        _textOverlayNotifier.value = null;
+      }
+      return;
+    }
+
+    _syncTextEditor(interaction);
+    var nextSnapshot = _TextEditingOverlaySnapshot.fromInteraction(interaction);
+    var pending = _pendingTextDraftSync;
+    if (pending != null) {
+      if (pending.elementId != interaction.elementId) {
+        _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+        pending = null;
+      } else if (_isSameTextValue(interaction.draftData.text, pending.text)) {
+        _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+        pending = null;
+      } else {
+        pending = _resolvePendingTextDraftSyncForInteraction(
+          interaction: interaction,
+          pending: pending,
+        );
+        if (_pendingTextDraftSync != pending) {
+          _pendingTextDraftSync = pending;
+          _schedulePendingTextDraftSyncDispatch();
+        }
+        final mergedPending = pending;
+        nextSnapshot = nextSnapshot.copyWith(
+          data: nextSnapshot.data.copyWith(text: mergedPending.text),
+          rect: mergedPending.previewRect,
+        );
+      }
+    }
+    _setTextOverlaySnapshot(nextSnapshot);
+  }
+
+  void _setTextOverlaySnapshot(_TextEditingOverlaySnapshot nextSnapshot) {
+    final current = _textOverlayNotifier.value;
+    if (_isSameTextOverlaySnapshot(current, nextSnapshot)) {
+      return;
+    }
+    _textOverlayNotifier.value = nextSnapshot;
+  }
+
+  bool _isSameTextOverlaySnapshot(
+    _TextEditingOverlaySnapshot? current,
+    _TextEditingOverlaySnapshot next,
+  ) {
+    if (current == null) {
+      return false;
+    }
+    if (identical(current, next)) {
+      return true;
+    }
+    return current.elementId == next.elementId &&
+        identical(current.data, next.data) &&
+        current.rect == next.rect &&
+        current.isNew == next.isNew &&
+        current.rotation == next.rotation &&
+        current.opacity == next.opacity &&
+        current.initialCursorPosition == next.initialCursorPosition;
+  }
+
+  bool _isSameTextValue(String left, String right) =>
+      identical(left, right) || left == right;
+
+  TextLayoutMetrics _resolveEditingTextLayout({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) {
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: data,
+      layoutWidth: layoutWidth,
+      locale: locale,
+    );
+    final cachedLayout = _editingTextLayout;
+    if (cachedLayout != null && _editingTextLayoutKey == nextKey) {
+      return cachedLayout;
+    }
+    final layout = layoutText(
+      data: data,
+      maxWidth: layoutWidth,
+      minWidth: layoutWidth,
+      widthBasis: TextWidthBasis.parent,
+      locale: locale,
+    );
+    _editingTextLayout = layout;
+    _editingTextLayoutKey = nextKey;
+    return layout;
+  }
+
+  _EditingLayoutIdentity _resolveEditingLayoutIdentity({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) => _EditingLayoutIdentity(
+    textToken: data.text,
+    fontSize: data.fontSize,
+    fontFamily: data.fontFamily,
+    horizontalAlign: data.horizontalAlign,
+    layoutWidth: _quantizeEditingLayoutWidth(layoutWidth),
+    localeTag: locale?.toLanguageTag(),
+  );
+
+  void _clearEditingTextLayoutCache() {
+    _editingTextLayout = null;
+    _editingTextLayoutKey = null;
+  }
+
+  void _invalidateEditingPainterLayoutIfNeeded({
+    required TextData data,
+    required double layoutWidth,
+    required Locale? locale,
+  }) {
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: data,
+      layoutWidth: layoutWidth,
+      locale: locale,
+    );
+    if (_editingPainterLayoutKey == nextKey) {
+      return;
+    }
+    _editingPainterLayoutKey = nextKey;
+    _editingPainterLayout = null;
+  }
+
+  TextEditingState? _resolveVisibleTextEditingInteraction(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is! TextEditingState) {
+      return null;
+    }
+    final overlay = _textOverlayNotifier.value;
+    if (overlay == null || overlay.elementId != interaction.elementId) {
+      return interaction;
+    }
+    return overlay.toInteractionState();
+  }
+
+  PainterTextLayoutMetrics? _resolveEditingPainterLayout() {
+    final interaction = _resolveVisibleTextEditingInteraction(
+      widget.store.state,
+    );
+    if (interaction == null) {
+      return null;
+    }
+    final layoutWidth = interaction.rect.width;
+    if (layoutWidth <= 0) {
+      return null;
+    }
+    final locale = Localizations.maybeLocaleOf(context);
+    final nextKey = _resolveEditingLayoutIdentity(
+      data: interaction.draftData,
+      layoutWidth: layoutWidth,
+      locale: locale,
+    );
+    final cachedLayout = _editingPainterLayout;
+    if (cachedLayout != null && _editingPainterLayoutKey == nextKey) {
+      return cachedLayout;
+    }
+
+    final layout = layoutTextWithPainter(
+      data: interaction.draftData,
+      maxWidth: layoutWidth,
+      minWidth: layoutWidth,
+      widthBasis: TextWidthBasis.parent,
+      locale: locale,
+    );
+    _editingPainterLayout = layout;
+    _editingPainterLayoutKey = nextKey;
+    return layout;
+  }
+
+  void _clearEditingPainterLayoutCache() {
+    _editingPainterLayout = null;
+    _editingPainterLayoutKey = null;
+  }
+
   void _handleTextControllerChanged() {
     if (_suppressTextControllerChange) {
       return;
@@ -2531,16 +3832,190 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (controller == null) {
       return;
     }
-    final interaction = widget.store.state.application.interaction;
-    if (interaction is! TextEditingState) {
+    final interaction = _resolveVisibleTextEditingInteraction(
+      widget.store.state,
+    );
+    if (interaction == null) {
       return;
     }
     final nextText = controller.text;
     if (nextText == interaction.draftData.text) {
       return;
     }
+    final locale = Localizations.maybeLocaleOf(context);
+    final geometry = _resolveTextEditGeometryForDraft(
+      interaction: interaction,
+      text: nextText,
+      locale: locale,
+    );
+    _editingTextLayout = geometry.layout;
+    _editingTextLayoutKey = _resolveEditingLayoutIdentity(
+      data: geometry.data,
+      layoutWidth: geometry.rect.width,
+      locale: locale,
+    );
+    _clearEditingPainterLayoutCache();
     _resetVerticalCaretRun();
-    unawaited(widget.store.dispatch(UpdateTextEdit(text: nextText)));
+    _pendingTextDraftSync = _PendingTextDraftSync(
+      elementId: interaction.elementId,
+      text: nextText,
+      previewRect: geometry.rect,
+      sourceRect: interaction.rect,
+      sourceData: interaction.draftData,
+    );
+    _syncPendingTextDraftOverlay(
+      text: nextText,
+      previewRect: geometry.rect,
+      interaction: interaction,
+    );
+    _schedulePendingTextDraftSyncDispatch();
+  }
+
+  _TextDraftGeometry _resolveTextEditGeometryForDraft({
+    required TextEditingState interaction,
+    required String text,
+    required Locale? locale,
+  }) {
+    final nextData = interaction.draftData.copyWith(text: text);
+    final geometry = resolveTextEditingGeometry(
+      origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+      currentRect: interaction.rect,
+      data: nextData,
+      allowShrinkHeight: true,
+      locale: locale,
+    );
+    return _TextDraftGeometry(
+      data: nextData,
+      rect: geometry.rect,
+      layout: geometry.layout,
+    );
+  }
+
+  _PendingTextDraftSync _resolvePendingTextDraftSyncForInteraction({
+    required TextEditingState interaction,
+    required _PendingTextDraftSync pending,
+  }) {
+    if (pending.sourceRect == interaction.rect &&
+        identical(pending.sourceData, interaction.draftData)) {
+      return pending;
+    }
+    final locale = Localizations.maybeLocaleOf(context);
+    final geometry = _resolveTextEditGeometryForDraft(
+      interaction: interaction,
+      text: pending.text,
+      locale: locale,
+    );
+    _editingTextLayout = geometry.layout;
+    _editingTextLayoutKey = _resolveEditingLayoutIdentity(
+      data: geometry.data,
+      layoutWidth: geometry.rect.width,
+      locale: locale,
+    );
+    _clearEditingPainterLayoutCache();
+    return pending.copyWith(
+      previewRect: geometry.rect,
+      sourceRect: interaction.rect,
+      sourceData: interaction.draftData,
+    );
+  }
+
+  void _syncPendingTextDraftOverlay({
+    required String text,
+    required DrawRect previewRect,
+    required TextEditingState interaction,
+  }) {
+    final snapshot = _textOverlayNotifier.value;
+    if (snapshot == null || snapshot.elementId != interaction.elementId) {
+      return;
+    }
+    final nextSnapshot = snapshot.copyWith(
+      data: snapshot.data.copyWith(text: text),
+      rect: previewRect,
+    );
+    _setTextOverlaySnapshot(nextSnapshot);
+  }
+
+  void _schedulePendingTextDraftSyncDispatch() {
+    final pending = _pendingTextDraftSync;
+    if (pending == null) {
+      _cancelPendingTextDraftSyncDispatch();
+      return;
+    }
+
+    final now = DateTime.now();
+    final last = _lastTextDraftSyncAt;
+    if (last == null || now.difference(last) >= _textDraftSyncMinInterval) {
+      _cancelPendingTextDraftSyncDispatch();
+      _textDraftDispatcher.dispatch(pending);
+      return;
+    }
+
+    final delay = _textDraftSyncMinInterval - now.difference(last);
+    final timer = _textDraftSyncTimer;
+    if (timer != null && timer.isActive) {
+      return;
+    }
+    _textDraftSyncTimer = Timer(delay, () {
+      _textDraftSyncTimer = null;
+      if (!mounted || _pendingTextDraftSync == null) {
+        return;
+      }
+      _textDraftDispatcher.dispatch(_pendingTextDraftSync!);
+    });
+  }
+
+  void _cancelPendingTextDraftSyncDispatch() {
+    _textDraftSyncTimer?.cancel();
+    _textDraftSyncTimer = null;
+  }
+
+  Future<void> _dispatchPendingTextDraftSync(
+    _PendingTextDraftSync pending,
+  ) async {
+    final interaction = widget.store.state.application.interaction;
+    if (interaction is! TextEditingState ||
+        interaction.elementId != pending.elementId) {
+      if (_pendingTextDraftSync == pending) {
+        _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+      }
+      return;
+    }
+
+    if (_isSameTextValue(interaction.draftData.text, pending.text)) {
+      if (_pendingTextDraftSync == pending) {
+        _pendingTextDraftSync = null;
+        _cancelPendingTextDraftSyncDispatch();
+      }
+      return;
+    }
+
+    final resolvedPending = _resolvePendingTextDraftSyncForInteraction(
+      interaction: interaction,
+      pending: pending,
+    );
+    if (_pendingTextDraftSync == pending && resolvedPending != pending) {
+      _pendingTextDraftSync = resolvedPending;
+      _schedulePendingTextDraftSyncDispatch();
+    }
+
+    _lastTextDraftSyncAt = DateTime.now();
+    await widget.store.dispatch(
+      UpdateTextEdit(
+        text: resolvedPending.text,
+        rect: resolvedPending.previewRect,
+      ),
+    );
+  }
+
+  Future<void> _flushPendingTextDraftSync() async {
+    _cancelPendingTextDraftSyncDispatch();
+    await _textDraftDispatcher.flush();
+    final pending = _pendingTextDraftSync;
+    if (pending == null) {
+      return;
+    }
+    await _dispatchPendingTextDraftSync(pending);
   }
 
   void _resetVerticalCaretRun() {
@@ -2593,7 +4068,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     double? pageOffset,
   }) {
     final controller = _textController;
-    final layout = _editingPainterLayout;
+    final layout = _resolveEditingPainterLayout();
     if (controller == null || layout == null) {
       return;
     }
@@ -2602,7 +4077,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
 
-    final lineMetrics = layout.painter.computeLineMetrics();
+    final lineMetrics = layout.lineMetrics;
     if (lineMetrics.isEmpty) {
       return;
     }
@@ -2765,13 +4240,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return offset;
   }
 
-  void _handleStateChange(DrawState state) {
+  double _quantizeEditingLayoutWidth(double width) =>
+      (width * 10).roundToDouble() / 10;
+
+  bool _shouldPaintTextDecorations({
+    required TextData data,
+    required double opacity,
+  }) {
+    final backgroundOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
+    if (backgroundOpacity > 0) {
+      return true;
+    }
+    final strokeOpacity = (data.strokeColor.a * opacity).clamp(0.0, 1.0);
+    return data.strokeWidth > 0 && strokeOpacity > 0;
+  }
+
+  void _refreshPointerVisualsForState(DrawState state) {
     final position = _lastPointerPosition;
     if (position != null && _isPointerInside) {
-      // Use the combined path when a pointer position is available.
       if (!mounted) {
-        // When not mounted we cannot call setState, so compute
-        // cursor and hover state directly.
         _cursor = _resolveCursorForState(state, position);
         _hoveredSelectionElementId = null;
         _hoveredBindingElementId = _resolveHoverBindingElementId(
@@ -2784,17 +4271,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         );
         return;
       }
-      final hoverStateChanged = _updateCursorAndHoverForPosition(position);
-      // Always rebuild on state changes so the canvas picks up new
-      // interaction state (e.g. creating element with appended points).
-      // _updateCursorAndHoverForPosition only calls setState when hover
-      // values change, which is not enough for live creation updates.
-      if (!hoverStateChanged) {
-        setState(() {});
-      }
+      _updateCursorAndHoverForPosition(position);
       return;
     }
-    final cursor = _resolveCursorForState(state, position);
+
+    _refreshCursorAndClearHoverForState(state);
+  }
+
+  void _refreshCursorAndClearHoverForState(DrawState state) {
+    final cursor = _resolveCursorForState(state, _lastPointerPosition);
     if (!mounted) {
       _cursor = cursor;
       _hoveredSelectionElementId = null;
@@ -2803,10 +4288,94 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _updateCursorIfChanged(cursor);
-    final hoverStateChanged = _clearHoverState();
-    // Rebuild unconditionally so the canvas reflects the new state.
-    if (!hoverStateChanged) {
-      setState(() {});
+    _clearHoverState();
+  }
+
+  void _handleStateChange(DrawState state) {
+    final previousState = _lastObservedState;
+    _lastObservedState = state;
+
+    _syncTextEditingOverlayState(state);
+    // Keystrokes in text editing mutate only the draft payload and trigger
+    // very high-frequency state updates. Skip cursor hit-testing work and
+    // canvas tree rebuilds; the dedicated text overlay updates itself via
+    // [ValueListenableBuilder].
+    if (previousState != null &&
+        isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
+      if (shouldRefreshDynamicLayerForTextEditingDraftMutation(
+        previous: previousState,
+        next: state,
+      )) {
+        _refreshDynamicLayerSnapshot(
+          state,
+          assumeChanged: true,
+          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+        );
+      }
+      return;
+    }
+    if (previousState != null) {
+      final interactionMutationPlan = resolveInteractionMutationRefreshPlan(
+        previous: previousState,
+        next: state,
+      );
+      if (interactionMutationPlan != null) {
+        _handleInteractionMutation(
+          state,
+          previousState: previousState,
+          plan: interactionMutationPlan,
+        );
+        return;
+      }
+    }
+
+    if (previousState != null) {
+      final filterStyleMutation = resolveFilterStyleMutation(
+        previous: previousState,
+        next: state,
+      );
+      if (filterStyleMutation != null) {
+        _refreshPointerVisualsForState(state);
+        _refreshDynamicLayerSnapshotForFilterStyleMutation(
+          state,
+          changedFilterElementIds: filterStyleMutation.changedFilterElementIds,
+        );
+        return;
+      }
+    }
+    _refreshPointerVisualsForState(state);
+    _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+  }
+
+  void _handleInteractionMutation(
+    DrawState state, {
+    required DrawState previousState,
+    required InteractionMutationRefreshPlan plan,
+  }) {
+    if (plan.shouldRefreshPointerVisuals(
+      hasActivePointer: _activePointerIds.isNotEmpty,
+    )) {
+      _refreshPointerVisualsForState(state);
+    } else {
+      _refreshCursorAndClearHoverForState(state);
+    }
+
+    switch (plan.refreshMode) {
+      case InteractionMutationRefreshMode.dynamicOnly:
+        if (_tryRefreshCachedInteractionDynamicLayerSnapshot(
+          state,
+          previousState: previousState,
+          plan: plan,
+        )) {
+          return;
+        }
+        _refreshDynamicLayerSnapshot(
+          state,
+          assumeChanged: true,
+          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+        );
+      case InteractionMutationRefreshMode.canvasLayers:
+        _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
     }
   }
 
@@ -2814,28 +4383,28 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted) {
       return;
     }
+    _cachedInputSelectionConfigSource = null;
+    _cachedInputSelectionConfig = null;
+    _cachedInputSelectionScale = null;
 
-    final position = _lastPointerPosition;
-    late final bool hoverStateChanged;
-    if (position != null && _isPointerInside) {
-      hoverStateChanged = _updateCursorAndHoverForPosition(position);
-    } else {
-      _updateCursorIfChanged(
-        _resolveCursorForState(widget.store.state, position),
-      );
-      hoverStateChanged = _clearHoverState();
-    }
-    if (!hoverStateChanged) {
-      setState(() {});
-    }
+    _refreshPointerVisualsForState(widget.store.state);
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   void _handleTextRenderingCacheInvalidation() {
     if (!mounted) {
       return;
     }
+    _clearEditingTextLayoutCache();
+    _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
-    setState(() {});
+    _refreshCanvasLayerSnapshots(
+      widget.store.state,
+      assumeDynamicChanged: true,
+    );
   }
 
   void _handleSystemFontsChange() {
@@ -2895,6 +4464,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   Future<void> _resetInteractionForToolChange() async {
+    _pointerMoveDispatcher.reset();
+    await _flushPendingTextDraftSync();
     final interaction = widget.store.state.application.interaction;
     if (interaction is TextEditingState) {
       await widget.store.dispatch(
@@ -2916,4 +4487,277 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     await widget.store.dispatch(const ClearSelection());
   }
+}
+
+@immutable
+class _CanvasLayerSceneSnapshot {
+  const _CanvasLayerSceneSnapshot({
+    required this.staticPreviewElements,
+    required this.dynamicPreviewElements,
+    required this.dynamicPreviewElementsRevision,
+    required this.dynamicPreviewElementIds,
+    required this.optimizedDynamicElementIds,
+    required this.optimizedSceneHasPotentialOccluders,
+    required this.dynamicLayerStartIndex,
+    required this.dynamicLayerOwnsWholeScene,
+    required this.creatingSnapshot,
+    required this.highlightMaskLayer,
+    required this.highlightMaskConfig,
+    required this.watermarkLayer,
+    required this.watermarkConfig,
+    required this.preferFastFilterFallback,
+    required this.textRenderingCacheRevision,
+  });
+
+  final Map<String, ElementState> staticPreviewElements;
+  final Map<String, ElementState> dynamicPreviewElements;
+  final int? dynamicPreviewElementsRevision;
+  final Set<String>? dynamicPreviewElementIds;
+  final Set<String> optimizedDynamicElementIds;
+  final bool optimizedSceneHasPotentialOccluders;
+  final int? dynamicLayerStartIndex;
+  final bool dynamicLayerOwnsWholeScene;
+  final CreatingElementSnapshot? creatingSnapshot;
+  final HighlightMaskLayer highlightMaskLayer;
+  final HighlightMaskConfig highlightMaskConfig;
+  final WatermarkLayer watermarkLayer;
+  final WatermarkConfig watermarkConfig;
+  final bool preferFastFilterFallback;
+  final int textRenderingCacheRevision;
+}
+
+@immutable
+class _DynamicLayerSnapshot {
+  const _DynamicLayerSnapshot({
+    required this.stateView,
+    required this.renderKey,
+  });
+
+  final DrawStateView stateView;
+  final DynamicCanvasRenderKey renderKey;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _DynamicLayerSnapshot &&
+          identical(other.stateView, stateView) &&
+          other.renderKey == renderKey;
+
+  @override
+  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
+}
+
+@immutable
+class _TextEditingOverlaySnapshot {
+  const _TextEditingOverlaySnapshot({
+    required this.elementId,
+    required this.data,
+    required this.rect,
+    required this.isNew,
+    required this.rotation,
+    required this.opacity,
+    required this.initialCursorPosition,
+  });
+
+  factory _TextEditingOverlaySnapshot.fromInteraction(
+    TextEditingState interaction,
+  ) => _TextEditingOverlaySnapshot(
+    elementId: interaction.elementId,
+    data: interaction.draftData,
+    rect: interaction.rect,
+    isNew: interaction.isNew,
+    rotation: interaction.rotation,
+    opacity: interaction.opacity,
+    initialCursorPosition: interaction.initialCursorPosition,
+  );
+
+  final String elementId;
+  final TextData data;
+  final DrawRect rect;
+  final bool isNew;
+  final double rotation;
+  final double opacity;
+  final DrawPoint? initialCursorPosition;
+
+  _TextEditingOverlaySnapshot copyWith({TextData? data, DrawRect? rect}) =>
+      _TextEditingOverlaySnapshot(
+        elementId: elementId,
+        data: data ?? this.data,
+        rect: rect ?? this.rect,
+        isNew: isNew,
+        rotation: rotation,
+        opacity: opacity,
+        initialCursorPosition: initialCursorPosition,
+      );
+
+  TextEditingState toInteractionState() => TextEditingState(
+    elementId: elementId,
+    draftData: data,
+    rect: rect,
+    isNew: isNew,
+    opacity: opacity,
+    rotation: rotation,
+    initialCursorPosition: initialCursorPosition,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _TextEditingOverlaySnapshot &&
+          other.elementId == elementId &&
+          identical(other.data, data) &&
+          other.rect == rect &&
+          other.isNew == isNew &&
+          other.rotation == rotation &&
+          other.opacity == opacity &&
+          other.initialCursorPosition == initialCursorPosition;
+
+  @override
+  int get hashCode => Object.hash(
+    elementId,
+    identityHashCode(data),
+    rect,
+    isNew,
+    rotation,
+    opacity,
+    initialCursorPosition,
+  );
+}
+
+@immutable
+class _EditingTextOverlayPainter extends CustomPainter {
+  const _EditingTextOverlayPainter({
+    required this.elementId,
+    required this.data,
+    required this.opacity,
+    required this.layout,
+    required this.cacheRevision,
+    this.locale,
+  });
+
+  static const _renderer = TextRenderer();
+
+  final String elementId;
+  final TextData data;
+  final double opacity;
+  final TextLayoutMetrics layout;
+  final int cacheRevision;
+  final Locale? locale;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) {
+      return;
+    }
+
+    final element = ElementState(
+      id: elementId,
+      rect: DrawRect(maxX: size.width, maxY: size.height),
+      rotation: 0,
+      opacity: opacity,
+      zIndex: 0,
+      data: data,
+    );
+    _renderer.renderWithOptions(
+      canvas: canvas,
+      element: element,
+      scaleFactor: 1,
+      locale: locale,
+      precomputedLayout: layout,
+      renderFill: false,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _EditingTextOverlayPainter oldDelegate) =>
+      oldDelegate.elementId != elementId ||
+      oldDelegate.data != data ||
+      oldDelegate.opacity != opacity ||
+      !identical(oldDelegate.layout, layout) ||
+      oldDelegate.cacheRevision != cacheRevision ||
+      oldDelegate.locale != locale;
+}
+
+@immutable
+class _PendingTextDraftSync {
+  const _PendingTextDraftSync({
+    required this.elementId,
+    required this.text,
+    required this.previewRect,
+    required this.sourceRect,
+    required this.sourceData,
+  });
+
+  final String elementId;
+  final String text;
+  final DrawRect previewRect;
+  final DrawRect sourceRect;
+  final TextData sourceData;
+
+  _PendingTextDraftSync copyWith({
+    String? elementId,
+    String? text,
+    DrawRect? previewRect,
+    DrawRect? sourceRect,
+    TextData? sourceData,
+  }) => _PendingTextDraftSync(
+    elementId: elementId ?? this.elementId,
+    text: text ?? this.text,
+    previewRect: previewRect ?? this.previewRect,
+    sourceRect: sourceRect ?? this.sourceRect,
+    sourceData: sourceData ?? this.sourceData,
+  );
+}
+
+@immutable
+class _TextDraftGeometry {
+  const _TextDraftGeometry({
+    required this.data,
+    required this.rect,
+    required this.layout,
+  });
+
+  final TextData data;
+  final DrawRect rect;
+  final TextLayoutMetrics layout;
+}
+
+@immutable
+class _EditingLayoutIdentity {
+  const _EditingLayoutIdentity({
+    required this.textToken,
+    required this.fontSize,
+    required this.fontFamily,
+    required this.horizontalAlign,
+    required this.layoutWidth,
+    required this.localeTag,
+  });
+
+  final String textToken;
+  final double fontSize;
+  final String? fontFamily;
+  final TextHorizontalAlign horizontalAlign;
+  final double layoutWidth;
+  final String? localeTag;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _EditingLayoutIdentity &&
+          identical(other.textToken, textToken) &&
+          other.fontSize == fontSize &&
+          other.fontFamily == fontFamily &&
+          other.horizontalAlign == horizontalAlign &&
+          other.layoutWidth == layoutWidth &&
+          other.localeTag == localeTag;
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(textToken),
+    fontSize,
+    fontFamily,
+    horizontalAlign,
+    layoutWidth,
+    localeTag,
+  );
 }

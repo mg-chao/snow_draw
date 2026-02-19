@@ -3,19 +3,22 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../draw/elements/types/filter/filter_data.dart';
+import '../../draw/elements/types/serial_number/serial_number_data.dart';
+import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import '../../draw/models/interaction_state.dart';
 import '../../draw/render/element_renderer.dart';
 import '../../draw/services/log/log_service.dart';
 import '../../draw/types/draw_rect.dart';
-import '../../draw/utils/selection_calculator.dart';
 import 'filter_scene_compositor.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
+import 'visible_element_scene_resolver.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 
@@ -79,84 +82,98 @@ class StaticCanvasPainter extends CustomPainter {
     }
 
     if (!skipBaseElementScene) {
-      // Query visible elements. Preview elements are handled below to avoid
-      // lifting them into a higher render layer.
-      final visibleElements = document.queryElementsInRectOrdered(viewportRect);
-      if (creatingElementId != null) {
-        visibleElements.removeWhere(
-          (element) => element.id == creatingElementId,
-        );
-      }
-      if (dynamicLayerStartIndex != null) {
-        visibleElements.removeWhere((element) {
-          final orderIndex = document.getOrderIndex(element.id) ?? -1;
-          return orderIndex >= dynamicLayerStartIndex;
-        });
-      }
-      if (previewElements.isNotEmpty) {
-        final visibleIds = {for (final element in visibleElements) element.id};
-        for (final preview in previewElements.values) {
-          if (visibleIds.contains(preview.id)) {
-            continue;
-          }
-          final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-          if (_rectsIntersect(aabb, viewportRect)) {
-            visibleElements.add(preview);
-            visibleIds.add(preview.id);
-          }
+      final maxOrderIndex = dynamicLayerStartIndex == null
+          ? null
+          : dynamicLayerStartIndex - 1;
+      final effectiveElements = resolveVisibleElementScene(
+        document: document,
+        viewportRect: viewportRect,
+        previewElementsById: previewElements,
+        maxOrderIndex: maxOrderIndex,
+        excludedElementId: creatingElementId,
+      );
+
+      var hasFilterElement = false;
+      final visibleTextIds = <String>{};
+      for (final element in effectiveElements) {
+        if (!hasFilterElement && element.data is FilterData) {
+          hasFilterElement = true;
+        }
+        if (element.opacity > 0 && element.data is TextData) {
+          visibleTextIds.add(element.id);
         }
       }
-
-      final serialConnectors = resolveSerialNumberConnectorMap(stateView);
-
-      // Draw visible elements in document z-order, applying preview geometry
-      // without lifting elements to the top layer.
-      final effectiveElements = <ElementState>[];
-      if (previewElements.isEmpty) {
-        effectiveElements.addAll(visibleElements);
-      } else {
-        for (final element in visibleElements) {
-          final preview = previewElements[element.id];
-          final effectiveElement = preview ?? element;
-          if (preview != null) {
-            final aabb = SelectionCalculator.computeElementWorldAabb(
-              effectiveElement,
-            );
-            if (!_rectsIntersect(aabb, viewportRect)) {
-              continue;
-            }
-          }
-          effectiveElements.add(effectiveElement);
-        }
-      }
-
-      filterSceneCompositor.paintElements(
-        canvas: canvas,
-        elements: effectiveElements,
-        paintElement: (sceneCanvas, element) {
-          elementRenderer.renderElement(
-            canvas: sceneCanvas,
-            element: element,
-            scaleFactor: scale,
-            registry: renderKey.elementRegistry,
-            locale: renderKey.locale,
+      _includeEditingTextIdForSerialConnectors(
+        stateView: stateView,
+        previewElementsById: previewElements,
+        visibleTextIds: visibleTextIds,
+      );
+      final shouldPaintSerialConnectors =
+          visibleTextIds.isNotEmpty &&
+          _shouldPaintSerialConnectors(
+            boundTextIds: document.boundTextIds,
+            previewElementsById: previewElements,
+            visibleTextIds: visibleTextIds,
           );
+      final serialConnectors = shouldPaintSerialConnectors
+          ? resolveSerialNumberConnectorMap(
+              stateView,
+              previewElementsById: previewElements,
+              visibleTextElementIds: visibleTextIds,
+            )
+          : const <String, List<SerialNumberTextConnector>>{};
+      void paintElement(Canvas sceneCanvas, ElementState element) {
+        elementRenderer.renderElement(
+          canvas: sceneCanvas,
+          element: element,
+          scaleFactor: scale,
+          registry: renderKey.elementRegistry,
+          locale: renderKey.locale,
+        );
+        if (shouldPaintSerialConnectors) {
           drawSerialNumberConnectorsForText(
             canvas: sceneCanvas,
             textElement: element,
             connectorsByTextId: serialConnectors,
           );
-        },
-      );
-      if (renderKey.performanceMonitoringEnabled) {
-        final diagnostics = filterSceneCompositor.lastDiagnostics;
-        if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
-          _staticCanvasFallbackLog.warning('Heavy static filter frame', {
-            'pictureRecorders': diagnostics.pictureRecorders,
-            'saveLayers': diagnostics.saveLayers,
-            'filterPasses': diagnostics.filterPasses,
-            'batchCount': diagnostics.batchCount,
-          });
+        }
+      }
+
+      if (!hasFilterElement) {
+        for (final element in effectiveElements) {
+          paintElement(canvas, element);
+        }
+      } else {
+        final filterCacheContext = shouldPaintSerialConnectors
+            ? null
+            : _buildFilterCacheContext(scale: scale);
+        filterSceneCompositor.paintElements(
+          canvas: canvas,
+          elements: effectiveElements,
+          cacheContext: filterCacheContext,
+          visibleBounds: Rect.fromLTWH(
+            viewportRect.minX,
+            viewportRect.minY,
+            viewportRect.width,
+            viewportRect.height,
+          ),
+          paintElement: paintElement,
+        );
+        if (renderKey.performanceMonitoringEnabled) {
+          final diagnostics = filterSceneCompositor.lastDiagnostics;
+          if (diagnostics.pictureRecorders > 12 ||
+              diagnostics.filterPasses > 6) {
+            _staticCanvasFallbackLog.warning('Heavy static filter frame', {
+              'pictureRecorders': diagnostics.pictureRecorders,
+              'saveLayers': diagnostics.saveLayers,
+              'filterPasses': diagnostics.filterPasses,
+              'batchCount': diagnostics.batchCount,
+              'batchCacheHits': diagnostics.batchCacheHits,
+              'batchCacheMisses': diagnostics.batchCacheMisses,
+              'prefixSceneCacheHits': diagnostics.prefixSceneCacheHits,
+              'prefixSceneCacheMisses': diagnostics.prefixSceneCacheMisses,
+            });
+          }
         }
       }
     }
@@ -173,13 +190,16 @@ class StaticCanvasPainter extends CustomPainter {
     }
 
     if (renderKey.watermarkLayer == WatermarkLayer.staticLayer) {
+      canvas
+        ..save()
+        ..scale(1 / scale, 1 / scale)
+        ..translate(-camera.position.x, -camera.position.y);
       paintWatermark(
         canvas: canvas,
         viewportSize: size,
         config: renderKey.watermarkConfig,
-        scaleFactor: scale,
-        cameraPosition: Offset(camera.position.x, camera.position.y),
       );
+      canvas.restore();
     }
 
     canvas.restore();
@@ -197,6 +217,10 @@ class StaticCanvasPainter extends CustomPainter {
 
   static Paint? _cachedBackgroundPaint;
   static Color? _cachedBackgroundColor;
+  static final _minorGridPaint = Paint()..style = PaintingStyle.stroke;
+  static final _majorGridPaint = Paint()..style = PaintingStyle.stroke;
+  static var _minorGridPointBuffer = Float32List(0);
+  static var _majorGridPointBuffer = Float32List(0);
 
   static Paint _resolveBackgroundPaint(Color color) {
     if (_cachedBackgroundPaint != null && _cachedBackgroundColor == color) {
@@ -306,12 +330,10 @@ class StaticCanvasPainter extends CustomPainter {
     final majorColor = config.lineColor.withValues(
       alpha: config.majorLineOpacity,
     );
-    final minorPaint = Paint()
-      ..style = PaintingStyle.stroke
+    final minorPaint = _minorGridPaint
       ..strokeWidth = minorStrokeWidth
       ..color = minorColor;
-    final majorPaint = Paint()
-      ..style = PaintingStyle.stroke
+    final majorPaint = _majorGridPaint
       ..strokeWidth = majorStrokeWidth
       ..color = majorColor;
 
@@ -341,14 +363,20 @@ class StaticCanvasPainter extends CustomPainter {
       final minorVerticalCount = verticalLineCount - majorVerticalCount;
       final minorHorizontalCount = horizontalLineCount - majorHorizontalCount;
 
-      // Pre-allocate Float32Lists for maximum performance.
+      // Reuse typed-data buffers to avoid per-frame allocations.
       // Each line needs 4 floats: x1, y1, x2, y2.
-      final majorPoints = Float32List(
-        (majorVerticalCount + majorHorizontalCount) * 4,
+      final majorPointCount = (majorVerticalCount + majorHorizontalCount) * 4;
+      final minorPointCount = (minorVerticalCount + minorHorizontalCount) * 4;
+      _majorGridPointBuffer = _ensurePointBuffer(
+        _majorGridPointBuffer,
+        majorPointCount,
       );
-      final minorPoints = Float32List(
-        (minorVerticalCount + minorHorizontalCount) * 4,
+      _minorGridPointBuffer = _ensurePointBuffer(
+        _minorGridPointBuffer,
+        minorPointCount,
       );
+      final majorPoints = _majorGridPointBuffer;
+      final minorPoints = _minorGridPointBuffer;
 
       var majorIdx = 0;
       var minorIdx = 0;
@@ -386,11 +414,19 @@ class StaticCanvasPainter extends CustomPainter {
       }
 
       // Draw all lines with just 2 GPU draw calls.
-      if (minorPoints.isNotEmpty) {
-        canvas.drawRawPoints(ui.PointMode.lines, minorPoints, minorPaint);
+      if (minorIdx > 0) {
+        canvas.drawRawPoints(
+          ui.PointMode.lines,
+          _slicePointBuffer(minorPoints, minorIdx),
+          minorPaint,
+        );
       }
-      if (majorPoints.isNotEmpty) {
-        canvas.drawRawPoints(ui.PointMode.lines, majorPoints, majorPaint);
+      if (majorIdx > 0) {
+        canvas.drawRawPoints(
+          ui.PointMode.lines,
+          _slicePointBuffer(majorPoints, majorIdx),
+          majorPaint,
+        );
       }
     } else {
       // Only major lines visible at this zoom level.
@@ -401,7 +437,12 @@ class StaticCanvasPainter extends CustomPainter {
 
       final verticalCount = endXIndex - startXIndex + 1;
       final horizontalCount = endYIndex - startYIndex + 1;
-      final majorPoints = Float32List((verticalCount + horizontalCount) * 4);
+      final majorPointCount = (verticalCount + horizontalCount) * 4;
+      _majorGridPointBuffer = _ensurePointBuffer(
+        _majorGridPointBuffer,
+        majorPointCount,
+      );
+      final majorPoints = _majorGridPointBuffer;
 
       var idx = 0;
 
@@ -424,7 +465,13 @@ class StaticCanvasPainter extends CustomPainter {
       }
 
       // Single GPU draw call for all major lines.
-      canvas.drawRawPoints(ui.PointMode.lines, majorPoints, majorPaint);
+      if (idx > 0) {
+        canvas.drawRawPoints(
+          ui.PointMode.lines,
+          _slicePointBuffer(majorPoints, idx),
+          majorPaint,
+        );
+      }
     }
   }
 
@@ -434,17 +481,18 @@ class StaticCanvasPainter extends CustomPainter {
     required double scale,
     required double minSpacing,
   }) {
-    if (majorEvery <= 1) {
-      return majorEvery;
+    final normalizedMajorEvery = majorEvery < 1 ? 1 : majorEvery;
+    if (normalizedMajorEvery == 1) {
+      return 1;
     }
     if (scale <= 0 || minSpacing <= 0) {
-      return majorEvery;
+      return normalizedMajorEvery;
     }
 
-    var factor = majorEvery;
+    var factor = normalizedMajorEvery;
     var step = baseSize * factor;
     while (step * scale < minSpacing) {
-      factor *= majorEvery;
+      factor *= normalizedMajorEvery;
       step = baseSize * factor;
     }
     return factor;
@@ -473,14 +521,88 @@ class StaticCanvasPainter extends CustomPainter {
 
   double _smoothStep(double t) => t * t * (3 - 2 * t);
 
+  Float32List _ensurePointBuffer(Float32List current, int requiredLength) {
+    if (requiredLength <= current.length) {
+      return current;
+    }
+
+    var nextLength = current.isEmpty ? 128 : current.length;
+    while (nextLength < requiredLength) {
+      nextLength *= 2;
+    }
+    return Float32List(nextLength);
+  }
+
+  Float32List _slicePointBuffer(Float32List buffer, int usedLength) {
+    if (usedLength == buffer.length) {
+      return buffer;
+    }
+    return Float32List.sublistView(buffer, 0, usedLength);
+  }
+
   bool _isMajorLine(int index, int majorEvery) =>
       majorEvery > 0 && index % majorEvery == 0;
 
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
+  FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
+    final localeTag = renderKey.locale?.toLanguageTag() ?? '';
+    final normalizedScale = scale == 0 ? 1.0 : scale;
+    return FilterRenderCacheContext(
+      domain: FilterRenderCacheDomain.staticLayer,
+      documentVersion: renderKey.documentVersion,
+      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
+      scaleKey: (normalizedScale * 1000).round(),
+      localeTag: localeTag,
+    );
+  }
+
+  bool _shouldPaintSerialConnectors({
+    required Set<String> boundTextIds,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    for (final textId in visibleTextIds) {
+      if (boundTextIds.contains(textId)) {
+        return true;
+      }
+    }
+    for (final previewElement in previewElementsById.values) {
+      final data = previewElement.data;
+      if (data is SerialNumberData &&
+          data.textElementId != null &&
+          data.textElementId!.isNotEmpty &&
+          visibleTextIds.contains(data.textElementId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void _includeEditingTextIdForSerialConnectors({
+    required DrawStateView stateView,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) {
+    final interaction = stateView.state.application.interaction;
+    if (interaction is! TextEditingState || interaction.isNew) {
+      return;
+    }
+
+    final editingTextId = interaction.elementId;
+    final previewElement = previewElementsById[editingTextId];
+    if (previewElement != null) {
+      if (previewElement.data is TextData) {
+        visibleTextIds.add(editingTextId);
+      }
+      return;
+    }
+
+    final persistedElement = stateView.state.domain.document.getElementById(
+      editingTextId,
+    );
+    if (persistedElement?.data is TextData) {
+      visibleTextIds.add(editingTextId);
+    }
+  }
 
   @override
   bool shouldRepaint(covariant StaticCanvasPainter oldDelegate) =>

@@ -6,6 +6,7 @@ import '../../../types/element_style.dart';
 import '../../../utils/stroke_pattern_utils.dart';
 import '../../core/element_renderer.dart';
 import '../arrow/arrow_visual_cache.dart';
+import '../shared/two_point_stroke_utils.dart';
 import 'line_data.dart';
 
 class LineRenderer extends ElementTypeRenderer {
@@ -35,6 +36,20 @@ class LineRenderer extends ElementTypeRenderer {
     final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
     if (strokeOpacity <= 0 && fillOpacity <= 0) {
       return;
+    }
+    if (_canUseTwoPointStrokeFastPath(
+      data: data,
+      strokeOpacity: strokeOpacity,
+      fillOpacity: fillOpacity,
+    )) {
+      if (_renderTwoPointStrokeFastPath(
+        canvas: canvas,
+        element: element,
+        data: data,
+        strokeOpacity: strokeOpacity,
+      )) {
+        return;
+      }
     }
 
     final cached = arrowVisualCache.resolve(element: element, data: data);
@@ -126,4 +141,33 @@ class LineRenderer extends ElementTypeRenderer {
 
   bool _isClosed(LineData data) =>
       data.points.length > 2 && data.points.first == data.points.last;
+
+  bool _canUseTwoPointStrokeFastPath({
+    required LineData data,
+    required double strokeOpacity,
+    required double fillOpacity,
+  }) =>
+      canUseTwoPointStrokeFastPath(
+        pointCount: data.points.length,
+        strokeOpacity: strokeOpacity,
+        fillOpacity: fillOpacity,
+        strokeWidth: data.strokeWidth,
+      ) &&
+      !_isClosed(data);
+
+  bool _renderTwoPointStrokeFastPath({
+    required Canvas canvas,
+    required ElementState element,
+    required LineData data,
+    required double strokeOpacity,
+  }) => renderTwoPointNormalizedStroke(
+    canvas: canvas,
+    rect: element.rect,
+    rotation: element.rotation,
+    startPoint: data.points.first,
+    endPoint: data.points.last,
+    strokeWidth: data.strokeWidth,
+    strokeStyle: data.strokeStyle,
+    strokeColor: data.color.withValues(alpha: strokeOpacity),
+  );
 }

@@ -26,8 +26,8 @@ import '../../core/reducer_utils.dart';
 
 /// Reducer for element creation.
 ///
-/// Handles: CreateElement, UpdateCreatingElement, FinishCreateElement,
-/// CancelCreateElement.
+/// Handles: CreateElement, UpdateCreatingElement,
+/// UpdateCreatingElementBatch, FinishCreateElement, CancelCreateElement.
 @immutable
 class CreateElementReducer {
   const CreateElementReducer();
@@ -42,6 +42,11 @@ class CreateElementReducer {
   ) => switch (action) {
     final CreateElement a => _startCreateElement(state, a, context),
     final UpdateCreatingElement a => _updateCreatingElement(state, a, context),
+    final UpdateCreatingElementBatch a => _updateCreatingElementBatch(
+      state,
+      a,
+      context,
+    ),
     final AddArrowPoint a => _addCreationPoint(state, a, context),
     FinishCreateElement _ => _finishCreateElement(state, context),
     CancelCreateElement _ => _cancelCreateElement(state),
@@ -222,6 +227,53 @@ class CreateElementReducer {
       snapGuides: updateResult.snapGuides,
       creationMode: updateResult.creationMode,
     );
+    return state.copyWith(
+      application: state.application.copyWith(interaction: nextInteraction),
+    );
+  }
+
+  DrawState _updateCreatingElementBatch(
+    DrawState state,
+    UpdateCreatingElementBatch action,
+    CreateElementReducerDeps context,
+  ) {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState || action.positions.isEmpty) {
+      return state;
+    }
+
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: context.config,
+      ctrlPressed: action.snapOverride,
+    );
+    final updateResult = strategy.updateBatch(
+      state: state,
+      config: context.config,
+      creatingState: interaction,
+      positions: action.positions,
+      maintainAspectRatio: action.maintainAspectRatio,
+      createFromCenter: action.createFromCenter,
+      snappingMode: snappingMode,
+    );
+    if (_isCreationStateUnchanged(interaction, updateResult)) {
+      return state;
+    }
+
+    final baseElement = interaction.element;
+    final updatedElement = updateResult.data == interaction.elementData
+        ? baseElement
+        : baseElement.copyWith(data: updateResult.data);
+    final nextInteraction = interaction.copyWith(
+      element: updatedElement,
+      currentRect: updateResult.rect,
+      snapGuides: updateResult.snapGuides,
+      creationMode: updateResult.creationMode,
+    );
+
     return state.copyWith(
       application: state.application.copyWith(interaction: nextInteraction),
     );

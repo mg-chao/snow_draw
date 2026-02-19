@@ -3,6 +3,7 @@ import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/free_draw/free_draw_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/interaction_state.dart';
@@ -12,6 +13,7 @@ import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
+import '../pointer_sample_resampler.dart';
 
 /// Plugin that handles element creation via the current tool.
 class CreatePlugin extends DrawInputPlugin {
@@ -34,6 +36,7 @@ class CreatePlugin extends DrawInputPlugin {
 
   static const _doubleClickThreshold = Duration(milliseconds: 500);
   static const double _doubleClickToleranceMultiplier = 2;
+  static const _maxFreeDrawBatchSamples = 96;
 
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
@@ -46,6 +49,8 @@ class CreatePlugin extends DrawInputPlugin {
   var _justFinishedDragCreate = false;
   DateTime? _lastClickTime;
   DrawPoint? _lastClickPosition;
+  DrawPoint? _lastUpdatePosition;
+  KeyModifiers? _lastUpdateModifiers;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -141,6 +146,32 @@ class CreatePlugin extends DrawInputPlugin {
       }
     }
 
+    final isFreeDrawCreating = _isFreeDrawCreating(state);
+    final hasBatchedSamples =
+        isFreeDrawCreating && event.sampleCount > 1 && !event.modifiers.shift;
+    if (!_shouldDispatchCreatingUpdate(
+      event.position,
+      event.modifiers,
+      hasBatchedSamples: hasBatchedSamples,
+    )) {
+      return handled(message: 'Create unchanged');
+    }
+
+    if (hasBatchedSamples) {
+      final sampledPoints = resamplePointerSamples(
+        sampledPoints: event.sampledPoints,
+        maxSamples: _maxFreeDrawBatchSamples,
+      );
+      await dispatch(
+        UpdateCreatingElementBatch.frozen(
+          positions: sampledPoints,
+          createFromCenter: event.modifiers.alt,
+          snapOverride: event.modifiers.control,
+        ),
+      );
+      return handled(message: 'Create updated (batched)');
+    }
+
     await dispatch(
       UpdateCreatingElement(
         currentPosition: event.position,
@@ -155,6 +186,9 @@ class CreatePlugin extends DrawInputPlugin {
   Future<PluginResult> _handlePointerHover(PointerHoverInputEvent event) async {
     if (!_isPointCreating(state) || !_isMultiPoint) {
       return unhandled();
+    }
+    if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
+      return handled(message: 'Create hover unchanged');
     }
     await dispatch(
       UpdateCreatingElement(
@@ -288,6 +322,14 @@ class CreatePlugin extends DrawInputPlugin {
     return interaction is CreatingState && interaction.isPointCreation;
   }
 
+  bool _isFreeDrawCreating(DrawState state) {
+    final interaction = state.application.interaction;
+    if (interaction is! CreatingState) {
+      return false;
+    }
+    return interaction.elementData is FreeDrawData;
+  }
+
   bool _isElbowArrowCreating(DrawState state) {
     final interaction = state.application.interaction;
     if (interaction is! CreatingState) {
@@ -322,18 +364,59 @@ class CreatePlugin extends DrawInputPlugin {
     _lastClickPosition = null;
   }
 
+  bool _shouldDispatchCreatingUpdate(
+    DrawPoint position,
+    KeyModifiers modifiers, {
+    bool hasBatchedSamples = false,
+  }) {
+    if (!hasBatchedSamples &&
+        _positionsMatchForDedup(
+          previous: _lastUpdatePosition,
+          next: position,
+        ) &&
+        _lastUpdateModifiers == modifiers) {
+      return false;
+    }
+    _lastUpdatePosition = position;
+    _lastUpdateModifiers = modifiers;
+    return true;
+  }
+
+  bool _positionsMatchForDedup({
+    required DrawPoint? previous,
+    required DrawPoint next,
+  }) {
+    if (previous == null) {
+      return false;
+    }
+    return previous.x == next.x && previous.y == next.y;
+  }
+
   void _syncInternalState() {
     if (!_isPointCreating(state)) {
-      _resetPointCreationState();
+      _resetPointCreationSessionState();
+      if (!state.application.isCreating) {
+        _resetUpdateSignature();
+      }
     }
   }
 
   void _resetPointCreationState() {
+    _resetPointCreationSessionState();
+    _resetUpdateSignature();
+  }
+
+  void _resetPointCreationSessionState() {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
     _justFinishedDragCreate = false;
     _clearClickState();
+  }
+
+  void _resetUpdateSignature() {
+    _lastUpdatePosition = null;
+    _lastUpdateModifiers = null;
   }
 
   DrawStateView get _stateView {

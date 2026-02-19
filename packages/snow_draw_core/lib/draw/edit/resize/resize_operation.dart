@@ -103,6 +103,9 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       state,
       selectedIdsAtStart,
     );
+    final referenceElementAabbs = ObjectSnapService.buildReferenceAabbs(
+      referenceElements,
+    );
     final forceSerialNumberAspectRatio = _shouldLockSerialNumberAspectRatio(
       state: state,
       selectedIds: selectedIdsAtStart,
@@ -124,6 +127,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       selectionPadding: typedParams.selectionPadding ?? 0.0,
       elementSnapshots: elementSnapshots,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
+      referenceElementAabbs: referenceElementAabbs,
       forceSerialNumberAspectRatio: forceSerialNumberAspectRatio,
     );
   }
@@ -234,6 +238,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       final result = objectSnapService.snapResize(
         targetRect: newBounds,
         referenceElements: typedContext.referenceElements,
+        referenceAabbs: typedContext.referenceElementAabbs,
         snapDistance: snapDistance,
         targetAnchorsX: anchorsX,
         targetAnchorsY: anchorsY,

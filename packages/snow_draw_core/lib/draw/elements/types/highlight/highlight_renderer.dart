@@ -7,6 +7,13 @@ import 'highlight_data.dart';
 
 class HighlightRenderer extends ElementTypeRenderer {
   const HighlightRenderer();
+  static final _fillPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..blendMode = BlendMode.multiply
+    ..isAntiAlias = true;
+  static final _strokePaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..isAntiAlias = true;
 
   @override
   void render({
@@ -41,11 +48,8 @@ class HighlightRenderer extends ElementTypeRenderer {
     final shapeRect = Rect.fromLTWH(0, 0, rect.width, rect.height);
 
     if (fillOpacity > 0) {
-      final fillPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = data.color.withValues(alpha: fillOpacity)
-        ..blendMode = BlendMode.multiply
-        ..isAntiAlias = true;
+      final fillPaint = _fillPaint
+        ..color = data.color.withValues(alpha: fillOpacity);
       if (data.shape == HighlightShape.rectangle) {
         canvas.drawRect(shapeRect, fillPaint);
       } else {
@@ -54,11 +58,9 @@ class HighlightRenderer extends ElementTypeRenderer {
     }
 
     if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      final strokePaint = Paint()
-        ..style = PaintingStyle.stroke
+      final strokePaint = _strokePaint
         ..strokeWidth = data.strokeWidth
-        ..color = data.strokeColor.withValues(alpha: strokeOpacity)
-        ..isAntiAlias = true;
+        ..color = data.strokeColor.withValues(alpha: strokeOpacity);
       if (data.shape == HighlightShape.rectangle) {
         canvas.drawRect(shapeRect, strokePaint);
       } else {

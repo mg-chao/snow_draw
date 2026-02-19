@@ -263,6 +263,23 @@ void main() {
       entry.dispose();
     });
 
+    test('shouldRecordPicture defers recording until second stable frame', () {
+      final entry = FreeDrawVisualEntry(
+        data: const FreeDrawData(),
+        width: 100,
+        height: 100,
+        pointCount: 3,
+        path: Path(),
+        strokePath: null,
+      );
+
+      expect(entry.shouldRecordPicture(1), isFalse);
+      expect(entry.shouldRecordPicture(1), isTrue);
+      expect(entry.shouldRecordPicture(0.5), isFalse);
+      expect(entry.shouldRecordPicture(0.5), isTrue);
+      entry.dispose();
+    });
+
     test('setCachedPicture disposes previous picture', () {
       final entry = FreeDrawVisualEntry(
         data: const FreeDrawData(),

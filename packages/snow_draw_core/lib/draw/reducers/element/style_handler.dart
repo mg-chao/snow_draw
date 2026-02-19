@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_style_updatable_data.dart';
@@ -10,7 +8,7 @@ import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/serial_number/serial_number_layout.dart';
 import '../../elements/types/text/text_data.dart';
-import '../../elements/types/text/text_layout.dart';
+import '../../elements/types/text/text_editing_geometry.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
@@ -148,11 +146,10 @@ DrawState handleUpdateElementsStyle(
       if (data is TextData &&
           updatedData is TextData &&
           _shouldRelayoutText(styleUpdate)) {
-        final nextRect = _resolveTextRect(
+        final nextRect = resolveTextEditingRect(
           origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
           currentRect: next.rect,
           data: updatedData,
-          autoResize: updatedData.autoResize,
           allowShrinkHeight: true,
         );
         if (nextRect != next.rect) {
@@ -214,11 +211,10 @@ TextEditingState? _applyTextEditingStyleUpdate(
     if (updatedData is TextData && updatedData != interaction.draftData) {
       nextData = updatedData;
       changed = true;
-      nextRect = _resolveTextRect(
+      nextRect = resolveTextEditingRect(
         origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
         currentRect: interaction.rect,
         data: nextData,
-        autoResize: nextData.autoResize,
         allowShrinkHeight: true,
       );
       if (nextRect != interaction.rect) {
@@ -240,36 +236,6 @@ TextEditingState? _applyTextEditingStyleUpdate(
     draftData: nextData,
     rect: nextRect,
     opacity: nextOpacity,
-  );
-}
-
-DrawRect _resolveTextRect({
-  required DrawPoint origin,
-  required DrawRect currentRect,
-  required TextData data,
-  required bool autoResize,
-  bool allowShrinkHeight = false,
-}) {
-  final maxWidth = autoResize ? double.infinity : currentRect.width;
-  final layout = layoutText(data: data, maxWidth: maxWidth);
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    layout.lineHeight,
-  );
-  final minHeight = math.max(layout.lineHeight, layout.size.height);
-
-  final nextWidth = autoResize
-      ? layout.size.width + horizontalPadding * 2
-      : currentRect.width;
-  final shouldShrinkHeight = autoResize || allowShrinkHeight;
-  final desiredHeight = shouldShrinkHeight
-      ? minHeight
-      : math.max(currentRect.height, minHeight);
-
-  return DrawRect(
-    minX: origin.x,
-    minY: origin.y,
-    maxX: origin.x + nextWidth,
-    maxY: origin.y + desiredHeight,
   );
 }
 

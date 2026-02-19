@@ -73,5 +73,67 @@ void main() {
         isTrue,
       );
     });
+
+    test('precomputed reference AABBs preserve snap output', () {
+      const service = ObjectSnapService();
+      const targetRect = DrawRect(maxX: 10, maxY: 10);
+      final references = [
+        element('ref1', const DrawRect(minX: 16, maxX: 26, maxY: 10)),
+        element('ref2', const DrawRect(minY: 18, maxY: 28, maxX: 10)),
+      ];
+      final referenceAabbs = ObjectSnapService.buildReferenceAabbs(references);
+
+      final uncached = service.snapRect(
+        targetRect: targetRect,
+        referenceElements: references,
+        snapDistance: 10,
+        targetAnchorsX: const [SnapAxisAnchor.end],
+        targetAnchorsY: const [SnapAxisAnchor.end],
+      );
+      final cached = service.snapRect(
+        targetRect: targetRect,
+        referenceElements: references,
+        referenceAabbs: referenceAabbs,
+        snapDistance: 10,
+        targetAnchorsX: const [SnapAxisAnchor.end],
+        targetAnchorsY: const [SnapAxisAnchor.end],
+      );
+
+      expect(cached.dx, uncached.dx);
+      expect(cached.dy, uncached.dy);
+      expect(cached.guides, uncached.guides);
+    });
+
+    test('precomputed reference AABBs preserve snapMove output', () {
+      const service = ObjectSnapService();
+      const baseTargetRect = DrawRect(maxX: 10, maxY: 10);
+      const movedTargetRect = DrawRect(minX: 4, maxX: 14, maxY: 10);
+      final references = [
+        element('ref1', const DrawRect(minX: 16, maxX: 26, maxY: 10)),
+        element('ref2', const DrawRect(minY: 18, maxY: 28, maxX: 10)),
+      ];
+      final referenceAabbs = ObjectSnapService.buildReferenceAabbs(references);
+      final targetElements = [element('target', baseTargetRect)];
+
+      final uncached = service.snapMove(
+        targetRect: movedTargetRect,
+        referenceElements: references,
+        snapDistance: 10,
+        targetElements: targetElements,
+        targetOffset: const DrawPoint(x: 4, y: 0),
+      );
+      final cached = service.snapMove(
+        targetRect: movedTargetRect,
+        referenceElements: references,
+        referenceAabbs: referenceAabbs,
+        snapDistance: 10,
+        targetElements: targetElements,
+        targetOffset: const DrawPoint(x: 4, y: 0),
+      );
+
+      expect(cached.dx, uncached.dx);
+      expect(cached.dy, uncached.dy);
+      expect(cached.guides, uncached.guides);
+    });
   });
 }

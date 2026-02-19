@@ -18,18 +18,40 @@ import 'selection_geometry_resolver.dart';
 /// painters, etc.) only depend on the derived view instead of edit operations.
 @immutable
 class DrawStateViewBuilder {
+  static final _sharedPreviewEngine = EditPreviewEngine();
+  static final Expando<_DrawStateViewCacheEntry> _stateViewCache = Expando(
+    'draw_state_view_cache',
+  );
+
   DrawStateViewBuilder({
     required this.editOperations,
     EditPreviewEngine? previewEngine,
-  }) : _previewEngine = previewEngine ?? EditPreviewEngine();
+  }) : _previewEngine = previewEngine ?? _sharedPreviewEngine;
   final EditOperationRegistry editOperations;
   final EditPreviewEngine _previewEngine;
 
   DrawStateView build(DrawState state) {
+    final cached = _stateViewCache[state];
+    if (cached != null &&
+        identical(cached.editOperations, editOperations) &&
+        identical(cached.previewEngine, _previewEngine)) {
+      return cached.view;
+    }
+
+    final nextView = _buildUncached(state);
+    _stateViewCache[state] = _DrawStateViewCacheEntry(
+      editOperations: editOperations,
+      previewEngine: _previewEngine,
+      view: nextView,
+    );
+    return nextView;
+  }
+
+  DrawStateView _buildUncached(DrawState state) {
     final snapGuides = _resolveSnapGuides(state);
-    final createPreview = _buildCreatePreview(state);
-    if (createPreview != null) {
-      return createPreview;
+    final interaction = state.application.interaction;
+    if (interaction is CreatingState) {
+      return DrawStateView.fromState(state, snapGuides: snapGuides);
     }
 
     final textEditingPreview = _buildTextEditingPreview(state);
@@ -60,26 +82,6 @@ class DrawStateViewBuilder {
       previewElementsById: preview.previewElementsById,
       effectiveSelection: effectiveSelection,
       snapGuides: snapGuides,
-    );
-  }
-
-  DrawStateView? _buildCreatePreview(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return null;
-    }
-
-    final element = interaction.element;
-    if (element.rect == interaction.currentRect) {
-      return null;
-    }
-
-    final previewElement = element.copyWith(rect: interaction.currentRect);
-    return DrawStateView.withPreview(
-      state: state,
-      previewElementsById: {previewElement.id: previewElement},
-      effectiveSelection: _buildSelectionFromState(state),
-      snapGuides: interaction.snapGuides,
     );
   }
 
@@ -198,4 +200,17 @@ class DrawStateViewBuilder {
     }
     return const [];
   }
+}
+
+@immutable
+class _DrawStateViewCacheEntry {
+  const _DrawStateViewCacheEntry({
+    required this.editOperations,
+    required this.previewEngine,
+    required this.view,
+  });
+
+  final EditOperationRegistry editOperations;
+  final EditPreviewEngine previewEngine;
+  final DrawStateView view;
 }

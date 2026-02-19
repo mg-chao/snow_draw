@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
 import 'package:snow_draw_core/draw/models/camera_state.dart';
@@ -22,6 +23,64 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('toolbar stays hidden for non-serial selections', (tester) async {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+    final context = DrawContext.withDefaults(elementRegistry: registry);
+    final store = DefaultDrawStore(
+      context: context,
+      initialState: DrawState(
+        domain: DomainState(
+          document: DocumentState(
+            elements: const [
+              ElementState(
+                id: 'rectangle-selection',
+                rect: DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 90),
+                rotation: 0,
+                opacity: 1,
+                zIndex: 0,
+                data: RectangleData(),
+              ),
+            ],
+          ),
+          selection: const SelectionState(selectedIds: {'rectangle-selection'}),
+        ),
+        application: ApplicationState.initial(),
+      ),
+    );
+    final adapter = StyleToolbarAdapter(store: store);
+    final strings = AppLocalizations(const Locale('en'));
+
+    addTearDown(adapter.dispose);
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              SerialNumberOperationsToolbar(
+                key: const ValueKey('serial-toolbar'),
+                strings: strings,
+                store: store,
+                adapter: adapter,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('serial-toolbar')), findsOneWidget);
+    expect(find.byType(Positioned), findsNothing);
+
+    await store.dispatch(const MoveCamera(dx: 24, dy: 16));
+    await tester.pump();
+
+    expect(find.byType(Positioned), findsNothing);
+  });
 
   testWidgets('toolbar remains visible near horizontal viewport edges', (
     tester,

@@ -3,6 +3,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../draw/config/draw_config.dart';
+import '../../draw/services/log/log_service.dart';
+
+final ModuleLogger _gridShaderLog = LogService.fallback.render;
 
 /// Manages the grid fragment shader for GPU-accelerated grid rendering.
 ///
@@ -16,6 +19,7 @@ class GridShaderManager {
 
   ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
+  final _paint = Paint();
   var _isLoading = false;
   var _loadFailed = false;
 
@@ -40,9 +44,12 @@ class GridShaderManager {
         'packages/snow_draw_core/shaders/grid.frag',
       );
       _shader = _program!.fragmentShader();
-    } on Exception catch (e) {
+    } on Exception catch (error, stackTrace) {
       _loadFailed = true;
-      debugPrint('Failed to load grid shader: $e');
+      _gridShaderLog.warning('Failed to load grid shader', {
+        'error': error,
+        'stackTrace': stackTrace,
+      });
     } finally {
       _isLoading = false;
     }
@@ -114,8 +121,8 @@ class GridShaderManager {
       ..setFloat(idx++, majorAlpha);
 
     // Draw the shader as a full-screen rect
-    final paint = Paint()..shader = shader;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+    _paint.shader = shader;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _paint);
 
     return true;
   }
