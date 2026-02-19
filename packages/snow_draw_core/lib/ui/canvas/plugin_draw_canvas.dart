@@ -51,8 +51,6 @@ import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
 import 'filter_style_state_change.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
-import 'free_draw_creation_state_change.dart';
-import 'free_draw_preview_painter.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'highlight_mask_visibility.dart';
@@ -253,8 +251,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   CoordinateService? _coordinateService;
   late PluginInputCoordinator _pluginCoordinator;
   late DrawStateViewBuilder _stateViewBuilder;
-  late final FreeDrawPreviewLayerController _freeDrawPreviewLayerController;
-  late final FreeDrawPreviewPainter _freeDrawPreviewPainter;
   late final FrameAlignedPointerMoveDispatcher _pointerMoveDispatcher;
   late final FrameAlignedEventDispatcher<_HoverFrameEvent> _hoverMoveDispatcher;
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
@@ -430,16 +426,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     _lastObservedState = initialState;
     _syncTextEditingOverlayState(initialState);
-    _freeDrawPreviewLayerController = FreeDrawPreviewLayerController(
-      initialKey: FreeDrawPreviewRenderKey(
-        camera: initialState.application.view.camera,
-        scaleFactor: _effectiveScaleFactor(),
-        preview: _extractFreeDrawPreviewSnapshot(initialState),
-      ),
-    );
-    _freeDrawPreviewPainter = FreeDrawPreviewPainter(
-      controller: _freeDrawPreviewLayerController,
-    );
     widget.watermarkPreviewListenable?.addListener(
       _handleWatermarkPreviewChange,
     );
@@ -572,7 +558,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _updateCursorIfChanged(
       _resolveCursorForState(widget.store.state, _lastPointerPosition),
     );
-    _syncFreeDrawPreviewLayerState(widget.store.state);
     _syncTextEditingOverlayState(widget.store.state);
   }
 
@@ -597,7 +582,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _textOverlayNotifier.dispose();
     _dynamicLayerSnapshotNotifier.dispose();
     _eraserCursorPositionNotifier.dispose();
-    _freeDrawPreviewLayerController.dispose();
     unawaited(_pointerMoveDispatcher.dispose());
     unawaited(_hoverMoveDispatcher.dispose());
     unawaited(_textDraftDispatcher.dispose());
@@ -651,12 +635,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
                 renderKey: staticRenderKey,
                 stateView: stateView,
               ),
-              size: widget.size,
-            ),
-          ),
-          RepaintBoundary(
-            child: CustomPaint(
-              painter: _freeDrawPreviewPainter,
               size: widget.size,
             ),
           ),
@@ -1046,36 +1024,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return mode.revision;
     }
     return 0;
-  }
-
-  FreeDrawPreviewSnapshot? _extractFreeDrawPreviewSnapshot(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return null;
-    }
-    final data = interaction.elementData;
-    final mode = interaction.creationMode;
-    if (data is! FreeDrawData || mode is! FreeDrawCreationMode) {
-      return null;
-    }
-    final points = mode.worldPoints;
-    if (points == null || points.isEmpty) {
-      return null;
-    }
-
-    return FreeDrawPreviewSnapshot(
-      elementId: interaction.elementId,
-      points: points,
-      previewPath: mode.previewPath,
-      strokeColor: data.color,
-      strokeWidth: data.strokeWidth,
-      strokeStyle: data.strokeStyle,
-      opacity: interaction.elementOpacity,
-      isLineActive: mode.isLineActive,
-      lineAnchor: mode.lineAnchor,
-      lineCurrent: mode.lineCurrent,
-      revision: mode.revision,
-    );
   }
 
   /// Extract box selection bounds from state view.
@@ -2856,16 +2804,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       widget.watermarkPreviewListenable?.value ??
       state.domain.document.globalElements.watermark;
 
-  void _syncFreeDrawPreviewLayerState(DrawState state, {double? scaleFactor}) {
-    _freeDrawPreviewLayerController.update(
-      FreeDrawPreviewRenderKey(
-        camera: state.application.view.camera,
-        scaleFactor: scaleFactor ?? _effectiveScaleFactor(),
-        preview: _extractFreeDrawPreviewSnapshot(state),
-      ),
-    );
-  }
-
   bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
   bool get _isElementInteractionDisabledForCurrentTool =>
@@ -2972,8 +2910,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _transientDynamicFilterElementIds.isNotEmpty;
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
-    final hasFreeDrawPreview =
-        _freeDrawPreviewLayerController.renderKey.hasPreview;
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
@@ -2981,8 +2917,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final hasDynamicContent =
         dynamicLayerStartIndex != null ||
         creatingSnapshot != null ||
-        dynamicPreviewElements.isNotEmpty ||
-        hasFreeDrawPreview;
+        dynamicPreviewElements.isNotEmpty;
     final highlightMaskLayer = _resolveHighlightMaskLayer(
       stateView: stateView,
       hasDynamicContent: hasDynamicContent,
@@ -4426,17 +4361,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
 
-    _syncFreeDrawPreviewLayerState(state);
-    if (previousState != null &&
-        isFreeDrawPreviewMutationOnly(previous: previousState, next: state)) {
-      if (_activePointerIds.isEmpty) {
-        _refreshPointerVisualsForState(state);
-      }
-      // The dedicated free-draw preview layer already repaints from
-      // [_syncFreeDrawPreviewLayerState], so avoid rebuilding canvas snapshots
-      // on every point.
-      return;
-    }
     if (previousState != null) {
       final filterStyleMutation = resolveFilterStyleMutation(
         previous: previousState,
