@@ -27,42 +27,47 @@ class FreeDrawHitTester implements ElementHitTester {
       );
     }
 
+    final rect = element.rect;
     final localPosition = _toLocalPosition(element, position);
 
-    if (data.strokeWidth > 0 &&
-        _hitTestTwoPointStrokeFast(
-          element: element,
-          data: data,
-          localPosition: localPosition,
-          tolerance: tolerance,
-        )) {
-      return true;
+    if (data.points.length == 2) {
+      if (data.strokeWidth <= 0) {
+        return false;
+      }
+      return _hitTestTwoPointStrokeFast(
+        rect: rect,
+        data: data,
+        localPosition: localPosition,
+        tolerance: tolerance,
+      );
     }
 
-    // Resolve the visual cache once and share it between stroke
-    // and fill hit testing to avoid a redundant LRU lookup.
+    final hasStroke = data.strokeWidth > 0;
+    final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
+    final hasFill = fillOpacity > 0 && _isClosed(data, rect);
+    if (!hasStroke && !hasFill) {
+      return false;
+    }
+
     final cached = FreeDrawVisualCache.instance.resolve(
       element: element,
       data: data,
     );
 
-    if (data.strokeWidth > 0) {
-      if (_hitTestStroke(element, data, localPosition, tolerance, cached)) {
-        return true;
-      }
+    if (hasStroke &&
+        _hitTestStroke(
+          rect: rect,
+          data: data,
+          localPosition: localPosition,
+          tolerance: tolerance,
+          cached: cached,
+        )) {
+      return true;
     }
 
-    final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
-    if (fillOpacity <= 0 || !_isClosed(data, element.rect)) {
-      return false;
-    }
-
-    final rect = element.rect;
-    if (!_isInsideRect(rect, localPosition, 0)) {
-      return false;
-    }
-
-    if (cached.pointCount < 3) {
+    if (!hasFill ||
+        cached.pointCount < 3 ||
+        !_isInsideRect(rect, localPosition, 0)) {
       return false;
     }
 
@@ -104,15 +109,11 @@ class FreeDrawHitTester implements ElementHitTester {
   DrawRect getBounds(ElementState element) => element.rect;
 
   bool _hitTestTwoPointStrokeFast({
-    required ElementState element,
+    required DrawRect rect,
     required FreeDrawData data,
     required DrawPoint localPosition,
     required double tolerance,
   }) {
-    if (data.points.length != 2) {
-      return false;
-    }
-    final rect = element.rect;
     final radius = (data.strokeWidth / 2) + tolerance;
     if (!radius.isFinite || radius <= 0) {
       return false;
@@ -136,51 +137,44 @@ class FreeDrawHitTester implements ElementHitTester {
       radius: radius,
     );
   }
-}
 
-/// Hit-tests the stroke using the shared visual cache.
-///
-/// Accepts a pre-resolved [cached] entry so the caller can share
-/// the same lookup between stroke and fill testing.
-bool _hitTestStroke(
-  ElementState element,
-  FreeDrawData data,
-  DrawPoint localPosition,
-  double tolerance,
-  FreeDrawVisualEntry cached,
-) {
-  final rect = element.rect;
-  final halfWidth = data.strokeWidth / 2;
-  final maxRadius = halfWidth + tolerance;
-  if (!_isInsideRect(rect, localPosition, maxRadius)) {
-    return false;
-  }
-
-  if (cached.pointCount < 2) {
-    return false;
-  }
-
-  final flattened = cached.getOrBuildFlattened(data.strokeWidth);
-  if (flattened.length < 2) {
-    return false;
-  }
-
-  final testPoint = Offset(
-    localPosition.x - rect.minX,
-    localPosition.y - rect.minY,
-  );
-  final radiusSq = maxRadius * maxRadius;
-  for (var i = 1; i < flattened.length; i++) {
-    final distance = _distanceSquaredToSegment(
-      testPoint,
-      flattened[i - 1],
-      flattened[i],
-    );
-    if (distance <= radiusSq) {
-      return true;
+  bool _hitTestStroke({
+    required DrawRect rect,
+    required FreeDrawData data,
+    required DrawPoint localPosition,
+    required double tolerance,
+    required FreeDrawVisualEntry cached,
+  }) {
+    final radius = (data.strokeWidth / 2) + tolerance;
+    if (!radius.isFinite || radius <= 0) {
+      return false;
     }
+    if (!_isInsideRect(rect, localPosition, radius)) {
+      return false;
+    }
+
+    final flattened = cached.getOrBuildFlattened(data.strokeWidth);
+    if (flattened.length < 2) {
+      return false;
+    }
+
+    final testPoint = Offset(
+      localPosition.x - rect.minX,
+      localPosition.y - rect.minY,
+    );
+    final radiusSq = radius * radius;
+    for (var i = 1; i < flattened.length; i++) {
+      final distance = _distanceSquaredToSegment(
+        testPoint,
+        flattened[i - 1],
+        flattened[i],
+      );
+      if (distance <= radiusSq) {
+        return true;
+      }
+    }
+    return false;
   }
-  return false;
 }
 
 bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
