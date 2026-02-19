@@ -9,11 +9,10 @@ class CanvasConfig {
   final Color backgroundColor;
 
   CanvasConfig copyWith({Color? backgroundColor}) {
-    final nextBackgroundColor = backgroundColor ?? this.backgroundColor;
-    if (nextBackgroundColor == this.backgroundColor) {
+    if (backgroundColor == null || backgroundColor == this.backgroundColor) {
       return this;
     }
-    return CanvasConfig(backgroundColor: nextBackgroundColor);
+    return CanvasConfig(backgroundColor: backgroundColor);
   }
 
   @override
@@ -60,21 +59,17 @@ class BoxSelectionConfig {
     Color? strokeColor,
     double? strokeWidth,
   }) {
-    final nextFillColor = fillColor ?? this.fillColor;
-    final nextFillOpacity = fillOpacity ?? this.fillOpacity;
-    final nextStrokeColor = strokeColor ?? this.strokeColor;
-    final nextStrokeWidth = strokeWidth ?? this.strokeWidth;
-    if (nextFillColor == this.fillColor &&
-        nextFillOpacity == this.fillOpacity &&
-        nextStrokeColor == this.strokeColor &&
-        nextStrokeWidth == this.strokeWidth) {
+    if ((fillColor == null || fillColor == this.fillColor) &&
+        (fillOpacity == null || fillOpacity == this.fillOpacity) &&
+        (strokeColor == null || strokeColor == this.strokeColor) &&
+        (strokeWidth == null || strokeWidth == this.strokeWidth)) {
       return this;
     }
     return BoxSelectionConfig(
-      fillColor: nextFillColor,
-      fillOpacity: nextFillOpacity,
-      strokeColor: nextStrokeColor,
-      strokeWidth: nextStrokeWidth,
+      fillColor: fillColor ?? this.fillColor,
+      fillOpacity: fillOpacity ?? this.fillOpacity,
+      strokeColor: strokeColor ?? this.strokeColor,
+      strokeWidth: strokeWidth ?? this.strokeWidth,
     );
   }
 
