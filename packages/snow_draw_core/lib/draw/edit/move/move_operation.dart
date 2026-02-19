@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../../config/draw_config.dart';
 import '../../core/geometry/move_geometry.dart';
 import '../../history/history_metadata.dart';
@@ -68,7 +66,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
     );
     final selectedIdsAtStart = data.selectedIds;
-    final targetElements = _resolveTargetElements(state, selectedIdsAtStart);
+    final targetElements = snapshotSelectedElements(state);
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -116,65 +114,56 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       typedContext.startPosition,
       currentPosition,
     );
+    if (displacement.dx == 0 && displacement.dy == 0) {
+      return const EditUpdateResult<EditTransform>(
+        transform: MoveTransform.zero,
+      );
+    }
 
     var snapGuides = const <SnapGuide>[];
-    var snappedDx = displacement.dx;
-    var snappedDy = displacement.dy;
-    final gridConfig = config.grid;
+    var nextDx = displacement.dx;
+    var nextDy = displacement.dy;
+    final targetOffset = DrawPoint(x: displacement.dx, y: displacement.dy);
+    final targetRect = typedContext.snapBounds.translate(targetOffset);
     final snapConfig = config.snap;
-    final hasMovement = displacement.dx != 0 || displacement.dy != 0;
     final snappingMode = resolveEffectiveSnappingModeForConfig(
       config: config,
       ctrlPressed: modifiers.snapOverride,
     );
-    final shouldGridSnap = hasMovement && snappingMode == SnappingMode.grid;
     final shouldObjectSnap =
-        hasMovement &&
         snappingMode == SnappingMode.object &&
         (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
-
-    final baseSnapBounds = typedContext.snapBounds;
-
-    if (shouldGridSnap) {
-      final targetRect = baseSnapBounds.translate(
-        DrawPoint(x: displacement.dx, y: displacement.dy),
-      );
+    if (snappingMode == SnappingMode.grid) {
       final snappedRect = gridSnapService.snapRect(
         rect: targetRect,
-        gridSize: gridConfig.size,
+        gridSize: config.grid.size,
         snapMinX: true,
         snapMinY: true,
       );
-      snappedDx += snappedRect.minX - targetRect.minX;
-      snappedDy += snappedRect.minY - targetRect.minY;
+      nextDx += snappedRect.minX - targetRect.minX;
+      nextDy += snappedRect.minY - targetRect.minY;
     } else if (shouldObjectSnap) {
       final zoom = state.application.view.camera.zoom;
       final effectiveZoom = zoom == 0 ? 1.0 : zoom;
       final snapDistance = snapConfig.distance / effectiveZoom;
-      final targetRect = baseSnapBounds.translate(
-        DrawPoint(x: displacement.dx, y: displacement.dy),
+      final result = objectSnapService.snapMove(
+        targetRect: targetRect,
+        referenceElements: typedContext.referenceElements,
+        referenceAabbs: typedContext.referenceElementAabbs,
+        snapDistance: snapDistance,
+        targetElements: typedContext.targetElements,
+        targetOffset: targetOffset,
+        enablePointSnaps: snapConfig.enablePointSnaps,
+        enableGapSnaps: snapConfig.enableGapSnaps,
       );
-      final referenceElements = typedContext.referenceElements;
-      if (referenceElements.isNotEmpty) {
-        final result = objectSnapService.snapMove(
-          targetRect: targetRect,
-          referenceElements: referenceElements,
-          referenceAabbs: typedContext.referenceElementAabbs,
-          snapDistance: snapDistance,
-          targetElements: typedContext.targetElements,
-          targetOffset: DrawPoint(x: displacement.dx, y: displacement.dy),
-          enablePointSnaps: snapConfig.enablePointSnaps,
-          enableGapSnaps: snapConfig.enableGapSnaps,
-        );
-        snappedDx += result.dx;
-        snappedDy += result.dy;
-        if (snapConfig.showGuides) {
-          snapGuides = result.guides;
-        }
+      nextDx += result.dx;
+      nextDy += result.dy;
+      if (snapConfig.showGuides) {
+        snapGuides = result.guides;
       }
     }
 
-    final nextTransform = MoveTransform(dx: snappedDx, dy: snappedDy);
+    final nextTransform = MoveTransform(dx: nextDx, dy: nextDy);
     return EditUpdateResult<EditTransform>(
       transform: nextTransform,
       snapGuides: snapGuides,
@@ -238,21 +227,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     newBounds: result.multiSelectBounds!,
   );
 
-  List<ElementState> _resolveTargetElements(
-    DrawState state,
-    Set<String> selectedIds,
-  ) {
-    if (selectedIds.isEmpty) {
-      return const [];
-    }
-    final document = state.domain.document;
-    return [
-      for (final id in selectedIds)
-        if (document.getElementById(id) case final ElementState element)
-          element,
-    ];
-  }
-
   DrawRect _resolveSnapBounds({
     required List<ElementState> selectedElements,
     required DrawRect fallback,
@@ -261,16 +235,27 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       return fallback;
     }
 
-    var minX = double.infinity;
-    var minY = double.infinity;
-    var maxX = double.negativeInfinity;
-    var maxY = double.negativeInfinity;
-    for (final element in selectedElements) {
+    final firstAabb = SelectionCalculator.computeElementWorldAabb(
+      selectedElements.first,
+    );
+    var minX = firstAabb.minX;
+    var minY = firstAabb.minY;
+    var maxX = firstAabb.maxX;
+    var maxY = firstAabb.maxY;
+    for (final element in selectedElements.skip(1)) {
       final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      minX = math.min(minX, aabb.minX);
-      minY = math.min(minY, aabb.minY);
-      maxX = math.max(maxX, aabb.maxX);
-      maxY = math.max(maxY, aabb.maxY);
+      if (aabb.minX < minX) {
+        minX = aabb.minX;
+      }
+      if (aabb.minY < minY) {
+        minY = aabb.minY;
+      }
+      if (aabb.maxX > maxX) {
+        maxX = aabb.maxX;
+      }
+      if (aabb.maxY > maxY) {
+        maxY = aabb.maxY;
+      }
     }
 
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
