@@ -4,22 +4,16 @@ enum ErrorSeverity { recoverable, degradable, fatal }
 
 /// Shared error base for application-level failures.
 @immutable
-abstract interface class AppError implements Exception {
+abstract class AppError implements Exception {
   const AppError();
 
-  String get message;
+  String get message => toString();
   ErrorSeverity get severity;
-  Object? get cause;
+  Object? get cause => null;
 }
 
 /// Convenience base class with default message/cause handling.
 @immutable
-abstract class AppErrorBase implements AppError {
+abstract class AppErrorBase extends AppError {
   const AppErrorBase();
-
-  @override
-  String get message => toString();
-
-  @override
-  Object? get cause => null;
 }
