@@ -9,75 +9,70 @@ import '../free_transform/free_transform_context.dart';
 @immutable
 abstract class EditOperationParams {
   const EditOperationParams({this.initialSelectionBounds});
+
   final DrawRect? initialSelectionBounds;
 }
 
 @immutable
-class MoveOperationParams extends EditOperationParams {
+final class MoveOperationParams extends EditOperationParams {
   const MoveOperationParams({super.initialSelectionBounds});
 }
 
 @immutable
-class ResizeOperationParams extends EditOperationParams {
+final class ResizeOperationParams extends EditOperationParams {
   const ResizeOperationParams({
     required this.resizeMode,
     this.handleOffset,
     this.selectionPadding,
     super.initialSelectionBounds,
-  });
+  }) : assert(
+         selectionPadding == null || selectionPadding >= 0,
+         'selectionPadding must be non-negative',
+       );
+
   final ResizeMode resizeMode;
 
-  /// Local-space offset between the pointer and the resize handle center.
-  ///
-  /// When omitted, the operation computes it from [resizeMode] and config.
   final DrawPoint? handleOffset;
 
-  /// Selection padding used for handle placement / bounds calculation.
-  ///
-  /// When omitted, it should be injected at StartEdit (from
-  /// `SelectionConfig.padding`).
   final double? selectionPadding;
 }
 
 @immutable
-class RotateOperationParams extends EditOperationParams {
+final class RotateOperationParams extends EditOperationParams {
   const RotateOperationParams({
     this.startRotationAngle,
     this.rotationSnapAngle,
     super.initialSelectionBounds,
-  });
+  }) : assert(
+         rotationSnapAngle == null || rotationSnapAngle >= 0,
+         'rotationSnapAngle must be non-negative',
+       );
 
-  /// Pointer angle around the rotation center at the start (raw atan2 angle).
-  ///
-  /// When omitted, the operation computes it from the start pointer position.
   final double? startRotationAngle;
 
-  /// Discrete snap interval for rotation when `discreteAngle` modifier is
-  /// used.
-  ///
-  /// Usually injected from `DrawConfig.element.rotationSnapAngle` at
-  /// edit-start.
   final double? rotationSnapAngle;
 }
 
 @immutable
-class FreeTransformOperationParams extends EditOperationParams {
+final class FreeTransformOperationParams extends EditOperationParams {
   const FreeTransformOperationParams({
     super.initialSelectionBounds,
     this.initialMode = FreeTransformMode.move,
   });
+
   final FreeTransformMode initialMode;
 }
 
 @immutable
-class ArrowPointOperationParams extends EditOperationParams {
+final class ArrowPointOperationParams extends EditOperationParams {
   const ArrowPointOperationParams({
     required this.elementId,
     required this.pointKind,
     required this.pointIndex,
     this.isDoubleClick = false,
     super.initialSelectionBounds,
-  });
+  }) : assert(elementId != '', 'elementId must not be empty'),
+       assert(pointIndex >= 0, 'pointIndex must be non-negative');
 
   final String elementId;
   final ArrowPointKind pointKind;
