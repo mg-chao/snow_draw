@@ -7,7 +7,7 @@ import '../../../utils/snapping_mode.dart';
 import 'arrow_binding.dart';
 import 'arrow_binding_target_cache.dart';
 
-const _bindingCacheTargetThresholdFactor = 0.9;
+const _bindingCacheTargetThresholdFactor = 0.4;
 const _bindingCacheEmptyThresholdFactor = 0.75;
 const _bindingCacheCandidateThresholdFactor = 0.35;
 const _bindingCacheCandidateReferenceThresholdFactor = 0.35;

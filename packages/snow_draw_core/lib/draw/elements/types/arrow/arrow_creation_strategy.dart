@@ -540,7 +540,7 @@ CreationUpdateResult _updateLine({
 }
 
 const _loopCloseToleranceMultiplier = 1.5;
-const _defaultBindingCacheTargetThresholdFactor = 0.9;
+const _defaultBindingCacheTargetThresholdFactor = 0.4;
 const _defaultBindingCacheEmptyThresholdFactor = 0.75;
 const _defaultBindingCandidateCacheThresholdFactor = 0.35;
 const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;

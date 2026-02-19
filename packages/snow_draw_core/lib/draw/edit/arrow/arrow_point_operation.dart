@@ -40,8 +40,8 @@ import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/standard_finish_mixin.dart';
 
-const _defaultBindingCacheTargetThresholdFactor = 0.9;
-const _linePointBindingCacheTargetThresholdFactor = 0.9;
+const _defaultBindingCacheTargetThresholdFactor = 0.4;
+const _linePointBindingCacheTargetThresholdFactor = 0.4;
 const _defaultBindingCandidateCacheThresholdFactor = 0.35;
 const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;
 const _linePointBindingCandidateCacheThresholdFactor = 0.45;
