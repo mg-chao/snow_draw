@@ -117,12 +117,9 @@ typedef _RerouteResult = ({_FixedSegmentPathResult state, bool? reroutedSide});
 _RerouteResult? _tryActiveSpanFallback({
   required _FixedSegmentPathResult state,
   required ElbowFixedSegment activeFixed,
-  required ElbowHeading? requiredHeading,
+  required ElbowHeading requiredHeading,
   required bool activeIsStart,
 }) {
-  if (requiredHeading == null) {
-    return null;
-  }
   final fallback = _buildFallbackPathForActiveSpan(
     points: state.points,
     fixedSegments: state.fixedSegments,
@@ -147,11 +144,9 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
 }) {
-  if (state.fixedSegments.isEmpty || state.points.length < 2) {
-    return (state: state, reroutedSide: null);
-  }
+  final noChange = (state: state, reroutedSide: null);
   if (context.startActive == context.endActive) {
-    return (state: state, reroutedSide: null);
+    return noChange;
   }
 
   final activeIsStart = context.startActive;
@@ -160,7 +155,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
       : state.fixedSegments.last;
   final anchorIndex = activeIsStart ? activeFixed.index : activeFixed.index - 1;
   if (anchorIndex <= 0 || anchorIndex >= state.points.length) {
-    return (state: state, reroutedSide: null);
+    return noChange;
   }
 
   final activePoint = activeIsStart ? state.points.first : state.points.last;
@@ -190,7 +185,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
     endBinding: activeIsStart ? null : context.endBinding,
   );
   if (routed.length < 2) {
-    return (state: state, reroutedSide: null);
+    return noChange;
   }
 
   final stitchResult = _stitchSubPath(
@@ -202,7 +197,7 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   );
   final stitched = stitchResult.points;
   if (ElbowGeometry.pointListsEqual(stitched, state.points)) {
-    return (state: state, reroutedSide: null);
+    return noChange;
   }
 
   final changedStructure =
@@ -220,20 +215,29 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   final headingFlipped =
       axesStable &&
       requiredHeading != null &&
-      updatedFixed.isNotEmpty &&
       () {
-        final seg = activeIsStart ? updatedFixed.first : updatedFixed.last;
-        return requiredHeading.isHorizontal == seg.isHorizontal &&
-            !_directionMatches(seg.start, seg.end, requiredHeading);
+        final activeUpdatedSegment = activeIsStart
+            ? updatedFixed.first
+            : updatedFixed.last;
+        return requiredHeading.isHorizontal ==
+                activeUpdatedSegment.isHorizontal &&
+            !_directionMatches(
+              activeUpdatedSegment.start,
+              activeUpdatedSegment.end,
+              requiredHeading,
+            );
       }();
   if (!axesStable || headingFlipped) {
+    if (requiredHeading == null) {
+      return noChange;
+    }
     return _tryActiveSpanFallback(
           state: state,
           activeFixed: activeFixed,
           requiredHeading: requiredHeading,
           activeIsStart: activeIsStart,
         ) ??
-        (state: state, reroutedSide: null);
+        noChange;
   }
 
   return (
@@ -245,12 +249,11 @@ _RerouteResult _rerouteActiveSpanIfNeeded({
   );
 }
 
-({_FixedSegmentPathResult state, bool adoptedBaseline})
-_adoptBaselineRouteIfNeeded({
+_FixedSegmentPathResult _adoptBaselineRouteIfNeeded({
   required _ElbowEditContext context,
   required _FixedSegmentPathResult state,
 }) {
-  final noChange = (state: state, adoptedBaseline: false);
+  final noChange = state;
   if (!context.hasBindings ||
       (!context.hasBoundStart && !context.hasBoundEnd)) {
     return noChange;
@@ -267,12 +270,10 @@ _adoptBaselineRouteIfNeeded({
       context.endWasBound &&
       !context.endBindingRemoved;
   final forceBaseline = startActiveBound || endActiveBound;
-  final activeStart = startActiveBound && !endActiveBound;
-  final activeEnd = endActiveBound && !startActiveBound;
+  final singleActiveBound = startActiveBound != endActiveBound;
+  final activeStart = startActiveBound;
   final activeSegment =
-      forceBaseline &&
-          state.fixedSegments.isNotEmpty &&
-          (activeStart || activeEnd)
+      forceBaseline && state.fixedSegments.isNotEmpty && singleActiveBound
       ? (activeStart ? state.fixedSegments.first : state.fixedSegments.last)
       : null;
 
@@ -306,12 +307,9 @@ _adoptBaselineRouteIfNeeded({
     if (pts != null) {
       final reindexed = _reindexFixedSegments(pts, [activeSegment]);
       if (reindexed.isNotEmpty) {
-        return (
-          state: state.copyWith(
-            points: List<DrawPoint>.from(pts),
-            fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
-          ),
-          adoptedBaseline: true,
+        return state.copyWith(
+          points: List<DrawPoint>.from(pts),
+          fixedSegments: List<ElbowFixedSegment>.unmodifiable(reindexed),
         );
       }
     }
@@ -343,12 +341,9 @@ _adoptBaselineRouteIfNeeded({
             enforceAxes: true,
           )
         : mapped;
-    return (
-      state: state.copyWith(
-        points: List<DrawPoint>.from(adopted.points),
-        fixedSegments: adopted.fixedSegments,
-      ),
-      adoptedBaseline: true,
+    return state.copyWith(
+      points: List<DrawPoint>.from(adopted.points),
+      fixedSegments: adopted.fixedSegments,
     );
   }
 
@@ -362,12 +357,9 @@ _adoptBaselineRouteIfNeeded({
       startBound: activeStart,
     );
     if (fallback != null) {
-      return (
-        state: state.copyWith(
-          points: List<DrawPoint>.from(fallback.points),
-          fixedSegments: fallback.fixedSegments,
-        ),
-        adoptedBaseline: true,
+      return state.copyWith(
+        points: List<DrawPoint>.from(fallback.points),
+        fixedSegments: fallback.fixedSegments,
       );
     }
   }
@@ -530,11 +522,7 @@ _FixedSegmentPathResult _applyEndpointDragWithFixedSegments({
   final local = _rerouteActiveSpanIfNeeded(context: context, state: state);
   state = local.state;
   if (local.reroutedSide == null) {
-    final baseline = _adoptBaselineRouteIfNeeded(
-      context: context,
-      state: state,
-    );
-    state = baseline.state;
+    state = _adoptBaselineRouteIfNeeded(context: context, state: state);
   }
 
   // Step 3: reroute spans freed by binding removal.
@@ -653,9 +641,6 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   required bool isStart,
 }) {
   final noMove = (points: points, moved: false);
-  if (points.length < 2 || fixedSegments.isEmpty) {
-    return noMove;
-  }
   final endpoint = isStart ? points.first : points.last;
   final heading = ElbowGeometry.resolveBoundHeading(
     binding: binding,
@@ -696,9 +681,6 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
           isStart: isStart,
         )
       : (isStart ? points.first.x : points.last.x);
-  if (lane == null) {
-    return noMove;
-  }
   return _slideRun(
     points: points,
     startIndex: anchorIndex,
@@ -708,7 +690,7 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   );
 }
 
-double? _resolveHorizontalLane({
+double _resolveHorizontalLane({
   required List<DrawPoint> points,
   required DrawPoint endpoint,
   required DrawPoint reference,
