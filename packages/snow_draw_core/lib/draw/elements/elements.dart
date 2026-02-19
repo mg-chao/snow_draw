@@ -1,8 +1,5 @@
-// Core
 export 'core/elements_core.dart';
-// Registration
 export 'registration.dart';
-// Types
 export 'types/arrow/arrow.dart';
 export 'types/filter/filter.dart';
 export 'types/free_draw/free_draw.dart';
