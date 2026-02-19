@@ -667,17 +667,10 @@ _FixedSegmentPathResult _alignFixedSegmentsToBoundLanes({
   }
   final targetFixedH = !heading.isHorizontal;
   final nearest = isStart ? fixedSegments.first : fixedSegments.last;
-  ElbowFixedSegment? candidate;
-  for (final s in isStart ? fixedSegments : fixedSegments.reversed) {
-    if (s.isHorizontal == targetFixedH) {
-      candidate = s;
-      break;
-    }
-  }
-  if (candidate == null || candidate.index != nearest.index) {
+  if (nearest.isHorizontal != targetFixedH) {
     return noMove;
   }
-  final anchorIndex = isStart ? candidate.index - 1 : candidate.index;
+  final anchorIndex = isStart ? nearest.index - 1 : nearest.index;
   if (anchorIndex <= 0 || anchorIndex >= points.length - 1) {
     return noMove;
   }

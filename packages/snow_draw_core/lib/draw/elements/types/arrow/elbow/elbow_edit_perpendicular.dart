@@ -1,4 +1,4 @@
-﻿part of 'elbow_editing.dart';
+part of 'elbow_editing.dart';
 
 _FixedSegmentPathResult _ensurePerpendicularBindings({
   required _ElbowEditContext context,
@@ -82,11 +82,6 @@ _FixedSegmentPathResult _ensurePerpendicularBindings({
           ? _reindexFixedSegments(localPoints, updatedFixed)
           : _syncFixedSegmentsToPoints(localPoints, updatedFixed);
     }
-  }
-
-  if (identical(localPoints, points) && worldPoints.length != points.length) {
-    localPoints = worldPoints.map(space.fromWorld).toList(growable: false);
-    updatedFixed = _reindexFixedSegments(localPoints, updatedFixed);
   }
   return _mergeFixedSegmentsWithCollinearNeighbors(
     points: localPoints,

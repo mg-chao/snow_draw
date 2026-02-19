@@ -379,7 +379,7 @@ ArrowBinding? _resolveBindingOverride({
   required ArrowBinding? override,
   required bool overrideIsSet,
   required ArrowBinding? fallback,
-}) => overrideIsSet || override != null ? override : fallback;
+}) => overrideIsSet ? override : (override ?? fallback);
 
 // ---------------------------------------------------------------------------
 // Geometry helpers (merged from elbow_edit_geometry.dart)

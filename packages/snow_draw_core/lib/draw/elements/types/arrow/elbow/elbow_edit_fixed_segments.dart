@@ -11,6 +11,7 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
     return const [];
   }
   final result = <ElbowFixedSegment>[];
+  final usedIndices = <int>{};
   for (final segment in segments) {
     if (!_isInteriorSegmentIndex(segment.index, pointCount)) {
       continue;
@@ -23,7 +24,7 @@ List<ElbowFixedSegment> _sanitizeFixedSegments(
     if (!segment.isSignificant) {
       continue;
     }
-    if (result.any((entry) => entry.index == segment.index)) {
+    if (!usedIndices.add(segment.index)) {
       continue;
     }
     result.add(segment);
@@ -207,7 +208,7 @@ _FixedSegmentPathResult? _mapFixedSegmentsToBaseline({
       points: requireAll
           ? List<DrawPoint>.unmodifiable(List<DrawPoint>.from(baseline))
           : baseline,
-      fixedSegments: requireAll ? const [] : fixedSegments,
+      fixedSegments: const [],
     );
   }
 
