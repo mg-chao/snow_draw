@@ -16,22 +16,21 @@ import 'types/text/text_definition.dart';
 /// Call this when constructing a [DrawContext] to populate its
 /// `elementRegistry`.
 void registerBuiltInElements(DefaultElementRegistry registry) {
-  _registerIfMissing(registry, rectangleDefinition);
-  _registerIfMissing(registry, arrowDefinition);
-  _registerIfMissing(registry, lineDefinition);
-  _registerIfMissing(registry, freeDrawDefinition);
-  _registerIfMissing(registry, filterDefinition);
-  _registerIfMissing(registry, highlightDefinition);
-  _registerIfMissing(registry, textDefinition);
-  _registerIfMissing(registry, serialNumberDefinition);
+  for (final definition in _builtInDefinitions) {
+    final typeValue = definition.typeId.value;
+    if (!registry.supportsTypeValue(typeValue)) {
+      registry.register(definition);
+    }
+  }
 }
 
-void _registerIfMissing<T extends ElementData>(
-  DefaultElementRegistry registry,
-  ElementDefinition<T> definition,
-) {
-  if (registry.supportsTypeValue(definition.typeId.value)) {
-    return;
-  }
-  registry.register(definition);
-}
+final List<ElementDefinition<ElementData>> _builtInDefinitions = [
+  rectangleDefinition,
+  arrowDefinition,
+  lineDefinition,
+  freeDrawDefinition,
+  filterDefinition,
+  highlightDefinition,
+  textDefinition,
+  serialNumberDefinition,
+];
