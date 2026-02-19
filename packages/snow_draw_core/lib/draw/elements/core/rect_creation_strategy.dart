@@ -14,6 +14,9 @@ import '../../utils/snapping_mode.dart';
 import '../../utils/state_calculator.dart';
 import 'creation_strategy.dart';
 
+const _startAnchors = <SnapAxisAnchor>[SnapAxisAnchor.start];
+const _endAnchors = <SnapAxisAnchor>[SnapAxisAnchor.end];
+
 /// Default creation strategy for rect-based elements (rectangle, text, etc.).
 @immutable
 class RectCreationStrategy extends CreationStrategy {
@@ -25,12 +28,7 @@ class RectCreationStrategy extends CreationStrategy {
     required DrawPoint startPosition,
   }) => CreationUpdateResult(
     data: data,
-    rect: DrawRect(
-      minX: startPosition.x,
-      minY: startPosition.y,
-      maxX: startPosition.x,
-      maxY: startPosition.y,
-    ),
+    rect: DrawRect.fromPoint(startPosition),
     creationMode: const RectCreationMode(),
   );
 
@@ -44,84 +42,70 @@ class RectCreationStrategy extends CreationStrategy {
     required bool createFromCenter,
     required SnappingMode snappingMode,
   }) {
-    final gridConfig = config.grid;
     final snapToGrid = snappingMode == SnappingMode.grid;
+    final gridSize = config.grid.size;
     final startPosition = snapToGrid
         ? gridSnapService.snapPoint(
             point: creatingState.startPosition,
-            gridSize: gridConfig.size,
+            gridSize: gridSize,
           )
         : creatingState.startPosition;
-    final snappedCurrent = snapToGrid
-        ? gridSnapService.snapPoint(
-            point: currentPosition,
-            gridSize: gridConfig.size,
-          )
+    final current = snapToGrid
+        ? gridSnapService.snapPoint(point: currentPosition, gridSize: gridSize)
         : currentPosition;
-    var newRect = StateCalculator.calculateCreateRect(
+    var rect = StateCalculator.calculateCreateRect(
       startPosition: startPosition,
-      currentPosition: snappedCurrent,
+      currentPosition: current,
       maintainAspectRatio: maintainAspectRatio,
       createFromCenter: createFromCenter,
     );
 
-    var nextCreationMode = creatingState.creationMode;
-    var snapGuides = const <SnapGuide>[];
     final snapConfig = config.snap;
-    final shouldSnap =
+    final shouldObjectSnap =
         snappingMode == SnappingMode.object &&
         !createFromCenter &&
         (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
-
-    if (shouldSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
-      final direction = _resolveCreateDirection(
-        creatingState.startPosition,
-        currentPosition,
-      );
-      final anchorsX = _createAnchorsX(direction);
-      final anchorsY = _createAnchorsY(direction);
-      final snapReferences = _resolveSnapReferences(
-        state: state,
+    if (!shouldObjectSnap) {
+      return CreationUpdateResult(
+        data: creatingState.elementData,
+        rect: rect,
         creationMode: creatingState.creationMode,
       );
-      final referenceElements = snapReferences.referenceElements;
-      final referenceAabbs = snapReferences.referenceAabbs;
-      nextCreationMode = snapReferences.creationMode;
-      final result = objectSnapService.snapRect(
-        targetRect: newRect,
-        referenceElements: referenceElements,
-        referenceAabbs: referenceAabbs,
-        snapDistance: snapDistance,
-        targetAnchorsX: anchorsX,
-        targetAnchorsY: anchorsY,
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
+    }
+
+    final zoom = state.application.view.camera.zoom;
+    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
+    final snapDistance = snapConfig.distance / effectiveZoom;
+    final cachedMode = _resolveCachedSnapReferences(
+      state: state,
+      creationMode: creatingState.creationMode,
+    );
+    final moveMinX = currentPosition.x < creatingState.startPosition.x;
+    final moveMinY = currentPosition.y < creatingState.startPosition.y;
+    final result = objectSnapService.snapRect(
+      targetRect: rect,
+      referenceElements: cachedMode.referenceElements,
+      referenceAabbs: cachedMode.referenceAabbs,
+      snapDistance: snapDistance,
+      targetAnchorsX: moveMinX ? _startAnchors : _endAnchors,
+      targetAnchorsY: moveMinY ? _startAnchors : _endAnchors,
+      enablePointSnaps: snapConfig.enablePointSnaps,
+      enableGapSnaps: snapConfig.enableGapSnaps,
+    );
+    if (result.hasSnap) {
+      rect = DrawRect(
+        minX: rect.minX + (moveMinX ? result.dx : 0),
+        minY: rect.minY + (moveMinY ? result.dy : 0),
+        maxX: rect.maxX + (moveMinX ? 0 : result.dx),
+        maxY: rect.maxY + (moveMinY ? 0 : result.dy),
       );
-      if (result.hasSnap) {
-        final moveMinX = anchorsX.contains(SnapAxisAnchor.start);
-        final moveMaxX = anchorsX.contains(SnapAxisAnchor.end);
-        final moveMinY = anchorsY.contains(SnapAxisAnchor.start);
-        final moveMaxY = anchorsY.contains(SnapAxisAnchor.end);
-        newRect = DrawRect(
-          minX: newRect.minX + (moveMinX ? result.dx : 0),
-          minY: newRect.minY + (moveMinY ? result.dy : 0),
-          maxX: newRect.maxX + (moveMaxX ? result.dx : 0),
-          maxY: newRect.maxY + (moveMaxY ? result.dy : 0),
-        );
-      }
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
-      }
     }
 
     return CreationUpdateResult(
       data: creatingState.elementData,
-      rect: newRect,
-      creationMode: nextCreationMode,
-      snapGuides: snapGuides,
+      rect: rect,
+      creationMode: cachedMode,
+      snapGuides: snapConfig.showGuides ? result.guides : const <SnapGuide>[],
     );
   }
 
@@ -132,39 +116,16 @@ class RectCreationStrategy extends CreationStrategy {
   }) {
     final rect = creatingState.currentRect;
     final minSize = config.element.minCreateSize;
-    final updatedElement = creatingState.element.copyWith(rect: rect);
-    final isValid =
+    final shouldCommit =
         rect.width >= minSize &&
         rect.height >= minSize &&
-        updatedElement.isValidWith(config.element);
+        creatingState.element.copyWith(rect: rect).isValidWith(config.element);
     return CreationFinishResult(
       data: creatingState.elementData,
       rect: rect,
-      shouldCommit: isValid,
+      shouldCommit: shouldCommit,
     );
   }
-}
-
-enum _CreateAxis { start, end }
-
-@immutable
-class _CreateDirection {
-  const _CreateDirection({required this.horizontal, required this.vertical});
-  final _CreateAxis horizontal;
-  final _CreateAxis vertical;
-}
-
-@immutable
-class _SnapReferencesResult {
-  const _SnapReferencesResult({
-    required this.referenceElements,
-    required this.referenceAabbs,
-    required this.creationMode,
-  });
-
-  final List<ElementState> referenceElements;
-  final List<DrawRect> referenceAabbs;
-  final CreationMode creationMode;
 }
 
 @immutable
@@ -180,58 +141,30 @@ class _CachedRectCreationMode extends CreationMode {
   final int elementsVersion;
 }
 
-_CreateDirection _resolveCreateDirection(DrawPoint start, DrawPoint current) {
-  final horizontal = current.x >= start.x ? _CreateAxis.end : _CreateAxis.start;
-  final vertical = current.y >= start.y ? _CreateAxis.end : _CreateAxis.start;
-  return _CreateDirection(horizontal: horizontal, vertical: vertical);
-}
-
-List<SnapAxisAnchor> _createAnchorsX(_CreateDirection direction) => [
-  if (direction.horizontal == _CreateAxis.start)
-    SnapAxisAnchor.start
-  else
-    SnapAxisAnchor.end,
-];
-
-List<SnapAxisAnchor> _createAnchorsY(_CreateDirection direction) => [
-  if (direction.vertical == _CreateAxis.start)
-    SnapAxisAnchor.start
-  else
-    SnapAxisAnchor.end,
-];
-
-_SnapReferencesResult _resolveSnapReferences({
+_CachedRectCreationMode _resolveCachedSnapReferences({
   required DrawState state,
   required CreationMode creationMode,
 }) {
   final elementsVersion = state.domain.document.elementsVersion;
   if (creationMode is _CachedRectCreationMode &&
       creationMode.elementsVersion == elementsVersion) {
-    return _SnapReferencesResult(
-      referenceElements: creationMode.referenceElements,
-      referenceAabbs: creationMode.referenceAabbs,
-      creationMode: creationMode,
-    );
+    return creationMode;
   }
 
-  final references = List<ElementState>.unmodifiable(
+  final referenceElements = List<ElementState>.unmodifiable(
     _resolveReferenceElements(state),
   );
-  final referenceAabbs = ObjectSnapService.buildReferenceAabbs(references);
-  return _SnapReferencesResult(
-    referenceElements: references,
+  final referenceAabbs = ObjectSnapService.buildReferenceAabbs(
+    referenceElements,
+  );
+  return _CachedRectCreationMode(
+    referenceElements: referenceElements,
     referenceAabbs: referenceAabbs,
-    creationMode: _CachedRectCreationMode(
-      referenceElements: references,
-      referenceAabbs: referenceAabbs,
-      elementsVersion: elementsVersion,
-    ),
+    elementsVersion: elementsVersion,
   );
 }
 
-List<ElementState> _resolveReferenceElements(DrawState state) => state
-    .domain
-    .document
-    .elements
-    .where((element) => element.opacity > 0)
-    .toList();
+List<ElementState> _resolveReferenceElements(DrawState state) => [
+  for (final element in state.domain.document.elements)
+    if (element.opacity > 0) element,
+];
