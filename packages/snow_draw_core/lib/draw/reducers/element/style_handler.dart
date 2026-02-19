@@ -273,7 +273,6 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
       oldRect: element.rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: result.localPoints,

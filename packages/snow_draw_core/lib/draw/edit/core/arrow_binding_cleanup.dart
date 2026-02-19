@@ -61,7 +61,6 @@ ElementState _unbindArrowElement({
       oldRect: element.rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final transformedFixedSegments = transformFixedSegments(
       segments: unboundElbow.fixedSegments,

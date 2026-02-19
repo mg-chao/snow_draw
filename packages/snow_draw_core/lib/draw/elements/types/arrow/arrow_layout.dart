@@ -33,82 +33,59 @@ ArrowRectAndPoints computeArrowRectAndPoints({
   required DrawRect oldRect,
   required double rotation,
   required ArrowType arrowType,
-  required double strokeWidth,
 }) {
-  // For non-rotated elements, no transformation needed.
+  // For non-rotated elements, no transformation is needed.
   if (rotation == 0) {
-    final rect = _calculateArrowRect(
+    final rect = _calculatePathBounds(
       points: localPoints,
       arrowType: arrowType,
-      strokeWidth: strokeWidth,
     );
     return ArrowRectAndPoints(rect: rect, localPoints: localPoints);
   }
 
-  // Step 1: Transform local-space points to world space using the old rect
-  // center.
+  // Transform local-space points to world space using the old center.
   final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
   final worldPoints = localPoints.map(oldSpace.toWorld).toList(growable: false);
 
-  // Step 2: Rotate world points by -theta around the origin.
+  // Rotate world points by -theta around the origin.
   final cosTheta = math.cos(rotation);
   final sinTheta = math.sin(rotation);
-  final rotatedPoints = worldPoints
-      .map(
-        (w) => DrawPoint(
-          x: w.x * cosTheta + w.y * sinTheta,
-          y: -w.x * sinTheta + w.y * cosTheta,
-        ),
-      )
-      .toList(growable: false);
+  final rotatedBounds = _calculatePathBounds(
+    points: worldPoints
+        .map(
+          (point) => DrawPoint(
+            x: point.x * cosTheta + point.y * sinTheta,
+            y: -point.x * sinTheta + point.y * cosTheta,
+          ),
+        )
+        .toList(growable: false),
+    arrowType: arrowType,
+  );
+  final rotatedCenter = rotatedBounds.center;
 
-  // Step 3: Calculate the bounding box of rotated points.
-  var minX = rotatedPoints.first.x;
-  var maxX = rotatedPoints.first.x;
-  var minY = rotatedPoints.first.y;
-  var maxY = rotatedPoints.first.y;
-  for (final p in rotatedPoints.skip(1)) {
-    if (p.x < minX) {
-      minX = p.x;
-    }
-    if (p.x > maxX) {
-      maxX = p.x;
-    }
-    if (p.y < minY) {
-      minY = p.y;
-    }
-    if (p.y > maxY) {
-      maxY = p.y;
-    }
-  }
-  final rotatedCenterX = (minX + maxX) / 2;
-  final rotatedCenterY = (minY + maxY) / 2;
+  // Rotate the center back by theta to get the new local center.
+  final newCenter = DrawPoint(
+    x: rotatedCenter.x * cosTheta - rotatedCenter.y * sinTheta,
+    y: rotatedCenter.x * sinTheta + rotatedCenter.y * cosTheta,
+  );
 
-  // Step 4: The new rect center is the rotated center rotated back by theta.
-  final newCenterX = rotatedCenterX * cosTheta - rotatedCenterY * sinTheta;
-  final newCenterY = rotatedCenterX * sinTheta + rotatedCenterY * cosTheta;
-  final newCenter = DrawPoint(x: newCenterX, y: newCenterY);
-
-  // Step 5: Transform world points to local space using the new center.
+  // Transform world points to local space using the new center.
   final newSpace = ElementSpace(rotation: rotation, origin: newCenter);
   final newLocalPoints = worldPoints
       .map(newSpace.fromWorld)
       .toList(growable: false);
 
-  // Step 6: Calculate the rect from local points.
-  final rect = _calculateArrowRect(
+  final newRect = _calculatePathBounds(
     points: newLocalPoints,
     arrowType: arrowType,
-    strokeWidth: strokeWidth,
   );
 
-  return ArrowRectAndPoints(rect: rect, localPoints: newLocalPoints);
+  return ArrowRectAndPoints(rect: newRect, localPoints: newLocalPoints);
 }
 
-DrawRect _calculateArrowRect({
+DrawRect _calculatePathBounds({
   required List<DrawPoint> points,
   required ArrowType arrowType,
-  required double strokeWidth,
 }) => ArrowGeometry.calculatePathBounds(
   worldPoints: points,
   arrowType: arrowType,

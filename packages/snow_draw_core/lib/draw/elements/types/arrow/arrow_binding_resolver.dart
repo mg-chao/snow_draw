@@ -366,7 +366,6 @@ ElementState? _applyBindings({
       oldRect: rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final transformedFixedSegments = transformFixedSegments(
       segments: updated.fixedSegments,
@@ -395,7 +394,6 @@ ElementState? _applyBindings({
     oldRect: rect,
     rotation: element.rotation,
     arrowType: data.arrowType,
-    strokeWidth: data.strokeWidth,
   );
 
   final normalized = ArrowGeometry.normalizePoints(

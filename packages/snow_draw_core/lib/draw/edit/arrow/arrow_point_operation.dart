@@ -448,7 +448,6 @@ ElementState _buildUpdatedElement({
       oldRect: context.elementRect,
       rotation: context.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final transformedFixedSegments = transformFixedSegments(
       segments: updated.fixedSegments,
@@ -474,7 +473,6 @@ ElementState _buildUpdatedElement({
     oldRect: context.elementRect,
     rotation: context.rotation,
     arrowType: data.arrowType,
-    strokeWidth: data.strokeWidth,
   );
   final normalized = ArrowGeometry.normalizePoints(
     worldPoints: rectAndPoints.localPoints,
