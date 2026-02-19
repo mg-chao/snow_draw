@@ -2,9 +2,7 @@ import 'package:meta/meta.dart';
 
 import 'element_data.dart';
 import 'element_definition.dart';
-import 'element_hit_tester.dart';
 import 'element_registry_interface.dart';
-import 'element_renderer.dart';
 import 'element_type_id.dart';
 
 /// Runtime registry for all element types.
@@ -27,12 +25,15 @@ class DefaultElementRegistry implements ElementRegistry {
   }
 
   ElementDefinition<T>? get<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _getTypedDefinition(typeId.value);
+      getDefinition(typeId);
 
   @override
   ElementDefinition<T>? getDefinition<T extends ElementData>(
     ElementTypeId<T> typeId,
-  ) => _getTypedDefinition(typeId.value);
+  ) {
+    final definition = _definitionsByTypeValue[typeId.value];
+    return definition is ElementDefinition<T> ? definition : null;
+  }
 
   @override
   ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
@@ -40,36 +41,23 @@ class DefaultElementRegistry implements ElementRegistry {
 
   @override
   bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _getTypedDefinition<T>(typeId.value) != null;
+      getDefinition(typeId) != null;
 
   @override
   bool supportsTypeValue(String typeValue) =>
       _definitionsByTypeValue.containsKey(typeValue);
 
   ElementDefinition<T> require<T extends ElementData>(ElementTypeId<T> typeId) {
-    final definition = _getTypedDefinition<T>(typeId.value);
+    final definition = getDefinition(typeId);
     if (definition == null) {
       throw StateError('Element type "${typeId.value}" is not registered');
     }
     return definition;
   }
 
-  ElementTypeRenderer getRenderer<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => require(typeId).renderer;
-
-  ElementHitTester getHitTester<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => require(typeId).hitTester;
-
-  Iterable<ElementDefinition<ElementData>> get all =>
-      _definitionsByTypeValue.values;
-
-  Iterable<ElementTypeId<ElementData>> get typeIds =>
-      _definitionsByTypeValue.values.map((definition) => definition.typeId);
-
   @override
-  Iterable<ElementTypeId<ElementData>> get registeredTypeIds => typeIds;
+  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
+      _definitionsByTypeValue.values.map((definition) => definition.typeId);
 
   @visibleForTesting
   void clear() => _definitionsByTypeValue.clear();
@@ -77,19 +65,7 @@ class DefaultElementRegistry implements ElementRegistry {
   /// Copies this registry into a new instance.
   DefaultElementRegistry clone() {
     final cloned = DefaultElementRegistry();
-    for (final definition in _definitionsByTypeValue.values) {
-      cloned._definitionsByTypeValue[definition.typeId.value] = definition;
-    }
+    cloned._definitionsByTypeValue.addAll(_definitionsByTypeValue);
     return cloned;
-  }
-
-  ElementDefinition<T>? _getTypedDefinition<T extends ElementData>(
-    String typeValue,
-  ) {
-    final definition = _definitionsByTypeValue[typeValue];
-    if (definition is ElementDefinition<T>) {
-      return definition;
-    }
-    return null;
   }
 }
