@@ -32,9 +32,6 @@ class EditPreview {
     previewElementsById: {},
     selectionPreview: null,
   );
-
-  ElementState effectiveElement(ElementState element) =>
-      previewElementsById[element.id] ?? element;
 }
 
 SelectionPreview? buildSelectionPreview({
@@ -44,18 +41,13 @@ SelectionPreview? buildSelectionPreview({
   DrawRect? multiSelectBounds,
   double? multiSelectRotation,
 }) {
-  if (!state.domain.selection.hasSelection) {
-    return null;
-  }
-
-  final selectedIds = context.selectedIdsAtStart;
   final elementMap = state.domain.document.elementMap;
-  final selectedElements = <ElementState>[];
-  for (final id in selectedIds) {
-    final element = previewElementsById[id] ?? elementMap[id];
-    if (element != null) {
-      selectedElements.add(element);
-    }
+  final selectedElements = context.selectedIdsAtStart
+      .map((id) => previewElementsById[id] ?? elementMap[id])
+      .whereType<ElementState>()
+      .toList(growable: false);
+  if (selectedElements.isEmpty) {
+    return null;
   }
 
   final geometry = SelectionGeometryResolver.resolve(
@@ -65,15 +57,9 @@ SelectionPreview? buildSelectionPreview({
     overlayRotationOverride: multiSelectRotation,
   );
 
-  final bounds = geometry.bounds;
-  final center = geometry.center;
-  if (bounds == null || center == null) {
-    return null;
-  }
-
   return SelectionPreview(
-    bounds: bounds,
-    center: center,
+    bounds: geometry.bounds!,
+    center: geometry.center!,
     rotation: geometry.rotation,
   );
 }
