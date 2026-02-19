@@ -1,4 +1,3 @@
-import '../../core/error_context.dart';
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
@@ -11,12 +10,8 @@ enum ErrorStatePolicy { toIdle, keepState }
 
 /// Configuration for error handling behavior.
 class EditErrorHandlerConfig {
-  const EditErrorHandlerConfig({
-    this.statePolicy = ErrorStatePolicy.toIdle,
-    this.defaultReason = EditFailureReason.operationFailed,
-  });
+  const EditErrorHandlerConfig({this.statePolicy = ErrorStatePolicy.toIdle});
   final ErrorStatePolicy statePolicy;
-  final EditFailureReason defaultReason;
 
   static const toIdle = EditErrorHandlerConfig();
 
@@ -64,25 +59,24 @@ class EditErrorHandler {
   );
 
   static EditFailureReason mapExceptionToReason(Object error) {
-    // Unwrap EditErrorWithContext to get the inner error
-    final actualError = error is EditErrorWithContext
-        ? error.innerError
-        : error;
+    final actualError = switch (error) {
+      EditErrorWithContext(:final innerError) => innerError,
+      _ => error,
+    };
 
     return switch (actualError) {
       EditMissingDataError _ => EditFailureReason.missingSelectionBounds,
-      EditContextTypeMismatchError _ => EditFailureReason.invalidParams,
-      EditTransformTypeMismatchError _ => EditFailureReason.invalidParams,
-      EditParamsTypeMismatchError _ => EditFailureReason.invalidParams,
+      EditContextTypeMismatchError _ ||
+      EditTransformTypeMismatchError _ ||
+      EditParamsTypeMismatchError _ ||
+      AssertionError _ => EditFailureReason.invalidParams,
 
-      // Version conflict error mapping
       EditVersionConflictError(conflictType: 'selection') =>
         EditFailureReason.selectionChanged,
       EditVersionConflictError(conflictType: 'elements') =>
         EditFailureReason.elementsChanged,
       EditVersionConflictError() => EditFailureReason.operationFailed,
 
-      // Session restore error mapping
       EditSessionRestoreError(failureType: SessionRestoreFailure.notEditing) =>
         EditFailureReason.notEditing,
       EditSessionRestoreError(
@@ -94,7 +88,6 @@ class EditErrorHandler {
       ) =>
         EditFailureReason.sessionRestoreFailed,
 
-      AssertionError _ => EditFailureReason.invalidParams,
       _ => EditFailureReason.operationFailed,
     };
   }
@@ -127,30 +120,16 @@ extension EditErrorHandlerExtension on EditErrorHandler {
   }) {
     try {
       return operation();
-    } on EditError catch (e, stackTrace) {
-      // If error doesn't have context yet, add context
-      final errorWithContext = e is EditErrorWithContext
-          ? e
-          : EditErrorWithContext(
-              innerError: e,
-              context: ErrorContext(
-                operationName: operationName ?? 'unknown',
-                timestamp: DateTime.now(),
-                stackTrace: stackTrace,
-                metadata: {'operationId': fallbackOperationId?.toString()},
-              ),
-            );
-
+    } on EditError catch (error, _) {
       return EditErrorHandler.createFailure(
         state: state,
         config: config,
-        reason: EditErrorHandler.mapExceptionToReason(errorWithContext),
+        reason: EditErrorHandler.mapExceptionToReason(error),
         operationId: fallbackOperationId,
       );
-    } on Object catch (e, stackTrace) {
-      // Log unexpected errors
+    } on Object catch (error, stackTrace) {
       EditErrorHandler._logUnexpectedError(
-        e,
+        error,
         stackTrace,
         operationName,
         log: log,
@@ -160,7 +139,7 @@ extension EditErrorHandlerExtension on EditErrorHandler {
       return EditErrorHandler.createFailure(
         state: state,
         config: config,
-        reason: EditErrorHandler.mapExceptionToReason(e),
+        reason: EditErrorHandler.mapExceptionToReason(error),
         operationId: fallbackOperationId,
       );
     }
