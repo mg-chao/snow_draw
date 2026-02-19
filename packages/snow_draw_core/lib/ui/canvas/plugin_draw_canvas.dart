@@ -302,25 +302,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   DrawPoint _transformPosition(Offset localPosition) =>
       _coords.fromOffset(localPosition);
 
-  bool _shouldPreservePointerPressure() {
-    if (widget.currentToolTypeId == FreeDrawData.typeIdToken) {
-      return true;
-    }
-    final interaction = widget.store.state.application.interaction;
-    return interaction is CreatingState &&
-        interaction.elementData is FreeDrawData;
-  }
-
-  double _resolveDispatchedPointerPressure(double pressure) =>
-      _shouldPreservePointerPressure() ? pressure : 0.0;
-
-  DrawPoint _applyDispatchedPressure(DrawPoint position, double pressure) {
-    if (_doubleEquals(pressure, 0)) {
-      return position;
-    }
-    return position.copyWith(pressure: pressure);
-  }
-
   Future<void> _recreatePluginCoordinator() async {
     // Create dependencies.
     final dependencies = ControllerDependencies(
@@ -1153,16 +1134,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (widget.store.state.application.interaction is TextEditingState) {
       await _flushPendingTextDraftSync();
     }
-    final resolvedPressure = _resolveDispatchedPointerPressure(event.pressure);
-    final dispatchedPosition = _applyDispatchedPressure(
-      position,
-      resolvedPressure,
-    );
     await _pluginCoordinator.handleEvent(
       PointerDownInputEvent(
-        position: dispatchedPosition,
+        position: position,
         modifiers: _currentModifiers,
-        pressure: resolvedPressure,
+        pressure: 0.0,
       ),
     );
   }
@@ -1187,16 +1163,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
-    final resolvedPressure = _resolveDispatchedPointerPressure(event.pressure);
-    final dispatchedPosition = _applyDispatchedPressure(
-      position,
-      resolvedPressure,
-    );
     _pointerMoveDispatcher.dispatch(
       PointerMoveInputEvent(
-        position: dispatchedPosition,
+        position: position,
         modifiers: _currentModifiers,
-        pressure: resolvedPressure,
+        pressure: 0.0,
       ),
     );
   }

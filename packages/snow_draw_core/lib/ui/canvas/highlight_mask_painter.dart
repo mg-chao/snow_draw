@@ -12,7 +12,8 @@ import 'highlight_mask_shader_manager.dart';
 /// Paints a dimming mask over the viewport with holes for highlights.
 ///
 /// Tries the GPU-accelerated shader path first. Falls back to the
-/// path-difference CPU compositor only when the shader is unavailable.
+/// path-difference CPU compositor when the shader is not available or the
+/// highlight count exceeds the shader limit.
 void paintHighlightMask({
   required Canvas canvas,
   required List<ElementState> highlights,

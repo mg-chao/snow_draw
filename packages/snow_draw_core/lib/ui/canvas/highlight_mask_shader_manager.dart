@@ -34,8 +34,6 @@ const int _hiBOffset = _hiAOffset + highlightMaskShaderLimit * _vec4Floats;
 /// Offset where uHiC[32] starts (after uHiB).
 const int _hiCOffset = _hiBOffset + highlightMaskShaderLimit * _vec4Floats;
 
-const _whiteMaskColor = Color(0xFFFFFFFF);
-
 /// GPU-accelerated highlight mask rendering.
 ///
 /// Replaces the `saveLayer` + `BlendMode.clear` approach with shader draws,
@@ -47,9 +45,8 @@ class HighlightMaskShaderManager {
 
   ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
-  final _singlePassPaint = Paint();
-  final _chunkModulatePaint = Paint()..blendMode = BlendMode.modulate;
-  final _baseMaskPaint = Paint()..style = PaintingStyle.fill;
+  final _paint = Paint();
+  final _modulatePaint = Paint()..blendMode = BlendMode.modulate;
   var _isLoading = false;
   var _loadFailed = false;
 
@@ -84,8 +81,8 @@ class HighlightMaskShaderManager {
 
   /// Paints the highlight mask using the fragment shader.
   ///
-  /// Returns `true` if shader rendering was used. Returns `false` only when
-  /// the shader is unavailable so callers can run a CPU fallback.
+  /// Returns `true` if the shader was used, `false` if the caller
+  /// should fall back to the CPU-based `saveLayer` approach.
   bool paintMask({
     required Canvas canvas,
     required List<ElementState> highlights,
@@ -117,46 +114,22 @@ class HighlightMaskShaderManager {
       cameraPosition: cameraPosition,
     );
 
-    if (visible.isEmpty) {
-      _baseMaskPaint.color = maskConfig.maskColor.withValues(
-        alpha: effectiveAlpha,
-      );
-      canvas.drawRect(screenRect, _baseMaskPaint);
-      return true;
+    if (visible.length > highlightMaskShaderLimit) {
+      return false;
     }
 
-    if (visible.length <= highlightMaskShaderLimit) {
-      _configureShaderPass(
-        shader: shader,
-        screenWidth: screenWidth,
-        screenHeight: screenHeight,
-        maskColor: maskConfig.maskColor,
-        alpha: effectiveAlpha,
-        highlights: visible,
-        start: 0,
-        count: visible.length,
-      );
-      _singlePassPaint.shader = shader;
-      canvas.drawRect(screenRect, _singlePassPaint);
-      return true;
-    }
-
-    // Dense scenes: draw a base dimming layer, then modulate chunked hole
-    // masks. This avoids falling back to CPU when highlight count > 32.
-    _baseMaskPaint.color = maskConfig.maskColor.withValues(
-      alpha: effectiveAlpha,
-    );
-    canvas.drawRect(screenRect, _baseMaskPaint);
-
-    _drawHoleMaskModulate(
-      canvas: canvas,
+    _configureShaderPass(
       shader: shader,
-      screenRect: screenRect,
       screenWidth: screenWidth,
       screenHeight: screenHeight,
-      visibleHighlights: visible,
+      maskColor: maskConfig.maskColor,
+      alpha: effectiveAlpha,
+      highlights: visible,
+      start: 0,
+      count: visible.length,
     );
-
+    _paint.shader = shader;
+    canvas.drawRect(screenRect, _paint);
     return true;
   }
 
@@ -190,15 +163,22 @@ class HighlightMaskShaderManager {
     if (visible.isEmpty) {
       return true;
     }
+    if (visible.length > highlightMaskShaderLimit) {
+      return false;
+    }
 
-    _drawHoleMaskModulate(
-      canvas: canvas,
+    _configureShaderPass(
       shader: shader,
-      screenRect: screenRect,
       screenWidth: screenWidth,
       screenHeight: screenHeight,
-      visibleHighlights: visible,
+      maskColor: const Color(0xFFFFFFFF),
+      alpha: 1,
+      highlights: visible,
+      start: 0,
+      count: visible.length,
     );
+    _modulatePaint.shader = shader;
+    canvas.drawRect(screenRect, _modulatePaint);
     return true;
   }
 
@@ -279,38 +259,6 @@ class HighlightMaskShaderManager {
         ..setFloat(cBase + 1, 0)
         ..setFloat(cBase + 2, 0)
         ..setFloat(cBase + 3, 0);
-    }
-  }
-
-  void _drawHoleMaskModulate({
-    required Canvas canvas,
-    required ui.FragmentShader shader,
-    required Rect screenRect,
-    required double screenWidth,
-    required double screenHeight,
-    required List<_VisibleHighlight> visibleHighlights,
-  }) {
-    for (
-      var start = 0;
-      start < visibleHighlights.length;
-      start += highlightMaskShaderLimit
-    ) {
-      final count = math.min(
-        highlightMaskShaderLimit,
-        visibleHighlights.length - start,
-      );
-      _configureShaderPass(
-        shader: shader,
-        screenWidth: screenWidth,
-        screenHeight: screenHeight,
-        maskColor: _whiteMaskColor,
-        alpha: 1,
-        highlights: visibleHighlights,
-        start: start,
-        count: count,
-      );
-      _chunkModulatePaint.shader = shader;
-      canvas.drawRect(screenRect, _chunkModulatePaint);
     }
   }
 
