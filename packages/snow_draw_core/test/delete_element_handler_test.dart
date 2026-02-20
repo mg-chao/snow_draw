@@ -19,6 +19,8 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 class _TestDeps implements ElementReducerDeps {
+  const _TestDeps();
+
   @override
   DrawConfig get config => DrawConfig();
 
@@ -34,7 +36,7 @@ class _TestDeps implements ElementReducerDeps {
 }
 
 void main() {
-  final deps = _TestDeps();
+  const deps = _TestDeps();
 
   group('handleDeleteElements', () {
     test('deleting a bound target clears arrow binding', () {
@@ -61,10 +63,9 @@ void main() {
         deps,
       );
 
-      expect(next.domain.document.getElementById('target'), isNull);
-      final arrow = next.domain.document.getElementById('arrow');
-      expect(arrow, isNotNull);
-      final data = arrow!.data as ArrowData;
+      final document = next.domain.document;
+      expect(document.getElementById('target'), isNull);
+      final data = _elementData<ArrowData>(document, 'arrow');
       expect(data.startBinding, isNull);
     });
 
@@ -93,9 +94,7 @@ void main() {
         deps,
       );
 
-      final line = next.domain.document.getElementById('line');
-      expect(line, isNotNull);
-      final data = line!.data as LineData;
+      final data = _elementData<LineData>(next.domain.document, 'line');
       expect(data.endBinding, isNull);
       expect(data.endIsSpecial, isNull);
     });
@@ -137,11 +136,11 @@ void main() {
           deps,
         );
 
-        final kept = next.domain.document.getElementById('serial-keep');
-        expect(kept, isNotNull);
-        expect((kept!.data as SerialNumberData).textElementId, isNull);
-        expect(next.domain.document.getElementById('serial-delete'), isNull);
-        expect(next.domain.document.getElementById(sharedTextId), isNull);
+        final document = next.domain.document;
+        final kept = _elementData<SerialNumberData>(document, 'serial-keep');
+        expect(kept.textElementId, isNull);
+        expect(document.getElementById('serial-delete'), isNull);
+        expect(document.getElementById(sharedTextId), isNull);
       },
     );
 
@@ -189,6 +188,9 @@ void main() {
 DrawState _stateWithElements(List<ElementState> elements) => DrawState(
   domain: DomainState(document: DocumentState(elements: elements)),
 );
+
+T _elementData<T>(DocumentState document, String id) =>
+    document.getElementById(id)!.data as T;
 
 ElementState _filterElement({required String id, required int zIndex}) =>
     ElementState(
