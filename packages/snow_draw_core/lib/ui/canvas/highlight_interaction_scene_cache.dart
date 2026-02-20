@@ -127,9 +127,6 @@ class InteractionSceneCache {
 
     final nextEntry = _CachedSegment(
       picture: picture,
-      sourceElements: elements,
-      start: start,
-      end: end,
       elementRefs: [
         for (var index = start; index < end; index++) elements[index],
       ],
@@ -220,25 +217,7 @@ class InteractionSceneCache {
     return 0x1fffffff & (hash * 31 + (end - start));
   }
 
-  int _quantizeScale(double scaleFactor) {
-    final normalized = scaleFactor == 0 ? 1.0 : scaleFactor;
-    return (normalized * 1000).round();
-  }
-
-  static bool _setEquals<T>(Set<T> a, Set<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final value in a) {
-      if (!b.contains(value)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  int _quantizeScale(double scaleFactor) => (scaleFactor * 1000).round();
 }
 
 /// Backward-compatible alias.
@@ -253,9 +232,6 @@ class HighlightInteractionSceneCache extends InteractionSceneCache {
 class _CachedSegment {
   const _CachedSegment({
     required this.picture,
-    required this.sourceElements,
-    required this.start,
-    required this.end,
     required this.elementRefs,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
@@ -264,9 +240,6 @@ class _CachedSegment {
   });
 
   final Picture picture;
-  final List<ElementState> sourceElements;
-  final int start;
-  final int end;
   final List<ElementState> elementRefs;
   final int documentVersion;
   final int textRenderingCacheRevision;
@@ -287,12 +260,6 @@ class _CachedSegment {
         this.scaleKey != scaleKey ||
         this.localeTag != localeTag) {
       return false;
-    }
-
-    if (identical(sourceElements, elements) &&
-        this.start == start &&
-        this.end == end) {
-      return true;
     }
 
     final length = end - start;
@@ -348,8 +315,6 @@ class _SegmentLayoutCacheEntry {
     required Set<String> dynamicElementIds,
   }) =>
       identical(this.elements, elements) &&
-      InteractionSceneCache._setEquals(
-        this.dynamicElementIds,
-        dynamicElementIds,
-      );
+      this.dynamicElementIds.length == dynamicElementIds.length &&
+      this.dynamicElementIds.containsAll(dynamicElementIds);
 }
