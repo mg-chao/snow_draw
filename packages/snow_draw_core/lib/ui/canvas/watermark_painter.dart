@@ -50,6 +50,14 @@ final _identityMatrix4 = Float64List.fromList(<double>[
 double _snap(double value) =>
     (value / _sizeBucket).ceilToDouble() * _sizeBucket;
 
+Rect _cullRectForViewport(Size viewportSize, Offset center) {
+  final diagonal = math.sqrt(
+    viewportSize.width * viewportSize.width +
+        viewportSize.height * viewportSize.height,
+  );
+  return Rect.fromCenter(center: center, width: diagonal, height: diagonal);
+}
+
 @immutable
 class _WatermarkLayoutConfig {
   const _WatermarkLayoutConfig({
@@ -134,47 +142,6 @@ class _WatermarkRenderConfig {
       Object.hash(layout, color, effectiveAlpha, rotationRadians);
 }
 
-@immutable
-class _WatermarkTileSnapshot {
-  const _WatermarkTileSnapshot({required this.image});
-
-  final ui.Image image;
-}
-
-@immutable
-class _WatermarkViewportGeometry {
-  const _WatermarkViewportGeometry({
-    required this.viewportSize,
-    required this.layerRect,
-    required this.center,
-    required this.cullRect,
-  });
-
-  factory _WatermarkViewportGeometry.fromSize(Size viewportSize) {
-    final layerRect = Offset.zero & viewportSize;
-    final center = layerRect.center;
-    final diagonal = math.sqrt(
-      viewportSize.width * viewportSize.width +
-          viewportSize.height * viewportSize.height,
-    );
-    return _WatermarkViewportGeometry(
-      viewportSize: viewportSize,
-      layerRect: layerRect,
-      center: center,
-      cullRect: Rect.fromCenter(
-        center: center,
-        width: diagonal,
-        height: diagonal,
-      ),
-    );
-  }
-
-  final Size viewportSize;
-  final Rect layerRect;
-  final Offset center;
-  final Rect cullRect;
-}
-
 /// Caches watermark paint resources so repeated frames avoid text layout.
 ///
 /// Fast path: build a tiny shader tile and fill a rotated rect in one draw.
@@ -189,7 +156,6 @@ class _WatermarkViewportGeometry {
 class WatermarkPainterCache {
   WatermarkConfig? _renderSourceConfig;
   _WatermarkRenderConfig? _renderConfig;
-  _WatermarkViewportGeometry? _viewportGeometry;
 
   _WatermarkLayoutConfig? _tileConfig;
   ui.Image? _tileImage;
@@ -228,10 +194,9 @@ class WatermarkPainterCache {
       return;
     }
 
-    final viewportGeometry = _resolveViewportGeometry(viewportSize);
-    final layerRect = viewportGeometry.layerRect;
-    final center = viewportGeometry.center;
-    final cullRect = viewportGeometry.cullRect;
+    final layerRect = Offset.zero & viewportSize;
+    final center = layerRect.center;
+    final cullRect = _cullRectForViewport(viewportSize, center);
 
     // Clip to the viewport so rotated tiles do not bleed outside.
     canvas
@@ -266,7 +231,6 @@ class WatermarkPainterCache {
   void invalidate() {
     _renderSourceConfig = null;
     _renderConfig = null;
-    _viewportGeometry = null;
     _clearTileCache();
     _clearFallbackPictureCache();
     _tileRebuildCount = 0;
@@ -281,16 +245,6 @@ class WatermarkPainterCache {
     final resolved = _WatermarkRenderConfig.fromConfig(config);
     _renderSourceConfig = config;
     _renderConfig = resolved;
-    return resolved;
-  }
-
-  _WatermarkViewportGeometry _resolveViewportGeometry(Size viewportSize) {
-    final cached = _viewportGeometry;
-    if (cached != null && cached.viewportSize == viewportSize) {
-      return cached;
-    }
-    final resolved = _WatermarkViewportGeometry.fromSize(viewportSize);
-    _viewportGeometry = resolved;
     return resolved;
   }
 
@@ -334,16 +288,16 @@ class WatermarkPainterCache {
     _tileConfig = layoutConfig;
     _tileRebuildCount += 1;
 
-    final snapshot = _buildTileSnapshot(layoutConfig);
-    if (snapshot == null) {
+    final image = _buildTileImage(layoutConfig);
+    if (image == null) {
       // Remember failed snapshots for this config so fallback mode does not
       // retry expensive tile creation every frame.
       return;
     }
 
-    _tileImage = snapshot.image;
+    _tileImage = image;
     _tileShader = ui.ImageShader(
-      snapshot.image,
+      image,
       ui.TileMode.repeated,
       ui.TileMode.repeated,
       _identityMatrix4,
@@ -393,24 +347,24 @@ class WatermarkPainterCache {
     return _picture!;
   }
 
-  static _WatermarkTileSnapshot? _buildTileSnapshot(
-    _WatermarkLayoutConfig layoutConfig,
-  ) {
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: layoutConfig.text,
-        style: TextStyle(
-          color: _opaqueWhite,
-          fontSize: layoutConfig.fontSize,
-          fontFamily: layoutConfig.fontFamily.isEmpty
-              ? null
-              : layoutConfig.fontFamily,
+  static TextPainter _createTextPainter(_WatermarkLayoutConfig layoutConfig) =>
+      TextPainter(
+        text: TextSpan(
+          text: layoutConfig.text,
+          style: TextStyle(
+            color: _opaqueWhite,
+            fontSize: layoutConfig.fontSize,
+            fontFamily: layoutConfig.fontFamily.isEmpty
+                ? null
+                : layoutConfig.fontFamily,
+          ),
         ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
 
+  static ui.Image? _buildTileImage(_WatermarkLayoutConfig layoutConfig) {
+    final textPainter = _createTextPainter(layoutConfig);
     final textWidth = textPainter.width;
     final textHeight = textPainter.height;
     if (textWidth <= 0 || textHeight <= 0) {
@@ -448,8 +402,7 @@ class WatermarkPainterCache {
 
     final picture = recorder.endRecording();
     try {
-      final image = picture.toImageSync(tileWidth, tileHeight);
-      return _WatermarkTileSnapshot(image: image);
+      return picture.toImageSync(tileWidth, tileHeight);
     } on Object {
       return null;
     } finally {
@@ -463,35 +416,13 @@ class WatermarkPainterCache {
   }) {
     final layerRect = Offset.zero & viewportSize;
     final center = layerRect.center;
-
     // Record enough content to cover every rotation angle.
-    final diagonal = math.sqrt(
-      viewportSize.width * viewportSize.width +
-          viewportSize.height * viewportSize.height,
-    );
-    final cullRect = Rect.fromCenter(
-      center: center,
-      width: diagonal,
-      height: diagonal,
-    );
+    final cullRect = _cullRectForViewport(viewportSize, center);
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, cullRect);
 
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: layoutConfig.text,
-        style: TextStyle(
-          color: _opaqueWhite,
-          fontSize: layoutConfig.fontSize,
-          fontFamily: layoutConfig.fontFamily.isEmpty
-              ? null
-              : layoutConfig.fontFamily,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
+    final textPainter = _createTextPainter(layoutConfig);
 
     final tileWidth = textPainter.width;
     final tileHeight = textPainter.height;
