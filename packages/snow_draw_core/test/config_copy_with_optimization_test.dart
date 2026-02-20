@@ -3,75 +3,80 @@ import 'dart:ui' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 
+void expectNoOp<T extends Object>(T config, T Function() copy) {
+  expect(copy(), same(config));
+}
+
 void main() {
   group('Configuration copyWith no-op behavior', () {
     test('leaf configs return the same instance when unchanged', () {
       const canvas = CanvasConfig();
-      expect(canvas.copyWith(), same(canvas));
-      expect(
-        canvas.copyWith(backgroundColor: canvas.backgroundColor),
-        same(canvas),
+      expectNoOp(canvas, canvas.copyWith);
+      expectNoOp(
+        canvas,
+        () => canvas.copyWith(backgroundColor: canvas.backgroundColor),
       );
 
       const boxSelection = BoxSelectionConfig();
-      expect(boxSelection.copyWith(), same(boxSelection));
-      expect(
-        boxSelection.copyWith(strokeWidth: boxSelection.strokeWidth),
-        same(boxSelection),
+      expectNoOp(boxSelection, boxSelection.copyWith);
+      expectNoOp(
+        boxSelection,
+        () => boxSelection.copyWith(strokeWidth: boxSelection.strokeWidth),
       );
 
       const element = ElementConfig();
-      expect(element.copyWith(), same(element));
-      expect(
-        element.copyWith(rotationSnapAngle: element.rotationSnapAngle),
-        same(element),
+      expectNoOp(element, element.copyWith);
+      expectNoOp(
+        element,
+        () => element.copyWith(rotationSnapAngle: element.rotationSnapAngle),
       );
 
       const grid = GridConfig();
-      expect(grid.copyWith(), same(grid));
-      expect(grid.copyWith(size: grid.size), same(grid));
+      expectNoOp(grid, grid.copyWith);
+      expectNoOp(grid, () => grid.copyWith(size: grid.size));
 
       const snap = SnapConfig();
-      expect(snap.copyWith(), same(snap));
-      expect(snap.copyWith(distance: snap.distance), same(snap));
+      expectNoOp(snap, snap.copyWith);
+      expectNoOp(snap, () => snap.copyWith(distance: snap.distance));
 
       const highlight = HighlightMaskConfig();
-      expect(highlight.copyWith(), same(highlight));
-      expect(
-        highlight.copyWith(maskOpacity: highlight.maskOpacity),
-        same(highlight),
+      expectNoOp(highlight, highlight.copyWith);
+      expectNoOp(
+        highlight,
+        () => highlight.copyWith(maskOpacity: highlight.maskOpacity),
       );
 
       const watermark = WatermarkConfig();
-      expect(watermark.copyWith(), same(watermark));
-      expect(watermark.copyWith(text: watermark.text), same(watermark));
+      expectNoOp(watermark, watermark.copyWith);
+      expectNoOp(watermark, () => watermark.copyWith(text: watermark.text));
     });
 
     test('selection configs return the same instance when unchanged', () {
       const render = SelectionRenderConfig();
-      expect(render.copyWith(), same(render));
-      expect(
-        render.copyWith(controlPointSize: render.controlPointSize),
-        same(render),
+      expectNoOp(render, render.copyWith);
+      expectNoOp(
+        render,
+        () => render.copyWith(controlPointSize: render.controlPointSize),
       );
 
       const interaction = SelectionInteractionConfig();
-      expect(interaction.copyWith(), same(interaction));
-      expect(
-        interaction.copyWith(handleTolerance: interaction.handleTolerance),
-        same(interaction),
+      expectNoOp(interaction, interaction.copyWith);
+      expectNoOp(
+        interaction,
+        () =>
+            interaction.copyWith(handleTolerance: interaction.handleTolerance),
       );
 
       const selection = SelectionConfig();
-      expect(selection.copyWith(), same(selection));
-      expect(
-        selection.copyWith(
+      expectNoOp(selection, selection.copyWith);
+      expectNoOp(
+        selection,
+        () => selection.copyWith(
           render: selection.render,
           interaction: selection.interaction,
           padding: selection.padding,
           rotateHandleOffset: selection.rotateHandleOffset,
         ),
-        same(selection),
       );
     });
 
@@ -85,15 +90,15 @@ void main() {
           fontFamily: 'Roboto',
         );
 
-        expect(style.copyWith(), same(style));
-        expect(
-          style.copyWith(
+        expectNoOp(style, style.copyWith);
+        expectNoOp(
+          style,
+          () => style.copyWith(
             color: style.color,
             fillColor: style.fillColor,
             strokeWidth: style.strokeWidth,
             fontFamily: style.fontFamily,
           ),
-          same(style),
         );
 
         final cleared = style.copyWith(fontFamily: '   ');
@@ -122,13 +127,13 @@ void main() {
 
     test('draw config remains stable when nested copyWith is a no-op', () {
       final config = DrawConfig();
-
-      final unchangedGrid = config.grid.copyWith(size: config.grid.size);
-      final unchangedSnap = config.snap.copyWith(enabled: config.snap.enabled);
-
-      final updated = config.copyWith(grid: unchangedGrid, snap: unchangedSnap);
-
-      expect(updated, same(config));
+      expectNoOp(
+        config,
+        () => config.copyWith(
+          grid: config.grid.copyWith(size: config.grid.size),
+          snap: config.snap.copyWith(enabled: config.snap.enabled),
+        ),
+      );
     });
   });
 }
