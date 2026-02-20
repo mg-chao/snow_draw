@@ -3,7 +3,6 @@ import 'dart:math';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/multi_select_lifecycle.dart';
-import '../../services/selection_geometry_resolver.dart';
 import '../../types/draw_rect.dart';
 import '../../utils/selection_calculator.dart';
 
@@ -47,39 +46,24 @@ DrawState applySelectionChange(
     selectedIds,
   );
 
-  // No-op when the selected set doesn't change. This avoids rebuilding the
-  // selection state and accidentally wiping multi-select overlay state.
   if (selectionUnchanged && !forceRefreshOverlay) {
     return state;
   }
 
   final document = state.domain.document;
-  final selectedElements = <ElementState>[];
-  for (final id in selectedIds) {
-    final element = document.getElementById(id);
-    if (element != null) {
-      selectedElements.add(element);
-    }
-  }
-  final selectionBounds = SelectionCalculator.computeSelectionBoundsForElements(
-    selectedElements,
-  );
-  final geometry = SelectionGeometryResolver.resolve(
-    selectedElements: selectedElements,
-    selectionOverlay: state.application.selectionOverlay,
-    selectionBounds: selectionBounds,
-    overlayBoundsOverride: selectedElements.length > 1 ? selectionBounds : null,
-    overlayRotationOverride: 0,
-  );
-  final overlayBounds = geometry.isMultiSelect ? geometry.bounds : null;
+  final selectedElements = selectedIds
+      .map(document.getElementById)
+      .whereType<ElementState>()
+      .toList();
+  final overlayBounds = selectedElements.length > 1
+      ? SelectionCalculator.computeSelectionBoundsForElements(selectedElements)
+      : null;
 
-  final nextSelection = selectionUnchanged
-      ? state.domain.selection
-      : state.domain.selection.withSelectedIds(selectedIds);
+  final currentOverlay = state.application.selectionOverlay;
   final nextOverlay =
       selectionUnchanged && forceRefreshOverlay && overlayBounds != null
       ? MultiSelectLifecycle.onMoveFinished(
-          state.application.selectionOverlay,
+          currentOverlay,
           newBounds: overlayBounds,
         )
       : MultiSelectLifecycle.onSelectionChanged(
@@ -87,28 +71,26 @@ DrawState applySelectionChange(
           newOverlayBounds: overlayBounds,
         );
 
-  if (identical(nextSelection, state.domain.selection) &&
-      nextOverlay == state.application.selectionOverlay) {
-    return state;
+  if (selectionUnchanged) {
+    if (nextOverlay == currentOverlay) {
+      return state;
+    }
+    return state.copyWith(
+      application: state.application.copyWith(selectionOverlay: nextOverlay),
+    );
   }
 
+  final nextApplication = nextOverlay == currentOverlay
+      ? state.application
+      : state.application.copyWith(selectionOverlay: nextOverlay);
+
   return state.copyWith(
-    domain: state.domain.copyWith(selection: nextSelection),
-    application: state.application.copyWith(selectionOverlay: nextOverlay),
+    domain: state.domain.copyWith(
+      selection: state.domain.selection.withSelectedIds(selectedIds),
+    ),
+    application: nextApplication,
   );
 }
 
-bool _setEquals<T>(Set<T> a, Set<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (final item in a) {
-    if (!b.contains(item)) {
-      return false;
-    }
-  }
-  return true;
-}
+bool _setEquals<T>(Set<T> a, Set<T> b) =>
+    identical(a, b) || (a.length == b.length && a.containsAll(b));
