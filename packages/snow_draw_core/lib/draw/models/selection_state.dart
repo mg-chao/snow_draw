@@ -50,8 +50,6 @@ class SelectionState {
   SelectionState copyWith({Set<String>? selectedIds, int? selectionVersion}) {
     final nextSelectedIds = selectedIds == null
         ? this.selectedIds
-        : identical(selectedIds, this.selectedIds)
-        ? this.selectedIds
         : _freezeSelectedIds(selectedIds);
     final hasSelectionChanged = !_setEquals(this.selectedIds, nextSelectedIds);
     final nextSelectionVersion =
@@ -90,8 +88,7 @@ class SelectionState {
     if (!selectedIds.contains(elementId)) {
       return this;
     }
-    final newIds = {...selectedIds}..remove(elementId);
-    return _withSelectedIds(newIds);
+    return _withSelectedIds({...selectedIds}..remove(elementId));
   }
 
   /// Toggles an element's selection state.
@@ -119,20 +116,8 @@ class SelectionState {
   int get hashCode =>
       Object.hash(Object.hashAllUnordered(selectedIds), selectionVersion);
 
-  static bool _setEquals<T>(Set<T> a, Set<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final item in a) {
-      if (!b.contains(item)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  static bool _setEquals<T>(Set<T> a, Set<T> b) =>
+      identical(a, b) || (a.length == b.length && a.containsAll(b));
 
   @override
   String toString() =>
@@ -141,9 +126,6 @@ class SelectionState {
       'version: $selectionVersion)';
 
   SelectionState _withSelectedIds(Set<String> ids) {
-    if (identical(selectedIds, ids)) {
-      return this;
-    }
     final frozenIds = _freezeSelectedIds(ids);
     if (_setEquals(selectedIds, frozenIds)) {
       return this;
