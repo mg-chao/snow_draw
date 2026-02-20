@@ -35,7 +35,12 @@ class WatermarkCanvasLayerController
   WatermarkCanvasLayerState get state => value;
 
   /// Replace the current snapshot and request repaint when it changes.
-  void update(WatermarkCanvasLayerState nextState) => value = nextState;
+  void update(WatermarkCanvasLayerState nextState) {
+    if (value == nextState) {
+      return;
+    }
+    value = nextState;
+  }
 }
 
 /// Paints the watermark overlay on a dedicated repaint layer.
