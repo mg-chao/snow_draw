@@ -30,20 +30,15 @@ class SerialNumberHitTester implements ElementHitTester {
       return false;
     }
 
-    final center = rect.center;
-    final dx = position.x - center.x;
-    final dy = position.y - center.y;
-    final distanceSq = dx * dx + dy * dy;
-    final effectiveStrokeWidth = resolveSerialNumberStrokeWidth(data: data);
-    final strokeMargin = effectiveStrokeWidth > 0
-        ? effectiveStrokeWidth / 2
-        : 0.0;
-    final effectiveRadius = radius + strokeMargin + tolerance;
+    final effectiveRadius =
+        radius + resolveSerialNumberStrokeWidth(data: data) / 2 + tolerance;
     if (effectiveRadius <= 0) {
       return false;
     }
 
-    return distanceSq <= effectiveRadius * effectiveRadius;
+    final dx = position.x - rect.centerX;
+    final dy = position.y - rect.centerY;
+    return dx * dx + dy * dy <= effectiveRadius * effectiveRadius;
   }
 
   @override
