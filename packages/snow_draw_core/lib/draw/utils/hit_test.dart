@@ -195,6 +195,16 @@ class HitTest {
     final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
         ? document.boundTextIds
         : null;
+    HitTestResult cache(HitTestResult result) => _storeCache(
+      result: result,
+      state: state,
+      config: config,
+      tolerance: actualTolerance,
+      filterTypeId: filterTypeId,
+      registry: registry,
+      positionX: quantizedX,
+      positionY: quantizedY,
+    );
 
     // Determine corner handle offset for single arrow selections.
     ArrowLikeData? singleSelectedArrow;
@@ -208,7 +218,7 @@ class HitTest {
         }
       }
     }
-    final cornerHandleOffset = singleSelectedArrow != null ? 8 : 0;
+    final cornerHandleOffset = (singleSelectedArrow != null ? 8 : 0).toDouble();
 
     // Check if this is a single 2-point arrow selection.
     // For 2-point arrows, skip handle hit testing since all operations
@@ -242,16 +252,7 @@ class HitTest {
           allowRotateHandle: !isSingleElbowArrow,
         );
         if (handleResult != null) {
-          return _storeCache(
-            result: handleResult,
-            state: state,
-            config: config,
-            tolerance: actualTolerance,
-            filterTypeId: filterTypeId,
-            registry: registry,
-            positionX: quantizedX,
-            positionY: quantizedY,
-          );
+          return cache(handleResult);
         }
       }
     }
@@ -261,14 +262,14 @@ class HitTest {
     document.visitElementsAtPointTopDown(position, actualTolerance, (
       candidate,
     ) {
-      if (filterTypeId != null && candidate.typeId != filterTypeId) {
-        if (!_allowsSerialBoundText(
-          filterTypeId: filterTypeId,
-          candidate: candidate,
-          boundTextIds: boundTextIds,
-        )) {
-          return true;
-        }
+      final passesFilter =
+          filterTypeId == null ||
+          candidate.typeId == filterTypeId ||
+          (filterTypeId == SerialNumberData.typeIdToken &&
+              candidate.data is TextData &&
+              (boundTextIds?.contains(candidate.id) ?? false));
+      if (!passesFilter) {
+        return true;
       }
       final element = stateView.effectiveElement(candidate);
       if (!_testElement(element, position, registry, actualTolerance)) {
@@ -278,74 +279,38 @@ class HitTest {
       return false;
     });
     if (hitElement != null) {
-      return _storeCache(
-        result: HitTestResult(
+      return cache(
+        HitTestResult(
           elementId: hitElement!.id,
           cursorHint: CursorHint.move,
           target: HitTestTarget.element,
           isInSelectionPadding: isInSelectionPadding,
         ),
-        state: state,
-        config: config,
-        tolerance: actualTolerance,
-        filterTypeId: filterTypeId,
-        registry: registry,
-        positionX: quantizedX,
-        positionY: quantizedY,
       );
     }
 
     // 3. Check the padded selection area (allows dragging from padding).
     // (Used to support starting a move by dragging from the selection
     // padding area.) Skip for 2-point arrows.
-    if (selectionContext != null && selectedIds.isNotEmpty) {
-      if (isInSelectionPadding) {
-        final firstSelectedId = selectedIds.first;
-        return _storeCache(
-          result: HitTestResult(
-            elementId: firstSelectedId,
-            cursorHint: CursorHint.move,
-            target: HitTestTarget.selectionPadding,
-            isInSelectionPadding: true,
-          ),
-          state: state,
-          config: config,
-          tolerance: actualTolerance,
-          filterTypeId: filterTypeId,
-          registry: registry,
-          positionX: quantizedX,
-          positionY: quantizedY,
-        );
-      }
+    if (selectionContext != null &&
+        isInSelectionPadding &&
+        selectedIds.isNotEmpty) {
+      return cache(
+        HitTestResult(
+          elementId: selectedIds.first,
+          cursorHint: CursorHint.move,
+          target: HitTestTarget.selectionPadding,
+          isInSelectionPadding: true,
+        ),
+      );
     }
 
-    return _storeCache(
-      result: HitTestResult(
+    return cache(
+      HitTestResult(
         cursorHint: HitTestResult.none.cursorHint,
         isInSelectionPadding: isInSelectionPadding,
       ),
-      state: state,
-      config: config,
-      tolerance: actualTolerance,
-      filterTypeId: filterTypeId,
-      registry: registry,
-      positionX: quantizedX,
-      positionY: quantizedY,
     );
-  }
-
-  bool _allowsSerialBoundText({
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementState candidate,
-    required Set<String>? boundTextIds,
-  }) {
-    if (filterTypeId != SerialNumberData.typeIdToken) {
-      return false;
-    }
-    if (candidate.data is! TextData) {
-      return false;
-    }
-    return boundTextIds?.contains(candidate.id) ?? false;
   }
 
   /// Tests whether [position] hits any selection handle.
@@ -503,7 +468,7 @@ class HitTest {
     required EffectiveSelection selection,
     required DrawPoint position,
     required SelectionConfig config,
-    required num cornerHandleOffset,
+    required double cornerHandleOffset,
   }) {
     if (!selection.hasSelection) {
       return null;
@@ -519,7 +484,6 @@ class HitTest {
     final cos = rotation == 0.0 ? 1.0 : math.cos(rotation);
     final sin = rotation == 0.0 ? 0.0 : math.sin(rotation);
     final padding = config.padding;
-    final cornerOffset = cornerHandleOffset.toDouble();
     final paddedBounds = DrawRect(
       minX: bounds.minX - padding,
       minY: bounds.minY - padding,
@@ -527,12 +491,12 @@ class HitTest {
       maxY: bounds.maxY + padding,
     );
     final handleBounds = DrawRect(
-      minX: paddedBounds.minX - cornerOffset,
-      minY: paddedBounds.minY - cornerOffset,
-      maxX: paddedBounds.maxX + cornerOffset,
-      maxY: paddedBounds.maxY + cornerOffset,
+      minX: paddedBounds.minX - cornerHandleOffset,
+      minY: paddedBounds.minY - cornerHandleOffset,
+      maxX: paddedBounds.maxX + cornerHandleOffset,
+      maxY: paddedBounds.maxY + cornerHandleOffset,
     );
-    final testPosition = rotation == 0
+    final testPosition = rotation == 0.0
         ? position
         : DrawPoint(
             x:
@@ -652,59 +616,42 @@ class HitTest {
 
   /// Tests whether the pointer hits the top edge (excluding corner regions).
   bool _testTopEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    // Y coordinate is near the top edge.
-    if (!_isNearY(position.y, bounds.minY, tolerance)) {
+    if (!_isNear(position.y, bounds.minY, tolerance)) {
       return false;
     }
-    // X coordinate is between left/right, excluding corner regions.
-    final cornerOffset = tolerance; // Corner hit radius.
-    return position.x > bounds.minX + cornerOffset &&
-        position.x < bounds.maxX - cornerOffset;
+    return position.x > bounds.minX + tolerance &&
+        position.x < bounds.maxX - tolerance;
   }
 
   /// Tests whether the pointer hits the right edge (excluding corner regions).
   bool _testRightEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    // X coordinate is near the right edge.
-    if (!_isNearX(position.x, bounds.maxX, tolerance)) {
+    if (!_isNear(position.x, bounds.maxX, tolerance)) {
       return false;
     }
-    // Y coordinate is between top/bottom, excluding corner regions.
-    final cornerOffset = tolerance;
-    return position.y > bounds.minY + cornerOffset &&
-        position.y < bounds.maxY - cornerOffset;
+    return position.y > bounds.minY + tolerance &&
+        position.y < bounds.maxY - tolerance;
   }
 
   /// Tests whether the pointer hits the bottom edge (excluding corner regions).
   bool _testBottomEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    // Y coordinate is near the bottom edge.
-    if (!_isNearY(position.y, bounds.maxY, tolerance)) {
+    if (!_isNear(position.y, bounds.maxY, tolerance)) {
       return false;
     }
-    // X coordinate is between left/right, excluding corner regions.
-    final cornerOffset = tolerance;
-    return position.x > bounds.minX + cornerOffset &&
-        position.x < bounds.maxX - cornerOffset;
+    return position.x > bounds.minX + tolerance &&
+        position.x < bounds.maxX - tolerance;
   }
 
   /// Tests whether the pointer hits the left edge (excluding corner regions).
   bool _testLeftEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    // X coordinate is near the left edge.
-    if (!_isNearX(position.x, bounds.minX, tolerance)) {
+    if (!_isNear(position.x, bounds.minX, tolerance)) {
       return false;
     }
-    // Y coordinate is between top/bottom, excluding corner regions.
-    final cornerOffset = tolerance;
-    return position.y > bounds.minY + cornerOffset &&
-        position.y < bounds.maxY - cornerOffset;
+    return position.y > bounds.minY + tolerance &&
+        position.y < bounds.maxY - tolerance;
   }
 
-  /// Returns true if [x] is within [tolerance] of [target].
-  bool _isNearX(double x, double target, double tolerance) =>
-      (x - target).abs() <= tolerance;
-
-  /// Returns true if [y] is within [tolerance] of [target].
-  bool _isNearY(double y, double target, double tolerance) =>
-      (y - target).abs() <= tolerance;
+  bool _isNear(double value, double target, double tolerance) =>
+      (value - target).abs() <= tolerance;
 
   /// Maps a selection [handle] to a resize mode.
   ResizeMode? getResizeModeForHandle(HandleType handle) {
