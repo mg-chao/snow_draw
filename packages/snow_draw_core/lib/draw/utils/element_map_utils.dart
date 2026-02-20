@@ -12,11 +12,7 @@ Map<String, ElementState> mergeFromList(Iterable<ElementState> elements) =>
 Map<String, ElementState> updateElement(
   Map<String, ElementState> elementMap,
   ElementState element,
-) {
-  final next = Map<String, ElementState>.from(elementMap);
-  next[element.id] = element;
-  return next;
-}
+) => {...elementMap, element.id: element};
 
 Map<String, ElementState> updateElements(
   Map<String, ElementState> elementMap,
@@ -25,11 +21,7 @@ Map<String, ElementState> updateElements(
   if (elements.isEmpty) {
     return elementMap;
   }
-  final next = Map<String, ElementState>.from(elementMap);
-  for (final element in elements) {
-    next[element.id] = element;
-  }
-  return next;
+  return {...elementMap, for (final element in elements) element.id: element};
 }
 
 Map<String, ElementState> removeElement(
@@ -39,21 +31,19 @@ Map<String, ElementState> removeElement(
   if (!elementMap.containsKey(elementId)) {
     return elementMap;
   }
-  final next = Map<String, ElementState>.from(elementMap)..remove(elementId);
-  return next;
+  return Map<String, ElementState>.from(elementMap)..remove(elementId);
 }
 
 Map<String, ElementState> removeElements(
   Map<String, ElementState> elementMap,
   Iterable<String> elementIds,
 ) {
-  final ids = elementIds is Set<String> ? elementIds : elementIds.toSet();
-  if (ids.isEmpty) {
+  if (elementIds.isEmpty) {
     return elementMap;
   }
 
   final next = Map<String, ElementState>.from(elementMap);
-  for (final id in ids) {
+  for (final id in elementIds.toSet()) {
     next.remove(id);
   }
   return next;
