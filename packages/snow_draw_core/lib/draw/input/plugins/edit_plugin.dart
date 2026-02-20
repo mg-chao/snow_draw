@@ -24,75 +24,84 @@ class EditPlugin extends DrawInputPlugin {
   KeyModifiers? _lastUpdateModifiers;
 
   @override
-  bool canHandle(InputEvent event, DrawState state) =>
-      state.application.isEditing;
+  bool canHandle(InputEvent _, DrawState state) => state.application.isEditing;
 
   @override
-  void reset() {
-    _clearUpdateSignature();
-  }
+  void reset() => _clearUpdateSignature();
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) async {
-    if (event is PointerDownInputEvent) {
-      _clearUpdateSignature();
-      switch (_routingPolicy.editPointerDownBehavior) {
-        case EditPointerDownBehavior.ignore:
-          return unhandled();
-        case EditPointerDownBehavior.cancelEdit:
-          await dispatch(const CancelEdit());
-          return handled(message: 'Edit canceled');
-        case EditPointerDownBehavior.commitEdit:
-          await dispatch(const FinishEdit());
-          return handled(message: 'Edit committed');
-      }
+    switch (event) {
+      case PointerDownInputEvent():
+        return _handlePointerDown();
+      case PointerMoveInputEvent(:final position, :final modifiers):
+        return _handlePointerMove(position: position, modifiers: modifiers);
+      case PointerUpInputEvent():
+        return _handlePointerUp();
+      case PointerCancelInputEvent():
+        return _handlePointerCancel();
+      default:
+        return unhandled();
+    }
+  }
+
+  Future<PluginResult> _handlePointerDown() async {
+    _clearUpdateSignature();
+
+    switch (_routingPolicy.editPointerDownBehavior) {
+      case EditPointerDownBehavior.ignore:
+        return unhandled();
+      case EditPointerDownBehavior.cancelEdit:
+        await dispatch(const CancelEdit());
+        return handled(message: 'Edit canceled');
+      case EditPointerDownBehavior.commitEdit:
+        await dispatch(const FinishEdit());
+        return handled(message: 'Edit committed');
+    }
+  }
+
+  Future<PluginResult> _handlePointerMove({
+    required DrawPoint position,
+    required KeyModifiers modifiers,
+  }) async {
+    if (!_shouldDispatchUpdate(position, modifiers)) {
+      return handled(message: 'Edit unchanged');
     }
 
-    if (event is PointerMoveInputEvent) {
-      if (!_shouldDispatchUpdate(event.position, event.modifiers)) {
-        return handled(message: 'Edit unchanged');
-      }
-      await dispatch(
-        UpdateEdit(
-          currentPosition: event.position,
-          modifiers: event.modifiers.toEditModifiers(),
-        ),
-      );
-      return handled(message: 'Edit updated');
-    }
+    await dispatch(
+      UpdateEdit(
+        currentPosition: position,
+        modifiers: modifiers.toEditModifiers(),
+      ),
+    );
+    return handled(message: 'Edit updated');
+  }
 
-    if (event is PointerUpInputEvent) {
-      _clearUpdateSignature();
-      await dispatch(const FinishEdit());
-      return handled(message: 'Edit finished');
-    }
+  Future<PluginResult> _handlePointerUp() async {
+    _clearUpdateSignature();
+    await dispatch(const FinishEdit());
+    return handled(message: 'Edit finished');
+  }
 
-    if (event is PointerCancelInputEvent) {
-      _clearUpdateSignature();
-      await dispatch(const CancelEdit());
-      return consumed(message: 'Edit canceled');
-    }
-
-    return unhandled();
+  Future<PluginResult> _handlePointerCancel() async {
+    _clearUpdateSignature();
+    await dispatch(const CancelEdit());
+    return consumed(message: 'Edit canceled');
   }
 
   bool _shouldDispatchUpdate(DrawPoint position, KeyModifiers modifiers) {
-    if (_positionsMatchForDedup(
-          previous: _lastUpdatePosition,
-          next: position,
-        ) &&
+    final previous = _lastUpdatePosition;
+    if (previous != null &&
+        previous.x == position.x &&
+        previous.y == position.y &&
         _lastUpdateModifiers == modifiers) {
       return false;
     }
+
     _lastUpdatePosition = position;
     _lastUpdateModifiers = modifiers;
     return true;
   }
-
-  bool _positionsMatchForDedup({
-    required DrawPoint? previous,
-    required DrawPoint next,
-  }) => previous != null && previous.x == next.x && previous.y == next.y;
 
   void _clearUpdateSignature() {
     _lastUpdatePosition = null;
