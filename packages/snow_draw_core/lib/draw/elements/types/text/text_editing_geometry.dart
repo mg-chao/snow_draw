@@ -38,27 +38,11 @@ TextEditingGeometry resolveInitialTextEditingGeometry({
   required DrawPoint position,
   required TextData data,
   Locale? locale,
-}) {
-  final layout = layoutText(
-    data: data,
-    maxWidth: double.infinity,
-    locale: locale,
-  );
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    layout.lineHeight,
-  );
-  final width = layout.size.width + horizontalPadding * 2;
-  final height = math.max(layout.size.height, layout.lineHeight);
-  return TextEditingGeometry(
-    rect: DrawRect(
-      minX: position.x,
-      minY: position.y,
-      maxX: position.x + width,
-      maxY: position.y + height,
-    ),
-    layout: layout,
-  );
-}
+}) => _resolveContentSizedTextEditingGeometry(
+  origin: position,
+  data: data,
+  locale: locale,
+);
 
 /// Resolves the text editing rect for the next draft payload.
 ///
@@ -90,28 +74,27 @@ TextEditingGeometry resolveTextEditingGeometry({
   bool allowShrinkHeight = false,
   Locale? locale,
 }) {
-  final autoResize = data.autoResize;
-  final maxWidth = autoResize ? double.infinity : currentRect.width;
-  final layout = layoutText(data: data, maxWidth: maxWidth, locale: locale);
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    layout.lineHeight,
-  );
-  final minHeight = math.max(layout.lineHeight, layout.size.height);
-  final nextWidth = autoResize
-      ? layout.size.width + horizontalPadding * 2
-      : currentRect.width;
-  final shouldShrinkHeight = autoResize || allowShrinkHeight;
-  final nextHeight = shouldShrinkHeight
-      ? minHeight
-      : math.max(currentRect.height, minHeight);
+  if (data.autoResize) {
+    return _resolveContentSizedTextEditingGeometry(
+      origin: origin,
+      data: data,
+      locale: locale,
+    );
+  }
 
-  return TextEditingGeometry(
-    rect: DrawRect(
-      minX: origin.x,
-      minY: origin.y,
-      maxX: origin.x + nextWidth,
-      maxY: origin.y + nextHeight,
-    ),
+  final layout = layoutText(
+    data: data,
+    maxWidth: currentRect.width,
+    locale: locale,
+  );
+  final contentHeight = _resolveContentHeight(layout);
+  final nextHeight = allowShrinkHeight
+      ? contentHeight
+      : math.max(currentRect.height, contentHeight);
+  return _buildTextEditingGeometry(
+    origin: origin,
+    width: currentRect.width,
+    height: nextHeight,
     layout: layout,
   );
 }
@@ -132,24 +115,51 @@ TextEditingGeometry resolveAutoResizeTextEditingGeometry({
   required DrawPoint origin,
   required TextData data,
   Locale? locale,
+}) => _resolveContentSizedTextEditingGeometry(
+  origin: origin,
+  data: data,
+  locale: locale,
+);
+
+TextEditingGeometry _resolveContentSizedTextEditingGeometry({
+  required DrawPoint origin,
+  required TextData data,
+  Locale? locale,
 }) {
   final layout = layoutText(
     data: data,
     maxWidth: double.infinity,
     locale: locale,
   );
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    layout.lineHeight,
-  );
-  final height = math.max(layout.lineHeight, layout.size.height);
-  final width = layout.size.width + horizontalPadding * 2;
-  return TextEditingGeometry(
-    rect: DrawRect(
-      minX: origin.x,
-      minY: origin.y,
-      maxX: origin.x + width,
-      maxY: origin.y + height,
-    ),
+  return _buildTextEditingGeometry(
+    origin: origin,
+    width: _resolveContentWidth(layout),
+    height: _resolveContentHeight(layout),
     layout: layout,
   );
 }
+
+TextEditingGeometry _buildTextEditingGeometry({
+  required DrawPoint origin,
+  required double width,
+  required double height,
+  required TextLayoutMetrics layout,
+}) => TextEditingGeometry(
+  rect: DrawRect(
+    minX: origin.x,
+    minY: origin.y,
+    maxX: origin.x + width,
+    maxY: origin.y + height,
+  ),
+  layout: layout,
+);
+
+double _resolveContentWidth(TextLayoutMetrics layout) {
+  final horizontalPadding = resolveTextLayoutHorizontalPadding(
+    layout.lineHeight,
+  );
+  return layout.size.width + horizontalPadding * 2;
+}
+
+double _resolveContentHeight(TextLayoutMetrics layout) =>
+    math.max(layout.size.height, layout.lineHeight);
