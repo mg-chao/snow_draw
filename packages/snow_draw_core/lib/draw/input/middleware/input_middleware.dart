@@ -182,8 +182,8 @@ class InputPipeline {
       final middleware = middlewares[middlewareIndex];
       var nextCalled = false;
       var middlewareCompleted = false;
-      var nextSettled = false;
       var nextObserved = false;
+      var nextSettled = false;
       InputEvent? nextInputEvent;
       Future<InputEvent?>? nextFuture;
 
@@ -209,13 +209,9 @@ class InputPipeline {
             final downstreamEvent = await Future<InputEvent?>.microtask(
               () => executeNext(nextEvent, middlewareIndex + 1),
             );
-            if (!downstreamCompleter.isCompleted) {
-              downstreamCompleter.complete(downstreamEvent);
-            }
+            downstreamCompleter.complete(downstreamEvent);
           } on Object catch (error, stackTrace) {
-            if (!downstreamCompleter.isCompleted) {
-              downstreamCompleter.completeError(error, stackTrace);
-            }
+            downstreamCompleter.completeError(error, stackTrace);
           }
         }());
         final downstreamFuture = downstreamCompleter.future.whenComplete(
@@ -237,45 +233,43 @@ class InputPipeline {
         );
         middlewareCompleted = true;
 
-        if (nextCalled && (!nextObserved || !nextSettled)) {
-          await _awaitDownstream(
-            context: context,
-            middleware: middleware,
-            fallbackEvent: nextInputEvent ?? eventToProcess,
-            downstreamFuture: nextFuture,
-          );
-
-          _logMiddlewareFailure(
-            context: context,
-            middleware: middleware,
-            event: eventToProcess,
-            error: !nextObserved
-                ? StateError(
-                    'Input middleware "${middleware.name}" called next() '
-                    'without awaiting or returning it. '
-                    'Return or await next() to keep input order.',
-                  )
-                : StateError(
-                    'Input middleware "${middleware.name}" completed '
-                    'before next() finished. '
-                    'Return or await next() to keep input order.',
-                  ),
-            stackTrace: StackTrace.current,
-          );
-          return null;
+        if (!nextCalled || (nextObserved && nextSettled)) {
+          return result;
         }
 
-        return result;
+        await _awaitDownstream(
+          context: context,
+          middleware: middleware,
+          event: nextInputEvent ?? eventToProcess,
+          downstreamFuture: nextFuture,
+        );
+
+        _logMiddlewareFailure(
+          context: context,
+          middleware: middleware,
+          event: eventToProcess,
+          error: !nextObserved
+              ? StateError(
+                  'Input middleware "${middleware.name}" called next() '
+                  'without awaiting or returning it. '
+                  'Return or await next() to keep input order.',
+                )
+              : StateError(
+                  'Input middleware "${middleware.name}" completed '
+                  'before next() finished. '
+                  'Return or await next() to keep input order.',
+                ),
+          stackTrace: StackTrace.current,
+        );
+        return null;
       } on Object catch (error, stackTrace) {
         middlewareCompleted = true;
-        if (nextCalled) {
-          await _awaitDownstream(
-            context: context,
-            middleware: middleware,
-            fallbackEvent: nextInputEvent ?? eventToProcess,
-            downstreamFuture: nextFuture,
-          );
-        }
+        await _awaitDownstream(
+          context: context,
+          middleware: middleware,
+          event: nextInputEvent ?? eventToProcess,
+          downstreamFuture: nextFuture,
+        );
 
         _logMiddlewareFailure(
           context: context,
@@ -310,20 +304,21 @@ class InputPipeline {
   Future<void> _awaitDownstream({
     required MiddlewareContext context,
     required InputMiddleware middleware,
-    required InputEvent fallbackEvent,
+    required InputEvent event,
     required Future<InputEvent?>? downstreamFuture,
   }) async {
-    if (downstreamFuture == null) {
+    final future = downstreamFuture;
+    if (future == null) {
       return;
     }
 
     try {
-      await downstreamFuture;
+      await future;
     } on Object catch (error, stackTrace) {
       _logMiddlewareFailure(
         context: context,
         middleware: middleware,
-        event: fallbackEvent,
+        event: event,
         error: error,
         stackTrace: stackTrace,
       );
