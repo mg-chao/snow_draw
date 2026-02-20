@@ -1,14 +1,3 @@
-/// Tests that lock down behavior of the element editing system before
-/// simplification refactoring. These tests verify:
-///
-/// 1. ArrowPointOperation finish/preview consistency (before
-///    StandardFinishMixin migration).
-/// 2. All standard operations still produce consistent finish/preview
-///    results.
-/// 3. Reference element resolution produces identical results when
-///    extracted to a shared helper.
-library;
-
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,7 +9,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_validation.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
@@ -40,10 +28,6 @@ import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
-
-  // =========================================================================
-  // 0. EditContext.hasSnapshots
-  // =========================================================================
 
   group('EditContext.hasSnapshots', () {
     test('MoveEditContext reports true when snapshots present', () {
@@ -148,10 +132,6 @@ void main() {
       expect(EditValidation.isValidContext(noSnaps), isFalse);
     });
   });
-
-  // =========================================================================
-  // 1. ArrowPointOperation: finish/preview consistency
-  // =========================================================================
 
   group('ArrowPointOperation finish/preview consistency', () {
     test('straight arrow: preview matches finish geometry', () {
@@ -308,10 +288,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 2. Standard operations: verify pipeline still works
-  // =========================================================================
-
   group('Standard operations pipeline consistency', () {
     test('move: finish and preview produce same geometry', () {
       final element = _rectangleElement(
@@ -450,10 +426,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 3. Reference element resolution consistency
-  // =========================================================================
-
   group('Reference element resolution', () {
     test('filters out selected and invisible elements', () {
       final r1 = _rectangleElement(
@@ -474,7 +446,6 @@ void main() {
       );
       final state = _stateWith([r1, r2, invisible], selectedIds: {'r1'});
 
-      // Verify the filtering logic: visible non-selected elements only.
       final references = state.domain.document.elements
           .where(
             (e) =>
@@ -482,15 +453,10 @@ void main() {
                 !state.domain.selection.selectedIds.contains(e.id),
           )
           .toList();
-      expect(references.length, equals(1));
-      expect(references.first.id, equals('r2'));
+      expect(references.map((element) => element.id), ['r2']);
     });
   });
 }
-
-// ===========================================================================
-// Test helpers
-// ===========================================================================
 
 DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
   final ids = selectedIds ?? {elements.first.id};
@@ -515,8 +481,6 @@ ElementState _rectangleElement({required String id, required DrawRect rect}) =>
 ElementState _arrowElement({
   required String id,
   required List<DrawPoint> points,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
 }) {
   final rect = _rectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
@@ -529,11 +493,7 @@ ElementState _arrowElement({
     rotation: 0,
     opacity: 1,
     zIndex: 1,
-    data: ArrowData(
-      points: normalized,
-      startBinding: startBinding,
-      endBinding: endBinding,
-    ),
+    data: ArrowData(points: normalized),
   );
 }
 
@@ -550,12 +510,8 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
     maxY = math.max(maxY, point.y);
   }
 
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
+  maxX = minX == maxX ? minX + 1 : maxX;
+  maxY = minY == maxY ? minY + 1 : maxY;
 
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
