@@ -1,19 +1,3 @@
-/// Pre-refactoring tests for ArrowPointOperation finish/preview behavior.
-///
-/// These tests lock down the exact behavior of ArrowPointOperation before
-/// migrating it to use StandardFinishMixin, ensuring the refactoring
-/// preserves all edge cases:
-///
-/// - Point deletion on finish (shouldDelete flag)
-/// - Preview does NOT delete points (shows delete indicator instead)
-/// - Elbow arrow edit pipeline integration
-/// - Binding preservation through finish/preview
-/// - Identity transform handling
-/// - Missing element handling
-library;
-
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
@@ -39,17 +23,13 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
 
-  // =========================================================================
-  // 1. finish/preview consistency for straight arrows
-  // =========================================================================
-
   group('ArrowPointOperation finish/preview consistency', () {
     test('endpoint drag: preview rect matches finish rect', () {
       final arrow = _arrowElement(
         id: 'a1',
         points: const [DrawPoint(x: 0, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -103,7 +83,7 @@ void main() {
           DrawPoint(x: 200, y: 50),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -146,17 +126,13 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 2. Identity / no-change handling
-  // =========================================================================
-
   group('ArrowPointOperation identity handling', () {
     test('no-change finish returns idle', () {
       final arrow = _arrowElement(
         id: 'a1',
         points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -176,7 +152,6 @@ void main() {
 
       final result = op.finish(state: state, context: ctx, transform: t0);
       expect(result.application.interaction, isA<IdleState>());
-      // Element should be unchanged.
       expect(
         result.domain.document.getElementById('a1')!.rect,
         equals(arrow.rect),
@@ -188,7 +163,7 @@ void main() {
         id: 'a1',
         points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -215,14 +190,8 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 3. Point deletion behavior
-  // =========================================================================
-
   group('ArrowPointOperation point deletion', () {
     test('finish deletes mid-point when shouldDelete is true', () {
-      // Create a 3-point arrow and drag the middle point close to
-      // the previous point so shouldDelete triggers.
       final arrow = _arrowElement(
         id: 'a1',
         points: const [
@@ -231,7 +200,7 @@ void main() {
           DrawPoint(x: 200, y: 50),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -248,8 +217,6 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 100, y: 50),
       );
-
-      // Drag the mid-point very close to the first point.
       final update = op.update(
         state: state,
         context: ctx,
@@ -260,7 +227,6 @@ void main() {
       );
 
       final transform = update.transform as ArrowPointTransform;
-      // The update should flag shouldDelete.
       expect(transform.shouldDelete, isTrue);
 
       final result = op.finish(
@@ -270,7 +236,6 @@ void main() {
       );
       final finishedArrow = result.domain.document.getElementById('a1')!;
       final finishedData = finishedArrow.data as ArrowData;
-      // After deletion, the arrow should have fewer points.
       expect(finishedData.points.length, equals(2));
     });
 
@@ -283,7 +248,7 @@ void main() {
           DrawPoint(x: 200, y: 50),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -300,8 +265,6 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 100, y: 50),
       );
-
-      // Drag mid-point close to first point.
       final update = op.update(
         state: state,
         context: ctx,
@@ -321,7 +284,6 @@ void main() {
       );
       final previewEl = preview.previewElementsById['a1']!;
       final previewData = previewEl.data as ArrowData;
-      // Preview should still show all 3 points (no deletion).
       expect(previewData.points.length, equals(3));
     });
 
@@ -334,7 +296,7 @@ void main() {
           DrawPoint(x: 200, y: 50),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -353,9 +315,8 @@ void main() {
         startPosition: const DrawPoint(x: 100, y: 80),
       );
 
-      final transform = t0;
-      expect(transform.shouldDelete, isTrue);
-      expect(transform.hasChanges, isTrue);
+      expect(t0.shouldDelete, isTrue);
+      expect(t0.hasChanges, isTrue);
 
       final result = op.finish(state: state, context: ctx, transform: t0);
       final finishedArrow = result.domain.document.getElementById('a1')!;
@@ -364,17 +325,13 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 4. Addable point (insertion) behavior
-  // =========================================================================
-
   group('ArrowPointOperation point insertion', () {
     test('addable point inserts after threshold', () {
       final arrow = _arrowElement(
         id: 'a1',
         points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -391,8 +348,6 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 105, y: 50),
       );
-
-      // Drag far enough to trigger insertion.
       final update = op.update(
         state: state,
         context: ctx,
@@ -409,14 +364,9 @@ void main() {
       );
       final finishedArrow = result.domain.document.getElementById('a1')!;
       final finishedData = finishedArrow.data as ArrowData;
-      // Should now have 3 points (original 2 + inserted 1).
       expect(finishedData.points.length, equals(3));
     });
   });
-
-  // =========================================================================
-  // 5. Binding preservation
-  // =========================================================================
 
   group('ArrowPointOperation binding handling', () {
     test('dragging non-endpoint preserves existing bindings', () {
@@ -437,7 +387,7 @@ void main() {
         ],
         endBinding: binding,
       );
-      final state = _stateWith([target, arrow], selectedIds: {'a1'});
+      final state = _stateWith([target, arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -470,20 +420,15 @@ void main() {
       );
       final finishedArrow = result.domain.document.getElementById('a1')!;
       final finishedData = finishedArrow.data as ArrowData;
-      // End binding should be preserved since we only moved
-      // a mid-point.
       expect(finishedData.endBinding, equals(binding));
     });
   });
 
-  // =========================================================================
-  // 6. Elbow arrow editing
-  // =========================================================================
-
   group('ArrowPointOperation elbow arrows', () {
     test('elbow endpoint drag: preview matches finish rect', () {
-      final arrow = _elbowArrowElement(
+      final arrow = _arrowElement(
         id: 'e1',
+        arrowType: ArrowType.elbow,
         points: const [
           DrawPoint(x: 10, y: 50),
           DrawPoint(x: 100, y: 50),
@@ -491,7 +436,7 @@ void main() {
           DrawPoint(x: 200, y: 150),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'e1'});
+      final state = _stateWith([arrow], selectedIds: const {'e1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -534,8 +479,9 @@ void main() {
     });
 
     test('elbow segment drag produces valid geometry', () {
-      final arrow = _elbowArrowElement(
+      final arrow = _arrowElement(
         id: 'e1',
+        arrowType: ArrowType.elbow,
         points: const [
           DrawPoint(x: 10, y: 50),
           DrawPoint(x: 100, y: 50),
@@ -543,11 +489,9 @@ void main() {
           DrawPoint(x: 200, y: 150),
         ],
       );
-      final state = _stateWith([arrow], selectedIds: {'e1'});
+      final state = _stateWith([arrow], selectedIds: const {'e1'});
 
       const op = ArrowPointOperation();
-      // Drag the middle horizontal segment (index 1, between
-      // points 1 and 2).
       final ctx = op.createContext(
         state: state,
         position: const DrawPoint(x: 100, y: 100),
@@ -578,15 +522,10 @@ void main() {
       );
       final finishedArrow = result.domain.document.getElementById('e1')!;
       final finishedData = finishedArrow.data as ArrowData;
-      // Should still have valid points.
       expect(finishedData.points.length, greaterThanOrEqualTo(2));
       expect(result.application.interaction, isA<IdleState>());
     });
   });
-
-  // =========================================================================
-  // 7. Cancel behavior
-  // =========================================================================
 
   group('ArrowPointOperation cancel', () {
     test('cancel returns to idle without modifying elements', () {
@@ -594,10 +533,9 @@ void main() {
         id: 'a1',
         points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
-
       final result = op.cancel(state: state);
       expect(result.application.interaction, isA<IdleState>());
       expect(
@@ -607,17 +545,13 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 8. Selection preview
-  // =========================================================================
-
   group('ArrowPointOperation selection preview', () {
     test('preview includes selection preview', () {
       final arrow = _arrowElement(
         id: 'a1',
         points: const [DrawPoint(x: 10, y: 50), DrawPoint(x: 200, y: 50)],
       );
-      final state = _stateWith([arrow], selectedIds: {'a1'});
+      final state = _stateWith([arrow], selectedIds: const {'a1'});
 
       const op = ArrowPointOperation();
       final ctx = op.createContext(
@@ -653,19 +587,15 @@ void main() {
   });
 }
 
-// ===========================================================================
-// Test helpers
-// ===========================================================================
-
-DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
-  final ids = selectedIds ?? {elements.first.id};
-  return DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: ids),
-    ),
-  );
-}
+DrawState _stateWith(
+  List<ElementState> elements, {
+  required Set<String> selectedIds,
+}) => DrawState(
+  domain: DomainState(
+    document: DocumentState(elements: elements),
+    selection: SelectionState(selectedIds: selectedIds),
+  ),
+);
 
 ElementState _rectangleElement({required String id, required DrawRect rect}) =>
     ElementState(
@@ -682,6 +612,7 @@ ElementState _arrowElement({
   required List<DrawPoint> points,
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
+  ArrowType arrowType = ArrowType.straight,
 }) {
   final rect = _rectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
@@ -695,32 +626,7 @@ ElementState _arrowElement({
     opacity: 1,
     zIndex: 1,
     data: ArrowData(
-      points: normalized,
-      startBinding: startBinding,
-      endBinding: endBinding,
-    ),
-  );
-}
-
-ElementState _elbowArrowElement({
-  required String id,
-  required List<DrawPoint> points,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
-}) {
-  final rect = _rectForPoints(points);
-  final normalized = ArrowGeometry.normalizePoints(
-    worldPoints: points,
-    rect: rect,
-  );
-  return ElementState(
-    id: id,
-    rect: rect,
-    rotation: 0,
-    opacity: 1,
-    zIndex: 1,
-    data: ArrowData(
-      arrowType: ArrowType.elbow,
+      arrowType: arrowType,
       points: normalized,
       startBinding: startBinding,
       endBinding: endBinding,
@@ -735,10 +641,18 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
   var maxY = points.first.y;
 
   for (final point in points.skip(1)) {
-    minX = math.min(minX, point.x);
-    maxX = math.max(maxX, point.x);
-    minY = math.min(minY, point.y);
-    maxY = math.max(maxY, point.y);
+    if (point.x < minX) {
+      minX = point.x;
+    }
+    if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    }
+    if (point.y > maxY) {
+      maxY = point.y;
+    }
   }
 
   if (minX == maxX) {
