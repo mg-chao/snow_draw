@@ -83,7 +83,6 @@ DrawState applySelectionChange(
           newBounds: overlayBounds,
         )
       : MultiSelectLifecycle.onSelectionChanged(
-          state.application.selectionOverlay,
           selectedIds,
           newOverlayBounds: overlayBounds,
         );
