@@ -26,24 +26,55 @@ class ElementRenderer {
   static final _selectionHandleStrokePaint = Paint()
     ..style = PaintingStyle.stroke
     ..isAntiAlias = true;
+  static const _unknownElementColor = Color(0xFFB00020);
+  static const _selectionDashLength = 6.0;
+  static const _selectionGapLength = 4.0;
+
+  double _effectiveScale(double scaleFactor) =>
+      scaleFactor == 0 ? 1.0 : scaleFactor;
+
+  DrawRect _inflateBounds(DrawRect bounds, double amount) => DrawRect(
+    minX: bounds.minX - amount,
+    minY: bounds.minY - amount,
+    maxX: bounds.maxX + amount,
+    maxY: bounds.maxY + amount,
+  );
+
+  DrawRect _selectionBounds(
+    DrawRect bounds,
+    SelectionConfig config,
+    double scale,
+  ) => _inflateBounds(bounds, config.padding / scale);
+
+  Rect _toRect(DrawRect rect) =>
+      Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height);
+
+  void _applyRotation(
+    Canvas canvas, {
+    double? rotation,
+    DrawPoint? rotationCenter,
+  }) {
+    if (rotation == null || rotation == 0 || rotationCenter == null) {
+      return;
+    }
+    canvas
+      ..translate(rotationCenter.x, rotationCenter.y)
+      ..rotate(rotation)
+      ..translate(-rotationCenter.x, -rotationCenter.y);
+  }
 
   void _renderUnknownElement(
     Canvas canvas,
     ElementState element,
     double scaleFactor,
   ) {
-    final rect = Rect.fromLTWH(
-      element.rect.minX,
-      element.rect.minY,
-      element.rect.width,
-      element.rect.height,
-    );
-    final effectiveScale = scaleFactor == 0 ? 1.0 : scaleFactor;
-    final strokeWidth = (1.5 / effectiveScale).clamp(0.5, 4.0);
+    final rect = _toRect(element.rect);
+    final scale = _effectiveScale(scaleFactor);
+    final strokeWidth = (1.5 / scale).clamp(0.5, 4.0);
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..color = const Color(0xFFB00020)
+      ..color = _unknownElementColor
       ..isAntiAlias = true;
     canvas
       ..drawRect(rect, paint)
@@ -80,20 +111,20 @@ class ElementRenderer {
     Locale? locale,
   }) {
     final definition = registry.getDefinition(element.typeId);
-    if (definition == null) {
-      final message =
-          'Unknown element type "${element.typeId}" '
-          'encountered during render';
-      _renderFallbackLog.warning(message, {'typeId': element.typeId});
-      _renderUnknownElement(canvas, element, scaleFactor);
+    if (definition != null) {
+      definition.renderer.render(
+        canvas: canvas,
+        element: element,
+        scaleFactor: scaleFactor,
+        locale: locale,
+      );
       return;
     }
-    definition.renderer.render(
-      canvas: canvas,
-      element: element,
-      scaleFactor: scaleFactor,
-      locale: locale,
+    _renderFallbackLog.warning(
+      'Unknown element type "${element.typeId}" encountered during render',
+      {'typeId': element.typeId},
     );
+    _renderUnknownElement(canvas, element, scaleFactor);
   }
 
   /// Renders the selection overlay (outline + resize handles).
@@ -107,7 +138,9 @@ class ElementRenderer {
     bool dashed = true,
     double cornerHandleOffset = 0.0,
   }) {
-    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
+    final scale = _effectiveScale(scaleFactor);
+    final paddedBounds = _selectionBounds(bounds, config, scale);
+
     renderSelectionOutline(
       canvas: canvas,
       bounds: bounds,
@@ -118,34 +151,9 @@ class ElementRenderer {
       dashed: dashed,
     );
 
-    final padding = config.padding / scale;
-    final paddedBounds = DrawRect(
-      minX: bounds.minX - padding,
-      minY: bounds.minY - padding,
-      maxX: bounds.maxX + padding,
-      maxY: bounds.maxY + padding,
-    );
-
-    canvas.save();
-
-    // Apply rotation (if any).
-    if (rotation != null && rotation != 0 && rotationCenter != null) {
-      // Move origin to rotation center.
-      canvas
-        ..translate(rotationCenter.x, rotationCenter.y)
-        // Rotate.
-        ..rotate(rotation)
-        // Move origin back.
-        ..translate(-rotationCenter.x, -rotationCenter.y);
-    }
-
-    // Apply additional offset to corner handles (for arrow elements).
-    final handleOffset = cornerHandleOffset / scale;
-    final handleBounds = DrawRect(
-      minX: paddedBounds.minX - handleOffset,
-      minY: paddedBounds.minY - handleOffset,
-      maxX: paddedBounds.maxX + handleOffset,
-      maxY: paddedBounds.maxY + handleOffset,
+    final handleBounds = _inflateBounds(
+      paddedBounds,
+      cornerHandleOffset / scale,
     );
 
     final handleFillPaint = _selectionHandleFillPaint
@@ -157,39 +165,23 @@ class ElementRenderer {
     final handleSize = config.render.controlPointSize / scale;
     final cornerRadius = config.render.cornerRadius / scale;
 
-    _drawSelectionCornerHandle(
-      canvas: canvas,
-      center: Offset(handleBounds.minX, handleBounds.minY),
-      handleSize: handleSize,
-      cornerRadius: cornerRadius,
-      fillPaint: handleFillPaint,
-      strokePaint: handleStrokePaint,
-    );
-    _drawSelectionCornerHandle(
-      canvas: canvas,
-      center: Offset(handleBounds.maxX, handleBounds.minY),
-      handleSize: handleSize,
-      cornerRadius: cornerRadius,
-      fillPaint: handleFillPaint,
-      strokePaint: handleStrokePaint,
-    );
-    _drawSelectionCornerHandle(
-      canvas: canvas,
-      center: Offset(handleBounds.maxX, handleBounds.maxY),
-      handleSize: handleSize,
-      cornerRadius: cornerRadius,
-      fillPaint: handleFillPaint,
-      strokePaint: handleStrokePaint,
-    );
-    _drawSelectionCornerHandle(
-      canvas: canvas,
-      center: Offset(handleBounds.minX, handleBounds.maxY),
-      handleSize: handleSize,
-      cornerRadius: cornerRadius,
-      fillPaint: handleFillPaint,
-      strokePaint: handleStrokePaint,
-    );
-
+    canvas.save();
+    _applyRotation(canvas, rotation: rotation, rotationCenter: rotationCenter);
+    for (final center in <Offset>[
+      Offset(handleBounds.minX, handleBounds.minY),
+      Offset(handleBounds.maxX, handleBounds.minY),
+      Offset(handleBounds.maxX, handleBounds.maxY),
+      Offset(handleBounds.minX, handleBounds.maxY),
+    ]) {
+      _drawSelectionCornerHandle(
+        canvas: canvas,
+        center: center,
+        handleSize: handleSize,
+        cornerRadius: cornerRadius,
+        fillPaint: handleFillPaint,
+        strokePaint: handleStrokePaint,
+      );
+    }
     canvas.restore();
   }
 
@@ -223,54 +215,26 @@ class ElementRenderer {
     DrawPoint? rotationCenter,
     bool dashed = true,
   }) {
-    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
-    final padding = config.padding / scale;
-    final paddedBounds = DrawRect(
-      minX: bounds.minX - padding,
-      minY: bounds.minY - padding,
-      maxX: bounds.maxX + padding,
-      maxY: bounds.maxY + padding,
-    );
-
-    canvas.save();
-
-    // Apply rotation (if any).
-    if (rotation != null && rotation != 0 && rotationCenter != null) {
-      // Move origin to rotation center.
-      canvas
-        ..translate(rotationCenter.x, rotationCenter.y)
-        // Rotate.
-        ..rotate(rotation)
-        // Move origin back.
-        ..translate(-rotationCenter.x, -rotationCenter.y);
-    }
+    final scale = _effectiveScale(scaleFactor);
+    final rect = _toRect(_selectionBounds(bounds, config, scale));
 
     final paint = _selectionOutlinePaint
       ..strokeWidth = config.render.strokeWidth / scale
       ..color = config.render.strokeColor;
 
-    final rect = Rect.fromLTWH(
-      paddedBounds.minX,
-      paddedBounds.minY,
-      paddedBounds.width,
-      paddedBounds.height,
-    );
-
-    if (dashed) {
-      // Selection outline: dashed.
-      final path = Path()..addRect(rect);
+    canvas.save();
+    _applyRotation(canvas, rotation: rotation, rotationCenter: rotationCenter);
+    if (!dashed) {
+      canvas.drawRect(rect, paint);
+    } else {
       _drawDashedPath(
         canvas,
-        path,
+        Path()..addRect(rect),
         paint,
-        dashLength: 6.0 / scale,
-        gapLength: 4.0 / scale,
+        dashLength: _selectionDashLength / scale,
+        gapLength: _selectionGapLength / scale,
       );
-    } else {
-      // Per-element outline: solid.
-      canvas.drawRect(rect, paint);
     }
-
     canvas.restore();
   }
 
@@ -283,29 +247,9 @@ class ElementRenderer {
     double? rotation,
     DrawPoint? rotationCenter,
   }) {
-    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
-    final padding = config.padding / scale;
-    final paddedBounds = DrawRect(
-      minX: bounds.minX - padding,
-      minY: bounds.minY - padding,
-      maxX: bounds.maxX + padding,
-      maxY: bounds.maxY + padding,
-    );
+    final scale = _effectiveScale(scaleFactor);
+    final paddedBounds = _selectionBounds(bounds, config, scale);
 
-    canvas.save();
-
-    // Apply rotation (if any).
-    if (rotation != null && rotation != 0 && rotationCenter != null) {
-      // Move origin to rotation center.
-      canvas
-        ..translate(rotationCenter.x, rotationCenter.y)
-        // Rotate.
-        ..rotate(rotation)
-        // Move origin back.
-        ..translate(-rotationCenter.x, -rotationCenter.y);
-    }
-
-    // The rotation handle sits above the selection, centered horizontally.
     final margin = config.rotateHandleOffset / scale;
     final handlePosition = Offset(
       paddedBounds.centerX,
@@ -318,10 +262,13 @@ class ElementRenderer {
       ..strokeWidth = config.render.strokeWidth / scale
       ..color = config.render.strokeColor;
 
-    final angleHandleSize = config.render.controlPointSize / (2 * scale);
+    final handleRadius = config.render.controlPointSize / (2 * scale);
+
+    canvas.save();
+    _applyRotation(canvas, rotation: rotation, rotationCenter: rotationCenter);
     canvas
-      ..drawCircle(handlePosition, angleHandleSize, handlePaint)
-      ..drawCircle(handlePosition, angleHandleSize, handleStrokePaint)
+      ..drawCircle(handlePosition, handleRadius, handlePaint)
+      ..drawCircle(handlePosition, handleRadius, handleStrokePaint)
       ..restore();
   }
 }
