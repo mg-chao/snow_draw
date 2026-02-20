@@ -28,22 +28,12 @@ class LineHitTester implements ElementHitTester {
       );
     }
 
-    if (data.strokeWidth > 0 &&
-        _hitTestTwoPointStrokeFast(
-          element: element,
-          data: data,
-          position: position,
-          tolerance: tolerance,
-        )) {
-      return true;
-    }
-
-    if (data.strokeWidth > 0 &&
-        _strokeTester.hitTest(
-          element: element,
-          position: position,
-          tolerance: tolerance,
-        )) {
+    if (_hitTestStroke(
+      element: element,
+      data: data,
+      position: position,
+      tolerance: tolerance,
+    )) {
       return true;
     }
 
@@ -59,16 +49,42 @@ class LineHitTester implements ElementHitTester {
     }
 
     final cached = arrowVisualCache.resolve(element: element, data: data);
-    if (cached.geometry.localPoints.length < 3) {
-      return false;
-    }
-
     final fillPath = cached.getOrBuildClosedFillPath();
     final testPoint = Offset(
       localPosition.x - rect.minX,
       localPosition.y - rect.minY,
     );
     return fillPath.contains(testPoint);
+  }
+
+  bool _hitTestStroke({
+    required ElementState element,
+    required LineData data,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
+    if (data.strokeWidth <= 0) {
+      return false;
+    }
+
+    if (data.points.length == 2) {
+      final rect = element.rect;
+      final localPosition = _toLocalPosition(element, position);
+      if (_hitTestTwoPointStrokeFast(
+        rect: rect,
+        data: data,
+        localPosition: localPosition,
+        tolerance: tolerance,
+      )) {
+        return true;
+      }
+    }
+
+    return _strokeTester.hitTest(
+      element: element,
+      position: position,
+      tolerance: tolerance,
+    );
   }
 
   DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
@@ -90,20 +106,11 @@ class LineHitTester implements ElementHitTester {
       data.points.length > 2 && data.points.first == data.points.last;
 
   bool _hitTestTwoPointStrokeFast({
-    required ElementState element,
+    required DrawRect rect,
     required LineData data,
-    required DrawPoint position,
+    required DrawPoint localPosition,
     required double tolerance,
   }) {
-    if (data.points.length != 2 || _isClosed(data)) {
-      return false;
-    }
-
-    final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
-    if (!localPosition.x.isFinite || !localPosition.y.isFinite) {
-      return false;
-    }
     final radius = (data.strokeWidth / 2) + tolerance;
     if (!radius.isFinite || radius <= 0) {
       return false;
