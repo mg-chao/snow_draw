@@ -22,10 +22,8 @@ void main() {
           state,
           const ZoomCamera(scale: 2),
           const _NoopCameraReducerDeps(),
-        );
-
-        expect(next, isNotNull);
-        final camera = next!.application.view.camera;
+        )!;
+        final camera = next.application.view.camera;
         expect(camera.zoom, 2);
         expect(camera.position, const DrawPoint(x: 40, y: -12));
         expect(camera.position.x.isFinite, isTrue);
