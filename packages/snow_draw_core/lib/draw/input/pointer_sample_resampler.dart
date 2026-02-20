@@ -21,20 +21,21 @@ List<DrawPoint> resamplePointerSamples({
     return sampledPoints;
   }
 
-  final stride = (sampledPoints.length - 1) / (maxSamples - 1);
-  final reduced = <DrawPoint>[];
+  final lastIndex = sampledPoints.length - 1;
+  final stride = lastIndex / (maxSamples - 1);
+  final reduced = <DrawPoint>[sampledPoints.first];
 
-  for (var i = 0; i < maxSamples - 1; i++) {
-    final index = (i * stride).round().clamp(0, sampledPoints.length - 1);
+  for (var i = 1; i < maxSamples - 1; i++) {
+    final index = (i * stride).round();
     final point = sampledPoints[index];
-    if (reduced.isEmpty || reduced.last != point) {
+    if (reduced.last != point) {
       reduced.add(point);
     }
   }
 
-  final tail = sampledPoints.last;
-  if (reduced.isEmpty || reduced.last != tail) {
-    reduced.add(tail);
+  final lastPoint = sampledPoints.last;
+  if (reduced.last != lastPoint) {
+    reduced.add(lastPoint);
   }
 
   return List<DrawPoint>.unmodifiable(reduced);
