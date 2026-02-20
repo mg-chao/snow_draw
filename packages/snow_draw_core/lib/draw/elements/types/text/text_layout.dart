@@ -209,7 +209,6 @@ TextLayoutMetrics layoutText({
     letterSpacing: resolvedStyle.letterSpacing,
     wordSpacing: resolvedStyle.wordSpacing,
     height: resolvedStyle.height,
-    textBaseline: resolvedStyle.textBaseline ?? TextBaseline.alphabetic,
     horizontalAlign: data.horizontalAlign,
     maxWidth: safeMaxWidth,
     minWidth: safeMinWidth,
@@ -224,9 +223,7 @@ TextLayoutMetrics layoutText({
       text: resolvedText,
       style: resolvedStyle,
       align: data.horizontalAlign,
-      widthBasis: widthBasis,
       locale: locale,
-      minWidth: safeMinWidth,
       maxWidth: safeMaxWidth,
     );
 
@@ -311,7 +308,7 @@ PainterTextLayoutMetrics layoutTextWithPainter({
     )..layout(minWidth: safeMinWidth, maxWidth: safeMaxWidth);
 
     final lineMetrics = painter.computeLineMetrics();
-    final fm = _extractFontMetrics(painter, lineMetrics);
+    final fm = _extractFontMetricsFromPainter(painter, lineMetrics);
 
     // Reuse the paragraph from the fast layout path when possible,
     // avoiding a redundant ParagraphBuilder + layout call.
@@ -319,7 +316,9 @@ PainterTextLayoutMetrics layoutTextWithPainter({
       data: data,
       maxWidth: safeMaxWidth,
       minWidth: safeMinWidth,
+      colorOverride: colorOverride,
       widthBasis: widthBasis,
+      styleOverride: resolvedStyle,
       locale: locale,
     );
 
@@ -346,9 +345,7 @@ ui.Paragraph _buildParagraph({
   required String text,
   required TextStyle style,
   required TextHorizontalAlign align,
-  required TextWidthBasis widthBasis,
   required Locale? locale,
-  required double minWidth,
   required double maxWidth,
 }) {
   // Build strut-equivalent line height via ParagraphStyle.
@@ -391,9 +388,7 @@ ui.Paragraph _buildParagraph({
     ..addText(text)
     ..pop();
 
-  final paragraph = builder.build()
-    ..layout(ui.ParagraphConstraints(width: maxWidth));
-  return paragraph;
+  return builder.build()..layout(ui.ParagraphConstraints(width: maxWidth));
 }
 
 _FontMetrics _measureFontMetrics({
@@ -404,41 +399,44 @@ _FontMetrics _measureFontMetrics({
     text: _fontMetricsProbeText,
     style: style,
     align: TextHorizontalAlign.left,
-    widthBasis: TextWidthBasis.longestLine,
     locale: locale,
-    minWidth: 0,
     maxWidth: 4096,
   );
   final probeLineMetrics = probeParagraph.computeLineMetrics();
-  return _extractFontMetrics(probeParagraph, probeLineMetrics);
+  return _extractFontMetricsFromParagraph(probeParagraph, probeLineMetrics);
 }
 
-_FontMetrics _extractFontMetrics(
-  Object layoutSource,
+_FontMetrics _extractFontMetricsFromPainter(
+  TextPainter painter,
+  List<ui.LineMetrics> lineMetrics,
+) => _extractFontMetrics(
+  lineMetrics: lineMetrics,
+  fallbackBaseline: painter.computeDistanceToActualBaseline(
+    TextBaseline.alphabetic,
+  ),
+  fallbackLineHeight: painter.preferredLineHeight,
+);
+
+_FontMetrics _extractFontMetricsFromParagraph(
+  ui.Paragraph paragraph,
   List<ui.LineMetrics> lineMetrics,
 ) {
-  final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
+  final fallbackLineHeight = lineMetrics.isNotEmpty
+      ? lineMetrics.first.height
+      : (paragraph.height > 0 ? paragraph.height : 14.0);
+  return _extractFontMetrics(
+    lineMetrics: lineMetrics,
+    fallbackBaseline: paragraph.alphabeticBaseline,
+    fallbackLineHeight: fallbackLineHeight,
+  );
+}
 
-  double fallbackBaseline;
-  double fallbackLineHeight;
-  if (layoutSource is TextPainter) {
-    fallbackBaseline = layoutSource.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
-    fallbackLineHeight = layoutSource.preferredLineHeight;
-  } else if (layoutSource is ui.Paragraph) {
-    // Paragraph doesn't expose preferredLineHeight directly;
-    // use ideographicBaseline as a reasonable proxy.
-    fallbackBaseline = layoutSource.alphabeticBaseline;
-    fallbackLineHeight = layoutSource.height > 0
-        ? (lineMetrics.isNotEmpty
-              ? lineMetrics.first.height
-              : layoutSource.height)
-        : 14.0;
-  } else {
-    fallbackBaseline = 0;
-    fallbackLineHeight = 14.0;
-  }
+_FontMetrics _extractFontMetrics({
+  required List<ui.LineMetrics> lineMetrics,
+  required double fallbackBaseline,
+  required double fallbackLineHeight,
+}) {
+  final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
 
   final baseline = primaryLine?.baseline ?? fallbackBaseline;
   final lineHeight = primaryLine?.height ?? fallbackLineHeight;
@@ -517,7 +515,6 @@ class _LayoutCacheKey {
     required this.letterSpacing,
     required this.wordSpacing,
     required this.height,
-    required this.textBaseline,
     required this.horizontalAlign,
     required double maxWidth,
     required double minWidth,
@@ -536,15 +533,12 @@ class _LayoutCacheKey {
   final double? letterSpacing;
   final double? wordSpacing;
   final double? height;
-  final TextBaseline textBaseline;
   final TextHorizontalAlign horizontalAlign;
   final double maxWidth;
   final double minWidth;
   final TextWidthBasis widthBasis;
   final _TextPaintKey paintKey;
   final Locale? locale;
-
-  static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 
   static double _quantizeCoarse(double value) =>
       (value / 5).roundToDouble() * 5;
@@ -561,7 +555,6 @@ class _LayoutCacheKey {
           other.letterSpacing == letterSpacing &&
           other.wordSpacing == wordSpacing &&
           other.height == height &&
-          other.textBaseline == textBaseline &&
           other.horizontalAlign == horizontalAlign &&
           other.maxWidth == maxWidth &&
           other.minWidth == minWidth &&
@@ -579,7 +572,6 @@ class _LayoutCacheKey {
     letterSpacing,
     wordSpacing,
     height,
-    textBaseline,
     horizontalAlign,
     maxWidth,
     minWidth,
