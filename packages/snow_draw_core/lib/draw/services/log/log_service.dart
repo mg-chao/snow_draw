@@ -153,31 +153,25 @@ class LogService {
     Object? error,
     StackTrace? stackTrace,
   ) {
-    final offThreshold = Level.off.value - 1;
-    if (level.value >= offThreshold) {
+    final normalizedLevel = _normalizeLevel(level);
+    if (normalizedLevel == null) {
       return;
     }
-    if (level.value >= Level.fatal.value - 1) {
-      _logger.f(message, error: error, stackTrace: stackTrace);
-      return;
+
+    _logger.log(normalizedLevel, message, error: error, stackTrace: stackTrace);
+  }
+
+  Level? _normalizeLevel(Level level) {
+    if (level < Level.trace) {
+      return Level.trace;
     }
-    if (level.value >= Level.error.value) {
-      _logger.e(message, error: error, stackTrace: stackTrace);
-      return;
+    if (level > Level.fatal) {
+      return null;
     }
-    if (level.value >= Level.warning.value) {
-      _logger.w(message, error: error, stackTrace: stackTrace);
-      return;
+    if (level > Level.error) {
+      return Level.fatal;
     }
-    if (level.value >= Level.info.value) {
-      _logger.i(message, error: error, stackTrace: stackTrace);
-      return;
-    }
-    if (level.value >= Level.debug.value) {
-      _logger.d(message, error: error, stackTrace: stackTrace);
-      return;
-    }
-    _logger.t(message, error: error, stackTrace: stackTrace);
+    return level;
   }
 
   void _outputToHandlers(
