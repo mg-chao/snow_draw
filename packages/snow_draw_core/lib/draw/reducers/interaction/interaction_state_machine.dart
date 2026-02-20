@@ -19,7 +19,7 @@ import 'text/text_edit_reducer.dart';
 /// Interaction state machine - coordinates sub-reducers.
 ///
 /// Responsibilities:
-/// 1. Dispatch actions to sub-reducers by priority
+/// 1. Dispatch actions to sub-reducers in priority order
 /// 2. Coordinate state transitions across subsystems
 ///
 /// Returns explicit transition events from reducers.
@@ -69,98 +69,25 @@ class InteractionStateMachine {
 
   /// Handle non-edit actions (state only).
   ///
-  /// Reducers are called in a specific priority order. The first reducer that
-  /// handles an action (returns non-null) wins, and subsequent reducers are
-  /// skipped.
+  /// Reducers are evaluated in order and the first non-null result wins.
   DrawState? reduceState(
     DrawState state,
     DrawAction action,
     InteractionReducerDeps context,
-  ) {
-    for (final entry in _interactionReducers) {
-      final nextState = entry.reduce(state, action, context);
-      if (nextState != null) {
-        return nextState;
-      }
-    }
-    return null;
-  }
-
-  /// Pre-reducer stabilization (no-op).
-  DrawState stabilize(
-    DrawState state,
-    DrawAction action,
-    InteractionReducerDeps _,
-  ) {
-    if (action is CancelEdit) {
-      return state;
-    }
-    return state;
-  }
-}
-
-enum InteractionReducerPriority {
-  pending(0),
-  boxSelect(1),
-  creation(2),
-  textEdit(3),
-  selection(4),
-  element(5),
-  camera(6);
-
-  const InteractionReducerPriority(this.order);
-  final int order;
-}
-
-@immutable
-class _ReducerEntry {
-  const _ReducerEntry({required this.priority, required this.reduce});
-  final InteractionReducerPriority priority;
-  final DrawState? Function(
-    DrawState state,
-    DrawAction action,
-    InteractionReducerDeps context,
-  )
-  reduce;
+  ) =>
+      _pendingReducer.reduce(state, action) ??
+      _boxSelectReducer.reduce(state, action) ??
+      _createReducer.reduce(state, action, context) ??
+      _textEditReducer.reduce(state, action, context) ??
+      selectionReducer(state, action, context) ??
+      elementReducer(state, action, context) ??
+      cameraReducer(state, action, context);
 }
 
 const _pendingReducer = PendingStateReducer();
 const _boxSelectReducer = BoxSelectReducer();
 const _createReducer = CreateElementReducer();
 const _textEditReducer = TextEditReducer();
-
-final _interactionReducers = <_ReducerEntry>[
-  _ReducerEntry(
-    priority: InteractionReducerPriority.pending,
-    reduce: (state, action, _) => _pendingReducer.reduce(state, action),
-  ),
-  _ReducerEntry(
-    priority: InteractionReducerPriority.boxSelect,
-    reduce: (state, action, _) => _boxSelectReducer.reduce(state, action),
-  ),
-  _ReducerEntry(
-    priority: InteractionReducerPriority.creation,
-    reduce: (state, action, context) =>
-        _createReducer.reduce(state, action, context),
-  ),
-  _ReducerEntry(
-    priority: InteractionReducerPriority.textEdit,
-    reduce: (state, action, context) =>
-        _textEditReducer.reduce(state, action, context),
-  ),
-  const _ReducerEntry(
-    priority: InteractionReducerPriority.selection,
-    reduce: selectionReducer,
-  ),
-  const _ReducerEntry(
-    priority: InteractionReducerPriority.element,
-    reduce: elementReducer,
-  ),
-  const _ReducerEntry(
-    priority: InteractionReducerPriority.camera,
-    reduce: cameraReducer,
-  ),
-]..sort((a, b) => a.priority.order.compareTo(b.priority.order));
 
 const interactionStateMachine = InteractionStateMachine();
 
@@ -169,16 +96,6 @@ class HistoryAvailability {
   const HistoryAvailability({this.canUndo = true, this.canRedo = true});
   final bool canUndo;
   final bool canRedo;
-
-  bool shouldCancelFor(DrawAction action) {
-    if (action is Undo) {
-      return canUndo;
-    }
-    if (action is Redo) {
-      return canRedo;
-    }
-    return false;
-  }
 }
 
 DrawAction? _resolveEditIntentAction(
