@@ -1,16 +1,12 @@
 import '../../actions/draw_actions.dart';
 import '../../models/draw_state.dart';
 
-/// Sub-reducer function signature.
+/// Handles a [DrawAction] and returns the next [DrawState].
 ///
-/// Returns a [DrawState] to indicate the action was handled (even if it's a
-/// no-op), or `null` to indicate "not handled" so the next reducer can try.
+/// Returning `null` means the action is not handled by this reducer.
 typedef SubReducer<D> =
     DrawState? Function(DrawState state, DrawAction action, D deps);
 
-/// Handler signature for a specific [DrawAction] type.
+/// Type-safe handler for a specific [DrawAction] subtype.
 typedef ActionHandler<A extends DrawAction, D> =
     DrawState? Function(DrawState state, A action, D deps);
-
-/// Handler signature for actions that don't carry extra payload.
-typedef SimpleHandler<D> = DrawState? Function(DrawState state, D deps);
