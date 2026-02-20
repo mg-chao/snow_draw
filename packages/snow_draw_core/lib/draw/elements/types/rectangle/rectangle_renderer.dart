@@ -15,8 +15,12 @@ import 'rectangle_render_plan.dart';
 class RectangleRenderer extends ElementTypeRenderer {
   const RectangleRenderer();
 
-  // Cache expensive stroke/fill paths by size/style to avoid per-frame
-  // rebuilds. Only used for CPU fallback rendering.
+  static const _lineToSpacingRatio = 4;
+  static const double _lineFillAngle = -math.pi / 4;
+  static const double _crossLineFillAngle = math.pi / 4;
+
+  // Cache expensive stroke paths by size/style to avoid per-frame rebuilds.
+  // Only used for CPU fallback rendering.
   static final _strokePathCache = LruCache<_StrokePathKey, Path>(
     maxEntries: 200,
   );
@@ -53,19 +57,24 @@ class RectangleRenderer extends ElementTypeRenderer {
       shaderReady: RectangleShaderManager.instance.isReady,
     );
 
-    // Prefer the shader only for pattern-heavy styles where it provides a
-    // clear benefit over built-in Canvas primitives.
-    if (renderPlan.shouldUseShader &&
-        _renderWithShader(canvas, element, data, renderPlan, scaleFactor)) {
+    if (!renderPlan.paintFill && !renderPlan.paintStroke) {
       return;
     }
 
-    if (renderPlan.shouldUseSolidFastPath) {
-      _renderSolidFastPath(canvas, element, data, renderPlan);
-      return;
+    switch (renderPlan.backend) {
+      case RectangleRenderBackend.solidFastPath:
+        _renderSolidFastPath(canvas, element, data, renderPlan);
+        return;
+      case RectangleRenderBackend.shaderPattern:
+        if (_renderWithShader(canvas, element, data, renderPlan, scaleFactor)) {
+          return;
+        }
+        _renderPatternFallback(canvas, element, data, renderPlan);
+        return;
+      case RectangleRenderBackend.cpuPattern:
+        _renderPatternFallback(canvas, element, data, renderPlan);
+        return;
     }
-
-    _renderPatternFallback(canvas, element, data, renderPlan);
   }
 
   /// Renders the rectangle using the GPU fragment shader.
@@ -78,37 +87,22 @@ class RectangleRenderer extends ElementTypeRenderer {
     RectangleRenderPlan renderPlan,
     double scaleFactor,
   ) {
-    final shaderManager = RectangleShaderManager.instance;
-    if (!shaderManager.isReady) {
-      return false;
-    }
     final rect = element.rect;
-    final rotation = element.rotation;
+    final fillLineWidth = _resolveFillLineWidth(data.strokeWidth);
+    final fillLineSpacing = _resolveFillLineSpacing(fillLineWidth);
 
-    // Calculate fill pattern parameters (matching CPU fallback logic)
-    final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    const lineToSpacingRatio = 4.0;
-    final fillLineSpacing = (fillLineWidth * lineToSpacingRatio).clamp(
-      3.0,
-      18.0,
-    );
-
-    // Calculate stroke pattern parameters (matching CPU fallback logic)
-    // Dash and dot patterns are proportional to stroke width
     final dashLength = data.strokeWidth * 3.0;
     final gapLength = dashLength * 0.5;
     final dotSpacing = data.strokeWidth * 2.0;
     final dotRadius = data.strokeWidth * 0.5;
+    final effectiveScale = _resolveScaleFactor(scaleFactor);
 
-    // Scale-aware anti-aliasing width
-    final aaWidth = 1.5 / (scaleFactor == 0 ? 1.0 : scaleFactor);
-
-    return shaderManager.paintRectangle(
+    return RectangleShaderManager.instance.paintRectangle(
       canvas: canvas,
       elementId: element.id,
       center: Offset(rect.centerX, rect.centerY),
       size: Size(rect.width, rect.height),
-      rotation: rotation,
+      rotation: element.rotation,
       cornerRadius: data.cornerRadius,
       fillStyle: data.fillStyle,
       fillColor: renderPlan.fillColor,
@@ -121,7 +115,7 @@ class RectangleRenderer extends ElementTypeRenderer {
       gapLength: gapLength,
       dotSpacing: dotSpacing,
       dotRadius: dotRadius,
-      aaWidth: aaWidth,
+      aaWidth: 1.5 / effectiveScale,
     );
   }
 
@@ -132,30 +126,17 @@ class RectangleRenderer extends ElementTypeRenderer {
     RectangleData data,
     RectangleRenderPlan renderPlan,
   ) {
-    if (!renderPlan.paintFill && !renderPlan.paintStroke) {
-      return;
-    }
-
     final rect = element.rect;
-    final rotation = element.rotation;
     final rRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height),
       Radius.circular(data.cornerRadius),
     );
 
     canvas.save();
-    if (rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
+    _applyElementRotation(canvas, element);
 
     if (renderPlan.paintFill) {
-      _fillPaint
-        ..color = renderPlan.fillColor
-        ..shader = null
-        ..colorFilter = null;
+      _setSolidFillPaint(renderPlan.fillColor);
       canvas.drawRRect(rRect, _fillPaint);
     }
 
@@ -180,130 +161,168 @@ class RectangleRenderer extends ElementTypeRenderer {
     RectangleRenderPlan renderPlan,
   ) {
     final rect = element.rect;
-    final rotation = element.rotation;
 
     canvas.save();
 
-    final size = Size(rect.width, rect.height);
     final rRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(0, 0, rect.width, rect.height),
       Radius.circular(data.cornerRadius),
     );
 
-    if (rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
-
+    _applyElementRotation(canvas, element);
     canvas.translate(rect.minX, rect.minY);
 
     if (renderPlan.paintFill) {
-      if (data.fillStyle == FillStyle.solid) {
-        _fillPaint
-          ..color = renderPlan.fillColor
-          ..shader = null
-          ..colorFilter = null;
-        canvas.drawRRect(rRect, _fillPaint);
-      } else {
-        final fillLineWidth = (1 + (data.strokeWidth - 1) * 0.6).clamp(
-          0.5,
-          3.0,
-        );
-        const lineToSpacingRatio = 4.0;
-        final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-        const lineAngle = -math.pi / 4;
-        const crossLineAngle = math.pi / 4;
-        _fillPaint
-          ..color = renderPlan.fillColor
-          ..shader = lineShaderCache.getOrCreate(
-            LineShaderKey(
-              spacing: spacing,
-              lineWidth: fillLineWidth,
-              angle: lineAngle,
-            ),
-            () => buildLineShader(
-              spacing: spacing,
-              lineWidth: fillLineWidth,
-              angle: lineAngle,
-            ),
-          )
-          ..colorFilter = ColorFilter.mode(
-            renderPlan.fillColor,
-            BlendMode.modulate,
-          );
-        canvas.drawRRect(rRect, _fillPaint);
-        if (data.fillStyle == FillStyle.crossLine) {
-          _fillPaint.shader = lineShaderCache.getOrCreate(
-            LineShaderKey(
-              spacing: spacing,
-              lineWidth: fillLineWidth,
-              angle: crossLineAngle,
-            ),
-            () => buildLineShader(
-              spacing: spacing,
-              lineWidth: fillLineWidth,
-              angle: crossLineAngle,
-            ),
-          );
-          canvas.drawRRect(rRect, _fillPaint);
-        }
-      }
+      _paintFill(
+        canvas: canvas,
+        data: data,
+        fillColor: renderPlan.fillColor,
+        rRect: rRect,
+      );
     }
 
     if (renderPlan.paintStroke) {
-      _strokePaint
-        ..strokeWidth = data.strokeWidth
-        ..color = renderPlan.strokeColor
-        ..strokeCap = StrokeCap.butt;
+      _paintStroke(
+        canvas: canvas,
+        data: data,
+        strokeColor: renderPlan.strokeColor,
+        rRect: rRect,
+        width: rect.width,
+        height: rect.height,
+      );
+    }
 
-      if (data.strokeStyle == StrokeStyle.solid) {
+    canvas.restore();
+  }
+
+  static double _resolveScaleFactor(double scaleFactor) =>
+      scaleFactor == 0 ? 1.0 : scaleFactor;
+
+  static double _resolveFillLineWidth(double strokeWidth) =>
+      (1 + (strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
+
+  static double _resolveFillLineSpacing(double lineWidth) =>
+      (lineWidth * _lineToSpacingRatio).clamp(3.0, 18.0);
+
+  void _applyElementRotation(Canvas canvas, ElementState element) {
+    final rotation = element.rotation;
+    if (rotation == 0) {
+      return;
+    }
+    final rect = element.rect;
+    canvas
+      ..translate(rect.centerX, rect.centerY)
+      ..rotate(rotation)
+      ..translate(-rect.centerX, -rect.centerY);
+  }
+
+  void _setSolidFillPaint(Color color) {
+    _fillPaint
+      ..color = color
+      ..shader = null
+      ..colorFilter = null;
+  }
+
+  void _paintFill({
+    required Canvas canvas,
+    required RectangleData data,
+    required Color fillColor,
+    required RRect rRect,
+  }) {
+    switch (data.fillStyle) {
+      case FillStyle.solid:
+        _setSolidFillPaint(fillColor);
+        canvas.drawRRect(rRect, _fillPaint);
+        return;
+      case FillStyle.line:
+      case FillStyle.crossLine:
+        final fillLineWidth = _resolveFillLineWidth(data.strokeWidth);
+        final spacing = _resolveFillLineSpacing(fillLineWidth);
+        _fillPaint
+          ..color = fillColor
+          ..shader = _resolveLineShader(
+            spacing: spacing,
+            lineWidth: fillLineWidth,
+            angle: _lineFillAngle,
+          )
+          ..colorFilter = ColorFilter.mode(fillColor, BlendMode.modulate);
+        canvas.drawRRect(rRect, _fillPaint);
+
+        if (data.fillStyle == FillStyle.crossLine) {
+          _fillPaint.shader = _resolveLineShader(
+            spacing: spacing,
+            lineWidth: fillLineWidth,
+            angle: _crossLineFillAngle,
+          );
+          canvas.drawRRect(rRect, _fillPaint);
+        }
+        return;
+    }
+  }
+
+  Shader _resolveLineShader({
+    required double spacing,
+    required double lineWidth,
+    required double angle,
+  }) => lineShaderCache.getOrCreate(
+    LineShaderKey(spacing: spacing, lineWidth: lineWidth, angle: angle),
+    () => buildLineShader(spacing: spacing, lineWidth: lineWidth, angle: angle),
+  );
+
+  void _paintStroke({
+    required Canvas canvas,
+    required RectangleData data,
+    required Color strokeColor,
+    required RRect rRect,
+    required double width,
+    required double height,
+  }) {
+    _strokePaint
+      ..strokeWidth = data.strokeWidth
+      ..color = strokeColor
+      ..strokeCap = StrokeCap.butt
+      ..shader = null
+      ..colorFilter = null;
+
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
         canvas.drawRRect(rRect, _strokePaint);
-      } else {
-        if (data.strokeStyle == StrokeStyle.dashed) {
-          // Dash pattern proportional to stroke width
-          final dashLength = data.strokeWidth * 2.0;
-          final gapLength = dashLength * 1.2;
-          final key = _StrokePathKey(
-            width: size.width,
-            height: size.height,
+        return;
+      case StrokeStyle.dashed:
+        final dashLength = data.strokeWidth * 2.0;
+        final gapLength = dashLength * 1.2;
+        final dashedPath = _strokePathCache.getOrCreate(
+          _StrokePathKey(
+            width: width,
+            height: height,
             cornerRadius: data.cornerRadius,
             strokeStyle: StrokeStyle.dashed,
             patternPrimary: dashLength,
             patternSecondary: gapLength,
-          );
-          final dashedPath = _strokePathCache.getOrCreate(
-            key,
-            () =>
-                buildDashedPath(Path()..addRRect(rRect), dashLength, gapLength),
-          );
-          _strokePaint.strokeCap = StrokeCap.round;
-          canvas.drawPath(dashedPath, _strokePaint);
-        } else {
-          // Dot pattern proportional to stroke width
-          _dotPaint.color = _strokePaint.color;
-          final dotSpacing = data.strokeWidth * 2.0;
-          final dotRadius = data.strokeWidth * 0.5;
-          final key = _StrokePathKey(
-            width: size.width,
-            height: size.height,
+          ),
+          () => buildDashedPath(Path()..addRRect(rRect), dashLength, gapLength),
+        );
+        _strokePaint.strokeCap = StrokeCap.round;
+        canvas.drawPath(dashedPath, _strokePaint);
+        return;
+      case StrokeStyle.dotted:
+        final dotSpacing = data.strokeWidth * 2.0;
+        final dotRadius = data.strokeWidth * 0.5;
+        final dottedPath = _strokePathCache.getOrCreate(
+          _StrokePathKey(
+            width: width,
+            height: height,
             cornerRadius: data.cornerRadius,
             strokeStyle: StrokeStyle.dotted,
             patternPrimary: dotSpacing,
             patternSecondary: dotRadius,
-          );
-          final dottedPath = _strokePathCache.getOrCreate(
-            key,
-            () =>
-                buildDottedPath(Path()..addRRect(rRect), dotSpacing, dotRadius),
-          );
-          canvas.drawPath(dottedPath, _dotPaint);
-        }
-      }
+          ),
+          () => buildDottedPath(Path()..addRRect(rRect), dotSpacing, dotRadius),
+        );
+        _dotPaint.color = strokeColor;
+        canvas.drawPath(dottedPath, _dotPaint);
+        return;
     }
-
-    canvas.restore();
   }
 }
 
