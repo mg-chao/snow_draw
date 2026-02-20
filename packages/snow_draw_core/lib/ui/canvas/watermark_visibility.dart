@@ -8,20 +8,9 @@ bool isWatermarkVisible(WatermarkConfig config) {
   if (config.text.trim().isEmpty) {
     return false;
   }
-  if (config.opacity <= 0) {
-    return false;
-  }
-  if (config.color.a <= 0) {
-    return false;
-  }
 
   // At 8-bit precision an alpha below 1/255 ~= 0.004 maps to zero.
-  final effectiveAlpha = config.color.a * config.opacity;
-  if (effectiveAlpha < 0.004) {
-    return false;
-  }
-
-  return true;
+  return config.color.a * config.opacity >= 0.004;
 }
 
 /// Decides which canvas layer should render the watermark.
