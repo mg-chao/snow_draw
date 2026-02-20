@@ -19,41 +19,33 @@ class SelectionGeometryResolver {
       return SelectionGeometry.none;
     }
 
-    final isMultiSelect = selectedElements.length > 1;
-    if (!isMultiSelect) {
+    if (selectedElements.length == 1) {
       final element = selectedElements.first;
       return SelectionGeometry(
         bounds: element.rect,
         center: element.center,
-        rotation: _nullIfZero(element.rotation),
+        rotation: element.rotation == 0.0 ? null : element.rotation,
         hasSelection: true,
       );
     }
 
-    final fallbackBounds =
-        selectionBounds ??
-        SelectionCalculator.computeSelectionBoundsForElements(selectedElements);
+    final overlay = selectionOverlay.multiSelectOverlay;
     final bounds =
         overlayBoundsOverride ??
-        selectionOverlay.multiSelectOverlay?.bounds ??
-        fallbackBounds;
-    if (bounds == null) {
-      return const SelectionGeometry(hasSelection: true, isMultiSelect: true);
-    }
+        overlay?.bounds ??
+        selectionBounds ??
+        SelectionCalculator.computeSelectionBoundsForElements(
+          selectedElements,
+        )!;
 
-    final rotation =
-        overlayRotationOverride ??
-        selectionOverlay.multiSelectOverlay?.rotation ??
-        0.0;
+    final rotation = overlayRotationOverride ?? overlay?.rotation ?? 0.0;
 
     return SelectionGeometry(
       bounds: bounds,
       center: bounds.center,
-      rotation: _nullIfZero(rotation),
+      rotation: rotation == 0.0 ? null : rotation,
       hasSelection: true,
       isMultiSelect: true,
     );
   }
-
-  static double? _nullIfZero(double value) => value == 0.0 ? null : value;
 }
