@@ -30,7 +30,7 @@ final class SerialNumberData extends ElementData
   factory SerialNumberData.fromJson(
     Map<String, dynamic> json,
   ) => SerialNumberData(
-    number: _coerceNumber(
+    number: _coerceNonNegative(
       (json['number'] as num?)?.toInt(),
       ConfigDefaults.defaultSerialNumber,
     ),
@@ -47,9 +47,7 @@ final class SerialNumberData extends ElementData
     fontSize:
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultSerialNumberFontSize,
-    fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
-        ? null
-        : json['fontFamily'] as String?,
+    fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
@@ -57,9 +55,7 @@ final class SerialNumberData extends ElementData
       (style) => style.name == json['strokeStyle'],
       orElse: () => ConfigDefaults.defaultStrokeStyle,
     ),
-    textElementId: (json['textElementId'] as String?)?.trim().isEmpty ?? true
-        ? null
-        : json['textElementId'] as String?,
+    textElementId: _normalizeOptionalString(json['textElementId'] as String?),
   );
 
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
@@ -88,15 +84,17 @@ final class SerialNumberData extends ElementData
     StrokeStyle? strokeStyle,
     Object? textElementId = _textElementIdUnset,
   }) => SerialNumberData(
-    number: _coerceNumber(number, this.number),
+    number: _coerceNonNegative(number, this.number),
     color: color ?? this.color,
     fillColor: fillColor ?? this.fillColor,
     fillStyle: fillStyle ?? this.fillStyle,
     fontSize: fontSize ?? this.fontSize,
-    fontFamily: _resolveFontFamily(fontFamily, this.fontFamily),
+    fontFamily: fontFamily == _fontFamilyUnset
+        ? this.fontFamily
+        : _normalizeOptionalString(fontFamily as String?),
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeStyle: strokeStyle ?? this.strokeStyle,
-    textElementId: textElementId == _textElementIdUnset
+    textElementId: identical(textElementId, _textElementIdUnset)
         ? this.textElementId
         : textElementId as String?,
   );
@@ -108,25 +106,21 @@ final class SerialNumberData extends ElementData
     fillColor: style.fillColor,
     fillStyle: style.fillStyle,
     fontSize: style.fontSize,
-    fontFamily: style.fontFamily?.trim().isEmpty ?? true
-        ? null
-        : style.fontFamily,
+    fontFamily: style.fontFamily,
     strokeWidth: style.strokeWidth,
     strokeStyle: style.strokeStyle,
   );
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    number: update.serialNumber ?? number,
-    color: update.color ?? color,
-    fillColor: update.fillColor ?? fillColor,
-    fillStyle: update.fillStyle ?? fillStyle,
-    fontSize: update.fontSize ?? fontSize,
-    fontFamily: update.fontFamily == null
-        ? fontFamily
-        : (update.fontFamily!.trim().isEmpty ? null : update.fontFamily),
-    strokeWidth: update.strokeWidth ?? strokeWidth,
-    strokeStyle: update.strokeStyle ?? strokeStyle,
+    number: update.serialNumber,
+    color: update.color,
+    fillColor: update.fillColor,
+    fillStyle: update.fillStyle,
+    fontSize: update.fontSize,
+    fontFamily: update.fontFamily ?? _fontFamilyUnset,
+    strokeWidth: update.strokeWidth,
+    strokeStyle: update.strokeStyle,
   );
 
   @override
@@ -171,16 +165,12 @@ final class SerialNumberData extends ElementData
   );
 }
 
-int _coerceNumber(int? value, int fallback) {
+int _coerceNonNegative(int? value, int fallback) {
   final resolved = value ?? fallback;
   return resolved < 0 ? 0 : resolved;
 }
 
-String? _resolveFontFamily(Object? value, String? fallback) {
-  if (value == SerialNumberData._fontFamilyUnset) {
-    return fallback;
-  }
-  final raw = value as String?;
+String? _normalizeOptionalString(String? raw) {
   final trimmed = raw?.trim();
   if (trimmed == null || trimmed.isEmpty) {
     return null;
