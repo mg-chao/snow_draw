@@ -3,6 +3,7 @@ import '../input_event.dart';
 import 'input_middleware.dart';
 
 final ModuleLogger _inputFallbackLog = LogService.fallback.input;
+const _slowEventThreshold = Duration(milliseconds: 16);
 
 /// Logging middleware.
 ///
@@ -18,9 +19,11 @@ class LoggingMiddleware extends InputMiddlewareBase {
     NextMiddleware next,
   ) async {
     final log = context.log ?? _inputFallbackLog;
+    final eventType = event.runtimeType.toString();
+
     if (verbose) {
       log.trace('Input event', {
-        'type': event.runtimeType.toString(),
+        'type': eventType,
         'position': event.position,
         'modifiers': event.modifiers.toString(),
         'isEditing': context.state.application.isEditing,
@@ -28,15 +31,13 @@ class LoggingMiddleware extends InputMiddlewareBase {
         'hasSelection': context.state.domain.hasSelection,
       });
     } else {
-      log.debug('Input event', {'type': event.runtimeType.toString()});
+      log.debug('Input event', {'type': eventType});
     }
 
     final result = await next(event);
 
     if (verbose && result != null) {
-      log.debug('Input event processed', {
-        'type': event.runtimeType.toString(),
-      });
+      log.debug('Input event processed', {'type': eventType});
     }
 
     return result;
@@ -46,26 +47,23 @@ class LoggingMiddleware extends InputMiddlewareBase {
 /// Event filter middleware.
 ///
 /// Filters events based on a predicate.
-class EventFilterMiddleware extends ConditionalMiddleware {
+class EventFilterMiddleware extends InputMiddlewareBase {
   const EventFilterMiddleware({required this.predicate})
     : super(name: 'EventFilter');
+
   final bool Function(InputEvent event, MiddlewareContext context) predicate;
 
   @override
-  Future<bool> shouldProcess(
-    InputEvent event,
-    MiddlewareContext context,
-  ) async => !predicate(event, context);
-
-  @override
-  Future<InputEvent?> processEvent(
+  Future<InputEvent?> process(
     InputEvent event,
     MiddlewareContext context,
     NextMiddleware next,
-  ) async =>
-      // If shouldProcess returns true, predicate failed and the event is
-      // intercepted.
-      null;
+  ) async {
+    if (!predicate(event, context)) {
+      return null;
+    }
+    return next(event);
+  }
 }
 
 /// Throttle middleware.
@@ -85,18 +83,15 @@ class ThrottleMiddleware extends InputMiddlewareBase {
     MiddlewareContext context,
     NextMiddleware next,
   ) async {
-    // Throttle only specified event types.
-    if (!_throttledEventTypes.contains(event.runtimeType)) {
+    final eventType = event.runtimeType;
+    if (!_throttledEventTypes.contains(eventType)) {
       return next(event);
     }
 
-    final eventType = event.runtimeType;
     final now = DateTime.now();
     final lastTime = _lastProcessTimes[eventType];
 
     if (lastTime != null && now.difference(lastTime) < duration) {
-      // Skip this event - return null so the coordinator knows it was
-      // intercepted rather than processed.
       return null;
     }
 
@@ -119,17 +114,14 @@ class PerformanceMiddleware extends InputMiddlewareBase {
     NextMiddleware next,
   ) async {
     final stopwatch = Stopwatch()..start();
-
     final result = await next(event);
-
-    stopwatch.stop();
     final duration = stopwatch.elapsed;
+    final eventType = event.runtimeType.toString();
 
-    onMeasure?.call(event.runtimeType.toString(), duration);
-    if (onMeasure == null && duration.inMilliseconds > 16) {
-      // Longer than one frame, log a warning.
+    onMeasure?.call(eventType, duration);
+    if (onMeasure == null && duration > _slowEventThreshold) {
       (context.log ?? _inputFallbackLog).warning('Slow input event', {
-        'type': event.runtimeType.toString(),
+        'type': eventType,
         'duration_ms': duration.inMilliseconds,
       });
     }
@@ -150,17 +142,10 @@ class ValidationMiddleware extends InputMiddlewareBase {
     MiddlewareContext context,
     NextMiddleware next,
   ) async {
-    // Validate the position.
-    if (event.position.x.isNaN || event.position.y.isNaN) {
+    final position = event.position;
+    if (!position.x.isFinite || !position.y.isFinite) {
       (context.log ?? _inputFallbackLog).warning('Invalid input position', {
-        'position': event.position,
-      });
-      return null; // Intercept invalid event.
-    }
-
-    if (event.position.x.isInfinite || event.position.y.isInfinite) {
-      (context.log ?? _inputFallbackLog).warning('Infinite input position', {
-        'position': event.position,
+        'position': position,
       });
       return null;
     }
@@ -188,13 +173,15 @@ class StateSnapshotMiddleware extends InputMiddlewareBase {
     MiddlewareContext context,
     NextMiddleware next,
   ) async {
+    final onSnapshot = this.onSnapshot;
+    if (onSnapshot == null) {
+      return next(event);
+    }
+
     final before = _captureState(context);
-
     final result = await next(event);
-
     final after = _captureState(context);
-
-    onSnapshot?.call(event.runtimeType.toString(), before, after);
+    onSnapshot(event.runtimeType.toString(), before, after);
 
     return result;
   }
