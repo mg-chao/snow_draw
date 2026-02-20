@@ -8,16 +8,15 @@ import 'draw_point.dart';
 class DrawRect {
   const DrawRect({this.minX = 0, this.minY = 0, this.maxX = 0, this.maxY = 0});
 
-  factory DrawRect.fromPoints(DrawPoint minPoint, DrawPoint maxPoint) =>
-      DrawRect(
-        minX: minPoint.x,
-        minY: minPoint.y,
-        maxX: maxPoint.x,
-        maxY: maxPoint.y,
-      );
+  factory DrawRect.fromPoints(DrawPoint a, DrawPoint b) => DrawRect(
+    minX: min(a.x, b.x),
+    minY: min(a.y, b.y),
+    maxX: max(a.x, b.x),
+    maxY: max(a.y, b.y),
+  );
 
   factory DrawRect.fromPoint(DrawPoint point) =>
-      DrawRect(minX: point.x, minY: point.y, maxX: point.x, maxY: point.y);
+      DrawRect.fromPoints(point, point);
   final double minX;
   final double minY;
   final double maxX;
