@@ -8,7 +8,7 @@ class HistoryMetadata {
   HistoryMetadata({
     required this.description,
     required this.recordType,
-    Set<String> affectedElementIds = const {},
+    Set<String> affectedElementIds = const <String>{},
     DateTime? timestamp,
     Map<String, dynamic>? extra,
   }) : affectedElementIds = Set<String>.unmodifiable(affectedElementIds),
@@ -20,13 +20,11 @@ class HistoryMetadata {
     required Set<String> elementIds,
     Map<String, dynamic>? extra,
   }) {
-    final count = elementIds.length;
-    final description = count == 1
-        ? '$operationType 1 element'
-        : '$operationType $count elements';
+    final elementCount = elementIds.length;
 
     return HistoryMetadata(
-      description: description,
+      description:
+          '$operationType $elementCount element${elementCount == 1 ? '' : 's'}',
       recordType: HistoryRecordType.edit,
       affectedElementIds: elementIds,
       extra: extra,
