@@ -13,10 +13,7 @@ bool isHighlightInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
@@ -55,10 +52,8 @@ bool _isHighlightCreatingMutationOnly({
   required CreatingState next,
 }) {
   if (previous.elementData is! HighlightData ||
-      next.elementData is! HighlightData) {
-    return false;
-  }
-  if (!_isSameHighlightCreationSession(previous, next)) {
+      next.elementData is! HighlightData ||
+      !_isSameHighlightCreationSession(previous, next)) {
     return false;
   }
   return previous.currentRect != next.currentRect ||
@@ -83,10 +78,7 @@ bool _isHighlightEditingMutationOnly({
   required EditingState next,
   required DocumentState document,
 }) {
-  if (!_isSameEditSession(previous, next)) {
-    return false;
-  }
-  if (!_isHighlightEditContext(context: previous.context, document: document) ||
+  if (!_isSameEditSession(previous, next) ||
       !_isHighlightEditContext(context: next.context, document: document)) {
     return false;
   }
@@ -103,16 +95,13 @@ bool _isHighlightEditContext({
   required EditContext context,
   required DocumentState document,
 }) {
-  if (context.selectedIdsAtStart.isEmpty) {
+  final selectedIds = context.selectedIdsAtStart;
+  if (selectedIds.isEmpty) {
     return false;
   }
-  for (final elementId in context.selectedIdsAtStart) {
-    final element = document.getElementById(elementId);
-    if (element?.data is! HighlightData) {
-      return false;
-    }
-  }
-  return true;
+  return selectedIds.every(
+    (elementId) => document.getElementById(elementId)?.data is HighlightData,
+  );
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {
