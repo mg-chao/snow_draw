@@ -7,10 +7,9 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
   test('elbow binding gap grows when an arrowhead is present', () {
-    const rect = DrawRect(maxX: 200, maxY: 100);
     const element = ElementState(
       id: 'rect-1',
-      rect: rect,
+      rect: DrawRect(maxX: 200, maxY: 100),
       rotation: 0,
       opacity: 1,
       zIndex: 0,
@@ -24,35 +23,27 @@ void main() {
     final anchor = ArrowBindingUtils.resolveElbowAnchorPoint(
       binding: binding,
       target: element,
-    );
+    )!;
     final withoutArrowhead = ArrowBindingUtils.resolveElbowBoundPoint(
       binding: binding,
       target: element,
       hasArrowhead: false,
-    );
+    )!;
     final withArrowhead = ArrowBindingUtils.resolveElbowBoundPoint(
       binding: binding,
       target: element,
       hasArrowhead: true,
-    );
-
-    expect(anchor, isNotNull);
-    expect(withoutArrowhead, isNotNull);
-    expect(withArrowhead, isNotNull);
+    )!;
 
     const baseGap = ArrowBindingUtils.elbowBindingGapBase;
     const arrowGap =
         ArrowBindingUtils.elbowBindingGapBase *
         ArrowBindingUtils.elbowArrowheadGapMultiplier;
 
-    final anchorPoint = anchor!;
-    final noArrow = withoutArrowhead!;
-    final withArrow = withArrowhead!;
-
-    expect(noArrow.y, closeTo(anchorPoint.y, 1e-6));
-    expect(withArrow.y, closeTo(anchorPoint.y, 1e-6));
-    expect(noArrow.x - anchorPoint.x, closeTo(baseGap, 1e-6));
-    expect(withArrow.x - anchorPoint.x, closeTo(arrowGap, 1e-6));
-    expect(withArrow.x, greaterThan(noArrow.x));
+    expect(withoutArrowhead.y, closeTo(anchor.y, 1e-6));
+    expect(withArrowhead.y, closeTo(anchor.y, 1e-6));
+    expect(withoutArrowhead.x - anchor.x, closeTo(baseGap, 1e-6));
+    expect(withArrowhead.x - anchor.x, closeTo(arrowGap, 1e-6));
+    expect(withArrowhead.x, greaterThan(withoutArrowhead.x));
   });
 }
