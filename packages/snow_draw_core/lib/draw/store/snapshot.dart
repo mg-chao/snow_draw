@@ -4,9 +4,9 @@ import 'package:meta/meta.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
 import '../models/global_elements_state.dart';
-import '../models/interaction_state.dart';
-import '../models/selection_overlay_state.dart';
 import '../models/selection_state.dart';
+
+const _elementListEquality = ListEquality<ElementState>();
 
 abstract interface class HistorySnapshot {
   List<ElementState> get elements;
@@ -52,39 +52,27 @@ class PersistentSnapshot implements HistorySnapshot {
   @override
   final bool includeSelection;
 
-  DrawState applyTo(DrawState state) => state.copyWith(
-    domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(
-        elements: elements,
-        globalElements: globalElements,
-      ),
-      selection: includeSelection ? selection : state.domain.selection,
-    ),
-    application: state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: SelectionOverlayState.empty,
-    ),
-  );
-
   @override
   List<String>? get order => elements.map((element) => element.id).toList();
+
+  SelectionState? get _comparableSelection =>
+      includeSelection ? selection : null;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is PersistentSnapshot &&
-          // Use deep equality rather than identical().
-          const ListEquality<ElementState>().equals(elements, other.elements) &&
-          other.globalElements == globalElements &&
+          _elementListEquality.equals(elements, other.elements) &&
+          globalElements == other.globalElements &&
           includeSelection == other.includeSelection &&
-          (!includeSelection || selection == other.selection);
+          _comparableSelection == other._comparableSelection;
 
   @override
   int get hashCode => Object.hash(
-    const ListEquality<ElementState>().hash(elements),
+    _elementListEquality.hash(elements),
     globalElements,
     includeSelection,
-    includeSelection ? selection : null,
+    _comparableSelection,
   );
 
   @override
