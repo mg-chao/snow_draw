@@ -1,3 +1,4 @@
+import '../../draw/models/document_state.dart';
 import '../../draw/models/draw_state.dart';
 import '../../draw/models/interaction_state.dart';
 import 'serial_number_interaction_classifier.dart';
@@ -10,57 +11,49 @@ bool isSerialNumberInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
+  if (!_isInteractionMutationOnly(previous: previous, next: next)) {
     return false;
   }
-  if (!identical(previous.domain, next.domain)) {
+
+  final previousInteraction = previous.application.interaction;
+  final nextInteraction = next.application.interaction;
+  return switch ((previousInteraction, nextInteraction)) {
+    (final CreatingState previousCreating, final CreatingState nextCreating) =>
+      _isSerialNumberCreatingMutationOnly(
+        previous: previousCreating,
+        next: nextCreating,
+      ),
+    (final EditingState previousEditing, final EditingState nextEditing) =>
+      _isSerialNumberEditingMutationOnly(
+        previous: previousEditing,
+        next: nextEditing,
+        document: next.domain.document,
+      ),
+    _ => false,
+  };
+}
+
+bool _isInteractionMutationOnly({
+  required DrawState previous,
+  required DrawState next,
+}) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
   final previousApplication = previous.application;
   final nextApplication = next.application;
-  if (previousApplication.view != nextApplication.view ||
-      previousApplication.selectionOverlay !=
-          nextApplication.selectionOverlay) {
-    return false;
-  }
-
-  final previousInteraction = previousApplication.interaction;
-  final nextInteraction = nextApplication.interaction;
-  if (SerialNumberInteractionClassifier.isSerialNumberCreation(
-        previousInteraction,
-      ) &&
-      SerialNumberInteractionClassifier.isSerialNumberCreation(
-        nextInteraction,
-      )) {
-    return _isSerialNumberCreatingMutationOnly(
-      previousInteraction as CreatingState,
-      nextInteraction as CreatingState,
-    );
-  }
-
-  final document = next.domain.document;
-  if (!SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-        interaction: previousInteraction,
-        document: document,
-      ) ||
-      !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-        interaction: nextInteraction,
-        document: document,
-      )) {
-    return false;
-  }
-  return _isSerialNumberEditingMutationOnly(
-    previousInteraction as EditingState,
-    nextInteraction as EditingState,
-  );
+  return previousApplication.view == nextApplication.view &&
+      previousApplication.selectionOverlay == nextApplication.selectionOverlay;
 }
 
-bool _isSerialNumberCreatingMutationOnly(
-  CreatingState previous,
-  CreatingState next,
-) {
-  if (!_isSameSerialNumberCreationSession(previous, next)) {
+bool _isSerialNumberCreatingMutationOnly({
+  required CreatingState previous,
+  required CreatingState next,
+}) {
+  if (!SerialNumberInteractionClassifier.isSerialNumberCreation(previous) ||
+      !SerialNumberInteractionClassifier.isSerialNumberCreation(next) ||
+      !_isSameSerialNumberCreationSession(previous, next)) {
     return false;
   }
   return previous.currentRect != next.currentRect ||
@@ -80,11 +73,20 @@ bool _isSameSerialNumberCreationSession(
     previous.elementZIndex == next.elementZIndex &&
     previous.startPosition == next.startPosition;
 
-bool _isSerialNumberEditingMutationOnly(
-  EditingState previous,
-  EditingState next,
-) {
-  if (!_isSameSerialNumberEditSession(previous, next)) {
+bool _isSerialNumberEditingMutationOnly({
+  required EditingState previous,
+  required EditingState next,
+  required DocumentState document,
+}) {
+  if (!_isSameSerialNumberEditSession(previous, next) ||
+      !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+        interaction: previous,
+        document: document,
+      ) ||
+      !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+        interaction: next,
+        document: document,
+      )) {
     return false;
   }
   return previous.currentTransform != next.currentTransform ||
