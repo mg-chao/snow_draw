@@ -21,12 +21,10 @@ class VisibleElementSceneCache {
   }) {
     final cached = _entry;
     if (cached != null &&
-        cached.matches(
-          document: document,
-          viewportRect: viewportRect,
-          minOrderIndex: minOrderIndex,
-          maxOrderIndex: maxOrderIndex,
-        )) {
+        identical(cached.document, document) &&
+        cached.viewportRect == viewportRect &&
+        cached.minOrderIndex == minOrderIndex &&
+        cached.maxOrderIndex == maxOrderIndex) {
       return cached.elements;
     }
 
@@ -49,9 +47,7 @@ class VisibleElementSceneCache {
   }
 
   /// Clears the cached scene query.
-  void clear() {
-    _entry = null;
-  }
+  void clear() => _entry = null;
 }
 
 class _VisibleElementSceneCacheEntry {
@@ -68,15 +64,4 @@ class _VisibleElementSceneCacheEntry {
   final int? minOrderIndex;
   final int? maxOrderIndex;
   final List<ElementState> elements;
-
-  bool matches({
-    required DocumentState document,
-    required DrawRect viewportRect,
-    required int? minOrderIndex,
-    required int? maxOrderIndex,
-  }) =>
-      identical(this.document, document) &&
-      this.viewportRect == viewportRect &&
-      this.minOrderIndex == minOrderIndex &&
-      this.maxOrderIndex == maxOrderIndex;
 }
