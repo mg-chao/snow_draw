@@ -57,7 +57,10 @@ class LogConfig {
     this.colorOutput = true,
     this.emojiOutput = true,
     this.verbose = false,
-  });
+  }) : assert(
+         stackTraceMethodCount >= 0,
+         'stackTraceMethodCount must be non-negative',
+       );
 
   /// Global minimum log level.
   final Level minLevel;
@@ -106,26 +109,16 @@ class LogConfig {
   );
 
   /// Default test configuration.
-  static const test = LogConfig(
-    minLevel: Level.warning,
-    enabled: false, // Logging is disabled by default for tests.
-  );
+  static const LogConfig test = silent;
 
   /// Silent configuration (fully disabled).
   static const silent = LogConfig(enabled: false);
 
   /// Check whether a module should log at a given level.
-  bool shouldLog(LogModule module, Level level) {
-    if (!enabled) {
-      return false;
-    }
-    if (disabledModules.contains(module)) {
-      return false;
-    }
-
-    final effectiveLevel = moduleLevels[module] ?? minLevel;
-    return level.index >= effectiveLevel.index;
-  }
+  bool shouldLog(LogModule module, Level level) =>
+      enabled &&
+      !disabledModules.contains(module) &&
+      level.index >= getEffectiveLevel(module).index;
 
   /// Get the effective log level for a module.
   Level getEffectiveLevel(LogModule module) => moduleLevels[module] ?? minLevel;
@@ -158,20 +151,25 @@ class LogConfig {
 
   /// Enable a specific module.
   LogConfig enableModule(LogModule module) {
-    final newDisabled = Set<LogModule>.from(disabledModules)..remove(module);
-    return copyWith(disabledModules: newDisabled);
+    if (!disabledModules.contains(module)) {
+      return this;
+    }
+    return copyWith(disabledModules: {...disabledModules}..remove(module));
   }
 
   /// Disable a specific module.
   LogConfig disableModule(LogModule module) {
-    final newDisabled = Set<LogModule>.from(disabledModules)..add(module);
-    return copyWith(disabledModules: newDisabled);
+    if (disabledModules.contains(module)) {
+      return this;
+    }
+    return copyWith(disabledModules: {...disabledModules, module});
   }
 
   /// Set the level for a module.
   LogConfig withModuleLevel(LogModule module, Level level) {
-    final newLevels = Map<LogModule, Level>.from(moduleLevels);
-    newLevels[module] = level;
-    return copyWith(moduleLevels: newLevels);
+    if (moduleLevels[module] == level) {
+      return this;
+    }
+    return copyWith(moduleLevels: {...moduleLevels, module: level});
   }
 }
