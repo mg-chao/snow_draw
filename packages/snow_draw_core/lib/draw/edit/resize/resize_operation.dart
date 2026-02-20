@@ -163,7 +163,6 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       startBounds: startBounds,
       rotation: typedContext.rotation,
       center: startBounds.center,
-      isMultiSelect: typedContext.isMultiSelect,
     );
     final maintainAspectRatio =
         modifiers.maintainAspectRatio ||
