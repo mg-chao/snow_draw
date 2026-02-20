@@ -3,7 +3,6 @@ import 'package:meta/meta.dart';
 import '../../../actions/draw_actions.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../../utils/selection_calculator.dart';
 import '../../core/reducer_utils.dart';
 
 /// Reducer for box selection operations.
@@ -25,32 +24,31 @@ class BoxSelectReducer {
   };
 
   DrawState _startBoxSelect(DrawState state, StartBoxSelect action) {
-    final nextState = applySelectionChange(state, const {});
-    final nextApplication = nextState.application.copyWith(
-      interaction: BoxSelectingState(
-        startPosition: action.startPosition,
-        currentPosition: action.startPosition,
-      ),
-    );
-    return nextState.copyWith(application: nextApplication);
-  }
-
-  DrawState _updateBoxSelect(DrawState state, UpdateBoxSelect action) {
-    final interaction = state.application.interaction;
-    if (interaction is! BoxSelectingState) {
-      return state;
-    }
-    if (interaction.currentPosition == action.currentPosition) {
-      return state;
-    }
-    return state.copyWith(
-      application: state.application.copyWith(
-        interaction: interaction.copyWith(
-          currentPosition: action.currentPosition,
+    final nextState = applySelectionChange(state, const <String>{});
+    return nextState.copyWith(
+      application: nextState.application.copyWith(
+        interaction: BoxSelectingState(
+          startPosition: action.startPosition,
+          currentPosition: action.startPosition,
         ),
       ),
     );
   }
+
+  DrawState _updateBoxSelect(DrawState state, UpdateBoxSelect action) =>
+      switch (state.application.interaction) {
+        final BoxSelectingState interaction
+            when interaction.currentPosition == action.currentPosition =>
+          state,
+        final BoxSelectingState interaction => state.copyWith(
+          application: state.application.copyWith(
+            interaction: interaction.copyWith(
+              currentPosition: action.currentPosition,
+            ),
+          ),
+        ),
+        _ => state,
+      };
 
   DrawState _finishBoxSelect(DrawState state) {
     final interaction = state.application.interaction;
@@ -58,25 +56,11 @@ class BoxSelectReducer {
       return state;
     }
 
-    final bounds = interaction.bounds;
-    final selectedIds = <String>{};
-
-    final document = state.domain.document;
-    final candidates = document.getElementsInRect(bounds);
-    for (final element in candidates) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      // Select elements that overlap the selection bounds (intersection test).
-      if (bounds.minX <= aabb.maxX &&
-          bounds.maxX >= aabb.minX &&
-          bounds.minY <= aabb.maxY &&
-          bounds.maxY >= aabb.minY) {
-        selectedIds.add(element.id);
-      }
-    }
-
-    final next = state.copyWith(
-      application: state.application.copyWith(interaction: const IdleState()),
-    );
+    final selectedIds = state.domain.document
+        .getElementsInRect(interaction.bounds)
+        .map((element) => element.id)
+        .toSet();
+    final next = state.copyWith(application: state.application.toIdle());
     return applySelectionChange(next, selectedIds);
   }
 
