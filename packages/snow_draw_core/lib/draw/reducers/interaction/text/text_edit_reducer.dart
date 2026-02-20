@@ -25,7 +25,7 @@ class TextEditReducer {
   ) => switch (action) {
     final StartTextEdit a => _startTextEdit(state, a, context),
     final UpdateTextEdit a => _updateTextEdit(state, a),
-    final FinishTextEdit a => _finishTextEdit(state, a, context),
+    final FinishTextEdit a => _finishTextEdit(state, a),
     CancelTextEdit _ => _cancelTextEdit(state),
     _ => null,
   };
@@ -39,53 +39,73 @@ class TextEditReducer {
       return state;
     }
 
-    final elementId = action.elementId;
-    TextData draftData;
-    DrawRect rect;
-    bool isNew;
-    String resolvedId;
-    double opacity;
-    double rotation;
-
-    if (elementId != null) {
-      final element = state.domain.document.getElementById(elementId);
-      if (element == null || element.data is! TextData) {
-        return state;
-      }
-      draftData = element.data as TextData;
-      rect = element.rect;
-      opacity = element.opacity;
-      rotation = element.rotation;
-      isNew = false;
-      resolvedId = elementId;
-    } else {
-      final defaults = context.config.textStyle;
-      draftData = const TextData().withElementStyle(defaults) as TextData;
-      rect = resolveInitialTextEditingRect(
-        position: action.position,
-        data: draftData,
-      );
-      opacity = defaults.opacity;
-      rotation = 0;
-      isNew = true;
-      resolvedId = context.idGenerator();
+    final session = _resolveStartSession(state, action, context);
+    if (session == null) {
+      return state;
     }
 
-    final selectionIds = isNew ? const <String>{} : {resolvedId};
-    final nextState = applySelectionChange(state, selectionIds);
+    final nextState = applySelectionChange(
+      state,
+      session.isNew ? const <String>{} : {session.elementId},
+    );
 
     return nextState.copyWith(
       application: nextState.application.copyWith(
         interaction: TextEditingState(
-          elementId: resolvedId,
-          draftData: draftData,
-          rect: rect,
-          isNew: isNew,
-          opacity: opacity,
-          rotation: rotation,
+          elementId: session.elementId,
+          draftData: session.draftData,
+          rect: session.rect,
+          isNew: session.isNew,
+          opacity: session.opacity,
+          rotation: session.rotation,
           initialCursorPosition: action.position,
         ),
       ),
+    );
+  }
+
+  ({
+    String elementId,
+    TextData draftData,
+    DrawRect rect,
+    bool isNew,
+    double opacity,
+    double rotation,
+  })?
+  _resolveStartSession(
+    DrawState state,
+    StartTextEdit action,
+    TextEditReducerDeps context,
+  ) {
+    final elementId = action.elementId;
+    if (elementId != null) {
+      final element = state.domain.document.getElementById(elementId);
+      final data = element?.data;
+      if (element == null || data is! TextData) {
+        return null;
+      }
+      return (
+        elementId: element.id,
+        draftData: data,
+        rect: element.rect,
+        isNew: false,
+        opacity: element.opacity,
+        rotation: element.rotation,
+      );
+    }
+
+    final defaults = context.config.textStyle;
+    final draftData = const TextData().withElementStyle(defaults) as TextData;
+    return (
+      elementId: context.idGenerator(),
+      draftData: draftData,
+      rect: resolveInitialTextEditingRect(
+        position: action.position,
+        data: draftData,
+      ),
+      isNew: true,
+      opacity: defaults.opacity,
+      rotation: 0,
     );
   }
 
@@ -94,19 +114,18 @@ class TextEditReducer {
     if (interaction is! TextEditingState) {
       return state;
     }
-    if (action.text == interaction.draftData.text && action.rect == null) {
+
+    final textUnchanged = action.text == interaction.draftData.text;
+    if (textUnchanged && action.rect == null) {
       return state;
     }
 
-    final nextData = interaction.draftData.copyWith(text: action.text);
+    final nextData = textUnchanged
+        ? interaction.draftData
+        : interaction.draftData.copyWith(text: action.text);
     final nextRect =
         action.rect ??
-        resolveTextEditingRect(
-          origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
-          currentRect: interaction.rect,
-          data: nextData,
-          allowShrinkHeight: true,
-        );
+        _resolveTextDraftRect(currentRect: interaction.rect, data: nextData);
     if (nextData == interaction.draftData && nextRect == interaction.rect) {
       return state;
     }
@@ -118,116 +137,157 @@ class TextEditReducer {
     );
   }
 
-  DrawState _finishTextEdit(
-    DrawState state,
-    FinishTextEdit action,
-    TextEditReducerDeps context,
-  ) {
+  DrawState _finishTextEdit(DrawState state, FinishTextEdit action) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
       return state;
     }
 
-    final trimmed = action.text.trim();
-    if (trimmed.isEmpty) {
-      if (interaction.isNew) {
-        return state.copyWith(application: state.application.toIdle());
-      }
-
-      final remainingElements = state.domain.document.elements
-          .where((element) => element.id != interaction.elementId)
-          .toList();
-      final updatedElements = <ElementState>[];
-      for (final element in remainingElements) {
-        final serialUpdate = _resolveSerialUnbindUpdate(
-          element: element,
-          deletedTextId: interaction.elementId,
-        );
-        if (serialUpdate != null) {
-          updatedElements.add(serialUpdate);
-          continue;
-        }
-
-        final arrowUpdate = _resolveArrowUnbindUpdate(
-          element: element,
-          deletedTextId: interaction.elementId,
-        );
-        updatedElements.add(arrowUpdate ?? element);
-      }
-      final nextDomain = state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: updatedElements),
-      );
-      final nextState = applySelectionChange(
-        state.copyWith(domain: nextDomain),
-        const {},
-      );
-      return nextState.copyWith(application: nextState.application.toIdle());
+    if (action.text.trim().isEmpty) {
+      return interaction.isNew
+          ? _toIdle(state)
+          : _deleteExistingText(state, interaction);
     }
 
     final nextData = interaction.draftData.copyWith(text: action.text);
-    final nextRect = resolveTextEditingRect(
-      origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+    final nextRect = _resolveTextDraftRect(
       currentRect: interaction.rect,
       data: nextData,
-      allowShrinkHeight: true,
     );
 
     if (interaction.isNew) {
-      final element = ElementState(
-        id: interaction.elementId,
-        rect: nextRect,
-        rotation: 0,
-        opacity: interaction.opacity,
-        zIndex: resolveNextZIndex(state.domain.document.elements),
-        data: nextData,
-      );
-      final nextElements = [...state.domain.document.elements, element];
-      final nextDomain = state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: nextElements),
-      );
-      final nextState = applySelectionChange(
-        state.copyWith(domain: nextDomain),
-        const {},
-      );
-      return nextState.copyWith(application: nextState.application.toIdle());
+      return _createTextElement(state, interaction, nextData, nextRect);
     }
 
-    final elements = state.domain.document.elements;
-    List<ElementState>? nextElements;
-    for (var index = 0; index < elements.length; index++) {
-      final currentElement = elements[index];
-      if (currentElement.id != interaction.elementId) {
-        continue;
-      }
-      if (currentElement.rect == nextRect && currentElement.data == nextData) {
-        continue;
-      }
-      nextElements ??= [...elements];
-      nextElements[index] = currentElement.copyWith(
-        rect: nextRect,
-        data: nextData,
-      );
-    }
+    return _updateTextElement(state, interaction, nextData, nextRect);
+  }
 
-    var nextBaseState = state;
-    if (nextElements != null) {
-      nextBaseState = state.copyWith(
-        domain: state.domain.copyWith(
-          document: state.domain.document.copyWith(elements: nextElements),
+  DrawState _createTextElement(
+    DrawState state,
+    TextEditingState interaction,
+    TextData data,
+    DrawRect rect,
+  ) {
+    final element = ElementState(
+      id: interaction.elementId,
+      rect: rect,
+      rotation: 0,
+      opacity: interaction.opacity,
+      zIndex: resolveNextZIndex(state.domain.document.elements),
+      data: data,
+    );
+
+    final nextState = state.copyWith(
+      domain: state.domain.copyWith(
+        document: state.domain.document.copyWith(
+          elements: [...state.domain.document.elements, element],
         ),
-      );
+      ),
+    );
+    return _clearSelectionAndIdle(nextState);
+  }
+
+  DrawState _updateTextElement(
+    DrawState state,
+    TextEditingState interaction,
+    TextData data,
+    DrawRect rect,
+  ) {
+    final orderIndex = state.domain.document.getOrderIndex(
+      interaction.elementId,
+    );
+    if (orderIndex == null) {
+      return _clearSelectionAndIdle(state);
     }
 
-    final nextState = applySelectionChange(nextBaseState, const {});
-    return nextState.copyWith(application: nextState.application.toIdle());
+    final currentElement = state.domain.document.elements[orderIndex];
+    if (currentElement.rect == rect && currentElement.data == data) {
+      return _clearSelectionAndIdle(state);
+    }
+
+    final nextElements = [...state.domain.document.elements];
+    nextElements[orderIndex] = currentElement.copyWith(rect: rect, data: data);
+
+    final nextState = state.copyWith(
+      domain: state.domain.copyWith(
+        document: state.domain.document.copyWith(elements: nextElements),
+      ),
+    );
+    return _clearSelectionAndIdle(nextState);
+  }
+
+  DrawState _deleteExistingText(DrawState state, TextEditingState interaction) {
+    final nextElements = _removeTextElementAndUnbindReferences(
+      elements: state.domain.document.elements,
+      deletedTextId: interaction.elementId,
+    );
+    final nextState = nextElements == null
+        ? state
+        : state.copyWith(
+            domain: state.domain.copyWith(
+              document: state.domain.document.copyWith(elements: nextElements),
+            ),
+          );
+    return _clearSelectionAndIdle(nextState);
+  }
+
+  List<ElementState>? _removeTextElementAndUnbindReferences({
+    required List<ElementState> elements,
+    required String deletedTextId,
+  }) {
+    final nextElements = <ElementState>[];
+    var changed = false;
+
+    for (final element in elements) {
+      if (element.id == deletedTextId) {
+        changed = true;
+        continue;
+      }
+
+      final updatedElement =
+          _resolveSerialUnbindUpdate(
+            element: element,
+            deletedTextId: deletedTextId,
+          ) ??
+          _resolveArrowUnbindUpdate(
+            element: element,
+            deletedTextId: deletedTextId,
+          ) ??
+          element;
+
+      if (updatedElement != element) {
+        changed = true;
+      }
+      nextElements.add(updatedElement);
+    }
+
+    return changed ? nextElements : null;
   }
 
   DrawState _cancelTextEdit(DrawState state) {
     if (state.application.interaction is! TextEditingState) {
       return state;
     }
-    return state.copyWith(application: state.application.toIdle());
+    return _toIdle(state);
   }
+
+  DrawRect _resolveTextDraftRect({
+    required DrawRect currentRect,
+    required TextData data,
+  }) => resolveTextEditingRect(
+    origin: DrawPoint(x: currentRect.minX, y: currentRect.minY),
+    currentRect: currentRect,
+    data: data,
+    allowShrinkHeight: true,
+  );
+
+  DrawState _clearSelectionAndIdle(DrawState state) {
+    final nextState = applySelectionChange(state, const <String>{});
+    return nextState.copyWith(application: nextState.application.toIdle());
+  }
+
+  DrawState _toIdle(DrawState state) =>
+      state.copyWith(application: state.application.toIdle());
 
   ElementState? _resolveSerialUnbindUpdate({
     required ElementState element,
