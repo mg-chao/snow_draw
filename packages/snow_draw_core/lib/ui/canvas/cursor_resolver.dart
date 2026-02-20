@@ -10,109 +10,68 @@ import '../../draw/types/edit_context.dart';
 import '../../draw/types/resize_mode.dart';
 import '../../draw/utils/hit_test.dart';
 
+const _rotatedHandleHints = <CursorHint>[
+  CursorHint.resizeRight,
+  CursorHint.resizeUpRightDownLeft,
+  CursorHint.resizeUp,
+  CursorHint.resizeUpLeftDownRight,
+  CursorHint.resizeLeft,
+  CursorHint.resizeUpRightDownLeft,
+  CursorHint.resizeDown,
+  CursorHint.resizeUpLeftDownRight,
+];
+
 class CursorResolver {
   const CursorResolver();
 
-  MouseCursor resolveForHitTest(HitTestResult result) {
-    final handleType = result.handleType;
-    if (handleType != null && handleType != HandleType.rotate) {
-      final rotation = result.selectionRotation ?? 0.0;
-      return _cursorFromHint(_hintForRotatedHandle(handleType, rotation));
-    }
-
-    return _cursorFromHint(result.cursorHint ?? _hintFromResult(result));
-  }
+  MouseCursor resolveForHitTest(HitTestResult result) =>
+      _cursorFromHint(_hintForHitTest(result));
 
   MouseCursor? resolveLockedCursor(InteractionState interaction) {
-    if (interaction is! EditingState) {
-      return null;
+    if (interaction case EditingState(:final context)) {
+      return switch (context) {
+        ResizeEditContext(:final resizeMode, :final rotation) =>
+          _cursorForResizeMode(resizeMode, rotation),
+        RotateEditContext() || ArrowPointEditContext() => grabbingCursor(),
+        MoveEditContext() => SystemMouseCursors.move,
+        FreeTransformEditContext() => _cursorForFreeTransform(context),
+        _ => SystemMouseCursors.move,
+      };
     }
+    return null;
+  }
 
-    final context = interaction.context;
-    if (context is ResizeEditContext) {
-      return _cursorForResizeMode(context.resizeMode, context.rotation);
+  CursorHint _hintForHitTest(HitTestResult result) {
+    final handleType = result.handleType;
+    if (handleType == null) {
+      return result.cursorHint ??
+          (result.elementId == null ? CursorHint.basic : CursorHint.move);
     }
-    if (context is RotateEditContext) {
-      return _grabbingCursor();
+    if (handleType == HandleType.rotate) {
+      return result.cursorHint ?? CursorHint.rotate;
     }
-    if (context is MoveEditContext) {
-      return SystemMouseCursors.move;
-    }
-    if (context is FreeTransformEditContext) {
-      return _cursorForFreeTransform(context);
-    }
-    if (context is ArrowPointEditContext) {
-      return _grabbingCursor();
-    }
-
-    return SystemMouseCursors.move;
+    return _hintForRotatedHandle(handleType, result.selectionRotation ?? 0.0);
   }
 
   MouseCursor _cursorForFreeTransform(FreeTransformEditContext context) =>
       switch (context.currentMode) {
         FreeTransformMode.move => SystemMouseCursors.move,
-        FreeTransformMode.rotate => _grabbingCursor(),
-        FreeTransformMode.resize => _cursorFromHint(
-          CursorHint.resizeUpLeftDownRight,
-        ),
+        FreeTransformMode.rotate => grabbingCursor(),
+        FreeTransformMode.resize => SystemMouseCursors.resizeUpLeftDownRight,
       };
 
-  CursorHint _hintFromResult(HitTestResult result) {
-    final handleType = result.handleType;
-    if (handleType != null) {
-      return _hintForHandle(handleType);
-    }
-    if (result.elementId != null) {
-      return CursorHint.move;
-    }
-    return CursorHint.basic;
-  }
-
-  CursorHint _hintForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.topLeft:
-      case HandleType.bottomRight:
-        return CursorHint.resizeUpLeftDownRight;
-      case HandleType.topRight:
-      case HandleType.bottomLeft:
-        return CursorHint.resizeUpRightDownLeft;
-      case HandleType.top:
-        return CursorHint.resizeUp;
-      case HandleType.bottom:
-        return CursorHint.resizeDown;
-      case HandleType.left:
-        return CursorHint.resizeLeft;
-      case HandleType.right:
-        return CursorHint.resizeRight;
-      case HandleType.rotate:
-        return CursorHint.rotate;
-    }
-  }
-
-  MouseCursor _cursorForResizeMode(ResizeMode mode, double rotation) =>
-      _cursorFromHint(
-        _hintForRotatedHandle(_handleTypeForResizeMode(mode), rotation),
-      );
-
-  HandleType _handleTypeForResizeMode(ResizeMode mode) {
-    switch (mode) {
-      case ResizeMode.topLeft:
-        return HandleType.topLeft;
-      case ResizeMode.topRight:
-        return HandleType.topRight;
-      case ResizeMode.bottomRight:
-        return HandleType.bottomRight;
-      case ResizeMode.bottomLeft:
-        return HandleType.bottomLeft;
-      case ResizeMode.top:
-        return HandleType.top;
-      case ResizeMode.bottom:
-        return HandleType.bottom;
-      case ResizeMode.left:
-        return HandleType.left;
-      case ResizeMode.right:
-        return HandleType.right;
-    }
+  MouseCursor _cursorForResizeMode(ResizeMode mode, double rotation) {
+    final handleType = switch (mode) {
+      ResizeMode.topLeft => HandleType.topLeft,
+      ResizeMode.topRight => HandleType.topRight,
+      ResizeMode.bottomRight => HandleType.bottomRight,
+      ResizeMode.bottomLeft => HandleType.bottomLeft,
+      ResizeMode.top => HandleType.top,
+      ResizeMode.bottom => HandleType.bottom,
+      ResizeMode.left => HandleType.left,
+      ResizeMode.right => HandleType.right,
+    };
+    return _cursorFromHint(_hintForRotatedHandle(handleType, rotation));
   }
 
   CursorHint _hintForRotatedHandle(HandleType handle, double rotation) {
@@ -121,28 +80,21 @@ class CursorResolver {
     return _hintForAngle(visualAngle);
   }
 
-  double _baseAngleForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.right:
-        return 0;
-      case HandleType.topRight:
-        return math.pi / 4;
-      case HandleType.top:
-        return math.pi / 2;
-      case HandleType.topLeft:
-        return 3 * math.pi / 4;
-      case HandleType.left:
-        return math.pi;
-      case HandleType.bottomLeft:
-        return 5 * math.pi / 4;
-      case HandleType.bottom:
-        return 3 * math.pi / 2;
-      case HandleType.bottomRight:
-        return 7 * math.pi / 4;
-      case HandleType.rotate:
-        return 0;
-    }
-  }
+  double _baseAngleForHandle(HandleType handle) => switch (handle) {
+    HandleType.right => 0,
+    HandleType.topRight => math.pi / 4,
+    HandleType.top => math.pi / 2,
+    HandleType.topLeft => 3 * math.pi / 4,
+    HandleType.left => math.pi,
+    HandleType.bottomLeft => 5 * math.pi / 4,
+    HandleType.bottom => 3 * math.pi / 2,
+    HandleType.bottomRight => 7 * math.pi / 4,
+    HandleType.rotate => throw ArgumentError.value(
+      handle,
+      'handle',
+      'Rotate handle does not have a resize angle.',
+    ),
+  };
 
   double _normalizeAngle(double angle) {
     const twoPi = 2 * math.pi;
@@ -152,65 +104,33 @@ class CursorResolver {
 
   CursorHint _hintForAngle(double angle) {
     const step = math.pi / 8; // 22.5 degrees in radians.
-    final sector = ((angle + step) / (math.pi / 4)).floor() % 8;
-    switch (sector) {
-      case 0:
-        return CursorHint.resizeRight;
-      case 1:
-        return CursorHint.resizeUpRightDownLeft;
-      case 2:
-        return CursorHint.resizeUp;
-      case 3:
-        return CursorHint.resizeUpLeftDownRight;
-      case 4:
-        return CursorHint.resizeLeft;
-      case 5:
-        return CursorHint.resizeUpRightDownLeft;
-      case 6:
-        return CursorHint.resizeDown;
-      case 7:
-        return CursorHint.resizeUpLeftDownRight;
-    }
-    return CursorHint.resizeRight;
+    final sector =
+        ((angle + step) / (math.pi / 4)).floor() % _rotatedHandleHints.length;
+    return _rotatedHandleHints[sector];
   }
 
-  MouseCursor _cursorFromHint(CursorHint hint) {
-    switch (hint) {
-      case CursorHint.basic:
-        return SystemMouseCursors.basic;
-      case CursorHint.move:
-        return SystemMouseCursors.move;
-      case CursorHint.resizeUpLeftDownRight:
-        return SystemMouseCursors.resizeUpLeftDownRight;
-      case CursorHint.resizeUpRightDownLeft:
-        return SystemMouseCursors.resizeUpRightDownLeft;
-      case CursorHint.resizeUp:
-        return SystemMouseCursors.resizeUp;
-      case CursorHint.resizeDown:
-        return SystemMouseCursors.resizeDown;
-      case CursorHint.resizeLeft:
-        return SystemMouseCursors.resizeLeft;
-      case CursorHint.resizeRight:
-        return SystemMouseCursors.resizeRight;
-      case CursorHint.rotate:
-        return _grabCursor();
-    }
-  }
+  MouseCursor _cursorFromHint(CursorHint hint) => switch (hint) {
+    CursorHint.basic => SystemMouseCursors.basic,
+    CursorHint.move => SystemMouseCursors.move,
+    CursorHint.resizeUpLeftDownRight =>
+      SystemMouseCursors.resizeUpLeftDownRight,
+    CursorHint.resizeUpRightDownLeft =>
+      SystemMouseCursors.resizeUpRightDownLeft,
+    CursorHint.resizeUp => SystemMouseCursors.resizeUp,
+    CursorHint.resizeDown => SystemMouseCursors.resizeDown,
+    CursorHint.resizeLeft => SystemMouseCursors.resizeLeft,
+    CursorHint.resizeRight => SystemMouseCursors.resizeRight,
+    CursorHint.rotate => grabCursor(),
+  };
 
-  MouseCursor grabCursor() {
+  MouseCursor grabCursor() => _dragCursor(SystemMouseCursors.grab);
+
+  MouseCursor grabbingCursor() => _dragCursor(SystemMouseCursors.grabbing);
+
+  MouseCursor _dragCursor(MouseCursor cursor) {
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
       return SystemMouseCursors.click;
     }
-    return SystemMouseCursors.grab;
+    return cursor;
   }
-
-  MouseCursor grabbingCursor() {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
-      return SystemMouseCursors.click;
-    }
-    return SystemMouseCursors.grabbing;
-  }
-
-  MouseCursor _grabCursor() => grabCursor();
-  MouseCursor _grabbingCursor() => grabbingCursor();
 }
