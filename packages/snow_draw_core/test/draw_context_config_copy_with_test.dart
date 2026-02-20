@@ -6,7 +6,11 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 
 void main() {
-  group('DrawContext copyWith configuration behavior', () {
+  DrawContext withDefaultConfig() {
+    return DrawContext.withDefaults(config: DrawConfig());
+  }
+
+  group('DrawContext.copyWith config handling', () {
     test('applies config when config and configManager are both provided', () {
       final base = DrawContext.withDefaults();
       final manager = ConfigManager(DrawConfig());
@@ -21,20 +25,16 @@ void main() {
       expect(manager.current, nextConfig);
     });
 
-    test(
-      'reuses existing configManager when provided config is value-equal',
-      () {
-        final base = DrawContext.withDefaults(config: DrawConfig());
+    test('reuses existing configManager for a value-equal config', () {
+      final base = withDefaultConfig();
+      final copied = base.copyWith(config: DrawConfig());
 
-        final copied = base.copyWith(config: DrawConfig());
-
-        expect(copied.configManager, same(base.configManager));
-        expect(copied.config, base.config);
-      },
-    );
+      expect(copied.configManager, same(base.configManager));
+      expect(copied.config, base.config);
+    });
 
     test('creates a new configManager when provided config is different', () {
-      final base = DrawContext.withDefaults(config: DrawConfig());
+      final base = withDefaultConfig();
       final nextConfig = base.config.copyWith(
         canvas: const CanvasConfig(backgroundColor: Color(0xFFABCDEF)),
       );
