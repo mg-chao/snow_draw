@@ -148,6 +148,7 @@ SerialNumberTextLayout layoutSerialNumberText({
   Color? colorOverride,
   Locale? locale,
 }) {
+  final text = data.number.toString();
   final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
   final fontScale = _resolveSerialNumberFontScale(data.fontSize);
   final geometryKey = _TextGeometryKey(
@@ -157,30 +158,19 @@ SerialNumberTextLayout layoutSerialNumberText({
   );
   final color = colorOverride ?? data.color;
   final painterKey = _TextPainterKey(geometryKey: geometryKey, color: color);
-
-  final cachedGeometry = _textGeometryCache.get(geometryKey);
-  final cachedPainter = _textPainterCache.get(painterKey);
-  if (cachedGeometry != null && cachedPainter != null) {
-    return _buildScaledTextLayout(
-      painter: cachedPainter,
-      geometry: cachedGeometry,
-      fontScale: fontScale,
+  final painter = _textPainterCache.getOrCreate(painterKey, () {
+    _textPainterBuildCount += 1;
+    return _buildTextPainter(
+      text: text,
+      sanitizedFamily: sanitizedFamily,
+      locale: geometryKey.locale,
+      color: color,
     );
-  }
-
-  final text = geometryKey.number.toString();
-  final painter =
-      cachedPainter ??
-      _cacheTextPainter(
-        key: painterKey,
-        text: text,
-        sanitizedFamily: sanitizedFamily,
-        locale: geometryKey.locale,
-        color: color,
-      );
-  final geometry =
-      cachedGeometry ??
-      _cacheTextGeometry(key: geometryKey, text: text, painter: painter);
+  });
+  final geometry = _textGeometryCache.getOrCreate(geometryKey, () {
+    _textGeometryBuildCount += 1;
+    return _buildTextGeometry(painter: painter);
+  });
 
   return _buildScaledTextLayout(
     painter: painter,
@@ -228,39 +218,7 @@ Rect? _scaleRect(Rect? rect, double scale) {
   );
 }
 
-_TextGeometry _cacheTextGeometry({
-  required _TextGeometryKey key,
-  required String text,
-  required TextPainter painter,
-}) {
-  _textGeometryBuildCount += 1;
-  final geometry = _buildTextGeometry(text: text, painter: painter);
-  _textGeometryCache.put(key, geometry);
-  return geometry;
-}
-
-TextPainter _cacheTextPainter({
-  required _TextPainterKey key,
-  required String text,
-  required String? sanitizedFamily,
-  required Locale? locale,
-  required Color color,
-}) {
-  _textPainterBuildCount += 1;
-  final painter = _buildTextPainter(
-    text: text,
-    sanitizedFamily: sanitizedFamily,
-    locale: locale,
-    color: color,
-  );
-  _textPainterCache.put(key, painter);
-  return painter;
-}
-
-_TextGeometry _buildTextGeometry({
-  required String text,
-  required TextPainter painter,
-}) {
+_TextGeometry _buildTextGeometry({required TextPainter painter}) {
   final metrics = painter.computeLineMetrics();
   final lineHeight = metrics.isNotEmpty
       ? metrics.first.height
@@ -268,7 +226,7 @@ _TextGeometry _buildTextGeometry({
   return _TextGeometry(
     size: painter.size,
     lineHeight: lineHeight,
-    visualBounds: _resolveVisualBounds(painter, text),
+    visualBounds: _resolveVisualBounds(painter),
   );
 }
 
@@ -329,7 +287,7 @@ double resolveSerialNumberStrokeWidth({
   required SerialNumberData data,
   double minStrokeWidth = 0,
 }) {
-  const baseFontSize = ConfigDefaults.defaultSerialNumberFontSize;
+  const baseFontSize = _canonicalSerialNumberFontSize;
   if (baseFontSize <= 0) {
     return math.max(data.strokeWidth, minStrokeWidth);
   }
@@ -365,11 +323,9 @@ String? _sanitizeFontFamily(String? fontFamily) {
   return trimmed;
 }
 
-Rect? _resolveVisualBounds(TextPainter painter, String text) {
-  if (text.isEmpty) {
-    return null;
-  }
-  final selection = TextSelection(baseOffset: 0, extentOffset: text.length);
+Rect? _resolveVisualBounds(TextPainter painter) {
+  final textLength = painter.plainText.length;
+  final selection = TextSelection(baseOffset: 0, extentOffset: textLength);
   final boxes = painter.getBoxesForSelection(selection);
   if (boxes.isEmpty) {
     return null;
