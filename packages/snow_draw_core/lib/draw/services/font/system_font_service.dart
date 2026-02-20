@@ -12,15 +12,13 @@ import 'system_font_service_stub.dart'
 /// can shape text with it and the text-rendering caches are
 /// automatically invalidated.
 class SystemFontService {
-  SystemFontService._();
-
-  static final _instance = SystemFontService._();
+  const SystemFontService._();
 
   /// Shared singleton instance.
   ///
   /// Font state (index, loaded families) is inherently global because
   /// `FontLoader` registers fonts into the engine-wide font collection.
-  static SystemFontService get instance => _instance;
+  static const instance = SystemFontService._();
 
   /// Returns a sorted list of all font family names available on the
   /// host operating system.
