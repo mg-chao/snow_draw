@@ -11,14 +11,6 @@ import 'input_event.dart';
 /// Defines action dispatch capability, decoupled from store implementations.
 typedef ActionDispatcher = Future<void> Function(DrawAction action);
 
-/// Batch action dispatcher (optional extension).
-abstract interface class BatchActionDispatcher {
-  Future<void> call(DrawAction action);
-
-  /// Dispatch multiple actions in batch.
-  Future<void> dispatchAll(Iterable<DrawAction> actions);
-}
-
 /// State provider for input systems.
 abstract interface class StateProvider {
   DrawState get currentState;
@@ -43,9 +35,7 @@ class ControllerDependencies implements StateProvider {
   final DrawContext Function() _contextProvider;
   final SelectionConfig Function() _selectionConfigProvider;
 
-  Future<void> call(DrawAction action) => _dispatcher(action);
-
-  Future<void> dispatch(DrawAction action) => call(action);
+  Future<void> dispatch(DrawAction action) => _dispatcher(action);
 
   @override
   DrawState get currentState => _stateProvider.currentState;
@@ -147,7 +137,7 @@ enum PluginResultStatus {
 
 /// Plugin context.
 ///
-/// Provides dependencies and services required by plugins.
+/// Provides dependencies required by plugins.
 @immutable
 class PluginContext {
   const PluginContext({
@@ -155,8 +145,7 @@ class PluginContext {
     required this.contextProvider,
     required this.selectionConfigProvider,
     required this.dispatcher,
-    Map<Type, Object>? services,
-  }) : _services = services ?? const {};
+  });
 
   /// State provider.
   final DrawState Function() stateProvider;
@@ -170,9 +159,6 @@ class PluginContext {
   /// Action dispatcher.
   final ActionDispatcher dispatcher;
 
-  /// Service locator (optional, for advanced scenarios).
-  final Map<Type, Object> _services;
-
   /// Get the current state.
   DrawState get state => stateProvider();
 
@@ -184,41 +170,6 @@ class PluginContext {
 
   /// Dispatch an action.
   Future<void> dispatch(DrawAction action) => dispatcher(action);
-
-  /// Register a service (for inter-plugin communication).
-  PluginContext registerService<T extends Object>(T service) {
-    final newServices = Map<Type, Object>.from(_services);
-    newServices[T] = service;
-    return PluginContext(
-      stateProvider: stateProvider,
-      contextProvider: contextProvider,
-      selectionConfigProvider: selectionConfigProvider,
-      dispatcher: dispatcher,
-      services: newServices,
-    );
-  }
-
-  /// Get a service.
-  T? getService<T extends Object>() => _services[T] as T?;
-
-  /// Check whether a service exists.
-  bool hasService<T extends Object>() => _services.containsKey(T);
-
-  /// Create a copy.
-  PluginContext copyWith({
-    DrawState Function()? stateProvider,
-    DrawContext Function()? contextProvider,
-    SelectionConfig Function()? selectionConfigProvider,
-    ActionDispatcher? dispatcher,
-    Map<Type, Object>? services,
-  }) => PluginContext(
-    stateProvider: stateProvider ?? this.stateProvider,
-    contextProvider: contextProvider ?? this.contextProvider,
-    selectionConfigProvider:
-        selectionConfigProvider ?? this.selectionConfigProvider,
-    dispatcher: dispatcher ?? this.dispatcher,
-    services: services ?? _services,
-  );
 }
 
 /// Input plugin interface.
@@ -360,11 +311,6 @@ abstract class InputPluginBase implements InputPlugin {
   @protected
   PluginResult consumed({String? message}) =>
       PluginResult.consumed(message: message);
-
-  /// Helper: check whether the event type is supported.
-  @protected
-  bool isEventTypeSupported(InputEvent event) =>
-      _supportedEventTypes.contains(event.runtimeType);
 }
 
 /// Base class for draw input plugins.
