@@ -6,7 +6,7 @@ abstract interface class Recordable {
 
 /// Marker interface for actions that should not be recorded.
 abstract interface class NonRecordable {
-  String get nonRecordableReason;
+  String get nonRecordableReason => '';
 }
 
 /// Categories for recorded history entries.
