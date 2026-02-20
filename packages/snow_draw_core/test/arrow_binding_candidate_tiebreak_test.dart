@@ -10,53 +10,45 @@ void main() {
     test(
       'resolveBindingCandidate stays deterministic for equal score and z-index',
       () {
-        final targets = _overlappingTargets();
-        const point = DrawPoint(x: 50, y: 50);
-
-        final resultFromAB = ArrowBindingUtils.resolveBindingCandidate(
-          worldPoint: point,
-          targets: targets,
-          snapDistance: 24,
+        _expectStableWinner(
+          (targets) => ArrowBindingUtils.resolveBindingCandidate(
+            worldPoint: _testPoint,
+            targets: targets,
+            snapDistance: _snapDistance,
+          ),
         );
-        final resultFromBA = ArrowBindingUtils.resolveBindingCandidate(
-          worldPoint: point,
-          targets: targets.reversed,
-          snapDistance: 24,
-        );
-
-        expect(resultFromAB, isNotNull);
-        expect(resultFromBA, isNotNull);
-        expect(resultFromAB!.binding.elementId, 'a');
-        expect(resultFromBA!.binding.elementId, 'a');
       },
     );
 
     test(
       'resolveElbowBindingCandidate is deterministic for equal candidates',
       () {
-        final targets = _overlappingTargets();
-        const point = DrawPoint(x: 50, y: 50);
-
-        final resultFromAB = ArrowBindingUtils.resolveElbowBindingCandidate(
-          worldPoint: point,
-          targets: targets,
-          snapDistance: 24,
-          hasArrowhead: false,
+        _expectStableWinner(
+          (targets) => ArrowBindingUtils.resolveElbowBindingCandidate(
+            worldPoint: _testPoint,
+            targets: targets,
+            snapDistance: _snapDistance,
+            hasArrowhead: false,
+          ),
         );
-        final resultFromBA = ArrowBindingUtils.resolveElbowBindingCandidate(
-          worldPoint: point,
-          targets: targets.reversed,
-          snapDistance: 24,
-          hasArrowhead: false,
-        );
-
-        expect(resultFromAB, isNotNull);
-        expect(resultFromBA, isNotNull);
-        expect(resultFromAB!.binding.elementId, 'a');
-        expect(resultFromBA!.binding.elementId, 'a');
       },
     );
   });
+}
+
+const _testPoint = DrawPoint(x: 50, y: 50);
+const _snapDistance = 24.0;
+
+void _expectStableWinner(
+  ArrowBindingResult? Function(Iterable<ElementState> targets) resolve,
+) {
+  final targets = _overlappingTargets();
+
+  final resultFromAB = resolve(targets);
+  final resultFromBA = resolve(targets.reversed);
+
+  expect(resultFromAB?.binding.elementId, 'a');
+  expect(resultFromBA?.binding.elementId, 'a');
 }
 
 List<ElementState> _overlappingTargets() => const [
