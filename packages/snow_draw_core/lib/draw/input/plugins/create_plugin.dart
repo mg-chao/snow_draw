@@ -1,5 +1,4 @@
 import '../../actions/draw_actions.dart';
-import '../../elements/core/creation_strategy.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -46,7 +45,6 @@ class CreatePlugin extends DrawInputPlugin {
   DrawPoint? _pointerDownPosition;
   var _isDragging = false;
   var _isMultiPoint = false;
-  var _justFinishedDragCreate = false;
   DateTime? _lastClickTime;
   DrawPoint? _lastClickPosition;
   DrawPoint? _lastUpdatePosition;
@@ -65,26 +63,17 @@ class CreatePlugin extends DrawInputPlugin {
       _routingPolicy.allowCreate(state);
 
   @override
-  Future<PluginResult> handleEvent(InputEvent event) async {
+  Future<PluginResult> handleEvent(InputEvent event) {
     _syncInternalState();
 
-    if (event is PointerDownInputEvent) {
-      return _handlePointerDown(event);
-    }
-    if (event is PointerMoveInputEvent) {
-      return _handlePointerMove(event);
-    }
-    if (event is PointerHoverInputEvent) {
-      return _handlePointerHover(event);
-    }
-    if (event is PointerUpInputEvent) {
-      return _handlePointerUp(event);
-    }
-    if (event is PointerCancelInputEvent) {
-      return _handlePointerCancel();
-    }
-
-    return unhandled();
+    return switch (event) {
+      PointerDownInputEvent() => _handlePointerDown(event),
+      PointerMoveInputEvent() => _handlePointerMove(event),
+      PointerHoverInputEvent() => _handlePointerHover(event),
+      PointerUpInputEvent() => _handlePointerUp(event),
+      PointerCancelInputEvent() => _handlePointerCancel(),
+      _ => Future<PluginResult>.value(unhandled()),
+    };
   }
 
   @override
@@ -115,7 +104,6 @@ class CreatePlugin extends DrawInputPlugin {
 
     _resetPointCreationState();
     _pointerDownPosition = event.position;
-    _justFinishedDragCreate = false;
 
     await dispatch(
       CreateElement(
@@ -172,14 +160,7 @@ class CreatePlugin extends DrawInputPlugin {
       return handled(message: 'Create updated (batched)');
     }
 
-    await dispatch(
-      UpdateCreatingElement(
-        currentPosition: event.position,
-        maintainAspectRatio: event.modifiers.shift,
-        createFromCenter: event.modifiers.alt,
-        snapOverride: event.modifiers.control,
-      ),
-    );
+    await _dispatchCreatingUpdate(event.position, event.modifiers);
     return handled(message: 'Create updated');
   }
 
@@ -190,14 +171,7 @@ class CreatePlugin extends DrawInputPlugin {
     if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
       return handled(message: 'Create hover unchanged');
     }
-    await dispatch(
-      UpdateCreatingElement(
-        currentPosition: event.position,
-        maintainAspectRatio: event.modifiers.shift,
-        createFromCenter: event.modifiers.alt,
-        snapOverride: event.modifiers.control,
-      ),
-    );
+    await _dispatchCreatingUpdate(event.position, event.modifiers);
     return handled(message: 'Create hover updated');
   }
 
@@ -227,7 +201,6 @@ class CreatePlugin extends DrawInputPlugin {
     if (wasMeaningfulDrag && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetPointCreationState();
-      _justFinishedDragCreate = true;
       return handled(message: 'Create finished');
     }
 
@@ -241,15 +214,8 @@ class CreatePlugin extends DrawInputPlugin {
     final isDoubleClick =
         !wasMeaningfulDrag && _isDoubleClick(event.position, now);
 
-    if (wasMultiPoint && _isElbowArrowCreating(state)) {
-      await dispatch(
-        UpdateCreatingElement(
-          currentPosition: event.position,
-          maintainAspectRatio: event.modifiers.shift,
-          createFromCenter: event.modifiers.alt,
-          snapOverride: event.modifiers.control,
-        ),
-      );
+    if (_isElbowArrowCreating(state)) {
+      await _dispatchCreatingUpdate(event.position, event.modifiers);
       await dispatch(const FinishCreateElement());
       _resetPointCreationState();
       return handled(message: 'Create finished (elbow)');
@@ -293,28 +259,7 @@ class CreatePlugin extends DrawInputPlugin {
       tolerance: tolerance,
       filterTypeId: toolTypeId,
     );
-    if (hitResult.isHandleHit) {
-      return false;
-    }
-    if (hitResult.isHit) {
-      return false;
-    }
-    if (!state.domain.hasSelection) {
-      return true;
-    }
-    if (_isPointCreationTool(toolTypeId) && _justFinishedDragCreate) {
-      return true;
-    }
-    return false;
-  }
-
-  bool _isPointCreationTool(ElementTypeId<ElementData>? toolTypeId) {
-    if (toolTypeId == null) {
-      return false;
-    }
-    final definition = drawContext.elementRegistry.getDefinition(toolTypeId);
-    final strategy = definition?.creationStrategy;
-    return strategy is PointCreationStrategy;
+    return !hitResult.isHit && !state.domain.hasSelection;
   }
 
   bool _isPointCreating(DrawState state) {
@@ -324,10 +269,8 @@ class CreatePlugin extends DrawInputPlugin {
 
   bool _isFreeDrawCreating(DrawState state) {
     final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return false;
-    }
-    return interaction.elementData is FreeDrawData;
+    return interaction is CreatingState &&
+        interaction.elementData is FreeDrawData;
   }
 
   bool _isElbowArrowCreating(DrawState state) {
@@ -369,11 +312,11 @@ class CreatePlugin extends DrawInputPlugin {
     KeyModifiers modifiers, {
     bool hasBatchedSamples = false,
   }) {
+    final previousPosition = _lastUpdatePosition;
     if (!hasBatchedSamples &&
-        _positionsMatchForDedup(
-          previous: _lastUpdatePosition,
-          next: position,
-        ) &&
+        previousPosition != null &&
+        previousPosition.x == position.x &&
+        previousPosition.y == position.y &&
         _lastUpdateModifiers == modifiers) {
       return false;
     }
@@ -382,22 +325,26 @@ class CreatePlugin extends DrawInputPlugin {
     return true;
   }
 
-  bool _positionsMatchForDedup({
-    required DrawPoint? previous,
-    required DrawPoint next,
-  }) {
-    if (previous == null) {
-      return false;
-    }
-    return previous.x == next.x && previous.y == next.y;
-  }
+  Future<void> _dispatchCreatingUpdate(
+    DrawPoint position,
+    KeyModifiers modifiers,
+  ) => dispatch(
+    UpdateCreatingElement(
+      currentPosition: position,
+      maintainAspectRatio: modifiers.shift,
+      createFromCenter: modifiers.alt,
+      snapOverride: modifiers.control,
+    ),
+  );
 
   void _syncInternalState() {
-    if (!_isPointCreating(state)) {
-      _resetPointCreationSessionState();
-      if (!state.application.isCreating) {
-        _resetUpdateSignature();
-      }
+    if (_isPointCreating(state)) {
+      return;
+    }
+
+    _resetPointCreationSessionState();
+    if (!state.application.isCreating) {
+      _resetUpdateSignature();
     }
   }
 
@@ -410,7 +357,6 @@ class CreatePlugin extends DrawInputPlugin {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
-    _justFinishedDragCreate = false;
     _clearClickState();
   }
 
