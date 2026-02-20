@@ -264,7 +264,6 @@ void main() {
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
     );
-    // debug: print(result.localPoints);
 
     expect(result.fixedSegments, isNotNull);
     expect(result.fixedSegments!.length, 1);
@@ -402,13 +401,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -462,13 +459,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 1),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -572,13 +567,11 @@ void main() {
     final element = _arrowElement(points, fixedSegments: fixedSegments);
     final data = element.data as ArrowData;
 
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -641,13 +634,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.8, y: 1),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -696,13 +687,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -754,13 +743,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -819,13 +806,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -869,13 +854,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -889,7 +872,6 @@ void main() {
       endBindingOverride: binding,
     );
 
-    printOnFailure('right anchor points: ${result.localPoints}');
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     expect(result.fixedSegments, isNotNull);
     final fixed = result.fixedSegments!.first;
@@ -930,13 +912,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -961,12 +941,10 @@ void main() {
 
     final fixed = result.fixedSegments!.first;
     final isHorizontal = _isHorizontal(fixed.start, fixed.end);
-    final baselineIndex = _closestBaselineSegmentIndex(
-      baseline,
-      isHorizontal: isHorizontal,
-      preferredIndex: fixed.index,
+    expect(
+      _hasSegmentOrientation(baseline, isHorizontal: isHorizontal),
+      isTrue,
     );
-    expect(baselineIndex, isNotNull);
   });
 
   test('bound start maps fixed segment direction to baseline route', () {
@@ -988,13 +966,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.first;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[0] = boundPoint;
@@ -1019,12 +995,10 @@ void main() {
 
     final fixed = result.fixedSegments!.first;
     final isHorizontal = _isHorizontal(fixed.start, fixed.end);
-    final baselineIndex = _closestBaselineSegmentIndex(
-      baseline,
-      isHorizontal: isHorizontal,
-      preferredIndex: fixed.index,
+    expect(
+      _hasSegmentOrientation(baseline, isHorizontal: isHorizontal),
+      isTrue,
     );
-    expect(baselineIndex, isNotNull);
   });
 
   test('unbinding removes diagonal segment after bound routing', () {
@@ -1046,13 +1020,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -1112,13 +1084,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -1266,13 +1236,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -1606,13 +1574,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -1676,13 +1642,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -1978,17 +1942,6 @@ void main() {
       endBindingOverride: binding,
     );
 
-    final baseline = routeElbowArrow(
-      start: movedBoundPoints.first,
-      end: movedBoundPoint,
-      endBinding: binding,
-      elementsById: {'rect-1': movedBoundElement},
-      startArrowhead: boundData.startArrowhead,
-      endArrowhead: boundData.endArrowhead,
-    ).points;
-
-    printOnFailure('moved left binding points: ${updated.localPoints}');
-    printOnFailure('baseline left binding points: $baseline');
     final headings = _headingSequence(updated.localPoints);
     expect(
       headings,
@@ -2021,13 +1974,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final topBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: topBinding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final topBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: topBinding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
     final movedTop = List<DrawPoint>.from(points);
     movedTop[movedTop.length - 1] = topBound;
 
@@ -2067,13 +2018,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final rightBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: rightBinding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final rightBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: rightBinding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
     final movedRight = List<DrawPoint>.from(points);
     movedRight[movedRight.length - 1] = rightBound;
 
@@ -2145,20 +2094,16 @@ void main() {
     final element = _arrowElement(points, fixedSegments: fixedSegments);
     final data = element.data as ArrowData;
 
-    final startBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: startBinding,
-          target: leftElement,
-          hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.first;
-    final endBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: endBinding,
-          target: rightElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final startBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: startBinding,
+      target: leftElement,
+      hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+    )!;
+    final endBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: endBinding,
+      target: rightElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[0] = startBound;
@@ -2246,20 +2191,16 @@ void main() {
     final element = _arrowElement(points, fixedSegments: fixedSegments);
     final data = element.data as ArrowData;
 
-    final startBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: startBinding,
-          target: leftElement,
-          hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.first;
-    final endBound =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: endBinding,
-          target: rightElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final startBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: startBinding,
+      target: leftElement,
+      hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+    )!;
+    final endBound = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: endBinding,
+      target: rightElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[0] = startBound;
@@ -2306,13 +2247,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -2371,13 +2310,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -2442,13 +2379,11 @@ void main() {
       anchor: DrawPoint(x: 0.5, y: 0),
     );
 
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: target,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: target,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
     final boundPoints = List<DrawPoint>.from(points)
       ..[points.length - 1] = boundPoint;
 
@@ -2473,13 +2408,11 @@ void main() {
 
     const movedRect = DrawRect(minX: 160, minY: 320, maxX: 240, maxY: 380);
     final movedTarget = elbowRectangleElement(id: 'rect-1', rect: movedRect);
-    final movedBoundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: movedTarget,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        boundResult.localPoints.last;
+    final movedBoundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: movedTarget,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
     final movedPoints = List<DrawPoint>.from(boundResult.localPoints)
       ..[boundResult.localPoints.length - 1] = movedBoundPoint;
 
@@ -2491,9 +2424,6 @@ void main() {
       fixedSegmentsOverride: boundResult.fixedSegments,
       endBindingOverride: binding,
     );
-
-    printOnFailure('moved points: ${movedResult.localPoints}');
-    printOnFailure('fixed segments: ${movedResult.fixedSegments}');
 
     expect(elbowPathIsOrthogonal(movedResult.localPoints), isTrue);
     expect(movedResult.fixedSegments, isNotNull);
@@ -2538,13 +2468,11 @@ void main() {
         elementId: 'rect-1',
         anchor: DrawPoint(x: 1, y: 0.5),
       );
-      final rightBoundPoint =
-          ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: rightBinding,
-            target: target,
-            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-          ) ??
-          points.last;
+      final rightBoundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: rightBinding,
+        target: target,
+        hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+      )!;
       final rightPoints = List<DrawPoint>.from(points)
         ..[points.length - 1] = rightBoundPoint;
 
@@ -2570,13 +2498,11 @@ void main() {
         elementId: 'rect-1',
         anchor: DrawPoint(x: 0.5, y: 1),
       );
-      final bottomBoundPoint =
-          ArrowBindingUtils.resolveElbowBoundPoint(
-            binding: bottomBinding,
-            target: target,
-            hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-          ) ??
-          rightResult.localPoints.last;
+      final bottomBoundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+        binding: bottomBinding,
+        target: target,
+        hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+      )!;
       final bottomPoints = List<DrawPoint>.from(rightResult.localPoints)
         ..[rightResult.localPoints.length - 1] = bottomBoundPoint;
 
@@ -2588,9 +2514,6 @@ void main() {
         fixedSegmentsOverride: rightResult.fixedSegments,
         endBindingOverride: bottomBinding,
       );
-
-      printOnFailure('bottom points: ${bottomResult.localPoints}');
-      printOnFailure('fixed segments: ${bottomResult.fixedSegments}');
 
       final headings = _headingSequence(bottomResult.localPoints);
       expect(headings, isNotEmpty);
@@ -2626,13 +2549,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final rightBoundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: rightBinding,
-          target: target,
-          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        ) ??
-        points.last;
+    final rightBoundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: rightBinding,
+      target: target,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+    )!;
     final rightPoints = List<DrawPoint>.from(points)
       ..[points.length - 1] = rightBoundPoint;
 
@@ -2673,9 +2594,6 @@ void main() {
       endBindingOverrideIsSet: true,
     );
 
-    printOnFailure('unbound points: ${unboundResult.localPoints}');
-    printOnFailure('fixed segments: ${unboundResult.fixedSegments}');
-
     final headings = _headingSequence(unboundResult.localPoints);
     expect(headings, isNotEmpty);
     expect(
@@ -2715,9 +2633,6 @@ void main() {
       fixedSegmentsOverride: fixedSegments,
     );
 
-    printOnFailure('points: ${result.localPoints}');
-    printOnFailure('fixed: ${result.fixedSegments}');
-
     expect(elbowPathIsOrthogonal(result.localPoints), isTrue);
     final last = result.localPoints.last;
     final prev = result.localPoints[result.localPoints.length - 2];
@@ -2748,13 +2663,11 @@ void main() {
       elementId: 'target',
       anchor: DrawPoint(x: 0.5, y: 0),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: target,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: target,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = <DrawPoint>[
       points.first,
@@ -2835,13 +2748,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 1, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.last;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[movedPoints.length - 1] = boundPoint;
@@ -2918,13 +2829,11 @@ void main() {
       elementId: 'rect-1',
       anchor: DrawPoint(x: 0, y: 0.5),
     );
-    final boundPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        points.first;
+    final boundPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    )!;
 
     final movedPoints = List<DrawPoint>.from(points);
     movedPoints[0] = boundPoint;
@@ -3109,37 +3018,20 @@ bool _hasImmediateBacktrack(List<DrawPoint> points) {
   return false;
 }
 
-int? _closestBaselineSegmentIndex(
+bool _hasSegmentOrientation(
   List<DrawPoint> baseline, {
   required bool isHorizontal,
-  required int preferredIndex,
 }) {
-  if (baseline.length < 2) {
-    return null;
-  }
-  int? bestIndex;
-  var bestIndexDelta = double.infinity;
   for (var i = 1; i < baseline.length; i++) {
-    if (_isHorizontal(baseline[i - 1], baseline[i]) != isHorizontal) {
-      continue;
-    }
-    final indexDelta = (i - preferredIndex).abs().toDouble();
-    if (indexDelta < bestIndexDelta) {
-      bestIndexDelta = indexDelta;
-      bestIndex = i;
+    if (_isHorizontal(baseline[i - 1], baseline[i]) == isHorizontal) {
+      return true;
     }
   }
-  return bestIndex;
+  return false;
 }
 
-int _indexOfPoint(List<DrawPoint> points, DrawPoint target) {
-  for (var i = 0; i < points.length; i++) {
-    if (elbowPointsClose(points[i], target)) {
-      return i;
-    }
-  }
-  return -1;
-}
+int _indexOfPoint(List<DrawPoint> points, DrawPoint target) =>
+    points.indexWhere((point) => elbowPointsClose(point, target));
 
 List<DrawPoint> _prefixThroughPoint(List<DrawPoint> points, DrawPoint target) {
   final index = _indexOfPoint(points, target);
