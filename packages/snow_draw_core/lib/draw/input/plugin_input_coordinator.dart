@@ -12,6 +12,7 @@ import 'plugin_registry.dart';
 /// registry.
 class PluginInputCoordinator {
   static const _processingFailureReason = 'Input processing failed';
+  static const _disposedReason = 'Input coordinator disposed';
   static const _coalescedEventMessage = 'Event coalesced by coordinator';
   static const _pressureCoalescingTolerance = 1e-4;
 
@@ -26,8 +27,7 @@ class PluginInputCoordinator {
   final InputPipeline _pipeline;
   final _queue = Queue<_QueuedInputEvent>();
 
-  Completer<void>? _drainCompleter;
-  var _isDraining = false;
+  Future<void>? _drainFuture;
   var _isDisposed = false;
   var _coalescedEventCount = 0;
 
@@ -46,35 +46,35 @@ class PluginInputCoordinator {
   Future<PluginResult?> handleEvent(InputEvent event) {
     if (_isDisposed) {
       return Future<PluginResult?>.value(
-        const PluginResult.unhandled(reason: 'Input coordinator disposed'),
+        const PluginResult.unhandled(reason: _disposedReason),
       );
     }
 
     final queuedEvent = _QueuedInputEvent(event);
-    _enqueueEvent(queuedEvent);
-    if (!_isDraining) {
-      unawaited(_drainQueue());
-    }
+    _enqueueOrCoalesce(queuedEvent);
+    _drainFuture ??= _drainQueue();
     return queuedEvent.completer.future;
   }
 
-  void _enqueueEvent(_QueuedInputEvent queuedEvent) {
-    if (_tryCoalesceQueuedEvent(queuedEvent)) {
+  void _enqueueOrCoalesce(_QueuedInputEvent incomingEvent) {
+    if (_tryCoalesce(incomingEvent)) {
       return;
     }
-    _queue.addLast(queuedEvent);
+    _queue.addLast(incomingEvent);
   }
 
-  bool _tryCoalesceQueuedEvent(_QueuedInputEvent incomingEvent) {
-    if (!_isDraining || _queue.isEmpty) {
+  bool _tryCoalesce(_QueuedInputEvent incomingEvent) {
+    if (_drainFuture == null || _queue.isEmpty) {
       return false;
     }
-    final incomingInputEvent = incomingEvent.event;
-    if (!_isCoalescibleEvent(incomingInputEvent)) {
+
+    final incomingInput = incomingEvent.event;
+    if (!_isCoalescibleEvent(incomingInput)) {
       return false;
     }
+
     final lastQueuedEvent = _queue.last;
-    if (!_canCoalesce(lastQueuedEvent.event, incomingInputEvent)) {
+    if (!_canCoalesce(lastQueuedEvent.event, incomingInput)) {
       return false;
     }
 
@@ -89,7 +89,6 @@ class PluginInputCoordinator {
 
   bool _canCoalesce(InputEvent previousEvent, InputEvent nextEvent) =>
       previousEvent.runtimeType == nextEvent.runtimeType &&
-      _isCoalescibleEvent(previousEvent) &&
       previousEvent.modifiers == nextEvent.modifiers &&
       _isPressureCompatible(previousEvent, nextEvent);
 
@@ -107,13 +106,6 @@ class PluginInputCoordinator {
       event is PointerMoveInputEvent || event is PointerHoverInputEvent;
 
   Future<void> _drainQueue() async {
-    if (_isDraining) {
-      return;
-    }
-    _isDraining = true;
-    final completer = Completer<void>();
-    _drainCompleter = completer;
-
     try {
       while (_queue.isNotEmpty) {
         final queuedEvent = _queue.removeFirst();
@@ -132,34 +124,24 @@ class PluginInputCoordinator {
         }
       }
     } finally {
-      _isDraining = false;
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-      _drainCompleter = null;
+      _drainFuture = null;
     }
   }
 
   Future<PluginResult?> _processEvent(InputEvent event) async {
     final state = _pluginContext.state;
-
-    // Create middleware context.
     final middlewareContext = MiddlewareContext(
       state: state,
       log: _pluginContext.context.log.input,
     );
 
-    // 1. Process via middleware pipeline.
     final processedEvent = await _pipeline.execute(event, middlewareContext);
-
-    // If middleware intercepts the event, return immediately.
     if (processedEvent == null) {
       return const PluginResult.handled(
         message: 'Event intercepted by middleware',
       );
     }
 
-    // 2. Dispatch to plugins.
     return _registry.dispatch(processedEvent, state);
   }
 
@@ -192,18 +174,22 @@ class PluginInputCoordinator {
     }
     _isDisposed = true;
 
-    while (_queue.isNotEmpty) {
-      _queue.removeFirst().complete(
-        const PluginResult.unhandled(reason: 'Input coordinator disposed'),
-      );
-    }
+    _completeQueuedEvents(
+      const PluginResult.unhandled(reason: _disposedReason),
+    );
 
-    final drainCompleter = _drainCompleter;
-    if (drainCompleter != null) {
-      await drainCompleter.future;
+    final drainFuture = _drainFuture;
+    if (drainFuture != null) {
+      await drainFuture;
     }
 
     await _registry.dispose();
+  }
+
+  void _completeQueuedEvents(PluginResult result) {
+    while (_queue.isNotEmpty) {
+      _queue.removeFirst().complete(result);
+    }
   }
 
   /// Get statistics.
@@ -211,7 +197,7 @@ class PluginInputCoordinator {
     'middlewareCount': _pipeline.middlewares.length,
     'middlewares': _pipeline.middlewares.map((m) => m.name).toList(),
     'queuedEvents': _queue.length,
-    'isDraining': _isDraining,
+    'isDraining': _drainFuture != null,
     'coalescedEvents': _coalescedEventCount,
     ..._registry.getStats(),
   };
