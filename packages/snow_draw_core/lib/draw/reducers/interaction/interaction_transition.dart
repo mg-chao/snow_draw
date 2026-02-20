@@ -14,10 +14,11 @@ class InteractionTransition {
   });
 
   /// State unchanged.
-  factory InteractionTransition.unchanged(
+  const InteractionTransition.unchanged(
     DrawState state, {
     List<EditSessionEvent> events = const [],
-  }) => InteractionTransition(nextState: state, events: events);
+  }) : this(nextState: state, events: events);
+
   final DrawState nextState;
   final List<EditSessionEvent> events;
 }
