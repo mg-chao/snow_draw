@@ -1,15 +1,3 @@
-/// Tests that lock down behavior before and after Edit System fixes.
-///
-/// Covers:
-/// 1. replaceElementsById performance: index reuse in large lists.
-/// 2. ResizeTransform.isIdentity correctness.
-/// 3. ArrowPointEditContext.hasSnapshots override.
-/// 4. _fixedSegmentForIndex boundary guard consistency.
-/// 5. replaceElementsById correctness with mixed valid/ghost IDs.
-library;
-
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/apply/edit_apply.dart';
@@ -37,11 +25,7 @@ import 'package:snow_draw_core/draw/types/resize_mode.dart';
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
 
-  // =========================================================================
-  // 1. replaceElementsById: correctness with mixed valid/ghost IDs
-  // =========================================================================
-
-  group('replaceElementsById mixed valid and ghost IDs', () {
+  group('replaceElementsById', () {
     test('small list: applies valid change, ignores ghost', () {
       final elements = List.generate(5, (i) => _element('e$i'));
       final replacement = elements[2].copyWith(
@@ -51,6 +35,7 @@ void main() {
         elements: elements,
         replacementsById: {'e2': replacement, 'ghost': _element('ghost')},
       );
+
       expect(result.length, elements.length);
       expect(identical(result[2], replacement), isTrue);
       expect(result.map((e) => e.id).toList(), ['e0', 'e1', 'e2', 'e3', 'e4']);
@@ -65,12 +50,13 @@ void main() {
         elements: elements,
         replacementsById: {'el100': replacement, 'ghost': _element('ghost')},
       );
+
       expect(result.length, 200);
       expect(identical(result[100], replacement), isTrue);
       expect(result[100].rect.minX, 999);
     });
 
-    test('large list: all ghost IDs returns same list', () {
+    test('all ghost IDs return same list instance', () {
       final elements = List.generate(200, (i) => _element('el$i'));
       final result = EditApply.replaceElementsById(
         elements: elements,
@@ -79,41 +65,36 @@ void main() {
           'ghost2': _element('ghost2'),
         },
       );
+
       expect(identical(result, elements), isTrue);
     });
 
-    test('large list: replacements count >= elements count still works', () {
+    test('more replacements than elements applies valid IDs only', () {
       final elements = List.generate(3, (i) => _element('e$i'));
-      final replacements = <String, ElementState>{};
-      for (var i = 0; i < 5; i++) {
-        final id = 'e$i';
-        if (i < 3) {
-          replacements[id] = elements[i].copyWith(
+      final replacements = <String, ElementState>{
+        for (var i = 0; i < elements.length; i++)
+          'e$i': elements[i].copyWith(
             rect: DrawRect(
               minX: i * 10.0,
               minY: i * 10.0,
               maxX: i * 10.0 + 10,
               maxY: i * 10.0 + 10,
             ),
-          );
-        } else {
-          replacements[id] = _element(id);
-        }
-      }
+          ),
+        'e3': _element('e3'),
+        'e4': _element('e4'),
+      };
       final result = EditApply.replaceElementsById(
         elements: elements,
         replacementsById: replacements,
       );
+
       expect(result.length, 3);
       expect(result[0].rect.minX, 0);
       expect(result[1].rect.minX, 10);
       expect(result[2].rect.minX, 20);
     });
   });
-
-  // =========================================================================
-  // 2. ResizeTransform.isIdentity
-  // =========================================================================
 
   group('ResizeTransform.isIdentity', () {
     test('incomplete transform is identity', () {
@@ -145,10 +126,9 @@ void main() {
       expect(t.isIdentity, isFalse);
     });
 
-    test('resize operation: scale 1.0 with same bounds returns idle '
-        'without changes', () {
-      final element = _rectangleElement(
-        id: 'r1',
+    test('resize operation: scale 1.0 with same bounds returns idle', () {
+      final element = _element(
+        'r1',
         rect: const DrawRect(maxX: 100, maxY: 100),
       );
       final state = _stateWith([element]);
@@ -162,7 +142,6 @@ void main() {
           selectionPadding: 0,
         ),
       );
-      // Simulate a transform where scales are 1.0 and bounds match
       const transform = ResizeTransform.complete(
         currentPosition: DrawPoint(x: 100, y: 100),
         newSelectionBounds: DrawRect(maxX: 100, maxY: 100),
@@ -175,6 +154,7 @@ void main() {
         context: ctx,
         transform: transform,
       );
+
       expect(result.application.interaction, isA<IdleState>());
       expect(
         result.domain.document.getElementById('r1')!.rect,
@@ -182,10 +162,6 @@ void main() {
       );
     });
   });
-
-  // =========================================================================
-  // 3. ArrowPointEditContext.hasSnapshots
-  // =========================================================================
 
   group('ArrowPointEditContext.hasSnapshots', () {
     test('returns true when initialPoints are present', () {
@@ -205,17 +181,12 @@ void main() {
           pointIndex: 1,
         ),
       );
-      // After fix, hasSnapshots should return true for valid
-      // arrow point contexts.
+
       expect(ctx.hasSnapshots, isTrue);
     });
   });
 
-  // =========================================================================
-  // 4. ArrowPointOperation: full round-trip still works after fixes
-  // =========================================================================
-
-  group('ArrowPointOperation round-trip after fixes', () {
+  group('ArrowPointOperation round-trip', () {
     test('endpoint drag: preview and finish produce same rect', () {
       final arrow = _arrowElement(
         id: 'a1',
@@ -291,10 +262,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 5. EditValidation.shouldSkipCompute with arrow point context
-  // =========================================================================
-
   group('EditValidation with ArrowPointEditContext', () {
     test('isValidContext returns true for valid arrow point context', () {
       final arrow = _arrowElement(
@@ -313,15 +280,11 @@ void main() {
           pointIndex: 1,
         ),
       );
-      // After fix, this should return true.
+
       expect(EditValidation.isValidContext(ctx), isTrue);
     });
   });
 }
-
-// ===========================================================================
-// Test helpers
-// ===========================================================================
 
 ElementState _element(String id, {DrawRect? rect}) => ElementState(
   id: id,
@@ -331,16 +294,6 @@ ElementState _element(String id, {DrawRect? rect}) => ElementState(
   zIndex: 0,
   data: const RectangleData(),
 );
-
-ElementState _rectangleElement({required String id, required DrawRect rect}) =>
-    ElementState(
-      id: id,
-      rect: rect,
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: const RectangleData(),
-    );
 
 ElementState _arrowElement({
   required String id,
@@ -362,34 +315,47 @@ ElementState _arrowElement({
 }
 
 DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
-  final ids = selectedIds ?? {elements.first.id};
+  assert(
+    elements.isNotEmpty,
+    'elements must contain at least one element for default selection',
+  );
   return DrawState(
     domain: DomainState(
       document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: ids),
+      selection: SelectionState(
+        selectedIds: selectedIds ?? {elements.first.id},
+      ),
     ),
   );
 }
 
 DrawRect _rectForPoints(List<DrawPoint> points) {
+  assert(points.isNotEmpty, 'points must not be empty');
+
   var minX = points.first.x;
   var maxX = points.first.x;
   var minY = points.first.y;
   var maxY = points.first.y;
 
   for (final point in points.skip(1)) {
-    minX = math.min(minX, point.x);
-    maxX = math.max(maxX, point.x);
-    minY = math.min(minY, point.y);
-    maxY = math.max(maxY, point.y);
+    if (point.x < minX) {
+      minX = point.x;
+    }
+    if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    }
+    if (point.y > maxY) {
+      maxY = point.y;
+    }
   }
 
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return DrawRect(
+    minX: minX,
+    minY: minY,
+    maxX: maxX == minX ? minX + 1 : maxX,
+    maxY: maxY == minY ? minY + 1 : maxY,
+  );
 }
