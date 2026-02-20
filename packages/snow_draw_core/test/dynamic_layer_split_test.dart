@@ -13,127 +13,122 @@ import 'package:snow_draw_core/ui/canvas/dynamic_layer_split.dart';
 
 void main() {
   test('returns null when no split is needed', () {
-    final state = _stateWith();
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, isNull);
+    expect(_splitIndex(_stateWith()), isNull);
   });
 
   test('returns earliest selected element index', () {
-    final state = _stateWith(selectedIds: const {'e2', 'e3'});
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 1);
+    expect(_splitIndex(_stateWith(selectedIds: const {'e2', 'e3'})), 1);
   });
 
   test('highlight above selection does not force full-scene lifting', () {
-    final state = _stateWith(
-      selectedIds: const {'e2'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'e2'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'e2',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'h1',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: HighlightData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'e2',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: RectangleData(),
-        ),
-        ElementState(
-          id: 'h1',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 2,
-          data: HighlightData(),
-        ),
-      ],
+      ),
+      1,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 1);
   });
 
   test('selected highlight keeps dynamic split scoped to its z-index', () {
-    final state = _stateWith(
-      selectedIds: const {'h1'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'h1'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'h1',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: HighlightData(),
+            ),
+            ElementState(
+              id: 'e3',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: RectangleData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'h1',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: HighlightData(),
-        ),
-        ElementState(
-          id: 'e3',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 2,
-          data: RectangleData(),
-        ),
-      ],
+      ),
+      1,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 1);
   });
 
   test('keeps earliest selected index when no highlight in dynamic range', () {
-    final state = _stateWith(
-      selectedIds: const {'e2'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: HighlightData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'e2'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: HighlightData(),
+            ),
+            ElementState(
+              id: 'e2',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'e3',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: RectangleData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'e2',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: RectangleData(),
-        ),
-        ElementState(
-          id: 'e3',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 2,
-          data: RectangleData(),
-        ),
-      ],
+      ),
+      1,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 1);
   });
 
   test('highlight creation keeps committed scene on static layer', () {
@@ -149,11 +144,7 @@ void main() {
       startPosition: const DrawPoint(x: 10, y: 10),
       currentRect: const DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 20),
     );
-    final state = _stateWith(interaction: interaction);
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, isNull);
+    expect(_splitIndex(_stateWith(interaction: interaction)), isNull);
   });
 
   test('creating filter lifts all document elements', () {
@@ -169,119 +160,118 @@ void main() {
       startPosition: const DrawPoint(x: 10, y: 10),
       currentRect: const DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 20),
     );
-    final state = _stateWith(interaction: interaction);
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 0);
+    expect(_splitIndex(_stateWith(interaction: interaction)), 0);
   });
 
   test('selecting filter lifts all document elements', () {
-    final state = _stateWith(
-      selectedIds: const {'f1'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'f1'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'f1',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: FilterData(),
+            ),
+            ElementState(
+              id: 'e3',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: RectangleData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'f1',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: FilterData(),
-        ),
-        ElementState(
-          id: 'e3',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 2,
-          data: RectangleData(),
-        ),
-      ],
+      ),
+      0,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 0);
   });
 
   test('selected range including filter lifts all document elements', () {
-    final state = _stateWith(
-      selectedIds: const {'e1'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'e1'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'f1',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: FilterData(),
+            ),
+            ElementState(
+              id: 'e3',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 2,
+              data: RectangleData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'f1',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: FilterData(),
-        ),
-        ElementState(
-          id: 'e3',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 2,
-          data: RectangleData(),
-        ),
-      ],
+      ),
+      0,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 0);
   });
 
   test('transparent filter does not force full-scene lifting', () {
-    final state = _stateWith(
-      selectedIds: const {'e2'},
-      elements: const [
-        ElementState(
-          id: 'e1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: RectangleData(),
+    expect(
+      _splitIndex(
+        _stateWith(
+          selectedIds: const {'e2'},
+          elements: const [
+            ElementState(
+              id: 'e1',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'e2',
+              rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 1,
+              data: RectangleData(),
+            ),
+            ElementState(
+              id: 'f1',
+              rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+              rotation: 0,
+              opacity: 0,
+              zIndex: 2,
+              data: FilterData(),
+            ),
+          ],
         ),
-        ElementState(
-          id: 'e2',
-          rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 1,
-          data: RectangleData(),
-        ),
-        ElementState(
-          id: 'f1',
-          rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-          rotation: 0,
-          opacity: 0,
-          zIndex: 2,
-          data: FilterData(),
-        ),
-      ],
+      ),
+      1,
     );
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, 1);
   });
 
   test('keeps static scene when creating new text', () {
@@ -293,53 +283,51 @@ void main() {
       opacity: 1,
       rotation: 0,
     );
-    final state = _stateWith(interaction: interaction);
-    final view = DrawStateView.fromState(state);
-
-    final splitIndex = resolveDynamicLayerStartIndex(view);
-    expect(splitIndex, isNull);
+    expect(_splitIndex(_stateWith(interaction: interaction)), isNull);
   });
 }
+
+int? _splitIndex(DrawState state) =>
+    resolveDynamicLayerStartIndex(DrawStateView.fromState(state));
+
+const _defaultElements = <ElementState>[
+  ElementState(
+    id: 'e1',
+    rect: DrawRect(maxX: 10, maxY: 10),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: RectangleData(),
+  ),
+  ElementState(
+    id: 'e2',
+    rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 1,
+    data: RectangleData(),
+  ),
+  ElementState(
+    id: 'e3',
+    rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 2,
+    data: RectangleData(),
+  ),
+];
 
 DrawState _stateWith({
   Set<String> selectedIds = const <String>{},
   InteractionState interaction = const IdleState(),
-  List<ElementState>? elements,
+  List<ElementState> elements = _defaultElements,
 }) {
-  const defaultElements = [
-    ElementState(
-      id: 'e1',
-      rect: DrawRect(maxX: 10, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: RectangleData(),
-    ),
-    ElementState(
-      id: 'e2',
-      rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 1,
-      data: RectangleData(),
-    ),
-    ElementState(
-      id: 'e3',
-      rect: DrawRect(minX: 40, maxX: 50, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 2,
-      data: RectangleData(),
-    ),
-  ];
-
   final initial = DrawState.initial();
-  final domain = initial.domain.copyWith(
-    document: initial.domain.document.copyWith(
-      elements: elements ?? defaultElements,
+  return initial.copyWith(
+    domain: initial.domain.copyWith(
+      document: initial.domain.document.copyWith(elements: elements),
+      selection: initial.domain.selection.withSelectedIds(selectedIds),
     ),
-    selection: initial.domain.selection.withSelectedIds(selectedIds),
+    application: initial.application.copyWith(interaction: interaction),
   );
-  final application = initial.application.copyWith(interaction: interaction);
-  return initial.copyWith(domain: domain, application: application);
 }
