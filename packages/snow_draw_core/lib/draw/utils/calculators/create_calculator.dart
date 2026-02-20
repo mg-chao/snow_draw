@@ -12,51 +12,45 @@ class CreateCalculator {
     required bool maintainAspectRatio,
     required bool createFromCenter,
   }) {
-    double minX = min(startPosition.x, currentPosition.x);
-    double minY = min(startPosition.y, currentPosition.y);
-    double maxX = max(startPosition.x, currentPosition.x);
-    double maxY = max(startPosition.y, currentPosition.y);
-
-    if (createFromCenter) {
-      final dx = (currentPosition.x - startPosition.x).abs();
-      final dy = (currentPosition.y - startPosition.y).abs();
-      minX = startPosition.x - dx;
-      minY = startPosition.y - dy;
-      maxX = startPosition.x + dx;
-      maxY = startPosition.y + dy;
-    }
+    final dx = currentPosition.x - startPosition.x;
+    final dy = currentPosition.y - startPosition.y;
 
     if (maintainAspectRatio) {
-      final width = maxX - minX;
-      final height = maxY - minY;
+      final side = max(dx.abs(), dy.abs());
 
-      if (width > height) {
-        final newHeight = width;
-        if (createFromCenter) {
-          minY = startPosition.y - newHeight / 2;
-          maxY = startPosition.y + newHeight / 2;
-        } else {
-          if (startPosition.y < currentPosition.y) {
-            maxY = minY + newHeight;
-          } else {
-            minY = maxY - newHeight;
-          }
-        }
-      } else {
-        final newWidth = height;
-        if (createFromCenter) {
-          minX = startPosition.x - newWidth / 2;
-          maxX = startPosition.x + newWidth / 2;
-        } else {
-          if (startPosition.x < currentPosition.x) {
-            maxX = minX + newWidth;
-          } else {
-            minX = maxX - newWidth;
-          }
-        }
+      if (createFromCenter) {
+        return DrawRect(
+          minX: startPosition.x - side,
+          minY: startPosition.y - side,
+          maxX: startPosition.x + side,
+          maxY: startPosition.y + side,
+        );
       }
+
+      final endX = startPosition.x + (dx > 0 ? side : -side);
+      final endY = startPosition.y + (dy > 0 ? side : -side);
+      return DrawRect(
+        minX: min(startPosition.x, endX),
+        minY: min(startPosition.y, endY),
+        maxX: max(startPosition.x, endX),
+        maxY: max(startPosition.y, endY),
+      );
     }
 
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    if (createFromCenter) {
+      return DrawRect(
+        minX: startPosition.x - dx.abs(),
+        minY: startPosition.y - dy.abs(),
+        maxX: startPosition.x + dx.abs(),
+        maxY: startPosition.y + dy.abs(),
+      );
+    }
+
+    return DrawRect(
+      minX: min(startPosition.x, currentPosition.x),
+      minY: min(startPosition.y, currentPosition.y),
+      maxX: max(startPosition.x, currentPosition.x),
+      maxY: max(startPosition.y, currentPosition.y),
+    );
   }
 }
