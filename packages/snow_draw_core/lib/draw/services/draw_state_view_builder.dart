@@ -1,13 +1,11 @@
 import 'package:meta/meta.dart';
 
 import '../edit/edit_operation_registry_interface.dart';
-import '../edit/preview/edit_preview.dart';
 import '../edit/preview/edit_preview_engine.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/element_state.dart';
 import '../models/interaction_state.dart';
-import '../types/snap_guides.dart';
 import '../utils/selection_calculator.dart';
 import 'selection_data_computer.dart';
 import 'selection_geometry_resolver.dart';
@@ -48,31 +46,35 @@ class DrawStateViewBuilder {
   }
 
   DrawStateView _buildUncached(DrawState state) {
-    final snapGuides = _resolveSnapGuides(state);
     final interaction = state.application.interaction;
     if (interaction is CreatingState) {
-      return DrawStateView.fromState(state, snapGuides: snapGuides);
+      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
     }
 
-    final textEditingPreview = _buildTextEditingPreview(state);
-    if (textEditingPreview != null) {
-      return textEditingPreview;
+    if (interaction is TextEditingState) {
+      return _buildTextEditingPreview(state: state, interaction: interaction);
+    }
+
+    if (interaction is! EditingState) {
+      return DrawStateView.fromState(state);
     }
 
     final preview = _previewEngine.build(
       state: state,
       editOperations: editOperations,
     );
-
-    if (preview == EditPreview.none) {
-      return DrawStateView.fromState(state, snapGuides: snapGuides);
+    final selectionPreview = preview.selectionPreview;
+    final hasPreview =
+        selectionPreview != null || preview.previewElementsById.isNotEmpty;
+    if (!hasPreview) {
+      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
     }
 
-    final effectiveSelection = preview.selectionPreview != null
+    final effectiveSelection = selectionPreview != null
         ? EffectiveSelection(
-            bounds: preview.selectionPreview!.bounds,
-            center: preview.selectionPreview!.center,
-            rotation: preview.selectionPreview!.rotation,
+            bounds: selectionPreview.bounds,
+            center: selectionPreview.center,
+            rotation: selectionPreview.rotation,
             hasSelection: true,
           )
         : _buildSelectionFromState(state);
@@ -81,16 +83,14 @@ class DrawStateViewBuilder {
       state: state,
       previewElementsById: preview.previewElementsById,
       effectiveSelection: effectiveSelection,
-      snapGuides: snapGuides,
+      snapGuides: interaction.snapGuides,
     );
   }
 
-  DrawStateView? _buildTextEditingPreview(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! TextEditingState) {
-      return null;
-    }
-
+  DrawStateView _buildTextEditingPreview({
+    required DrawState state,
+    required TextEditingState interaction,
+  }) {
     final existingElement = state.domain.document.getElementById(
       interaction.elementId,
     );
@@ -144,17 +144,13 @@ class DrawStateViewBuilder {
       return EffectiveSelection.none;
     }
 
-    final selectedElements = <ElementState>[];
-    for (final id in selection.selectedIds) {
-      if (id == previewElement.id) {
-        selectedElements.add(previewElement);
-        continue;
-      }
-      final element = state.domain.document.getElementById(id);
-      if (element != null) {
-        selectedElements.add(element);
-      }
-    }
+    final selectedElements = <ElementState>[
+      for (final id in selection.selectedIds)
+        if (id == previewElement.id)
+          previewElement
+        else
+          ?state.domain.document.getElementById(id),
+    ];
 
     if (selectedElements.isEmpty) {
       return EffectiveSelection.none;
@@ -177,28 +173,17 @@ class DrawStateViewBuilder {
   }
 
   static EffectiveSelection _buildSelectionFromState(DrawState state) {
-    if (!state.domain.hasSelection) {
+    final selection = SelectionDataComputer.compute(state);
+    if (!selection.hasSelection) {
       return EffectiveSelection.none;
     }
 
-    final selection = SelectionDataComputer.compute(state);
     return EffectiveSelection(
       bounds: selection.overlayBounds,
       center: selection.overlayCenter,
       rotation: selection.overlayRotation,
-      hasSelection: selection.hasSelection,
+      hasSelection: true,
     );
-  }
-
-  static List<SnapGuide> _resolveSnapGuides(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is EditingState) {
-      return interaction.snapGuides;
-    }
-    if (interaction is CreatingState) {
-      return interaction.snapGuides;
-    }
-    return const [];
   }
 }
 
