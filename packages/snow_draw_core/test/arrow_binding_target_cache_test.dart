@@ -4,22 +4,26 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_ca
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
+const _defaultArrowType = ArrowType.curved;
+const _defaultArrowheadStyle = ArrowheadStyle.none;
+const _defaultShouldLookupBindings = true;
+const _defaultAllowNewBinding = true;
+const _defaultHasBindableTargets = true;
+
+typedef _ResolvedCandidate = ({bool hasValue, ArrowBindingResult? value});
+
 void main() {
   group('ArrowBindingTargetCache candidate caching', () {
     test('returns no candidate before caching', () {
       final cache = ArrowBindingTargetCache();
-      final resolved = cache.resolveCandidate(
+      final resolved = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 10, y: 12),
         referencePoint: null,
         positionThreshold: 4,
         referenceThreshold: 4,
         elementsVersion: 3,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: null,
       );
 
@@ -28,47 +32,35 @@ void main() {
     });
 
     test('reuses cached miss when null value is stored', () {
-      final cache = ArrowBindingTargetCache()
-        ..cacheCandidate(
-          position: const DrawPoint(x: 100, y: 120),
-          referencePoint: const DrawPoint(x: 80, y: 90),
-          elementsVersion: 7,
-          snapDistance: 12,
-          arrowType: ArrowType.curved,
-          arrowheadStyle: ArrowheadStyle.none,
-          shouldLookupBindings: true,
-          allowNewBinding: true,
-          hasBindableTargets: true,
-          preferredBinding: null,
-          value: null,
-        );
+      final cache = ArrowBindingTargetCache();
+      _cacheCandidate(
+        cache,
+        position: const DrawPoint(x: 100, y: 120),
+        referencePoint: const DrawPoint(x: 80, y: 90),
+        elementsVersion: 7,
+        snapDistance: 12,
+        preferredBinding: null,
+        value: null,
+      );
 
-      final resolved = cache.resolveCandidate(
+      final resolved = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 102, y: 121),
         referencePoint: const DrawPoint(x: 79, y: 92),
         positionThreshold: 6,
         referenceThreshold: 6,
         elementsVersion: 7,
         snapDistance: 12,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: null,
       );
-      final resolvedFar = cache.resolveCandidate(
+      final resolvedFar = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 110, y: 126),
         referencePoint: const DrawPoint(x: 79, y: 92),
         positionThreshold: 6,
         referenceThreshold: 6,
         elementsVersion: 7,
         snapDistance: 12,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: null,
       );
 
@@ -84,16 +76,12 @@ void main() {
         elementId: 'target-a',
         anchor: DrawPoint(x: 0.5, y: 0.5),
       );
-      cache.cacheCandidate(
+      _cacheCandidate(
+        cache,
         position: const DrawPoint(x: 40, y: 40),
         referencePoint: null,
         elementsVersion: 2,
         snapDistance: 8,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: initialBinding,
         value: const ArrowBindingResult(
           binding: initialBinding,
@@ -103,18 +91,14 @@ void main() {
         ),
       );
 
-      final resolved = cache.resolveCandidate(
+      final resolved = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 40, y: 40),
         referencePoint: null,
         positionThreshold: 4,
         referenceThreshold: 4,
         elementsVersion: 2,
         snapDistance: 8,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: const ArrowBinding(
           elementId: 'target-b',
           anchor: DrawPoint(x: 0.5, y: 0.5),
@@ -137,46 +121,34 @@ void main() {
         distance: 1,
         zIndex: 1,
       );
-      cache.cacheCandidate(
+      _cacheCandidate(
+        cache,
         position: const DrawPoint(x: 10, y: 10),
         referencePoint: null,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
         value: expected,
       );
 
-      final resolvedFar = cache.resolveCandidate(
+      final resolvedFar = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 30, y: 30),
         referencePoint: null,
         positionThreshold: 5,
         referenceThreshold: 5,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
       );
-      final resolvedNear = cache.resolveCandidate(
+      final resolvedNear = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 12, y: 12),
         referencePoint: null,
         positionThreshold: 5,
         referenceThreshold: 5,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
       );
 
@@ -198,59 +170,43 @@ void main() {
         zIndex: 1,
       );
 
-      cache.cacheCandidate(
+      _cacheCandidate(
+        cache,
         position: const DrawPoint(x: 10, y: 10),
         referencePoint: null,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
         value: hit,
       );
-      final hitResolution = cache.resolveCandidate(
+      final hitResolution = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 15, y: 10),
         referencePoint: null,
         positionThreshold: 6,
         referenceThreshold: 6,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
       );
 
-      cache.cacheCandidate(
+      _cacheCandidate(
+        cache,
         position: const DrawPoint(x: 10, y: 10),
         referencePoint: null,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
         value: null,
       );
-      final missResolution = cache.resolveCandidate(
+      final missResolution = _resolveCandidate(
+        cache,
         position: const DrawPoint(x: 15, y: 10),
         referencePoint: null,
         positionThreshold: 6,
         referenceThreshold: 6,
         elementsVersion: 5,
         snapDistance: 10,
-        arrowType: ArrowType.curved,
-        arrowheadStyle: ArrowheadStyle.none,
-        shouldLookupBindings: true,
-        allowNewBinding: true,
-        hasBindableTargets: true,
         preferredBinding: binding,
       );
 
@@ -261,3 +217,51 @@ void main() {
     });
   });
 }
+
+void _cacheCandidate(
+  ArrowBindingTargetCache cache, {
+  required DrawPoint position,
+  required DrawPoint? referencePoint,
+  required int elementsVersion,
+  required double snapDistance,
+  required ArrowBinding? preferredBinding,
+  required ArrowBindingResult? value,
+}) {
+  cache.cacheCandidate(
+    position: position,
+    referencePoint: referencePoint,
+    elementsVersion: elementsVersion,
+    snapDistance: snapDistance,
+    arrowType: _defaultArrowType,
+    arrowheadStyle: _defaultArrowheadStyle,
+    shouldLookupBindings: _defaultShouldLookupBindings,
+    allowNewBinding: _defaultAllowNewBinding,
+    hasBindableTargets: _defaultHasBindableTargets,
+    preferredBinding: preferredBinding,
+    value: value,
+  );
+}
+
+_ResolvedCandidate _resolveCandidate(
+  ArrowBindingTargetCache cache, {
+  required DrawPoint position,
+  required DrawPoint? referencePoint,
+  required double positionThreshold,
+  required double referenceThreshold,
+  required int elementsVersion,
+  required double snapDistance,
+  required ArrowBinding? preferredBinding,
+}) => cache.resolveCandidate(
+  position: position,
+  referencePoint: referencePoint,
+  positionThreshold: positionThreshold,
+  referenceThreshold: referenceThreshold,
+  elementsVersion: elementsVersion,
+  snapDistance: snapDistance,
+  arrowType: _defaultArrowType,
+  arrowheadStyle: _defaultArrowheadStyle,
+  shouldLookupBindings: _defaultShouldLookupBindings,
+  allowNewBinding: _defaultAllowNewBinding,
+  hasBindableTargets: _defaultHasBindableTargets,
+  preferredBinding: preferredBinding,
+);
