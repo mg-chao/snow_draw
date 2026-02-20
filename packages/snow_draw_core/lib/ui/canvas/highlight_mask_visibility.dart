@@ -8,13 +8,13 @@ HighlightMaskLayer resolveHighlightMaskLayer({
   required bool hasDynamicHighlights,
   required HighlightMaskConfig config,
 }) {
-  if (!hasHighlights) {
+  if (!hasHighlights || config.maskOpacity <= 0) {
     return HighlightMaskLayer.none;
   }
-  if (config.maskOpacity <= 0) {
-    return HighlightMaskLayer.none;
+
+  if (hasDynamicContent || hasDynamicHighlights) {
+    return HighlightMaskLayer.dynamicLayer;
   }
-  return hasDynamicContent || hasDynamicHighlights
-      ? HighlightMaskLayer.dynamicLayer
-      : HighlightMaskLayer.staticLayer;
+
+  return HighlightMaskLayer.staticLayer;
 }
