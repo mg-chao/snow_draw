@@ -9,32 +9,21 @@ List<Offset> resolveFreeDrawLocalPoints({
   required DrawRect rect,
   required List<DrawPoint> points,
 }) {
-  if (points.isEmpty) {
-    return const <Offset>[];
-  }
   final width = rect.width;
   final height = rect.height;
-  return points
-      .map((point) => Offset(point.x * width, point.y * height))
-      .toList(growable: false);
+  return [
+    for (final point in points) Offset(point.x * width, point.y * height),
+  ];
 }
 
 /// Resolves per-point pressure values from normalized points.
 ///
 /// Returns a list parallel to [points] with pressure in 0..1.
 /// Points without pressure data get a default of 0.5.
-List<double> resolveFreeDrawPressures({required List<DrawPoint> points}) {
-  if (points.isEmpty) {
-    return const <double>[];
-  }
-  final hasPressure = points.any((p) => p.hasPressure);
-  if (!hasPressure) {
-    return List<double>.filled(points.length, 0.5);
-  }
-  return points
-      .map((p) => p.hasPressure ? p.pressure.clamp(0.0, 1.0) : 0.5)
-      .toList(growable: false);
-}
+List<double> resolveFreeDrawPressures({required List<DrawPoint> points}) => [
+  for (final point in points)
+    point.hasPressure ? point.pressure.clamp(0.0, 1.0) : 0.5,
+];
 
 /// Builds a smooth center-line path using Catmull-Rom splines.
 ///
@@ -55,9 +44,6 @@ Path buildFreeDrawSmoothPath(List<Offset> points) {
   final closed = points.first == points.last;
   final source = closed ? points.sublist(0, points.length - 1) : points;
   final smoothed = _smoothPoints(source, closed: closed);
-  if (smoothed.length < 2) {
-    return Path();
-  }
 
   final path = Path()..moveTo(smoothed.first.dx, smoothed.first.dy);
   const tension = 0.5;
@@ -84,11 +70,6 @@ Path buildFreeDrawSmoothPath(List<Offset> points) {
 
 /// Incrementally extends a smooth path with new points.
 ///
-/// Reuses the smoothed-point computation but only generates
-/// Catmull-Rom cubics for the full path using the range helper,
-/// which is cheaper than the full [buildFreeDrawSmoothPath] when
-/// the smoothing pass dominates less than the cubic generation.
-///
 /// Returns `null` if the inputs are too short or if a full rebuild
 /// is needed (caller should fall back to [buildFreeDrawSmoothPath]).
 Path? buildFreeDrawSmoothPathIncremental({
@@ -96,59 +77,25 @@ Path? buildFreeDrawSmoothPathIncremental({
   required Path basePath,
   required int basePointCount,
 }) {
-  if (allPoints.length < 2) {
-    return null;
-  }
-  if (allPoints.first == allPoints.last) {
-    return null;
-  }
-
-  final smoothed = _smoothPoints(allPoints, closed: false);
-  if (smoothed.length < 2) {
+  if (allPoints.length < 2 ||
+      allPoints.first == allPoints.last ||
+      basePointCount < 3 ||
+      basePointCount > allPoints.length) {
     return null;
   }
 
-  // If the base covered fewer than 3 smoothed points, a full
-  // rebuild is cheaper and more correct.
-  if (basePointCount < 3) {
-    return null;
+  if (allPoints.length == basePointCount) {
+    return Path()..addPath(basePath, Offset.zero);
   }
-
-  final count = smoothed.length;
-  // We need to recompute from 2 segments before the new tail
-  // because Catmull-Rom uses 4 control points per segment, so
-  // appending a point affects the previous 2 segments.
-  final recomputeFrom = math.max(0, basePointCount - 3);
-
-  // Build a new path from the smoothed points, splitting at
-  // recomputeFrom. The smoothing pass is still O(n) but the
-  // cubic generation for the stable prefix can be skipped in
-  // future iterations when we cache the smoothed array.
-  final _ = basePath;
-  final prefixEnd = math.min(count, recomputeFrom + 1);
-  final result = Path()..moveTo(smoothed.first.dx, smoothed.first.dy);
-  _addOpenCatmullRomSegmentsRange(result, smoothed, 0, prefixEnd);
-  _addOpenCatmullRomSegmentsRange(result, smoothed, recomputeFrom, count);
-  return result;
+  return buildFreeDrawSmoothPath(allPoints);
 }
 
 /// Appends open (non-closed) Catmull-Rom cubic segments for all
 /// points in [smoothed] to [path].
 void _addOpenCatmullRomSegments(Path path, List<Offset> smoothed) {
-  _addOpenCatmullRomSegmentsRange(path, smoothed, 0, smoothed.length);
-}
-
-/// Appends open Catmull-Rom cubic segments for the range
-/// [from]..[to) in [smoothed] to [path].
-void _addOpenCatmullRomSegmentsRange(
-  Path path,
-  List<Offset> smoothed,
-  int from,
-  int to,
-) {
   const tension = 0.5;
   final count = smoothed.length;
-  if (count < 2 || from >= to - 1) {
+  if (count < 2) {
     return;
   }
 
@@ -156,7 +103,7 @@ void _addOpenCatmullRomSegmentsRange(
   final phantomLast =
       smoothed[count - 1] + (smoothed[count - 1] - smoothed[count - 2]);
 
-  for (var i = from; i < to - 1; i++) {
+  for (var i = 0; i < count - 1; i++) {
     final p0 = i == 0 ? phantomFirst : smoothed[i - 1];
     final p1 = smoothed[i];
     final p2 = smoothed[i + 1];
@@ -200,11 +147,7 @@ Path buildVariableWidthOutline({
   }
 
   final count = rPoints.length;
-  final widths = _computeWidths(
-    pressures: rPressures,
-    baseWidth: baseWidth,
-    count: count,
-  );
+  final widths = _computeWidths(pressures: rPressures, baseWidth: baseWidth);
   // All width transforms mutate in-place to avoid intermediate
   // list allocations (previously ~8 copies per stroke).
   _applyVelocityDampingInPlace(rPoints, widths);
@@ -337,20 +280,12 @@ Offset _smoothNormalAt(List<Offset> points, int i) {
 List<double> _computeWidths({
   required List<double> pressures,
   required double baseWidth,
-  required int count,
 }) {
-  if (count == 0) {
-    return const <double>[];
-  }
-
   final minWidth = (baseWidth * 0.15).clamp(0.3, 2.0);
-
-  final widths = List<double>.filled(count, 0);
-  for (var i = 0; i < count; i++) {
-    final pressureFactor = 0.3 + pressures[i].clamp(0.0, 1.0) * 0.7;
-    widths[i] = math.max(baseWidth * pressureFactor, minWidth);
-  }
-  return widths;
+  return [
+    for (final pressure in pressures)
+      math.max(baseWidth * (0.3 + pressure.clamp(0.0, 1.0) * 0.7), minWidth),
+  ];
 }
 
 /// Applies velocity-based width damping in-place.
