@@ -68,16 +68,16 @@ class StaticCanvasPainter extends CustomPainter {
       maxY: (size.height - camera.position.y) / scale,
     );
 
-    // Try GPU-accelerated shader grid first (drawn in screen coordinates).
-    final shaderUsed = _drawGridWithShader(canvas, size, scale);
+    final shouldPaintGrid = _shouldPaintGrid(scale);
+    final shaderUsed =
+        shouldPaintGrid && _drawGridWithShader(canvas, size, scale);
 
     canvas
       ..save()
       ..translate(camera.position.x, camera.position.y)
       ..scale(scale, scale);
 
-    // Fall back to CPU-based grid if shader not available.
-    if (!shaderUsed) {
+    if (shouldPaintGrid && !shaderUsed) {
       _drawGridFallback(canvas, viewportRect, scale);
     }
 
@@ -104,7 +104,6 @@ class StaticCanvasPainter extends CustomPainter {
         }
       }
       _includeEditingTextIdForSerialConnectors(
-        stateView: stateView,
         previewElementsById: previewElements,
         visibleTextIds: visibleTextIds,
       );
@@ -212,7 +211,7 @@ class StaticCanvasPainter extends CustomPainter {
   void _drawBackground(Canvas canvas, Size size) {
     final color = renderKey.canvasConfig.backgroundColor;
     final paint = _resolveBackgroundPaint(color);
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+    canvas.drawRect(Offset.zero & size, paint);
   }
 
   static Paint? _cachedBackgroundPaint;
@@ -233,40 +232,35 @@ class StaticCanvasPainter extends CustomPainter {
     return _cachedBackgroundPaint!;
   }
 
+  bool _shouldPaintGrid(double scale) {
+    final config = renderKey.gridConfig;
+    final baseSize = config.size;
+    if (!config.enabled || baseSize <= 0 || scale <= 0) {
+      return false;
+    }
+    return baseSize * scale >= config.minRenderSpacing;
+  }
+
   /// Draws the grid using the GPU-accelerated fragment shader.
   ///
   /// Returns true if the shader was used successfully, false if fallback
   /// rendering should be used instead.
   bool _drawGridWithShader(Canvas canvas, Size size, double scale) {
     final config = renderKey.gridConfig;
-    if (!config.enabled) {
-      return true; // Grid disabled, no need for fallback.
-    }
-
-    final baseSize = config.size;
-    if (baseSize <= 0) {
-      return true; // Invalid config, no need for fallback.
-    }
-
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-    if (baseSize * effectiveScale < config.minRenderSpacing) {
-      return true; // Grid too small to render, no need for fallback.
-    }
-
     final shaderManager = GridShaderManager.instance;
     if (!shaderManager.isReady) {
-      return false; // Shader not ready, use fallback.
+      return false;
     }
 
     final minorOpacityRatio = _resolveMinorOpacityRatio(
-      baseSize: baseSize,
-      scale: effectiveScale,
+      baseSize: config.size,
+      scale: scale,
       minScreenSpacing: config.minScreenSpacing,
     );
     final majorEveryFactor = _resolveMajorEveryFactor(
-      baseSize: baseSize,
+      baseSize: config.size,
       majorEvery: config.majorLineEvery,
-      scale: effectiveScale,
+      scale: scale,
       minSpacing: config.minScreenSpacing,
     );
 
@@ -277,7 +271,7 @@ class StaticCanvasPainter extends CustomPainter {
         renderKey.camera.position.x,
         renderKey.camera.position.y,
       ),
-      scale: effectiveScale,
+      scale: scale,
       config: config,
       minorOpacityRatio: minorOpacityRatio,
       majorEveryFactor: majorEveryFactor,
@@ -289,41 +283,24 @@ class StaticCanvasPainter extends CustomPainter {
   /// Used when the fragment shader is not available.
   void _drawGridFallback(Canvas canvas, DrawRect viewportRect, double scale) {
     final config = renderKey.gridConfig;
-    if (!config.enabled) {
-      return;
-    }
-
     final baseSize = config.size;
-    if (baseSize <= 0) {
-      return;
-    }
-
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-    if (baseSize * effectiveScale < config.minRenderSpacing) {
-      return;
-    }
-
-    final minorStrokeWidth = config.lineWidth / effectiveScale;
-    // Major lines are 1.5x thicker for clear visual distinction.
+    final minorStrokeWidth = config.lineWidth / scale;
     final majorStrokeWidth = minorStrokeWidth * 1.5;
-    final screenSpacing = baseSize * effectiveScale;
+    final screenSpacing = baseSize * scale;
     final showMinorLines = screenSpacing >= config.minScreenSpacing;
     final minorOpacityRatio = _resolveMinorOpacityRatio(
       baseSize: baseSize,
-      scale: effectiveScale,
+      scale: scale,
       minScreenSpacing: config.minScreenSpacing,
     );
     final majorEveryFactor = _resolveMajorEveryFactor(
       baseSize: baseSize,
       majorEvery: config.majorLineEvery,
-      scale: effectiveScale,
+      scale: scale,
       minSpacing: config.minScreenSpacing,
     );
     final majorStep = baseSize * majorEveryFactor;
 
-    // Use solid lines with opacity and thickness differentiation for clear
-    // visual distinction between major and minor grid lines.
-    // Minor lines use reduced opacity (0.5x) for subtlety.
     final minorColor = config.lineColor.withValues(
       alpha: config.lineOpacity * minorOpacityRatio * 0.5,
     );
@@ -347,7 +324,6 @@ class StaticCanvasPainter extends CustomPainter {
       final verticalLineCount = endXIndex - startXIndex + 1;
       final horizontalLineCount = endYIndex - startYIndex + 1;
 
-      // Count major vs minor lines for pre-allocation.
       var majorVerticalCount = 0;
       var majorHorizontalCount = 0;
       for (var ix = startXIndex; ix <= endXIndex; ix++) {
@@ -363,8 +339,6 @@ class StaticCanvasPainter extends CustomPainter {
       final minorVerticalCount = verticalLineCount - majorVerticalCount;
       final minorHorizontalCount = horizontalLineCount - majorHorizontalCount;
 
-      // Reuse typed-data buffers to avoid per-frame allocations.
-      // Each line needs 4 floats: x1, y1, x2, y2.
       final majorPointCount = (majorVerticalCount + majorHorizontalCount) * 4;
       final minorPointCount = (minorVerticalCount + minorHorizontalCount) * 4;
       _majorGridPointBuffer = _ensurePointBuffer(
@@ -381,7 +355,6 @@ class StaticCanvasPainter extends CustomPainter {
       var majorIdx = 0;
       var minorIdx = 0;
 
-      // Batch vertical lines.
       for (var ix = startXIndex; ix <= endXIndex; ix++) {
         final x = ix * step;
         if (_isMajorLine(ix, majorEveryFactor)) {
@@ -397,7 +370,6 @@ class StaticCanvasPainter extends CustomPainter {
         }
       }
 
-      // Batch horizontal lines.
       for (var iy = startYIndex; iy <= endYIndex; iy++) {
         final y = iy * step;
         if (_isMajorLine(iy, majorEveryFactor)) {
@@ -413,7 +385,6 @@ class StaticCanvasPainter extends CustomPainter {
         }
       }
 
-      // Draw all lines with just 2 GPU draw calls.
       if (minorIdx > 0) {
         canvas.drawRawPoints(
           ui.PointMode.lines,
@@ -429,7 +400,6 @@ class StaticCanvasPainter extends CustomPainter {
         );
       }
     } else {
-      // Only major lines visible at this zoom level.
       final startXIndex = (viewportRect.minX / majorStep).floor();
       final endXIndex = (viewportRect.maxX / majorStep).ceil();
       final startYIndex = (viewportRect.minY / majorStep).floor();
@@ -446,7 +416,6 @@ class StaticCanvasPainter extends CustomPainter {
 
       var idx = 0;
 
-      // Batch vertical major lines.
       for (var ix = startXIndex; ix <= endXIndex; ix++) {
         final x = ix * majorStep;
         majorPoints[idx++] = x;
@@ -455,7 +424,6 @@ class StaticCanvasPainter extends CustomPainter {
         majorPoints[idx++] = viewportRect.maxY;
       }
 
-      // Batch horizontal major lines.
       for (var iy = startYIndex; iy <= endYIndex; iy++) {
         final y = iy * majorStep;
         majorPoints[idx++] = viewportRect.minX;
@@ -464,7 +432,6 @@ class StaticCanvasPainter extends CustomPainter {
         majorPoints[idx++] = y;
       }
 
-      // Single GPU draw call for all major lines.
       if (idx > 0) {
         canvas.drawRawPoints(
           ui.PointMode.lines,
@@ -485,7 +452,7 @@ class StaticCanvasPainter extends CustomPainter {
     if (normalizedMajorEvery == 1) {
       return 1;
     }
-    if (scale <= 0 || minSpacing <= 0) {
+    if (baseSize <= 0 || scale <= 0 || minSpacing <= 0) {
       return normalizedMajorEvery;
     }
 
@@ -545,12 +512,11 @@ class StaticCanvasPainter extends CustomPainter {
 
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
     final localeTag = renderKey.locale?.toLanguageTag() ?? '';
-    final normalizedScale = scale == 0 ? 1.0 : scale;
     return FilterRenderCacheContext(
       domain: FilterRenderCacheDomain.staticLayer,
       documentVersion: renderKey.documentVersion,
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
-      scaleKey: (normalizedScale * 1000).round(),
+      scaleKey: (scale * 1000).round(),
       localeTag: localeTag,
     );
   }
@@ -560,17 +526,18 @@ class StaticCanvasPainter extends CustomPainter {
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) {
-    for (final textId in visibleTextIds) {
-      if (boundTextIds.contains(textId)) {
-        return true;
-      }
+    if (visibleTextIds.any(boundTextIds.contains)) {
+      return true;
     }
+
     for (final previewElement in previewElementsById.values) {
       final data = previewElement.data;
-      if (data is SerialNumberData &&
-          data.textElementId != null &&
-          data.textElementId!.isNotEmpty &&
-          visibleTextIds.contains(data.textElementId)) {
+      final textElementId = data is SerialNumberData
+          ? data.textElementId
+          : null;
+      if (textElementId != null &&
+          textElementId.isNotEmpty &&
+          visibleTextIds.contains(textElementId)) {
         return true;
       }
     }
@@ -578,7 +545,6 @@ class StaticCanvasPainter extends CustomPainter {
   }
 
   void _includeEditingTextIdForSerialConnectors({
-    required DrawStateView stateView,
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) {
