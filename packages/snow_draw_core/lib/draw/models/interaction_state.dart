@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 import '../elements/core/element_data.dart';
@@ -120,20 +122,6 @@ class EditingState extends InteractionState {
   final EditTransform currentTransform;
   final List<SnapGuide> snapGuides;
 
-  EditingState copyWith({
-    EditOperationId? operationId,
-    EditSessionId? sessionId,
-    EditContext? context,
-    EditTransform? currentTransform,
-    List<SnapGuide>? snapGuides,
-  }) => EditingState(
-    operationId: operationId ?? this.operationId,
-    sessionId: sessionId ?? this.sessionId,
-    context: context ?? this.context,
-    currentTransform: currentTransform ?? this.currentTransform,
-    snapGuides: snapGuides ?? this.snapGuides,
-  );
-
   EditingState withTransform(
     EditTransform transform, {
     List<SnapGuide>? guides,
@@ -195,8 +183,6 @@ class RectCreationMode extends CreationMode {
 /// Point-based creation mode (for arrows).
 @immutable
 class PointCreationMode extends CreationMode {
-  static const _sessionDataUnset = Object();
-
   const PointCreationMode({
     this.fixedPoints = const [],
     this.currentPoint,
@@ -214,18 +200,6 @@ class PointCreationMode extends CreationMode {
   /// This is intentionally excluded from equality/hashCode so reducers can
   /// attach mutable caches without forcing state churn.
   final Object? sessionData;
-
-  PointCreationMode copyWith({
-    List<DrawPoint>? fixedPoints,
-    DrawPoint? currentPoint,
-    Object? sessionData = _sessionDataUnset,
-  }) => PointCreationMode(
-    fixedPoints: fixedPoints ?? this.fixedPoints,
-    currentPoint: currentPoint ?? this.currentPoint,
-    sessionData: sessionData == _sessionDataUnset
-        ? this.sessionData
-        : sessionData,
-  );
 
   @override
   bool operator ==(Object other) =>
@@ -360,21 +334,12 @@ class BoxSelectingState extends InteractionState {
     currentPosition: currentPosition ?? this.currentPosition,
   );
 
-  DrawRect get bounds {
-    final minX = startPosition.x < currentPosition.x
-        ? startPosition.x
-        : currentPosition.x;
-    final minY = startPosition.y < currentPosition.y
-        ? startPosition.y
-        : currentPosition.y;
-    final maxX = startPosition.x > currentPosition.x
-        ? startPosition.x
-        : currentPosition.x;
-    final maxY = startPosition.y > currentPosition.y
-        ? startPosition.y
-        : currentPosition.y;
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
+  DrawRect get bounds => DrawRect(
+    minX: math.min(startPosition.x, currentPosition.x),
+    minY: math.min(startPosition.y, currentPosition.y),
+    maxX: math.max(startPosition.x, currentPosition.x),
+    maxY: math.max(startPosition.y, currentPosition.y),
+  );
 
   @override
   String toString() =>
