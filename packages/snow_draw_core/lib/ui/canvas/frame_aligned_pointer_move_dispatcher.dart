@@ -31,7 +31,7 @@ class FrameAlignedEventDispatcher<T> {
 
   T? _pendingEvent;
   Future<void>? _inFlightDispatch;
-  var _withoutCoalescingQueue = Future<void>.value();
+  var _immediateQueue = Future<void>.value();
   var _frameCallbackScheduled = false;
   var _isDisposed = false;
 
@@ -41,21 +41,18 @@ class FrameAlignedEventDispatcher<T> {
     }
 
     if (!_shouldCoalesce()) {
-      final queued = _withoutCoalescingQueue.then(
+      final queued = _immediateQueue.then(
         (_) => _dispatchWithoutCoalescing(event),
       );
-      _withoutCoalescingQueue = queued.catchError((Object _) {});
+      _immediateQueue = queued.catchError((Object _) {});
       unawaited(queued);
       return;
     }
 
     final pending = _pendingEvent;
-    if (pending == null) {
-      _pendingEvent = event;
-    } else {
-      final merged = _mergePendingEvents?.call(pending, event);
-      _pendingEvent = (merged ?? event) as T;
-    }
+    _pendingEvent = pending == null
+        ? event
+        : (_mergePendingEvents?.call(pending, event) ?? event) as T;
     _scheduleFrameDispatch();
   }
 
@@ -63,7 +60,7 @@ class FrameAlignedEventDispatcher<T> {
     if (_isDisposed) {
       return;
     }
-    await _withoutCoalescingQueue;
+    await _immediateQueue;
     await _waitForInFlightDispatch();
     final pending = _takePendingEvent();
     if (pending == null) {
@@ -82,7 +79,7 @@ class FrameAlignedEventDispatcher<T> {
     }
     _isDisposed = true;
     _pendingEvent = null;
-    await _withoutCoalescingQueue;
+    await _immediateQueue;
     await _waitForInFlightDispatch();
   }
 
