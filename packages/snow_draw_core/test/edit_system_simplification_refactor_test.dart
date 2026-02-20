@@ -1,24 +1,13 @@
-/// Pre-refactoring tests that lock down behavior of the edit system
-/// before simplifying duplicated patterns:
-///
-/// 1. computeResult validation + identity guard (shared across
-///    Move/Resize/Rotate).
-/// 2. Private _resolveReferenceElements wrappers (Move/Resize).
-/// 3. Snapshot building helpers (buildMoveSnapshots, etc.).
-/// 4. Context creation boilerplate (selection bounds, IDs, versions).
-///
-/// Each test captures the exact output of the current code so that
-/// after refactoring we can verify nothing changed.
-library;
-
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
+import 'package:snow_draw_core/draw/edit/core/edit_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_helpers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
+import 'package:snow_draw_core/draw/edit/core/edit_result.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_validation.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
@@ -37,15 +26,12 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
+import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
-
-  // =========================================================================
-  // 1. computeResult returns null for identity transforms
-  // =========================================================================
 
   group('computeResult identity guard', () {
     test('MoveOperation: zero displacement returns null preview', () {
@@ -127,10 +113,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 2. computeResult validation: empty snapshots / empty selection
-  // =========================================================================
-
   group('computeResult validation guard', () {
     test('MoveEditContext with empty snapshots is invalid', () {
       const ctx = MoveEditContext(
@@ -174,10 +156,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 3. Snapshot building helpers produce correct data
-  // =========================================================================
-
   group('Snapshot building helpers', () {
     test('buildMoveSnapshots captures element centers', () {
       final el = _rect('r1');
@@ -216,10 +194,6 @@ void main() {
       expect(snapshots['r1']!.rotation, equals(1.2));
     });
   });
-
-  // =========================================================================
-  // 4. resolveReferenceElements filters correctly
-  // =========================================================================
 
   group('resolveReferenceElements', () {
     test('excludes selected elements', () {
@@ -270,10 +244,6 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // 5. Context creation captures correct state
-  // =========================================================================
-
   group('Context creation captures correct state', () {
     test('MoveOperation context captures selection version', () {
       final el = _rect('r1');
@@ -309,8 +279,7 @@ void main() {
           selectionPadding: 0,
         ),
       );
-      final typedCtx = ctx;
-      expect(typedCtx.resizeMode, equals(ResizeMode.topLeft));
+      expect(ctx.resizeMode, equals(ResizeMode.topLeft));
     });
 
     test('RotateOperation context captures base rotation', () {
@@ -330,16 +299,11 @@ void main() {
         position: const DrawPoint(x: 110, y: 50),
         params: const RotateOperationParams(),
       );
-      final typedCtx = ctx;
-      expect(typedCtx.baseRotation, equals(0.7));
+      expect(ctx.baseRotation, equals(0.7));
     });
   });
 
-  // =========================================================================
-  // 6. Full round-trip: update 鈫?preview 鈫?finish consistency
-  // =========================================================================
-
-  group('Full round-trip consistency after refactoring', () {
+  group('Full round-trip consistency', () {
     test('move: displaced element center matches expected offset', () {
       final el = _rect('r1');
       final state = _stateWith([el]);
@@ -355,13 +319,12 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 50, y: 50),
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 70, y: 90),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final finished = op.finish(
@@ -370,7 +333,6 @@ void main() {
         transform: update.transform,
       );
       final movedEl = finished.domain.document.getElementById('r1')!;
-      // dx=20, dy=40 from original center (50,50)
       expect(movedEl.rect.centerX, closeTo(70, 0.01));
       expect(movedEl.rect.centerY, closeTo(90, 0.01));
     });
@@ -394,13 +356,12 @@ void main() {
         context: ctx,
         startPosition: handlePos,
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 200, y: 200),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final finished = op.finish(
@@ -430,13 +391,12 @@ void main() {
         context: ctx,
         startPosition: startPos,
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: DrawPoint(x: center.x, y: center.y + 60),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final finished = op.finish(
@@ -470,13 +430,12 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 200, y: 50),
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 300, y: 100),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final preview = op.buildPreview(
@@ -496,10 +455,6 @@ void main() {
       expect(finishEl.rect.maxX, greaterThan(arrow.rect.maxX));
     });
   });
-
-  // =========================================================================
-  // 7. Multi-element operations
-  // =========================================================================
 
   group('Multi-element operations', () {
     test('move: all selected elements move by same offset', () {
@@ -521,13 +476,12 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 50, y: 50),
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 60, y: 70),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final finished = op.finish(
@@ -537,17 +491,12 @@ void main() {
       );
       final m1 = finished.domain.document.getElementById('r1')!;
       final m2 = finished.domain.document.getElementById('r2')!;
-      // Both should move by dx=10, dy=20
       expect(m1.rect.centerX, closeTo(60, 0.01));
       expect(m1.rect.centerY, closeTo(70, 0.01));
       expect(m2.rect.centerX, closeTo(260, 0.01));
       expect(m2.rect.centerY, closeTo(270, 0.01));
     });
   });
-
-  // =========================================================================
-  // 8. Finish transitions to idle
-  // =========================================================================
 
   group('Finish transitions to idle', () {
     test('move finish transitions to idle', () {
@@ -565,13 +514,12 @@ void main() {
         context: ctx,
         startPosition: const DrawPoint(x: 50, y: 50),
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 80, y: 80),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final result = op.finish(
@@ -600,13 +548,12 @@ void main() {
         context: ctx,
         startPosition: DrawPoint(x: el.rect.maxX, y: el.rect.maxY),
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: const DrawPoint(x: 150, y: 150),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final result = op.finish(
@@ -634,13 +581,12 @@ void main() {
         context: ctx,
         startPosition: startPos,
       );
-      final update = op.update(
+      final update = _updateOperation(
+        operation: op,
         state: state,
         context: ctx,
         transform: t0,
         currentPosition: DrawPoint(x: center.x, y: center.y + 60),
-        modifiers: const EditModifiers(),
-        config: DrawConfig.defaultConfig,
       );
 
       final result = op.finish(
@@ -653,9 +599,20 @@ void main() {
   });
 }
 
-// ===========================================================================
-// Test helpers
-// ===========================================================================
+EditUpdateResult<EditTransform> _updateOperation({
+  required EditOperation operation,
+  required DrawState state,
+  required EditContext context,
+  required EditTransform transform,
+  required DrawPoint currentPosition,
+}) => operation.update(
+  state: state,
+  context: context,
+  transform: transform,
+  currentPosition: currentPosition,
+  modifiers: const EditModifiers(),
+  config: DrawConfig.defaultConfig,
+);
 
 DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
   final ids = selectedIds ?? {elements.first.id};
