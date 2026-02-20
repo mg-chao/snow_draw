@@ -16,10 +16,6 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
 
-  // -----------------------------------------------------------------------
-  // Helpers
-  // -----------------------------------------------------------------------
-
   DrawState stateWith(List<ElementState> elements) => DrawState(
     domain: DomainState(document: DocumentState(elements: elements)),
   );
@@ -43,10 +39,6 @@ void main() {
     ArrowBinding? endBinding,
   }) {
     final rect = _rectForPoints(points);
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: points,
-      rect: rect,
-    );
     return ElementState(
       id: id,
       rect: rect,
@@ -54,16 +46,29 @@ void main() {
       opacity: 1,
       zIndex: 1,
       data: ArrowData(
-        points: normalized,
+        points: ArrowGeometry.normalizePoints(worldPoints: points, rect: rect),
         startBinding: startBinding,
         endBinding: endBinding,
       ),
     );
   }
 
-  // -----------------------------------------------------------------------
-  // Tests
-  // -----------------------------------------------------------------------
+  ({ElementState target, ElementState arrow, DrawState state})
+  boundArrowFixture({String arrowId = 'boundArrow'}) {
+    final target = rect0(
+      id: 'target',
+      rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
+    );
+    final arrow = arrow0(
+      id: arrowId,
+      points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
+      startBinding: const ArrowBinding(
+        elementId: 'target',
+        anchor: DrawPoint(x: 0, y: 0.5),
+      ),
+    );
+    return (target: target, arrow: arrow, state: stateWith([target, arrow]));
+  }
 
   group('EditComputePipeline.finalize', () {
     test('returns null for empty updatedById', () {
@@ -111,85 +116,43 @@ void main() {
     );
 
     test('does not mutate the caller map keys', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'boundArrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow]);
-
-      // Move the target - the resolver would add 'boundArrow' to the
-      // result. The caller's map must not gain that extra key.
-      final movedTarget = target.copyWith(
+      final fixture = boundArrowFixture();
+      final movedTarget = fixture.target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
       );
       final callerMap = <String, ElementState>{'target': movedTarget};
       final keysBefore = callerMap.keys.toSet();
 
-      EditComputePipeline.finalize(state: state, updatedById: callerMap);
+      EditComputePipeline.finalize(
+        state: fixture.state,
+        updatedById: callerMap,
+      );
 
-      // The caller's map must not have been mutated by finalize.
       expect(callerMap.keys.toSet(), equals(keysBefore));
     });
 
     test('does not mutate the caller map values', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'arrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow]);
-
-      // Move the arrow - unbinding should not overwrite the caller's
-      // value.
-      final movedArrow = arrow.copyWith(
+      final fixture = boundArrowFixture(arrowId: 'arrow');
+      final movedArrow = fixture.arrow.copyWith(
         rect: const DrawRect(minX: 60, minY: 79, maxX: 250, maxY: 81),
       );
       final callerMap = <String, ElementState>{'arrow': movedArrow};
 
-      EditComputePipeline.finalize(state: state, updatedById: callerMap);
+      EditComputePipeline.finalize(
+        state: fixture.state,
+        updatedById: callerMap,
+      );
 
-      // The caller's map value must still be the original movedArrow.
       expect(identical(callerMap['arrow'], movedArrow), isTrue);
     });
 
     test('unbinds arrow-like elements in the result', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'arrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow]);
-
-      final movedArrow = arrow.copyWith(
+      final fixture = boundArrowFixture(arrowId: 'arrow');
+      final movedArrow = fixture.arrow.copyWith(
         rect: const DrawRect(minX: 60, minY: 79, maxX: 250, maxY: 81),
       );
       final result = EditComputePipeline.finalize(
-        state: state,
+        state: fixture.state,
         updatedById: {'arrow': movedArrow},
       );
 
@@ -217,83 +180,36 @@ void main() {
     });
 
     test('skipBindingUpdate predicate excludes elements', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'boundArrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow]);
-
-      // Move the target - the resolver would normally update the
-      // bound arrow. The skip predicate should prevent that.
-      final movedTarget = target.copyWith(
+      final fixture = boundArrowFixture();
+      final movedTarget = fixture.target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
       );
       final result = EditComputePipeline.finalize(
-        state: state,
+        state: fixture.state,
         updatedById: {'target': movedTarget},
-        skipBindingUpdate: (id, _) => id == 'boundArrow',
+        skipBindingUpdate: (id, _) => id == fixture.arrow.id,
       );
 
       expect(result, isNotNull);
-      // The bound arrow should NOT appear in the result because
-      // the skip predicate excluded it.
-      expect(result!.updatedElements.containsKey('boundArrow'), isFalse);
+      expect(result!.updatedElements.containsKey(fixture.arrow.id), isFalse);
     });
 
     test('resolves bindings when bound target moves', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'boundArrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow]);
-
-      // Move the target - the resolver should update the bound arrow.
-      final movedTarget = target.copyWith(
+      final fixture = boundArrowFixture();
+      final movedTarget = fixture.target.copyWith(
         rect: const DrawRect(minX: 300, minY: 40, maxX: 380, maxY: 120),
       );
       final result = EditComputePipeline.finalize(
-        state: state,
+        state: fixture.state,
         updatedById: {'target': movedTarget},
       );
 
       expect(result, isNotNull);
-      // The bound arrow should appear in the result because the
-      // resolver updated it.
-      expect(result!.updatedElements.containsKey('boundArrow'), isTrue);
+      expect(result!.updatedElements.containsKey(fixture.arrow.id), isTrue);
     });
 
     test('skips unrelated arrow binding updates for non-bindable elements', () {
-      final target = rect0(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = arrow0(
-        id: 'boundArrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
+      final fixture = boundArrowFixture();
       const freeDraw = ElementState(
         id: 'free',
         rect: DrawRect(minX: 20, minY: 20, maxX: 60, maxY: 60),
@@ -302,7 +218,7 @@ void main() {
         zIndex: 2,
         data: FreeDrawData(),
       );
-      final state = stateWith([target, arrow, freeDraw]);
+      final state = stateWith([fixture.target, fixture.arrow, freeDraw]);
 
       final movedFreeDraw = freeDraw.copyWith(
         rect: const DrawRect(minX: 40, minY: 24, maxX: 80, maxY: 64),
@@ -335,37 +251,25 @@ void main() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
 DrawRect _rectForPoints(List<DrawPoint> points) {
+  assert(points.isNotEmpty);
+
   var minX = points.first.x;
   var maxX = points.first.x;
   var minY = points.first.y;
   var maxY = points.first.y;
 
   for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
+    minX = point.x < minX ? point.x : minX;
+    maxX = point.x > maxX ? point.x : maxX;
+    minY = point.y < minY ? point.y : minY;
+    maxY = point.y > maxY ? point.y : maxY;
   }
 
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return DrawRect(
+    minX: minX,
+    minY: minY,
+    maxX: maxX == minX ? minX + 1 : maxX,
+    maxY: maxY == minY ? minY + 1 : maxY,
+  );
 }
