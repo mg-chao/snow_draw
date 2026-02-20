@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../draw/services/log/log_service.dart';
 
 final ModuleLogger _filterShaderLog = LogService.fallback.render;
+const _mosaicShaderAssetPath =
+    'packages/snow_draw_core/shaders/filter_mosaic.frag';
 
 /// Manages shader-backed image filters used by canvas filter elements.
 class FilterShaderManager {
@@ -14,8 +16,7 @@ class FilterShaderManager {
   static final instance = FilterShaderManager._();
 
   ui.FragmentProgram? _mosaicProgram;
-  var _isLoadingMosaic = false;
-  var _mosaicLoadFailed = false;
+  Future<void>? _mosaicLoadTask;
 
   /// Whether shader-backed image filters are supported on this backend.
   bool get isShaderFilterSupported => ui.ImageFilter.isShaderFilterSupported;
@@ -27,27 +28,22 @@ class FilterShaderManager {
   bool get canUseShaderBackedMosaic => isShaderFilterSupported && isMosaicReady;
 
   /// Preloads shader programs used for filter rendering.
-  Future<void> load() async {
-    await _loadMosaicProgram();
-  }
+  Future<void> load() => _mosaicLoadTask ??= _loadMosaicProgram();
 
   Future<void> _loadMosaicProgram() async {
-    if (_mosaicProgram != null || _isLoadingMosaic || _mosaicLoadFailed) {
+    if (_mosaicProgram != null) {
       return;
     }
-    _isLoadingMosaic = true;
+
     try {
       _mosaicProgram = await ui.FragmentProgram.fromAsset(
-        'packages/snow_draw_core/shaders/filter_mosaic.frag',
+        _mosaicShaderAssetPath,
       );
     } on Exception catch (error, stackTrace) {
-      _mosaicLoadFailed = true;
       _filterShaderLog.warning('Failed to load mosaic filter shader', {
         'error': error,
         'stackTrace': stackTrace,
       });
-    } finally {
-      _isLoadingMosaic = false;
     }
   }
 
@@ -88,18 +84,29 @@ class FilterShaderManager {
       return null;
     }
 
-    final resolvedBlockSize =
-        blockSize ??
-        resolveMosaicBlockSize(strength: strength, regionSize: regionSize);
-
-    final shaderFilter = _createShaderBackedMosaicFilter(
-      regionWidth: width,
-      regionHeight: height,
-      regionOffset: regionOffset,
-      blockSize: resolvedBlockSize,
+    final resolvedBlockSize = _resolveValidBlockSize(
+      blockSize ??
+          resolveMosaicBlockSize(strength: strength, regionSize: regionSize),
     );
-    if (shaderFilter != null) {
-      return shaderFilter;
+
+    if (canUseShaderBackedMosaic) {
+      final shader = _mosaicProgram!.fragmentShader();
+      var index = 0;
+      shader
+        ..setFloat(index++, width)
+        ..setFloat(index++, height)
+        ..setFloat(index++, resolvedBlockSize)
+        ..setFloat(index++, regionOffset.dx)
+        ..setFloat(index++, regionOffset.dy);
+
+      try {
+        return ui.ImageFilter.shader(shader);
+      } on Exception catch (error, stackTrace) {
+        _filterShaderLog.warning('Failed to create mosaic shader filter', {
+          'error': error,
+          'stackTrace': stackTrace,
+        });
+      }
     }
 
     return _createMatrixMosaicFilter(
@@ -108,30 +115,11 @@ class FilterShaderManager {
     );
   }
 
-  ui.ImageFilter? _createShaderBackedMosaicFilter({
-    required double regionWidth,
-    required double regionHeight,
-    required Offset regionOffset,
-    required double blockSize,
-  }) {
-    if (!isShaderFilterSupported || _mosaicProgram == null) {
-      return null;
+  double _resolveValidBlockSize(double value) {
+    if (value.isFinite && value > 0) {
+      return value;
     }
-
-    final shader = _mosaicProgram!.fragmentShader();
-    var index = 0;
-    shader
-      ..setFloat(index++, regionWidth)
-      ..setFloat(index++, regionHeight)
-      ..setFloat(index++, blockSize)
-      ..setFloat(index++, regionOffset.dx)
-      ..setFloat(index++, regionOffset.dy);
-
-    try {
-      return ui.ImageFilter.shader(shader);
-    } on Exception {
-      return null;
-    }
+    return 1;
   }
 
   ui.ImageFilter _createMatrixMosaicFilter({
