@@ -10,8 +10,11 @@ DrawState? selectionReducer(
   SelectionReducerDeps context,
 ) => switch (action) {
   final SelectElement a => _handleSelectElement(state, a, context),
-  ClearSelection _ => _handleClearSelection(state, context),
-  SelectAll _ => _handleSelectAll(state, context),
+  ClearSelection _ => applySelectionChange(state, const <String>{}),
+  SelectAll _ => applySelectionChange(
+    state,
+    state.domain.document.elements.map((e) => e.id).toSet(),
+  ),
   _ => null,
 };
 
@@ -20,8 +23,7 @@ DrawState _handleSelectElement(
   SelectElement action,
   SelectionReducerDeps context,
 ) {
-  final element = state.domain.document.getElementById(action.elementId);
-  if (element == null) {
+  if (state.domain.document.getElementById(action.elementId) == null) {
     context.log.store.warning('Selection failed: element not found', {
       'action': action.runtimeType.toString(),
       'elementId': action.elementId,
@@ -36,26 +38,13 @@ DrawState _handleSelectElement(
     return state;
   }
 
-  Set<String> newSelectedIds;
   if (!action.addToSelection) {
-    newSelectedIds = {action.elementId};
-  } else {
-    newSelectedIds = {...state.domain.selection.selectedIds};
-    if (newSelectedIds.contains(action.elementId)) {
-      newSelectedIds.remove(action.elementId);
-    } else {
-      newSelectedIds.add(action.elementId);
-    }
+    return applySelectionChange(state, {action.elementId});
   }
 
-  return applySelectionChange(state, newSelectedIds);
+  final nextSelectedIds = {...state.domain.selection.selectedIds};
+  if (!nextSelectedIds.add(action.elementId)) {
+    nextSelectedIds.remove(action.elementId);
+  }
+  return applySelectionChange(state, nextSelectedIds);
 }
-
-DrawState _handleClearSelection(DrawState state, SelectionReducerDeps _) =>
-    applySelectionChange(state, const {});
-
-DrawState _handleSelectAll(DrawState state, SelectionReducerDeps _) =>
-    applySelectionChange(
-      state,
-      state.domain.document.elements.map((e) => e.id).toSet(),
-    );
