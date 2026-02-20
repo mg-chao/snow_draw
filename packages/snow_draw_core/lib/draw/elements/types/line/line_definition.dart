@@ -6,13 +6,13 @@ import 'line_data.dart';
 import 'line_hit_tester.dart';
 import 'line_renderer.dart';
 
-final lineDefinition = ElementDefinition<LineData>(
+const lineDefinition = ElementDefinition<LineData>(
   typeId: LineData.typeIdToken,
   displayName: 'Line',
   icon: Icons.show_chart,
-  renderer: const LineRenderer(),
-  hitTester: const LineHitTester(),
-  createDefaultData: () => const LineData(),
+  renderer: LineRenderer(),
+  hitTester: LineHitTester(),
+  createDefaultData: LineData.new,
   fromJson: LineData.fromJson,
-  creationStrategy: const ArrowCreationStrategy(),
+  creationStrategy: ArrowCreationStrategy(),
 );
