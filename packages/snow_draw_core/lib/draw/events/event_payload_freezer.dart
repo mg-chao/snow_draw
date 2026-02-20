@@ -7,16 +7,12 @@ import 'dart:collection';
 ///
 /// Throws an [ArgumentError] when payload values contain cyclic references.
 Map<String, dynamic> freezeEventPayloadMap(Map<String, dynamic> payload) {
-  if (payload.isEmpty) {
-    return const <String, dynamic>{};
-  }
-
   final active = HashSet<Object>.identity();
   final frozenBySource = HashMap<Object, Object>.identity();
-  return _freezePayloadMap(payload, active, frozenBySource);
+  return _freezeRootPayloadMap(payload, active, frozenBySource);
 }
 
-Map<String, dynamic> _freezePayloadMap(
+Map<String, dynamic> _freezeRootPayloadMap(
   Map<String, dynamic> payload,
   Set<Object> active,
   Map<Object, Object> frozenBySource,
@@ -24,13 +20,12 @@ Map<String, dynamic> _freezePayloadMap(
   source: payload,
   active: active,
   frozenBySource: frozenBySource,
-  buildFrozen: () {
-    final frozen = <String, dynamic>{};
-    payload.forEach((key, value) {
-      frozen[key] = _freezePayloadValue(value, active, frozenBySource);
-    });
-    return Map<String, dynamic>.unmodifiable(frozen);
-  },
+  buildFrozen: () => Map<String, dynamic>.unmodifiable(
+    payload.map(
+      (key, value) =>
+          MapEntry(key, _freezePayloadValue(value, active, frozenBySource)),
+    ),
+  ),
 );
 
 Object? _freezePayloadValue(
@@ -43,17 +38,14 @@ Object? _freezePayloadValue(
       source: value,
       active: active,
       frozenBySource: frozenBySource,
-      buildFrozen: () {
-        if (value.isEmpty) {
-          return const <Object?, Object?>{};
-        }
-        final frozen = <Object?, Object?>{};
-        value.forEach((key, nestedValue) {
-          frozen[_freezePayloadValue(key, active, frozenBySource)] =
-              _freezePayloadValue(nestedValue, active, frozenBySource);
-        });
-        return Map<Object?, Object?>.unmodifiable(frozen);
-      },
+      buildFrozen: () => Map<Object?, Object?>.unmodifiable(
+        value.map(
+          (key, nestedValue) => MapEntry(
+            _freezePayloadValue(key, active, frozenBySource),
+            _freezePayloadValue(nestedValue, active, frozenBySource),
+          ),
+        ),
+      ),
     );
   }
 
@@ -62,16 +54,9 @@ Object? _freezePayloadValue(
       source: value,
       active: active,
       frozenBySource: frozenBySource,
-      buildFrozen: () {
-        if (value.isEmpty) {
-          return const <Object?>[];
-        }
-        return List<Object?>.unmodifiable(
-          value.map(
-            (item) => _freezePayloadValue(item, active, frozenBySource),
-          ),
-        );
-      },
+      buildFrozen: () => List<Object?>.unmodifiable(
+        value.map((item) => _freezePayloadValue(item, active, frozenBySource)),
+      ),
     );
   }
 
@@ -80,16 +65,9 @@ Object? _freezePayloadValue(
       source: value,
       active: active,
       frozenBySource: frozenBySource,
-      buildFrozen: () {
-        if (value.isEmpty) {
-          return const <Object?>{};
-        }
-        return Set<Object?>.unmodifiable(
-          value.map(
-            (item) => _freezePayloadValue(item, active, frozenBySource),
-          ),
-        );
-      },
+      buildFrozen: () => Set<Object?>.unmodifiable(
+        value.map((item) => _freezePayloadValue(item, active, frozenBySource)),
+      ),
     );
   }
 
@@ -98,15 +76,9 @@ Object? _freezePayloadValue(
       source: value,
       active: active,
       frozenBySource: frozenBySource,
-      buildFrozen: () {
-        final frozen = value
-            .map((item) => _freezePayloadValue(item, active, frozenBySource))
-            .toList(growable: false);
-        if (frozen.isEmpty) {
-          return const <Object?>[];
-        }
-        return List<Object?>.unmodifiable(frozen);
-      },
+      buildFrozen: () => List<Object?>.unmodifiable(
+        value.map((item) => _freezePayloadValue(item, active, frozenBySource)),
+      ),
     );
   }
 
@@ -119,27 +91,19 @@ T _freezeCollection<T extends Object>({
   required Map<Object, Object> frozenBySource,
   required T Function() buildFrozen,
 }) {
-  final cached = frozenBySource[source];
-  if (cached != null) {
-    return cached as T;
+  if (frozenBySource.containsKey(source)) {
+    return frozenBySource[source]! as T;
   }
 
-  final frozen = _withCycleGuard(source, active, buildFrozen);
-  frozenBySource[source] = frozen;
-  return frozen;
-}
-
-T _withCycleGuard<T>(Object source, Set<Object> active, T Function() body) {
   if (!active.add(source)) {
-    _throwCycleError(source);
+    throw ArgumentError.value(source, 'payload', 'contains a cyclic reference');
   }
+
   try {
-    return body();
+    final frozen = buildFrozen();
+    frozenBySource[source] = frozen;
+    return frozen;
   } finally {
     active.remove(source);
   }
-}
-
-Never _throwCycleError(Object source) {
-  throw ArgumentError.value(source, 'payload', 'contains a cyclic reference');
 }
