@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import 'package:meta/meta.dart';
 
@@ -17,10 +16,6 @@ class EventBus {
 
   final StreamController<DrawEvent> _controller;
   final Map<Type, _TypedChannelBase> _typedChannels = {};
-  final Set<_TypedChannelBase> _activeTypedChannels = LinkedHashSet.identity();
-  final Map<Type, bool> _compatibleListenerCache = {};
-  final Map<Type, bool> _subtypeListenerCache = {};
-  final Map<Type, List<_TypedChannelBase>> _dispatchTargetsCache = {};
   Future<void>? _disposeFuture;
 
   /// Event stream.
@@ -28,8 +23,7 @@ class EventBus {
 
   /// Whether there are active listeners.
   bool get hasListeners =>
-      !_controller.isClosed &&
-      (_controller.hasListener || _activeTypedChannels.isNotEmpty);
+      !_controller.isClosed && (_controller.hasListener || _hasTypedListeners);
 
   /// Whether the event bus has been disposed.
   bool get isDisposed => _controller.isClosed;
@@ -47,21 +41,10 @@ class EventBus {
     if (_controller.hasListener) {
       return true;
     }
-    if (_activeTypedChannels.isEmpty) {
-      return false;
-    }
 
-    final cacheKey = T;
-    final cached = _compatibleListenerCache[cacheKey];
-    if (cached != null) {
-      return cached;
-    }
-
-    final hasCompatible = _activeTypedChannels.any(
+    return _typedChannels.values.any(
       (channel) => channel.hasListeners && channel.acceptsType<T>(),
     );
-    _compatibleListenerCache[cacheKey] = hasCompatible;
-    return hasCompatible;
   }
 
   /// Whether listeners can receive this concrete [event] instance.
@@ -72,11 +55,10 @@ class EventBus {
     if (_controller.hasListener) {
       return true;
     }
-    if (_activeTypedChannels.isEmpty) {
-      return false;
-    }
 
-    return _resolveDispatchTargets(event).isNotEmpty;
+    return _typedChannels.values.any(
+      (channel) => channel.hasListeners && channel.matches(event),
+    );
   }
 
   /// Emit an event.
@@ -91,7 +73,10 @@ class EventBus {
     }
 
     final hasRawListeners = _controller.hasListener;
-    final typedTargets = _resolveDispatchTargets(event);
+    final typedTargets = <_TypedChannelBase>[
+      for (final channel in _typedChannels.values)
+        if (channel.hasListeners && channel.matches(event)) channel,
+    ];
     if (!hasRawListeners && typedTargets.isEmpty) {
       return false;
     }
@@ -111,11 +96,7 @@ class EventBus {
       return false;
     }
 
-    if (_controller.hasListener || hasListenersFor<T>()) {
-      return tryEmit(eventFactory());
-    }
-
-    if (!_hasSubtypeListenersFor<T>()) {
+    if (!_controller.hasListener && !_hasPotentialTypedListenersFor<T>()) {
       return false;
     }
 
@@ -133,11 +114,7 @@ class EventBus {
       return Stream<T>.empty();
     }
 
-    late final _TypedChannel<T> channel;
-    channel = _TypedChannel<T>(
-      onFirstListener: () => _handleTypedListenerAttached(channel),
-      onLastListener: () => _handleTypedListenerDetached(channel),
-    );
+    final channel = _TypedChannel<T>();
     _typedChannels[T] = channel;
     return channel.stream;
   }
@@ -174,65 +151,17 @@ class EventBus {
     }
     await Future.wait(futures);
     _typedChannels.clear();
-    _activeTypedChannels.clear();
-    _clearTypedListenerCaches();
   }
 
-  List<_TypedChannelBase> _resolveDispatchTargets(DrawEvent event) {
-    if (_activeTypedChannels.isEmpty) {
-      return const <_TypedChannelBase>[];
-    }
+  bool get _hasTypedListeners =>
+      _typedChannels.values.any((channel) => channel.hasListeners);
 
-    final eventType = event.runtimeType;
-    final cached = _dispatchTargetsCache[eventType];
-    if (cached != null) {
-      return cached;
-    }
-
-    final targets = <_TypedChannelBase>[
-      for (final channel in _activeTypedChannels)
-        if (channel.hasListeners && channel.matches(event)) channel,
-    ];
-    final frozenTargets = List<_TypedChannelBase>.unmodifiable(targets);
-    _dispatchTargetsCache[eventType] = frozenTargets;
-    return frozenTargets;
-  }
-
-  bool _hasSubtypeListenersFor<T extends DrawEvent>() {
-    if (_activeTypedChannels.isEmpty) {
-      return false;
-    }
-
-    final cacheKey = T;
-    final cached = _subtypeListenerCache[cacheKey];
-    if (cached != null) {
-      return cached;
-    }
-
-    final hasSubtype = _activeTypedChannels.any(
-      (channel) => channel.hasListeners && channel.isSubtypeOf<T>(),
-    );
-    _subtypeListenerCache[cacheKey] = hasSubtype;
-    return hasSubtype;
-  }
-
-  void _handleTypedListenerAttached(_TypedChannelBase channel) {
-    if (_activeTypedChannels.add(channel)) {
-      _clearTypedListenerCaches();
-    }
-  }
-
-  void _handleTypedListenerDetached(_TypedChannelBase channel) {
-    if (_activeTypedChannels.remove(channel)) {
-      _clearTypedListenerCaches();
-    }
-  }
-
-  void _clearTypedListenerCaches() {
-    _compatibleListenerCache.clear();
-    _subtypeListenerCache.clear();
-    _dispatchTargetsCache.clear();
-  }
+  bool _hasPotentialTypedListenersFor<T extends DrawEvent>() =>
+      _typedChannels.values.any(
+        (channel) =>
+            channel.hasListeners &&
+            (channel.acceptsType<T>() || channel.isSubtypeOf<T>()),
+      );
 }
 
 abstract interface class _TypedChannelBase {
@@ -246,13 +175,7 @@ abstract interface class _TypedChannelBase {
 }
 
 class _TypedChannel<T extends DrawEvent> implements _TypedChannelBase {
-  _TypedChannel({
-    required void Function() onFirstListener,
-    required void Function() onLastListener,
-  }) : _controller = StreamController<T>.broadcast(
-         onListen: onFirstListener,
-         onCancel: onLastListener,
-       );
+  _TypedChannel() : _controller = StreamController<T>.broadcast();
 
   final StreamController<T> _controller;
 
@@ -272,12 +195,7 @@ class _TypedChannel<T extends DrawEvent> implements _TypedChannelBase {
   bool isSubtypeOf<S extends DrawEvent>() => <T>[] is List<S>;
 
   @override
-  void emit(DrawEvent event) {
-    if (_controller.isClosed || !_controller.hasListener || event is! T) {
-      return;
-    }
-    _controller.add(event);
-  }
+  void emit(DrawEvent event) => _controller.add(event as T);
 
   @override
   Future<void> close() => _controller.close();
