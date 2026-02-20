@@ -18,28 +18,19 @@ class CombinedElementLookup {
   ElementState? operator [](String id) => overlay[id] ?? base[id];
 
   /// Returns true if the element exists in either map.
-  bool containsKey(String id) =>
-      overlay.containsKey(id) || base.containsKey(id);
+  bool containsKey(String id) => this[id] != null;
 
   /// Returns all keys from both maps (overlay keys take precedence).
-  Iterable<String> get keys sync* {
-    yield* overlay.keys;
-    for (final key in base.keys) {
-      if (!overlay.containsKey(key)) {
-        yield key;
-      }
-    }
-  }
+  Iterable<String> get keys => overlay.keys.followedBy(
+    base.keys.where((key) => !overlay.containsKey(key)),
+  );
 
   /// Returns all values, with overlay values taking precedence.
-  Iterable<ElementState> get values sync* {
-    yield* overlay.values;
-    for (final entry in base.entries) {
-      if (!overlay.containsKey(entry.key)) {
-        yield entry.value;
-      }
-    }
-  }
+  Iterable<ElementState> get values => overlay.values.followedBy(
+    base.entries
+        .where((entry) => !overlay.containsKey(entry.key))
+        .map((entry) => entry.value),
+  );
 
   /// Creates a concrete map from this view.
   ///
