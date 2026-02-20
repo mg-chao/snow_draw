@@ -21,10 +21,7 @@ bool isRectangleInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
@@ -63,10 +60,8 @@ bool _isRectangleCreatingMutationOnly({
   required CreatingState next,
 }) {
   if (previous.elementData is! RectangleData ||
-      next.elementData is! RectangleData) {
-    return false;
-  }
-  if (!_isSameRectangleCreationSession(previous, next)) {
+      next.elementData is! RectangleData ||
+      !_isSameRectangleCreationSession(previous, next)) {
     return false;
   }
   return previous.currentRect != next.currentRect ||
@@ -91,10 +86,8 @@ bool _isRectangleEditingMutationOnly({
   required EditingState next,
   required DocumentState document,
 }) {
-  if (!_isSameEditSession(previous, next)) {
-    return false;
-  }
-  if (!_isRectangleEditContext(context: next.context, document: document)) {
+  if (!_isSameEditSession(previous, next) ||
+      !_isRectangleEditContext(context: next.context, document: document)) {
     return false;
   }
   return previous.currentTransform != next.currentTransform ||
@@ -109,62 +102,14 @@ bool _isSameEditSession(EditingState previous, EditingState next) =>
 bool _isRectangleEditContext({
   required EditContext context,
   required DocumentState document,
-}) => _resolveRectangleEditContextEligibility(
-  context: context,
-  document: document,
-);
-
-bool _resolveRectangleEditContextEligibility({
-  required EditContext context,
-  required DocumentState document,
 }) {
-  final cachedProfile = _rectangleEditContextProfileCache[context];
-  if (cachedProfile != null && identical(cachedProfile.document, document)) {
-    return cachedProfile.isEligible;
-  }
-
-  final isEligible = _computeRectangleEditContextEligibility(
-    context: context,
-    document: document,
-  );
-  _rectangleEditContextProfileCache[context] = _RectangleEditContextProfile(
-    document: document,
-    isEligible: isEligible,
-  );
-  return isEligible;
-}
-
-bool _computeRectangleEditContextEligibility({
-  required EditContext context,
-  required DocumentState document,
-}) {
-  if (context.selectedIdsAtStart.isEmpty) {
+  final selectedIds = context.selectedIdsAtStart;
+  if (selectedIds.isEmpty || document.hasArrowBoundToAny(selectedIds)) {
     return false;
   }
-  if (document.hasArrowBoundToAny(context.selectedIdsAtStart)) {
-    return false;
-  }
-  for (final elementId in context.selectedIdsAtStart) {
-    final element = document.getElementById(elementId);
-    if (element?.data is! RectangleData) {
-      return false;
-    }
-  }
-  return true;
-}
-
-final _rectangleEditContextProfileCache = Expando<_RectangleEditContextProfile>(
-  'rectangle_interaction_edit_context_profile',
-);
-
-class _RectangleEditContextProfile {
-  const _RectangleEditContextProfile({
-    required this.document,
-    required this.isEligible,
-  });
-
-  final DocumentState document;
-  final bool isEligible;
+  return selectedIds.every(
+    (elementId) => document.getElementById(elementId)?.data is RectangleData,
+  );
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {
