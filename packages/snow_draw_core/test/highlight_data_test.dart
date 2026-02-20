@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
@@ -15,6 +15,14 @@ void main() {
     expect(data.strokeWidth, 0);
   });
 
+  test('HighlightData.fromJson decodes supported shape names', () {
+    final rectangle = HighlightData.fromJson(const {'shape': 'rectangle'});
+    final ellipse = HighlightData.fromJson(const {'shape': 'ellipse'});
+
+    expect(rectangle.shape, HighlightShape.rectangle);
+    expect(ellipse.shape, HighlightShape.ellipse);
+  });
+
   test('HighlightData.withElementStyle applies highlight style fields', () {
     const style = ElementStyleConfig(
       color: Color(0xFF00FF00),
@@ -24,7 +32,7 @@ void main() {
     );
 
     const data = HighlightData();
-    final updated = data.withElementStyle(style) as HighlightData;
+    final updated = data.withElementStyle(style);
 
     expect(updated.color, style.color);
     expect(updated.strokeColor, style.textStrokeColor);
@@ -41,7 +49,7 @@ void main() {
       highlightShape: HighlightShape.ellipse,
     );
 
-    final updated = data.withStyleUpdate(update) as HighlightData;
+    final updated = data.withStyleUpdate(update);
 
     expect(updated.color, update.color);
     expect(updated.strokeColor, update.textStrokeColor);
