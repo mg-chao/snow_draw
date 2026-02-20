@@ -1,11 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-/// Web / unsupported-platform stub.
-///
-/// Returns empty results and never loads anything.
-
 final revisionNotifier = ValueNotifier<int>(0);
 
-Future<List<String>> listFamiliesImpl() async => const [];
+Future<List<String>> listFamiliesImpl() => Future.value(const <String>[]);
 
-Future<void> ensureLoadedImpl(String family) async {}
+Future<void> ensureLoadedImpl(String _) => Future<void>.value();
