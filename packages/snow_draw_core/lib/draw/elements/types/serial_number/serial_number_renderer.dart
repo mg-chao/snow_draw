@@ -16,6 +16,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
 
   static const double _lineFillAngle = -math.pi / 4;
   static const double _crossLineFillAngle = math.pi / 4;
+  static const _paintScaleTolerance = 0.0001;
   static final _strokePathCache = LruCache<_StrokePathKey, Path>(
     maxEntries: 128,
   );
@@ -34,16 +35,11 @@ class SerialNumberRenderer extends ElementTypeRenderer {
         '${data.runtimeType})',
       );
     }
-    final _ = scaleFactor;
 
     final rect = element.rect;
-    final rotation = element.rotation;
-    final opacity = element.opacity;
-    final fillOpacity = (data.fillColor.a * opacity).clamp(0.0, 1.0);
-    final strokeOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-    final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-
-    if (fillOpacity <= 0 && strokeOpacity <= 0 && textOpacity <= 0) {
+    final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
+    final contentOpacity = (data.color.a * element.opacity).clamp(0.0, 1.0);
+    if (fillOpacity <= 0 && contentOpacity <= 0) {
       return;
     }
 
@@ -57,10 +53,10 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     final circleRect = Rect.fromCircle(center: center, radius: radius);
 
     canvas.save();
-    if (rotation != 0) {
+    if (element.rotation != 0) {
       canvas
         ..translate(rect.centerX, rect.centerY)
-        ..rotate(rotation)
+        ..rotate(element.rotation)
         ..translate(-rect.centerX, -rect.centerY);
     }
 
@@ -70,12 +66,11 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       _paintFill(canvas, data, circleRect, fillOpacity);
     }
 
-    if (strokeOpacity > 0 && strokeWidth > 0) {
-      _paintStroke(canvas, data, circleRect, strokeOpacity, strokeWidth);
-    }
-
-    if (textOpacity > 0) {
-      _paintText(canvas, data, circleRect, textOpacity, locale);
+    if (contentOpacity > 0) {
+      if (strokeWidth > 0) {
+        _paintStroke(canvas, data, circleRect, contentOpacity, strokeWidth);
+      }
+      _paintText(canvas, data, circleRect, contentOpacity, locale);
     }
 
     canvas.restore();
@@ -88,38 +83,39 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     double fillOpacity,
   ) {
     final fillColor = data.fillColor.withValues(alpha: fillOpacity);
-    if (data.fillStyle == FillStyle.solid) {
-      final paint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = fillColor
-        ..isAntiAlias = true;
-      canvas.drawOval(circleRect, paint);
-      return;
-    }
-
-    // Match text fill spacing so stripes scale with font size.
-    final equivalentStrokeWidth = data.fontSize / 42;
-    final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
-      0.5,
-      3.0,
-    );
-    const lineToSpacingRatio = 4.0;
-    final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-    final fillPaint = buildLineFillPaint(
-      spacing: spacing,
-      lineWidth: fillLineWidth,
-      angle: _lineFillAngle,
-      color: fillColor,
-    );
-    canvas.drawOval(circleRect, fillPaint);
-    if (data.fillStyle == FillStyle.crossLine) {
-      final crossPaint = buildLineFillPaint(
-        spacing: spacing,
-        lineWidth: fillLineWidth,
-        angle: _crossLineFillAngle,
-        color: fillColor,
-      );
-      canvas.drawOval(circleRect, crossPaint);
+    switch (data.fillStyle) {
+      case FillStyle.solid:
+        final paint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = fillColor
+          ..isAntiAlias = true;
+        canvas.drawOval(circleRect, paint);
+        return;
+      case FillStyle.line:
+      case FillStyle.crossLine:
+        final equivalentStrokeWidth = data.fontSize / 42;
+        final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
+          0.5,
+          3.0,
+        );
+        final spacing = (fillLineWidth * 4.0).clamp(3.0, 18.0);
+        final fillPaint = buildLineFillPaint(
+          spacing: spacing,
+          lineWidth: fillLineWidth,
+          angle: _lineFillAngle,
+          color: fillColor,
+        );
+        canvas.drawOval(circleRect, fillPaint);
+        if (data.fillStyle == FillStyle.crossLine) {
+          final crossPaint = buildLineFillPaint(
+            spacing: spacing,
+            lineWidth: fillLineWidth,
+            angle: _crossLineFillAngle,
+            color: fillColor,
+          );
+          canvas.drawOval(circleRect, crossPaint);
+        }
+        return;
     }
   }
 
@@ -136,47 +132,52 @@ class SerialNumberRenderer extends ElementTypeRenderer {
       ..color = data.color.withValues(alpha: strokeOpacity)
       ..isAntiAlias = true;
 
-    if (data.strokeStyle == StrokeStyle.solid) {
-      canvas.drawOval(circleRect, strokePaint);
-      return;
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
+        canvas.drawOval(circleRect, strokePaint);
+        return;
+      case StrokeStyle.dashed:
+        final dashLength = strokeWidth * 2.0;
+        final gapLength = dashLength * 1.2;
+        final dashedPath = _strokePathCache.getOrCreate(
+          _StrokePathKey(
+            diameter: circleRect.width,
+            strokeStyle: StrokeStyle.dashed,
+            patternPrimary: dashLength,
+            patternSecondary: gapLength,
+          ),
+          () => buildDashedPath(
+            Path()..addOval(circleRect),
+            dashLength,
+            gapLength,
+          ),
+        );
+        strokePaint.strokeCap = StrokeCap.round;
+        canvas.drawPath(dashedPath, strokePaint);
+        return;
+      case StrokeStyle.dotted:
+        final dotSpacing = strokeWidth * 2.0;
+        final dotRadius = strokeWidth * 0.5;
+        final dottedPath = _strokePathCache.getOrCreate(
+          _StrokePathKey(
+            diameter: circleRect.width,
+            strokeStyle: StrokeStyle.dotted,
+            patternPrimary: dotSpacing,
+            patternSecondary: dotRadius,
+          ),
+          () => buildDottedPath(
+            Path()..addOval(circleRect),
+            dotSpacing,
+            dotRadius,
+          ),
+        );
+        final dotPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = strokePaint.color
+          ..isAntiAlias = true;
+        canvas.drawPath(dottedPath, dotPaint);
+        return;
     }
-
-    final path = Path()..addOval(circleRect);
-    if (data.strokeStyle == StrokeStyle.dashed) {
-      final dashLength = strokeWidth * 2.0;
-      final gapLength = dashLength * 1.2;
-      final key = _StrokePathKey(
-        diameter: circleRect.width,
-        strokeStyle: StrokeStyle.dashed,
-        patternPrimary: dashLength,
-        patternSecondary: gapLength,
-      );
-      final dashedPath = _strokePathCache.getOrCreate(
-        key,
-        () => buildDashedPath(path, dashLength, gapLength),
-      );
-      strokePaint.strokeCap = StrokeCap.round;
-      canvas.drawPath(dashedPath, strokePaint);
-      return;
-    }
-
-    final dotSpacing = strokeWidth * 2.0;
-    final dotRadius = strokeWidth * 0.5;
-    final key = _StrokePathKey(
-      diameter: circleRect.width,
-      strokeStyle: StrokeStyle.dotted,
-      patternPrimary: dotSpacing,
-      patternSecondary: dotRadius,
-    );
-    final dottedPath = _strokePathCache.getOrCreate(
-      key,
-      () => buildDottedPath(path, dotSpacing, dotRadius),
-    );
-    final dotPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = strokePaint.color
-      ..isAntiAlias = true;
-    canvas.drawPath(dottedPath, dotPaint);
   }
 
   void _paintText(
@@ -205,7 +206,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     canvas
       ..save()
       ..translate(offset.dx, offset.dy);
-    if (!_doubleEquals(paintScale, 1)) {
+    if ((paintScale - 1).abs() > _paintScaleTolerance) {
       canvas.scale(paintScale, paintScale);
     }
     layout.painter.paint(canvas, Offset.zero);
@@ -244,5 +245,3 @@ class _StrokePathKey {
   int get hashCode =>
       Object.hash(diameter, strokeStyle, patternPrimary, patternSecondary);
 }
-
-bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
