@@ -14,53 +14,35 @@ class MiddlewarePipelineFactory {
   ///
   /// The middlewares are executed in priority order:
   /// 1. ValidationMiddleware (priority: 1000)
-  /// 2. InterceptionMiddleware (priority: 900)
+  /// 2. InterceptionMiddleware (priority: 900, optional)
   /// 3. ReductionMiddleware (priority: 500)
   /// 4. HistoryMiddleware (priority: 400)
   MiddlewarePipeline createDefault({
     List<ActionInterceptor> interceptors = const [],
     ErrorHandler? errorHandler,
-  }) {
-    final middlewares = <Middleware>[
-      ValidationMiddleware(),
-      if (interceptors.isNotEmpty)
-        InterceptionMiddleware(interceptors: interceptors),
-      const ReductionMiddleware(),
-      const HistoryMiddleware(),
-    ];
-
-    return MiddlewarePipeline(
-      middlewares: middlewares,
-      errorHandler: errorHandler ?? const ErrorHandler(),
-    ).sortByPriority();
-  }
+  }) => createCustom(
+    middlewares: _defaultMiddlewares(interceptors: interceptors),
+    errorHandler: errorHandler,
+  );
 
   /// Create a pipeline by extending the default middleware chain.
   MiddlewarePipeline extendDefault({
     List<Middleware> additionalMiddlewares = const [],
     List<ActionInterceptor> interceptors = const [],
     ErrorHandler? errorHandler,
-  }) {
-    final basePipeline = createDefault(
-      interceptors: interceptors,
-      errorHandler: errorHandler,
-    );
-
-    if (additionalMiddlewares.isEmpty) {
-      return basePipeline;
-    }
-
-    return MiddlewarePipeline(
-      middlewares: [...basePipeline.middlewares, ...additionalMiddlewares],
-      errorHandler: basePipeline.errorHandler,
-    ).sortByPriority();
-  }
+  }) => createCustom(
+    middlewares: <Middleware>[
+      ..._defaultMiddlewares(interceptors: interceptors),
+      ...additionalMiddlewares,
+    ],
+    errorHandler: errorHandler,
+  );
 
   /// Create a minimal pipeline with only essential middlewares.
   MiddlewarePipeline createMinimal({ErrorHandler? errorHandler}) =>
-      MiddlewarePipeline(
-        middlewares: const [ReductionMiddleware()],
-        errorHandler: errorHandler ?? const ErrorHandler(),
+      createCustom(
+        middlewares: const <Middleware>[ReductionMiddleware()],
+        errorHandler: errorHandler,
       );
 
   /// Create a custom pipeline with specific middlewares.
@@ -71,6 +53,16 @@ class MiddlewarePipelineFactory {
     middlewares: middlewares,
     errorHandler: errorHandler ?? const ErrorHandler(),
   ).sortByPriority();
+
+  List<Middleware> _defaultMiddlewares({
+    required List<ActionInterceptor> interceptors,
+  }) => <Middleware>[
+    ValidationMiddleware(),
+    if (interceptors.isNotEmpty)
+      InterceptionMiddleware(interceptors: interceptors),
+    const ReductionMiddleware(),
+    const HistoryMiddleware(),
+  ];
 }
 
 const middlewarePipelineFactory = MiddlewarePipelineFactory();
