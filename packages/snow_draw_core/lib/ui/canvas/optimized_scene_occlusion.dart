@@ -32,30 +32,19 @@ List<DrawRect> resolveOptimizedOccluderQueryRects({
   double linePaddingStrokeFactor = _defaultLineOccluderPaddingStrokeFactor,
   double lineTargetSegmentLength = _defaultLineOccluderTargetSegmentLength,
 }) {
-  final data = seedElement.data;
-  final normalizedPoints = switch (data) {
-    LineData(:final points) when points.length == 2 => points,
-    FreeDrawData(:final points) when points.length == 2 => points,
-    _ => null,
-  };
-  if (normalizedPoints == null) {
+  final lineSeed = _resolveTwoPointLineSeed(seedElement);
+  if (lineSeed == null || maxLineQueryRects <= 0) {
     return [seedAabb];
   }
 
-  final worldPoints = _resolveTwoPointWorldPoints(
+  final (start, end) = _resolveTwoPointWorldPoints(
     seedElement: seedElement,
-    normalizedPoints: normalizedPoints,
+    normalizedPoints: lineSeed.normalizedPoints,
   );
-  if (worldPoints.length < 2) {
-    return [seedAabb];
-  }
 
-  final rawStrokeWidth = switch (data) {
-    LineData(:final strokeWidth) => strokeWidth,
-    FreeDrawData(:final strokeWidth) => strokeWidth,
-    _ => 0.0,
-  };
-  final strokeWidth = rawStrokeWidth.isFinite ? rawStrokeWidth.abs() : 0.0;
+  final strokeWidth = lineSeed.strokeWidth.isFinite
+      ? lineSeed.strokeWidth.abs()
+      : 0.0;
   final safePaddingFloor = _normalizeNonNegativeFinite(
     linePaddingFloor,
     fallback: _defaultLineOccluderPaddingFloor,
@@ -72,16 +61,37 @@ List<DrawRect> resolveOptimizedOccluderQueryRects({
     safePaddingFloor,
     strokeWidth * safePaddingStrokeFactor,
   );
-  final planner = _LineOccluderQueryPlanner(
-    maxQueryRects: maxLineQueryRects,
+  return _buildSegmentQueryRects(
+    start: start,
+    end: end,
+    maxRects: maxLineQueryRects,
     padding: padding,
     targetSegmentLength: safeTargetSegmentLength,
   );
-  final queryRects = planner.build(worldPoints);
-  return queryRects.isEmpty ? [seedAabb] : queryRects;
 }
 
-List<DrawPoint> _resolveTwoPointWorldPoints({
+class _TwoPointLineSeed {
+  const _TwoPointLineSeed({
+    required this.normalizedPoints,
+    required this.strokeWidth,
+  });
+
+  final List<DrawPoint> normalizedPoints;
+  final double strokeWidth;
+}
+
+_TwoPointLineSeed? _resolveTwoPointLineSeed(ElementState seedElement) {
+  final data = seedElement.data;
+  return switch (data) {
+    LineData(:final points, :final strokeWidth) when points.length == 2 =>
+      _TwoPointLineSeed(normalizedPoints: points, strokeWidth: strokeWidth),
+    FreeDrawData(:final points, :final strokeWidth) when points.length == 2 =>
+      _TwoPointLineSeed(normalizedPoints: points, strokeWidth: strokeWidth),
+    _ => null,
+  };
+}
+
+(DrawPoint, DrawPoint) _resolveTwoPointWorldPoints({
   required ElementState seedElement,
   required List<DrawPoint> normalizedPoints,
 }) {
@@ -89,101 +99,60 @@ List<DrawPoint> _resolveTwoPointWorldPoints({
     rect: seedElement.rect,
     normalizedPoints: normalizedPoints,
   );
-  if (rawPoints.isEmpty) {
-    return const <DrawPoint>[];
-  }
+
+  final start = DrawPoint(x: rawPoints[0].dx, y: rawPoints[0].dy);
+  final end = DrawPoint(x: rawPoints[1].dx, y: rawPoints[1].dy);
   if (seedElement.rotation == 0) {
-    return rawPoints
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
+    return (start, end);
   }
 
   final space = ElementSpace(
     rotation: seedElement.rotation,
     origin: seedElement.rect.center,
   );
-  return rawPoints
-      .map((point) => space.toWorld(DrawPoint(x: point.dx, y: point.dy)))
-      .toList(growable: false);
+  return (space.toWorld(start), space.toWorld(end));
 }
 
-class _LineOccluderQueryPlanner {
-  const _LineOccluderQueryPlanner({
-    required this.maxQueryRects,
-    required this.padding,
-    required this.targetSegmentLength,
-  });
-
-  final int maxQueryRects;
-  final double padding;
-  final double targetSegmentLength;
-
-  List<DrawRect> build(List<DrawPoint> worldPoints) {
-    if (maxQueryRects <= 0 || worldPoints.length < 2) {
-      return const <DrawRect>[];
-    }
-
-    final rects = <DrawRect>[];
-    for (var index = 1; index < worldPoints.length; index++) {
-      final remainingBudget = maxQueryRects - rects.length;
-      if (remainingBudget <= 0) {
-        return const <DrawRect>[];
-      }
-      final segmentRects = _buildSegmentRects(
-        start: worldPoints[index - 1],
-        end: worldPoints[index],
-        maxRects: remainingBudget,
-      );
-      if (segmentRects.isEmpty) {
-        return const <DrawRect>[];
-      }
-      rects.addAll(segmentRects);
-    }
-    return rects;
+List<DrawRect> _buildSegmentQueryRects({
+  required DrawPoint start,
+  required DrawPoint end,
+  required int maxRects,
+  required double padding,
+  required double targetSegmentLength,
+}) {
+  final baseRect = _segmentRect(start: start, end: end, padding: padding);
+  final dx = (end.x - start.x).abs();
+  final dy = (end.y - start.y).abs();
+  final shouldSubdivide =
+      dx > padding * _lineAxisAlignedToleranceFactor &&
+      dy > padding * _lineAxisAlignedToleranceFactor;
+  if (!shouldSubdivide || maxRects == 1) {
+    return <DrawRect>[baseRect];
   }
 
-  List<DrawRect> _buildSegmentRects({
-    required DrawPoint start,
-    required DrawPoint end,
-    required int maxRects,
-  }) {
-    final dx = (end.x - start.x).abs();
-    final dy = (end.y - start.y).abs();
-    final baseRect = _segmentRect(start: start, end: end, padding: padding);
-
-    final shouldSubdivide =
-        dx > padding * _lineAxisAlignedToleranceFactor &&
-        dy > padding * _lineAxisAlignedToleranceFactor;
-    if (!shouldSubdivide || maxRects <= 1) {
-      return <DrawRect>[baseRect];
-    }
-
-    final length = start.distance(end);
-    if (!length.isFinite || length <= 0) {
-      return <DrawRect>[baseRect];
-    }
-
-    final effectiveTargetLength = math.max(targetSegmentLength, padding * 6);
-    final chunkCount = (length / effectiveTargetLength).ceil().clamp(
-      1,
-      maxRects,
-    );
-    if (chunkCount <= 1) {
-      return <DrawRect>[baseRect];
-    }
-
-    final rects = <DrawRect>[];
-    for (var index = 0; index < chunkCount; index++) {
-      final t0 = index / chunkCount;
-      final t1 = (index + 1) / chunkCount;
-      final chunkStart = _lerpPoint(start, end, t0);
-      final chunkEnd = _lerpPoint(start, end, t1);
-      rects.add(
-        _segmentRect(start: chunkStart, end: chunkEnd, padding: padding),
-      );
-    }
-    return rects;
+  final length = start.distance(end);
+  if (!length.isFinite || length <= 0) {
+    return <DrawRect>[baseRect];
   }
+
+  final effectiveTargetLength = math.max(targetSegmentLength, padding * 6);
+  var chunkCount = (length / effectiveTargetLength).ceil();
+  if (chunkCount < 1) {
+    chunkCount = 1;
+  } else if (chunkCount > maxRects) {
+    chunkCount = maxRects;
+  }
+  if (chunkCount == 1) {
+    return <DrawRect>[baseRect];
+  }
+
+  return List<DrawRect>.generate(chunkCount, (index) {
+    final t0 = index / chunkCount;
+    final t1 = (index + 1) / chunkCount;
+    final chunkStart = _lerpPoint(start, end, t0);
+    final chunkEnd = _lerpPoint(start, end, t1);
+    return _segmentRect(start: chunkStart, end: chunkEnd, padding: padding);
+  }, growable: false);
 }
 
 DrawRect _segmentRect({
