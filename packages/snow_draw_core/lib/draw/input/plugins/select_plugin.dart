@@ -54,25 +54,17 @@ class SelectPlugin extends DrawInputPlugin {
   }
 
   @override
-  bool canHandle(InputEvent event, DrawState state) =>
+  bool canHandle(InputEvent _, DrawState state) =>
       !_isSelectionBehaviorDisabled && _routingPolicy.allowSelection(state);
 
   @override
-  Future<PluginResult> handleEvent(InputEvent event) async {
-    if (event is PointerDownInputEvent) {
-      return _handlePointerDown(event);
-    }
-    if (event is PointerMoveInputEvent) {
-      return _handlePointerMove(event);
-    }
-    if (event is PointerUpInputEvent) {
-      return _handlePointerUp(event);
-    }
-    if (event is PointerCancelInputEvent) {
-      return _handlePointerCancel();
-    }
-    return unhandled();
-  }
+  Future<PluginResult> handleEvent(InputEvent event) => switch (event) {
+    PointerDownInputEvent() => _handlePointerDown(event),
+    PointerMoveInputEvent() => _handlePointerMove(event),
+    PointerUpInputEvent() => _handlePointerUp(),
+    PointerCancelInputEvent() => _handlePointerCancel(),
+    _ => Future<PluginResult>.value(unhandled()),
+  };
 
   DrawStateView get _stateView {
     final builder = _stateViewBuilder;
@@ -107,48 +99,40 @@ class SelectPlugin extends DrawInputPlugin {
     final editModifiers = modifiers.toEditModifiers();
 
     if (intent is StartArrowPointIntent) {
-      final handle = _resolveArrowHandleForIntent(
-        stateView: stateView,
-        intent: intent,
-        position: position,
-      );
       final now = DateTime.now();
-      final element = stateView.state.domain.document.getElementById(
-        intent.elementId,
-      );
-      final data = element?.data is ArrowLikeData
-          ? element!.data as ArrowLikeData
-          : null;
-      final canDoubleClick =
-          handle != null &&
-          data != null &&
-          _isArrowHandleDoubleClickCandidate(handle: handle, data: data);
-      if (canDoubleClick && _isDoubleClick(handle, position, now)) {
+      final data = _arrowDataForElement(stateView, intent.elementId);
+      if (data == null) {
         _clearArrowHandleClickState();
-        final doubleClickIntent = StartArrowPointIntent(
-          elementId: intent.elementId,
-          pointKind: intent.pointKind,
-          pointIndex: intent.pointIndex,
-          isDoubleClick: true,
-        );
-        final handledIntent = await _executeIntent(
-          doubleClickIntent,
-          position,
-          editModifiers,
-        );
-        if (!handledIntent) {
-          return unhandled();
-        }
-        return handled(
-          message: handle.isFixed
-              ? 'Arrow segment released'
-              : 'Arrow point deleted',
-        );
-      }
-      if (canDoubleClick) {
-        _recordArrowHandleClick(handle, position, now);
       } else {
-        _clearArrowHandleClickState();
+        final handle = _resolveArrowHandleForIntent(
+          intent: intent,
+          position: position,
+          data: data,
+        );
+        final canDoubleClick = _isArrowHandleDoubleClickCandidate(
+          handle: handle,
+          data: data,
+        );
+        if (canDoubleClick && _isDoubleClick(handle, position, now)) {
+          _clearArrowHandleClickState();
+          final doubleClickIntent = StartArrowPointIntent(
+            elementId: intent.elementId,
+            pointKind: intent.pointKind,
+            pointIndex: intent.pointIndex,
+            isDoubleClick: true,
+          );
+          await _executeIntent(doubleClickIntent, position, editModifiers);
+          return handled(
+            message: handle.isFixed
+                ? 'Arrow segment released'
+                : 'Arrow point deleted',
+          );
+        }
+        if (canDoubleClick) {
+          _recordArrowHandleClick(handle, position, now);
+        } else {
+          _clearArrowHandleClickState();
+        }
       }
     } else {
       _clearArrowHandleClickState();
@@ -167,8 +151,8 @@ class SelectPlugin extends DrawInputPlugin {
       return handled(message: 'Pending select');
     }
 
-    final handledIntent = await _executeIntent(intent, position, editModifiers);
-    return handledIntent ? handled(message: 'Selection handled') : unhandled();
+    await _executeIntent(intent, position, editModifiers);
+    return handled(message: 'Selection handled');
   }
 
   Future<PluginResult> _handlePointerMove(PointerMoveInputEvent event) async {
@@ -180,21 +164,22 @@ class SelectPlugin extends DrawInputPlugin {
 
     final pendingIntent = interaction.intent;
     final pointerDownPosition = interaction.pointerDownPosition;
-    final dx = event.position.x - pointerDownPosition.x;
-    final dy = event.position.y - pointerDownPosition.y;
-    final threshold = _dragStartThreshold;
+    final thresholdSquared = _dragStartThreshold * _dragStartThreshold;
 
-    if ((dx * dx + dy * dy) >= (threshold * threshold)) {
+    if (pointerDownPosition.distanceSquared(event.position) >=
+        thresholdSquared) {
       await dispatch(const ClearDragPending());
 
       if (state.domain.hasSelection) {
-        final elementId = switch (pendingIntent) {
-          PendingSelectIntent(:final elementId) => elementId,
-          PendingMoveIntent() => state.domain.selection.selectedIds.first,
-        };
-        final addToSelection = switch (pendingIntent) {
-          PendingSelectIntent(:final addToSelection) => addToSelection,
-          PendingMoveIntent() => false,
+        final (elementId, addToSelection) = switch (pendingIntent) {
+          PendingSelectIntent(:final elementId, :final addToSelection) => (
+            elementId,
+            addToSelection,
+          ),
+          PendingMoveIntent() => (
+            state.domain.selection.selectedIds.first,
+            false,
+          ),
         };
 
         final didStart = await _dispatchStartEditForIntent(
@@ -214,7 +199,7 @@ class SelectPlugin extends DrawInputPlugin {
     return handled(message: 'Pending drag');
   }
 
-  Future<PluginResult> _handlePointerUp(PointerUpInputEvent event) async {
+  Future<PluginResult> _handlePointerUp() async {
     final interaction = state.application.interaction;
 
     if (interaction is! DragPendingState) {
@@ -246,36 +231,13 @@ class SelectPlugin extends DrawInputPlugin {
     return unhandled();
   }
 
-  Future<bool> _executeIntent(
-    EditIntent? intent,
+  Future<void> _executeIntent(
+    EditIntent intent,
     DrawPoint position,
     EditModifiers modifiers,
   ) async {
-    if (intent == null) {
-      return false;
-    }
-
-    if (intent case SelectIntent()) {
-      await dispatch(
-        SelectElement(
-          elementId: intent.elementId,
-          addToSelection: intent.addToSelection,
-          position: position,
-        ),
-      );
-      if (!intent.addToSelection) {
-        await dispatch(
-          SetDragPending(
-            pointerDownPosition: position,
-            intent: const PendingMoveIntent(),
-          ),
-        );
-      }
-      return true;
-    }
-
-    if (intent case StartMoveIntent()) {
-      if (!state.domain.selection.selectedIds.contains(intent.elementId)) {
+    switch (intent) {
+      case SelectIntent():
         await dispatch(
           SelectElement(
             elementId: intent.elementId,
@@ -283,31 +245,48 @@ class SelectPlugin extends DrawInputPlugin {
             position: position,
           ),
         );
-      }
-      await dispatch(
-        SetDragPending(
-          pointerDownPosition: position,
-          intent: const PendingMoveIntent(),
-        ),
-      );
-      return true;
+        if (!intent.addToSelection) {
+          await dispatch(
+            SetDragPending(
+              pointerDownPosition: position,
+              intent: const PendingMoveIntent(),
+            ),
+          );
+        }
+        return;
+      case StartMoveIntent():
+        if (!state.domain.selection.selectedIds.contains(intent.elementId)) {
+          await dispatch(
+            SelectElement(
+              elementId: intent.elementId,
+              addToSelection: intent.addToSelection,
+              position: position,
+            ),
+          );
+        }
+        await dispatch(
+          SetDragPending(
+            pointerDownPosition: position,
+            intent: const PendingMoveIntent(),
+          ),
+        );
+        return;
+      case BoxSelectIntent():
+        await dispatch(StartBoxSelect(startPosition: intent.startPosition));
+        return;
+      case ClearSelectionIntent():
+        await dispatch(const ClearSelection());
+        return;
+      default:
+        await dispatch(
+          EditIntentAction(
+            intent: intent,
+            position: position,
+            modifiers: modifiers,
+          ),
+        );
+        return;
     }
-
-    if (intent case BoxSelectIntent()) {
-      await dispatch(StartBoxSelect(startPosition: intent.startPosition));
-      return true;
-    }
-
-    if (intent case ClearSelectionIntent()) {
-      await dispatch(const ClearSelection());
-      return true;
-    }
-
-    return _dispatchEditIntent(
-      intent: intent,
-      position: position,
-      modifiers: modifiers,
-    );
   }
 
   Future<bool> _dispatchStartEditForIntent({
@@ -326,21 +305,6 @@ class SelectPlugin extends DrawInputPlugin {
     return !wasEditing && state.application.isEditing;
   }
 
-  Future<bool> _dispatchEditIntent({
-    required EditIntent intent,
-    required DrawPoint position,
-    required EditModifiers modifiers,
-  }) async {
-    await dispatch(
-      EditIntentAction(
-        intent: intent,
-        position: position,
-        modifiers: modifiers,
-      ),
-    );
-    return true;
-  }
-
   Future<void> _updateEditFromEvent(PointerMoveInputEvent event) => dispatch(
     UpdateEdit(
       currentPosition: event.position,
@@ -349,28 +313,23 @@ class SelectPlugin extends DrawInputPlugin {
   );
 
   EditIntent? _filterIntentForTool(EditIntent? intent) {
-    if (intent == null) {
-      return null;
-    }
-    if (_isSelectionBehaviorDisabled) {
+    if (intent == null || _isSelectionBehaviorDisabled) {
       return null;
     }
     if (currentToolTypeId == null) {
       return intent;
     }
 
-    switch (intent) {
-      case SelectIntent(:final elementId):
-      case StartMoveIntent(:final elementId):
-        if (!_isSelectableElement(elementId)) {
-          return null;
-        }
-      case BoxSelectIntent():
-        // Box selection should only be allowed when selection tool is active.
-        // When another tool is active, convert to clear selection intent.
-        return const ClearSelectionIntent();
-      default:
-        break;
+    if (intent is BoxSelectIntent) {
+      // Box selection should only be allowed when selection tool is active.
+      // When another tool is active, convert to clear selection intent.
+      return const ClearSelectionIntent();
+    }
+
+    if (intent
+        case SelectIntent(:final elementId) ||
+            StartMoveIntent(:final elementId)) {
+      return _isSelectableElement(elementId) ? intent : null;
     }
 
     return intent;
@@ -401,18 +360,23 @@ class SelectPlugin extends DrawInputPlugin {
   bool _isBoundSerialText(String textElementId) =>
       state.domain.document.boundTextIds.contains(textElementId);
 
-  ArrowPointHandle? _resolveArrowHandleForIntent({
-    required DrawStateView stateView,
+  ArrowLikeData? _arrowDataForElement(
+    DrawStateView stateView,
+    String elementId,
+  ) {
+    final element = stateView.state.domain.document.getElementById(elementId);
+    final data = element?.data;
+    if (data is ArrowLikeData) {
+      return data;
+    }
+    return null;
+  }
+
+  ArrowPointHandle _resolveArrowHandleForIntent({
     required StartArrowPointIntent intent,
     required DrawPoint position,
+    required ArrowLikeData data,
   }) {
-    final element = stateView.state.domain.document.getElementById(
-      intent.elementId,
-    );
-    if (element == null || element.data is! ArrowLikeData) {
-      return null;
-    }
-    final data = element.data as ArrowLikeData;
     final isFixed =
         data.arrowType == ArrowType.elbow &&
         intent.pointKind == ArrowPointKind.addable &&
