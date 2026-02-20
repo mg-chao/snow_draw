@@ -10,6 +10,8 @@ import 'selection_state.dart';
 class SelectionOverlayState {
   const SelectionOverlayState({this.multiSelectOverlay});
 
+  static const empty = SelectionOverlayState();
+
   final MultiSelectOverlayState? multiSelectOverlay;
 
   bool get hasOverlay => multiSelectOverlay != null;
@@ -23,8 +25,6 @@ class SelectionOverlayState {
         : (multiSelectOverlay ?? this.multiSelectOverlay),
   );
 
-  static const empty = SelectionOverlayState();
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -36,6 +36,5 @@ class SelectionOverlayState {
 
   @override
   String toString() =>
-      'SelectionOverlayState(multiSelectOverlay: '
-      '${multiSelectOverlay != null})';
+      'SelectionOverlayState(multiSelectOverlay: $multiSelectOverlay)';
 }
