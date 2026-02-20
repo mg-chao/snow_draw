@@ -1013,7 +1013,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return null;
   }
 
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+  KeyEventResult _handleKeyEvent(FocusNode _, KeyEvent event) {
     if (event is KeyDownEvent) {
       _updateKeyboardModifiers(event, true);
     } else if (event is KeyUpEvent) {
@@ -1386,7 +1386,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
-  void _handlePointerExit(PointerExitEvent event) {
+  void _handlePointerExit(PointerExitEvent _) {
     _isPointerInside = false;
     _lastPointerPosition = null;
     _eraserCursorPositionNotifier.value = null;
@@ -1442,10 +1442,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _handleEraserPreviewMutation({required bool hadPendingPreview}) {
     final hasPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
-    if (!mounted) {
-      return;
-    }
-    if (!hasPendingPreview && !hadPendingPreview) {
+    if (!mounted || (!hasPendingPreview && !hadPendingPreview)) {
       return;
     }
     final requiresStaticRefresh = hasPendingPreview != hadPendingPreview;
@@ -1510,12 +1507,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _activePointerIds.removeAll(_eraserPointerIds);
       _eraserPointerIds.clear();
     }
-    if (_pendingErasePreviewElementsById.isEmpty) {
-      _resetEraserVolatilePreviewElementIds();
-      return;
-    }
+    final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
     _pendingErasePreviewElementsById.clear();
     _resetEraserVolatilePreviewElementIds();
+    if (!hadPendingPreview) {
+      return;
+    }
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
@@ -1633,84 +1630,50 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
 
-    // Update selected arrows
-    final arrowIds = _resolveArrowSelectionIds(state);
-    if (arrowIds.isNotEmpty) {
+    void updateSelectedStrokeWidth(List<String> elementIds) {
+      if (elementIds.isEmpty) {
+        return;
+      }
       unawaited(
         widget.store.dispatch(
-          UpdateElementsStyle(elementIds: arrowIds, strokeWidth: next),
+          UpdateElementsStyle(elementIds: elementIds, strokeWidth: next),
         ),
       );
     }
 
-    // Update selected rectangles
-    final rectangleIds = _resolveRectangleSelectionIds(state);
-    if (rectangleIds.isNotEmpty) {
-      unawaited(
-        widget.store.dispatch(
-          UpdateElementsStyle(elementIds: rectangleIds, strokeWidth: next),
-        ),
-      );
-    }
+    updateSelectedStrokeWidth(_resolveArrowSelectionIds(state));
+    updateSelectedStrokeWidth(_resolveRectangleSelectionIds(state));
+    updateSelectedStrokeWidth(_resolveLineSelectionIds(state));
+    updateSelectedStrokeWidth(_resolveFreeDrawSelectionIds(state));
 
-    // Update selected lines
-    final lineIds = _resolveLineSelectionIds(state);
-    if (lineIds.isNotEmpty) {
-      unawaited(
-        widget.store.dispatch(
-          UpdateElementsStyle(elementIds: lineIds, strokeWidth: next),
-        ),
+    var nextConfig = config;
+    var configChanged = false;
+    if (!_doubleEquals(next, nextConfig.arrowStyle.strokeWidth)) {
+      nextConfig = nextConfig.copyWith(
+        arrowStyle: nextConfig.arrowStyle.copyWith(strokeWidth: next),
       );
+      configChanged = true;
     }
-
-    // Update selected free draw elements
-    final freeDrawIds = _resolveFreeDrawSelectionIds(state);
-    if (freeDrawIds.isNotEmpty) {
-      unawaited(
-        widget.store.dispatch(
-          UpdateElementsStyle(elementIds: freeDrawIds, strokeWidth: next),
-        ),
+    if (!_doubleEquals(next, nextConfig.rectangleStyle.strokeWidth)) {
+      nextConfig = nextConfig.copyWith(
+        rectangleStyle: nextConfig.rectangleStyle.copyWith(strokeWidth: next),
       );
+      configChanged = true;
     }
-
-    // Update arrow style config if needed
-    if (!_doubleEquals(next, config.arrowStyle.strokeWidth)) {
-      final nextStyle = config.arrowStyle.copyWith(strokeWidth: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(arrowStyle: nextStyle)),
-        ),
+    if (!_doubleEquals(next, nextConfig.lineStyle.strokeWidth)) {
+      nextConfig = nextConfig.copyWith(
+        lineStyle: nextConfig.lineStyle.copyWith(strokeWidth: next),
       );
+      configChanged = true;
     }
-
-    // Update rectangle style config if needed
-    if (!_doubleEquals(next, config.rectangleStyle.strokeWidth)) {
-      final nextStyle = config.rectangleStyle.copyWith(strokeWidth: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(rectangleStyle: nextStyle)),
-        ),
+    if (!_doubleEquals(next, nextConfig.freeDrawStyle.strokeWidth)) {
+      nextConfig = nextConfig.copyWith(
+        freeDrawStyle: nextConfig.freeDrawStyle.copyWith(strokeWidth: next),
       );
+      configChanged = true;
     }
-
-    // Update line style config if needed
-    if (!_doubleEquals(next, config.lineStyle.strokeWidth)) {
-      final nextStyle = config.lineStyle.copyWith(strokeWidth: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(lineStyle: nextStyle)),
-        ),
-      );
-    }
-
-    // Update free draw style config if needed
-    if (!_doubleEquals(next, config.freeDrawStyle.strokeWidth)) {
-      final nextStyle = config.freeDrawStyle.copyWith(strokeWidth: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(freeDrawStyle: nextStyle)),
-        ),
-      );
+    if (configChanged) {
+      unawaited(widget.store.dispatch(UpdateConfig(nextConfig)));
     }
   }
 
@@ -1749,27 +1712,30 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
     }
 
-    if (!_doubleEquals(next, config.textStyle.fontSize)) {
-      final nextStyle = config.textStyle.copyWith(fontSize: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(textStyle: nextStyle)),
-        ),
-      );
-    }
-
     final serialNumberIds = _resolveSerialNumberSelectionIds(state);
     final updateSerialNumberStyle =
         serialNumberIds.isNotEmpty ||
         toolTypeId == SerialNumberData.typeIdToken;
+
+    var nextConfig = config;
+    var configChanged = false;
+    if (!_doubleEquals(next, nextConfig.textStyle.fontSize)) {
+      nextConfig = nextConfig.copyWith(
+        textStyle: nextConfig.textStyle.copyWith(fontSize: next),
+      );
+      configChanged = true;
+    }
     if (updateSerialNumberStyle &&
-        !_doubleEquals(next, config.serialNumberStyle.fontSize)) {
-      final nextStyle = config.serialNumberStyle.copyWith(fontSize: next);
-      unawaited(
-        widget.store.dispatch(
-          UpdateConfig(config.copyWith(serialNumberStyle: nextStyle)),
+        !_doubleEquals(next, nextConfig.serialNumberStyle.fontSize)) {
+      nextConfig = nextConfig.copyWith(
+        serialNumberStyle: nextConfig.serialNumberStyle.copyWith(
+          fontSize: next,
         ),
       );
+      configChanged = true;
+    }
+    if (configChanged) {
+      unawaited(widget.store.dispatch(UpdateConfig(nextConfig)));
     }
   }
 
@@ -1818,20 +1784,29 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
   }
 
-  double? _resolveAverageSelectedStrokeWidth(DrawState state) {
+  double? _resolveAverageSelectedMetric(
+    DrawState state,
+    double? Function(ElementData data) metricResolver,
+  ) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
       return null;
     }
+
+    final document = state.domain.document;
     var count = 0;
     var total = 0.0;
     for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      final data = element?.data;
-      if (data is RectangleData) {
-        total += data.strokeWidth;
-        count += 1;
+      final data = document.getElementById(id)?.data;
+      if (data == null) {
+        continue;
       }
+      final metric = metricResolver(data);
+      if (metric == null) {
+        continue;
+      }
+      total += metric;
+      count += 1;
     }
     if (count == 0) {
       return null;
@@ -1839,187 +1814,96 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return total / count;
   }
 
-  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      final data = element?.data;
-      if (data is ArrowData) {
-        total += data.strokeWidth;
-        count += 1;
-      }
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
+  double? _resolveAverageSelectedStrokeWidth(DrawState state) =>
+      _resolveAverageSelectedMetric(state, (data) {
+        if (data is RectangleData) {
+          return data.strokeWidth;
+        }
+        return null;
+      });
 
-  double? _resolveAverageSelectedLineStrokeWidth(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      final data = element?.data;
-      if (data is LineData) {
-        total += data.strokeWidth;
-        count += 1;
-      }
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
+  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) =>
+      _resolveAverageSelectedMetric(state, (data) {
+        if (data is ArrowData) {
+          return data.strokeWidth;
+        }
+        return null;
+      });
 
-  double? _resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      final data = element?.data;
-      if (data is FreeDrawData) {
-        total += data.strokeWidth;
-        count += 1;
-      }
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
+  double? _resolveAverageSelectedLineStrokeWidth(DrawState state) =>
+      _resolveAverageSelectedMetric(state, (data) {
+        if (data is LineData) {
+          return data.strokeWidth;
+        }
+        return null;
+      });
 
-  double? _resolveAverageSelectedFontSize(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      final data = element?.data;
-      if (data is TextData) {
-        total += data.fontSize;
-        count += 1;
-      }
-      if (data is SerialNumberData) {
-        total += data.fontSize;
-        count += 1;
-      }
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
+  double? _resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) =>
+      _resolveAverageSelectedMetric(state, (data) {
+        if (data is FreeDrawData) {
+          return data.strokeWidth;
+        }
+        return null;
+      });
 
-  List<String> _resolveRectangleSelectionIds(DrawState state) {
+  double? _resolveAverageSelectedFontSize(DrawState state) =>
+      _resolveAverageSelectedMetric(state, (data) {
+        if (data is TextData) {
+          return data.fontSize;
+        }
+        if (data is SerialNumberData) {
+          return data.fontSize;
+        }
+        return null;
+      });
+
+  List<String> _resolveSelectionIds(
+    DrawState state,
+    bool Function(ElementData data) matcher,
+  ) {
     final selectedIds = state.domain.selection.selectedIds;
     if (selectedIds.isEmpty) {
       return const [];
     }
+
+    final document = state.domain.document;
     final ids = <String>[];
     for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is RectangleData) {
+      final data = document.getElementById(id)?.data;
+      if (data != null && matcher(data)) {
         ids.add(id);
       }
     }
     return ids;
   }
 
-  List<String> _resolveArrowSelectionIds(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return const [];
-    }
-    final ids = <String>[];
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is ArrowData) {
-        ids.add(id);
-      }
-    }
-    return ids;
-  }
+  List<String> _resolveRectangleSelectionIds(DrawState state) =>
+      _resolveSelectionIds(state, (data) => data is RectangleData);
 
-  List<String> _resolveLineSelectionIds(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return const [];
-    }
-    final ids = <String>[];
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is LineData) {
-        ids.add(id);
-      }
-    }
-    return ids;
-  }
+  List<String> _resolveArrowSelectionIds(DrawState state) =>
+      _resolveSelectionIds(state, (data) => data is ArrowData);
 
-  List<String> _resolveFreeDrawSelectionIds(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return const [];
-    }
-    final ids = <String>[];
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is FreeDrawData) {
-        ids.add(id);
-      }
-    }
-    return ids;
-  }
+  List<String> _resolveLineSelectionIds(DrawState state) =>
+      _resolveSelectionIds(state, (data) => data is LineData);
+
+  List<String> _resolveFreeDrawSelectionIds(DrawState state) =>
+      _resolveSelectionIds(state, (data) => data is FreeDrawData);
 
   List<String> _resolveTextSelectionIds(DrawState state) {
-    final ids = <String>{};
-    final selectedIds = state.domain.selection.selectedIds;
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is TextData || element?.data is SerialNumberData) {
-        ids.add(id);
-      }
-    }
+    final ids = _resolveSelectionIds(
+      state,
+      (data) => data is TextData || data is SerialNumberData,
+    );
     final interaction = state.application.interaction;
-    if (interaction is TextEditingState) {
-      ids.add(interaction.elementId);
+    if (interaction is! TextEditingState ||
+        ids.contains(interaction.elementId)) {
+      return ids;
     }
-    if (ids.isEmpty) {
-      return const [];
-    }
-    return ids.toList(growable: false);
+    return [...ids, interaction.elementId];
   }
 
-  List<String> _resolveSerialNumberSelectionIds(DrawState state) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return const [];
-    }
-    final ids = <String>[];
-    for (final id in selectedIds) {
-      final element = state.domain.document.getElementById(id);
-      if (element?.data is SerialNumberData) {
-        ids.add(id);
-      }
-    }
-    return ids;
-  }
+  List<String> _resolveSerialNumberSelectionIds(DrawState state) =>
+      _resolveSelectionIds(state, (data) => data is SerialNumberData);
 
   /// Computes cursor and hover state in a single pass, sharing the
   /// hit test result and arrow-handle lookup between both paths.
@@ -2088,7 +1972,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
       stateView: stateView,
       hitResult: hitResult,
-      selectionConfig: selectionConfig,
     )) {
       nextCursor = _idleCursorForCurrentTool;
     } else if (_shouldShowTextCursor(
@@ -2096,7 +1979,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
       stateView: stateView,
       hitResult: hitResult,
-      selectionConfig: selectionConfig,
     )) {
       nextCursor = SystemMouseCursors.text;
     } else if (!hitResult.isHit) {
@@ -2462,7 +2344,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawPoint position,
     required DrawStateView stateView,
     required draw_hit_test.HitTestResult hitResult,
-    required SelectionConfig selectionConfig,
   }) {
     if (hitResult.isHandleHit) {
       return false;
@@ -2474,12 +2355,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         return true;
       }
 
-      final selectionHit = _isSelectionHit(
-        stateView: stateView,
-        position: position,
-        hitResult: hitResult,
-        selectionConfig: selectionConfig,
-      );
+      final selectionHit = _isSelectionHit(hitResult);
       if (selectionHit) {
         return false;
       }
@@ -2497,7 +2373,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         stateView: stateView,
         position: position,
         hitResult: hitResult,
-        selectionConfig: selectionConfig,
       )) {
         return false;
       }
@@ -2534,7 +2409,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawPoint position,
     required DrawStateView stateView,
     required draw_hit_test.HitTestResult hitResult,
-    required SelectionConfig selectionConfig,
   }) {
     final interaction = _resolveVisibleTextEditingInteraction(state);
     if (interaction == null) {
@@ -2545,12 +2419,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    final selectionHit = _isSelectionHit(
-      stateView: stateView,
-      position: position,
-      hitResult: hitResult,
-      selectionConfig: selectionConfig,
-    );
+    final selectionHit = _isSelectionHit(hitResult);
     if (selectionHit) {
       return false;
     }
@@ -2563,18 +2432,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return !_isInsideAnyTextElement(stateView, position);
   }
 
-  bool _isSelectionHit({
-    required DrawStateView stateView,
-    required DrawPoint position,
-    required draw_hit_test.HitTestResult hitResult,
-    required SelectionConfig selectionConfig,
-  }) => hitResult.isHandleHit || hitResult.isInSelectionPadding;
+  bool _isSelectionHit(draw_hit_test.HitTestResult hitResult) =>
+      hitResult.isHandleHit || hitResult.isInSelectionPadding;
 
   bool _shouldDeferToSelectionBox({
     required DrawStateView stateView,
     required DrawPoint position,
     required draw_hit_test.HitTestResult hitResult,
-    required SelectionConfig selectionConfig,
   }) {
     final state = stateView.state;
     if (!state.domain.hasSelection) {
@@ -2589,12 +2453,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
 
-    if (!_isSelectionHit(
-      stateView: stateView,
-      position: position,
-      hitResult: hitResult,
-      selectionConfig: selectionConfig,
-    )) {
+    if (!_isSelectionHit(hitResult)) {
       return false;
     }
 
@@ -2734,7 +2593,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
       stateView: stateView,
       hitResult: hitResult,
-      selectionConfig: selectionConfig,
     )) {
       return _idleCursorForCurrentTool;
     }
@@ -2743,7 +2601,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       position: position,
       stateView: stateView,
       hitResult: hitResult,
-      selectionConfig: selectionConfig,
     )) {
       return SystemMouseCursors.text;
     }
@@ -4135,7 +3992,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         return i;
       }
     }
-    return lineMetrics.isEmpty ? 0 : lineMetrics.length - 1;
+    return lineMetrics.length - 1;
   }
 
   int _lineIndexForBaseline({
