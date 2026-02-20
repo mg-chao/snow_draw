@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/edit/core/edit_event_factory.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -117,10 +116,10 @@ class _ActionProcessorHarness {
   _ActionProcessorHarness({required bool enableInteractionMutationFastPath})
     : _eventBus = EventBus(),
       _drawContext = _createContext(),
-      _stateManager = StateManager(_initialCreatingRectangleState()),
-      _historyManager = HistoryManager(),
-      _listenerRegistry = ListenerRegistry(),
       _middleware = _RecordingMiddleware() {
+    final stateManager = StateManager(_initialCreatingRectangleState());
+    final historyManager = HistoryManager();
+    final listenerRegistry = ListenerRegistry();
     var nextSessionId = 0;
     final editSessionService = EditSessionService.fromRegistry(
       _drawContext.editOperations,
@@ -130,24 +129,24 @@ class _ActionProcessorHarness {
 
     final services = ActionProcessorServices(
       drawContext: _drawContext,
-      stateManager: _stateManager,
-      historyManager: _historyManager,
+      stateManager: stateManager,
+      historyManager: historyManager,
       configManager: _drawContext.configManager,
-      listenerRegistry: _listenerRegistry,
+      listenerRegistry: listenerRegistry,
       snapshotBuilder: const SnapshotBuilder(),
       editSessionService: editSessionService,
       sessionIdGenerator: () => 'session-${nextSessionId++}',
       isBatching: () => false,
       includeSelectionInHistory: false,
       eventBus: _eventBus,
-      publishEditEvents: _publishedEditEvents.addAll,
+      publishEditEvents: (_) {},
       enableInteractionMutationFastPath: enableInteractionMutationFastPath,
     );
 
     final pipeline = MiddlewarePipeline(middlewares: [_middleware]);
     processor = ActionProcessor(services: services, pipeline: pipeline);
 
-    _listenerRegistry.register((_) => listenerNotificationCount += 1);
+    listenerRegistry.register((_) => listenerNotificationCount += 1);
     _interactionSubscription = _eventBus.on<InteractionChangedEvent>(
       interactionEvents.add,
     );
@@ -155,11 +154,7 @@ class _ActionProcessorHarness {
 
   final EventBus _eventBus;
   final DrawContext _drawContext;
-  final StateManager _stateManager;
-  final HistoryManager _historyManager;
-  final ListenerRegistry _listenerRegistry;
   final _RecordingMiddleware _middleware;
-  final _publishedEditEvents = <EditSessionEvent>[];
   late final StreamSubscription<InteractionChangedEvent>
   _interactionSubscription;
 
@@ -170,9 +165,7 @@ class _ActionProcessorHarness {
 
   List<Type> get middlewareInvocations => _middleware.invocations;
 
-  Future<void> flushEvents() async {
-    await Future<void>.delayed(Duration.zero);
-  }
+  Future<void> flushEvents() => Future<void>.delayed(Duration.zero);
 
   Future<void> dispose() async {
     await _interactionSubscription.cancel();
