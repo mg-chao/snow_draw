@@ -2,8 +2,6 @@ import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
-import '../../draw/elements/types/arrow/arrow_binding_resolver.dart'
-    show ArrowBindingResolver;
 import '../../draw/elements/types/serial_number/serial_number_binding.dart';
 import '../../draw/elements/types/serial_number/serial_number_data.dart';
 import '../../draw/elements/types/serial_number/serial_number_layout.dart';
@@ -18,7 +16,7 @@ import 'serial_number_connection_painter.dart';
 ///
 /// Maintains a cached index of serial number bindings and computed connectors
 /// to avoid rebuilding on every paint cycle. Uses version-based invalidation
-/// similar to [ArrowBindingResolver].
+/// to avoid rebuilding the index when the document is unchanged.
 class SerialNumberConnectorCache {
   SerialNumberConnectorCache._();
 
@@ -57,12 +55,6 @@ class SerialNumberConnectorCache {
     if (_shouldRebuildIndex(documentVersion)) {
       _rebuildBindingIndex(document);
       _cachedDocumentVersion = documentVersion;
-    }
-
-    // If no bindings exist, return empty
-    if (_bindingIndex.isEmpty &&
-        !_containsPreviewSerialBinding(effectivePreviewElements)) {
-      return _emptySnapshot;
     }
 
     final visibleTextIds = _normalizeVisibleTextIds(
@@ -115,34 +107,8 @@ class SerialNumberConnectorCache {
     _connectorCache = const {};
   }
 
-  bool _shouldRebuildIndex(int documentVersion) {
-    if (_cachedDocumentVersion == -1) {
-      return true;
-    }
-    if (documentVersion < _cachedDocumentVersion) {
-      // Version went backwards (e.g., undo), rebuild
-      return true;
-    }
-    if (documentVersion != _cachedDocumentVersion) {
-      return true;
-    }
-    return false;
-  }
-
-  bool _containsPreviewSerialBinding(Map<String, ElementState> previews) {
-    if (previews.isEmpty) {
-      return false;
-    }
-    for (final preview in previews.values) {
-      final data = preview.data;
-      if (data is SerialNumberData &&
-          data.textElementId != null &&
-          data.textElementId!.isNotEmpty) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool _shouldRebuildIndex(int documentVersion) =>
+      _cachedDocumentVersion != documentVersion;
 
   void _rebuildBindingIndex(DocumentState document) {
     final newIndex = <String, String>{};
@@ -188,13 +154,11 @@ class SerialNumberConnectorCache {
         continue;
       }
       final previewData = preview.data;
-      // Any preview serial with a binding can change connector output.
-      if (previewData is SerialNumberData &&
+      final previewHasBinding =
+          previewData is SerialNumberData &&
           previewData.textElementId != null &&
-          previewData.textElementId!.isNotEmpty) {
-        affected.add(previewId);
-      } else if (_bindingIndex.containsKey(previewId)) {
-        // If the preview updates a persisted serial, mark it affected.
+          previewData.textElementId!.isNotEmpty;
+      if (previewHasBinding || _bindingIndex.containsKey(previewId)) {
         affected.add(previewId);
       }
 
@@ -299,7 +263,7 @@ class SerialNumberConnectorCache {
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) {
-    if (affectedSerialIds.isEmpty || visibleTextIds.isEmpty) {
+    if (affectedSerialIds.isEmpty) {
       return const <String>{};
     }
 
@@ -385,20 +349,12 @@ class SerialNumberConnectorCache {
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) {
-    if (visibleTextIds.isEmpty) {
-      return const <String>{};
-    }
-
     final candidateSerialIds = <String>{};
     for (final textId in visibleTextIds) {
       final boundSerials = _reverseBindingIndex[textId];
       if (boundSerials != null) {
         candidateSerialIds.addAll(boundSerials);
       }
-    }
-
-    if (previewElementsById.isEmpty) {
-      return candidateSerialIds;
     }
 
     for (final preview in previewElementsById.values) {
@@ -424,6 +380,10 @@ class SerialNumberConnectorCache {
     required ElementState textElement,
   }) {
     final lineWidth = resolveSerialNumberStrokeWidth(data: serialData);
+    if (lineWidth <= 0) {
+      return null;
+    }
+
     final connection = resolveSerialNumberTextConnection(
       serialElement: serialElement,
       textElement: textElement,
@@ -438,7 +398,7 @@ class SerialNumberConnectorCache {
       0.0,
       1.0,
     );
-    if (opacity <= 0 || lineWidth <= 0) {
+    if (opacity <= 0) {
       return null;
     }
 
