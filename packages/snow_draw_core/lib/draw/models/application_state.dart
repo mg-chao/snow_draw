@@ -44,9 +44,6 @@ class ApplicationState {
   /// Whether the state is idle.
   bool get isIdle => interaction is IdleState;
 
-  /// Whether it is pending (select or move).
-  bool get isPending => interaction is DragPendingState;
-
   ApplicationState copyWith({
     ViewState? view,
     InteractionState? interaction,
@@ -58,12 +55,9 @@ class ApplicationState {
   );
 
   /// Reset to the idle state.
-  ApplicationState toIdle() {
-    if (interaction is IdleState) {
-      return this;
-    }
-    return copyWith(interaction: const IdleState());
-  }
+  ApplicationState toIdle() => interaction is IdleState
+      ? this
+      : copyWith(interaction: const IdleState());
 
   @override
   bool operator ==(Object other) =>
