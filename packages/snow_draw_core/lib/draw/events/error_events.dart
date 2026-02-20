@@ -1,10 +1,7 @@
-import 'package:meta/meta.dart';
-
 import 'event_bus.dart';
 import 'event_payload_freezer.dart';
 
 /// Error event.
-@immutable
 class ErrorEvent extends DrawEvent {
   const ErrorEvent({
     required this.message,
@@ -20,12 +17,11 @@ class ErrorEvent extends DrawEvent {
 }
 
 /// Validation failure event.
-@immutable
 class ValidationFailedEvent extends DrawEvent {
   ValidationFailedEvent({
     required this.action,
     required this.reason,
-    Map<String, dynamic> details = const {},
+    Map<String, dynamic> details = const <String, dynamic>{},
   }) : details = freezeEventPayloadMap(details);
   final String action;
   final String reason;
