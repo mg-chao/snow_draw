@@ -10,6 +10,7 @@ class ConfigManager {
   ConfigManager(DrawConfig initialConfig)
     : _config = initialConfig,
       _controller = StreamController<DrawConfig>.broadcast();
+
   DrawConfig _config;
   final StreamController<DrawConfig> _controller;
   DrawConfig? _pendingConfig;
@@ -30,15 +31,16 @@ class ConfigManager {
     if (_isDisposed) {
       return false;
     }
-    if (_freezeDepth > 0) {
-      final baseConfig = _pendingConfig ?? _config;
-      if (newConfig == baseConfig) {
-        return false;
-      }
-      _pendingConfig = newConfig;
-      return false;
+
+    if (_freezeDepth == 0) {
+      return _commit(newConfig);
     }
-    return _applyUpdate(newConfig);
+
+    final writableConfig = _pendingConfig ?? _config;
+    if (newConfig != writableConfig) {
+      _pendingConfig = newConfig;
+    }
+    return false;
   }
 
   /// Freeze config reads during a dispatch.
@@ -54,22 +56,24 @@ class ConfigManager {
     if (_isDisposed || _freezeDepth == 0) {
       return;
     }
+
     _freezeDepth -= 1;
-    if (_freezeDepth > 0) {
+    if (_freezeDepth != 0) {
       return;
     }
+
     final pending = _pendingConfig;
     _pendingConfig = null;
-    if (pending == null) {
-      return;
+    if (pending != null) {
+      _commit(pending);
     }
-    _applyUpdate(pending);
   }
 
-  bool _applyUpdate(DrawConfig newConfig) {
+  bool _commit(DrawConfig newConfig) {
     if (newConfig == _config) {
       return false;
     }
+
     _config = newConfig;
     _controller.add(newConfig);
     return true;
@@ -79,23 +83,26 @@ class ConfigManager {
   ///
   /// Convenience method to update only the selection config.
   /// Returns true if updated, false if unchanged.
-  bool updateSelection(SelectionConfig selection) =>
-      update(_configForWrites.copyWith(selection: selection));
+  bool updateSelection(SelectionConfig selection) {
+    final writableConfig = _pendingConfig ?? _config;
+    return update(writableConfig.copyWith(selection: selection));
+  }
 
   /// Update canvas configuration.
   ///
   /// Convenience method to update only the canvas config.
   /// Returns true if updated, false if unchanged.
-  bool updateCanvas(CanvasConfig canvas) =>
-      update(_configForWrites.copyWith(canvas: canvas));
-
-  DrawConfig get _configForWrites => _pendingConfig ?? _config;
+  bool updateCanvas(CanvasConfig canvas) {
+    final writableConfig = _pendingConfig ?? _config;
+    return update(writableConfig.copyWith(canvas: canvas));
+  }
 
   /// Release resources.
   Future<void> dispose() {
     if (_isDisposed) {
       return Future<void>.value();
     }
+
     _isDisposed = true;
     _freezeDepth = 0;
     _pendingConfig = null;
