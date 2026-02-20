@@ -53,7 +53,7 @@ class ListenerRegistry {
     final normalizedChangeMask = _normalizeChangeMask(changeTypes);
 
     final previousEntry = _listeners[listener];
-    if (previousEntry != null && previousEntry.isFiltered) {
+    if (previousEntry?.isFiltered ?? false) {
       _filteredListenerCount -= 1;
     }
 
@@ -73,7 +73,7 @@ class ListenerRegistry {
   /// Removes the listener. O(1) removal with ordering preserved.
   void unregister(StateChangeListener<DrawState> listener) {
     final removed = _listeners.remove(listener);
-    if (removed != null && removed.isFiltered) {
+    if (removed?.isFiltered ?? false) {
       _filteredListenerCount -= 1;
     }
   }
@@ -93,7 +93,7 @@ class ListenerRegistry {
         return;
       }
       final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-      _notifyAllUnfiltered(entriesSnapshot, next);
+      _notifyEntries(entriesSnapshot, next);
       return;
     }
 
@@ -101,42 +101,25 @@ class ListenerRegistry {
     if (changeMask == 0) {
       return;
     }
-
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-    _notifyWithFilters(entriesSnapshot, next, changeMask);
+    _notifyEntries(entriesSnapshot, next, changeMask: changeMask);
   }
 
-  void _notifyAllUnfiltered(List<_ListenerEntry> entries, DrawState next) {
-    // Notify listeners in registration order.
-    // Iterate a snapshot to avoid map mutation during notification.
+  void _notifyEntries(
+    List<_ListenerEntry> entries,
+    DrawState next, {
+    int? changeMask,
+  }) {
     for (final entry in entries) {
       if (!_isCurrentEntry(entry)) {
         continue;
       }
-      try {
-        entry.notify(next);
-      } on Object catch (error, stackTrace) {
-        // Continue notifying remaining listeners even when one throws.
-        _onError?.call(error, stackTrace);
-      }
-    }
-  }
-
-  void _notifyWithFilters(
-    List<_ListenerEntry> entries,
-    DrawState next,
-    int changeMask,
-  ) {
-    // Notify listeners in registration order.
-    // Iterate a snapshot to avoid map mutation during notification.
-    for (final entry in entries) {
-      if (!_isCurrentEntry(entry) || !entry.matches(changeMask)) {
+      if (changeMask != null && !entry.matches(changeMask)) {
         continue;
       }
       try {
-        entry.notify(next);
+        entry.listener(next);
       } on Object catch (error, stackTrace) {
-        // Continue notifying remaining listeners even when one throws.
         _onError?.call(error, stackTrace);
       }
     }
@@ -170,7 +153,7 @@ class ListenerRegistry {
       mask |= _maskForChange(change);
     }
 
-    if (mask == 0 || mask == _allChangeMask) {
+    if (mask == _allChangeMask) {
       return null;
     }
 
@@ -182,20 +165,16 @@ class ListenerRegistry {
 ///
 /// Internal class that stores a listener and its normalized change mask.
 class _ListenerEntry {
-  _ListenerEntry(this.listener, this.changeMask)
-    : isFiltered = changeMask != null;
+  _ListenerEntry(this.listener, this.changeMask);
   final StateChangeListener<DrawState> listener;
   final int? changeMask;
-  final bool isFiltered;
+  bool get isFiltered => changeMask != null;
 
   /// Returns true when this listener should receive the current change mask.
   bool matches(int stateChangeMask) {
     final mask = changeMask;
     return mask == null || (mask & stateChangeMask) != 0;
   }
-
-  /// Notify the listener with the next state snapshot.
-  void notify(DrawState state) => listener(state);
 }
 
 int _computeChangeMask(DrawState previous, DrawState next) {
@@ -262,23 +241,20 @@ bool _interactionChanged(DrawState previous, DrawState next) {
 
   if (previousInteraction is TextEditingState &&
       nextInteraction is TextEditingState) {
-    if (previousInteraction.elementId != nextInteraction.elementId ||
-        previousInteraction.isNew != nextInteraction.isNew ||
-        previousInteraction.opacity != nextInteraction.opacity ||
-        previousInteraction.rotation != nextInteraction.rotation ||
-        previousInteraction.initialCursorPosition !=
-            nextInteraction.initialCursorPosition) {
-      return true;
-    }
-    return !identical(
-          previousInteraction.draftData,
-          nextInteraction.draftData,
-        ) ||
-        previousInteraction.rect != nextInteraction.rect;
+    return _textEditingChanged(previousInteraction, nextInteraction);
   }
 
   return previousInteraction != nextInteraction;
 }
+
+bool _textEditingChanged(TextEditingState previous, TextEditingState next) =>
+    previous.elementId != next.elementId ||
+    previous.isNew != next.isNew ||
+    previous.opacity != next.opacity ||
+    previous.rotation != next.rotation ||
+    previous.initialCursorPosition != next.initialCursorPosition ||
+    !identical(previous.draftData, next.draftData) ||
+    previous.rect != next.rect;
 
 int _maskForChange(DrawStateChange change) => switch (change) {
   DrawStateChange.document => _documentChangeMask,
