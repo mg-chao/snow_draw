@@ -15,33 +15,30 @@ class PendingStateReducer {
   ///
   /// Returns null if the action is not a pending-state operation.
   DrawState? reduce(DrawState state, DrawAction action) => switch (action) {
-    final SetDragPending a => _setDragPending(state, a),
+    SetDragPending(:final pointerDownPosition, :final intent) =>
+      _setDragPending(
+        state,
+        DragPendingState(
+          pointerDownPosition: pointerDownPosition,
+          intent: intent,
+        ),
+      ),
     ClearDragPending _ => _clearDragPending(state),
     _ => null,
   };
 
-  DrawState _setDragPending(DrawState state, SetDragPending action) =>
-      switch (state.application.interaction) {
-        final DragPendingState interaction
-            when interaction.pointerDownPosition ==
-                    action.pointerDownPosition &&
-                interaction.intent == action.intent =>
-          state,
-        _ => state.copyWith(
-          application: state.application.copyWith(
-            interaction: DragPendingState(
-              pointerDownPosition: action.pointerDownPosition,
-              intent: action.intent,
-            ),
-          ),
-        ),
-      };
-
-  DrawState _clearDragPending(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is DragPendingState) {
-      return state.copyWith(application: state.application.toIdle());
+  DrawState _setDragPending(DrawState state, DragPendingState pending) {
+    if (state.application.interaction == pending) {
+      return state;
     }
-    return state;
+
+    return state.copyWith(
+      application: state.application.copyWith(interaction: pending),
+    );
   }
+
+  DrawState _clearDragPending(DrawState state) =>
+      state.application.interaction is DragPendingState
+      ? state.copyWith(application: state.application.toIdle())
+      : state;
 }
