@@ -35,18 +35,6 @@ class TextRenderer extends ElementTypeRenderer {
     _backgroundPathCache.clear();
   }
 
-  Paint _buildLineFillPaint({
-    required double spacing,
-    required double lineWidth,
-    required double angle,
-    required Color color,
-  }) => buildLineFillPaint(
-    spacing: spacing,
-    lineWidth: lineWidth,
-    angle: angle,
-    color: color,
-  );
-
   @override
   void render({
     required Canvas canvas,
@@ -95,6 +83,7 @@ class TextRenderer extends ElementTypeRenderer {
     }
 
     final layoutWidth = rect.width;
+    final text = data.text.isEmpty ? ' ' : data.text;
 
     // Single layout call; the Paragraph cache handles dedup.
     final layout =
@@ -113,47 +102,6 @@ class TextRenderer extends ElementTypeRenderer {
       verticalAlign: data.verticalAlign,
     );
 
-    // Background
-    final backgroundHPad = shouldDrawBackground
-        ? resolveTextBackgroundHorizontalPadding(layout.lineHeight)
-        : 0.0;
-    final backgroundVPad = shouldDrawBackground
-        ? resolveTextBackgroundVerticalPadding(layout.lineHeight)
-        : 0.0;
-    final bgColor = data.fillColor.withValues(alpha: backgroundOpacity);
-    Paint? backgroundPaint;
-    Paint? crossLinePaint;
-    if (shouldDrawBackground) {
-      if (data.fillStyle == FillStyle.solid) {
-        backgroundPaint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = bgColor
-          ..isAntiAlias = true;
-      } else {
-        final equivalentStrokeWidth = data.fontSize / 42;
-        final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
-          0.5,
-          3.0,
-        );
-        const lineToSpacingRatio = 4.0;
-        final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-        backgroundPaint = _buildLineFillPaint(
-          spacing: spacing,
-          lineWidth: fillLineWidth,
-          angle: _lineFillAngle,
-          color: bgColor,
-        );
-        if (data.fillStyle == FillStyle.crossLine) {
-          crossLinePaint = _buildLineFillPaint(
-            spacing: spacing,
-            lineWidth: fillLineWidth,
-            angle: _crossLineFillAngle,
-            color: bgColor,
-          );
-        }
-      }
-    }
-
     canvas.save();
     if (rotation != 0) {
       canvas
@@ -163,10 +111,49 @@ class TextRenderer extends ElementTypeRenderer {
     }
     canvas.translate(rect.minX, rect.minY);
 
-    if (shouldDrawBackground && backgroundPaint != null) {
+    if (shouldDrawBackground) {
+      final horizontalPadding = resolveTextBackgroundHorizontalPadding(
+        layout.lineHeight,
+      );
+      final verticalPadding = resolveTextBackgroundVerticalPadding(
+        layout.lineHeight,
+      );
+      final backgroundColor = data.fillColor.withValues(
+        alpha: backgroundOpacity,
+      );
+      late final Paint backgroundPaint;
+      Paint? crossLinePaint;
+      if (data.fillStyle == FillStyle.solid) {
+        backgroundPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = backgroundColor
+          ..isAntiAlias = true;
+      } else {
+        final equivalentStrokeWidth = data.fontSize / 42;
+        final fillLineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(
+          0.5,
+          3.0,
+        );
+        const lineToSpacingRatio = 4.0;
+        final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
+        backgroundPaint = buildLineFillPaint(
+          spacing: spacing,
+          lineWidth: fillLineWidth,
+          angle: _lineFillAngle,
+          color: backgroundColor,
+        );
+        if (data.fillStyle == FillStyle.crossLine) {
+          crossLinePaint = buildLineFillPaint(
+            spacing: spacing,
+            lineWidth: fillLineWidth,
+            angle: _crossLineFillAngle,
+            color: backgroundColor,
+          );
+        }
+      }
       final boxes = _resolveBackgroundBoxes(
         paragraph: layout.paragraph,
-        text: data.text,
+        text: text,
         fontSize: data.fontSize,
         fontFamily: data.fontFamily,
         horizontalAlign: data.horizontalAlign,
@@ -175,8 +162,8 @@ class TextRenderer extends ElementTypeRenderer {
       _paintTextBackground(
         canvas: canvas,
         paintOffset: textOffset,
-        horizontalPadding: backgroundHPad,
-        verticalPadding: backgroundVPad,
+        horizontalPadding: horizontalPadding,
+        verticalPadding: verticalPadding,
         paint: backgroundPaint,
         cornerRadius: data.cornerRadius,
         boxes: boxes,
@@ -185,8 +172,8 @@ class TextRenderer extends ElementTypeRenderer {
         _paintTextBackground(
           canvas: canvas,
           paintOffset: textOffset,
-          horizontalPadding: backgroundHPad,
-          verticalPadding: backgroundVPad,
+          horizontalPadding: horizontalPadding,
+          verticalPadding: verticalPadding,
           paint: crossLinePaint,
           cornerRadius: data.cornerRadius,
           boxes: boxes,
@@ -198,10 +185,9 @@ class TextRenderer extends ElementTypeRenderer {
     if (shouldDrawStroke) {
       final strokeParagraph = _buildStrokeParagraph(
         data: data,
+        text: text,
         strokeOpacity: strokeOpacity,
-        align: data.horizontalAlign,
         locale: locale,
-        minWidth: layoutWidth,
         maxWidth: layoutWidth,
       );
       canvas.drawParagraph(strokeParagraph, textOffset);
@@ -212,10 +198,10 @@ class TextRenderer extends ElementTypeRenderer {
     if (shouldDrawFill) {
       final fillParagraph = _resolveFillParagraph(
         data: data,
+        text: text,
         textOpacity: textOpacity,
         layout: layout,
         locale: locale,
-        minWidth: layoutWidth,
         maxWidth: layoutWidth,
       );
       canvas.drawParagraph(fillParagraph, textOffset);
@@ -241,10 +227,10 @@ class TextRenderer extends ElementTypeRenderer {
   /// `ParagraphBuilder` + `layout()` call.
   ui.Paragraph _resolveFillParagraph({
     required TextData data,
+    required String text,
     required double textOpacity,
     required TextLayoutMetrics layout,
     required Locale? locale,
-    required double minWidth,
     required double maxWidth,
   }) {
     final fillColor = data.color.withValues(alpha: textOpacity);
@@ -254,7 +240,7 @@ class TextRenderer extends ElementTypeRenderer {
       return layout.paragraph;
     }
     final key = _FillParagraphKey(
-      text: data.text.isEmpty ? ' ' : data.text,
+      text: text,
       fontSize: data.fontSize,
       fontFamily: data.fontFamily,
       horizontalAlign: data.horizontalAlign,
@@ -265,11 +251,10 @@ class TextRenderer extends ElementTypeRenderer {
     return _fillParagraphCache.getOrCreate(
       key,
       () => _buildRawParagraph(
-        text: data.text.isEmpty ? ' ' : data.text,
+        text: text,
         data: data,
         color: fillColor,
         locale: locale,
-        minWidth: minWidth,
         maxWidth: maxWidth,
       ),
     );
@@ -277,14 +262,13 @@ class TextRenderer extends ElementTypeRenderer {
 
   ui.Paragraph _buildStrokeParagraph({
     required TextData data,
+    required String text,
     required double strokeOpacity,
-    required TextHorizontalAlign align,
     required Locale? locale,
-    required double minWidth,
     required double maxWidth,
   }) {
     final key = _StrokeParagraphKey(
-      text: data.text.isEmpty ? ' ' : data.text,
+      text: text,
       fontSize: data.fontSize,
       fontFamily: data.fontFamily,
       horizontalAlign: data.horizontalAlign,
@@ -303,11 +287,10 @@ class TextRenderer extends ElementTypeRenderer {
         ..color = strokeColor
         ..isAntiAlias = true;
       return _buildRawParagraph(
-        text: data.text.isEmpty ? ' ' : data.text,
+        text: text,
         data: data,
         foreground: paint,
         locale: locale,
-        minWidth: minWidth,
         maxWidth: maxWidth,
       );
     });
@@ -317,7 +300,6 @@ class TextRenderer extends ElementTypeRenderer {
     required String text,
     required TextData data,
     required Locale? locale,
-    required double minWidth,
     required double maxWidth,
     Color? color,
     Paint? foreground,
@@ -382,18 +364,12 @@ class TextRenderer extends ElementTypeRenderer {
     required Size textSize,
     required TextVerticalAlign verticalAlign,
   }) {
-    var dy = 0.0;
-    switch (verticalAlign) {
-      case TextVerticalAlign.top:
-        dy = 0;
-      case TextVerticalAlign.center:
-        dy = (containerSize.height - textSize.height) / 2;
-      case TextVerticalAlign.bottom:
-        dy = containerSize.height - textSize.height;
-    }
-    if (dy.isNaN || dy.isInfinite || dy < 0) {
-      dy = 0;
-    }
+    final rawDy = switch (verticalAlign) {
+      TextVerticalAlign.top => 0.0,
+      TextVerticalAlign.center => (containerSize.height - textSize.height) / 2,
+      TextVerticalAlign.bottom => containerSize.height - textSize.height,
+    };
+    final dy = rawDy.isFinite && rawDy >= 0 ? rawDy : 0.0;
     return Offset(0, dy);
   }
 
@@ -411,9 +387,8 @@ class TextRenderer extends ElementTypeRenderer {
     required TextHorizontalAlign horizontalAlign,
     required double layoutWidth,
   }) {
-    final resolvedText = text.isEmpty ? ' ' : text;
     final key = _BackgroundBoxKey(
-      text: resolvedText,
+      text: text,
       fontSize: fontSize,
       fontFamily: fontFamily,
       horizontalAlign: horizontalAlign,
@@ -423,7 +398,7 @@ class TextRenderer extends ElementTypeRenderer {
       key,
       () => paragraph.getBoxesForRange(
         0,
-        resolvedText.length,
+        text.length,
         boxHeightStyle: ui.BoxHeightStyle.strut,
       ),
     );
@@ -494,11 +469,7 @@ class TextRenderer extends ElementTypeRenderer {
     if (cornerRadius <= 0) {
       return 0;
     }
-    final maxRadius = rect.shortestSide / 2;
-    if (cornerRadius > maxRadius) {
-      return maxRadius;
-    }
-    return cornerRadius;
+    return math.min(cornerRadius, rect.shortestSide / 2);
   }
 
   static double _quantize(double value) => (value * 10).roundToDouble() / 10;
