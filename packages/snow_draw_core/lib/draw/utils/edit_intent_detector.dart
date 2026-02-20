@@ -28,7 +28,6 @@ class EditIntentDetector {
     required DrawStateView stateView,
     required DrawPoint position,
     required bool isShiftPressed,
-    required bool isAltPressed,
     required SelectionConfig config,
     required ElementRegistry registry,
     ElementTypeId<ElementData>? filterTypeId,
@@ -50,87 +49,97 @@ class EditIntentDetector {
       filterTypeId: filterTypeId,
     );
 
-    final state = stateView.state;
-    final selectedIds = state.domain.selection.selectedIds;
-
-    // 1. Handle hit -> resize/rotate.
     if (hitResult.isHandleHit) {
-      return _getHandleIntent(hitResult.handleType!, config.padding);
-    }
-
-    // 2. Element hit -> select or start move.
-    if (hitResult.elementId != null) {
-      final element = state.domain.document.getElementById(
-        hitResult.elementId!,
+      return _getHandleIntent(
+        handleType: hitResult.handleType!,
+        selectionPadding: config.padding,
       );
-      if (element != null) {
-        final addToSelection = isShiftPressed;
-        if (selectedIds.contains(hitResult.elementId)) {
-          if (addToSelection) {
-            if (hitResult.isSelectionPaddingHit) {
-              return null;
-            }
-            return SelectIntent(
-              elementId: hitResult.elementId!,
-              addToSelection: true,
-            );
-          }
-          return StartMoveIntent(
-            elementId: hitResult.elementId!,
-            addToSelection: false,
-          );
-        } else {
-          final deferSelectionForDrag =
-              !addToSelection &&
-              selectedIds.length > 1 &&
-              hitResult.isInSelectionPadding;
-          return SelectIntent(
-            elementId: hitResult.elementId!,
-            addToSelection: addToSelection,
-            deferSelectionForDrag: deferSelectionForDrag,
-          );
-        }
-      }
     }
 
-    // 3. Clicked blank area.
-    if (!isShiftPressed) {
-      return BoxSelectIntent(startPosition: position);
+    final elementId = hitResult.elementId;
+    if (elementId != null) {
+      return _detectElementIntent(
+        stateView: stateView,
+        elementId: elementId,
+        isShiftPressed: isShiftPressed,
+        isSelectionPaddingHit: hitResult.isSelectionPaddingHit,
+        isInSelectionPadding: hitResult.isInSelectionPadding,
+      );
     }
 
-    return null;
+    return isShiftPressed ? null : BoxSelectIntent(startPosition: position);
   }
 
-  EditIntent _getHandleIntent(HandleType handleType, double selectionPadding) {
-    switch (handleType) {
-      case HandleType.rotate:
-        return const StartRotateIntent();
-      case HandleType.topLeft:
-      case HandleType.top:
-      case HandleType.topRight:
-      case HandleType.right:
-      case HandleType.bottomRight:
-      case HandleType.bottom:
-      case HandleType.bottomLeft:
-      case HandleType.left:
-        final resizeMode = hitTest.getResizeModeForHandle(handleType);
-        return StartResizeIntent(
-          mode: resizeMode!,
-          selectionPadding: selectionPadding,
-        );
-    }
-  }
-
-  /// Returns a create intent if the app is currently creating.
-  CreateIntent? detectCreateIntent({
-    required ElementTypeId<ElementData> elementTypeId,
-    required bool isCreating,
+  EditIntent? _detectElementIntent({
+    required DrawStateView stateView,
+    required String elementId,
+    required bool isShiftPressed,
+    required bool isSelectionPaddingHit,
+    required bool isInSelectionPadding,
   }) {
-    if (!isCreating) {
+    final state = stateView.state;
+    if (state.domain.document.getElementById(elementId) == null) {
       return null;
     }
-    return CreateIntent(typeId: elementTypeId);
+
+    final selectedIds = state.domain.selection.selectedIds;
+    final isSelected = selectedIds.contains(elementId);
+    if (isSelected) {
+      if (isShiftPressed) {
+        return isSelectionPaddingHit
+            ? null
+            : SelectIntent(elementId: elementId, addToSelection: true);
+      }
+      return StartMoveIntent(elementId: elementId, addToSelection: false);
+    }
+
+    final deferSelectionForDrag =
+        !isShiftPressed && selectedIds.length > 1 && isInSelectionPadding;
+    return SelectIntent(
+      elementId: elementId,
+      addToSelection: isShiftPressed,
+      deferSelectionForDrag: deferSelectionForDrag,
+    );
   }
+
+  EditIntent _getHandleIntent({
+    required HandleType handleType,
+    required double selectionPadding,
+  }) => switch (handleType) {
+    HandleType.rotate => const StartRotateIntent(),
+    HandleType.topLeft => StartResizeIntent(
+      mode: ResizeMode.topLeft,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.top => StartResizeIntent(
+      mode: ResizeMode.top,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.topRight => StartResizeIntent(
+      mode: ResizeMode.topRight,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.right => StartResizeIntent(
+      mode: ResizeMode.right,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.bottomRight => StartResizeIntent(
+      mode: ResizeMode.bottomRight,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.bottom => StartResizeIntent(
+      mode: ResizeMode.bottom,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.bottomLeft => StartResizeIntent(
+      mode: ResizeMode.bottomLeft,
+      selectionPadding: selectionPadding,
+    ),
+    HandleType.left => StartResizeIntent(
+      mode: ResizeMode.left,
+      selectionPadding: selectionPadding,
+    ),
+  };
 
   EditIntent? _detectArrowPointIntent({
     required DrawStateView stateView,
@@ -259,12 +268,4 @@ final class ClearSelectionIntent extends EditIntent {
 
   @override
   String toString() => 'ClearSelectionIntent()';
-}
-
-final class CreateIntent {
-  const CreateIntent({required this.typeId});
-  final ElementTypeId<ElementData> typeId;
-
-  @override
-  String toString() => 'CreateIntent(typeId: $typeId)';
 }
