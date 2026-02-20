@@ -13,9 +13,6 @@ import 'package:snow_draw_core/draw/types/snap_guides.dart';
 
 void main() {
   test('creating rectangle state view avoids preview element duplication', () {
-    final builder = DrawStateViewBuilder(
-      editOperations: DefaultEditOperationRegistry.empty(),
-    );
     const guides = [
       SnapGuide(
         kind: SnapGuideKind.point,
@@ -25,27 +22,36 @@ void main() {
         markers: [DrawPoint(x: 20, y: 30)],
       ),
     ];
-    final creating = CreatingState(
-      element: const ElementState(
-        id: 'creating-rectangle',
-        rect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      ),
-      startPosition: const DrawPoint(x: 10, y: 10),
-      currentRect: const DrawRect(minX: 10, minY: 10, maxX: 120, maxY: 80),
-      snapGuides: guides,
-    );
-    final state = DrawState(
-      application: ApplicationState.initial().copyWith(interaction: creating),
-    );
-
-    final view = builder.build(state);
+    final view =
+        DrawStateViewBuilder(
+          editOperations: DefaultEditOperationRegistry.empty(),
+        ).build(
+          DrawState(
+            application: ApplicationState.initial().copyWith(
+              interaction: CreatingState(
+                element: const ElementState(
+                  id: 'creating-rectangle',
+                  rect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 0,
+                  data: RectangleData(),
+                ),
+                startPosition: const DrawPoint(x: 10, y: 10),
+                currentRect: const DrawRect(
+                  minX: 10,
+                  minY: 10,
+                  maxX: 120,
+                  maxY: 80,
+                ),
+                snapGuides: guides,
+              ),
+            ),
+          ),
+        );
 
     expect(view.previewElementsById, isEmpty);
     expect(view.snapGuides, guides);
-    expect(identical(view.effectiveSelection, EffectiveSelection.none), isTrue);
+    expect(view.effectiveSelection, same(EffectiveSelection.none));
   });
 }
