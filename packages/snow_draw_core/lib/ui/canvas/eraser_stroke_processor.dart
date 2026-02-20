@@ -31,8 +31,7 @@ class EraserStrokeProcessor {
   /// Clears all stroke state.
   void reset() {
     _lastProcessedPositions.clear();
-    _effectiveElementCache.clear();
-    _cachedEffectiveStateView = null;
+    _clearEffectiveElementCache();
   }
 
   /// Clears the cached last position for a pointer.
@@ -55,23 +54,19 @@ class EraserStrokeProcessor {
     _lastProcessedPositions[pointerId] = position;
     final strokeStart = previous ?? position;
     final includeStart = previous == null;
-    final resolvedTolerance = _resolveSampleTolerance(tolerance);
+    final resolvedTolerance = _sanitizeTolerance(tolerance);
 
     final document = stateView.state.domain.document;
     final elementById = document.elementMap;
     if (elementById.isEmpty) {
-      _effectiveElementCache.clear();
-      _cachedEffectiveStateView = null;
+      _clearEffectiveElementCache();
       return false;
     }
     final hasPreviewOverrides = stateView.previewElementsById.isNotEmpty;
-    if (!hasPreviewOverrides) {
-      _effectiveElementCache.clear();
-      _cachedEffectiveStateView = null;
-    } else if (!identical(_cachedEffectiveStateView, stateView)) {
-      _effectiveElementCache.clear();
-      _cachedEffectiveStateView = stateView;
-    }
+    _syncEffectiveElementCache(
+      stateView: stateView,
+      hasPreviewOverrides: hasPreviewOverrides,
+    );
 
     var hasNewHits = false;
     _visitStrokeSamples(
@@ -123,25 +118,60 @@ class EraserStrokeProcessor {
       if (candidate == null) {
         continue;
       }
-      final element = hasPreviewOverrides
-          ? (_effectiveElementCache[candidateId] ??= stateView.effectiveElement(
-              candidate,
-            ))
-          : candidate;
-      if (_isElementHitAtSample(
+      final element = _resolveEffectiveElement(
+        candidateId: candidateId,
+        candidate: candidate,
+        stateView: stateView,
+        hasPreviewOverrides: hasPreviewOverrides,
+      );
+      if (!_isElementHitAtSample(
         element: element,
         sample: sample,
         tolerance: tolerance,
       )) {
-        if (queuePreview(element)) {
-          hasNewHits = true;
-        }
+        continue;
+      }
+      if (queuePreview(element)) {
+        hasNewHits = true;
       }
     }
     return hasNewHits;
   }
 
-  double _resolveSampleTolerance(double tolerance) {
+  void _clearEffectiveElementCache() {
+    _effectiveElementCache.clear();
+    _cachedEffectiveStateView = null;
+  }
+
+  void _syncEffectiveElementCache({
+    required DrawStateView stateView,
+    required bool hasPreviewOverrides,
+  }) {
+    if (!hasPreviewOverrides) {
+      _clearEffectiveElementCache();
+      return;
+    }
+    if (!identical(_cachedEffectiveStateView, stateView)) {
+      _effectiveElementCache.clear();
+      _cachedEffectiveStateView = stateView;
+    }
+  }
+
+  ElementState _resolveEffectiveElement({
+    required String candidateId,
+    required ElementState candidate,
+    required DrawStateView stateView,
+    required bool hasPreviewOverrides,
+  }) {
+    if (!hasPreviewOverrides) {
+      return candidate;
+    }
+    return _effectiveElementCache[candidateId] ??= stateView.effectiveElement(
+      candidate,
+    );
+  }
+
+  double _sanitizeTolerance(double tolerance) {
     if (!tolerance.isFinite || tolerance <= 0) {
       return 0;
     }
@@ -154,16 +184,18 @@ class EraserStrokeProcessor {
     required double tolerance,
   }) {
     final hitTester = _hitTesterResolver(element);
-    return hitTester?.hitTest(
-          element: element,
-          position: sample,
-          tolerance: tolerance,
-        ) ??
-        _isInsideRectWithTolerance(
-          element: element,
-          position: sample,
-          tolerance: tolerance,
-        );
+    if (hitTester != null) {
+      return hitTester.hitTest(
+        element: element,
+        position: sample,
+        tolerance: tolerance,
+      );
+    }
+    return _isInsideRectWithTolerance(
+      element: element,
+      position: sample,
+      tolerance: tolerance,
+    );
   }
 
   bool _isInsideRectWithTolerance({
@@ -203,7 +235,7 @@ class EraserStrokeProcessor {
     }
 
     final sampleStep = tolerance * _sampleStepFactor;
-    if (!sampleStep.isFinite || sampleStep <= 0) {
+    if (sampleStep <= 0) {
       if (includeStart) {
         onSample(start);
       }
@@ -212,15 +244,7 @@ class EraserStrokeProcessor {
     }
 
     final distance = math.sqrt(distanceSquared);
-    final sampleCountValue = distance / sampleStep;
-    if (!sampleCountValue.isFinite) {
-      if (includeStart) {
-        onSample(start);
-      }
-      onSample(end);
-      return;
-    }
-    final sampleCount = math.max(1, sampleCountValue.ceil());
+    final sampleCount = math.max(1, (distance / sampleStep).ceil());
     if (includeStart) {
       onSample(start);
     }
