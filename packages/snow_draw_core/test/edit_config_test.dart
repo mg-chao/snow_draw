@@ -43,41 +43,35 @@ void main() {
       expect(updated.rotationSnapAngle, config.rotationSnapAngle);
     });
 
-    test('rejects invalid values in constructor and copyWith', () {
-      expect(
+    test('constructor rejects invalid values', () {
+      final invalidConfigs = <EditConfig Function()>[
         () => EditConfig(dragThreshold: -0.1),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => EditConfig(selectionPadding: -1),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => EditConfig(handleTolerance: 0),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => EditConfig(minElementSize: 0),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => EditConfig(rotationSnapAngle: -0.01),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => EditConfig(rotationHandleOffset: -1),
-        throwsA(isA<AssertionError>()),
-      );
+      ];
 
+      for (final buildConfig in invalidConfigs) {
+        _expectAssertion(buildConfig);
+      }
+    });
+
+    test('copyWith rejects invalid values', () {
       const config = EditConfig.defaults;
-      expect(
+      final invalidUpdates = <EditConfig Function()>[
         () => config.copyWith(selectionPadding: -1),
-        throwsA(isA<AssertionError>()),
-      );
-      expect(
         () => config.copyWith(handleTolerance: 0),
-        throwsA(isA<AssertionError>()),
-      );
+      ];
+
+      for (final updateConfig in invalidUpdates) {
+        _expectAssertion(updateConfig);
+      }
     });
   });
+}
+
+void _expectAssertion(EditConfig Function() action) {
+  expect(action, throwsA(isA<AssertionError>()));
 }
