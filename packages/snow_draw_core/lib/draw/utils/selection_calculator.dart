@@ -1,6 +1,5 @@
-import 'dart:math';
+import 'dart:math' as math;
 
-import '../core/coordinates/element_space.dart';
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
 import '../models/selection_overlay_state.dart';
@@ -29,31 +28,19 @@ class SelectionCalculator {
     if (selected.isEmpty) {
       return null;
     }
-    if (selected.length == 1) {
-      return selected.first.rect;
+    final singleElement = _singleSelectedElement(selected);
+    if (singleElement != null) {
+      return singleElement.rect;
     }
 
-    var minX = double.infinity;
-    var minY = double.infinity;
-    var maxX = double.negativeInfinity;
-    var maxY = double.negativeInfinity;
-
-    for (final element in selected) {
-      final aabb = computeElementWorldAabb(element);
-      minX = min(minX, aabb.minX);
-      minY = min(minY, aabb.minY);
-      maxX = max(maxX, aabb.maxX);
-      maxY = max(maxY, aabb.maxY);
+    var bounds = computeElementWorldAabb(selected.first);
+    for (var i = 1; i < selected.length; i++) {
+      bounds = _expandBounds(bounds, computeElementWorldAabb(selected[i]));
     }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    return bounds;
   }
 
   static DrawRect? computeOverlayBounds(DrawState state) {
-    if (!state.domain.selection.hasSelection) {
-      return null;
-    }
-
     final selected = getSelectedElements(state);
     return computeOverlayBoundsForSelection(
       selectedElements: selected,
@@ -62,10 +49,6 @@ class SelectionCalculator {
   }
 
   static double? computeOverlayRotation(DrawState state) {
-    if (!state.domain.selection.hasSelection) {
-      return null;
-    }
-
     final selected = getSelectedElements(state);
     return computeOverlayRotationForSelection(
       selectedElements: selected,
@@ -74,10 +57,6 @@ class SelectionCalculator {
   }
 
   static DrawPoint? computeOverlayCenter(DrawState state) {
-    if (!state.domain.selection.hasSelection) {
-      return null;
-    }
-
     final selected = getSelectedElements(state);
     return computeOverlayCenterForSelection(
       selectedElements: selected,
@@ -86,19 +65,11 @@ class SelectionCalculator {
   }
 
   static double? getSelectionRotation(DrawState state) {
-    if (!state.domain.selection.hasSelection) {
-      return null;
-    }
-
     final selected = getSelectedElements(state);
     return getSelectionRotationForElements(selected);
   }
 
   static DrawPoint? getSelectionCenter(DrawState state) {
-    if (!state.domain.selection.hasSelection) {
-      return null;
-    }
-
     final selected = getSelectedElements(state);
     return getSelectionCenterForElements(selected);
   }
@@ -110,12 +81,13 @@ class SelectionCalculator {
     if (selectedElements.isEmpty) {
       return null;
     }
-    if (selectedElements.length == 1) {
-      return selectedElements.first.rect;
+    final singleElement = _singleSelectedElement(selectedElements);
+    if (singleElement != null) {
+      return singleElement.rect;
     }
 
     return selectionOverlay.multiSelectOverlay?.bounds ??
-        computeSelectionBoundsForElements(selectedElements);
+        computeSelectionBoundsForElements(selectedElements)!;
   }
 
   static double? computeOverlayRotationForSelection({
@@ -126,9 +98,10 @@ class SelectionCalculator {
       return null;
     }
 
-    final rotation = selectedElements.length == 1
-        ? selectedElements.first.rotation
-        : (selectionOverlay.multiSelectOverlay?.rotation ?? 0.0);
+    final rotation =
+        _singleSelectedElement(selectedElements)?.rotation ??
+        selectionOverlay.multiSelectOverlay?.rotation ??
+        0.0;
     return rotation == 0.0 ? null : rotation;
   }
 
@@ -139,33 +112,24 @@ class SelectionCalculator {
     if (selectedElements.isEmpty) {
       return null;
     }
-    if (selectedElements.length == 1) {
-      return selectedElements.first.center;
+    final singleElement = _singleSelectedElement(selectedElements);
+    if (singleElement != null) {
+      return singleElement.center;
     }
 
-    return computeOverlayBoundsForSelection(
-      selectedElements: selectedElements,
-      selectionOverlay: selectionOverlay,
-    )?.center;
+    final bounds =
+        selectionOverlay.multiSelectOverlay?.bounds ??
+        computeSelectionBoundsForElements(selectedElements)!;
+    return bounds.center;
   }
 
   static double? getSelectionRotationForElements(
     List<ElementState> selectedElements,
-  ) {
-    if (selectedElements.length != 1) {
-      return null;
-    }
-    return selectedElements.first.rotation;
-  }
+  ) => _singleSelectedElement(selectedElements)?.rotation;
 
   static DrawPoint? getSelectionCenterForElements(
     List<ElementState> selectedElements,
-  ) {
-    if (selectedElements.length != 1) {
-      return null;
-    }
-    return selectedElements.first.center;
-  }
+  ) => _singleSelectedElement(selectedElements)?.center;
 
   static DrawRect computeElementWorldAabb(ElementState element) {
     final rect = element.rect;
@@ -175,42 +139,27 @@ class SelectionCalculator {
     }
 
     final center = rect.center;
-    final space = ElementSpace(rotation: rotation, origin: center);
-    final halfWidth = rect.width / 2;
-    final halfHeight = rect.height / 2;
-
-    final localCorners = <DrawPoint>[
-      DrawPoint(x: -halfWidth, y: -halfHeight),
-      DrawPoint(x: halfWidth, y: -halfHeight),
-      DrawPoint(x: halfWidth, y: halfHeight),
-      DrawPoint(x: -halfWidth, y: halfHeight),
-    ];
-
-    var minX = double.infinity;
-    var minY = double.infinity;
-    var maxX = double.negativeInfinity;
-    var maxY = double.negativeInfinity;
-
-    for (final p in localCorners) {
-      final rotatedCorner = space.toWorld(
-        DrawPoint(x: center.x + p.x, y: center.y + p.y),
-      );
-      final x = rotatedCorner.x;
-      final y = rotatedCorner.y;
-      if (x < minX) {
-        minX = x;
-      }
-      if (y < minY) {
-        minY = y;
-      }
-      if (x > maxX) {
-        maxX = x;
-      }
-      if (y > maxY) {
-        maxY = y;
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    final halfWidth = rect.width.abs() / 2;
+    final halfHeight = rect.height.abs() / 2;
+    final cosTheta = math.cos(rotation).abs();
+    final sinTheta = math.sin(rotation).abs();
+    final xExtent = halfWidth * cosTheta + halfHeight * sinTheta;
+    final yExtent = halfWidth * sinTheta + halfHeight * cosTheta;
+    return DrawRect(
+      minX: center.x - xExtent,
+      minY: center.y - yExtent,
+      maxX: center.x + xExtent,
+      maxY: center.y + yExtent,
+    );
   }
+
+  static ElementState? _singleSelectedElement(List<ElementState> selected) =>
+      selected.length == 1 ? selected.first : null;
+
+  static DrawRect _expandBounds(DrawRect a, DrawRect b) => DrawRect(
+    minX: math.min(a.minX, b.minX),
+    minY: math.min(a.minY, b.minY),
+    maxX: math.max(a.maxX, b.maxX),
+    maxY: math.max(a.maxY, b.maxY),
+  );
 }
