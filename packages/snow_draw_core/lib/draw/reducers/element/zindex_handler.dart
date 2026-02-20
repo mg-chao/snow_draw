@@ -44,13 +44,7 @@ DrawState handleChangeZIndex(
   final reordered = [...elements];
   final target = reordered.removeAt(currentIndex);
   reordered.insert(destinationIndex, target);
-  final reindexed = _reindexElements(reordered);
-
-  return state.copyWith(
-    domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: reindexed),
-    ),
-  );
+  return _reindexAndApply(state, source: elements, reordered: reordered);
 }
 
 DrawState handleChangeZIndexBatch(
@@ -74,47 +68,26 @@ DrawState handleChangeZIndexBatch(
     return state;
   }
 
-  late final List<ElementState> reordered;
-
-  switch (action.operation) {
-    case ZIndexOperation.bringToFront:
-      final partition = _partitionElementsBySelection(elements, idSet);
-      reordered = [...partition.unselected, ...partition.selected];
-    case ZIndexOperation.sendToBack:
-      final partition = _partitionElementsBySelection(elements, idSet);
-      reordered = [...partition.selected, ...partition.unselected];
-    case ZIndexOperation.bringForward:
-      reordered = [...elements];
-      for (var i = reordered.length - 2; i >= 0; i--) {
-        final current = reordered[i];
-        final next = reordered[i + 1];
-        if (idSet.contains(current.id) && !idSet.contains(next.id)) {
-          reordered[i] = next;
-          reordered[i + 1] = current;
-        }
-      }
-    case ZIndexOperation.sendBackward:
-      reordered = [...elements];
-      for (var i = 1; i < reordered.length; i++) {
-        final current = reordered[i];
-        final previous = reordered[i - 1];
-        if (idSet.contains(current.id) && !idSet.contains(previous.id)) {
-          reordered[i] = previous;
-          reordered[i - 1] = current;
-        }
-      }
-  }
+  final reordered = switch (action.operation) {
+    ZIndexOperation.bringToFront => _reorderBySelectionPartition(
+      elements: elements,
+      idSet: idSet,
+      selectedFirst: false,
+    ),
+    ZIndexOperation.sendToBack => _reorderBySelectionPartition(
+      elements: elements,
+      idSet: idSet,
+      selectedFirst: true,
+    ),
+    ZIndexOperation.bringForward => _moveSelectionForward(elements, idSet),
+    ZIndexOperation.sendBackward => _moveSelectionBackward(elements, idSet),
+  };
 
   if (_hasSameOrder(elements, reordered)) {
     return _reindexDocumentIfNeeded(state, elements);
   }
 
-  final reindexed = _reindexElements(reordered);
-  return state.copyWith(
-    domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: reindexed),
-    ),
-  );
+  return _reindexAndApply(state, source: elements, reordered: reordered);
 }
 
 ({List<ElementState> selected, List<ElementState> unselected})
@@ -129,6 +102,49 @@ _partitionElementsBySelection(List<ElementState> elements, Set<String> idSet) {
     }
   }
   return (selected: selected, unselected: unselected);
+}
+
+List<ElementState> _reorderBySelectionPartition({
+  required List<ElementState> elements,
+  required Set<String> idSet,
+  required bool selectedFirst,
+}) {
+  final partition = _partitionElementsBySelection(elements, idSet);
+  return selectedFirst
+      ? [...partition.selected, ...partition.unselected]
+      : [...partition.unselected, ...partition.selected];
+}
+
+List<ElementState> _moveSelectionForward(
+  List<ElementState> elements,
+  Set<String> idSet,
+) {
+  final reordered = [...elements];
+  for (var i = reordered.length - 2; i >= 0; i--) {
+    final current = reordered[i];
+    final next = reordered[i + 1];
+    if (idSet.contains(current.id) && !idSet.contains(next.id)) {
+      reordered[i] = next;
+      reordered[i + 1] = current;
+    }
+  }
+  return reordered;
+}
+
+List<ElementState> _moveSelectionBackward(
+  List<ElementState> elements,
+  Set<String> idSet,
+) {
+  final reordered = [...elements];
+  for (var i = 1; i < reordered.length; i++) {
+    final current = reordered[i];
+    final previous = reordered[i - 1];
+    if (idSet.contains(current.id) && !idSet.contains(previous.id)) {
+      reordered[i] = previous;
+      reordered[i - 1] = current;
+    }
+  }
+  return reordered;
 }
 
 int _resolveSingleDestinationIndex({
@@ -146,9 +162,6 @@ int _resolveSingleDestinationIndex({
 }
 
 bool _hasSameOrder(List<ElementState> before, List<ElementState> after) {
-  if (identical(before, after)) {
-    return true;
-  }
   if (before.length != after.length) {
     return false;
   }
@@ -163,9 +176,15 @@ bool _hasSameOrder(List<ElementState> before, List<ElementState> after) {
 DrawState _reindexDocumentIfNeeded(
   DrawState state,
   List<ElementState> elements,
-) {
-  final reindexed = _reindexElements(elements);
-  if (identical(reindexed, elements)) {
+) => _reindexAndApply(state, source: elements, reordered: elements);
+
+DrawState _reindexAndApply(
+  DrawState state, {
+  required List<ElementState> source,
+  required List<ElementState> reordered,
+}) {
+  final reindexed = _reindexElements(reordered);
+  if (identical(reindexed, source)) {
     return state;
   }
   return state.copyWith(
