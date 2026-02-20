@@ -33,22 +33,23 @@ class RectangleRenderPlan {
     required double elementOpacity,
     required bool shaderReady,
   }) {
-    final resolvedOpacity = _clampOpacity(elementOpacity);
-    final fillOpacity = _clampOpacity(data.fillColor.a * resolvedOpacity);
-    final strokeOpacity = _clampOpacity(data.color.a * resolvedOpacity);
+    final opacity = _clampOpacity(elementOpacity);
+    final fillOpacity = _clampOpacity(data.fillColor.a * opacity);
+    final strokeOpacity = _clampOpacity(data.color.a * opacity);
     final paintFill = fillOpacity > 0;
     final paintStroke = strokeOpacity > 0 && data.strokeWidth > 0;
 
-    final hasPatternFill = paintFill && data.fillStyle != FillStyle.solid;
-    final hasPatternStroke =
-        paintStroke && data.strokeStyle != StrokeStyle.solid;
-    final needsPatternRendering = hasPatternFill || hasPatternStroke;
-
-    final backend = switch ((needsPatternRendering, shaderReady)) {
-      (true, true) => RectangleRenderBackend.shaderPattern,
-      (true, false) => RectangleRenderBackend.cpuPattern,
-      (false, _) => RectangleRenderBackend.solidFastPath,
-    };
+    final needsPatternRendering =
+        (paintFill && data.fillStyle != FillStyle.solid) ||
+        (paintStroke && data.strokeStyle != StrokeStyle.solid);
+    final RectangleRenderBackend backend;
+    if (!needsPatternRendering) {
+      backend = RectangleRenderBackend.solidFastPath;
+    } else if (shaderReady) {
+      backend = RectangleRenderBackend.shaderPattern;
+    } else {
+      backend = RectangleRenderBackend.cpuPattern;
+    }
 
     return RectangleRenderPlan._(
       backend: backend,
