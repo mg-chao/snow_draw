@@ -117,6 +117,9 @@ class DocumentState {
 
   int? getOrderIndex(String id) => _orderIndex[id];
 
+  ElementState _elementForEntry(SpatialIndexEntry entry) =>
+      _elementMap[entry.id]!;
+
   /// Returns whether any blend-sensitive element exists at or above
   /// [orderIndex].
   ///
@@ -198,11 +201,7 @@ class DocumentState {
       if (excludedElementId != null && elementId == excludedElementId) {
         continue;
       }
-      final element = _elementMap[elementId];
-      if (element == null || element.opacity <= 0) {
-        continue;
-      }
-      if (!visitor(element)) {
+      if (!visitor(_elementForEntry(entry))) {
         return;
       }
     }
@@ -234,14 +233,8 @@ class DocumentState {
     return false;
   }
 
-  List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) {
-    final result = <ElementState>[];
-    visitElementsAtPointTopDown(point, tolerance, (element) {
-      result.add(element);
-      return true;
-    });
-    return result;
-  }
+  List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) =>
+      queryElementsAtPointTopDown(point, tolerance);
 
   bool hasElementAtPoint(DrawPoint point, double tolerance) => _spatialIndex
       .searchPointEntries(point, tolerance, sortByZ: false)
@@ -249,7 +242,7 @@ class DocumentState {
 
   List<ElementState> getElementsInRect(DrawRect rect) {
     final entries = _spatialIndex.searchRectEntries(rect);
-    return _elementsForEntries(entries);
+    return _collectElements(entries);
   }
 
   /// Queries elements intersecting [rect], sorted by ascending z-order.
@@ -265,16 +258,11 @@ class DocumentState {
     final result = <ElementState>[];
     for (final entry in entries) {
       final zIndex = entry.zIndex;
-      if (minOrderIndex != null && zIndex < minOrderIndex) {
+      if ((minOrderIndex != null && zIndex < minOrderIndex) ||
+          (maxOrderIndex != null && zIndex > maxOrderIndex)) {
         continue;
       }
-      if (maxOrderIndex != null && zIndex > maxOrderIndex) {
-        continue;
-      }
-      final element = getElementById(entry.id);
-      if (element != null) {
-        result.add(element);
-      }
+      result.add(_elementForEntry(entry));
     }
     return result;
   }
@@ -303,15 +291,7 @@ class DocumentState {
     double tolerance,
     bool Function(ElementState element) visitor,
   ) {
-    final entries = _spatialIndex.searchPointEntries(point, tolerance);
-    for (final entry in entries) {
-      final element = getElementById(entry.id);
-      if (element != null) {
-        if (!visitor(element)) {
-          return;
-        }
-      }
-    }
+    _visitEntries(_spatialIndex.searchPointEntries(point, tolerance), visitor);
   }
 
   /// Visits point candidates in arbitrary order.
@@ -323,19 +303,10 @@ class DocumentState {
     double tolerance,
     bool Function(ElementState element) visitor,
   ) {
-    final entries = _spatialIndex.searchPointEntries(
-      point,
-      tolerance,
-      sortByZ: false,
+    _visitEntries(
+      _spatialIndex.searchPointEntries(point, tolerance, sortByZ: false),
+      visitor,
     );
-    for (final entry in entries) {
-      final element = getElementById(entry.id);
-      if (element != null) {
-        if (!visitor(element)) {
-          return;
-        }
-      }
-    }
   }
 
   /// Visits rect-intersecting candidates in arbitrary order.
@@ -346,26 +317,30 @@ class DocumentState {
     DrawRect rect,
     bool Function(ElementState element) visitor,
   ) {
-    final entries = _spatialIndex.searchRectEntries(rect, sortByZ: false);
+    _visitEntries(
+      _spatialIndex.searchRectEntries(rect, sortByZ: false),
+      visitor,
+    );
+  }
+
+  void _visitEntries(
+    Iterable<SpatialIndexEntry> entries,
+    bool Function(ElementState element) visitor,
+  ) {
     for (final entry in entries) {
-      final element = getElementById(entry.id);
-      if (element != null) {
-        if (!visitor(element)) {
-          return;
-        }
+      if (!visitor(_elementForEntry(entry))) {
+        return;
       }
     }
   }
 
-  List<ElementState> _elementsForEntries(Iterable<SpatialIndexEntry> entries) {
-    final elements = <ElementState>[];
-    for (final entry in entries) {
-      final element = getElementById(entry.id);
-      if (element != null) {
-        elements.add(element);
-      }
-    }
-    return elements;
+  List<ElementState> _collectElements(Iterable<SpatialIndexEntry> entries) {
+    final result = <ElementState>[];
+    _visitEntries(entries, (element) {
+      result.add(element);
+      return true;
+    });
+    return result;
   }
 
   Set<String> _buildBoundTextIds() {
@@ -421,55 +396,29 @@ class DocumentState {
     return highlights;
   }
 
-  List<bool> _buildBlendSensitiveSuffix({required bool includeTransparent}) {
+  List<bool> _buildBlendSensitiveSuffix({required bool includeTransparent}) =>
+      _buildSuffix((element) {
+        final data = element.data;
+        final isBlendSensitive = data is HighlightData || data is FilterData;
+        if (!isBlendSensitive) {
+          return false;
+        }
+        return includeTransparent || element.opacity > 0;
+      });
+
+  List<bool> _buildFilterSuffix({required bool includeTransparent}) =>
+      _buildSuffix(
+        (element) =>
+            element.data is FilterData &&
+            (includeTransparent || element.opacity > 0),
+      );
+
+  List<bool> _buildSuffix(bool Function(ElementState element) predicate) {
     final suffix = List<bool>.filled(elements.length + 1, false);
-    var hasBlendSensitive = false;
-
     for (var index = elements.length - 1; index >= 0; index--) {
-      final element = elements[index];
-      if (_isBlendSensitiveElement(
-        element,
-        includeTransparent: includeTransparent,
-      )) {
-        hasBlendSensitive = true;
-      }
-      suffix[index] = hasBlendSensitive;
+      suffix[index] = suffix[index + 1] || predicate(elements[index]);
     }
-
     return List<bool>.unmodifiable(suffix);
-  }
-
-  List<bool> _buildFilterSuffix({required bool includeTransparent}) {
-    final suffix = List<bool>.filled(elements.length + 1, false);
-    var hasFilter = false;
-
-    for (var index = elements.length - 1; index >= 0; index--) {
-      final element = elements[index];
-      final data = element.data;
-      final isFilter = data is FilterData;
-      final isVisible = includeTransparent || element.opacity > 0;
-      if (isFilter && isVisible) {
-        hasFilter = true;
-      }
-      suffix[index] = hasFilter;
-    }
-
-    return List<bool>.unmodifiable(suffix);
-  }
-
-  bool _isBlendSensitiveElement(
-    ElementState element, {
-    required bool includeTransparent,
-  }) {
-    final data = element.data;
-    final isBlendSensitive = data is HighlightData || data is FilterData;
-    if (!isBlendSensitive) {
-      return false;
-    }
-    if (includeTransparent) {
-      return true;
-    }
-    return element.opacity > 0;
   }
 
   int _normalizeOrderIndex(int orderIndex) {
