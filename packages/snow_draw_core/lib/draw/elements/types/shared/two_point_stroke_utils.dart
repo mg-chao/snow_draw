@@ -161,30 +161,31 @@ void _drawTwoPointStroke({
   switch (strokeStyle) {
     case StrokeStyle.solid:
       canvas.drawLine(segment.start, segment.end, strokePaint);
+      return;
     case StrokeStyle.dashed:
       final dashLength = strokeWidth * 2.0;
-      final gapLength = dashLength * 1.2;
       _drawDashedSegment(
         canvas: canvas,
         start: segment.start,
         end: segment.end,
         paint: strokePaint,
         dashLength: dashLength,
-        gapLength: gapLength,
+        gapLength: dashLength * 1.2,
       );
+      return;
     case StrokeStyle.dotted:
-      final dotPositions = _buildDottedSegmentPositions(
-        start: segment.start,
-        end: segment.end,
-        spacing: strokeWidth * 2.0,
-      );
-      if (dotPositions.isEmpty) {
-        return;
-      }
       final dotPaint = _dotPaint
         ..strokeWidth = strokeWidth
         ..color = strokeColor;
-      canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
+      canvas.drawRawPoints(
+        PointMode.points,
+        _buildDottedSegmentPositions(
+          start: segment.start,
+          end: segment.end,
+          spacing: strokeWidth * 2.0,
+        ),
+        dotPaint,
+      );
   }
 }
 
@@ -206,8 +207,12 @@ void _drawDashedSegment({
 
   final unitX = dx / length;
   final unitY = dy / length;
-  var distance = 0.0;
-  while (distance < length) {
+  final step = dashLength + gapLength;
+  if (step <= 0 || !step.isFinite) {
+    canvas.drawLine(start, end, paint);
+    return;
+  }
+  for (var distance = 0.0; distance < length; distance += step) {
     final dashEnd = math.min(distance + dashLength, length);
     final dashStartOffset = Offset(
       start.dx + unitX * distance,
@@ -218,7 +223,6 @@ void _drawDashedSegment({
       start.dy + unitY * dashEnd,
     );
     canvas.drawLine(dashStartOffset, dashEndOffset, paint);
-    distance = dashEnd + gapLength;
   }
 }
 
@@ -234,22 +238,20 @@ Float32List _buildDottedSegmentPositions({
     return Float32List.fromList([start.dx, start.dy]);
   }
 
+  if (!spacing.isFinite) {
+    return Float32List.fromList([start.dx, start.dy]);
+  }
   final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-  final dotCount = (length / safeSpacing).floor() + 1;
+  final dotCount = (length / safeSpacing).ceil();
   final positions = Float32List(dotCount * 2);
   final unitX = dx / length;
   final unitY = dy / length;
 
-  var index = 0;
-  var distance = 0.0;
-  while (distance < length && index < positions.length) {
-    positions[index++] = start.dx + unitX * distance;
-    positions[index++] = start.dy + unitY * distance;
-    distance += safeSpacing;
-  }
-
-  if (index < positions.length) {
-    return Float32List.sublistView(positions, 0, index);
+  for (var i = 0; i < dotCount; i++) {
+    final distance = i * safeSpacing;
+    final offsetIndex = i * 2;
+    positions[offsetIndex] = start.dx + unitX * distance;
+    positions[offsetIndex + 1] = start.dy + unitY * distance;
   }
   return positions;
 }
