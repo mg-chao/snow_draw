@@ -15,19 +15,15 @@ abstract class StateSelector<S, T> {
   bool equals(T prev, T next) => prev == next;
 }
 
-T Function(Object?) _wrapSelector<S, T>(T Function(S) selector) =>
-    (state) => selector(state as S);
-
-bool Function(Object?, Object?) _wrapEquals<T>(bool Function(T, T) equals) =>
-    (prev, next) => equals(prev as T, next as T);
-
 /// Simple functional selector.
 ///
 /// Uses a function to select a state slice and optional custom equality.
 class SimpleSelector<S, T> extends StateSelector<S, T> {
   SimpleSelector(T Function(S) selector, {bool Function(T, T)? equals})
-    : _selector = _wrapSelector(selector),
-      _equals = equals == null ? null : _wrapEquals(equals);
+    : _selector = ((state) => selector(state as S)),
+      _equals = equals == null
+          ? null
+          : ((prev, next) => equals(prev as T, next as T));
   final T Function(Object?) _selector;
   final bool Function(Object?, Object?)? _equals;
 
@@ -48,7 +44,9 @@ class CombinedSelector<S, T> extends StateSelector<S, T> {
     this._selectors,
     this._combiner, {
     bool Function(T, T)? equals,
-  }) : _equals = equals == null ? null : _wrapEquals(equals);
+  }) : _equals = equals == null
+           ? null
+           : ((prev, next) => equals(prev as T, next as T));
   final List<StateSelector<S, dynamic>> _selectors;
   final T Function(List<dynamic>) _combiner;
   final bool Function(Object?, Object?)? _equals;
@@ -74,12 +72,14 @@ class MemoizedSelector<S, T> extends StateSelector<S, T> {
   final StateSelector<S, T> _selector;
   S? _lastState;
   T? _lastResult;
+  var _hasCache = false;
 
   @override
   T select(S state) {
-    if (_lastState == null || _lastState != state) {
+    if (!_hasCache || _lastState != state) {
       _lastState = state;
       _lastResult = _selector.select(state);
+      _hasCache = true;
     }
     return _lastResult as T;
   }
@@ -89,6 +89,7 @@ class MemoizedSelector<S, T> extends StateSelector<S, T> {
 
   /// Clear the cache.
   void clearCache() {
+    _hasCache = false;
     _lastState = null;
     _lastResult = null;
   }
