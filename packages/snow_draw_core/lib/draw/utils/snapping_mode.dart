@@ -5,31 +5,26 @@ enum SnappingMode { none, object, grid }
 SnappingMode resolvePersistentSnappingMode({
   required bool gridEnabled,
   required bool objectEnabled,
-}) {
-  if (gridEnabled) {
-    return SnappingMode.grid;
-  }
-  if (objectEnabled) {
-    return SnappingMode.object;
-  }
-  return SnappingMode.none;
-}
+}) => gridEnabled
+    ? SnappingMode.grid
+    : objectEnabled
+    ? SnappingMode.object
+    : SnappingMode.none;
 
 SnappingMode resolveEffectiveSnappingMode({
   required bool gridEnabled,
   required bool objectEnabled,
   required bool ctrlPressed,
 }) {
-  final persistent = resolvePersistentSnappingMode(
+  if (ctrlPressed) {
+    return gridEnabled || objectEnabled
+        ? SnappingMode.none
+        : SnappingMode.object;
+  }
+  return resolvePersistentSnappingMode(
     gridEnabled: gridEnabled,
     objectEnabled: objectEnabled,
   );
-  if (!ctrlPressed) {
-    return persistent;
-  }
-  return persistent == SnappingMode.none
-      ? SnappingMode.object
-      : SnappingMode.none;
 }
 
 SnappingMode resolveEffectiveSnappingModeForConfig({
