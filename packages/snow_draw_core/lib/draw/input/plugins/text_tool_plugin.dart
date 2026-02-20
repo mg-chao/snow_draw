@@ -59,38 +59,33 @@ class TextToolPlugin extends DrawInputPlugin {
       _isSelectionToolModeActive || _isSerialToolActive;
 
   @override
-  bool canHandle(InputEvent event, DrawState state) {
+  bool canHandle(InputEvent _, DrawState state) {
     if (state.application.interaction is TextEditingState) {
       return true;
     }
     if (_isTextToolActive) {
       return _routingPolicy.allowCreate(state);
     }
-    if (_isSelectionToolModeActive) {
-      return _routingPolicy.allowSelection(state);
-    }
-    if (_isSerialToolActive) {
+    if (_isSelectionLikeToolActive) {
       return _routingPolicy.allowSelection(state);
     }
     return false;
   }
 
   @override
-  Future<PluginResult> handleEvent(InputEvent event) async {
-    if (event is PointerDownInputEvent) {
-      return _handlePointerDown(event);
-    }
-    if (event is PointerMoveInputEvent) {
-      return _handlePointerMove();
-    }
-    if (event is PointerUpInputEvent) {
-      return _handlePointerUp();
-    }
-    if (event is PointerCancelInputEvent) {
-      return _handlePointerCancel();
-    }
-    return unhandled();
-  }
+  Future<PluginResult> handleEvent(InputEvent event) => switch (event) {
+    PointerDownInputEvent() => _handlePointerDown(event),
+    PointerMoveInputEvent() => _ignoreWhileTextEditing(
+      message: 'Text editing pointer move ignored',
+    ),
+    PointerUpInputEvent() => _ignoreWhileTextEditing(
+      message: 'Text editing pointer up ignored',
+    ),
+    PointerCancelInputEvent() => _ignoreWhileTextEditing(
+      message: 'Text editing pointer cancel ignored',
+    ),
+    _ => Future<PluginResult>.value(unhandled()),
+  };
 
   DrawStateView get _stateView {
     final builder = _stateViewBuilder;
@@ -103,34 +98,10 @@ class TextToolPlugin extends DrawInputPlugin {
   Future<PluginResult> _handlePointerDown(PointerDownInputEvent event) async {
     final interaction = state.application.interaction;
     if (interaction is TextEditingState) {
-      if (_isInsideEditingRect(interaction, event.position)) {
-        return handled(message: 'Text editing focus retained');
-      }
-
-      if (_isSelectionBoxHit(interaction, event.position)) {
-        await _finishTextEditForSelection(interaction, event.position);
-        return unhandled(reason: 'Selection box hit during text edit');
-      }
-
-      await dispatch(
-        FinishTextEdit(
-          elementId: interaction.elementId,
-          text: interaction.draftData.text,
-          isNew: interaction.isNew,
-        ),
+      return _handlePointerDownWhileEditing(
+        interaction: interaction,
+        position: event.position,
       );
-
-      if (_isTextToolActive) {
-        final hitId = _hitTextElementId(event.position);
-        if (hitId != null) {
-          await dispatch(
-            StartTextEdit(elementId: hitId, position: event.position),
-          );
-          return handled(message: 'Text edit restarted');
-        }
-      }
-
-      return handled(message: 'Text edit finished');
     }
 
     if (_shouldDeferToSelectionBox(event.position)) {
@@ -138,68 +109,79 @@ class TextToolPlugin extends DrawInputPlugin {
     }
 
     if (_isTextToolActive) {
-      final hitId = _hitTextElementId(event.position);
-
-      // If there's a selection and we're clicking on a blank area (not hitting
-      // any text element), defer to SelectPlugin to clear the selection instead
-      // of creating a new text element.
-      if (hitId == null && state.domain.hasSelection) {
-        return unhandled(reason: 'Defer to selection clearing');
-      }
-
-      if (hitId != null && _hasMultipleSelectedTextElements()) {
-        return unhandled(reason: 'Multiple text selection blocks editing');
-      }
-
-      await dispatch(StartTextEdit(elementId: hitId, position: event.position));
-      return handled(message: 'Text edit started');
+      return _handlePointerDownForTextTool(event.position);
     }
 
-    if (_shouldEnterEditFromSelection(event)) {
-      final hitId = _hitTextElementId(
-        event.position,
-        allowedIds: state.domain.selection.selectedIds,
-      );
-      if (hitId != null) {
-        await dispatch(
-          StartTextEdit(elementId: hitId, position: event.position),
-        );
-        return handled(message: 'Text edit from selection');
-      }
+    final hitId = _selectedTextHitIdForEdit(event);
+    if (hitId == null) {
+      return unhandled();
     }
 
-    return unhandled();
+    await dispatch(StartTextEdit(elementId: hitId, position: event.position));
+    return handled(message: 'Text edit from selection');
   }
 
-  Future<PluginResult> _handlePointerMove() async {
+  Future<PluginResult> _handlePointerDownWhileEditing({
+    required TextEditingState interaction,
+    required DrawPoint position,
+  }) async {
+    if (_isInsideRect(interaction.rect, interaction.rotation, position)) {
+      return handled(message: 'Text editing focus retained');
+    }
+
+    if (_isSelectionBoxHit(interaction, position)) {
+      await _finishTextEditForSelection(interaction, position);
+      return unhandled(reason: 'Selection box hit during text edit');
+    }
+
+    await _finishTextEdit(interaction);
+
+    if (!_isTextToolActive) {
+      return handled(message: 'Text edit finished');
+    }
+
+    final hitId = _hitTextElementId(position);
+    if (hitId == null) {
+      return handled(message: 'Text edit finished');
+    }
+
+    await dispatch(StartTextEdit(elementId: hitId, position: position));
+    return handled(message: 'Text edit restarted');
+  }
+
+  Future<PluginResult> _handlePointerDownForTextTool(DrawPoint position) async {
+    final hitId = _hitTextElementId(position);
+
+    if (hitId == null && state.domain.hasSelection) {
+      return unhandled(reason: 'Defer to selection clearing');
+    }
+
+    if (hitId != null && _hasMultipleSelectedTextElements()) {
+      return unhandled(reason: 'Multiple text selection blocks editing');
+    }
+
+    await dispatch(StartTextEdit(elementId: hitId, position: position));
+    return handled(message: 'Text edit started');
+  }
+
+  Future<PluginResult> _ignoreWhileTextEditing({
+    required String message,
+  }) async {
     if (state.application.interaction is TextEditingState) {
-      return handled(message: 'Text editing pointer move ignored');
+      return handled(message: message);
     }
     return unhandled();
   }
-
-  Future<PluginResult> _handlePointerUp() async {
-    if (state.application.interaction is TextEditingState) {
-      return handled(message: 'Text editing pointer up ignored');
-    }
-    return unhandled();
-  }
-
-  Future<PluginResult> _handlePointerCancel() async {
-    if (state.application.interaction is TextEditingState) {
-      return handled(message: 'Text editing pointer cancel ignored');
-    }
-    return unhandled();
-  }
-
-  bool _isInsideEditingRect(TextEditingState interaction, DrawPoint position) =>
-      _isInsideRect(interaction.rect, interaction.rotation, position);
 
   bool _isSelectionBoxHit(TextEditingState interaction, DrawPoint position) {
     if (!state.domain.selection.selectedIds.contains(interaction.elementId)) {
       return false;
     }
 
+    return _isSelectionOverlayHit(position);
+  }
+
+  bool _isSelectionOverlayHit(DrawPoint position) {
     final stateView = _stateView;
     if (!stateView.effectiveSelection.hasSelection) {
       return false;
@@ -213,39 +195,15 @@ class TextToolPlugin extends DrawInputPlugin {
       filterTypeId: currentToolTypeId,
     );
 
-    if (hitResult.isHandleHit) {
-      return true;
-    }
-
-    return hitResult.isInSelectionPadding;
+    return hitResult.isHandleHit || hitResult.isInSelectionPadding;
   }
 
   bool _shouldDeferToSelectionBox(DrawPoint position) {
-    if (!state.domain.hasSelection) {
+    if (!state.domain.hasSelection || !_hasSelectedTextElement()) {
       return false;
     }
 
-    if (!_hasSelectedTextElement()) {
-      return false;
-    }
-
-    final stateView = _stateView;
-    if (!stateView.effectiveSelection.hasSelection) {
-      return false;
-    }
-
-    final hitResult = hitTest.test(
-      stateView: stateView,
-      position: position,
-      config: selectionConfig,
-      registry: drawContext.elementRegistry,
-      filterTypeId: currentToolTypeId,
-    );
-
-    final isSelectionHit =
-        hitResult.isHandleHit || hitResult.isInSelectionPadding;
-
-    if (!isSelectionHit) {
+    if (!_isSelectionOverlayHit(position)) {
       return false;
     }
 
@@ -306,13 +264,7 @@ class TextToolPlugin extends DrawInputPlugin {
     TextEditingState interaction,
     DrawPoint position,
   ) async {
-    await dispatch(
-      FinishTextEdit(
-        elementId: interaction.elementId,
-        text: interaction.draftData.text,
-        isNew: interaction.isNew,
-      ),
-    );
+    await _finishTextEdit(interaction);
 
     final trimmed = interaction.draftData.text.trim();
     if (!interaction.isNew && trimmed.isNotEmpty) {
@@ -322,27 +274,31 @@ class TextToolPlugin extends DrawInputPlugin {
     }
   }
 
-  bool _shouldEnterEditFromSelection(PointerDownInputEvent event) {
-    if (_isTextToolActive) {
-      return false;
-    }
+  Future<void> _finishTextEdit(TextEditingState interaction) => dispatch(
+    FinishTextEdit(
+      elementId: interaction.elementId,
+      text: interaction.draftData.text,
+      isNew: interaction.isNew,
+    ),
+  );
+
+  String? _selectedTextHitIdForEdit(PointerDownInputEvent event) {
     if (!_isSelectionLikeToolActive) {
-      return false;
+      return null;
     }
     if (event.modifiers.shift) {
-      return false;
+      return null;
     }
     if (!state.domain.hasSelection) {
-      return false;
+      return null;
     }
     if (_hasMultipleSelectedTextElements()) {
-      return false;
+      return null;
     }
-    final hitId = _hitTextElementId(
+    return _hitTextElementId(
       event.position,
       allowedIds: state.domain.selection.selectedIds,
     );
-    return hitId != null;
   }
 
   String? _hitTextElementId(DrawPoint position, {Set<String>? allowedIds}) {
