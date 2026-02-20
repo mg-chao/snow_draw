@@ -42,40 +42,14 @@ class ElementState {
     data: data ?? this.data,
   );
 
-  ElementState withPosition(double x, double y) => copyWith(
-    rect: DrawRect(
-      minX: x,
-      minY: y,
-      maxX: x + rect.width,
-      maxY: y + rect.height,
-    ),
-  );
-
-  ElementState withSize(double width, double height) => copyWith(
-    rect: DrawRect(
-      minX: rect.minX,
-      minY: rect.minY,
-      maxX: rect.minX + width,
-      maxY: rect.minY + height,
-    ),
-  );
-
   ElementState movedBy(double dx, double dy) => copyWith(
     rect: rect.translate(DrawPoint(x: dx, y: dy)),
   );
 
-  ElementState withRotation(double rotation) => copyWith(rotation: rotation);
-
-  ElementState withOpacity(double opacity) => copyWith(opacity: opacity);
-
   DrawPoint get center => rect.center;
 
-  double get width => rect.width;
-
-  double get height => rect.height;
-
   bool isValidWith(ElementConfig config) =>
-      width >= config.minValidSize && height >= config.minValidSize;
+      rect.width >= config.minValidSize && rect.height >= config.minValidSize;
 
   bool get isValid => isValidWith(const ElementConfig());
 
