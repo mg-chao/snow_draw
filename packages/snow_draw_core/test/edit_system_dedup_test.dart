@@ -1,8 +1,3 @@
-/// Tests that lock down behavior of the element editing system before
-/// refactoring to extract shared utility functions and eliminate
-/// duplicated preview/finish logic.
-library;
-
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +8,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
@@ -31,10 +25,6 @@ import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
-
-  // =========================================================================
-  // ArrowPointOperation: preview/finish consistency
-  // =========================================================================
 
   group('ArrowPointOperation preview/finish consistency', () {
     test('straight arrow: preview matches finish geometry', () {
@@ -191,17 +181,13 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // Standard operations: verify pipeline still works after refactoring
-  // =========================================================================
-
   group('Standard operations pipeline consistency', () {
     test('move: finish and preview produce same geometry', () {
       final element = _rectangleElement(
         id: 'r1',
         rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = _stateWith([element], selectedIds: {element.id});
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -244,7 +230,7 @@ void main() {
         id: 'r1',
         rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = _stateWith([element], selectedIds: {element.id});
 
       const op = ResizeOperation();
       final handlePos = DrawPoint(x: element.rect.maxX, y: element.rect.maxY);
@@ -291,7 +277,7 @@ void main() {
         id: 'r1',
         rect: const DrawRect(maxX: 100, maxY: 100),
       );
-      final state = _stateWith([element]);
+      final state = _stateWith([element], selectedIds: {element.id});
 
       const op = RotateOperation();
       final center = element.rect.center;
@@ -334,19 +320,16 @@ void main() {
   });
 }
 
-// ===========================================================================
-// Test helpers
-// ===========================================================================
-
-DrawState _stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
-  final ids = selectedIds ?? {elements.first.id};
-  return DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: ids),
-    ),
-  );
-}
+DrawState _stateWith(
+  List<ElementState> elements, {
+  required Set<String> selectedIds,
+}) =>
+    DrawState(
+      domain: DomainState(
+        document: DocumentState(elements: elements),
+        selection: SelectionState(selectedIds: selectedIds),
+      ),
+    );
 
 ElementState _rectangleElement({required String id, required DrawRect rect}) =>
     ElementState(
@@ -361,8 +344,6 @@ ElementState _rectangleElement({required String id, required DrawRect rect}) =>
 ElementState _arrowElement({
   required String id,
   required List<DrawPoint> points,
-  ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
 }) {
   final rect = _rectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
@@ -375,11 +356,7 @@ ElementState _arrowElement({
     rotation: 0,
     opacity: 1,
     zIndex: 1,
-    data: ArrowData(
-      points: normalized,
-      startBinding: startBinding,
-      endBinding: endBinding,
-    ),
+    data: ArrowData(points: normalized),
   );
 }
 
