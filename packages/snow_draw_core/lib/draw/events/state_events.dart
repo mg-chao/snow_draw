@@ -28,9 +28,7 @@ class SelectionChangedEvent extends StateChangeEvent {
   SelectionChangedEvent({
     required Set<String> selectedIds,
     required this.selectionVersion,
-  }) : selectedIds = selectedIds.isEmpty
-           ? const <String>{}
-           : Set<String>.unmodifiable(selectedIds);
+  }) : selectedIds = Set<String>.unmodifiable(selectedIds);
   final Set<String> selectedIds;
   final int selectionVersion;
 
