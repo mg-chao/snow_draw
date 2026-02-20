@@ -25,25 +25,20 @@ bool isLightweightLineInteractionMutationOnly({
 
   final previousInteraction = previous.application.interaction;
   final nextInteraction = next.application.interaction;
-  final document = next.domain.document;
-
-  if (previousInteraction is CreatingState &&
-      nextInteraction is CreatingState) {
-    return _isLightweightLineCreatingMutationOnly(
-      previous: previousInteraction,
-      next: nextInteraction,
-    );
-  }
-
-  if (previousInteraction is EditingState && nextInteraction is EditingState) {
-    return _isLightweightLineEditingMutationOnly(
-      previous: previousInteraction,
-      next: nextInteraction,
-      document: document,
-    );
-  }
-
-  return false;
+  return switch ((previousInteraction, nextInteraction)) {
+    (final CreatingState previousCreating, final CreatingState nextCreating) =>
+      _isLightweightLineCreatingMutationOnly(
+        previous: previousCreating,
+        next: nextCreating,
+      ),
+    (final EditingState previousEditing, final EditingState nextEditing) =>
+      _isLightweightLineEditingMutationOnly(
+        previous: previousEditing,
+        next: nextEditing,
+        document: next.domain.document,
+      ),
+    _ => false,
+  };
 }
 
 /// Returns true when [interaction] is an editing session limited to
@@ -74,33 +69,37 @@ bool isLightweightLineEditContext({
 bool isLightweightLineEditMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) =>
-    _isInteractionMutationOnly(previous: previous, next: next) &&
-    _isLightweightLineEditingMutationOnly(
-      previous: previous.application.interaction,
-      next: next.application.interaction,
-      document: next.domain.document,
-    );
+}) {
+  if (!_isInteractionMutationOnly(previous: previous, next: next)) {
+    return false;
+  }
+
+  final previousInteraction = previous.application.interaction;
+  final nextInteraction = next.application.interaction;
+  if (previousInteraction is! EditingState ||
+      nextInteraction is! EditingState) {
+    return false;
+  }
+
+  return _isLightweightLineEditingMutationOnly(
+    previous: previousInteraction,
+    next: nextInteraction,
+    document: next.domain.document,
+  );
+}
 
 bool _isInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
   final previousApplication = previous.application;
   final nextApplication = next.application;
-  if (previousApplication.view != nextApplication.view ||
-      previousApplication.selectionOverlay !=
-          nextApplication.selectionOverlay) {
-    return false;
-  }
-  return true;
+  return previousApplication.view == nextApplication.view &&
+      previousApplication.selectionOverlay == nextApplication.selectionOverlay;
 }
 
 bool _isSameEditSession(EditingState previous, EditingState next) =>
@@ -112,10 +111,9 @@ bool _isLightweightLineCreatingMutationOnly({
   required CreatingState previous,
   required CreatingState next,
 }) {
-  if (previous.elementData is! LineData || next.elementData is! LineData) {
-    return false;
-  }
-  if (!_isSameLineCreationSession(previous, next)) {
+  if (previous.elementData is! LineData ||
+      next.elementData is! LineData ||
+      !_isSameLineCreationSession(previous, next)) {
     return false;
   }
   return previous.currentRect != next.currentRect ||
@@ -133,21 +131,15 @@ bool _isSameLineCreationSession(CreatingState previous, CreatingState next) =>
     previous.startPosition == next.startPosition;
 
 bool _isLightweightLineEditingMutationOnly({
-  required InteractionState previous,
-  required InteractionState next,
+  required EditingState previous,
+  required EditingState next,
   required DocumentState document,
 }) {
-  if (previous is! EditingState || next is! EditingState) {
-    return false;
-  }
-  if (!_isSameEditSession(previous, next)) {
-    return false;
-  }
-  if (!_isLightweightLineContext(
+  if (!_isSameEditSession(previous, next) ||
+      !_isLightweightLineContext(
         context: previous.context,
         document: document,
-      ) ||
-      !_isLightweightLineContext(context: next.context, document: document)) {
+      )) {
     return false;
   }
 
@@ -159,21 +151,15 @@ bool _isLightweightLineContext({
   required EditContext context,
   required DocumentState document,
 }) {
-  if (context.selectedIdsAtStart.isEmpty) {
+  final selectedIds = context.selectedIdsAtStart;
+  if (selectedIds.isEmpty) {
     return false;
   }
-  for (final elementId in context.selectedIdsAtStart) {
-    final element = document.getElementById(elementId);
-    if (element == null) {
-      return false;
-    }
-    final data = element.data;
-    if (data is LineData || data is FreeDrawData) {
-      continue;
-    }
-    return false;
-  }
-  return true;
+
+  return selectedIds.every((elementId) {
+    final data = document.getElementById(elementId)?.data;
+    return data is LineData || data is FreeDrawData;
+  });
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {
