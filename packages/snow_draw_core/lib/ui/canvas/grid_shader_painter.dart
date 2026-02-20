@@ -17,7 +17,6 @@ class GridShaderManager {
 
   static final instance = GridShaderManager._();
 
-  ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
   final _paint = Paint();
   var _isLoading = false;
@@ -40,10 +39,9 @@ class GridShaderManager {
 
     _isLoading = true;
     try {
-      _program = await ui.FragmentProgram.fromAsset(
+      _shader = (await ui.FragmentProgram.fromAsset(
         'packages/snow_draw_core/shaders/grid.frag',
-      );
-      _shader = _program!.fragmentShader();
+      )).fragmentShader();
     } on Exception catch (error, stackTrace) {
       _loadFailed = true;
       _gridShaderLog.warning('Failed to load grid shader', {
@@ -68,14 +66,11 @@ class GridShaderManager {
     required double minorOpacityRatio,
     required int majorEveryFactor,
   }) {
-    if (_shader == null) {
+    final shader = _shader;
+    if (shader == null) {
       return false;
     }
 
-    final shader = _shader!;
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-
-    // Calculate colors with opacity
     final minorColor = config.lineColor.withValues(
       alpha: config.lineOpacity * minorOpacityRatio * 0.5,
     );
@@ -83,54 +78,40 @@ class GridShaderManager {
       alpha: config.majorLineOpacity,
     );
 
-    // Set uniforms (order must match shader declaration)
     var idx = 0;
-
-    // uResolution (vec2)
     shader
       ..setFloat(idx++, size.width)
       ..setFloat(idx++, size.height)
-      // uCameraPosition (vec2)
       ..setFloat(idx++, cameraPosition.dx)
       ..setFloat(idx++, cameraPosition.dy)
-      // uScale (float)
-      ..setFloat(idx++, effectiveScale)
-      // uGridSize (float)
+      ..setFloat(idx++, scale)
       ..setFloat(idx++, config.size)
-      // uMajorEvery (float)
       ..setFloat(idx++, majorEveryFactor.toDouble())
-      // uLineWidth (float) - minor line width in screen pixels
       ..setFloat(idx++, config.lineWidth)
-      // uMajorLineWidth (float) - major line width (1.5x thicker)
       ..setFloat(idx++, config.lineWidth * 1.5);
 
-    // uMinorColor (vec4) - premultiplied alpha
-    final minorAlpha = minorColor.a;
-    shader
-      ..setFloat(idx++, minorColor.r * minorAlpha)
-      ..setFloat(idx++, minorColor.g * minorAlpha)
-      ..setFloat(idx++, minorColor.b * minorAlpha)
-      ..setFloat(idx++, minorAlpha);
+    idx = _setPremultipliedColor(shader, idx, minorColor);
+    _setPremultipliedColor(shader, idx, majorColor);
 
-    // uMajorColor (vec4) - premultiplied alpha
-    final majorAlpha = majorColor.a;
-    shader
-      ..setFloat(idx++, majorColor.r * majorAlpha)
-      ..setFloat(idx++, majorColor.g * majorAlpha)
-      ..setFloat(idx++, majorColor.b * majorAlpha)
-      ..setFloat(idx++, majorAlpha);
-
-    // Draw the shader as a full-screen rect
     _paint.shader = shader;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _paint);
+    canvas.drawRect(Offset.zero & size, _paint);
 
     return true;
+  }
+
+  int _setPremultipliedColor(ui.FragmentShader shader, int start, Color color) {
+    final alpha = color.a;
+    shader
+      ..setFloat(start++, color.r * alpha)
+      ..setFloat(start++, color.g * alpha)
+      ..setFloat(start++, color.b * alpha)
+      ..setFloat(start++, alpha);
+    return start;
   }
 
   /// Disposes of the shader resources.
   void dispose() {
     _shader?.dispose();
     _shader = null;
-    _program = null;
   }
 }
