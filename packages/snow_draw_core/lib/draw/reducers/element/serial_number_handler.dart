@@ -18,98 +18,86 @@ DrawState handleCreateSerialNumberTextElements(
     return state;
   }
 
-  final isSingleTarget = action.elementIds.length == 1;
-  final singleTargetId = isSingleTarget ? action.elementIds.first : null;
+  final document = state.domain.document;
+  final focusSerialId = targetIds.length == 1 ? targetIds.first : null;
   final textStyle = context.config.textStyle;
-  final elements = <ElementState>[];
-  var didChange = false;
-  String? focusTextId;
+  final nextElements = <ElementState>[];
+  var hasDocumentChanges = false;
+  ElementState? focusTextElement;
 
-  for (final element in state.domain.document.elements) {
-    if (!targetIds.contains(element.id)) {
-      elements.add(element);
-      continue;
-    }
-
+  for (final element in document.elements) {
     final data = element.data;
-    if (data is! SerialNumberData) {
-      elements.add(element);
+    if (!targetIds.contains(element.id) || data is! SerialNumberData) {
+      nextElements.add(element);
       continue;
     }
 
-    final boundId = data.textElementId;
-    final boundElement = boundId == null
+    final boundTextId = data.textElementId;
+    final boundTextElement = boundTextId == null
         ? null
-        : state.domain.document.getElementById(boundId);
-    if (boundElement != null && boundElement.data is TextData) {
-      if (isSingleTarget && element.id == singleTargetId) {
-        focusTextId = boundId;
+        : document.getElementById(boundTextId);
+    if (boundTextElement != null && boundTextElement.data is TextData) {
+      if (element.id == focusSerialId) {
+        focusTextElement = boundTextElement;
       }
-      elements.add(element);
+      nextElements.add(element);
       continue;
     }
 
-    final textId = context.idGenerator();
     final textData = const TextData().withElementStyle(textStyle) as TextData;
-    final textRect = resolveSerialNumberBoundTextRect(
-      serialElement: element,
-      serialData: data,
-      textData: textData,
-    );
     final textElement = ElementState(
-      id: textId,
-      rect: textRect,
+      id: context.idGenerator(),
+      rect: resolveSerialNumberBoundTextRect(
+        serialElement: element,
+        serialData: data,
+        textData: textData,
+      ),
       rotation: 0,
       opacity: textStyle.opacity,
       zIndex: element.zIndex + 1,
       data: textData,
     );
-    final updatedSerial = element.copyWith(
-      data: data.copyWith(textElementId: textId),
-    );
-    elements
-      ..add(updatedSerial)
+    nextElements
+      ..add(
+        element.copyWith(data: data.copyWith(textElementId: textElement.id)),
+      )
       ..add(textElement);
-    if (isSingleTarget && element.id == singleTargetId) {
-      focusTextId = textId;
+    if (element.id == focusSerialId) {
+      focusTextElement = textElement;
     }
-    didChange = true;
+    hasDocumentChanges = true;
   }
 
-  if (!didChange && focusTextId == null) {
+  if (!hasDocumentChanges && focusTextElement == null) {
     return state;
   }
 
-  final nextState = didChange
+  final nextState = hasDocumentChanges
       ? state.copyWith(
           domain: state.domain.copyWith(
-            document: state.domain.document.copyWith(elements: elements),
+            document: document.copyWith(elements: nextElements),
           ),
         )
       : state;
 
-  if (didChange) {
+  if (hasDocumentChanges) {
     nextState.domain.document.warmCaches();
   }
 
-  if (focusTextId == null) {
+  final focusedText = focusTextElement;
+  if (focusedText == null) {
     return nextState;
   }
 
-  final textElement = nextState.domain.document.getElementById(focusTextId);
-  if (textElement == null || textElement.data is! TextData) {
-    return nextState;
-  }
-
-  final selectedState = applySelectionChange(nextState, {focusTextId});
-  final textData = textElement.data as TextData;
+  final selectedState = applySelectionChange(nextState, {focusedText.id});
+  final textData = focusedText.data as TextData;
   final textInteraction = TextEditingState(
-    elementId: focusTextId,
+    elementId: focusedText.id,
     draftData: textData,
-    rect: textElement.rect,
+    rect: focusedText.rect,
     isNew: false,
-    opacity: textElement.opacity,
-    rotation: textElement.rotation,
+    opacity: focusedText.opacity,
+    rotation: focusedText.rotation,
   );
   return selectedState.copyWith(
     application: selectedState.application.copyWith(
