@@ -16,25 +16,17 @@ enum RecoveryAction {
 @immutable
 class ErrorHandler {
   const ErrorHandler({this.logger});
+
   final void Function(String message, Object error, StackTrace stackTrace)?
   logger;
 
   RecoveryAction handle(Object error, StackTrace stackTrace) {
     if (error is FormatException) {
-      _log('Skipping middleware after format error', error, stackTrace);
+      logger?.call('Skipping middleware after format error', error, stackTrace);
       return RecoveryAction.skip;
     }
 
-    if (error is StateError || error is ArgumentError) {
-      _log('Stopping pipeline due to programmer error', error, stackTrace);
-      return RecoveryAction.stop;
-    }
-
-    _log('Stopping pipeline due to error', error, stackTrace);
+    logger?.call('Stopping pipeline due to error', error, stackTrace);
     return RecoveryAction.stop;
-  }
-
-  void _log(String message, Object error, StackTrace stackTrace) {
-    logger?.call(message, error, stackTrace);
   }
 }
