@@ -133,7 +133,7 @@ class StaticCanvasPainter extends CustomPainter {
         if (shouldPaintSerialConnectors) {
           drawSerialNumberConnectorsForText(
             canvas: sceneCanvas,
-            textElement: element,
+            textElementId: element.id,
             connectorsByTextId: serialConnectors,
           );
         }

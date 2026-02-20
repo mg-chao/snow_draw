@@ -1303,7 +1303,7 @@ class DynamicCanvasPainter extends CustomPainter {
     if (sceneContext.shouldPaintSerialConnectors) {
       drawSerialNumberConnectorsForText(
         canvas: canvas,
-        textElement: element,
+        textElementId: element.id,
         connectorsByTextId: sceneContext.serialConnectors,
       );
     }
