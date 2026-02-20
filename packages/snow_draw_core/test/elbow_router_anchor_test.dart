@@ -7,40 +7,56 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'elbow_test_utils.dart';
 
+const _rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
+const _elementId = 'rect-1';
+
+ElbowRouteResult _routeToEndAnchor({
+  required DrawPoint start,
+  required DrawPoint end,
+  required DrawPoint anchor,
+}) {
+  final element = elbowRectangleElement(id: _elementId, rect: _rect);
+  return routeElbowArrow(
+    start: start,
+    end: end,
+    endBinding: ArrowBinding(elementId: _elementId, anchor: anchor),
+    elementsById: {_elementId: element},
+    endArrowhead: ArrowheadStyle.triangle,
+  );
+}
+
+void _expectValidRoute(ElbowRouteResult result) {
+  expect(
+    elbowPathIntersectsBounds(result.points, _rect),
+    isFalse,
+    reason: 'Route should not pass through the bound rectangle.',
+  );
+  expect(
+    elbowPathIsOrthogonal(result.points),
+    isTrue,
+    reason: 'Elbow paths should remain orthogonal.',
+  );
+}
+
+DrawPoint _penultimatePoint(ElbowRouteResult result) =>
+    result.points[result.points.length - 2];
+
 void main() {
   test('elbow routing avoids a bound rectangle when start aligns above', () {
-    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
-    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
-    final start = DrawPoint(x: rect.centerX, y: rect.minY - 40);
-
-    final result = routeElbowArrow(
-      start: start,
-      end: DrawPoint(x: rect.centerX, y: rect.maxY + 200),
-      endBinding: const ArrowBinding(
-        elementId: 'rect-1',
-        anchor: DrawPoint(x: 0.5, y: 1),
-      ),
-      elementsById: {'rect-1': element},
-      endArrowhead: ArrowheadStyle.triangle,
+    final result = _routeToEndAnchor(
+      start: DrawPoint(x: _rect.centerX, y: _rect.minY - 40),
+      end: DrawPoint(x: _rect.centerX, y: _rect.maxY + 200),
+      anchor: const DrawPoint(x: 0.5, y: 1),
     );
 
-    expect(
-      elbowPathIntersectsBounds(result.points, rect),
-      isFalse,
-      reason: 'Route should not pass through the bound rectangle.',
-    );
+    _expectValidRoute(result);
     expect(
       result.points.length,
       greaterThan(2),
       reason: 'Expected at least one bend to route around the rectangle.',
     );
-    expect(
-      elbowPathIsOrthogonal(result.points),
-      isTrue,
-      reason: 'Elbow paths should remain orthogonal.',
-    );
 
-    final penultimate = result.points[result.points.length - 2];
+    final penultimate = _penultimatePoint(result);
     final endPoint = result.points.last;
     expect(
       (penultimate.x - endPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
@@ -55,33 +71,15 @@ void main() {
   });
 
   test('elbow routing approaches a top binding from above', () {
-    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
-    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
-    final start = DrawPoint(x: rect.centerX, y: rect.maxY + 60);
-
-    final result = routeElbowArrow(
-      start: start,
-      end: DrawPoint(x: rect.centerX, y: rect.minY - 200),
-      endBinding: const ArrowBinding(
-        elementId: 'rect-1',
-        anchor: DrawPoint(x: 0.5, y: 0),
-      ),
-      elementsById: {'rect-1': element},
-      endArrowhead: ArrowheadStyle.triangle,
+    final result = _routeToEndAnchor(
+      start: DrawPoint(x: _rect.centerX, y: _rect.maxY + 60),
+      end: DrawPoint(x: _rect.centerX, y: _rect.minY - 200),
+      anchor: const DrawPoint(x: 0.5, y: 0),
     );
 
-    expect(
-      elbowPathIntersectsBounds(result.points, rect),
-      isFalse,
-      reason: 'Route should not pass through the bound rectangle.',
-    );
-    expect(
-      elbowPathIsOrthogonal(result.points),
-      isTrue,
-      reason: 'Elbow paths should remain orthogonal.',
-    );
+    _expectValidRoute(result);
 
-    final penultimate = result.points[result.points.length - 2];
+    final penultimate = _penultimatePoint(result);
     final endPoint = result.points.last;
     expect(
       (penultimate.x - endPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
@@ -96,33 +94,15 @@ void main() {
   });
 
   test('elbow routing approaches a left binding from left side', () {
-    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
-    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
-    final start = DrawPoint(x: rect.maxX + 200, y: rect.centerY);
-
-    final result = routeElbowArrow(
-      start: start,
-      end: DrawPoint(x: rect.minX - 200, y: rect.centerY),
-      endBinding: const ArrowBinding(
-        elementId: 'rect-1',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      ),
-      elementsById: {'rect-1': element},
-      endArrowhead: ArrowheadStyle.triangle,
+    final result = _routeToEndAnchor(
+      start: DrawPoint(x: _rect.maxX + 200, y: _rect.centerY),
+      end: DrawPoint(x: _rect.minX - 200, y: _rect.centerY),
+      anchor: const DrawPoint(x: 0, y: 0.5),
     );
 
-    expect(
-      elbowPathIntersectsBounds(result.points, rect),
-      isFalse,
-      reason: 'Route should not pass through the bound rectangle.',
-    );
-    expect(
-      elbowPathIsOrthogonal(result.points),
-      isTrue,
-      reason: 'Elbow paths should remain orthogonal.',
-    );
+    _expectValidRoute(result);
 
-    final penultimate = result.points[result.points.length - 2];
+    final penultimate = _penultimatePoint(result);
     final endPoint = result.points.last;
     expect(
       (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
@@ -137,33 +117,15 @@ void main() {
   });
 
   test('elbow routing approaches a right binding from right side', () {
-    const rect = DrawRect(minX: 100, minY: 100, maxX: 500, maxY: 260);
-    final element = elbowRectangleElement(id: 'rect-1', rect: rect);
-    final start = DrawPoint(x: rect.minX - 200, y: rect.centerY);
-
-    final result = routeElbowArrow(
-      start: start,
-      end: DrawPoint(x: rect.maxX + 200, y: rect.centerY),
-      endBinding: const ArrowBinding(
-        elementId: 'rect-1',
-        anchor: DrawPoint(x: 1, y: 0.5),
-      ),
-      elementsById: {'rect-1': element},
-      endArrowhead: ArrowheadStyle.triangle,
+    final result = _routeToEndAnchor(
+      start: DrawPoint(x: _rect.minX - 200, y: _rect.centerY),
+      end: DrawPoint(x: _rect.maxX + 200, y: _rect.centerY),
+      anchor: const DrawPoint(x: 1, y: 0.5),
     );
 
-    expect(
-      elbowPathIntersectsBounds(result.points, rect),
-      isFalse,
-      reason: 'Route should not pass through the bound rectangle.',
-    );
-    expect(
-      elbowPathIsOrthogonal(result.points),
-      isTrue,
-      reason: 'Elbow paths should remain orthogonal.',
-    );
+    _expectValidRoute(result);
 
-    final penultimate = result.points[result.points.length - 2];
+    final penultimate = _penultimatePoint(result);
     final endPoint = result.points.last;
     expect(
       (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
