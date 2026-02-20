@@ -13,15 +13,35 @@ DrawState? elementReducer(
   DrawAction action,
   ElementReducerDeps context,
 ) => switch (action) {
-  final DeleteElements a => handleDeleteElements(state, a, context),
-  final DuplicateElements a => handleDuplicateElements(state, a, context),
-  final ChangeElementZIndex a => handleChangeZIndex(state, a, context),
-  final ChangeElementsZIndex a => handleChangeZIndexBatch(state, a, context),
-  final UpdateElementsStyle a => handleUpdateElementsStyle(state, a, context),
-  final RefreshAutoResizeTextLayoutsAfterFontLoad a =>
-    handleRefreshAutoResizeTextLayoutsAfterFontLoad(state, a, context),
-  final UpdateGlobalElements a => handleUpdateGlobalElements(state, a, context),
-  final CreateSerialNumberTextElements a =>
-    handleCreateSerialNumberTextElements(state, a, context),
+  final DeleteElements delete => handleDeleteElements(state, delete, context),
+  final DuplicateElements duplicate => handleDuplicateElements(
+    state,
+    duplicate,
+    context,
+  ),
+  final ChangeElementZIndex zIndex => handleChangeZIndex(
+    state,
+    zIndex,
+    context,
+  ),
+  final ChangeElementsZIndex zIndexBatch => handleChangeZIndexBatch(
+    state,
+    zIndexBatch,
+    context,
+  ),
+  final UpdateElementsStyle style => handleUpdateElementsStyle(
+    state,
+    style,
+    context,
+  ),
+  final RefreshAutoResizeTextLayoutsAfterFontLoad refresh =>
+    handleRefreshAutoResizeTextLayoutsAfterFontLoad(state, refresh, context),
+  final UpdateGlobalElements global => handleUpdateGlobalElements(
+    state,
+    global,
+    context,
+  ),
+  final CreateSerialNumberTextElements serial =>
+    handleCreateSerialNumberTextElements(state, serial, context),
   _ => null,
 };
