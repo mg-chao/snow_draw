@@ -10,25 +10,28 @@ class HistoryChangeSet {
     this.globalElementsChanged = false,
     this.selectionChanged = false,
     this.reindexZIndices = false,
-  }) : modifiedIds = Set<String>.unmodifiable(modifiedIds ?? const {}),
-       addedIds = Set<String>.unmodifiable(addedIds ?? const {}),
-       removedIds = Set<String>.unmodifiable(removedIds ?? const {});
+  }) : modifiedIds = _freezeIds(modifiedIds),
+       addedIds = _freezeIds(addedIds),
+       removedIds = _freezeIds(removedIds),
+       allElementIds = Set<String>.unmodifiable({
+         ...?modifiedIds,
+         ...?addedIds,
+         ...?removedIds,
+       });
   final Set<String> modifiedIds;
   final Set<String> addedIds;
   final Set<String> removedIds;
+  final Set<String> allElementIds;
   final bool orderChanged;
   final bool globalElementsChanged;
   final bool selectionChanged;
   final bool reindexZIndices;
 
-  bool get hasElementChanges =>
-      modifiedIds.isNotEmpty || addedIds.isNotEmpty || removedIds.isNotEmpty;
-
-  Set<String> get allElementIds => {...modifiedIds, ...addedIds, ...removedIds};
+  bool get hasElementChanges => allElementIds.isNotEmpty;
 
   int get elementChangeCount => allElementIds.length;
 
-  bool get isSingleElementChange => elementChangeCount == 1;
+  bool get isSingleElementChange => allElementIds.length == 1;
 
   @override
   String toString() =>
@@ -40,3 +43,7 @@ class HistoryChangeSet {
       'selectionChanged: $selectionChanged, '
       'reindexZIndices: $reindexZIndices)';
 }
+
+Set<String> _freezeIds(Set<String>? ids) => ids == null || ids.isEmpty
+    ? const <String>{}
+    : Set<String>.unmodifiable(ids);
