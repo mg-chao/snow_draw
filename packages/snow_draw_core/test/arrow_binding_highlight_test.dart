@@ -12,15 +12,13 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/arrow_binding_highlight.dart';
 
 void main() {
+  const endBinding = ArrowBinding(
+    elementId: 'rect',
+    anchor: DrawPoint(x: 1, y: 0.5),
+  );
+
   test('resolveArrowPointEditHighlightBinding uses initial endpoint index', () {
-    final context = _buildContext(
-      pointKind: ArrowPointKind.turning,
-      pointIndex: 3,
-    );
-    const binding = ArrowBinding(
-      elementId: 'rect',
-      anchor: DrawPoint(x: 1, y: 0.5),
-    );
+    final context = _buildTurningContext(pointIndex: 3);
     const data = ArrowData(
       points: [
         DrawPoint.zero,
@@ -31,48 +29,29 @@ void main() {
       ],
       arrowType: ArrowType.elbow,
     );
-    final transform = ArrowPointTransform(
-      currentPosition: DrawPoint.zero,
-      points: context.initialPoints,
-      endBinding: binding,
-      hasChanges: true,
-    );
 
     final result = resolveArrowPointEditHighlightBinding(
       context: context,
       data: data,
-      transform: transform,
+      transform: _buildTransform(context: context, endBinding: endBinding),
     );
 
-    expect(result, binding);
+    expect(result, endBinding);
   });
 
   test(
     'resolveArrowPointEditHighlightBinding ignores non-endpoint handles',
     () {
-      final context = _buildContext(
-        pointKind: ArrowPointKind.turning,
-        pointIndex: 1,
-      );
-      const binding = ArrowBinding(
-        elementId: 'rect',
-        anchor: DrawPoint(x: 1, y: 0.5),
-      );
+      final context = _buildTurningContext(pointIndex: 1);
       final data = ArrowData(
         points: context.initialPoints,
         arrowType: ArrowType.elbow,
-      );
-      final transform = ArrowPointTransform(
-        currentPosition: DrawPoint.zero,
-        points: context.initialPoints,
-        endBinding: binding,
-        hasChanges: true,
       );
 
       final result = resolveArrowPointEditHighlightBinding(
         context: context,
         data: data,
-        transform: transform,
+        transform: _buildTransform(context: context, endBinding: endBinding),
       );
 
       expect(result, isNull);
@@ -80,49 +59,55 @@ void main() {
   );
 }
 
-ArrowPointEditContext _buildContext({
-  required ArrowPointKind pointKind,
-  required int pointIndex,
-}) {
-  const elementRect = DrawRect(maxX: 100, maxY: 100);
-  const points = [
-    DrawPoint.zero,
-    DrawPoint(x: 0.2, y: 0),
-    DrawPoint(x: 0.2, y: 0.3),
-    DrawPoint(x: 0.4, y: 0.3),
-  ];
-  const baseElement = ElementState(
-    id: 'arrow',
-    rect: elementRect,
-    rotation: 0,
-    opacity: 1,
-    zIndex: 0,
-    data: ArrowData(points: points, arrowType: ArrowType.elbow),
-  );
-  return ArrowPointEditContext(
-    startPosition: DrawPoint.zero,
-    startBounds: elementRect,
-    selectedIdsAtStart: const {'arrow'},
-    selectionVersion: 0,
-    elementsVersion: 0,
-    elementId: 'arrow',
-    elementRect: elementRect,
-    rotation: 0,
-    initialPoints: points,
-    initialFixedSegments: const [],
-    arrowType: ArrowType.elbow,
-    pointKind: pointKind,
-    pointIndex: pointIndex,
-    dragOffset: DrawPoint.zero,
-    baseElement: baseElement,
-    elementSpace: null,
-    releaseFixedSegment: false,
-    deletePointOnStart: false,
-    startArrowhead: ArrowheadStyle.none,
-    endArrowhead: ArrowheadStyle.standard,
-    initialStartBinding: null,
-    initialEndBinding: null,
-    hasBindableTargets: false,
-    bindingTargetCache: ArrowBindingTargetCache(),
-  );
-}
+const _elementRect = DrawRect(maxX: 100, maxY: 100);
+const List<DrawPoint> _initialPoints = [
+  DrawPoint.zero,
+  DrawPoint(x: 0.2, y: 0),
+  DrawPoint(x: 0.2, y: 0.3),
+  DrawPoint(x: 0.4, y: 0.3),
+];
+const _baseElement = ElementState(
+  id: 'arrow',
+  rect: _elementRect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: ArrowData(points: _initialPoints, arrowType: ArrowType.elbow),
+);
+
+ArrowPointEditContext _buildTurningContext({required int pointIndex}) =>
+    ArrowPointEditContext(
+      startPosition: DrawPoint.zero,
+      startBounds: _elementRect,
+      selectedIdsAtStart: const {'arrow'},
+      selectionVersion: 0,
+      elementsVersion: 0,
+      elementId: 'arrow',
+      elementRect: _elementRect,
+      rotation: 0,
+      initialPoints: _initialPoints,
+      initialFixedSegments: const [],
+      arrowType: ArrowType.elbow,
+      pointKind: ArrowPointKind.turning,
+      pointIndex: pointIndex,
+      dragOffset: DrawPoint.zero,
+      baseElement: _baseElement,
+      elementSpace: null,
+      releaseFixedSegment: false,
+      deletePointOnStart: false,
+      startArrowhead: ArrowheadStyle.none,
+      endArrowhead: ArrowheadStyle.standard,
+      initialStartBinding: null,
+      initialEndBinding: null,
+      hasBindableTargets: false,
+      bindingTargetCache: ArrowBindingTargetCache(),
+    );
+
+ArrowPointTransform _buildTransform({
+  required ArrowPointEditContext context,
+  required ArrowBinding endBinding,
+}) => ArrowPointTransform(
+  currentPosition: DrawPoint.zero,
+  points: context.initialPoints,
+  endBinding: endBinding,
+);
