@@ -157,6 +157,14 @@ final class _SingleOperationRegistry implements EditOperationRegistry {
 }
 
 class _GuideOnlyOperation extends EditOperation {
+  static const _guide = SnapGuide(
+    kind: SnapGuideKind.point,
+    axis: SnapGuideAxis.vertical,
+    start: DrawPoint(x: 20, y: 0),
+    end: DrawPoint(x: 20, y: 100),
+    markers: [DrawPoint(x: 20, y: 50)],
+  );
+
   @override
   EditOperationId get id => 'guide_only_test';
 
@@ -197,12 +205,11 @@ class _GuideOnlyOperation extends EditOperation {
     required EditModifiers modifiers,
     required DrawConfig config,
   }) {
-    final zero = currentPosition.x - currentPosition.x;
     final guides = currentPosition.x > 0
-        ? <SnapGuide>[_buildGuide(zero)]
-        : <SnapGuide>[];
+        ? <SnapGuide>[_guide]
+        : const <SnapGuide>[];
     return EditUpdateResult<EditTransform>(
-      transform: MoveTransform(dx: zero, dy: zero),
+      transform: MoveTransform.zero,
       snapGuides: guides,
     );
   }
@@ -227,14 +234,6 @@ class _GuideOnlyOperation extends EditOperation {
     required EditContext context,
     required EditTransform transform,
   }) => EditPreview.none;
-
-  SnapGuide _buildGuide(double zero) => SnapGuide(
-    kind: SnapGuideKind.point,
-    axis: SnapGuideAxis.vertical,
-    start: DrawPoint(x: 20 + zero, y: zero),
-    end: DrawPoint(x: 20 + zero, y: 100 + zero),
-    markers: [DrawPoint(x: 20 + zero, y: 50 + zero)],
-  );
 }
 
 class _GuideOnlyContext extends EditContext {
