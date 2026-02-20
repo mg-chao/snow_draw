@@ -11,67 +11,37 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 void main() {
   test('collects document highlights in document order', () {
     final state = _buildState(
-      elements: const [
-        ElementState(
-          id: 'h1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: HighlightData(),
-        ),
-        ElementState(
+      elements: [
+        _highlight(id: 'h1'),
+        _rectangle(
           id: 'r1',
-          rect: DrawRect(minX: 12, maxX: 22, maxY: 10),
-          rotation: 0,
-          opacity: 1,
+          rect: const DrawRect(minX: 12, maxX: 22, maxY: 10),
           zIndex: 1,
-          data: RectangleData(),
         ),
-        ElementState(
+        _highlight(
           id: 'h2',
-          rect: DrawRect(minX: 24, maxX: 34, maxY: 10),
-          rotation: 0,
-          opacity: 1,
+          rect: const DrawRect(minX: 24, maxX: 34, maxY: 10),
           zIndex: 2,
-          data: HighlightData(),
         ),
       ],
     );
 
     final view = DrawStateView.fromState(state);
-    final highlights = view.highlightMaskScene.elements;
 
-    expect(highlights.map((e) => e.id).toList(), ['h1', 'h2']);
+    expect(_ids(view.highlightMaskScene.elements), ['h1', 'h2']);
     expect(view.highlightMaskScene.hasHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('applies preview override precedence over document elements', () {
-    const docHighlight = ElementState(
-      id: 'e1',
-      rect: DrawRect(maxX: 10, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: HighlightData(),
-    );
-    const previewReplacedAsRectangle = ElementState(
-      id: 'e1',
-      rect: DrawRect(maxX: 10, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: RectangleData(),
-    );
+    final docHighlight = _highlight(id: 'e1');
+    final previewReplacedAsRectangle = _rectangle(id: 'e1');
 
-    final state = _buildState(elements: const [docHighlight]);
-    final view = DrawStateView.withPreview(
+    final state = _buildState(elements: [docHighlight]);
+    final view = _buildPreviewView(
       state: state,
-      previewElementsById: const {'e1': previewReplacedAsRectangle},
-      effectiveSelection: EffectiveSelection.none,
-      snapGuides: const [],
+      previewElementsById: {'e1': previewReplacedAsRectangle},
     );
 
     expect(view.highlightMaskScene.elements, isEmpty);
@@ -83,47 +53,21 @@ void main() {
   test(
     'includes preview-only transient highlights after document highlights',
     () {
-      const docHighlight = ElementState(
-        id: 'h1',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: HighlightData(),
-      );
-      const transientPreviewHighlight = ElementState(
+      final transientPreviewHighlight = _highlight(
         id: 'h_preview',
-        rect: DrawRect(minX: 12, maxX: 22, maxY: 10),
-        rotation: 0,
-        opacity: 1,
+        rect: const DrawRect(minX: 12, maxX: 22, maxY: 10),
         zIndex: 99,
-        data: HighlightData(),
       );
 
-      final state = _buildState(elements: const [docHighlight]);
-      final view = DrawStateView.withPreview(
+      final state = _buildState(elements: [_highlight(id: 'h1')]);
+      final view = _buildPreviewView(
         state: state,
-        previewElementsById: const {'h_preview': transientPreviewHighlight},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
+        previewElementsById: {'h_preview': transientPreviewHighlight},
       );
 
-      expect(
-        view.highlightMaskScene.elements.map((element) => element.id).toList(),
-        ['h1', 'h_preview'],
-      );
-      expect(
-        view.highlightMaskScene.staticElements
-            .map((element) => element.id)
-            .toList(),
-        ['h1'],
-      );
-      expect(
-        view.highlightMaskScene.dynamicElements
-            .map((element) => element.id)
-            .toList(),
-        ['h_preview'],
-      );
+      expect(_ids(view.highlightMaskScene.elements), ['h1', 'h_preview']);
+      expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
+      expect(_ids(view.highlightMaskScene.dynamicElements), ['h_preview']);
       expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
       expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
     },
@@ -132,51 +76,22 @@ void main() {
   test('includes creating highlight with current rect as last element', () {
     const creatingRect = DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90);
     final creatingInteraction = CreatingState(
-      element: const ElementState(
-        id: 'creating',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 5,
-        data: HighlightData(),
-      ),
+      element: _highlight(id: 'creating', zIndex: 5),
       startPosition: DrawPoint.zero,
       currentRect: creatingRect,
     );
     final state = _buildState(
-      elements: const [
-        ElementState(
-          id: 'h1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: HighlightData(),
-        ),
-      ],
+      elements: [_highlight(id: 'h1')],
       interaction: creatingInteraction,
     );
 
     final view = DrawStateView.fromState(state);
     final highlights = view.highlightMaskScene.elements;
 
-    expect(highlights.map((element) => element.id).toList(), [
-      'h1',
-      'creating',
-    ]);
+    expect(_ids(highlights), ['h1', 'creating']);
     expect(highlights.last.rect, creatingRect);
-    expect(
-      view.highlightMaskScene.staticElements
-          .map((element) => element.id)
-          .toList(),
-      ['h1'],
-    );
-    expect(
-      view.highlightMaskScene.dynamicElements
-          .map((element) => element.id)
-          .toList(),
-      ['creating'],
-    );
+    expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
+    expect(_ids(view.highlightMaskScene.dynamicElements), ['creating']);
     expect(view.highlightMaskScene.hasDynamicHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
@@ -189,51 +104,27 @@ void main() {
       const currentRect = DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90);
       const previewRect = DrawRect(minX: 1, minY: 2, maxX: 3, maxY: 4);
       final creatingInteraction = CreatingState(
-        element: const ElementState(
-          id: creatingId,
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 5,
-          data: HighlightData(),
-        ),
+        element: _highlight(id: creatingId, zIndex: 5),
         startPosition: DrawPoint.zero,
         currentRect: currentRect,
       );
       final state = _buildState(
-        elements: const [
-          ElementState(
-            id: 'h1',
-            rect: DrawRect(maxX: 10, maxY: 10),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 0,
-            data: HighlightData(),
-          ),
-        ],
+        elements: [_highlight(id: 'h1')],
         interaction: creatingInteraction,
       );
-      const previewHighlight = ElementState(
+      final previewHighlight = _highlight(
         id: creatingId,
         rect: previewRect,
-        rotation: 0,
-        opacity: 1,
         zIndex: 5,
-        data: HighlightData(),
       );
 
-      final view = DrawStateView.withPreview(
+      final view = _buildPreviewView(
         state: state,
-        previewElementsById: const {creatingId: previewHighlight},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
+        previewElementsById: {creatingId: previewHighlight},
       );
 
       final highlights = view.highlightMaskScene.elements;
-      expect(highlights.map((element) => element.id).toList(), [
-        'h1',
-        creatingId,
-      ]);
+      expect(_ids(highlights), ['h1', creatingId]);
       expect(
         highlights.where((element) => element.id == creatingId),
         hasLength(1),
@@ -246,85 +137,84 @@ void main() {
 
   test('excludes creating element when it is not a highlight', () {
     final creatingInteraction = CreatingState(
-      element: const ElementState(
-        id: 'creating_rect',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 5,
-        data: RectangleData(),
-      ),
+      element: _rectangle(id: 'creating_rect', zIndex: 5),
       startPosition: DrawPoint.zero,
       currentRect: const DrawRect(minX: 30, minY: 40, maxX: 70, maxY: 90),
     );
     final state = _buildState(
-      elements: const [
-        ElementState(
-          id: 'h1',
-          rect: DrawRect(maxX: 10, maxY: 10),
-          rotation: 0,
-          opacity: 1,
-          zIndex: 0,
-          data: HighlightData(),
-        ),
-      ],
+      elements: [_highlight(id: 'h1')],
       interaction: creatingInteraction,
     );
 
     final view = DrawStateView.fromState(state);
-    expect(view.highlightMaskScene.elements.map((element) => element.id), [
-      'h1',
-    ]);
+    expect(_ids(view.highlightMaskScene.elements), ['h1']);
     expect(view.highlightMaskScene.dynamicElements, isEmpty);
     expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('marks edited highlight previews as dynamic', () {
-    const h1 = ElementState(
-      id: 'h1',
-      rect: DrawRect(maxX: 10, maxY: 10),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: HighlightData(),
-    );
-    const h2 = ElementState(
+    final h1 = _highlight(id: 'h1');
+    final h2 = _highlight(
       id: 'h2',
-      rect: DrawRect(minX: 20, maxX: 30, maxY: 10),
-      rotation: 0,
-      opacity: 1,
+      rect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
       zIndex: 1,
-      data: HighlightData(),
     );
     final movedH2 = h2.copyWith(
       rect: const DrawRect(minX: 24, minY: 2, maxX: 34, maxY: 12),
     );
 
-    final state = _buildState(elements: const [h1, h2]);
-    final view = DrawStateView.withPreview(
+    final state = _buildState(elements: [h1, h2]);
+    final view = _buildPreviewView(
       state: state,
       previewElementsById: {h2.id: movedH2},
-      effectiveSelection: EffectiveSelection.none,
-      snapGuides: const [],
     );
 
-    expect(
-      view.highlightMaskScene.staticElements
-          .map((element) => element.id)
-          .toList(),
-      ['h1'],
-    );
-    expect(
-      view.highlightMaskScene.dynamicElements
-          .map((element) => element.id)
-          .toList(),
-      ['h2'],
-    );
+    expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
+    expect(_ids(view.highlightMaskScene.dynamicElements), ['h2']);
     expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
     expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
   });
 }
+
+DrawStateView _buildPreviewView({
+  required DrawState state,
+  required Map<String, ElementState> previewElementsById,
+}) => DrawStateView.withPreview(
+  state: state,
+  previewElementsById: previewElementsById,
+  effectiveSelection: EffectiveSelection.none,
+  snapGuides: const [],
+);
+
+ElementState _highlight({
+  required String id,
+  DrawRect rect = const DrawRect(maxX: 10, maxY: 10),
+  int zIndex = 0,
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: zIndex,
+  data: const HighlightData(),
+);
+
+ElementState _rectangle({
+  required String id,
+  DrawRect rect = const DrawRect(maxX: 10, maxY: 10),
+  int zIndex = 0,
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: zIndex,
+  data: const RectangleData(),
+);
+
+List<String> _ids(Iterable<ElementState> elements) =>
+    elements.map((element) => element.id).toList();
 
 DrawState _buildState({
   required List<ElementState> elements,
