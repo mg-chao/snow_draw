@@ -22,10 +22,6 @@ void paintHighlightMask({
   double scaleFactor = 1,
   Offset cameraPosition = Offset.zero,
 }) {
-  if (maskConfig.maskOpacity <= 0) {
-    return;
-  }
-
   if (highlights.isEmpty) {
     return;
   }
@@ -44,24 +40,25 @@ void paintHighlightMask({
     // The canvas is currently in world-coordinate space (translated +
     // scaled). Undo that transform so the shader can draw in screen
     // pixels, then restore afterwards.
-    canvas
-      ..save()
-      ..scale(1 / scale, 1 / scale)
-      ..translate(-cameraPosition.dx, -cameraPosition.dy);
+    canvas.save();
+    try {
+      canvas
+        ..scale(1 / scale, 1 / scale)
+        ..translate(-cameraPosition.dx, -cameraPosition.dy);
 
-    final used = shaderManager.paintMask(
-      canvas: canvas,
-      highlights: highlights,
-      viewportRect: viewportRect,
-      maskConfig: maskConfig,
-      scaleFactor: scale,
-      cameraPosition: cameraPosition,
-    );
-
-    canvas.restore();
-
-    if (used) {
-      return;
+      final used = shaderManager.paintMask(
+        canvas: canvas,
+        highlights: highlights,
+        viewportRect: viewportRect,
+        maskConfig: maskConfig,
+        scaleFactor: scale,
+        cameraPosition: cameraPosition,
+      );
+      if (used) {
+        return;
+      }
+    } finally {
+      canvas.restore();
     }
   }
 
@@ -84,6 +81,22 @@ final _fallbackClearPaint = Paint()
   ..blendMode = BlendMode.clear
   ..isAntiAlias = true;
 
+final class _VisibleHighlightHole {
+  const _VisibleHighlightHole({
+    required this.expandedRect,
+    required this.shape,
+    required this.rotation,
+    required this.centerX,
+    required this.centerY,
+  });
+
+  final Rect expandedRect;
+  final HighlightShape shape;
+  final double rotation;
+  final double centerX;
+  final double centerY;
+}
+
 /// CPU fallback that fills the viewport rect minus highlight-hole geometry.
 void _paintHighlightMaskFallback({
   required Canvas canvas,
@@ -102,74 +115,41 @@ void _paintHighlightMaskFallback({
   _fallbackMaskPaint.color = maskConfig.maskColor.withValues(
     alpha: effectiveAlpha,
   );
-  final holesPath = Path();
-  var hasVisibleHole = false;
-  for (final element in highlights) {
-    final data = element.data as HighlightData;
-    final inflate = data.strokeWidth / 2;
-    final rect = element.rect;
-    final cullRect = _buildCullRect(
-      rect: rect,
-      rotation: element.rotation,
-      inflate: inflate,
-    );
-    if (!_rectsIntersect(cullRect, viewportRect)) {
-      continue;
-    }
-    hasVisibleHole = true;
-    _appendHighlightHolePath(
-      holesPath: holesPath,
-      element: element,
-      data: data,
-      inflate: inflate,
-    );
-  }
-
-  if (!hasVisibleHole) {
+  final visibleHoles = _collectVisibleHighlightHoles(
+    highlights: highlights,
+    viewportRect: viewportRect,
+  );
+  if (visibleHoles.isEmpty) {
     canvas.drawRect(layerRect, _fallbackMaskPaint);
     return;
   }
 
-  final outerPath = Path()..addRect(layerRect);
+  final holesPath = Path();
+  for (final hole in visibleHoles) {
+    _appendHighlightHolePath(holesPath: holesPath, hole: hole);
+  }
+
   try {
     final maskPath = Path.combine(
       PathOperation.difference,
-      outerPath,
+      Path()..addRect(layerRect),
       holesPath,
     );
     canvas.drawPath(maskPath, _fallbackMaskPaint);
   } on Object {
     _paintHighlightMaskFallbackWithSaveLayer(
       canvas: canvas,
-      highlights: highlights,
-      viewportRect: viewportRect,
-      maskConfig: maskConfig,
-      effectiveAlpha: effectiveAlpha,
+      layerRect: layerRect,
+      visibleHoles: visibleHoles,
     );
   }
 }
 
-void _paintHighlightMaskFallbackWithSaveLayer({
-  required Canvas canvas,
+List<_VisibleHighlightHole> _collectVisibleHighlightHoles({
   required List<ElementState> highlights,
   required DrawRect viewportRect,
-  required HighlightMaskConfig maskConfig,
-  required double effectiveAlpha,
 }) {
-  final layerRect = Rect.fromLTWH(
-    viewportRect.minX,
-    viewportRect.minY,
-    viewportRect.width,
-    viewportRect.height,
-  );
-
-  canvas.saveLayer(layerRect, _fallbackLayerPaint);
-
-  _fallbackMaskPaint.color = maskConfig.maskColor.withValues(
-    alpha: effectiveAlpha,
-  );
-  canvas.drawRect(layerRect, _fallbackMaskPaint);
-
+  final visibleHoles = <_VisibleHighlightHole>[];
   for (final element in highlights) {
     final data = element.data as HighlightData;
     final inflate = data.strokeWidth / 2;
@@ -179,31 +159,39 @@ void _paintHighlightMaskFallbackWithSaveLayer({
       rotation: element.rotation,
       inflate: inflate,
     );
-    final expanded = Rect.fromLTWH(
-      rect.minX - inflate,
-      rect.minY - inflate,
-      rect.width + inflate * 2,
-      rect.height + inflate * 2,
-    );
-
     if (!_rectsIntersect(cullRect, viewportRect)) {
       continue;
     }
 
-    canvas.save();
-    if (element.rotation != 0) {
-      canvas
-        ..translate(rect.centerX, rect.centerY)
-        ..rotate(element.rotation)
-        ..translate(-rect.centerX, -rect.centerY);
-    }
+    visibleHoles.add(
+      _VisibleHighlightHole(
+        expandedRect: Rect.fromLTWH(
+          rect.minX - inflate,
+          rect.minY - inflate,
+          rect.width + inflate * 2,
+          rect.height + inflate * 2,
+        ),
+        shape: data.shape,
+        rotation: element.rotation,
+        centerX: rect.centerX,
+        centerY: rect.centerY,
+      ),
+    );
+  }
+  return visibleHoles;
+}
 
-    if (data.shape == HighlightShape.rectangle) {
-      canvas.drawRect(expanded, _fallbackClearPaint);
-    } else {
-      canvas.drawOval(expanded, _fallbackClearPaint);
-    }
-    canvas.restore();
+void _paintHighlightMaskFallbackWithSaveLayer({
+  required Canvas canvas,
+  required Rect layerRect,
+  required List<_VisibleHighlightHole> visibleHoles,
+}) {
+  canvas
+    ..saveLayer(layerRect, _fallbackLayerPaint)
+    ..drawRect(layerRect, _fallbackMaskPaint);
+
+  for (final hole in visibleHoles) {
+    _drawHighlightHole(canvas: canvas, hole: hole, paint: _fallbackClearPaint);
   }
 
   canvas.restore();
@@ -211,39 +199,84 @@ void _paintHighlightMaskFallbackWithSaveLayer({
 
 void _appendHighlightHolePath({
   required Path holesPath,
-  required ElementState element,
-  required HighlightData data,
-  required double inflate,
+  required _VisibleHighlightHole hole,
 }) {
-  final rect = element.rect;
-  final expandedRect = Rect.fromLTWH(
-    rect.minX - inflate,
-    rect.minY - inflate,
-    rect.width + inflate * 2,
-    rect.height + inflate * 2,
-  );
-  final shapePath = Path();
-  if (data.shape == HighlightShape.rectangle) {
-    shapePath.addRect(expandedRect);
-  } else {
-    shapePath.addOval(expandedRect);
-  }
-
-  final rotation = element.rotation;
-  if (rotation == 0) {
-    holesPath.addPath(shapePath, Offset.zero);
+  if (hole.rotation == 0) {
+    _addShapeToPath(
+      path: holesPath,
+      shape: hole.shape,
+      rect: hole.expandedRect,
+    );
     return;
   }
 
+  final shapePath = Path();
+  _addShapeToPath(path: shapePath, shape: hole.shape, rect: hole.expandedRect);
   holesPath.addPath(
     shapePath,
     Offset.zero,
     matrix4: _rotationMatrix(
-      rotation: rotation,
-      centerX: rect.centerX,
-      centerY: rect.centerY,
+      rotation: hole.rotation,
+      centerX: hole.centerX,
+      centerY: hole.centerY,
     ),
   );
+}
+
+void _drawHighlightHole({
+  required Canvas canvas,
+  required _VisibleHighlightHole hole,
+  required Paint paint,
+}) {
+  if (hole.rotation == 0) {
+    _drawShape(
+      canvas: canvas,
+      shape: hole.shape,
+      rect: hole.expandedRect,
+      paint: paint,
+    );
+    return;
+  }
+
+  canvas
+    ..save()
+    ..translate(hole.centerX, hole.centerY)
+    ..rotate(hole.rotation)
+    ..translate(-hole.centerX, -hole.centerY);
+  _drawShape(
+    canvas: canvas,
+    shape: hole.shape,
+    rect: hole.expandedRect,
+    paint: paint,
+  );
+  canvas.restore();
+}
+
+void _addShapeToPath({
+  required Path path,
+  required HighlightShape shape,
+  required Rect rect,
+}) {
+  switch (shape) {
+    case HighlightShape.rectangle:
+      path.addRect(rect);
+    case HighlightShape.ellipse:
+      path.addOval(rect);
+  }
+}
+
+void _drawShape({
+  required Canvas canvas,
+  required HighlightShape shape,
+  required Rect rect,
+  required Paint paint,
+}) {
+  switch (shape) {
+    case HighlightShape.rectangle:
+      canvas.drawRect(rect, paint);
+    case HighlightShape.ellipse:
+      canvas.drawOval(rect, paint);
+  }
 }
 
 Float64List _rotationMatrix({
