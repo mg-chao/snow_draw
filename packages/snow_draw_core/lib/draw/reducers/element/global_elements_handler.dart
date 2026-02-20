@@ -7,23 +7,18 @@ DrawState handleUpdateGlobalElements(
   UpdateGlobalElements action,
   ElementReducerDeps _,
 ) {
-  if (!action.hasUpdates) {
-    return state;
-  }
-
-  final document = state.domain.document;
-  final currentGlobalElements = document.globalElements;
-  final nextGlobalElements = currentGlobalElements.copyWith(
+  final currentDocument = state.domain.document;
+  final nextGlobalElements = currentDocument.globalElements.copyWith(
     highlightMask: action.highlightMask,
     watermark: action.watermark,
   );
-  if (nextGlobalElements == currentGlobalElements) {
+  if (identical(nextGlobalElements, currentDocument.globalElements)) {
     return state;
   }
 
   return state.copyWith(
     domain: state.domain.copyWith(
-      document: document.copyWith(globalElements: nextGlobalElements),
+      document: currentDocument.copyWith(globalElements: nextGlobalElements),
     ),
   );
 }
