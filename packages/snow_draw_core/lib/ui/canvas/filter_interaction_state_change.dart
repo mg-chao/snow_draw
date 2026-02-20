@@ -13,10 +13,7 @@ bool isFilterInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
@@ -51,10 +48,9 @@ bool _isFilterCreatingMutationOnly({
   required CreatingState previous,
   required CreatingState next,
 }) {
-  if (previous.elementData is! FilterData || next.elementData is! FilterData) {
-    return false;
-  }
-  if (!_isSameFilterCreationSession(previous, next)) {
+  if (previous.elementData is! FilterData ||
+      next.elementData is! FilterData ||
+      !_isSameFilterCreationSession(previous, next)) {
     return false;
   }
   return previous.currentRect != next.currentRect ||
@@ -79,8 +75,7 @@ bool _isFilterEditingMutationOnly({
   if (!_isSameEditSession(previous, next)) {
     return false;
   }
-  if (!_isFilterEditContext(context: previous.context, document: document) ||
-      !_isFilterEditContext(context: next.context, document: document)) {
+  if (!_isFilterEditContext(context: next.context, document: document)) {
     return false;
   }
   return previous.currentTransform != next.currentTransform ||
@@ -96,16 +91,13 @@ bool _isFilterEditContext({
   required EditContext context,
   required DocumentState document,
 }) {
-  if (context.selectedIdsAtStart.isEmpty) {
+  final selectedIds = context.selectedIdsAtStart;
+  if (selectedIds.isEmpty) {
     return false;
   }
-  for (final elementId in context.selectedIdsAtStart) {
-    final element = document.getElementById(elementId);
-    if (element?.data is! FilterData) {
-      return false;
-    }
-  }
-  return true;
+  return selectedIds.every(
+    (elementId) => document.getElementById(elementId)?.data is FilterData,
+  );
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {
