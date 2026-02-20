@@ -12,8 +12,8 @@ import '../text/text_layout.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
 
-const _defaultTextGap = 18;
-const _gapStrokeMultiplier = 2;
+const _defaultTextGap = 18.0;
+const _gapStrokeMultiplier = 2.0;
 
 @immutable
 class SerialNumberTextConnection {
@@ -44,8 +44,7 @@ DrawRect resolveSerialNumberBoundTextRect({
   final height = math.max(layout.size.height, layout.lineHeight);
   final strokeWidth = resolveSerialNumberStrokeWidth(data: serialData);
   final resolvedGap =
-      gap ??
-      math.max(_defaultTextGap, strokeWidth * _gapStrokeMultiplier).toDouble();
+      gap ?? math.max(_defaultTextGap, strokeWidth * _gapStrokeMultiplier);
 
   final rect = serialElement.rect;
   final minX = rect.maxX + resolvedGap;
@@ -88,26 +87,24 @@ SerialNumberTextConnection? resolveSerialNumberTextConnection({
   final dx = anchor.x - center.x;
   final dy = anchor.y - center.y;
   final distance = math.sqrt(dx * dx + dy * dy);
-  if (distance <= 0) {
-    return null;
-  }
 
   final radius = math.min(serialRect.width, serialRect.height) / 2;
   final bindingGap = ArrowBindingUtils.resolveBindingGap(target: serialElement);
-  final totalOffset = radius + bindingGap + lineWidth / 2;
-  if (distance <= totalOffset) {
+  final startOffset = radius + bindingGap;
+  final halfLineWidth = lineWidth / 2;
+  if (distance <= startOffset + halfLineWidth) {
     return null;
   }
 
   final ux = dx / distance;
   final uy = dy / distance;
   final start = DrawPoint(
-    x: center.x + ux * (radius + bindingGap),
-    y: center.y + uy * (radius + bindingGap),
+    x: center.x + ux * startOffset,
+    y: center.y + uy * startOffset,
   );
   final end = DrawPoint(
-    x: anchor.x - ux * (lineWidth / 2),
-    y: anchor.y - uy * (lineWidth / 2),
+    x: anchor.x - ux * halfLineWidth,
+    y: anchor.y - uy * halfLineWidth,
   );
 
   return SerialNumberTextConnection(
@@ -128,10 +125,17 @@ _TextAttachment _resolveTextAttachment({
   final centeredHorizontally =
       centerX >= textRect.minX && centerX <= textRect.maxX;
 
-  if ((isAbove || isBelow) && centeredHorizontally) {
-    return _TextAttachment(
-      anchor: DrawPoint(x: centerX, y: isAbove ? textRect.maxY : textRect.minY),
-    );
+  if (centeredHorizontally) {
+    if (isAbove) {
+      return _TextAttachment(
+        anchor: DrawPoint(x: centerX, y: textRect.maxY),
+      );
+    }
+    if (isBelow) {
+      return _TextAttachment(
+        anchor: DrawPoint(x: centerX, y: textRect.minY),
+      );
+    }
   }
 
   final anchorX = centerX.clamp(textRect.minX, textRect.maxX);
