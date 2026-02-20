@@ -54,13 +54,9 @@ class RectangleShaderManager {
 
     _isLoading = true;
     try {
-      final program = await ui.FragmentProgram.fromAsset(
+      _program = await ui.FragmentProgram.fromAsset(
         'packages/snow_draw_core/shaders/rectangle.frag',
       );
-      _program = program;
-      if (!kIsWeb) {
-        _sharedShader = program.fragmentShader();
-      }
     } on Exception catch (e) {
       _loadFailed = true;
       debugPrint('Failed to load rectangle shader: $e');
@@ -99,10 +95,6 @@ class RectangleShaderManager {
     }
 
     final shader = _resolveShader(program, elementId);
-    if (shader == null) {
-      return false;
-    }
-
     var idx = 0;
 
     // uResolution (vec2)
@@ -120,12 +112,8 @@ class RectangleShaderManager {
       ..setFloat(idx++, fillStyle.index.toDouble());
 
     // uFillColor (vec4), premultiplied alpha.
-    final fillAlpha = fillColor.a;
+    idx = _setPremultipliedColor(shader, idx, fillColor);
     shader
-      ..setFloat(idx++, fillColor.r * fillAlpha)
-      ..setFloat(idx++, fillColor.g * fillAlpha)
-      ..setFloat(idx++, fillColor.b * fillAlpha)
-      ..setFloat(idx++, fillAlpha)
       // uFillLineWidth (float)
       ..setFloat(idx++, fillLineWidth)
       // uFillLineSpacing (float)
@@ -134,12 +122,8 @@ class RectangleShaderManager {
       ..setFloat(idx++, strokeStyle.index.toDouble());
 
     // uStrokeColor (vec4), premultiplied alpha.
-    final strokeAlpha = strokeColor.a;
+    idx = _setPremultipliedColor(shader, idx, strokeColor);
     shader
-      ..setFloat(idx++, strokeColor.r * strokeAlpha)
-      ..setFloat(idx++, strokeColor.g * strokeAlpha)
-      ..setFloat(idx++, strokeColor.b * strokeAlpha)
-      ..setFloat(idx++, strokeAlpha)
       // uStrokeWidth (float)
       ..setFloat(idx++, strokeWidth)
       // uDashLength (float)
@@ -174,30 +158,33 @@ class RectangleShaderManager {
     return true;
   }
 
-  ui.FragmentShader? _resolveShader(
+  int _setPremultipliedColor(ui.FragmentShader shader, int start, Color color) {
+    final alpha = color.a;
+    shader
+      ..setFloat(start++, color.r * alpha)
+      ..setFloat(start++, color.g * alpha)
+      ..setFloat(start++, color.b * alpha)
+      ..setFloat(start++, alpha);
+    return start;
+  }
+
+  ui.FragmentShader _resolveShader(
     ui.FragmentProgram program,
     String elementId,
   ) {
-    if (!kIsWeb) {
-      final shader = _sharedShader;
-      if (shader != null) {
-        return shader;
-      }
-      final created = program.fragmentShader();
-      _sharedShader = created;
-      return created;
+    if (kIsWeb) {
+      return _webShaderCache.getOrCreate(elementId, program.fragmentShader);
     }
-    return _webShaderCache.getOrCreate(elementId, program.fragmentShader);
+    return _sharedShader ??= program.fragmentShader();
   }
 
-  Paint _resolvePaint(ui.FragmentShader shader) {
-    if (!kIsWeb) {
-      return _sharedPaint..shader = shader;
-    }
-    // Keep paint instances isolated on web to avoid mutable-state carry-over
-    // when multiple draw commands are queued in one frame.
-    return Paint()..shader = shader;
-  }
+  Paint _resolvePaint(ui.FragmentShader shader) =>
+      (kIsWeb
+            // Keep paint instances isolated on web to avoid mutable-state
+            // carry-over when multiple draw commands are queued in one frame.
+            ? Paint()
+            : _sharedPaint)
+        ..shader = shader;
 
   /// Disposes of the shader resources.
   void dispose() {
