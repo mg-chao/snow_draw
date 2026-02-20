@@ -159,7 +159,7 @@ void main() {
         throwsUnsupportedError,
       );
       expect(
-        () => scene.dynamicPreviewElementIds?.add('third'),
+        () => scene.dynamicPreviewElementIds.add('third'),
         throwsUnsupportedError,
       );
       expect(

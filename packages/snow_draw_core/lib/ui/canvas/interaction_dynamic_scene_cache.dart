@@ -38,7 +38,7 @@ typedef DynamicPreviewElementIdsResolver =
 class InteractionDynamicSceneSnapshot {
   InteractionDynamicSceneSnapshot({
     required Map<String, ElementState> previewElementsById,
-    required Set<String>? dynamicPreviewElementIds,
+    required Set<String> dynamicPreviewElementIds,
     required Set<String> optimizedDynamicElementIds,
     required this.optimizedSceneHasPotentialOccluders,
     required this.dynamicLayerStartIndex,
@@ -50,15 +50,15 @@ class InteractionDynamicSceneSnapshot {
   }) : previewElementsById = Map<String, ElementState>.unmodifiable(
          previewElementsById,
        ),
-       dynamicPreviewElementIds = dynamicPreviewElementIds == null
-           ? null
-           : Set<String>.unmodifiable(dynamicPreviewElementIds),
+       dynamicPreviewElementIds = Set<String>.unmodifiable(
+         dynamicPreviewElementIds,
+       ),
        optimizedDynamicElementIds = Set<String>.unmodifiable(
          optimizedDynamicElementIds,
        );
 
   final Map<String, ElementState> previewElementsById;
-  final Set<String>? dynamicPreviewElementIds;
+  final Set<String> dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
   final bool optimizedSceneHasPotentialOccluders;
   final int? dynamicLayerStartIndex;
@@ -84,24 +84,23 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
 }) {
   final optimizedDynamicElementIds =
       previousRenderKey.optimizedDynamicElementIds;
-  final optimizedSceneHasPotentialOccluders =
-      optimizedDynamicElementIds.isNotEmpty &&
-      previousRenderKey.optimizedSceneHasPotentialOccluders;
-  final previewElementsById = optimizedDynamicElementIds.isEmpty
-      ? resolvePreviewByLayerStart(
+  final hasOptimizedDynamicElements = optimizedDynamicElementIds.isNotEmpty;
+  final previewElementsById = hasOptimizedDynamicElements
+      ? resolvePreviewByOptimizedIds(stateView, optimizedDynamicElementIds)
+      : resolvePreviewByLayerStart(
           stateView,
           previousRenderKey.dynamicLayerStartIndex,
-        )
-      : resolvePreviewByOptimizedIds(stateView, optimizedDynamicElementIds);
-  final dynamicPreviewElementIds = resolveDynamicPreviewElementIds(
-    stateView,
-    previewElementsById,
-  );
+        );
   return InteractionDynamicSceneSnapshot(
     previewElementsById: previewElementsById,
-    dynamicPreviewElementIds: dynamicPreviewElementIds,
+    dynamicPreviewElementIds: resolveDynamicPreviewElementIds(
+      stateView,
+      previewElementsById,
+    ),
     optimizedDynamicElementIds: optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+    optimizedSceneHasPotentialOccluders:
+        hasOptimizedDynamicElements &&
+        previousRenderKey.optimizedSceneHasPotentialOccluders,
     dynamicLayerStartIndex: previousRenderKey.dynamicLayerStartIndex,
     rendersWholeElementScene: previousRenderKey.rendersWholeElementScene,
     highlightMaskLayer: previousRenderKey.highlightMaskLayer,
