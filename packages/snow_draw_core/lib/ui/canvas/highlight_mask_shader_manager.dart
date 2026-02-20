@@ -43,10 +43,8 @@ class HighlightMaskShaderManager {
 
   static final instance = HighlightMaskShaderManager._();
 
-  ui.FragmentProgram? _program;
   ui.FragmentShader? _shader;
   final _paint = Paint();
-  final _modulatePaint = Paint()..blendMode = BlendMode.modulate;
   var _isLoading = false;
   var _loadFailed = false;
 
@@ -64,10 +62,10 @@ class HighlightMaskShaderManager {
 
     _isLoading = true;
     try {
-      _program = await ui.FragmentProgram.fromAsset(
+      final program = await ui.FragmentProgram.fromAsset(
         'packages/snow_draw_core/shaders/highlight_mask.frag',
       );
-      _shader = _program!.fragmentShader();
+      _shader = program.fragmentShader();
     } on Exception catch (error, stackTrace) {
       _loadFailed = true;
       _log.warning('Failed to load highlight mask shader', {
@@ -118,80 +116,28 @@ class HighlightMaskShaderManager {
       return false;
     }
 
-    _configureShaderPass(
+    _configureShader(
       shader: shader,
       screenWidth: screenWidth,
       screenHeight: screenHeight,
       maskColor: maskConfig.maskColor,
       alpha: effectiveAlpha,
       highlights: visible,
-      start: 0,
-      count: visible.length,
     );
     _paint.shader = shader;
     canvas.drawRect(screenRect, _paint);
     return true;
   }
 
-  /// Paints highlight holes as a multiplicative pass.
-  ///
-  /// This pass outputs white outside highlight holes and transparent inside,
-  /// and is intended to be drawn with [BlendMode.modulate] over an existing
-  /// mask layer.
-  bool paintHoleMaskModulate({
-    required Canvas canvas,
-    required List<ElementState> highlights,
-    required DrawRect viewportRect,
-    required double scaleFactor,
-    required Offset cameraPosition,
-  }) {
-    final shader = _shader;
-    if (shader == null) {
-      return false;
-    }
-
-    final scale = scaleFactor == 0 ? 1.0 : scaleFactor;
-    final screenWidth = viewportRect.width * scale;
-    final screenHeight = viewportRect.height * scale;
-    final screenRect = Rect.fromLTWH(0, 0, screenWidth, screenHeight);
-    final visible = _cullHighlights(
-      highlights: highlights,
-      viewportRect: viewportRect,
-      scale: scale,
-      cameraPosition: cameraPosition,
-    );
-    if (visible.isEmpty) {
-      return true;
-    }
-    if (visible.length > highlightMaskShaderLimit) {
-      return false;
-    }
-
-    _configureShaderPass(
-      shader: shader,
-      screenWidth: screenWidth,
-      screenHeight: screenHeight,
-      maskColor: const Color(0xFFFFFFFF),
-      alpha: 1,
-      highlights: visible,
-      start: 0,
-      count: visible.length,
-    );
-    _modulatePaint.shader = shader;
-    canvas.drawRect(screenRect, _modulatePaint);
-    return true;
-  }
-
-  void _configureShaderPass({
+  void _configureShader({
     required ui.FragmentShader shader,
     required double screenWidth,
     required double screenHeight,
     required Color maskColor,
     required double alpha,
     required List<_VisibleHighlight> highlights,
-    required int start,
-    required int count,
   }) {
+    final count = highlights.length;
     var idx = 0;
     shader
       ..setFloat(idx++, screenWidth)
@@ -202,7 +148,7 @@ class HighlightMaskShaderManager {
       ..setFloat(idx++, alpha)
       ..setFloat(idx++, count.toDouble());
 
-    if (count <= 0) {
+    if (highlights.isEmpty) {
       shader
         ..setFloat(idx++, 0)
         ..setFloat(idx++, 0)
@@ -211,12 +157,11 @@ class HighlightMaskShaderManager {
       return;
     }
 
-    final end = start + count;
-    var bMinX = highlights[start].screenMinX;
-    var bMinY = highlights[start].screenMinY;
-    var bMaxX = highlights[start].screenMaxX;
-    var bMaxY = highlights[start].screenMaxY;
-    for (var i = start + 1; i < end; i++) {
+    var bMinX = highlights.first.screenMinX;
+    var bMinY = highlights.first.screenMinY;
+    var bMaxX = highlights.first.screenMaxX;
+    var bMaxY = highlights.first.screenMaxY;
+    for (var i = 1; i < count; i++) {
       final h = highlights[i];
       if (h.screenMinX < bMinX) {
         bMinX = h.screenMinX;
@@ -238,7 +183,7 @@ class HighlightMaskShaderManager {
       ..setFloat(idx++, bMaxY);
 
     for (var slot = 0; slot < count; slot++) {
-      final h = highlights[start + slot];
+      final h = highlights[slot];
       final aBase = _hiAOffset + slot * _vec4Floats;
       shader
         ..setFloat(aBase, h.cx)
@@ -266,7 +211,6 @@ class HighlightMaskShaderManager {
   void dispose() {
     _shader?.dispose();
     _shader = null;
-    _program = null;
   }
 }
 
@@ -309,15 +253,13 @@ class _VisibleHighlight {
 ///
 /// Precomputes cos/sin on the Dart side so the shader avoids per-fragment
 /// trigonometry. Also computes a tight screen-space AABB per highlight.
-final _visibleHighlightBuffer = <_VisibleHighlight>[];
-
 List<_VisibleHighlight> _cullHighlights({
   required List<ElementState> highlights,
   required DrawRect viewportRect,
   required double scale,
   required Offset cameraPosition,
 }) {
-  final result = _visibleHighlightBuffer..clear();
+  final result = <_VisibleHighlight>[];
   final screenW = viewportRect.width * scale;
   final screenH = viewportRect.height * scale;
   const aaMargin = 1.0;
@@ -326,10 +268,10 @@ List<_VisibleHighlight> _cullHighlights({
     final rect = element.rect;
     final inflate = data.strokeWidth / 2;
 
-    final cx = (rect.centerX + cameraPosition.dx / scale) * scale;
-    final cy = (rect.centerY + cameraPosition.dy / scale) * scale;
-    final hw = rect.width / 2 * scale;
-    final hh = rect.height / 2 * scale;
+    final cx = (rect.centerX * scale) + cameraPosition.dx;
+    final cy = (rect.centerY * scale) + cameraPosition.dy;
+    final hw = rect.width * scale / 2;
+    final hh = rect.height * scale / 2;
     final inflateX = inflate * scale;
     final inflateY = inflate * scale;
 
