@@ -11,62 +11,69 @@ abstract class EditEvent extends DrawEvent {
   const EditEvent();
 }
 
-/// Edit session started event.
 @immutable
-class EditSessionStartedEvent extends EditEvent {
-  const EditSessionStartedEvent({
-    required this.sessionId,
-    required this.operationId,
-  });
+abstract class _EditSessionEvent extends EditEvent {
+  const _EditSessionEvent({required this.sessionId, required this.operationId});
+
   final EditSessionId sessionId;
   final EditOperationId operationId;
 
+  String get eventName;
+
   @override
   String toString() =>
-      'EditSessionStarted(session: $sessionId, operation: $operationId)';
+      '$eventName(session: $sessionId, operation: $operationId)';
+}
+
+/// Edit session started event.
+@immutable
+class EditSessionStartedEvent extends _EditSessionEvent {
+  const EditSessionStartedEvent({
+    required super.sessionId,
+    required super.operationId,
+  });
+
+  @override
+  String get eventName => 'EditSessionStarted';
 }
 
 /// Edit session updated event.
 @immutable
-class EditSessionUpdatedEvent extends EditEvent {
+class EditSessionUpdatedEvent extends _EditSessionEvent {
   const EditSessionUpdatedEvent({
-    required this.sessionId,
-    required this.operationId,
+    required super.sessionId,
+    required super.operationId,
   });
-  final EditSessionId sessionId;
-  final EditOperationId operationId;
 
   @override
-  String toString() =>
-      'EditSessionUpdated(session: $sessionId, operation: $operationId)';
+  String get eventName => 'EditSessionUpdated';
 }
 
 /// Edit session finished event.
 @immutable
-class EditSessionFinishedEvent extends EditEvent {
+class EditSessionFinishedEvent extends _EditSessionEvent {
   const EditSessionFinishedEvent({
-    required this.sessionId,
-    required this.operationId,
+    required super.sessionId,
+    required super.operationId,
   });
-  final EditSessionId sessionId;
-  final EditOperationId operationId;
 
   @override
-  String toString() =>
-      'EditSessionFinished(session: $sessionId, operation: $operationId)';
+  String get eventName => 'EditSessionFinished';
 }
 
 /// Edit session cancelled event.
 @immutable
-class EditSessionCancelledEvent extends EditEvent {
+class EditSessionCancelledEvent extends _EditSessionEvent {
   const EditSessionCancelledEvent({
-    required this.sessionId,
-    required this.operationId,
+    required super.sessionId,
+    required super.operationId,
     required this.reason,
   });
-  final EditSessionId sessionId;
-  final EditOperationId operationId;
+
   final EditCancelReason reason;
+
+  @override
+  String get eventName => 'EditSessionCancelled';
 
   @override
   String toString() =>
