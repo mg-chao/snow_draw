@@ -2,6 +2,7 @@ import 'dart:io';
 
 const _backendPubspecPath = 'packages/snow_draw_flutter_backend/pubspec.yaml';
 const _forbiddenPackageName = 'snow_draw';
+const _requiredCorePackageName = 'snow_draw_core';
 
 void main() {
   final pubspecFile = File(_backendPubspecPath);
@@ -14,6 +15,7 @@ void main() {
   final lines = pubspecFile.readAsLinesSync();
   final violations = <String>[];
   String? currentSection;
+  var hasCoreDependency = false;
 
   for (var index = 0; index < lines.length; index++) {
     final lineNumber = index + 1;
@@ -34,12 +36,25 @@ void main() {
     if (!_isDependencySection(currentSection)) {
       continue;
     }
+
+    if (currentSection == 'dependencies' &&
+        trimmed.startsWith('$_requiredCorePackageName:')) {
+      hasCoreDependency = true;
+    }
+
     if (!trimmed.startsWith('$_forbiddenPackageName:')) {
       continue;
     }
     violations.add(
       '$_backendPubspecPath:$lineNumber: '
       'backend package must not depend on $_forbiddenPackageName',
+    );
+  }
+
+  if (!hasCoreDependency) {
+    violations.add(
+      '$_backendPubspecPath: missing required dependencies.'
+      '$_requiredCorePackageName entry',
     );
   }
 
@@ -54,7 +69,7 @@ void main() {
 
   stdout.writeln(
     'Backend pubspec boundary check passed. '
-    'No app package dependencies are declared in backend pubspec.',
+    'No app package dependencies are declared and core dependency is present.',
   );
 }
 
