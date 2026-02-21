@@ -76,6 +76,7 @@ This aggregates:
 - `check:core-ui-boundary`
 - `check:backend-legacy`
 - `check:backend-app-import-boundary`
+- `check:backend-pubspec-boundary`
 - `check:backend-entrypoint`
 - `check:ci-workflow`
 - `check:app-backend-import-boundary`
