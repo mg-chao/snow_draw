@@ -15,6 +15,12 @@ import 'package:snow_draw_core/draw/elements/types/text/text_definition.dart';
 
 void main() {
   group('DefaultElementRegistry characterization', () {
+    DefaultElementRegistry createRegistryWithBuiltIns() {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      return registry;
+    }
+
     test(
       'registerBuiltInElements is idempotent and registers all built-ins',
       () {
@@ -23,27 +29,27 @@ void main() {
         registerBuiltInElements(registry);
         registerBuiltInElements(registry);
 
-        final typeIds = registry.registeredTypeIds.map((type) => type.value);
-        expect(
-          typeIds.toSet(),
-          equals({
-            rectangleDefinition.typeId.value,
-            arrowDefinition.typeId.value,
-            lineDefinition.typeId.value,
-            freeDrawDefinition.typeId.value,
-            filterDefinition.typeId.value,
-            highlightDefinition.typeId.value,
-            textDefinition.typeId.value,
-            serialNumberDefinition.typeId.value,
-          }),
-        );
-        expect(typeIds.length, 8);
+        final typeIds = registry.registeredTypeIds
+            .map((type) => type.value)
+            .toList();
+        final expectedTypeIds = {
+          rectangleDefinition.typeId.value,
+          arrowDefinition.typeId.value,
+          lineDefinition.typeId.value,
+          freeDrawDefinition.typeId.value,
+          filterDefinition.typeId.value,
+          highlightDefinition.typeId.value,
+          textDefinition.typeId.value,
+          serialNumberDefinition.typeId.value,
+        };
+
+        expect(typeIds.toSet(), equals(expectedTypeIds));
+        expect(typeIds, hasLength(expectedTypeIds.length));
       },
     );
 
     test('lookups work with equivalent ElementTypeId instances', () {
-      final registry = DefaultElementRegistry();
-      registerBuiltInElements(registry);
+      final registry = createRegistryWithBuiltIns();
 
       const lookupTypeId = ElementTypeId<ElementData>('rectangle');
       final definition = registry.getDefinition(lookupTypeId);
@@ -54,8 +60,7 @@ void main() {
     });
 
     test('supports lookup by serialized type string', () {
-      final registry = DefaultElementRegistry();
-      registerBuiltInElements(registry);
+      final registry = createRegistryWithBuiltIns();
 
       final definition = registry.getDefinitionByValue(
         rectangleDefinition.typeId.value,
@@ -65,9 +70,9 @@ void main() {
       expect(definition!.typeId.value, rectangleDefinition.typeId.value);
       expect(
         registry.supportsTypeValue(rectangleDefinition.typeId.value),
-        true,
+        isTrue,
       );
-      expect(registry.supportsTypeValue('missing_type'), false);
+      expect(registry.supportsTypeValue('missing_type'), isFalse);
     });
 
     test('clone keeps entries detached from future registrations', () {
@@ -83,22 +88,16 @@ void main() {
       expect(registry.get(arrowDefinition.typeId), isNull);
     });
 
-    test(
-      'typed lookup with mismatched generic does not throw and returns null',
-      () {
-        final registry = DefaultElementRegistry();
-        registerBuiltInElements(registry);
+    test('typed lookup with mismatched generic returns null', () {
+      final registry = createRegistryWithBuiltIns();
 
-        const mismatched = ElementTypeId<LineData>('rectangle');
+      const mismatched = ElementTypeId<LineData>('rectangle');
 
-        expect(() => registry.getDefinition(mismatched), returnsNormally);
-        expect(registry.getDefinition(mismatched), isNull);
-      },
-    );
+      expect(registry.getDefinition(mismatched), isNull);
+    });
 
     test('supports honors generic type when value matches another element', () {
-      final registry = DefaultElementRegistry();
-      registerBuiltInElements(registry);
+      final registry = createRegistryWithBuiltIns();
 
       const mismatched = ElementTypeId<LineData>('rectangle');
 
@@ -106,8 +105,7 @@ void main() {
     });
 
     test('require throws StateError for mismatched generic lookups', () {
-      final registry = DefaultElementRegistry();
-      registerBuiltInElements(registry);
+      final registry = createRegistryWithBuiltIns();
 
       const mismatched = ElementTypeId<LineData>('rectangle');
 
