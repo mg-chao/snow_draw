@@ -7,8 +7,8 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
+import '../rectangle/rectangle_render_plan.dart';
 import 'element_type_renderer.dart';
-import 'rectangle_render_plan.dart';
 import 'stroke_pattern_utils.dart';
 
 class RectangleRenderer extends ElementTypeRenderer {
