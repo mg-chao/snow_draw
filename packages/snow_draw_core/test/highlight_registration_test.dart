@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
@@ -8,6 +8,6 @@ void main() {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
 
-    expect(registry.get(HighlightData.typeIdToken), isNotNull);
+    expect(registry.supports(HighlightData.typeIdToken), isTrue);
   });
 }
