@@ -15,7 +15,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 
 void main() {
-  test('encodes scene primitives when scene encoder is available', () {
+  test('renders scene primitives when scene encoder is available', () {
     final counters = _RenderCounters();
     final elementRegistry = _buildElementRegistry(counters);
 
@@ -24,7 +24,7 @@ void main() {
     expect(counters.sceneEncodes, 1);
   });
 
-  test('falls back safely when scene encoder is unavailable', () {
+  test('uses unknown-element fallback when scene encoder is unavailable', () {
     final counters = _RenderCounters();
     final elementRegistry = _buildElementRegistryWithoutSceneEncoder();
 
@@ -35,7 +35,7 @@ void main() {
     expect(counters.sceneEncodes, 0);
   });
 
-  test('falls back safely when scene encoding is not supported', () {
+  test('uses unknown-element fallback when scene encoding is unsupported', () {
     final elementRegistry = _buildElementRegistryWithUnsupportedEncoder();
 
     expect(
@@ -44,7 +44,7 @@ void main() {
     );
   });
 
-  test('falls back safely when element type is unknown', () {
+  test('uses unknown-element fallback when element type is unknown', () {
     final elementRegistry = DefaultElementRegistry();
 
     expect(
