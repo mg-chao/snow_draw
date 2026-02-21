@@ -23,6 +23,7 @@ rendering backends.
 - `apps/snow_draw`
   - Product UI composition and toolbar/store adapters.
   - Imports backend through package entrypoint only.
+  - Prefer importing shared core APIs via `package:snow_draw_core/snow_draw_core.dart`.
 
 ## Core -> Backend Contract
 
@@ -60,6 +61,8 @@ rendering backends.
 - App imports/exports backend APIs only through
   `package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart`.
 - Deep backend path imports from app are disallowed by guard scripts.
+- For core APIs, prefer `package:snow_draw_core/snow_draw_core.dart` over
+  deep package paths when the entrypoint exposes the needed symbols.
 
 ### Legacy namespace policy
 
