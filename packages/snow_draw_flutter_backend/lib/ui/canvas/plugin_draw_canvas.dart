@@ -1,23 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' hide TextLayoutMetrics;
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_core/draw/core/coordinates/element_space.dart';
-import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
-import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_like_data.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
-import 'package:snow_draw_core/draw/input/input_event.dart';
-import 'package:snow_draw_core/draw/input/plugin_system.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/types/edit_transform.dart';
-import 'package:snow_draw_core/draw/utils/hit_test.dart' as draw_hit_test;
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
@@ -1940,7 +1927,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // Shared hit test (computed once, used for both cursor and hover).
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final hitResult = draw_hit_test.hitTest.test(
+    final hitResult = hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
@@ -2326,7 +2313,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawState state,
     required DrawPoint position,
     required DrawStateView stateView,
-    required draw_hit_test.HitTestResult hitResult,
+    required HitTestResult hitResult,
   }) {
     if (hitResult.isHandleHit) {
       return false;
@@ -2391,7 +2378,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawState state,
     required DrawPoint position,
     required DrawStateView stateView,
-    required draw_hit_test.HitTestResult hitResult,
+    required HitTestResult hitResult,
   }) {
     final interaction = _resolveVisibleTextEditingInteraction(state);
     if (interaction == null) {
@@ -2415,13 +2402,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return !_isInsideAnyTextElement(stateView, position);
   }
 
-  bool _isSelectionHit(draw_hit_test.HitTestResult hitResult) =>
+  bool _isSelectionHit(HitTestResult hitResult) =>
       hitResult.isHandleHit || hitResult.isInSelectionPadding;
 
   bool _shouldDeferToSelectionBox({
     required DrawStateView stateView,
     required DrawPoint position,
-    required draw_hit_test.HitTestResult hitResult,
+    required HitTestResult hitResult,
   }) {
     final state = stateView.state;
     if (!state.domain.hasSelection) {
@@ -2564,7 +2551,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
-    final hitResult = draw_hit_test.hitTest.test(
+    final hitResult = hitTest.test(
       stateView: stateView,
       position: position,
       config: selectionConfig,
