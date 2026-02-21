@@ -26,6 +26,7 @@ void main() {
       'packages/snow_draw_flutter_backend/test/built_in_element_visual_icons_compatibility_test.dart',
       'packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
       'packages/snow_draw_flutter_backend/test/built_in_scene_encoder_routing_test.dart',
+      'packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart',
     ];
 
     var lastIndex = -1;
