@@ -31,17 +31,18 @@ void main() {
       highlightShape: HighlightShape.ellipse,
     );
 
-    const data = HighlightData();
-    final updated = data.withElementStyle(style);
-
-    expect(updated.color, style.color);
-    expect(updated.strokeColor, style.textStrokeColor);
-    expect(updated.strokeWidth, style.textStrokeWidth);
-    expect(updated.shape, style.highlightShape);
+    expect(
+      const HighlightData().withElementStyle(style),
+      const HighlightData(
+        shape: HighlightShape.ellipse,
+        color: Color(0xFF00FF00),
+        strokeColor: Color(0xFF0000FF),
+        strokeWidth: 3,
+      ),
+    );
   });
 
   test('HighlightData.withStyleUpdate applies highlight shape and strokes', () {
-    const data = HighlightData();
     const update = ElementStyleUpdate(
       color: Color(0xFF112233),
       textStrokeColor: Color(0xFF445566),
@@ -49,11 +50,14 @@ void main() {
       highlightShape: HighlightShape.ellipse,
     );
 
-    final updated = data.withStyleUpdate(update);
-
-    expect(updated.color, update.color);
-    expect(updated.strokeColor, update.textStrokeColor);
-    expect(updated.strokeWidth, update.textStrokeWidth);
-    expect(updated.shape, update.highlightShape);
+    expect(
+      const HighlightData().withStyleUpdate(update),
+      const HighlightData(
+        shape: HighlightShape.ellipse,
+        color: Color(0xFF112233),
+        strokeColor: Color(0xFF445566),
+        strokeWidth: 4,
+      ),
+    );
   });
 }
