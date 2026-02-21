@@ -87,6 +87,7 @@ This verifies:
 - built-in element default JSON snapshot compatibility
 - built-in element type id token stability
 - backend visual registration coverage for built-in core elements
+- backend package entrypoint export contract for app boundary usage
 
 ## Adding a New Rendering Backend
 
