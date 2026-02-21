@@ -20,9 +20,13 @@ void main() {
     test('exports element registry APIs and built-in registration', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
+      const arrow = ArrowData(strokeStyle: StrokeStyle.dotted);
+      const interaction = IdleState();
 
       expect(registry.registeredTypeIds, isNotEmpty);
       expect(registry, isA<ElementRegistry>());
+      expect(arrow.strokeStyle, StrokeStyle.dotted);
+      expect(interaction, isA<InteractionState>());
     });
 
     test('exports coordinate and scene contracts', () {
