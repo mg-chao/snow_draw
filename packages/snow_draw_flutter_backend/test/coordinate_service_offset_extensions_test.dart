@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/extensions/coordinate_service_offset_extensions.dart';
+import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 void main() {
   group('CoordinateServiceOffsetExtensions', () {

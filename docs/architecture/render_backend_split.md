@@ -120,6 +120,7 @@ This verifies:
 - backend entrypoint `flutterTextMetricsService` export behavior
 - backend coordinate adapter (`DrawPoint` <-> `Offset`) invertibility
 - backend compatibility test core-import boundary via core package entrypoint
+- backend compatibility test backend-import boundary via backend package entrypoint
 - built-in scene encoder routing coverage through backend scene rendering
 
 ## Adding a New Rendering Backend
