@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
@@ -16,8 +18,19 @@ void main() {
     final store = DefaultDrawStore(context: context);
     addTearDown(store.dispose);
 
+    final events = <DocumentChangedEvent>[];
+    final firstEvent = Completer<DocumentChangedEvent>();
+    final subscription = store.eventStreamOf<DocumentChangedEvent>().listen((
+      event,
+    ) {
+      events.add(event);
+      if (!firstEvent.isCompleted) {
+        firstEvent.complete(event);
+      }
+    });
+    addTearDown(subscription.cancel);
+
     final initialVersion = store.state.domain.document.elementsVersion;
-    final eventFuture = store.eventStreamOf<DocumentChangedEvent>().first;
 
     await store.dispatch(
       const UpdateGlobalElements(
@@ -25,12 +38,14 @@ void main() {
       ),
     );
 
-    final event = await eventFuture;
+    final event = await firstEvent.future;
+    await pumpEventQueue();
 
     expect(
       store.state.domain.document.elementsVersion,
       equals(initialVersion + 1),
     );
+    expect(events, hasLength(1));
     expect(event.elementsVersion, equals(initialVersion + 1));
   });
 }
