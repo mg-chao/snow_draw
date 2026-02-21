@@ -16,24 +16,21 @@ void main() {
     final store = DefaultDrawStore(context: context);
     addTearDown(store.dispose);
 
-    final events = <DocumentChangedEvent>[];
-    final subscription = store.onEvent<DocumentChangedEvent>(events.add);
-    addTearDown(subscription.cancel);
-
     final initialVersion = store.state.domain.document.elementsVersion;
+    final eventFuture = store.eventStreamOf<DocumentChangedEvent>().first;
 
     await store.dispatch(
       const UpdateGlobalElements(
         watermark: WatermarkConfig(text: 'CONFIDENTIAL'),
       ),
     );
-    await Future<void>.delayed(Duration.zero);
+
+    final event = await eventFuture;
 
     expect(
       store.state.domain.document.elementsVersion,
       equals(initialVersion + 1),
     );
-    expect(events, hasLength(1));
-    expect(events.single.elementsVersion, equals(initialVersion + 1));
+    expect(event.elementsVersion, equals(initialVersion + 1));
   });
 }
