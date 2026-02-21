@@ -19,6 +19,7 @@ void main() {
       'dart run melos run check:backend-pubspec-boundary',
       'dart run melos run check:backend-dependency-graph',
       'dart run melos run check:backend-core-entrypoint-import-boundary',
+      'dart run melos run check:backend-test-core-entrypoint-import-boundary',
       'dart run melos run check:backend-entrypoint',
       'dart run melos run check:ci-workflow',
       'dart run melos run check:app-backend-import-boundary',
@@ -100,6 +101,17 @@ void main() {
       pubspec,
       contains(
         'run: dart run tools/check_backend_core_entrypoint_import_boundary.dart',
+      ),
+    );
+    expect(
+      pubspec,
+      contains('check:backend-test-core-entrypoint-import-boundary:'),
+    );
+    expect(
+      pubspec,
+      contains(
+        'run: dart run '
+        'tools/check_backend_test_core_entrypoint_import_boundary.dart',
       ),
     );
     expect(pubspec, contains('check:core-purity:'));
