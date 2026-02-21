@@ -6,18 +6,15 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/ui/canvas/free_draw_creation_preview_cache.dart';
 
+const _defaultStrokeColor = Color(0xFF1576FE);
+
 void main() {
   group('FreeDrawCreationPreviewCache', () {
     test('sync keeps small previews in the tail path', () {
       final cache = FreeDrawCreationPreviewCache();
       final points = _buildPoints(16);
 
-      cache.sync(
-        elementId: 'stroke-1',
-        points: points,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-1', points: points);
 
       expect(cache.processedPointCount, points.length);
       expect(cache.tailPointCount, points.length);
@@ -31,11 +28,11 @@ void main() {
           FreeDrawCreationPreviewCache.segmentScanThresholdForTest;
       final points = _buildPoints(chunkSize * (scanThreshold + 4));
 
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-compact',
         points: points,
-        signature: _signature(strokeWidth: 3),
-        strokePaint: _strokePaint(strokeWidth: 3),
+        strokeWidth: 3,
       );
 
       expect(cache.sealedSegmentCount, greaterThan(scanThreshold));
@@ -51,11 +48,11 @@ void main() {
           FreeDrawCreationPreviewCache.compactionBatchSizeForTest;
       final points = _buildPoints(chunkSize * (maxSegments + compactionBatch));
 
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-compaction',
         points: points,
-        signature: _signature(strokeWidth: 4),
-        strokePaint: _strokePaint(strokeWidth: 4),
+        strokeWidth: 4,
       );
 
       expect(cache.processedPointCount, points.length);
@@ -66,20 +63,10 @@ void main() {
       final cache = FreeDrawCreationPreviewCache();
       final initial = _buildPoints(64);
 
-      cache.sync(
-        elementId: 'stroke-reset',
-        points: initial,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-reset', points: initial);
 
       final rewound = initial.sublist(0, 20);
-      cache.sync(
-        elementId: 'stroke-reset',
-        points: rewound,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-reset', points: rewound);
 
       expect(cache.processedPointCount, rewound.length);
       expect(cache.tailPointCount, rewound.length);
@@ -90,21 +77,11 @@ void main() {
       final cache = FreeDrawCreationPreviewCache();
       final initial = _buildPoints(48);
 
-      cache.sync(
-        elementId: 'stroke-tail-mutation',
-        points: initial,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-tail-mutation', points: initial);
 
       final mutated = List<DrawPoint>.of(initial);
       mutated[mutated.length - 1] = const DrawPoint(x: 300, y: 120);
-      cache.sync(
-        elementId: 'stroke-tail-mutation',
-        points: mutated,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-tail-mutation', points: mutated);
 
       expect(cache.processedPointCount, mutated.length);
       expect(cache.tailPointCount, mutated.length);
@@ -119,11 +96,10 @@ void main() {
             FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
         final initial = _buildPoints(chunkSize);
 
-        cache.sync(
+        _sync(
+          cache: cache,
           elementId: 'stroke-sealed-tail-mutation',
           points: initial,
-          signature: _signature(),
-          strokePaint: _strokePaint(),
         );
 
         final sealedBeforeMutation = cache.sealedSegmentCount;
@@ -132,11 +108,10 @@ void main() {
 
         final mutated = List<DrawPoint>.of(initial);
         mutated[mutated.length - 1] = const DrawPoint(x: 2048, y: 1024);
-        cache.sync(
+        _sync(
+          cache: cache,
           elementId: 'stroke-sealed-tail-mutation',
           points: mutated,
-          signature: _signature(),
-          strokePaint: _strokePaint(),
         );
 
         expect(cache.processedPointCount, mutated.length);
@@ -150,11 +125,10 @@ void main() {
       final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
       final points = _buildPoints(chunkSize);
 
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-sealed-tail-mutation-loop',
         points: points,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
       );
 
       final sealedSegmentCount = cache.sealedSegmentCount;
@@ -164,11 +138,10 @@ void main() {
           x: 2048 + index.toDouble(),
           y: 1024 + index.toDouble(),
         );
-        cache.sync(
+        _sync(
+          cache: cache,
           elementId: 'stroke-sealed-tail-mutation-loop',
           points: mutatedPoints,
-          signature: _signature(),
-          strokePaint: _strokePaint(),
         );
       }
 
@@ -182,24 +155,22 @@ void main() {
       final points = _buildPoints(32);
       final committedCount = points.length - 1;
 
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-line',
         points: points,
         visiblePointCount: committedCount,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
       );
 
       expect(cache.processedPointCount, committedCount);
 
       final movedTail = List<DrawPoint>.of(points)
         ..[points.length - 1] = const DrawPoint(x: 4096, y: 2048);
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-line',
         points: movedTail,
         visiblePointCount: committedCount,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
       );
 
       expect(cache.processedPointCount, committedCount);
@@ -211,27 +182,17 @@ void main() {
       final chunkSize = FreeDrawCreationPreviewCache.chunkPointThresholdForTest;
       final points = _buildPoints(chunkSize + 12);
 
-      cache.sync(
-        elementId: 'stroke-style',
-        points: points,
-        signature: _signature(),
-        strokePaint: _strokePaint(),
-      );
+      _sync(cache: cache, elementId: 'stroke-style', points: points);
 
       expect(cache.sealedSegmentCount, greaterThan(0));
 
       final shortPoints = points.sublist(0, 18);
-      cache.sync(
+      _sync(
+        cache: cache,
         elementId: 'stroke-style',
         points: shortPoints,
-        signature: _signature(
-          strokeWidth: 6,
-          strokeColor: const Color(0xFF00A884),
-        ),
-        strokePaint: _strokePaint(
-          strokeWidth: 6,
-          color: const Color(0xFF00A884),
-        ),
+        strokeWidth: 6,
+        strokeColor: const Color(0xFF00A884),
       );
 
       expect(cache.processedPointCount, shortPoints.length);
@@ -240,14 +201,9 @@ void main() {
     });
 
     test('clear drops cached preview state', () {
-      final cache = FreeDrawCreationPreviewCache()
-        ..sync(
-          elementId: 'stroke-clear',
-          points: _buildPoints(24),
-          signature: _signature(),
-          strokePaint: _strokePaint(),
-        )
-        ..clear();
+      final cache = FreeDrawCreationPreviewCache();
+      _sync(cache: cache, elementId: 'stroke-clear', points: _buildPoints(24));
+      cache.clear();
 
       expect(cache.processedPointCount, 0);
       expect(cache.tailPointCount, 0);
@@ -255,13 +211,8 @@ void main() {
     });
 
     test('paint executes safely with viewport culling', () {
-      final cache = FreeDrawCreationPreviewCache()
-        ..sync(
-          elementId: 'stroke-paint',
-          points: _buildPoints(40),
-          signature: _signature(),
-          strokePaint: _strokePaint(),
-        );
+      final cache = FreeDrawCreationPreviewCache();
+      _sync(cache: cache, elementId: 'stroke-paint', points: _buildPoints(40));
 
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
@@ -283,18 +234,30 @@ void main() {
   });
 }
 
-FreeDrawPreviewStrokeSignature _signature({
+void _sync({
+  required FreeDrawCreationPreviewCache cache,
+  required String elementId,
+  required List<DrawPoint> points,
+  int? visiblePointCount,
   double strokeWidth = 2,
-  Color strokeColor = const Color(0xFF1576FE),
-}) => FreeDrawPreviewStrokeSignature(
-  strokeStyle: StrokeStyle.solid,
-  strokeWidth: strokeWidth,
-  strokeColor: strokeColor,
-);
+  Color strokeColor = _defaultStrokeColor,
+}) {
+  cache.sync(
+    elementId: elementId,
+    points: points,
+    visiblePointCount: visiblePointCount,
+    signature: FreeDrawPreviewStrokeSignature(
+      strokeStyle: StrokeStyle.solid,
+      strokeWidth: strokeWidth,
+      strokeColor: strokeColor,
+    ),
+    strokePaint: _strokePaint(strokeWidth: strokeWidth, color: strokeColor),
+  );
+}
 
 Paint _strokePaint({
   double strokeWidth = 2,
-  Color color = const Color(0xFF1576FE),
+  Color color = _defaultStrokeColor,
 }) => Paint()
   ..style = PaintingStyle.stroke
   ..strokeWidth = strokeWidth
