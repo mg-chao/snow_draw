@@ -6,10 +6,10 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
-import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
 
 import 'element_type_renderer.dart';
 import 'rectangle_render_plan.dart';
+import 'stroke_pattern_utils.dart';
 
 class RectangleRenderer extends ElementTypeRenderer {
   const RectangleRenderer();

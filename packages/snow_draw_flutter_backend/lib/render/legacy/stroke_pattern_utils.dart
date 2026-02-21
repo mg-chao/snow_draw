@@ -3,8 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
-
-import 'lru_cache.dart';
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
 /// Shared cache for line-fill gradient shaders.
 ///

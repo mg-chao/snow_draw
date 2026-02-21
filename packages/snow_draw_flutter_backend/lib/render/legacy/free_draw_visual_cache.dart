@@ -3,14 +3,14 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
-import '../../../models/element_state.dart';
-import '../../../types/draw_point.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
-import '../../../utils/stroke_pattern_utils.dart';
-import 'free_draw_data.dart';
 import 'free_draw_path_utils.dart';
+import 'stroke_pattern_utils.dart';
 
 /// Cached visual data for a single free-draw element.
 ///

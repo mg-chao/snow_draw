@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/stroke_pattern_utils.dart';
 
 void main() {
   group('LineShaderKey', () {

@@ -2,13 +2,13 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_path_utils.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_visual_cache.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
-import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/free_draw_path_utils.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/free_draw_visual_cache.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/stroke_pattern_utils.dart';
 
 void main() {
   group('LruCache', () {

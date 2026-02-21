@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_path_utils.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/free_draw_path_utils.dart';
 
 void main() {
   group('buildFreeDrawSmoothPath', () {
