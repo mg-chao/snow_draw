@@ -9,7 +9,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
 import '../legacy/element_type_renderer.dart';
-import '../legacy/stroke_pattern_utils.dart';
+import '../patterns/stroke_pattern_utils.dart';
 
 class SerialNumberRenderer extends ElementTypeRenderer {
   const SerialNumberRenderer();

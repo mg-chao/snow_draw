@@ -8,7 +8,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 import 'package:snow_draw_flutter_backend/render/legacy/free_draw_path_utils.dart';
 import 'package:snow_draw_flutter_backend/render/legacy/free_draw_visual_cache.dart';
-import 'package:snow_draw_flutter_backend/render/legacy/stroke_pattern_utils.dart';
+import 'package:snow_draw_flutter_backend/render/patterns/stroke_pattern_utils.dart';
 
 void main() {
   group('LruCache', () {

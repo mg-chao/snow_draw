@@ -33,7 +33,7 @@ import '../../extensions/draw_color_extensions.dart';
 import '../../render/element_renderer.dart';
 import '../../render/legacy/arrow_visual_cache.dart';
 import '../../render/legacy/free_draw_visual_cache.dart';
-import '../../render/legacy/stroke_pattern_utils.dart';
+import '../../render/patterns/stroke_pattern_utils.dart';
 import 'binding_highlight_style.dart';
 import 'filter_scene_compositor.dart';
 import 'free_draw_creation_preview_cache.dart';
