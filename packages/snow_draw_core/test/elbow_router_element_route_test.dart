@@ -12,16 +12,18 @@ import 'elbow_test_utils.dart';
 
 void main() {
   test('routeElbowArrowForElement keeps local/world points in sync', () {
-    final points = <DrawPoint>[
-      const DrawPoint(x: 20, y: 40),
-      const DrawPoint(x: 220, y: 140),
+    const worldPoints = <DrawPoint>[
+      DrawPoint(x: 20, y: 40),
+      DrawPoint(x: 220, y: 140),
     ];
-    final rect = elbowRectForPoints(points);
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: points,
-      rect: rect,
+    final rect = elbowRectForPoints(worldPoints);
+    final data = ArrowData(
+      points: ArrowGeometry.normalizePoints(
+        worldPoints: worldPoints,
+        rect: rect,
+      ),
+      arrowType: ArrowType.elbow,
     );
-    final data = ArrowData(points: normalized, arrowType: ArrowType.elbow);
     final element = ElementState(
       id: 'arrow',
       rect: rect,
@@ -40,13 +42,18 @@ void main() {
     expect(result.localPoints.length, result.worldPoints.length);
     expect(result.localPoints.length, greaterThanOrEqualTo(2));
 
-    final space = ElementSpace(
+    final elementSpace = ElementSpace(
       rotation: element.rotation,
       origin: element.rect.center,
     );
     for (var i = 0; i < result.localPoints.length; i++) {
-      final projected = space.toWorld(result.localPoints[i]);
-      expect(elbowPointsClose(projected, result.worldPoints[i]), isTrue);
+      expect(
+        elbowPointsClose(
+          elementSpace.toWorld(result.localPoints[i]),
+          result.worldPoints[i],
+        ),
+        isTrue,
+      );
     }
 
     expect(elbowPathIsOrthogonal(result.worldPoints, epsilon: 1e-3), isTrue);
