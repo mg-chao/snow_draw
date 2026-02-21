@@ -65,9 +65,13 @@ melos:
       description: Ensure backend package entrypoint exports required public APIs.
       run: dart run tools/check_backend_entrypoint_exports.dart
 
+    check:ci-workflow:
+      description: Ensure CI workflow executes required quality gates in order.
+      run: dart run tools/check_ci_workflow_guards.dart
+
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:backend-entrypoint && dart run melos run check:app-backend-import-boundary
+      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.

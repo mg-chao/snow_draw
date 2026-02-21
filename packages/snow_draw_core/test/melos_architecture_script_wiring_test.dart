@@ -10,6 +10,7 @@ void main() {
     expect(pubspec, contains('check:core-purity'));
     expect(pubspec, contains('check:backend-legacy'));
     expect(pubspec, contains('check:backend-entrypoint'));
+    expect(pubspec, contains('check:ci-workflow'));
     expect(pubspec, contains('check:app-backend-import-boundary'));
   });
 }
