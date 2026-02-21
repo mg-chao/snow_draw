@@ -44,7 +44,7 @@ import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
 import '../../render/legacy/arrow_geometry.dart';
-import '../../render/legacy/text_renderer.dart';
+import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';

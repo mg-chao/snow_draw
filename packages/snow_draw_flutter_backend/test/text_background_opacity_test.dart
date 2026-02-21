@@ -8,7 +8,7 @@ import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_flutter_backend/render/legacy/text_renderer.dart';
+import 'package:snow_draw_flutter_backend/render/text/text_renderer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
