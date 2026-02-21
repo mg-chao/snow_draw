@@ -26,7 +26,6 @@ import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_d
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_renderer.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/plugin_system.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
@@ -45,6 +44,7 @@ import 'package:snow_draw_core/draw/utils/hit_test.dart' as draw_hit_test;
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
+import '../../render/legacy/text_renderer.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';

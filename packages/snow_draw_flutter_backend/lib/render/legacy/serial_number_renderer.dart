@@ -2,14 +2,13 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
-
-import '../../../models/element_state.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
-import '../../../utils/stroke_pattern_utils.dart';
-import '../../core/element_renderer.dart';
-import 'serial_number_data.dart';
-import 'serial_number_layout.dart';
+import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_layout.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
 
 class SerialNumberRenderer extends ElementTypeRenderer {
   const SerialNumberRenderer();
@@ -20,6 +19,11 @@ class SerialNumberRenderer extends ElementTypeRenderer {
   static final _strokePathCache = LruCache<_StrokePathKey, Path>(
     maxEntries: 128,
   );
+
+  /// Clears all static caches held by [SerialNumberRenderer].
+  static void clearCaches() {
+    _strokePathCache.clear();
+  }
 
   @override
   void render({

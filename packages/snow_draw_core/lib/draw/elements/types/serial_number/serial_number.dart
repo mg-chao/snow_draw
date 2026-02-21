@@ -3,5 +3,4 @@ export 'serial_number_data.dart';
 export 'serial_number_definition.dart';
 export 'serial_number_hit_tester.dart';
 export 'serial_number_layout.dart';
-export 'serial_number_renderer.dart';
 export 'serial_number_scene_encoder.dart';

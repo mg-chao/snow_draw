@@ -2,14 +2,13 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-
-import '../../../models/element_state.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
-import '../../../utils/stroke_pattern_utils.dart';
-import '../../core/element_renderer.dart';
-import 'text_data.dart';
-import 'text_layout.dart';
+import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
 
 class TextRenderer extends ElementTypeRenderer {
   const TextRenderer();

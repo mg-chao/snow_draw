@@ -15,10 +15,7 @@ packages/snow_draw_core/lib/draw/elements/types/line/line_renderer.dart:2:dart:u
 packages/snow_draw_core/lib/draw/elements/types/rectangle/rectangle_render_plan.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/rectangle/rectangle_renderer.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_layout.dart:3:package:flutter
-packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_renderer.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/shared/two_point_stroke_utils.dart:3:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_layout.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_layout.dart:3:package:flutter
-packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:4:package:flutter
 packages/snow_draw_core/lib/draw/utils/stroke_pattern_utils.dart:3:dart:ui
