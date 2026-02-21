@@ -2,8 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/scene/scene_primitive_renderer.dart';
 
 void main() {

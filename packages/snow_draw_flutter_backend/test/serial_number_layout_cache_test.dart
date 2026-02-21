@@ -1,8 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/types/draw_color.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/services/text/flutter_serial_number_layout.dart';
 
 void main() {
