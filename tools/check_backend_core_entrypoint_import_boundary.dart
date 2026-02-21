@@ -23,6 +23,7 @@ const _targetFiles = <String>[
   'packages/snow_draw_flutter_backend/lib/services/text/flutter_text_rendering_cache_invalidation.dart',
   'packages/snow_draw_flutter_backend/lib/services/text/flutter_serial_number_layout.dart',
   'packages/snow_draw_flutter_backend/lib/services/text/flutter_text_layout.dart',
+  'packages/snow_draw_flutter_backend/lib/ui/canvas/cursor_resolver.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/arrow_interaction_state_change.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/draw_canvas.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/dynamic_scene_optimization.dart',
