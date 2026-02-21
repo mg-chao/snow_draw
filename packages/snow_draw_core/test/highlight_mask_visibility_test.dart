@@ -3,53 +3,42 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/ui/canvas/highlight_mask_visibility.dart';
 
 void main() {
-  test('mask layer resolves to none when no highlights', () {
-    final layer = resolveHighlightMaskLayer(
-      hasHighlights: false,
-      hasDynamicContent: false,
-      hasDynamicHighlights: false,
-      config: const HighlightMaskConfig(maskOpacity: 1),
+  HighlightMaskLayer resolveLayer({
+    required bool hasHighlights,
+    bool hasDynamicContent = false,
+    bool hasDynamicHighlights = false,
+    double maskOpacity = 0.5,
+  }) {
+    return resolveHighlightMaskLayer(
+      hasHighlights: hasHighlights,
+      hasDynamicContent: hasDynamicContent,
+      hasDynamicHighlights: hasDynamicHighlights,
+      config: HighlightMaskConfig(maskOpacity: maskOpacity),
     );
+  }
+
+  test('mask layer resolves to none when no highlights', () {
+    final layer = resolveLayer(hasHighlights: false, maskOpacity: 1);
     expect(layer, HighlightMaskLayer.none);
   });
 
   test('mask layer resolves to none when opacity is zero', () {
-    final layer = resolveHighlightMaskLayer(
-      hasHighlights: true,
-      hasDynamicContent: false,
-      hasDynamicHighlights: false,
-      config: const HighlightMaskConfig(),
-    );
+    final layer = resolveLayer(hasHighlights: true, maskOpacity: 0);
     expect(layer, HighlightMaskLayer.none);
   });
 
   test('mask layer resolves to static when no dynamic highlights', () {
-    final layer = resolveHighlightMaskLayer(
-      hasHighlights: true,
-      hasDynamicContent: false,
-      hasDynamicHighlights: false,
-      config: const HighlightMaskConfig(maskOpacity: 0.5),
-    );
+    final layer = resolveLayer(hasHighlights: true);
     expect(layer, HighlightMaskLayer.staticLayer);
   });
 
   test('mask layer resolves to dynamic when highlights are dynamic', () {
-    final layer = resolveHighlightMaskLayer(
-      hasHighlights: true,
-      hasDynamicContent: false,
-      hasDynamicHighlights: true,
-      config: const HighlightMaskConfig(maskOpacity: 0.5),
-    );
+    final layer = resolveLayer(hasHighlights: true, hasDynamicHighlights: true);
     expect(layer, HighlightMaskLayer.dynamicLayer);
   });
 
   test('mask layer resolves to dynamic when scene content is dynamic', () {
-    final layer = resolveHighlightMaskLayer(
-      hasHighlights: true,
-      hasDynamicContent: true,
-      hasDynamicHighlights: false,
-      config: const HighlightMaskConfig(maskOpacity: 0.5),
-    );
+    final layer = resolveLayer(hasHighlights: true, hasDynamicContent: true);
     expect(layer, HighlightMaskLayer.dynamicLayer);
   });
 }
