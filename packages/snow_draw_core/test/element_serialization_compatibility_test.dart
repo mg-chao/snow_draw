@@ -21,10 +21,10 @@ void main() {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
 
-    final cases = <_SerializationCase>[
+    const cases = <_SerializationCase>[
       _SerializationCase(
         name: 'rectangle',
-        element: const RectangleData(
+        element: RectangleData(
           cornerRadius: 14,
           fillColor: DrawColor(0x11010203),
           color: DrawColor(0xFF0A0B0C),
@@ -32,20 +32,20 @@ void main() {
           strokeStyle: StrokeStyle.dotted,
           fillStyle: FillStyle.crossLine,
         ),
-        colorFields: const {'fillColor': 0x11010203, 'color': 0xFF0A0B0C},
+        colorFields: {'fillColor': 0x11010203, 'color': 0xFF0A0B0C},
       ),
       _SerializationCase(
         name: 'line',
-        element: const LineData(
+        element: LineData(
           points: [
-            DrawPoint(x: 0.0, y: 0.0),
+            DrawPoint.zero,
             DrawPoint(x: 0.35, y: 0.65),
-            DrawPoint(x: 1.0, y: 1.0),
+            DrawPoint(x: 1, y: 1),
           ],
           color: DrawColor(0xAA112233),
           fillColor: DrawColor(0x55112233),
           fillStyle: FillStyle.line,
-          strokeWidth: 4.0,
+          strokeWidth: 4,
           strokeStyle: StrokeStyle.dashed,
           startBinding: ArrowBinding(
             elementId: 'target-a',
@@ -66,15 +66,15 @@ void main() {
           startIsSpecial: true,
           endIsSpecial: false,
         ),
-        colorFields: const {'color': 0xAA112233, 'fillColor': 0x55112233},
+        colorFields: {'color': 0xAA112233, 'fillColor': 0x55112233},
       ),
       _SerializationCase(
         name: 'arrow',
-        element: const ArrowData(
+        element: ArrowData(
           points: [
-            DrawPoint(x: 0.0, y: 0.1),
+            DrawPoint(x: 0, y: 0.1),
             DrawPoint(x: 0.5, y: 0.5),
-            DrawPoint(x: 1.0, y: 0.9),
+            DrawPoint(x: 1, y: 0.9),
           ],
           color: DrawColor(0xCC334455),
           strokeWidth: 2.5,
@@ -101,44 +101,44 @@ void main() {
           startIsSpecial: true,
           endIsSpecial: true,
         ),
-        colorFields: const {'color': 0xCC334455},
+        colorFields: {'color': 0xCC334455},
       ),
       _SerializationCase(
         name: 'free_draw',
-        element: const FreeDrawData(
+        element: FreeDrawData(
           points: [
-            DrawPoint(x: 0.0, y: 0.0),
+            DrawPoint.zero,
             DrawPoint(x: 0.4, y: 0.5, pressure: 0.6),
-            DrawPoint(x: 1.0, y: 1.0, pressure: 0.9),
+            DrawPoint(x: 1, y: 1, pressure: 0.9),
           ],
           color: DrawColor(0xFF556677),
           fillColor: DrawColor(0x33556677),
           fillStyle: FillStyle.crossLine,
-          strokeWidth: 5.0,
+          strokeWidth: 5,
           strokeStyle: StrokeStyle.dashed,
         ),
-        colorFields: const {'color': 0xFF556677, 'fillColor': 0x33556677},
+        colorFields: {'color': 0xFF556677, 'fillColor': 0x33556677},
       ),
       _SerializationCase(
         name: 'filter',
-        element: const FilterData(
+        element: FilterData(
           type: CanvasFilterType.gaussianBlur,
           strength: 0.73,
         ),
       ),
       _SerializationCase(
         name: 'highlight',
-        element: const HighlightData(
+        element: HighlightData(
           shape: HighlightShape.ellipse,
           color: DrawColor(0x99AA5500),
           strokeColor: DrawColor(0xFF331100),
           strokeWidth: 2.25,
         ),
-        colorFields: const {'color': 0x99AA5500, 'strokeColor': 0xFF331100},
+        colorFields: {'color': 0x99AA5500, 'strokeColor': 0xFF331100},
       ),
       _SerializationCase(
         name: 'text',
-        element: const TextData(
+        element: TextData(
           text: 'backend split',
           color: DrawColor(0xFF123456),
           fontSize: 27,
@@ -152,7 +152,7 @@ void main() {
           cornerRadius: 8,
           autoResize: false,
         ),
-        colorFields: const {
+        colorFields: {
           'color': 0xFF123456,
           'fillColor': 0x88112233,
           'strokeColor': 0xFF654321,
@@ -160,7 +160,7 @@ void main() {
       ),
       _SerializationCase(
         name: 'serial_number',
-        element: const SerialNumberData(
+        element: SerialNumberData(
           number: 42,
           color: DrawColor(0xFF0F0F0F),
           fillColor: DrawColor(0x6600CCFF),
@@ -171,7 +171,7 @@ void main() {
           strokeStyle: StrokeStyle.dotted,
           textElementId: 'text-42',
         ),
-        colorFields: const {'color': 0xFF0F0F0F, 'fillColor': 0x6600CCFF},
+        colorFields: {'color': 0xFF0F0F0F, 'fillColor': 0x6600CCFF},
       ),
     ];
 
