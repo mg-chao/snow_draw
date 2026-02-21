@@ -1,7 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/types/draw_color.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/rectangle/rectangle_render_plan.dart';
 
 void main() {
