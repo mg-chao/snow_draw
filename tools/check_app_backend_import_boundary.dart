@@ -1,9 +1,10 @@
 import 'dart:io';
 
 const _appRootPath = 'apps/snow_draw';
-const _allowedImport =
-    "import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';";
 const _skipDirectoryNames = <String>{'.dart_tool', 'build', '.symlinks'};
+final _allowedImportPattern = RegExp(
+  r"""^import\s+['"]package:snow_draw_flutter_backend/snow_draw_flutter_backend\.dart['"];$""",
+);
 
 void main() {
   final appRoot = Directory(_appRootPath);
@@ -31,7 +32,7 @@ void main() {
       if (!line.contains('package:snow_draw_flutter_backend/')) {
         continue;
       }
-      if (line == _allowedImport) {
+      if (_allowedImportPattern.hasMatch(line)) {
         continue;
       }
       violations.add(
