@@ -7,7 +7,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
-import '../../render/legacy/arrow_geometry.dart';
+import '../../render/geometry/arrow_geometry.dart';
 
 const _defaultMaxLineOccluderQueryRects = 12;
 const _defaultLineOccluderPaddingFloor = 3.0;
