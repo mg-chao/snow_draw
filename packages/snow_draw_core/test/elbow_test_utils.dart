@@ -106,38 +106,48 @@ bool elbowSegmentIntersectsBounds(
 }) {
   final dx = (start.x - end.x).abs();
   final dy = (start.y - end.y).abs();
+
   if (dx <= dedupThreshold) {
     final x = (start.x + end.x) / 2;
     if (x < bounds.minX - dedupThreshold || x > bounds.maxX + dedupThreshold) {
       return false;
     }
-    final minY = math.min(start.y, end.y);
-    final maxY = math.max(start.y, end.y);
-    final overlapStart = math.max(minY, bounds.minY);
-    final overlapEnd = math.min(maxY, bounds.maxY);
-    return overlapEnd - overlapStart > epsilon;
+
+    return _rangesOverlap(
+      segmentMin: math.min(start.y, end.y),
+      segmentMax: math.max(start.y, end.y),
+      boundsMin: bounds.minY,
+      boundsMax: bounds.maxY,
+      epsilon: epsilon,
+    );
   }
+
   if (dy <= dedupThreshold) {
     final y = (start.y + end.y) / 2;
     if (y < bounds.minY - dedupThreshold || y > bounds.maxY + dedupThreshold) {
       return false;
     }
-    final minX = math.min(start.x, end.x);
-    final maxX = math.max(start.x, end.x);
-    final overlapStart = math.max(minX, bounds.minX);
-    final overlapEnd = math.min(maxX, bounds.maxX);
-    return overlapEnd - overlapStart > epsilon;
+
+    return _rangesOverlap(
+      segmentMin: math.min(start.x, end.x),
+      segmentMax: math.max(start.x, end.x),
+      boundsMin: bounds.minX,
+      boundsMax: bounds.maxX,
+      epsilon: epsilon,
+    );
   }
 
-  final minX = math.min(start.x, end.x);
-  final maxX = math.max(start.x, end.x);
-  final minY = math.min(start.y, end.y);
-  final maxY = math.max(start.y, end.y);
-  if (maxX < bounds.minX - dedupThreshold ||
-      minX > bounds.maxX + dedupThreshold ||
-      maxY < bounds.minY - dedupThreshold ||
-      minY > bounds.maxY + dedupThreshold) {
-    return false;
-  }
-  return true;
+  return false;
+}
+
+bool _rangesOverlap({
+  required double segmentMin,
+  required double segmentMax,
+  required double boundsMin,
+  required double boundsMax,
+  required double epsilon,
+}) {
+  final overlapStart = math.max(segmentMin, boundsMin);
+  final overlapEnd = math.min(segmentMax, boundsMax);
+  return overlapEnd - overlapStart > epsilon;
 }
