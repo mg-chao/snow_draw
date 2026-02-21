@@ -1,24 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/l10n/app_localizations.dart';
 import 'package:snow_draw/property_initialization.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw/widgets/style_toolbar.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/domain_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/models/selection_state.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
-import 'package:snow_draw_core/draw/types/draw_color.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   testWidgets(

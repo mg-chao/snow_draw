@@ -1,19 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/widgets/canvas_layer.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 void main() {

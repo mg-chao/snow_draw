@@ -1,6 +1,6 @@
 import 'dart:io';
 
-const _appRootPath = 'apps/snow_draw/lib';
+const _appRootPath = 'apps/snow_draw';
 const _skipDirectoryNames = <String>{'.dart_tool', 'build', '.symlinks'};
 final _allowedImportPattern = RegExp(
   r"""^import\s+['"]package:snow_draw_core/snow_draw_core\.dart['"];$""",

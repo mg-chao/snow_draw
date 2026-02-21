@@ -1,13 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/l10n/app_localizations.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
 import 'package:snow_draw/widgets/snap_controls.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

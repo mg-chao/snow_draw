@@ -1,4 +1,4 @@
-// Tests that verify pubspec dependency hygiene for the snow_draw app.
+﻿// Tests that verify pubspec dependency hygiene for the snow_draw app.
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
 // Internal package dependency:
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   group('snow_draw app dependency smoke tests', () {

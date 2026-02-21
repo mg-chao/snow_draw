@@ -43,5 +43,26 @@ void main() {
       const scene = RenderScene(primitives: <RenderPrimitive>[]);
       expect(scene.primitives, isEmpty);
     });
+
+    test('exports app-facing state, event, and cache contracts', () async {
+      final appState = ApplicationState.initial();
+      final domainState = DomainState.empty();
+      final eventBus = EventBus();
+      final cache = LruCache<String, int>(maxEntries: 2);
+      final validation = ValidationFailedEvent(
+        action: 'test-action',
+        reason: 'test-reason',
+      );
+
+      cache.put('a', 1);
+      cache.put('b', 2);
+      expect(appState.view, isA<ViewState>());
+      expect(domainState.document, isA<DocumentState>());
+      expect(domainState.selection, isA<SelectionState>());
+      expect(validation.action, 'test-action');
+      expect(eventBus.tryEmit(validation), isFalse);
+      expect(cache.get('a'), 1);
+      await eventBus.dispose();
+    });
   });
 }

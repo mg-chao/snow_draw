@@ -63,7 +63,8 @@ rendering backends.
 - Deep backend path imports from app are disallowed by guard scripts.
 - For core APIs, prefer `package:snow_draw_core/snow_draw_core.dart` over
   deep package paths when the entrypoint exposes the needed symbols.
-- App deep core path imports are disallowed by guard scripts.
+- App deep core path imports are disallowed by guard scripts in both
+  `apps/snow_draw/lib` and `apps/snow_draw/test`.
 
 ### Legacy namespace policy
 
