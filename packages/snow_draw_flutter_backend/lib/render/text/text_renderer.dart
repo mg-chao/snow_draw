@@ -8,7 +8,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
-import '../legacy/element_type_renderer.dart';
+import '../element_type_renderer.dart';
 import '../patterns/stroke_pattern_utils.dart';
 
 class TextRenderer extends ElementTypeRenderer {

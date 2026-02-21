@@ -5,7 +5,7 @@ import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
-import 'element_type_renderer.dart';
+import '../element_type_renderer.dart';
 
 class ArrowRenderer extends ElementTypeRenderer {
   const ArrowRenderer();

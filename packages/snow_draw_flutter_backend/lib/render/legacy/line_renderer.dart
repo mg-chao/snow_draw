@@ -2,12 +2,12 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import '../arrow/arrow_visual_cache.dart';
+import '../element_type_renderer.dart';
 import '../stroke/two_point_stroke_utils.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
-import 'element_type_renderer.dart';
 import 'stroke_pattern_utils.dart';
 
 class LineRenderer extends ElementTypeRenderer {

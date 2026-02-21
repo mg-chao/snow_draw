@@ -9,7 +9,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 
 import '../free_draw/free_draw_visual_cache.dart';
 import '../stroke/two_point_stroke_utils.dart';
-import 'element_type_renderer.dart';
+import '../element_type_renderer.dart';
 import 'stroke_pattern_utils.dart';
 
 class FreeDrawRenderer extends ElementTypeRenderer {
