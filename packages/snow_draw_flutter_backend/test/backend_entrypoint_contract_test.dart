@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/models/camera_state.dart';
 import 'package:snow_draw_core/draw/services/coordinate_service.dart';
+import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
@@ -33,5 +35,24 @@ void main() {
         );
       }
     });
+
+    test(
+      'exports Flutter text metrics service used by app context injection',
+      () {
+        expect(flutterTextMetricsService, isA<FlutterTextMetricsService>());
+
+        final metrics = flutterTextMetricsService.measure(
+          const TextLayoutRequest(
+            data: TextData(text: 'Backend', fontSize: 14),
+            maxWidth: 180,
+          ),
+        );
+
+        expect(metrics.width, greaterThan(0));
+        expect(metrics.height, greaterThan(0));
+        expect(metrics.lineHeight, greaterThan(0));
+        expect(metrics.lines, isNotEmpty);
+      },
+    );
   });
 }
