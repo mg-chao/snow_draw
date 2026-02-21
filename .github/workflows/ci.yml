@@ -44,5 +44,8 @@ jobs:
       - name: Verify backend legacy namespace
         run: dart run melos run check:backend-legacy
 
+      - name: Verify app/backend import boundary
+        run: dart run melos run check:app-backend-import-boundary
+
       - name: Run test suite
         run: dart run melos run test

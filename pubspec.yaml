@@ -57,6 +57,10 @@ melos:
       description: Enforce shim-only legacy namespace and block internal legacy imports.
       run: dart run tools/check_backend_legacy_namespace.dart
 
+    check:app-backend-import-boundary:
+      description: Keep app imports on backend package entrypoint APIs only.
+      run: dart run tools/check_app_backend_import_boundary.dart
+
     test:core:
       description: Run tests for the pure-Dart core package.
       packageFilters:
