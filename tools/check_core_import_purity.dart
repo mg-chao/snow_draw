@@ -16,7 +16,9 @@ void main() {
     stderr.writeln('Missing allowlist file: $_allowlistPath');
     stderr.writeln(
       'Create it with one entry per line: '
-      'path:line:dart:ui|path:line:package:flutter',
+      'path:line:dart:ui|path:line:package:flutter|'
+      'path:line:package:snow_draw_flutter_backend|'
+      'path:line:package:snow_draw',
     );
     exitCode = 1;
     return;
@@ -30,7 +32,7 @@ void main() {
 
   if (newViolations.isNotEmpty) {
     stderr.writeln(
-      'Found new Flutter/UI imports in $_scanRootPath '
+      'Found new boundary import violations in $_scanRootPath '
       '(not present in $_allowlistPath):',
     );
     for (final entry in newViolations) {
@@ -94,6 +96,12 @@ String? _matchDependency(String line) {
   final trimmed = line.trimLeft();
   if (!(trimmed.startsWith('import ') || trimmed.startsWith('export '))) {
     return null;
+  }
+  if (trimmed.contains('package:snow_draw_flutter_backend/')) {
+    return 'package:snow_draw_flutter_backend';
+  }
+  if (trimmed.contains('package:snow_draw/')) {
+    return 'package:snow_draw';
   }
   if (trimmed.contains('package:flutter/')) {
     return 'package:flutter';
