@@ -6,7 +6,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
-import 'package:snow_draw_flutter_backend/render/legacy/free_draw_path_utils.dart';
+import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_path_utils.dart';
 import 'package:snow_draw_flutter_backend/render/legacy/free_draw_visual_cache.dart';
 import 'package:snow_draw_flutter_backend/render/patterns/stroke_pattern_utils.dart';
 
@@ -54,7 +54,7 @@ void main() {
         ..get('a')
         ..put('c', 3);
       // Access 'a' to promote it.
-      // Insert 'c' — should evict 'b' (now LRU).
+      // Insert 'c' - should evict 'b' (now LRU).
       expect(evicted, [2]);
       expect(cache.get('a'), 1);
       expect(cache.get('b'), isNull);
@@ -155,7 +155,7 @@ void main() {
         ..moveTo(0, 0)
         ..lineTo(100, 0);
       final positions = buildDotPositions(base, 10);
-      // 100 / 10 = 10 intervals → 11 dots, each 2 floats.
+      // 100 / 10 = 10 intervals -> 11 dots, each 2 floats.
       expect(positions.length, greaterThanOrEqualTo(20));
       expect(positions.length.isEven, isTrue);
     });

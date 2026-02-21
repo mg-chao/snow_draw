@@ -9,7 +9,7 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
-import 'free_draw_path_utils.dart';
+import '../free_draw/free_draw_path_utils.dart';
 import 'stroke_pattern_utils.dart';
 
 /// Cached visual data for a single free-draw element.
