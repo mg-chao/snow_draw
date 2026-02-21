@@ -11,6 +11,7 @@ import 'package:snow_draw_core/draw/services/log/log_config.dart';
 import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
+import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 import 'grid_toolbar_adapter.dart';
 import 'l10n/app_localizations.dart';
@@ -47,6 +48,7 @@ DrawContext createAppContext() {
     elementRegistry: registry,
     idGenerator: RandomStringIdGenerator().call,
     logService: LogService(config: logConfig),
+    textMetricsService: flutterTextMetricsService,
   );
 }
 

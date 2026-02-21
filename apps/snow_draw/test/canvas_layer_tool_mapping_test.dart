@@ -14,7 +14,7 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
-import 'package:snow_draw_core/ui/canvas/draw_canvas.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/draw_canvas.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
