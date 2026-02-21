@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/utils/binding_highlight_style.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/binding_highlight_style.dart';
 
 void main() {
   test('resolveBindingHighlightStrokeWidth keeps fixed screen width', () {

@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:snow_draw_core/draw/elements/text_rendering_cache_invalidation.dart';
 
+import '../text/flutter_text_rendering_cache_invalidation.dart';
+
 final revisionNotifier = ValueNotifier<int>(0);
 
 final Map<String, _FontFamilyEntry> _fontIndex = {};
@@ -108,6 +110,7 @@ Future<void> _loadFontFamily(
   String key,
   _FontFamilyEntry entry,
 ) async {
+  ensureFlutterTextRenderingCacheInvalidatorInstalled();
   final loader = FontLoader(family);
   var addedFonts = 0;
   for (final path in entry.files) {

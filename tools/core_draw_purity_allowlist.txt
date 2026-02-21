@@ -2,39 +2,23 @@
 # Format: path:line:dart:ui or path:line:package:flutter
 # Keep this file in sync with tools/check_core_draw_import_purity.dart.
 
-packages/snow_draw_core/lib/draw/config/draw_config.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/edit/arrow/arrow_point_operation.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/core/element_renderer.dart:1:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_geometry.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_points.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_renderer.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_visual_cache.dart:3:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/filter/filter_renderer.dart:1:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/free_draw/free_draw_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/free_draw/free_draw_path_utils.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/free_draw/free_draw_renderer.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/free_draw/free_draw_visual_cache.dart:3:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/highlight/highlight_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/highlight/highlight_renderer.dart:1:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/line/line_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/line/line_renderer.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/rectangle/rectangle_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/rectangle/rectangle_render_plan.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/rectangle/rectangle_renderer.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_layout.dart:3:package:flutter
 packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_renderer.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/serial_number/serial_number_scene_encoder.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/shared/two_point_stroke_utils.dart:3:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/text/text_data.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_layout.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_layout.dart:3:package:flutter
 packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:4:package:flutter
-packages/snow_draw_core/lib/draw/elements/types/text/text_scene_encoder.dart:2:dart:ui
-packages/snow_draw_core/lib/draw/elements/types/text/text_scene_encoder.dart:4:package:flutter
-packages/snow_draw_core/lib/draw/store/history_manager.dart:1:dart:ui
-packages/snow_draw_core/lib/draw/utils/binding_highlight_style.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/utils/stroke_pattern_utils.dart:3:dart:ui
-packages/snow_draw_core/lib/draw/utils/stroke_pattern_utils.dart:5:package:flutter

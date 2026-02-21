@@ -1,7 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
-
-import 'package:flutter/painting.dart' show TextWidthBasis;
 
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
@@ -66,13 +63,10 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
 
-    final locale = _resolveLocale(localeTag);
-    final layout = layoutText(
+    final layout = layoutSceneText(
       data: data,
-      maxWidth: rect.width,
-      minWidth: rect.width,
-      widthBasis: TextWidthBasis.parent,
-      locale: locale,
+      width: rect.width,
+      localeTag: localeTag,
     );
     final localOrigin = DrawPoint(
       x: -rect.width / 2,
@@ -174,10 +168,10 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
     required DrawPoint localOrigin,
     required double cornerRadius,
   }) {
-    final boxes = layout.paragraph.getBoxesForRange(
-      0,
-      text.length,
-      boxHeightStyle: ui.BoxHeightStyle.strut,
+    final boxes = resolveTextRangeBoxes(
+      layout: layout,
+      start: 0,
+      end: text.length,
     );
     if (boxes.isEmpty) {
       return const RenderPath(<RenderPathCommand>[]);
@@ -320,49 +314,5 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       case TextHorizontalAlign.right:
         return RenderTextAlign.right;
     }
-  }
-
-  static ui.Locale? _resolveLocale(String? localeTag) {
-    if (localeTag == null || localeTag.isEmpty) {
-      return null;
-    }
-    final parts = localeTag
-        .split(RegExp('[-_]'))
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    if (parts.isEmpty) {
-      return null;
-    }
-
-    final languageCode = parts.first.toLowerCase();
-    if (!RegExp(r'^[a-z]{2,8}$').hasMatch(languageCode)) {
-      return null;
-    }
-    String? scriptCode;
-    String? countryCode;
-    for (final part in parts.skip(1)) {
-      if (scriptCode == null && part.length == 4) {
-        final normalizedScript =
-            '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
-        if (!RegExp(r'^[A-Z][a-z]{3}$').hasMatch(normalizedScript)) {
-          return null;
-        }
-        scriptCode = normalizedScript;
-        continue;
-      }
-      if (countryCode == null && (part.length == 2 || part.length == 3)) {
-        final normalizedCountry = part.toUpperCase();
-        if (!RegExp(r'^[A-Z]{2}$|^\d{3}$').hasMatch(normalizedCountry)) {
-          return null;
-        }
-        countryCode = normalizedCountry;
-      }
-    }
-
-    return ui.Locale.fromSubtags(
-      languageCode: languageCode,
-      scriptCode: scriptCode,
-      countryCode: countryCode,
-    );
   }
 }

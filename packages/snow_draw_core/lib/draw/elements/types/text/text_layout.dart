@@ -18,6 +18,22 @@ const _textLayoutHorizontalPaddingFactor = 0.01;
 const _textBackgroundHorizontalPaddingFactor = 0.32;
 const _textBackgroundVerticalPaddingFactor = 0.1;
 
+/// Lightweight background box snapshot in local text coordinates.
+@immutable
+class TextRangeBox {
+  const TextRangeBox({
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
+  });
+
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+}
+
 /// Lightweight layout result using `dart:ui.Paragraph` directly.
 ///
 /// Avoids the overhead of `TextPainter` for callers that only need
@@ -173,6 +189,93 @@ TextStyle buildTextStyle({
   locale: locale,
   textBaseline: TextBaseline.alphabetic,
 );
+
+/// Resolves a BCP-47 locale tag into a Flutter [Locale].
+///
+/// Returns null when [localeTag] is null, empty, or invalid.
+Locale? resolveTextLocale(String? localeTag) {
+  if (localeTag == null || localeTag.isEmpty) {
+    return null;
+  }
+  final parts = localeTag
+      .split(RegExp('[-_]'))
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+  if (parts.isEmpty) {
+    return null;
+  }
+
+  final languageCode = parts.first.toLowerCase();
+  if (!RegExp(r'^[a-z]{2,8}$').hasMatch(languageCode)) {
+    return null;
+  }
+
+  String? scriptCode;
+  String? countryCode;
+  for (final part in parts.skip(1)) {
+    if (scriptCode == null && part.length == 4) {
+      final normalizedScript =
+          '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
+      if (!RegExp(r'^[A-Z][a-z]{3}$').hasMatch(normalizedScript)) {
+        return null;
+      }
+      scriptCode = normalizedScript;
+      continue;
+    }
+    if (countryCode == null && (part.length == 2 || part.length == 3)) {
+      final normalizedCountry = part.toUpperCase();
+      if (!RegExp(r'^[A-Z]{2}$|^\d{3}$').hasMatch(normalizedCountry)) {
+        return null;
+      }
+      countryCode = normalizedCountry;
+    }
+  }
+
+  return Locale.fromSubtags(
+    languageCode: languageCode,
+    scriptCode: scriptCode,
+    countryCode: countryCode,
+  );
+}
+
+/// Scene-focused text layout helper with fixed-width paragraph behavior.
+TextLayoutMetrics layoutSceneText({
+  required TextData data,
+  required double width,
+  String? localeTag,
+}) => layoutText(
+  data: data,
+  maxWidth: width,
+  minWidth: width,
+  widthBasis: TextWidthBasis.parent,
+  locale: resolveTextLocale(localeTag),
+);
+
+/// Resolves paragraph boxes for a text range as plain geometry values.
+List<TextRangeBox> resolveTextRangeBoxes({
+  required TextLayoutMetrics layout,
+  required int start,
+  required int end,
+}) {
+  if (end <= start) {
+    return const <TextRangeBox>[];
+  }
+  final boxes = layout.paragraph.getBoxesForRange(
+    start,
+    end,
+    boxHeightStyle: ui.BoxHeightStyle.strut,
+  );
+  return boxes
+      .map(
+        (box) => TextRangeBox(
+          left: box.left,
+          top: box.top,
+          right: box.right,
+          bottom: box.bottom,
+        ),
+      )
+      .toList(growable: false);
+}
 
 // ---------------------------------------------------------------------------
 // layoutText – fast path using dart:ui.Paragraph directly

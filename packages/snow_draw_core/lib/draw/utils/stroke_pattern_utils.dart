@@ -2,8 +2,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:flutter/painting.dart'
-    show Alignment, GradientRotation, LinearGradient;
 import 'package:meta/meta.dart';
 
 import 'lru_cache.dart';
@@ -27,19 +25,24 @@ Shader buildLineShader({
   final lineStop = (lineWidth / spacing).clamp(0.0, 1.0);
   final cosAngle = math.cos(angle).abs();
   final adjustedSpacing = cosAngle > 0.01 ? spacing / cosAngle : spacing;
-  return LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    tileMode: TileMode.repeated,
-    colors: const [
+  final tileSize = adjustedSpacing;
+  final center = Offset(tileSize / 2, tileSize / 2);
+  final dx = -math.sin(angle) * tileSize;
+  final dy = math.cos(angle) * tileSize;
+  final start = Offset(center.dx - dx / 2, center.dy - dy / 2);
+  final end = Offset(center.dx + dx / 2, center.dy + dy / 2);
+  return Gradient.linear(
+    start,
+    end,
+    const [
       Color(0xFFFFFFFF),
       Color(0xFFFFFFFF),
       Color(0x00FFFFFF),
       Color(0x00FFFFFF),
     ],
-    stops: [0.0, lineStop, lineStop, 1.0],
-    transform: GradientRotation(angle),
-  ).createShader(Rect.fromLTWH(0, 0, adjustedSpacing, adjustedSpacing));
+    [0.0, lineStop, lineStop, 1.0],
+    TileMode.repeated,
+  );
 }
 
 /// Builds a [Paint] for hatched line fills using the shared cache.

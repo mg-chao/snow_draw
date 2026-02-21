@@ -45,6 +45,7 @@ import 'package:snow_draw_core/draw/utils/hit_test.dart' as draw_hit_test;
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
+import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
@@ -380,6 +381,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   @override
   void initState() {
     super.initState();
+    ensureFlutterTextRenderingCacheInvalidatorInstalled();
     final initialState = widget.store.state;
     _textFocusNode = FocusNode(onKeyEvent: _handleTextFocusKeyEvent);
     _pointerMoveDispatcher = FrameAlignedPointerMoveDispatcher(

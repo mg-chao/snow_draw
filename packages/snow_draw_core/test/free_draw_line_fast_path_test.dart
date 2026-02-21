@@ -59,13 +59,18 @@ void main() {
       _expectCacheEntryCount(0);
     });
 
-    test('hit tester keeps cached path flow for multi-point strokes', () {
+    test('hit tester bypasses visual cache for multi-point strokes', () {
       const hitTester = FreeDrawHitTester();
       final element = _freeDrawElement(_multiPointStrokeData);
 
-      hitTester.hitTest(element: element, position: _hitPosition, tolerance: 2);
+      final isHit = hitTester.hitTest(
+        element: element,
+        position: _hitPosition,
+        tolerance: 2,
+      );
 
-      _expectCacheEntryCount(1);
+      expect(isHit, isTrue);
+      _expectCacheEntryCount(0);
     });
   });
 }

@@ -313,6 +313,40 @@ class ArrowGeometry {
     return _evaluateCubic(_buildCubicSegment(points, segmentIndex), t);
   }
 
+  /// Calculates a point on the curved path using [DrawPoint] inputs.
+  ///
+  /// This mirrors [calculateCurvePoint] while keeping call sites free of
+  /// Flutter/UI coordinate types.
+  static DrawPoint? calculateCurveDrawPoint({
+    required List<DrawPoint> points,
+    required int segmentIndex,
+    required double t,
+  }) {
+    if (points.length < 2 ||
+        segmentIndex < 0 ||
+        segmentIndex >= points.length - 1) {
+      return null;
+    }
+
+    if (points.length < 3) {
+      final p1 = points[segmentIndex];
+      final p2 = points[segmentIndex + 1];
+      return DrawPoint(
+        x: p1.x + (p2.x - p1.x) * t,
+        y: p1.y + (p2.y - p1.y) * t,
+      );
+    }
+
+    final offsetPoints = points
+        .map((point) => Offset(point.x, point.y))
+        .toList(growable: false);
+    final curvePoint = _evaluateCubic(
+      _buildCubicSegment(offsetPoints, segmentIndex),
+      t,
+    );
+    return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
+  }
+
   static Path _buildVArrowhead(
     Offset tip,
     Offset dir,

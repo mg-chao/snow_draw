@@ -1,11 +1,11 @@
 import '../core/value_listenable.dart';
 import '../services/text/text_metrics_service.dart';
 
-import 'types/serial_number/serial_number_layout.dart';
-import 'types/text/text_layout.dart';
-import 'types/text/text_renderer.dart';
-
 final _textRenderingCacheRevision = ValueNotifier<int>(0);
+final _registeredInvalidators = <TextRenderingCacheInvalidator>{};
+
+/// Signature for backend-provided text rendering cache invalidation hooks.
+typedef TextRenderingCacheInvalidator = void Function();
 
 /// Notifies listeners whenever text rendering caches are invalidated.
 ///
@@ -14,14 +14,31 @@ final _textRenderingCacheRevision = ValueNotifier<int>(0);
 final ValueListenable<int> textRenderingCacheRevisionListenable =
     _textRenderingCacheRevision;
 
+/// Registers a backend-specific [invalidator].
+///
+/// Registered callbacks are executed when [invalidateTextRenderingCaches] runs.
+/// Duplicate callbacks are ignored.
+void registerTextRenderingCacheInvalidator(
+  TextRenderingCacheInvalidator invalidator,
+) {
+  _registeredInvalidators.add(invalidator);
+}
+
+/// Unregisters a previously added [invalidator].
+void unregisterTextRenderingCacheInvalidator(
+  TextRenderingCacheInvalidator invalidator,
+) {
+  _registeredInvalidators.remove(invalidator);
+}
+
 /// Clears all text-related rendering/layout caches and publishes a revision.
 ///
 /// Call this after runtime font registration completes to avoid stale
 /// fallback-glyph paragraphs being reused.
 void invalidateTextRenderingCaches() {
-  clearTextLayoutCaches();
   defaultTextMetricsService.clearCaches();
-  clearSerialNumberTextLayoutCache();
-  TextRenderer.clearCaches();
+  for (final invalidator in _registeredInvalidators) {
+    invalidator();
+  }
   _textRenderingCacheRevision.value++;
 }

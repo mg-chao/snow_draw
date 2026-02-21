@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../core/coordinates/element_space.dart';
@@ -179,12 +177,11 @@ class ArrowPointUtils {
       visualPointRadius,
     );
     final addableHitRadiusSq = addableHitRadius * addableHitRadius;
-    final curvePoints = _curvePointsForMidpoint(points, data.arrowType);
     for (var i = 0; i < points.length - 1; i++) {
       final midpoint = _segmentMidpoint(
         points: points,
+        arrowType: data.arrowType,
         segmentIndex: i,
-        curvePoints: curvePoints,
       );
       final distanceSq = localPosition.distanceSquared(midpoint);
       if (distanceSq <= addableHitRadiusSq) {
@@ -252,7 +249,6 @@ class ArrowPointUtils {
     required double loopThreshold,
   }) {
     final loopActive = _isLoopActive(points, loopThreshold);
-    final curvePoints = _curvePointsForMidpoint(points, arrowType);
 
     final turningPoints = <ArrowPointHandle>[];
     for (var i = 0; i < points.length; i++) {
@@ -278,8 +274,8 @@ class ArrowPointUtils {
           index: i,
           position: _segmentMidpoint(
             points: points,
+            arrowType: arrowType,
             segmentIndex: i,
-            curvePoints: curvePoints,
           ),
         ),
       );
@@ -480,35 +476,23 @@ class ArrowPointUtils {
     return space.fromWorld(position);
   }
 
-  static List<Offset>? _curvePointsForMidpoint(
-    List<DrawPoint> points,
-    ArrowType arrowType,
-  ) {
-    if (arrowType != ArrowType.curved || points.length < 3) {
-      return null;
-    }
-    return points
-        .map((point) => Offset(point.x, point.y))
-        .toList(growable: false);
-  }
-
   static DrawPoint _segmentMidpoint({
     required List<DrawPoint> points,
+    required ArrowType arrowType,
     required int segmentIndex,
-    required List<Offset>? curvePoints,
   }) {
     assert(
       segmentIndex >= 0 && segmentIndex < points.length - 1,
       'segmentIndex must reference a valid segment in points.',
     );
-    if (curvePoints != null) {
-      final curvePoint = ArrowGeometry.calculateCurvePoint(
-        points: curvePoints,
+    if (arrowType == ArrowType.curved && points.length >= 3) {
+      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
+        points: points,
         segmentIndex: segmentIndex,
         t: 0.5,
       );
       if (curvePoint != null) {
-        return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
+        return curvePoint;
       }
     }
     return _midpoint(points[segmentIndex], points[segmentIndex + 1]);

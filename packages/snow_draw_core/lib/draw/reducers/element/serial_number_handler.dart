@@ -51,6 +51,7 @@ DrawState handleCreateSerialNumberTextElements(
         serialElement: element,
         serialData: data,
         textData: textData,
+        textMetricsService: context.textMetricsService,
       ),
       rotation: 0,
       opacity: textStyle.opacity,

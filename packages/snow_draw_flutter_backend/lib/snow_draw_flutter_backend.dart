@@ -3,6 +3,7 @@ export 'extensions/draw_color_extensions.dart';
 export 'render/element_renderer.dart';
 export 'services/font/flutter_system_font_service.dart';
 export 'services/text/flutter_text_metrics_service.dart';
+export 'services/text/flutter_text_rendering_cache_invalidation.dart';
 export 'ui/canvas/draw_canvas.dart';
 export 'ui/canvas/plugin_draw_canvas.dart';
 export 'visual/built_in_element_visuals.dart';

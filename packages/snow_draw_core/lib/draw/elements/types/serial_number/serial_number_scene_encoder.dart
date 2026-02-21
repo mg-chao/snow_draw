@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import '../../../config/draw_config.dart';
 import '../../../models/element_state.dart';
@@ -99,19 +98,17 @@ final class SerialNumberSceneEncoder
       );
     }
     if (shouldRenderContent) {
-      final textLayout = layoutSerialNumberText(
+      final textLayout = layoutSerialNumberTextForScene(
         data: data,
-        colorOverride: ui.Color(contentColorArgb),
-        locale: _resolveLocale(localeTag),
+        colorArgb: contentColorArgb,
+        localeTag: localeTag,
       );
       final paintScale = textLayout.paintScale;
       if (paintScale > 0 && paintScale.isFinite) {
-        final visualCenter =
-            textLayout.visualBounds?.center ??
-            ui.Offset(textLayout.size.width / 2, textLayout.size.height / 2);
+        final visualCenter = resolveSerialNumberVisualCenter(textLayout);
         final localTextOrigin = DrawPoint(
-          x: -visualCenter.dx / paintScale,
-          y: -visualCenter.dy / paintScale,
+          x: -visualCenter.x / paintScale,
+          y: -visualCenter.y / paintScale,
         );
         final textRunScene = SceneBuilder()
           ..addTextRun(
@@ -210,49 +207,5 @@ final class SerialNumberSceneEncoder
       ),
       const RenderClosePath(),
     ]);
-  }
-
-  static ui.Locale? _resolveLocale(String? localeTag) {
-    if (localeTag == null || localeTag.isEmpty) {
-      return null;
-    }
-    final parts = localeTag
-        .split(RegExp('[-_]'))
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    if (parts.isEmpty) {
-      return null;
-    }
-
-    final languageCode = parts.first.toLowerCase();
-    if (!RegExp(r'^[a-z]{2,8}$').hasMatch(languageCode)) {
-      return null;
-    }
-    String? scriptCode;
-    String? countryCode;
-    for (final part in parts.skip(1)) {
-      if (scriptCode == null && part.length == 4) {
-        final normalizedScript =
-            '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
-        if (!RegExp(r'^[A-Z][a-z]{3}$').hasMatch(normalizedScript)) {
-          return null;
-        }
-        scriptCode = normalizedScript;
-        continue;
-      }
-      if (countryCode == null && (part.length == 2 || part.length == 3)) {
-        final normalizedCountry = part.toUpperCase();
-        if (!RegExp(r'^[A-Z]{2}$|^\d{3}$').hasMatch(normalizedCountry)) {
-          return null;
-        }
-        countryCode = normalizedCountry;
-      }
-    }
-
-    return ui.Locale.fromSubtags(
-      languageCode: languageCode,
-      scriptCode: scriptCode,
-      countryCode: countryCode,
-    );
   }
 }
