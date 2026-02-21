@@ -2,11 +2,13 @@ import 'dart:io';
 
 const _targetFiles = <String>[
   'packages/snow_draw_flutter_backend/lib/render/arrow/arrow_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/arrow/arrow_visual_cache.dart',
   'packages/snow_draw_flutter_backend/lib/render/element_type_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/filter/filter_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_path_utils.dart',
   'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_visual_cache.dart',
+  'packages/snow_draw_flutter_backend/lib/render/geometry/arrow_geometry.dart',
   'packages/snow_draw_flutter_backend/lib/render/highlight/highlight_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/line/line_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/patterns/stroke_pattern_utils.dart',

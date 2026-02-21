@@ -13,6 +13,7 @@ export 'draw/elements/core/element_scene_encoder.dart';
 export 'draw/elements/text_rendering_cache_invalidation.dart';
 export 'draw/elements/registration.dart';
 export 'draw/elements/types/arrow/arrow_data.dart';
+export 'draw/elements/types/arrow/arrow_like_data.dart';
 export 'draw/elements/types/filter/filter_data.dart';
 export 'draw/elements/types/free_draw/free_draw_data.dart';
 export 'draw/elements/types/highlight/highlight_data.dart';

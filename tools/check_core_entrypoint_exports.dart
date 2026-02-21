@@ -16,6 +16,7 @@ const _allowedExports = <String>{
   'draw/elements/text_rendering_cache_invalidation.dart',
   'draw/elements/registration.dart',
   'draw/elements/types/arrow/arrow_data.dart',
+  'draw/elements/types/arrow/arrow_like_data.dart',
   'draw/elements/types/filter/filter_data.dart',
   'draw/elements/types/free_draw/free_draw_data.dart',
   'draw/elements/types/highlight/highlight_data.dart',
