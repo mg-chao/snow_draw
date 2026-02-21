@@ -1,28 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
-import 'package:snow_draw_core/draw/elements/types/line/line_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_definition.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_definition.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_color.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 
 void main() {
@@ -211,12 +190,8 @@ void _render(ElementState element) {
   recorder.endRecording().dispose();
 }
 
-final _elementRegistry = DefaultElementRegistry()
-  ..register<RectangleData>(rectangleDefinition)
-  ..register<LineData>(lineDefinition)
-  ..register<ArrowData>(arrowDefinition)
-  ..register<FreeDrawData>(freeDrawDefinition)
-  ..register<HighlightData>(highlightDefinition)
-  ..register<FilterData>(filterDefinition)
-  ..register<TextData>(textDefinition)
-  ..register<SerialNumberData>(serialNumberDefinition);
+final _elementRegistry = (() {
+  final registry = DefaultElementRegistry();
+  registerBuiltInElements(registry);
+  return registry;
+})();
