@@ -49,6 +49,7 @@ rendering backends.
 - No `package:flutter` imports.
 - No `dart:ui` imports.
 - No reachable Flutter SDK packages in the core dependency graph.
+- No reachable backend/app workspace packages in the core dependency graph.
 - No shader/material declarations in core package metadata.
 
 ### App/backend import discipline
