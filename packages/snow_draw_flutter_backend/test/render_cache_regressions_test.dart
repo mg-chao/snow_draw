@@ -10,7 +10,7 @@ import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_path_utils.dart';
-import 'package:snow_draw_flutter_backend/render/legacy/free_draw_visual_cache.dart';
+import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_visual_cache.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

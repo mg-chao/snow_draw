@@ -7,8 +7,8 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
+import '../free_draw/free_draw_visual_cache.dart';
 import 'element_type_renderer.dart';
-import 'free_draw_visual_cache.dart';
 import 'stroke_pattern_utils.dart';
 import 'two_point_stroke_utils.dart';
 
