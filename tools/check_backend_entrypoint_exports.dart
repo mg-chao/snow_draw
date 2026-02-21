@@ -2,6 +2,7 @@ import 'dart:io';
 
 const _backendEntrypointPath =
     'packages/snow_draw_flutter_backend/lib/snow_draw_flutter_backend.dart';
+const _backendLibRootPath = 'packages/snow_draw_flutter_backend/lib';
 
 const _allowedExports = <String>{
   'extensions/coordinate_service_offset_extensions.dart',
@@ -68,6 +69,13 @@ void main() {
 
   for (final exportPath in exports) {
     if (_allowedExports.contains(exportPath)) {
+      final exportFile = File('$_backendLibRootPath/$exportPath');
+      if (!exportFile.existsSync()) {
+        violations.add(
+          '$_backendEntrypointPath: export "$exportPath" points to missing '
+          'file at ${exportFile.path.replaceAll(r'\\', '/')}',
+        );
+      }
       continue;
     }
     violations.add(
