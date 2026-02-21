@@ -28,6 +28,24 @@ void main() {
       lastIndex = index;
     }
 
+    const orderedCorePurityChecks = <String>[
+      'check:core-purity:',
+      'dart run tools/check_core_import_purity.dart',
+      'dart run tools/check_core_pubspec_purity.dart',
+      'dart run tools/check_core_dependency_graph_purity.dart',
+    ];
+
+    var corePurityLastIndex = -1;
+    for (final check in orderedCorePurityChecks) {
+      final index = pubspec.indexOf(check);
+      expect(
+        index,
+        greaterThan(corePurityLastIndex),
+        reason: 'Expected core purity check in order: $check',
+      );
+      corePurityLastIndex = index;
+    }
+
     expect(pubspec, contains('check:core-ui-boundary:'));
     expect(
       pubspec,
