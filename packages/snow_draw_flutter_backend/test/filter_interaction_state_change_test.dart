@@ -1,17 +1,5 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/domain_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
-import 'package:snow_draw_core/draw/models/selection_state.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/edit_context.dart';
-import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
-import 'package:snow_draw_core/draw/types/edit_transform.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/filter_interaction_state_change.dart';
 
 void main() {

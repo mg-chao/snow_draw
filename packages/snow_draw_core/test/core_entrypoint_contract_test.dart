@@ -12,6 +12,7 @@ void main() {
       expect(LogConfig.production.minLevel.toString(), contains('warning'));
       expect(LogConfig.production.emojiOutput, isFalse);
       expect(idGenerator.call(), isNotEmpty);
+      expect(EditOperationIds.move, 'move');
 
       const color = DrawColor(0xFF102030);
       expect(color.toARGB32(), 0xFF102030);
