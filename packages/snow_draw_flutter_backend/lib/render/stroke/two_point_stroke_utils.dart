@@ -3,9 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Shared immutable segment payload for two-point stroke fast paths.
 @immutable

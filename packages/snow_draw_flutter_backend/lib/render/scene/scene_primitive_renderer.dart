@@ -1,8 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
-import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Paints backend-agnostic [RenderScene] primitives to a Flutter [Canvas].
 class ScenePrimitiveRenderer {

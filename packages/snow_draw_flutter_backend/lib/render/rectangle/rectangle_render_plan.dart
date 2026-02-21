@@ -1,8 +1,7 @@
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Rendering backends for rectangle drawing.
 ///

@@ -1,7 +1,6 @@
 import 'dart:ui';
 
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../element_type_renderer.dart';
 

@@ -1,7 +1,22 @@
 import 'dart:io';
 
 const _targetFiles = <String>[
+  'packages/snow_draw_flutter_backend/lib/render/arrow/arrow_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/element_type_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/filter/filter_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_path_utils.dart',
+  'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/free_draw/free_draw_visual_cache.dart',
+  'packages/snow_draw_flutter_backend/lib/render/highlight/highlight_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/line/line_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/patterns/stroke_pattern_utils.dart',
+  'packages/snow_draw_flutter_backend/lib/render/rectangle/rectangle_render_plan.dart',
+  'packages/snow_draw_flutter_backend/lib/render/rectangle/rectangle_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/render/element_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/scene/scene_primitive_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/stroke/two_point_stroke_utils.dart',
+  'packages/snow_draw_flutter_backend/lib/render/text/serial_number_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/render/text/text_renderer.dart',
   'packages/snow_draw_flutter_backend/lib/services/text/flutter_text_rendering_cache_invalidation.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/draw_canvas.dart',
   'packages/snow_draw_flutter_backend/lib/visual/built_in_element_visuals.dart',
