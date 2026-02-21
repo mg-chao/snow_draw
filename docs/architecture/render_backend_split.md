@@ -83,6 +83,7 @@ This aggregates:
 - `check:ci-workflow`
 - `check:app-backend-import-boundary`
 - `check:app-pubspec-backend`
+- `check:app-dependency-graph`
 
 Run compatibility contract checks with:
 

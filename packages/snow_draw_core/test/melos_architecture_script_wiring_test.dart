@@ -19,6 +19,7 @@ void main() {
       'dart run melos run check:ci-workflow',
       'dart run melos run check:app-backend-import-boundary',
       'dart run melos run check:app-pubspec-backend',
+      'dart run melos run check:app-dependency-graph',
     ];
 
     var lastIndex = -1;
@@ -83,6 +84,11 @@ void main() {
     expect(
       pubspec,
       contains('run: dart run tools/check_app_pubspec_backend_dependency.dart'),
+    );
+    expect(pubspec, contains('check:app-dependency-graph:'));
+    expect(
+      pubspec,
+      contains('run: dart run tools/check_app_dependency_graph_boundary.dart'),
     );
   });
 }

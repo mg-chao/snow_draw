@@ -81,6 +81,10 @@ melos:
       description: Ensure app pubspec keeps required core/backend dependencies.
       run: dart run tools/check_app_pubspec_backend_dependency.dart
 
+    check:app-dependency-graph:
+      description: Validate app dependency graph reaches core/backend/flutter.
+      run: dart run tools/check_app_dependency_graph_boundary.dart
+
     check:backend-entrypoint:
       description: Ensure backend package entrypoint exports required public APIs.
       run: dart run tools/check_backend_entrypoint_exports.dart
@@ -91,7 +95,7 @@ melos:
 
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-ui-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-pubspec-backend
+      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-ui-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.
