@@ -1,15 +1,16 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import '../../../config/draw_config.dart';
-import '../../../models/element_state.dart';
-import '../../../types/draw_rect.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/stroke_pattern_utils.dart';
-import '../../core/element_renderer.dart';
-import '../shared/two_point_stroke_utils.dart';
-import 'free_draw_data.dart';
-import 'free_draw_visual_cache.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
+import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_visual_cache.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
+
+import 'element_type_renderer.dart';
+import 'two_point_stroke_utils.dart';
 
 class FreeDrawRenderer extends ElementTypeRenderer {
   const FreeDrawRenderer();

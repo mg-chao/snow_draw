@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import '../../models/element_state.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
 
 /// Renderer interface for a single element type.
 abstract class ElementTypeRenderer {

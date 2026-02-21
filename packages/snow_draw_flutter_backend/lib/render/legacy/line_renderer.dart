@@ -1,13 +1,14 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import '../../../models/element_state.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/stroke_pattern_utils.dart';
-import '../../core/element_renderer.dart';
-import '../arrow/arrow_visual_cache.dart';
-import '../shared/two_point_stroke_utils.dart';
-import 'line_data.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_visual_cache.dart';
+import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
+
+import 'element_type_renderer.dart';
+import 'two_point_stroke_utils.dart';
 
 class LineRenderer extends ElementTypeRenderer {
   const LineRenderer();

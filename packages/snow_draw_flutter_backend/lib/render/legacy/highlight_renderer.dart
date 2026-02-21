@@ -1,9 +1,10 @@
 import 'dart:ui';
 
-import '../../../models/element_state.dart';
-import '../../../types/element_style.dart';
-import '../../core/element_renderer.dart';
-import 'highlight_data.dart';
+import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/element_style.dart';
+
+import 'element_type_renderer.dart';
 
 class HighlightRenderer extends ElementTypeRenderer {
   const HighlightRenderer();

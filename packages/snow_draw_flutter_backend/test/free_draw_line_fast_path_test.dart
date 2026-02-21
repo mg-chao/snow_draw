@@ -3,12 +3,12 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_hit_tester.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_renderer.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_visual_cache.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_flutter_backend/render/legacy/free_draw_renderer.dart';
 
 const _strokeWidth = 4.0;
 const _elementRect = DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110);
