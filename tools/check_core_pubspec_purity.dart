@@ -25,6 +25,12 @@ void main() {
 
     final isTopLevel = line.isNotEmpty && !line.startsWith(' ');
     if (isTopLevel) {
+      if (trimmed == 'flutter:') {
+        violations.add(
+          '$_corePubspecPath:$lineNumber: top-level flutter section is not '
+          'allowed',
+        );
+      }
       section = trimmed.endsWith(':')
           ? trimmed.substring(0, trimmed.length - 1)
           : null;
@@ -41,6 +47,14 @@ void main() {
     if (section == 'dependencies' && trimmed.startsWith('flutter:')) {
       violations.add(
         '$_corePubspecPath:$lineNumber: dependencies.flutter is not allowed',
+      );
+      continue;
+    }
+
+    if (section == 'dependency_overrides' && trimmed.startsWith('flutter:')) {
+      violations.add(
+        '$_corePubspecPath:$lineNumber: dependency_overrides.flutter is not '
+        'allowed',
       );
       continue;
     }
