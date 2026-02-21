@@ -8,12 +8,23 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/ui/canvas/filter_scene_compositor.dart';
 
+void _paintElementRect(Canvas canvas, ElementState element, Color color) {
+  canvas.drawRect(
+    Rect.fromLTWH(
+      element.rect.minX,
+      element.rect.minY,
+      element.rect.width,
+      element.rect.height,
+    ),
+    Paint()..color = color,
+  );
+}
+
 void main() {
   test('compositor paints non-filter elements using original canvas', () {
     var paintCount = 0;
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    var usedOriginalCanvas = true;
     filterSceneCompositor.paintElements(
       canvas: canvas,
       elements: const [
@@ -35,24 +46,13 @@ void main() {
         ),
       ],
       paintElement: (sceneCanvas, element) {
-        if (!identical(sceneCanvas, canvas)) {
-          usedOriginalCanvas = false;
-        }
+        expect(identical(sceneCanvas, canvas), isTrue);
         paintCount += 1;
-        sceneCanvas.drawRect(
-          Rect.fromLTWH(
-            element.rect.minX,
-            element.rect.minY,
-            element.rect.width,
-            element.rect.height,
-          ),
-          Paint()..color = const Color(0xFF000000),
-        );
+        _paintElementRect(sceneCanvas, element, const Color(0xFF000000));
       },
     );
 
     expect(paintCount, 2);
-    expect(usedOriginalCanvas, isTrue);
     recorder.endRecording();
   });
 
@@ -76,23 +76,12 @@ void main() {
 
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    expect(
-      () => filterSceneCompositor.paintElements(
-        canvas: canvas,
-        elements: const [base, filter],
-        paintElement: (sceneCanvas, element) {
-          sceneCanvas.drawRect(
-            Rect.fromLTWH(
-              element.rect.minX,
-              element.rect.minY,
-              element.rect.width,
-              element.rect.height,
-            ),
-            Paint()..color = const Color(0xFF00AAFF),
-          );
-        },
-      ),
-      returnsNormally,
+    filterSceneCompositor.paintElements(
+      canvas: canvas,
+      elements: const [base, filter],
+      paintElement: (sceneCanvas, element) {
+        _paintElementRect(sceneCanvas, element, const Color(0xFF00AAFF));
+      },
     );
     recorder.endRecording();
   });
@@ -125,23 +114,12 @@ void main() {
 
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    expect(
-      () => filterSceneCompositor.paintElements(
-        canvas: canvas,
-        elements: const [base, grayscale, inversion],
-        paintElement: (sceneCanvas, element) {
-          sceneCanvas.drawRect(
-            Rect.fromLTWH(
-              element.rect.minX,
-              element.rect.minY,
-              element.rect.width,
-              element.rect.height,
-            ),
-            Paint()..color = const Color(0xFFAA5500),
-          );
-        },
-      ),
-      returnsNormally,
+    filterSceneCompositor.paintElements(
+      canvas: canvas,
+      elements: const [base, grayscale, inversion],
+      paintElement: (sceneCanvas, element) {
+        _paintElementRect(sceneCanvas, element, const Color(0xFFAA5500));
+      },
     );
     recorder.endRecording();
   });
@@ -162,10 +140,7 @@ void main() {
         ),
       ],
       paintElement: (sceneCanvas, element) {
-        sceneCanvas.drawRect(
-          const Rect.fromLTWH(0, 0, 20, 20),
-          Paint()..color = const Color(0xFF336699),
-        );
+        _paintElementRect(sceneCanvas, element, const Color(0xFF336699));
       },
     );
 
