@@ -1,11 +1,7 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/filter_scene_compositor.dart';
 
 void main() {
