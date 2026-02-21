@@ -73,6 +73,7 @@ This aggregates:
 
 - `check:core-purity`
 - `check:backend-legacy`
+- `check:backend-entrypoint`
 - `check:app-backend-import-boundary`
 
 Run compatibility contract checks with:

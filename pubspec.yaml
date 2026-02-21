@@ -61,9 +61,13 @@ melos:
       description: Keep app imports on backend package entrypoint APIs only.
       run: dart run tools/check_app_backend_import_boundary.dart
 
+    check:backend-entrypoint:
+      description: Ensure backend package entrypoint exports required public APIs.
+      run: dart run tools/check_backend_entrypoint_exports.dart
+
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:app-backend-import-boundary
+      run: dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:backend-entrypoint && dart run melos run check:app-backend-import-boundary
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.
