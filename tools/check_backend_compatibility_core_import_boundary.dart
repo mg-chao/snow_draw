@@ -1,12 +1,11 @@
 import 'dart:io';
 
-const _targetFiles = <String>[
-  'packages/snow_draw_flutter_backend/test/built_in_element_visuals_test.dart',
-  'packages/snow_draw_flutter_backend/test/built_in_element_visual_icons_compatibility_test.dart',
-  'packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
-  'packages/snow_draw_flutter_backend/test/built_in_scene_encoder_routing_test.dart',
-  'packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart',
-];
+const _backendTestRootPath = 'packages/snow_draw_flutter_backend/test';
+const _compatibilityBasenames = <String>{
+  'built_in_element_visuals_test.dart',
+  'built_in_scene_encoder_routing_test.dart',
+  'coordinate_service_offset_extensions_test.dart',
+};
 
 final _allowedImportPattern = RegExp(
   r"""^import\s+['"]package:snow_draw_core/snow_draw_core\.dart['"];$""",
@@ -16,14 +15,29 @@ final _allowedExportPattern = RegExp(
 );
 
 void main() {
-  final violations = <String>[];
-  for (final targetPath in _targetFiles) {
-    final file = File(targetPath);
-    if (!file.existsSync()) {
-      violations.add('$targetPath: missing compatibility test file');
-      continue;
-    }
+  final backendTestRoot = Directory(_backendTestRootPath);
+  if (!backendTestRoot.existsSync()) {
+    stderr.writeln('Missing backend test directory: $_backendTestRootPath');
+    exitCode = 1;
+    return;
+  }
 
+  final violations = <String>[];
+  final targetFiles = backendTestRoot
+      .listSync(recursive: true, followLinks: false)
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.dart'))
+      .where((file) {
+        final normalizedPath = file.path.replaceAll(r'\', '/');
+        final basename = _basename(normalizedPath);
+        return basename.endsWith('_compatibility_test.dart') ||
+            basename.endsWith('_contract_test.dart') ||
+            _compatibilityBasenames.contains(basename);
+      })
+      .toList(growable: false);
+
+  for (final file in targetFiles) {
+    final normalizedPath = file.path.replaceAll(r'\', '/');
     final lines = file.readAsLinesSync();
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index].trimLeft();
@@ -41,10 +55,14 @@ void main() {
       }
 
       violations.add(
-        '$targetPath:${index + 1}: backend compatibility tests must '
+        '$normalizedPath:${index + 1}: backend compatibility tests must '
         'reference core via package:snow_draw_core/snow_draw_core.dart',
       );
     }
+  }
+
+  if (targetFiles.isEmpty) {
+    violations.add('$_backendTestRootPath: no compatibility test files found');
   }
 
   if (violations.isNotEmpty) {
@@ -60,4 +78,12 @@ void main() {
     'Backend compatibility core import boundary check passed. '
     'Compatibility tests import core APIs through the core entrypoint only.',
   );
+}
+
+String _basename(String normalizedPath) {
+  final slashIndex = normalizedPath.lastIndexOf('/');
+  if (slashIndex == -1) {
+    return normalizedPath;
+  }
+  return normalizedPath.substring(slashIndex + 1);
 }
