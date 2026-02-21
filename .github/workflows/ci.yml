@@ -38,14 +38,8 @@ jobs:
       - name: Run formatting checks
         run: dart run melos run format:check
 
-      - name: Verify core purity
-        run: dart run melos run check:core-purity
-
-      - name: Verify backend legacy namespace
-        run: dart run melos run check:backend-legacy
-
-      - name: Verify app/backend import boundary
-        run: dart run melos run check:app-backend-import-boundary
+      - name: Verify architecture boundaries
+        run: dart run melos run check:architecture
 
       - name: Run test suite
         run: dart run melos run test
