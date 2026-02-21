@@ -17,6 +17,7 @@ void main() {
       'dart run melos run check:backend-entrypoint',
       'dart run melos run check:ci-workflow',
       'dart run melos run check:app-backend-import-boundary',
+      'dart run melos run check:app-pubspec-backend',
     ];
 
     var lastIndex = -1;
@@ -69,6 +70,11 @@ void main() {
     expect(
       pubspec,
       contains('run: dart run tools/check_ci_workflow_guards.dart'),
+    );
+    expect(pubspec, contains('check:app-pubspec-backend:'));
+    expect(
+      pubspec,
+      contains('run: dart run tools/check_app_pubspec_backend_dependency.dart'),
     );
   });
 }

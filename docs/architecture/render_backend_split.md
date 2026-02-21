@@ -80,6 +80,7 @@ This aggregates:
 - `check:backend-entrypoint`
 - `check:ci-workflow`
 - `check:app-backend-import-boundary`
+- `check:app-pubspec-backend`
 
 Run compatibility contract checks with:
 
