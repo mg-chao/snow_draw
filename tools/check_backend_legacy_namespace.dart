@@ -104,6 +104,20 @@ List<String> _scanLegacyShimShape(Directory legacyDir) {
       );
     }
 
+    final hasDeprecated = meaningful.any(
+      (line) => line.startsWith('@Deprecated('),
+    );
+    if (!hasDeprecated) {
+      violations.add(
+        '$normalizedPath: legacy shim must include a @Deprecated annotation',
+      );
+    }
+
+    final hasLibraryDirective = meaningful.any((line) => line == 'library;');
+    if (!hasLibraryDirective) {
+      violations.add('$normalizedPath: legacy shim must declare `library;`');
+    }
+
     final bodyTokens = <String>[
       'class ',
       'enum ',
