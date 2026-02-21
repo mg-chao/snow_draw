@@ -16,24 +16,12 @@ import 'types/text/text_definition.dart';
 /// Call this when constructing a [DrawContext] to populate its
 /// `elementRegistry`.
 void registerBuiltInElements(DefaultElementRegistry registry) {
-  assert(_debugValidateBuiltInDefinitions());
   for (final definition in _builtInDefinitions) {
     final typeValue = definition.typeId.value;
     if (!registry.supportsTypeValue(typeValue)) {
       registry.register(definition);
     }
   }
-}
-
-bool _debugValidateBuiltInDefinitions() {
-  for (final definition in _builtInDefinitions) {
-    assert(
-      definition.sceneEncoder != null,
-      'Built-in element "${definition.typeId.value}" must provide '
-      'a scene encoder.',
-    );
-  }
-  return true;
 }
 
 final List<ElementDefinition<ElementData>> _builtInDefinitions = [

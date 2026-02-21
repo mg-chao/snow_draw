@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
@@ -12,17 +12,6 @@ void main() {
     _renderElement(elementRegistry: elementRegistry);
 
     expect(counters.sceneEncodes, 1);
-  });
-
-  test('uses unknown-element fallback when scene encoder is unavailable', () {
-    final counters = _RenderCounters();
-    final elementRegistry = _buildElementRegistryWithoutSceneEncoder();
-
-    expect(
-      () => _renderElement(elementRegistry: elementRegistry),
-      returnsNormally,
-    );
-    expect(counters.sceneEncodes, 0);
   });
 
   test('uses unknown-element fallback when scene encoding is unsupported', () {
@@ -53,17 +42,6 @@ DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>
         createDefaultData: _SceneTestData.new,
         fromJson: (_) => const _SceneTestData(),
         sceneEncoder: _CountingSceneEncoder(counters),
-      ),
-    );
-
-DefaultElementRegistry _buildElementRegistryWithoutSceneEncoder() =>
-    DefaultElementRegistry()..register<_SceneTestData>(
-      ElementDefinition<_SceneTestData>(
-        typeId: _SceneTestData.typeIdToken,
-        displayName: 'scene-test',
-        hitTester: const _NoopHitTester(),
-        createDefaultData: _SceneTestData.new,
-        fromJson: (_) => const _SceneTestData(),
       ),
     );
 

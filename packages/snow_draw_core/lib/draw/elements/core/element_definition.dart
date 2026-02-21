@@ -18,8 +18,8 @@ class ElementDefinition<T extends ElementData> {
     required this.hitTester,
     required this.createDefaultData,
     required this.fromJson,
+    required this.sceneEncoder,
     this.creationStrategy,
-    this.sceneEncoder,
   });
   final ElementTypeId<T> typeId;
   final String displayName;
@@ -27,5 +27,5 @@ class ElementDefinition<T extends ElementData> {
   final T Function() createDefaultData;
   final T Function(Map<String, dynamic> json) fromJson;
   final CreationStrategy? creationStrategy;
-  final ElementSceneEncoder<T>? sceneEncoder;
+  final ElementSceneEncoder<T> sceneEncoder;
 }

@@ -9,13 +9,7 @@ import 'scene/scene_primitive_renderer.dart';
 
 final ModuleLogger _renderFallbackLog = LogService.fallback.render;
 
-enum _SceneRenderResult {
-  rendered,
-  missingDefinition,
-  missingSceneEncoder,
-  unsupported,
-  failed,
-}
+enum _SceneRenderResult { rendered, missingDefinition, unsupported, failed }
 
 /// Flutter element renderer.
 ///
@@ -131,12 +125,6 @@ class ElementRenderer {
           'using unknown-element fallback',
           {'typeId': element.typeId.value},
         );
-      case _SceneRenderResult.missingSceneEncoder:
-        _renderFallbackLog.error(
-          'Registered element type is missing a scene encoder, '
-          'using unknown-element fallback',
-          {'typeId': element.typeId.value},
-        );
       case _SceneRenderResult.unsupported:
         // Unsupported reason/details are logged by _renderSceneIfAvailable.
         break;
@@ -160,12 +148,8 @@ class ElementRenderer {
     if (definition == null) {
       return _SceneRenderResult.missingDefinition;
     }
-    final sceneEncoder = definition.sceneEncoder;
-    if (sceneEncoder == null) {
-      return _SceneRenderResult.missingSceneEncoder;
-    }
     try {
-      final scene = sceneEncoder.encodeScene(
+      final scene = definition.sceneEncoder.encodeScene(
         element: element,
         scaleFactor: scaleFactor,
         localeTag: locale?.toLanguageTag(),

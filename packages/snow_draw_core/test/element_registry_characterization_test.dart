@@ -64,7 +64,7 @@ void main() {
 
       for (final typeValue in builtInTypeValues) {
         final definition = registry.getDefinitionByValue(typeValue);
-        if (definition == null || definition.sceneEncoder == null) {
+        if (definition == null) {
           missingSceneEncoders.add(typeValue);
         }
       }

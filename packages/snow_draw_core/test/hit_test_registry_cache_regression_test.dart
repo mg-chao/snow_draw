@@ -4,12 +4,14 @@ import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
 import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_core/draw/elements/core/element_scene_encoder.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart';
@@ -67,6 +69,7 @@ ElementDefinition<_TestElementData> _testElementDefinition({
   hitTester: _ToggleHitTester(shouldHit: shouldHit),
   createDefaultData: () => const _TestElementData(),
   fromJson: (_) => const _TestElementData(),
+  sceneEncoder: const _NoopSceneEncoder(),
 );
 
 class _TestElementData extends ElementData {
@@ -97,4 +100,15 @@ class _ToggleHitTester implements ElementHitTester {
     required DrawPoint position,
     double tolerance = 0,
   }) => shouldHit;
+}
+
+class _NoopSceneEncoder implements ElementSceneEncoder<_TestElementData> {
+  const _NoopSceneEncoder();
+
+  @override
+  RenderScene encodeScene({
+    required ElementState element,
+    required double scaleFactor,
+    String? localeTag,
+  }) => const RenderScene(primitives: <RenderPrimitive>[]);
 }
