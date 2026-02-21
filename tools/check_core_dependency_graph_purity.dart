@@ -3,6 +3,10 @@ import 'dart:io';
 
 const _corePackageName = 'snow_draw_core';
 const _corePackagePath = 'packages/snow_draw_core';
+const _forbiddenWorkspacePackages = <String>{
+  'snow_draw_flutter_backend',
+  'snow_draw',
+};
 
 void main() {
   final result = Process.runSync('dart', const [
@@ -78,30 +82,49 @@ void main() {
     }
   }
 
-  final violations = <_PackageInfo>[];
+  final violations = <String>[];
+  final sdkViolations = <_PackageInfo>[];
   for (final packageName in reachable) {
     final package = packages[packageName];
     if (package == null) {
       continue;
     }
     if (package.source == 'sdk' && !_isAllowedSdkPackage(package.name)) {
-      violations.add(package);
+      sdkViolations.add(package);
     }
   }
 
-  if (violations.isNotEmpty) {
-    violations.sort((a, b) => a.name.compareTo(b.name));
-    stderr.writeln('Core dependency graph purity check failed.');
-    stderr.writeln(
+  if (sdkViolations.isNotEmpty) {
+    sdkViolations.sort((a, b) => a.name.compareTo(b.name));
+    violations.add(
       'Reachable SDK packages from $_corePackageName must be Dart-only; '
       'found disallowed SDK package(s):',
     );
+    for (final sdkViolation in sdkViolations) {
+      final chain = _buildChain(target: sdkViolation.name, parents: parents);
+      violations.add(
+        '- ${sdkViolation.name} (source: ${sdkViolation.source})'
+        '${chain.length > 1 ? ' via ${chain.join(' -> ')}' : ''}',
+      );
+    }
+  }
+
+  for (final forbiddenPackage in _forbiddenWorkspacePackages) {
+    if (!reachable.contains(forbiddenPackage)) {
+      continue;
+    }
+    final chain = _buildChain(target: forbiddenPackage, parents: parents);
+    violations.add(
+      'Forbidden workspace package "$forbiddenPackage" is reachable from '
+      '$_corePackageName'
+      '${chain.length > 1 ? ' via ${chain.join(' -> ')}' : ''}.',
+    );
+  }
+
+  if (violations.isNotEmpty) {
+    stderr.writeln('Core dependency graph purity check failed.');
     for (final violation in violations) {
-      final chain = _buildChain(target: violation.name, parents: parents);
-      stderr.writeln('  - ${violation.name} (source: ${violation.source})');
-      if (chain.length > 1) {
-        stderr.writeln('    path: ${chain.join(' -> ')}');
-      }
+      stderr.writeln('  $violation');
     }
     exitCode = 1;
     return;
@@ -109,7 +132,8 @@ void main() {
 
   stdout.writeln(
     'Core dependency graph purity check passed. '
-    'No disallowed SDK packages are reachable from $_corePackageName.',
+    'No disallowed SDK packages or forbidden workspace packages are reachable '
+    'from $_corePackageName.',
   );
 }
 
