@@ -26,5 +26,11 @@ void main() {
       );
       lastIndex = index;
     }
+
+    expect(pubspec, contains('check:ci-workflow:'));
+    expect(
+      pubspec,
+      contains('run: dart run tools/check_ci_workflow_guards.dart'),
+    );
   });
 }
