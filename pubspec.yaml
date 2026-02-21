@@ -69,6 +69,10 @@ melos:
       description: Block deep core draw imports outside the core package.
       run: dart run tools/check_workspace_core_deep_import_boundary.dart
 
+    check:workspace-backend-deep-import-boundary:
+      description: Block deep backend imports outside the backend package.
+      run: dart run tools/check_workspace_backend_deep_import_boundary.dart
+
     check:backend-legacy:
       description: Enforce shim-only legacy namespace and block internal legacy imports.
       run: dart run tools/check_backend_legacy_namespace.dart
@@ -131,7 +135,7 @@ melos:
 
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-draw-purity && dart run melos run check:core-ui-boundary && dart run melos run check:core-entrypoint && dart run melos run check:workspace-core-deep-import-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-test-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-core-entrypoint-import-boundary && dart run melos run check:backend-test-core-entrypoint-import-boundary && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-core-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
+      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-draw-purity && dart run melos run check:core-ui-boundary && dart run melos run check:core-entrypoint && dart run melos run check:workspace-core-deep-import-boundary && dart run melos run check:workspace-backend-deep-import-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-test-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-core-entrypoint-import-boundary && dart run melos run check:backend-test-core-entrypoint-import-boundary && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-core-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.
