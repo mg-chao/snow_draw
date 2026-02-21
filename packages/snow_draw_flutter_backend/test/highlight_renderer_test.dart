@@ -8,7 +8,7 @@ import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
-import 'package:snow_draw_flutter_backend/render/legacy/highlight_renderer.dart';
+import 'package:snow_draw_flutter_backend/render/highlight/highlight_renderer.dart';
 
 void main() {
   test('highlight renderer uses multiply blend', () async {
