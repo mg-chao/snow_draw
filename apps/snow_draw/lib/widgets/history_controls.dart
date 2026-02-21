@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/events/state_events.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../l10n/app_localizations.dart';
 
