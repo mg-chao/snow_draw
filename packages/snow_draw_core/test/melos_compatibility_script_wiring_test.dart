@@ -9,6 +9,7 @@ void main() {
     const orderedCommands = <String>[
       'check:compatibility-contracts:',
       'dart test packages/snow_draw_core/test/melos_compatibility_script_wiring_test.dart',
+      'dart test packages/snow_draw_core/test/core_entrypoint_contract_test.dart',
       'dart test packages/snow_draw_core/test/element_serialization_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_default_json_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart',
