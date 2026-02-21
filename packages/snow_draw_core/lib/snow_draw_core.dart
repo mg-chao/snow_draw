@@ -4,9 +4,11 @@
 export 'draw/actions/actions.dart';
 export 'draw/config/draw_config.dart';
 export 'draw/core/draw_context.dart';
+export 'draw/core/coordinates/element_space.dart';
 export 'draw/edit/arrow/arrow_point_operation.dart';
 export 'draw/elements/core/element_data.dart';
 export 'draw/elements/core/element_definition.dart';
+export 'draw/elements/core/element_hit_tester.dart';
 export 'draw/elements/core/element_type_id.dart';
 export 'draw/elements/core/element_registry.dart';
 export 'draw/elements/core/element_registry_interface.dart';

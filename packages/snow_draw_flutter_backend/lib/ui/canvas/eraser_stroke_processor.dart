@@ -1,11 +1,6 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
-import 'package:snow_draw_core/draw/core/coordinates/element_space.dart';
-import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Resolves the hit tester used for an element during eraser processing.
 typedef EraserHitTesterResolver =
