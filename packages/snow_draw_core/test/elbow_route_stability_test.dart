@@ -17,16 +17,16 @@ void main() {
       anchor: DrawPoint(x: 0.3, y: 0),
     );
 
-    final startPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: binding,
-          target: boundElement,
-          hasArrowhead: false,
-        ) ??
-        const DrawPoint(x: 36, y: -10);
+    final resolvedStartPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: binding,
+      target: boundElement,
+      hasArrowhead: false,
+    );
+    expect(resolvedStartPoint, isNotNull);
+    final startPoint = resolvedStartPoint!;
 
     final endX = rect.maxX + 180;
-    final sampled = <_RouteSample>[];
+    final rightSegmentYs = <double>[];
     for (var y = -140.0; y <= -4.0; y += 4.0) {
       final endPoint = DrawPoint(x: endX, y: y);
       final result = routeElbowArrow(
@@ -35,43 +35,20 @@ void main() {
         startBinding: binding,
         elementsById: {'rect-1': boundElement},
       );
-      final headings = _headingSequence(result.points);
-      final horizontalY = _rightSegmentY(points: result.points);
-      if (horizontalY != null &&
-          headings.length == 3 &&
-          headings[0] == ElbowHeading.up &&
-          headings[1] == ElbowHeading.right &&
-          headings[2] == ElbowHeading.down) {
-        sampled.add(
-          _RouteSample(
-            endY: y,
-            horizontalY: horizontalY,
-            points: result.points,
-          ),
-        );
+      final horizontalY = _rightSegmentYForUpRightDown(result.points);
+      if (horizontalY != null) {
+        rightSegmentYs.add(horizontalY);
       }
     }
 
-    expect(sampled.length, greaterThanOrEqualTo(3));
+    expect(rightSegmentYs.length, greaterThanOrEqualTo(3));
 
     var maxDelta = 0.0;
-    for (var i = 1; i < sampled.length; i++) {
-      final delta = (sampled[i].horizontalY - sampled[i - 1].horizontalY).abs();
+    for (var i = 1; i < rightSegmentYs.length; i++) {
+      final delta = (rightSegmentYs[i] - rightSegmentYs[i - 1]).abs();
       if (delta > maxDelta) {
         maxDelta = delta;
       }
-    }
-
-    if (maxDelta > 6) {
-      final details = sampled
-          .map(
-            (sample) =>
-                'endY=${sample.endY.toStringAsFixed(1)} '
-                'rightY=${sample.horizontalY.toStringAsFixed(1)} '
-                'points=${sample.points}',
-          )
-          .join('\n');
-      printOnFailure('route samples:\n$details');
     }
 
     expect(
@@ -83,39 +60,13 @@ void main() {
   });
 }
 
-class _RouteSample {
-  _RouteSample({
-    required this.endY,
-    required this.horizontalY,
-    required this.points,
-  });
-
-  final double endY;
-  final double horizontalY;
-  final List<DrawPoint> points;
-}
-
-List<ElbowHeading> _headingSequence(List<DrawPoint> points) {
-  if (points.length < 2) {
-    return const <ElbowHeading>[];
-  }
-  final headings = <ElbowHeading>[];
-  for (var i = 0; i < points.length - 1; i++) {
-    final start = points[i];
-    final end = points[i + 1];
-    if (ElbowGeometry.manhattanDistance(start, end) <=
-        ElbowConstants.dedupThreshold) {
-      continue;
-    }
-    headings.add(ElbowGeometry.headingForSegment(start, end));
-  }
-  return headings;
-}
-
-double? _rightSegmentY({required List<DrawPoint> points}) {
+double? _rightSegmentYForUpRightDown(List<DrawPoint> points) {
   if (points.length < 2) {
     return null;
   }
+
+  final headings = <ElbowHeading>[];
+  double? rightSegmentY;
   for (var i = 0; i < points.length - 1; i++) {
     final start = points[i];
     final end = points[i + 1];
@@ -124,9 +75,17 @@ double? _rightSegmentY({required List<DrawPoint> points}) {
       continue;
     }
     final heading = ElbowGeometry.headingForSegment(start, end);
+    headings.add(heading);
     if (heading == ElbowHeading.right) {
-      return (start.y + end.y) / 2;
+      rightSegmentY = (start.y + end.y) / 2;
     }
   }
-  return null;
+
+  if (headings.length != 3 ||
+      headings[0] != ElbowHeading.up ||
+      headings[1] != ElbowHeading.right ||
+      headings[2] != ElbowHeading.down) {
+    return null;
+  }
+  return rightSegmentY;
 }
