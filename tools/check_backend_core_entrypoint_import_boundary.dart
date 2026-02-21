@@ -47,6 +47,8 @@ const _targetFiles = <String>[
   'packages/snow_draw_flutter_backend/lib/ui/canvas/rectangle_interaction_state_change.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/lightweight_line_edit_state_change.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/interaction_dynamic_scene_cache.dart',
+  'packages/snow_draw_flutter_backend/lib/ui/canvas/serial_number_connection_painter.dart',
+  'packages/snow_draw_flutter_backend/lib/ui/canvas/serial_number_connector_cache.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/serial_number_interaction_classifier.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/serial_number_interaction_state_change.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/static_canvas_painter.dart',

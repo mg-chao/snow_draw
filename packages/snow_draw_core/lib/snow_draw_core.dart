@@ -20,6 +20,7 @@ export 'draw/elements/types/highlight/highlight_data.dart';
 export 'draw/elements/types/line/line_data.dart';
 export 'draw/elements/types/rectangle/rectangle_data.dart';
 export 'draw/elements/types/serial_number/serial_number_data.dart';
+export 'draw/elements/types/serial_number/serial_number_binding.dart';
 export 'draw/elements/types/text/text_data.dart';
 export 'draw/events/error_events.dart';
 export 'draw/events/event_bus.dart';

@@ -22,6 +22,7 @@ const _allowedExports = <String>{
   'draw/elements/types/highlight/highlight_data.dart',
   'draw/elements/types/line/line_data.dart',
   'draw/elements/types/rectangle/rectangle_data.dart',
+  'draw/elements/types/serial_number/serial_number_binding.dart',
   'draw/elements/types/serial_number/serial_number_data.dart',
   'draw/elements/types/text/text_data.dart',
   'draw/events/error_events.dart',

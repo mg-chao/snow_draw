@@ -1,10 +1,8 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_binding.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'serial_number_connector_cache.dart';
 
 class SerialNumberTextConnector {
