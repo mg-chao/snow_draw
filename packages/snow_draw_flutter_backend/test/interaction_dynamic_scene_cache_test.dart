@@ -1,14 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/models/camera_state.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/domain_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/interaction_dynamic_scene_cache.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';

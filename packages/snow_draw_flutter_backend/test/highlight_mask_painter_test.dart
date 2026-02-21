@@ -2,13 +2,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_painter.dart';
 
 const _deg45 = 0.7853981633974483;

@@ -1,17 +1,7 @@
-import 'dart:ui' as ui;
+﻿import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/core/element_data.dart';
-import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
-import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/core/element_scene_encoder.dart';
-import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
-import 'package:snow_draw_core/draw/render/scene/scene_encoding_not_supported.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 
 void main() {

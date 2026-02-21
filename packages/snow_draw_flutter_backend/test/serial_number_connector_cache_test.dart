@@ -1,12 +1,5 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/domain_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connection_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connector_cache.dart';
 

@@ -2,15 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/events/event_bus.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
-import 'package:snow_draw_core/draw/store/selector.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 
 void main() {

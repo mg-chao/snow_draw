@@ -1,12 +1,7 @@
 ﻿import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
-import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/optimized_scene_occlusion.dart';
 
 void main() {
