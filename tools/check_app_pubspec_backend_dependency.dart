@@ -42,12 +42,19 @@ void main() {
       continue;
     }
 
-    if (currentSection == 'dependency_overrides' &&
-        trimmed.startsWith('snow_draw_flutter_backend:')) {
-      violations.add(
-        '$_appPubspecPath:$lineNumber: dependency_overrides for '
-        'snow_draw_flutter_backend are not allowed',
-      );
+    if (currentSection == 'dependency_overrides') {
+      if (trimmed.startsWith('snow_draw_flutter_backend:')) {
+        violations.add(
+          '$_appPubspecPath:$lineNumber: dependency_overrides for '
+          'snow_draw_flutter_backend are not allowed',
+        );
+      }
+      if (trimmed.startsWith('snow_draw_core:')) {
+        violations.add(
+          '$_appPubspecPath:$lineNumber: dependency_overrides for '
+          'snow_draw_core are not allowed',
+        );
+      }
     }
   }
 
@@ -74,6 +81,7 @@ void main() {
 
   stdout.writeln(
     'App pubspec backend dependency check passed. '
-    'App declares required core/backend dependencies without backend overrides.',
+    'App declares required core/backend dependencies without core/backend '
+    'overrides.',
   );
 }
