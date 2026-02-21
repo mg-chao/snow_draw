@@ -102,9 +102,14 @@ This verifies:
 - draw config default primitive contract stability
 - action payload immutability contract for collection-backed actions
 - `DrawColor` ARGB32 channel/update behavior stability
+- fallback text metrics behavior and DTO invariants in pure Dart core
+- `DrawContext` text metrics injection/preservation behavior
+- scene encoder slice contracts for built-in elements (A-D)
 - backend visual registration coverage for built-in core elements
 - backend built-in icon mapping compatibility
 - backend package entrypoint export contract for app boundary usage
+- backend entrypoint `flutterTextMetricsService` export behavior
+- backend coordinate adapter (`DrawPoint` <-> `Offset`) invertibility
 - built-in scene encoder routing coverage through backend scene rendering
 
 ## Adding a New Rendering Backend
