@@ -10,6 +10,7 @@ void main() {
       'check:architecture:',
       'dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart',
       'dart run melos run check:core-purity',
+      'dart run melos run check:core-draw-purity',
       'dart run melos run check:core-ui-boundary',
       'dart run melos run check:backend-legacy',
       'dart run melos run check:backend-app-import-boundary',
@@ -55,6 +56,11 @@ void main() {
     expect(
       pubspec,
       contains('run: dart run tools/check_core_ui_boundary.dart'),
+    );
+    expect(pubspec, contains('check:core-draw-purity:'));
+    expect(
+      pubspec,
+      contains('run: dart run tools/check_core_draw_import_purity.dart'),
     );
     expect(pubspec, contains('check:backend-app-import-boundary:'));
     expect(

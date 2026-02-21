@@ -48,6 +48,7 @@ rendering backends.
 
 - No `package:flutter` imports.
 - No `dart:ui` imports.
+- No `package:flutter` or `dart:ui` imports under `lib/draw`.
 - No reachable Flutter SDK packages in the core dependency graph.
 - No reachable backend/app workspace packages in the core dependency graph.
 - No shader/material declarations in core package metadata.
@@ -74,6 +75,7 @@ dart run melos run check:architecture
 This aggregates:
 
 - `check:core-purity`
+- `check:core-draw-purity`
 - `check:core-ui-boundary`
 - `check:backend-legacy`
 - `check:backend-app-import-boundary`
