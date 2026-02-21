@@ -1,9 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import 'config_update_queue.dart';
 

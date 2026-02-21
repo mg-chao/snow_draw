@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'style_toolbar_state.dart';
 import 'tool_controller.dart';
 
