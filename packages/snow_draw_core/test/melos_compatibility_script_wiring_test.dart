@@ -14,6 +14,7 @@ void main() {
       'dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_registry_characterization_test.dart',
       'dart test packages/snow_draw_core/test/draw_config_defaults_compatibility_test.dart',
+      'dart test packages/snow_draw_core/test/action_payload_immutability_test.dart',
       'flutter test packages/snow_draw_flutter_backend/test/built_in_element_visuals_test.dart',
       'packages/snow_draw_flutter_backend/test/built_in_element_visual_icons_compatibility_test.dart',
       'packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',

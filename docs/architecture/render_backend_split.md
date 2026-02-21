@@ -96,6 +96,7 @@ This verifies:
 - built-in element type id token stability
 - built-in core scene encoder coverage in element registry
 - draw config default primitive contract stability
+- action payload immutability contract for collection-backed actions
 - backend visual registration coverage for built-in core elements
 - backend built-in icon mapping compatibility
 - backend package entrypoint export contract for app boundary usage
