@@ -35,9 +35,30 @@ melos:
       description: Block new Flutter/UI imports under core draw during migration.
       run: dart run tools/check_core_draw_import_purity.dart
 
+    test:core:
+      description: Run tests for the pure-Dart core package.
+      packageFilters:
+        scope: snow_draw_core
+      exec: dart test
+
+    test:backend:
+      description: Run tests for the Flutter backend package.
+      packageFilters:
+        scope: snow_draw_flutter_backend
+      exec: flutter test
+
+    test:app:
+      description: Run tests for the app package.
+      packageFilters:
+        scope: snow_draw
+      exec: flutter test
+
     test:
       description: Run tests in all packages.
-      run: dart run melos exec -- flutter test
+      run: |
+        dart run melos run test:core
+        dart run melos run test:backend
+        dart run melos run test:app
 
     run:windows:
       description: Run the snow_draw app on Windows.
