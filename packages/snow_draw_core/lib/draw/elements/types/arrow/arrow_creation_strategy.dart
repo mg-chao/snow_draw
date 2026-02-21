@@ -656,13 +656,10 @@ List<DrawPoint> _resolveArrowWorldPoints({
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
 }) {
-  final resolved = ArrowGeometry.resolveWorldPoints(
+  return ArrowGeometry.resolveWorldPoints(
     rect: rect,
     normalizedPoints: normalizedPoints,
   );
-  return resolved
-      .map((point) => DrawPoint(x: point.dx, y: point.dy))
-      .toList(growable: false);
 }
 
 _PointSnapResult _snapCreatePoint({

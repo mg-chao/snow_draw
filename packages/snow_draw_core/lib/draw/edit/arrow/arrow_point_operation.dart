@@ -86,9 +86,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final points = resolved
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
+    final points = List<DrawPoint>.unmodifiable(resolved);
     if (points.length < 2) {
       throw const EditMissingDataError(
         dataName: 'arrow points',

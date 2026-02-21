@@ -2,5 +2,4 @@
 # Format: path:line:dart:ui or path:line:package:flutter
 # Keep this file in sync with tools/check_core_draw_import_purity.dart.
 
-packages/snow_draw_core/lib/draw/elements/types/arrow/arrow_geometry.dart:2:dart:ui
 

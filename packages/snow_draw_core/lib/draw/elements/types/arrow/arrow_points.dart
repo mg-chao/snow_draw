@@ -455,15 +455,10 @@ class ArrowPointUtils {
   static List<DrawPoint> _resolveWorldPoints(
     ElementState element,
     ArrowLikeData data,
-  ) {
-    final resolved = ArrowGeometry.resolveWorldPoints(
-      rect: element.rect,
-      normalizedPoints: data.points,
-    );
-    return resolved
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
-  }
+  ) => ArrowGeometry.resolveWorldPoints(
+    rect: element.rect,
+    normalizedPoints: data.points,
+  );
 
   static DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
     if (element.rotation == 0) {

@@ -492,17 +492,9 @@ List<DrawPoint> _resolveWorldPoints({
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
 }) {
-  final resolved = ArrowGeometry.resolveWorldPoints(
+  return ArrowGeometry.resolveWorldPoints(
     rect: rect,
     normalizedPoints: normalizedPoints,
-  );
-  return List<DrawPoint>.generate(
-    resolved.length,
-    (i) => DrawPoint(
-      x: resolved[i].dx,
-      y: resolved[i].dy,
-      pressure: i < normalizedPoints.length ? normalizedPoints[i].pressure : 0,
-    ),
   );
 }
 

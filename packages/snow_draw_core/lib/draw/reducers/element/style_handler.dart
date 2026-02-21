@@ -283,7 +283,7 @@ bool _shouldRelayoutSerialNumber(ElementStyleUpdate update) =>
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: sanitizedData.points,
-  ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
+  );
 
   final newRect = ArrowGeometry.calculatePathBounds(
     worldPoints: worldPoints,
