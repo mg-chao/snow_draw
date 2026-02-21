@@ -41,6 +41,7 @@ Boundary checks are enforced with Melos scripts:
 - `dart run melos run check:core-purity`
 - `dart run melos run check:core-ui-boundary`
 - `dart run melos run check:backend-legacy`
+- `dart run melos run check:backend-app-import-boundary`
 - `dart run melos run check:backend-entrypoint`
 - `dart run melos run check:ci-workflow`
 - `dart run melos run check:app-backend-import-boundary`
