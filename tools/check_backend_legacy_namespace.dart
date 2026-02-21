@@ -97,6 +97,15 @@ List<String> _scanLegacyShimShape(Directory legacyDir) {
       continue;
     }
 
+    final importLines = meaningful
+        .where((line) => line.startsWith('import '))
+        .toList(growable: false);
+    if (importLines.isNotEmpty) {
+      violations.add(
+        '$normalizedPath: legacy shim must not declare import directives',
+      );
+    }
+
     final exportLine = exportLines.single;
     if (!exportLine.contains("export '../") || !exportLine.endsWith("';")) {
       violations.add(
