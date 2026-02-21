@@ -1,6 +1,5 @@
 import 'package:meta/meta.dart';
 
-import '../edit/core/edit_validation.dart' show EditValidation;
 import '../models/element_state.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
@@ -49,9 +48,6 @@ abstract class EditContext {
   bool get isMultiSelect => selectedIdsAtStart.length > 1;
 
   /// Whether this context carries non-empty element snapshots.
-  ///
-  /// Subclasses override to check their specific snapshot map. This
-  /// eliminates the need for a type-switch in [EditValidation].
   bool get hasSnapshots => false;
 }
 
@@ -99,9 +95,6 @@ final class MoveEditContext extends EditContext {
 
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
-
-  /// Get the starting center for an element.
-  DrawPoint? getStartCenter(String id) => elementSnapshots[id]?.center;
 }
 
 /// Context for resize operations.
@@ -145,10 +138,7 @@ final class ResizeEditContext extends EditContext {
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
 
-  bool get hasRotation => rotation != 0.0;
-
-  /// Get the starting geometry for an element.
-  ElementResizeSnapshot? getStartGeometry(String id) => elementSnapshots[id];
+  bool get hasRotation => rotation != 0;
 }
 
 /// Context for rotate operations.
@@ -184,7 +174,4 @@ final class RotateEditContext extends EditContext {
 
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
-
-  /// Get the starting rotation for an element.
-  ElementRotateSnapshot? getStartRotation(String id) => elementSnapshots[id];
 }

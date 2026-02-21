@@ -12,8 +12,6 @@ import '../history_recording_error.dart';
 import '../middleware_base.dart';
 import '../middleware_context.dart';
 
-const _skipHistoryMetadataKey = 'skipHistoryRecording';
-
 /// History middleware that manages undo/redo snapshots.
 ///
 /// It handles:
@@ -31,14 +29,13 @@ class HistoryMiddleware extends MiddlewareBase {
   String get name => 'History';
 
   @override
-  int get priority => 400; // Medium-high priority - after reduction
+  int get priority => 400;
 
   @override
   bool shouldExecute(DispatchContext context) {
     final action = context.action;
     final log = context.drawContext.log.history;
 
-    // Always execute for undo/redo/clear
     if (action is Undo || action is Redo || action is ClearHistory) {
       log.trace('History middleware executing', {
         'action': action.runtimeType.toString(),
@@ -47,20 +44,8 @@ class HistoryMiddleware extends MiddlewareBase {
       return true;
     }
 
-    final skipHistory =
-        context.getMetadata<bool>(_skipHistoryMetadataKey) ?? false;
-    if (skipHistory) {
-      log.warning('History middleware skipped', {
-        'action': action.runtimeType.toString(),
-        'reason': 'fallback',
-        'traceId': context.traceId,
-      });
-      return false;
-    }
-
-    // Check if we should record history
     final policy = _resolveHistoryPolicy(context, action);
-    if (policy == HistoryPolicy.skip || policy != HistoryPolicy.record) {
+    if (policy != HistoryPolicy.record) {
       log.trace('History middleware skipped', {
         'action': action.runtimeType.toString(),
         'reason': 'policy',
@@ -69,7 +54,6 @@ class HistoryMiddleware extends MiddlewareBase {
       return false;
     }
 
-    // Don't record during batching
     if (context.isBatching) {
       log.trace('History middleware skipped', {
         'action': action.runtimeType.toString(),
@@ -88,17 +72,14 @@ class HistoryMiddleware extends MiddlewareBase {
   ) async {
     final action = context.action;
 
-    // Handle undo
     if (action is Undo) {
       return _handleUndo(context, next);
     }
 
-    // Handle redo
     if (action is Redo) {
       return _handleRedo(context, next);
     }
 
-    // Handle clear history
     if (action is ClearHistory) {
       context.drawContext.log.history.trace('History clear requested', {
         'traceId': context.traceId,
@@ -107,7 +88,6 @@ class HistoryMiddleware extends MiddlewareBase {
       return next(context);
     }
 
-    // Record history after other middlewares execute
     final updatedContext = await next(context);
     _recordHistory(updatedContext, action);
     return updatedContext;
@@ -169,42 +149,19 @@ class HistoryMiddleware extends MiddlewareBase {
           changes != null &&
           !_requiresPersistentSnapshots(action: action, changes: changes);
 
-      // Take snapshot before action
-      final snapshotBefore = useIncremental
-          ? (action.requiresPreActionSnapshot
-                ? context.snapshotBuilder.buildIncrementalSnapshotBeforeAction(
-                    currentState: context.initialState,
-                    action: action,
-                    changes: changes,
-                    includeSelection: includeSelection,
-                  )
-                : context.snapshotBuilder.buildIncrementalSnapshotFromState(
-                    state: context.initialState,
-                    changes: changes,
-                    includeSelection: includeSelection,
-                  ))
-          : (action.requiresPreActionSnapshot
-                ? context.snapshotBuilder.buildSnapshotBeforeAction(
-                    currentState: context.initialState,
-                    action: action,
-                    includeSelection: includeSelection,
-                  )
-                : PersistentSnapshot.fromState(
-                    context.initialState,
-                    includeSelection: includeSelection,
-                  ));
-
-      // Take snapshot after action
-      final snapshotAfter = useIncremental
-          ? context.snapshotBuilder.buildIncrementalSnapshotFromState(
-              state: context.currentState,
-              changes: changes,
-              includeSelection: includeSelection,
-            )
-          : PersistentSnapshot.fromState(
-              context.currentState,
-              includeSelection: includeSelection,
-            );
+      final snapshotBefore = _buildSnapshotBefore(
+        context: context,
+        action: action,
+        changes: changes,
+        includeSelection: includeSelection,
+        useIncremental: useIncremental,
+      );
+      final snapshotAfter = _buildSnapshotAfter(
+        context: context,
+        changes: changes,
+        includeSelection: includeSelection,
+        useIncremental: useIncremental,
+      );
 
       final recorded = context.historyManager.record(
         snapshotBefore,
@@ -233,22 +190,80 @@ class HistoryMiddleware extends MiddlewareBase {
     }
   }
 
+  HistorySnapshot _buildSnapshotBefore({
+    required DispatchContext context,
+    required DrawAction action,
+    required HistoryChangeSet? changes,
+    required bool includeSelection,
+    required bool useIncremental,
+  }) {
+    if (useIncremental) {
+      final resolvedChanges = changes!;
+      if (action.requiresPreActionSnapshot) {
+        return context.snapshotBuilder.buildIncrementalSnapshotBeforeAction(
+          currentState: context.initialState,
+          action: action,
+          changes: resolvedChanges,
+          includeSelection: includeSelection,
+        );
+      }
+      return context.snapshotBuilder.buildIncrementalSnapshotFromState(
+        state: context.initialState,
+        changes: resolvedChanges,
+        includeSelection: includeSelection,
+      );
+    }
+
+    if (action.requiresPreActionSnapshot) {
+      return context.snapshotBuilder.buildSnapshotBeforeAction(
+        currentState: context.initialState,
+        action: action,
+        includeSelection: includeSelection,
+      );
+    }
+
+    return PersistentSnapshot.fromState(
+      context.initialState,
+      includeSelection: includeSelection,
+    );
+  }
+
+  HistorySnapshot _buildSnapshotAfter({
+    required DispatchContext context,
+    required HistoryChangeSet? changes,
+    required bool includeSelection,
+    required bool useIncremental,
+  }) {
+    if (useIncremental) {
+      return context.snapshotBuilder.buildIncrementalSnapshotFromState(
+        state: context.currentState,
+        changes: changes!,
+        includeSelection: includeSelection,
+      );
+    }
+
+    return PersistentSnapshot.fromState(
+      context.currentState,
+      includeSelection: includeSelection,
+    );
+  }
+
   HistoryPolicy _resolveHistoryPolicy(
     DispatchContext context,
     DrawAction action,
   ) {
+    if (action is FinishEdit && _metadataFromEdit(context) == null) {
+      return HistoryPolicy.none;
+    }
+
     if (action is Recordable) {
-      if (action is FinishEdit) {
-        final metadata = _metadataFromEdit(context);
-        if (metadata == null) {
-          return HistoryPolicy.none;
-        }
-      }
       return HistoryPolicy.record;
     }
+
     if (action is NonRecordable) {
       return HistoryPolicy.none;
     }
+
     return action.historyPolicy;
   }
 
@@ -489,13 +504,9 @@ class HistoryMiddleware extends MiddlewareBase {
   bool _requiresPersistentSnapshots({
     required DrawAction action,
     required HistoryChangeSet changes,
-  }) {
-    if ((action is ChangeElementZIndex || action is ChangeElementsZIndex) &&
-        !changes.reindexZIndices) {
-      return true;
-    }
-    return false;
-  }
+  }) =>
+      (action is ChangeElementZIndex || action is ChangeElementsZIndex) &&
+      !changes.reindexZIndices;
 
   bool _didElementOrderChange(DispatchContext context) {
     final before = context.initialState.domain.document.elements;
@@ -532,13 +543,10 @@ class HistoryMiddleware extends MiddlewareBase {
     required Iterable<ElementState> after,
   }) {
     final beforeIds = <String>{for (final element in before) element.id};
-    final addedIds = <String>{};
-    for (final element in after) {
-      if (!beforeIds.contains(element.id)) {
-        addedIds.add(element.id);
-      }
-    }
-    return addedIds;
+    return {
+      for (final element in after)
+        if (!beforeIds.contains(element.id)) element.id,
+    };
   }
 
   void _expandDeleteIdsForBoundSerialText({
@@ -584,6 +592,7 @@ class HistoryMiddleware extends MiddlewareBase {
     required Iterable<ElementState> elements,
     required String textElementId,
   }) {
+    final deletedIds = <String>{textElementId};
     final ids = <String>{};
     for (final element in elements) {
       final data = element.data;
@@ -591,22 +600,10 @@ class HistoryMiddleware extends MiddlewareBase {
         ids.add(element.id);
         continue;
       }
-      if (_isArrowBoundToTargetId(data: data, targetId: textElementId)) {
+      if (_isArrowBoundToAny(data: data, targetIds: deletedIds)) {
         ids.add(element.id);
       }
     }
     return ids;
-  }
-
-  bool _isArrowBoundToTargetId({
-    required Object data,
-    required String targetId,
-  }) {
-    if (data is! ArrowLikeData) {
-      return false;
-    }
-    final startTarget = data.startBinding?.elementId;
-    final endTarget = data.endBinding?.elementId;
-    return startTarget == targetId || endTarget == targetId;
   }
 }

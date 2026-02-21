@@ -6,24 +6,11 @@ import '../models/element_state.dart';
 /// the underlying element list changes.
 class ElementIndexService {
   ElementIndexService(List<ElementState> elements)
-    : _elements = List<ElementState>.unmodifiable(elements);
-  final List<ElementState> _elements;
+    : byId = Map<String, ElementState>.unmodifiable(<String, ElementState>{
+        for (final element in elements) element.id: element,
+      });
 
-  Map<String, ElementState>? _byIdCache;
-
-  Map<String, ElementState> get byId {
-    final cached = _byIdCache;
-    if (cached != null) {
-      return cached;
-    }
-    final map = <String, ElementState>{};
-    for (final element in _elements) {
-      map[element.id] = element;
-    }
-    final unmodifiable = Map<String, ElementState>.unmodifiable(map);
-    _byIdCache = unmodifiable;
-    return unmodifiable;
-  }
+  final Map<String, ElementState> byId;
 
   ElementState? operator [](String id) => byId[id];
 

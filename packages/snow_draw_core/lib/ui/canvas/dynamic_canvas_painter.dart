@@ -474,12 +474,7 @@ class DynamicCanvasPainter extends CustomPainter {
     required int visiblePointCount,
     required Paint strokePaint,
   }) {
-    final clampedCount = visiblePointCount < 0
-        ? 0
-        : (visiblePointCount > points.length
-              ? points.length
-              : visiblePointCount);
-    if (clampedCount < 2) {
+    if (visiblePointCount < 2) {
       return;
     }
 
@@ -487,7 +482,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final path = Path()..moveTo(first.x, first.y);
     var previous = first;
     var hasSegment = false;
-    for (var index = 1; index < clampedCount; index++) {
+    for (var index = 1; index < visiblePointCount; index++) {
       final point = points[index];
       if (point.x == previous.x && point.y == previous.y) {
         previous = point;
@@ -598,17 +593,17 @@ class DynamicCanvasPainter extends CustomPainter {
       scaleFactor: scale,
       cameraPosition: cameraPosition,
     );
-    if (!paintedStatic) {
-      paintHighlightMask(
-        canvas: canvas,
-        highlights: highlights,
-        viewportRect: viewportRect,
-        maskConfig: maskConfig,
-        scaleFactor: scale,
-        cameraPosition: cameraPosition,
-      );
+    if (paintedStatic) {
       return;
     }
+    paintHighlightMask(
+      canvas: canvas,
+      highlights: highlights,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scale,
+      cameraPosition: cameraPosition,
+    );
   }
 
   Set<String> _resolveExcludedDocumentHighlightIds({
@@ -680,9 +675,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final state = stateView.state;
     final document = state.domain.document;
-    final minOrderIndex = rendersWholeScene
-        ? null
-        : (dynamicLayerStartIndex ?? 0);
+    final minOrderIndex = rendersWholeScene ? null : dynamicLayerStartIndex;
     final baseVisibleElements = _visibleSceneCache.resolve(
       document: document,
       viewportRect: viewportRect,
@@ -1111,16 +1104,14 @@ class DynamicCanvasPainter extends CustomPainter {
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
-    final dynamicElementIds = interactionDynamicElementIds;
     final hasInteractiveFilterElement = _hasSharedElementId(
       interactionDynamicElementIds,
       staticContext.filterElementIds,
     );
-    final preferFastFilterFallback =
-        renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
     // Keep drag previews visually consistent with settled frames. Reserve
     // fast fallback for explicit high-frequency style mutations only.
-    final useAggressiveCpuFallback = preferFastFilterFallback;
+    final useAggressiveCpuFallback =
+        renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
 
     return _SceneRenderContext(
       hasFilterElement: staticContext.hasFilterElement,
@@ -1128,7 +1119,7 @@ class DynamicCanvasPainter extends CustomPainter {
       useAggressiveCpuFallback: useAggressiveCpuFallback,
       shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
-      dynamicElementIds: dynamicElementIds,
+      dynamicElementIds: interactionDynamicElementIds,
     );
   }
 
@@ -1312,7 +1303,7 @@ class DynamicCanvasPainter extends CustomPainter {
     if (sceneContext.shouldPaintSerialConnectors) {
       drawSerialNumberConnectorsForText(
         canvas: canvas,
-        textElement: element,
+        textElementId: element.id,
         connectorsByTextId: sceneContext.serialConnectors,
       );
     }
@@ -1320,12 +1311,11 @@ class DynamicCanvasPainter extends CustomPainter {
 
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
     final localeTag = renderKey.locale?.toLanguageTag() ?? '';
-    final normalizedScale = scale == 0 ? 1.0 : scale;
     return FilterRenderCacheContext(
       domain: FilterRenderCacheDomain.dynamicLayer,
       documentVersion: renderKey.documentVersion,
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
-      scaleKey: (normalizedScale * 1000).round(),
+      scaleKey: (scale * 1000).round(),
       localeTag: localeTag,
     );
   }
@@ -1402,23 +1392,17 @@ class DynamicCanvasPainter extends CustomPainter {
     String? creatingFilterId,
     Iterable<String> serialConnectorTextIds = const <String>{},
   }) {
-    final hasPreviewElements = dynamicPreviewIds.isNotEmpty;
-    final hasCreatingFilter = creatingFilterId != null;
-    final hasSerialConnectorTexts = serialConnectorTextIds.isNotEmpty;
-    if (!hasPreviewElements && !hasCreatingFilter && !hasSerialConnectorTexts) {
+    if (dynamicPreviewIds.isEmpty &&
+        creatingFilterId == null &&
+        serialConnectorTextIds.isEmpty) {
       return const <String>{};
     }
 
-    final dynamicElementIds = <String>{};
-    if (hasPreviewElements) {
-      dynamicElementIds.addAll(dynamicPreviewIds);
-    }
+    final dynamicElementIds = <String>{}..addAll(dynamicPreviewIds);
     if (creatingFilterId != null) {
       dynamicElementIds.add(creatingFilterId);
     }
-    if (hasSerialConnectorTexts) {
-      dynamicElementIds.addAll(serialConnectorTextIds);
-    }
+    dynamicElementIds.addAll(serialConnectorTextIds);
     return dynamicElementIds;
   }
 
@@ -1507,12 +1491,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final effectiveElement = stateView.effectiveElement(element);
     final selectionConfig = renderKey.selectionConfig;
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-    final handleTolerance =
-        selectionConfig.interaction.handleTolerance / effectiveScale;
+    final handleTolerance = selectionConfig.interaction.handleTolerance / scale;
     final loopThreshold = handleTolerance * 1.5;
-    final baseHandleSize =
-        selectionConfig.render.controlPointSize / effectiveScale;
+    final baseHandleSize = selectionConfig.render.controlPointSize / scale;
     // Apply multiplier for arrow point handles to make them larger
     final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
     final overlay = ArrowPointUtils.buildOverlay(
@@ -1525,7 +1506,7 @@ class DynamicCanvasPainter extends CustomPainter {
         overlay.loopPoints.isEmpty) {
       return;
     }
-    final strokeWidth = selectionConfig.render.strokeWidth / effectiveScale;
+    final strokeWidth = selectionConfig.render.strokeWidth / scale;
     final fillColor = selectionConfig.render.cornerFillColor;
     final strokeColor = selectionConfig.render.strokeColor;
     final highlightStroke = strokeColor.withValues(alpha: 0.95);
@@ -1640,12 +1621,8 @@ class DynamicCanvasPainter extends CustomPainter {
     if (highlights.isEmpty) {
       return;
     }
-    final effectiveScale = scale == 0 ? 1.0 : scale;
     final strokeColor = renderKey.selectionConfig.render.strokeColor;
-    final paint = createBindingHighlightPaint(
-      color: strokeColor,
-      scale: effectiveScale,
-    );
+    final paint = createBindingHighlightPaint(color: strokeColor, scale: scale);
 
     for (final highlight in highlights) {
       final element = stateView.state.domain.document.getElementById(
@@ -1920,12 +1897,11 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final rect = element.rect;
-    final effectiveScale = scale == 0 ? 1.0 : scale;
     final path = cached.path;
 
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0 / effectiveScale
+      ..strokeWidth = 1.0 / scale
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..color = color
@@ -2025,6 +2001,7 @@ class DynamicCanvasPainter extends CustomPainter {
         _ArrowBindingHighlight(elementId: hoveredBindingElementId),
       );
     }
+
     final interaction = stateView.state.application.interaction;
     if (interaction is EditingState &&
         interaction.context is ArrowPointEditContext) {
@@ -2032,38 +2009,34 @@ class DynamicCanvasPainter extends CustomPainter {
       final element = stateView.state.domain.document.getElementById(
         context.elementId,
       );
-      if (element == null || element.data is! ArrowLikeData) {
-        return _dedupeArrowBindingHighlights(highlights);
+      if (element != null && element.data is ArrowLikeData) {
+        final effectiveElement = stateView.effectiveElement(element);
+        final data = effectiveElement.data as ArrowLikeData;
+        final binding = resolveArrowPointEditHighlightBinding(
+          context: context,
+          data: data,
+          transform: interaction.currentTransform,
+        );
+        final highlight = _highlightFromBinding(binding);
+        if (highlight != null) {
+          highlights.add(highlight);
+        }
       }
-      final effectiveElement = stateView.effectiveElement(element);
-      final data = effectiveElement.data as ArrowLikeData;
-      final binding = resolveArrowPointEditHighlightBinding(
-        context: context,
-        data: data,
-        transform: interaction.currentTransform,
-      );
-      final highlight = _highlightFromBinding(binding);
-      if (highlight != null) {
-        highlights.add(highlight);
-      }
-      return _dedupeArrowBindingHighlights(highlights);
-    }
-    if (interaction is CreatingState) {
+    } else if (interaction is CreatingState && interaction.isPointCreation) {
       final element = interaction.element;
       final data = element.data;
-      if (data is! ArrowLikeData || !interaction.isPointCreation) {
-        return _dedupeArrowBindingHighlights(highlights);
+      if (data is ArrowLikeData) {
+        final endHighlight = _highlightFromBinding(data.endBinding);
+        if (endHighlight != null) {
+          highlights.add(endHighlight);
+        }
+        final startHighlight = _highlightFromBinding(data.startBinding);
+        if (startHighlight != null) {
+          highlights.add(startHighlight);
+        }
       }
-      final endHighlight = _highlightFromBinding(data.endBinding);
-      if (endHighlight != null) {
-        highlights.add(endHighlight);
-      }
-      final startHighlight = _highlightFromBinding(data.startBinding);
-      if (startHighlight != null) {
-        highlights.add(startHighlight);
-      }
-      return _dedupeArrowBindingHighlights(highlights);
     }
+
     return _dedupeArrowBindingHighlights(highlights);
   }
 
@@ -2100,8 +2073,7 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw stroke.
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth =
-          boxSelectionConfig.strokeWidth / (scale == 0 ? 1.0 : scale)
+      ..strokeWidth = boxSelectionConfig.strokeWidth / scale
       ..color = boxSelectionConfig.strokeColor
       ..isAntiAlias = true;
     canvas
@@ -2123,8 +2095,7 @@ class DynamicCanvasPainter extends CustomPainter {
     required double scale,
   }) {
     final config = renderKey.snapConfig;
-    final effectiveScale = scale == 0 ? 1.0 : scale;
-    final invScale = 1.0 / effectiveScale;
+    final invScale = 1.0 / scale;
     final strokeWidth = config.lineWidth * invScale;
     final markerSize = config.markerSize * invScale;
 
@@ -2222,7 +2193,7 @@ class DynamicCanvasPainter extends CustomPainter {
         _drawGapLabel(
           canvas: canvas,
           guide: guide,
-          scale: effectiveScale,
+          scale: scale,
           color: config.lineColor,
         );
       }
@@ -2379,11 +2350,10 @@ class DynamicCanvasPainter extends CustomPainter {
     if (label == null) {
       return;
     }
-    final effectiveScale = scale == 0 ? 1.0 : scale;
     final textPainter = _gapLabelPainter
       ..text = TextSpan(
         text: label.toStringAsFixed(0),
-        style: TextStyle(color: color, fontSize: 10 / effectiveScale),
+        style: TextStyle(color: color, fontSize: 10 / scale),
       )
       ..layout();
 
@@ -2393,7 +2363,7 @@ class DynamicCanvasPainter extends CustomPainter {
     );
     final offset = Offset(
       mid.x - textPainter.width / 2,
-      mid.y - textPainter.height - (4 / effectiveScale),
+      mid.y - textPainter.height - (4 / scale),
     );
     textPainter.paint(canvas, offset);
   }

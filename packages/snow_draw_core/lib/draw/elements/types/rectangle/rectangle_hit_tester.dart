@@ -24,22 +24,17 @@ class RectangleHitTester implements ElementHitTester {
 
     final rect = element.rect;
     final localPosition = _toLocalPosition(element, position);
-    final strokeHit = _testStroke(
+    if (_hitsStroke(
       rect: rect,
       position: localPosition,
       strokeWidth: data.strokeWidth,
       tolerance: tolerance,
-    );
-    if (strokeHit) {
+    )) {
       return true;
     }
 
-    final fillOpacity = (data.fillColor.a * element.opacity).clamp(0.0, 1.0);
-    if (fillOpacity <= 0) {
-      return false;
-    }
-
-    return _isInsideRect(rect, localPosition);
+    final fillOpacity = data.fillColor.a * element.opacity;
+    return fillOpacity > 0 && rect.containsPoint(localPosition);
   }
 
   DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
@@ -51,13 +46,7 @@ class RectangleHitTester implements ElementHitTester {
     return space.fromWorld(position);
   }
 
-  bool _isInsideRect(DrawRect rect, DrawPoint position) =>
-      position.x >= rect.minX &&
-      position.x <= rect.maxX &&
-      position.y >= rect.minY &&
-      position.y <= rect.maxY;
-
-  bool _testStroke({
+  bool _hitsStroke({
     required DrawRect rect,
     required DrawPoint position,
     required double strokeWidth,
@@ -68,37 +57,34 @@ class RectangleHitTester implements ElementHitTester {
     }
 
     final strokeMargin = (strokeWidth / 2) + tolerance;
-    final outerMinX = rect.minX - strokeMargin;
-    final outerMaxX = rect.maxX + strokeMargin;
-    final outerMinY = rect.minY - strokeMargin;
-    final outerMaxY = rect.maxY + strokeMargin;
-
-    final insideOuter =
-        position.x >= outerMinX &&
-        position.x <= outerMaxX &&
-        position.y >= outerMinY &&
-        position.y <= outerMaxY;
-    if (!insideOuter) {
+    final outerRect = DrawRect(
+      minX: rect.minX - strokeMargin,
+      minY: rect.minY - strokeMargin,
+      maxX: rect.maxX + strokeMargin,
+      maxY: rect.maxY + strokeMargin,
+    );
+    if (!outerRect.containsPoint(position)) {
       return false;
     }
 
-    final innerMinX = rect.minX + strokeMargin;
-    final innerMaxX = rect.maxX - strokeMargin;
-    final innerMinY = rect.minY + strokeMargin;
-    final innerMaxY = rect.maxY - strokeMargin;
-
-    final innerValid = innerMinX < innerMaxX && innerMinY < innerMaxY;
-    if (!innerValid) {
+    final innerRect = DrawRect(
+      minX: rect.minX + strokeMargin,
+      minY: rect.minY + strokeMargin,
+      maxX: rect.maxX - strokeMargin,
+      maxY: rect.maxY - strokeMargin,
+    );
+    if (innerRect.minX >= innerRect.maxX || innerRect.minY >= innerRect.maxY) {
       return true;
     }
 
-    final insideInner =
-        position.x > innerMinX &&
-        position.x < innerMaxX &&
-        position.y > innerMinY &&
-        position.y < innerMaxY;
-    return !insideInner;
+    return !_isStrictlyInside(innerRect, position);
   }
+
+  bool _isStrictlyInside(DrawRect rect, DrawPoint position) =>
+      position.x > rect.minX &&
+      position.x < rect.maxX &&
+      position.y > rect.minY &&
+      position.y < rect.maxY;
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;

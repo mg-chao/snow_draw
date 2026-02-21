@@ -1,6 +1,6 @@
 import 'package:snow_draw_core/draw/services/font/system_font_service.dart';
 
-final SystemFontService _service = SystemFontService.instance;
+const SystemFontService _service = SystemFontService.instance;
 
 Future<List<String>> loadSystemFontFamilies() => _service.listFamilies();
 

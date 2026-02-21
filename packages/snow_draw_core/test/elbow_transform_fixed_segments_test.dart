@@ -29,15 +29,13 @@ void main() {
         rotation: rotation,
       );
 
-      expect(transformed, isNotNull);
-      expect(transformed!.length, 1);
+      expect(transformed, hasLength(1));
 
-      final start = transformed.first.start;
-      final end = transformed.first.end;
-      expect(start.x, closeTo(10, 1e-6));
-      expect(start.y, closeTo(20, 1e-6));
-      expect(end.x, closeTo(10, 1e-6));
-      expect(end.y, closeTo(30, 1e-6));
+      final segment = transformed!.single;
+      expect(segment.start.x, closeTo(10, 1e-6));
+      expect(segment.start.y, closeTo(20, 1e-6));
+      expect(segment.end.x, closeTo(10, 1e-6));
+      expect(segment.end.y, closeTo(30, 1e-6));
     },
   );
 

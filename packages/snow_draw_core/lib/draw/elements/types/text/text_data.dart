@@ -37,23 +37,24 @@ final class TextData extends ElementData
     fontSize:
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultTextFontSize,
-    fontFamily: (json['fontFamily'] as String?)?.trim().isEmpty ?? true
-        ? null
-        : json['fontFamily'] as String?,
-    horizontalAlign: TextHorizontalAlign.values.firstWhere(
-      (value) => value.name == json['horizontalAlign'],
-      orElse: () => ConfigDefaults.defaultTextHorizontalAlign,
+    fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
+    horizontalAlign: _decodeEnum(
+      values: TextHorizontalAlign.values,
+      raw: json['horizontalAlign'],
+      fallback: ConfigDefaults.defaultTextHorizontalAlign,
     ),
-    verticalAlign: TextVerticalAlign.values.firstWhere(
-      (value) => value.name == json['verticalAlign'],
-      orElse: () => ConfigDefaults.defaultTextVerticalAlign,
+    verticalAlign: _decodeEnum(
+      values: TextVerticalAlign.values,
+      raw: json['verticalAlign'],
+      fallback: ConfigDefaults.defaultTextVerticalAlign,
     ),
     fillColor: Color(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
-    fillStyle: FillStyle.values.firstWhere(
-      (style) => style.name == json['fillStyle'],
-      orElse: () => ConfigDefaults.defaultFillStyle,
+    fillStyle: _decodeEnum(
+      values: FillStyle.values,
+      raw: json['fillStyle'],
+      fallback: ConfigDefaults.defaultFillStyle,
     ),
     strokeColor: Color(
       (json['strokeColor'] as int?) ??
@@ -104,9 +105,7 @@ final class TextData extends ElementData
     text: text ?? this.text,
     color: color ?? this.color,
     fontSize: fontSize ?? this.fontSize,
-    fontFamily: fontFamily == _fontFamilyUnset
-        ? this.fontFamily
-        : fontFamily as String?,
+    fontFamily: _resolveCopyWithFontFamily(fontFamily, this.fontFamily),
     horizontalAlign: horizontalAlign ?? this.horizontalAlign,
     verticalAlign: verticalAlign ?? this.verticalAlign,
     fillColor: fillColor ?? this.fillColor,
@@ -121,9 +120,7 @@ final class TextData extends ElementData
   ElementData withElementStyle(ElementStyleConfig style) => copyWith(
     color: style.color,
     fontSize: style.fontSize,
-    fontFamily: style.fontFamily?.trim().isEmpty ?? true
-        ? null
-        : style.fontFamily,
+    fontFamily: style.fontFamily,
     horizontalAlign: style.textAlign,
     verticalAlign: style.verticalAlign,
     fillColor: style.fillColor,
@@ -135,18 +132,16 @@ final class TextData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: update.color ?? color,
-    fontSize: update.fontSize ?? fontSize,
-    fontFamily: update.fontFamily == null
-        ? fontFamily
-        : (update.fontFamily!.trim().isEmpty ? null : update.fontFamily),
-    horizontalAlign: update.textAlign ?? horizontalAlign,
-    verticalAlign: update.verticalAlign ?? verticalAlign,
-    fillColor: update.fillColor ?? fillColor,
-    fillStyle: update.fillStyle ?? fillStyle,
-    strokeColor: update.textStrokeColor ?? strokeColor,
-    strokeWidth: update.textStrokeWidth ?? strokeWidth,
-    cornerRadius: update.cornerRadius ?? cornerRadius,
+    color: update.color,
+    fontSize: update.fontSize,
+    fontFamily: update.fontFamily ?? _fontFamilyUnset,
+    horizontalAlign: update.textAlign,
+    verticalAlign: update.verticalAlign,
+    fillColor: update.fillColor,
+    fillStyle: update.fillStyle,
+    strokeColor: update.textStrokeColor,
+    strokeWidth: update.textStrokeWidth,
+    cornerRadius: update.cornerRadius,
   );
 
   @override
@@ -198,4 +193,36 @@ final class TextData extends ElementData
     cornerRadius,
     autoResize,
   );
+
+  static String? _resolveCopyWithFontFamily(
+    Object? fontFamily,
+    String? currentFontFamily,
+  ) {
+    if (identical(fontFamily, _fontFamilyUnset)) {
+      return currentFontFamily;
+    }
+    return _normalizeOptionalString(fontFamily as String?);
+  }
+
+  static String? _normalizeOptionalString(String? raw) {
+    final trimmed = raw?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  static T _decodeEnum<T extends Enum>({
+    required List<T> values,
+    required Object? raw,
+    required T fallback,
+  }) {
+    if (raw is! String) {
+      return fallback;
+    }
+    return values.firstWhere(
+      (value) => value.name == raw,
+      orElse: () => fallback,
+    );
+  }
 }

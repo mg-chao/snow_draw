@@ -17,11 +17,10 @@ final class ElbowSpacing {
           : ElbowConstants.elbowNoArrowheadGapMultiplier);
 
   /// Padding used when inflating obstacle bounds near the arrowhead side.
-  static double headPadding({required bool hasArrowhead}) {
-    final padding =
-        ElbowConstants.basePadding - bindingGap(hasArrowhead: hasArrowhead);
-    return math.max(0, padding);
-  }
+  static double headPadding({required bool hasArrowhead}) => math.max(
+    0,
+    ElbowConstants.basePadding - bindingGap(hasArrowhead: hasArrowhead),
+  );
 
   /// Minimum padding when aligning fixed neighbors during editing.
   static double fixedNeighborPadding({required bool hasArrowhead}) {
@@ -38,16 +37,15 @@ final class ElbowSpacing {
   /// when an arrowhead is present.
   static double minBindingSpacing({required bool hasArrowhead}) {
     const base = ArrowBindingUtils.elbowBindingGapBase;
-    if (!hasArrowhead) {
-      return base;
-    }
-    return base * ArrowBindingUtils.elbowArrowheadGapMultiplier;
+    return hasArrowhead
+        ? base * ArrowBindingUtils.elbowArrowheadGapMultiplier
+        : base;
   }
 
   /// Reads the current spacing between [elementBounds] and [obstacle]
   /// along the exit axis defined by [heading].
   ///
-  /// Returns `null` when the spacing is non-finite or below epsilon.
+  /// Returns `null` when spacing is non-finite or at/below epsilon.
   static double? resolveObstacleSpacing({
     required DrawRect elementBounds,
     required DrawRect obstacle,
@@ -59,10 +57,9 @@ final class ElbowSpacing {
       ElbowHeading.down => obstacle.maxY - elementBounds.maxY,
       ElbowHeading.left => elementBounds.minX - obstacle.minX,
     };
-    if (!spacing.isFinite || spacing <= ElbowConstants.intersectionEpsilon) {
-      return null;
-    }
-    return spacing;
+    return spacing.isFinite && spacing > ElbowConstants.intersectionEpsilon
+        ? spacing
+        : null;
   }
 
   /// Adjusts [obstacle] so that the exit edge along [heading] sits

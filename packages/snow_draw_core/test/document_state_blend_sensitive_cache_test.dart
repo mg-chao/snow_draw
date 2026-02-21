@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -10,12 +11,7 @@ void main() {
   group('DocumentState blend-sensitive range queries', () {
     test('detects blend-sensitive elements at or above index', () {
       final document = DocumentState(
-        elements: [
-          _rectangle(id: 'rect-1', zIndex: 0),
-          _highlight(id: 'hl-1', zIndex: 1),
-          _rectangle(id: 'rect-2', zIndex: 2),
-          _filter(id: 'filter-1', zIndex: 3),
-        ],
+        elements: [_rectangle(0), _highlight(1), _rectangle(2), _filter(3)],
       );
 
       expect(document.hasBlendSensitiveElementFromOrderIndex(0), isTrue);
@@ -25,12 +21,7 @@ void main() {
     });
 
     test('above-index query excludes the current order index', () {
-      final document = DocumentState(
-        elements: [
-          _highlight(id: 'hl-1', zIndex: 0),
-          _rectangle(id: 'rect-1', zIndex: 1),
-        ],
-      );
+      final document = DocumentState(elements: [_highlight(0), _rectangle(1)]);
 
       expect(document.hasBlendSensitiveElementAboveOrderIndex(0), isFalse);
       expect(document.hasBlendSensitiveElementAboveOrderIndex(-1), isTrue);
@@ -39,9 +30,9 @@ void main() {
     test('can ignore transparent blend-sensitive elements', () {
       final document = DocumentState(
         elements: [
-          _highlight(id: 'hl-1', zIndex: 0, opacity: 0),
-          _filter(id: 'filter-1', zIndex: 1, opacity: 0),
-          _rectangle(id: 'rect-1', zIndex: 2),
+          _highlight(0, opacity: 0),
+          _filter(1, opacity: 0),
+          _rectangle(2),
         ],
       );
 
@@ -56,12 +47,7 @@ void main() {
     });
 
     test('handles index bounds safely', () {
-      final document = DocumentState(
-        elements: [
-          _rectangle(id: 'rect-1', zIndex: 0),
-          _highlight(id: 'hl-1', zIndex: 1),
-        ],
-      );
+      final document = DocumentState(elements: [_rectangle(0), _highlight(1)]);
 
       expect(document.hasBlendSensitiveElementFromOrderIndex(-100), isTrue);
       expect(document.hasBlendSensitiveElementFromOrderIndex(100), isFalse);
@@ -86,12 +72,7 @@ void main() {
   group('DocumentState filter range queries', () {
     test('detects filter elements at or above index', () {
       final document = DocumentState(
-        elements: [
-          _rectangle(id: 'rect-1', zIndex: 0),
-          _highlight(id: 'hl-1', zIndex: 1),
-          _filter(id: 'filter-1', zIndex: 2),
-          _rectangle(id: 'rect-2', zIndex: 3),
-        ],
+        elements: [_rectangle(0), _highlight(1), _filter(2), _rectangle(3)],
       );
 
       expect(document.hasFilterElementFromOrderIndex(0), isTrue);
@@ -103,10 +84,7 @@ void main() {
 
     test('can ignore transparent filters', () {
       final document = DocumentState(
-        elements: [
-          _filter(id: 'filter-1', zIndex: 0, opacity: 0),
-          _rectangle(id: 'rect-1', zIndex: 1),
-        ],
+        elements: [_filter(0, opacity: 0), _rectangle(1)],
       );
 
       expect(document.hasFilterElementFromOrderIndex(0), isTrue);
@@ -118,41 +96,39 @@ void main() {
   });
 }
 
-ElementState _rectangle({
-  required String id,
-  required int zIndex,
-  double opacity = 1,
-}) => ElementState(
-  id: id,
-  rect: const DrawRect(maxX: 40, maxY: 30),
-  rotation: 0,
-  opacity: opacity,
+const DrawRect _defaultRect = DrawRect(maxX: 40, maxY: 30);
+
+ElementState _rectangle(int zIndex, {double opacity = 1}) => _element(
+  id: 'rect-$zIndex',
   zIndex: zIndex,
+  opacity: opacity,
   data: const RectangleData(),
 );
 
-ElementState _highlight({
-  required String id,
-  required int zIndex,
-  double opacity = 1,
-}) => ElementState(
-  id: id,
-  rect: const DrawRect(maxX: 40, maxY: 30),
-  rotation: 0,
-  opacity: opacity,
+ElementState _highlight(int zIndex, {double opacity = 1}) => _element(
+  id: 'highlight-$zIndex',
   zIndex: zIndex,
+  opacity: opacity,
   data: const HighlightData(),
 );
 
-ElementState _filter({
+ElementState _filter(int zIndex, {double opacity = 1}) => _element(
+  id: 'filter-$zIndex',
+  zIndex: zIndex,
+  opacity: opacity,
+  data: const FilterData(),
+);
+
+ElementState _element({
   required String id,
   required int zIndex,
-  double opacity = 1,
+  required double opacity,
+  required ElementData data,
 }) => ElementState(
   id: id,
-  rect: const DrawRect(maxX: 40, maxY: 30),
+  rect: _defaultRect,
   rotation: 0,
   opacity: opacity,
   zIndex: zIndex,
-  data: const FilterData(),
+  data: data,
 );

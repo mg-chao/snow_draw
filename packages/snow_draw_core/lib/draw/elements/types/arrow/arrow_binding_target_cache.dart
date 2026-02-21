@@ -16,19 +16,7 @@ class ArrowBindingTargetCache {
   double _lastDistance = 0;
   var _elementsVersion = -1;
   List<ElementState> _targets = const [];
-  DrawPoint? _candidatePosition;
-  DrawPoint? _candidateReferencePoint;
-  double _candidateSnapDistance = 0;
-  var _candidateShouldLookupBindings = false;
-  var _candidateAllowNewBinding = false;
-  var _candidateHasBindableTargets = false;
-  ArrowBinding? _candidatePreferredBinding;
-  ArrowType? _candidateArrowType;
-  ArrowheadStyle? _candidateArrowheadStyle;
-  String? _candidateExcludedElementId;
-  var _candidateElementsVersion = -1;
-  var _hasCachedCandidate = false;
-  ArrowBindingResult? _candidateValue;
+  _ArrowBindingCandidateCacheEntry? _candidate;
 
   List<ElementState> get targets => _targets;
 
@@ -38,19 +26,18 @@ class ArrowBindingTargetCache {
     required double distance,
     required int elementsVersion,
   }) {
-    if (_lastPosition == null) {
+    final lastPosition = _lastPosition;
+    if (lastPosition == null || threshold <= 0) {
       return false;
     }
-    if (_elementsVersion != elementsVersion) {
+    if (_elementsVersion != elementsVersion || _lastDistance != distance) {
       return false;
     }
-    if (_lastDistance != distance) {
-      return false;
-    }
-    if (threshold <= 0) {
-      return false;
-    }
-    return _lastPosition!.distanceSquared(position) <= threshold * threshold;
+    return _isWithinThreshold(
+      from: lastPosition,
+      to: position,
+      threshold: threshold,
+    );
   }
 
   void update({
@@ -88,52 +75,48 @@ class ArrowBindingTargetCache {
     required ArrowBinding? preferredBinding,
     String? excludedElementId,
   }) {
-    if (!_hasCachedCandidate || _candidatePosition == null) {
+    final candidate = _candidate;
+    if (candidate == null) {
       return (hasValue: false, value: null);
     }
-    if (_candidateElementsVersion != elementsVersion ||
-        _candidateSnapDistance != snapDistance ||
-        _candidateArrowType != arrowType ||
-        _candidateArrowheadStyle != arrowheadStyle ||
-        _candidateShouldLookupBindings != shouldLookupBindings ||
-        _candidateAllowNewBinding != allowNewBinding ||
-        _candidateHasBindableTargets != hasBindableTargets ||
-        _candidatePreferredBinding != preferredBinding ||
-        _candidateExcludedElementId != excludedElementId) {
+    if (!candidate.matchesQuery(
+      elementsVersion: elementsVersion,
+      snapDistance: snapDistance,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      hasBindableTargets: hasBindableTargets,
+      preferredBinding: preferredBinding,
+      excludedElementId: excludedElementId,
+    )) {
       return (hasValue: false, value: null);
     }
 
-    final candidateIsMiss = _candidateValue == null;
-    final effectivePositionThreshold = candidateIsMiss
+    final isMiss = candidate.value == null;
+    final effectivePositionThreshold = isMiss
         ? positionThreshold * _missThresholdScale
         : positionThreshold;
-    if (effectivePositionThreshold <= 0) {
-      return (hasValue: false, value: null);
-    }
-    if (_candidatePosition!.distanceSquared(position) >
-        effectivePositionThreshold * effectivePositionThreshold) {
+    if (!_isWithinThreshold(
+      from: candidate.position,
+      to: position,
+      threshold: effectivePositionThreshold,
+    )) {
       return (hasValue: false, value: null);
     }
 
-    final cachedReference = _candidateReferencePoint;
-    if (cachedReference == null || referencePoint == null) {
-      if (cachedReference != referencePoint) {
-        return (hasValue: false, value: null);
-      }
-    } else {
-      final effectiveReferenceThreshold = candidateIsMiss
-          ? referenceThreshold * _missThresholdScale
-          : referenceThreshold;
-      if (effectiveReferenceThreshold <= 0) {
-        return (hasValue: false, value: null);
-      }
-      if (cachedReference.distanceSquared(referencePoint) >
-          effectiveReferenceThreshold * effectiveReferenceThreshold) {
-        return (hasValue: false, value: null);
-      }
+    final effectiveReferenceThreshold = isMiss
+        ? referenceThreshold * _missThresholdScale
+        : referenceThreshold;
+    if (!_referencesMatch(
+      cachedReference: candidate.referencePoint,
+      nextReference: referencePoint,
+      threshold: effectiveReferenceThreshold,
+    )) {
+      return (hasValue: false, value: null);
     }
 
-    return (hasValue: true, value: _candidateValue);
+    return (hasValue: true, value: candidate.value);
   }
 
   /// Stores the latest endpoint-binding candidate query result.
@@ -151,37 +134,26 @@ class ArrowBindingTargetCache {
     required ArrowBindingResult? value,
     String? excludedElementId,
   }) {
-    _candidatePosition = position;
-    _candidateReferencePoint = referencePoint;
-    _candidateElementsVersion = elementsVersion;
-    _candidateSnapDistance = snapDistance;
-    _candidateArrowType = arrowType;
-    _candidateArrowheadStyle = arrowheadStyle;
-    _candidateShouldLookupBindings = shouldLookupBindings;
-    _candidateAllowNewBinding = allowNewBinding;
-    _candidateHasBindableTargets = hasBindableTargets;
-    _candidatePreferredBinding = preferredBinding;
-    _candidateExcludedElementId = excludedElementId;
-    _hasCachedCandidate = true;
-    _candidateValue = value;
+    _candidate = _ArrowBindingCandidateCacheEntry(
+      position: position,
+      referencePoint: referencePoint,
+      elementsVersion: elementsVersion,
+      snapDistance: snapDistance,
+      arrowType: arrowType,
+      arrowheadStyle: arrowheadStyle,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      hasBindableTargets: hasBindableTargets,
+      preferredBinding: preferredBinding,
+      excludedElementId: excludedElementId,
+      value: value,
+    );
   }
 
   /// Clears only the cached endpoint-binding candidate while keeping target
   /// spatial-query data.
   void clearCandidate() {
-    _candidatePosition = null;
-    _candidateReferencePoint = null;
-    _candidateSnapDistance = 0;
-    _candidateShouldLookupBindings = false;
-    _candidateAllowNewBinding = false;
-    _candidateHasBindableTargets = false;
-    _candidatePreferredBinding = null;
-    _candidateArrowType = null;
-    _candidateArrowheadStyle = null;
-    _candidateExcludedElementId = null;
-    _candidateElementsVersion = -1;
-    _hasCachedCandidate = false;
-    _candidateValue = null;
+    _candidate = null;
   }
 
   void reset() {
@@ -189,6 +161,83 @@ class ArrowBindingTargetCache {
     _lastDistance = 0;
     _elementsVersion = -1;
     _targets = const [];
-    clearCandidate();
+    _candidate = null;
   }
+
+  bool _isWithinThreshold({
+    required DrawPoint from,
+    required DrawPoint to,
+    required double threshold,
+  }) {
+    if (threshold <= 0) {
+      return false;
+    }
+    return from.distanceSquared(to) <= threshold * threshold;
+  }
+
+  bool _referencesMatch({
+    required DrawPoint? cachedReference,
+    required DrawPoint? nextReference,
+    required double threshold,
+  }) {
+    if (cachedReference == null || nextReference == null) {
+      return cachedReference == nextReference;
+    }
+    return _isWithinThreshold(
+      from: cachedReference,
+      to: nextReference,
+      threshold: threshold,
+    );
+  }
+}
+
+class _ArrowBindingCandidateCacheEntry {
+  const _ArrowBindingCandidateCacheEntry({
+    required this.position,
+    required this.referencePoint,
+    required this.elementsVersion,
+    required this.snapDistance,
+    required this.arrowType,
+    required this.arrowheadStyle,
+    required this.shouldLookupBindings,
+    required this.allowNewBinding,
+    required this.hasBindableTargets,
+    required this.preferredBinding,
+    required this.excludedElementId,
+    required this.value,
+  });
+
+  final DrawPoint position;
+  final DrawPoint? referencePoint;
+  final int elementsVersion;
+  final double snapDistance;
+  final ArrowType arrowType;
+  final ArrowheadStyle arrowheadStyle;
+  final bool shouldLookupBindings;
+  final bool allowNewBinding;
+  final bool hasBindableTargets;
+  final ArrowBinding? preferredBinding;
+  final String? excludedElementId;
+  final ArrowBindingResult? value;
+
+  bool matchesQuery({
+    required int elementsVersion,
+    required double snapDistance,
+    required ArrowType arrowType,
+    required ArrowheadStyle arrowheadStyle,
+    required bool shouldLookupBindings,
+    required bool allowNewBinding,
+    required bool hasBindableTargets,
+    required ArrowBinding? preferredBinding,
+    required String? excludedElementId,
+  }) =>
+      this.elementsVersion == elementsVersion &&
+      this.snapDistance == snapDistance &&
+      this.arrowType == arrowType &&
+      this.arrowheadStyle == arrowheadStyle &&
+      this.shouldLookupBindings == shouldLookupBindings &&
+      this.allowNewBinding == allowNewBinding &&
+      this.hasBindableTargets == hasBindableTargets &&
+      this.preferredBinding == preferredBinding &&
+      this.excludedElementId == excludedElementId;
 }

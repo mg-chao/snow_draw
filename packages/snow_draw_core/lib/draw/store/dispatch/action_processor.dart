@@ -173,27 +173,13 @@ class ActionProcessor {
         includeSelectionInHistory: _services.includeSelectionInHistory,
       );
 
-      DispatchContext finalContext;
-      try {
-        finalContext = await _pipeline.execute(initialContext);
-      } on Object catch (error, stackTrace) {
-        finalContext = initialContext.withError(
-          error,
-          stackTrace,
-          source: 'Pipeline',
-        );
-      }
-
+      final finalContext = await _executePipeline(initialContext);
       if (finalContext.hasError) {
         final error =
             finalContext.error ?? StateError('Dispatch error without detail');
         final stackTrace = finalContext.stackTrace ?? StackTrace.current;
-
         _reportError(action, error, stackTrace, finalContext);
-
-        if (action.criticality == ActionCriticality.critical) {
-          Error.throwWithStackTrace(error, stackTrace);
-        }
+        _rethrowIfCritical(action, error, stackTrace);
         return;
       }
 
@@ -263,28 +249,36 @@ class ActionProcessor {
           stackTrace: stackTrace,
         ),
       );
-      if (action.criticality == ActionCriticality.critical) {
-        Error.throwWithStackTrace(error, stackTrace);
-      }
+      _rethrowIfCritical(action, error, stackTrace);
     } finally {
       _services.configManager.unfreeze();
     }
   }
 
+  Future<DispatchContext> _executePipeline(
+    DispatchContext initialContext,
+  ) async {
+    try {
+      return await _pipeline.execute(initialContext);
+    } on Object catch (error, stackTrace) {
+      return initialContext.withError(error, stackTrace, source: 'Pipeline');
+    }
+  }
+
   bool _handleConfigAction(DrawAction action) {
-    if (action is UpdateConfig) {
-      _services.configManager.update(action.config);
-      return true;
+    switch (action) {
+      case UpdateConfig(:final config):
+        _services.configManager.update(config);
+        return true;
+      case UpdateSelectionConfig(:final selection):
+        _services.configManager.updateSelection(selection);
+        return true;
+      case UpdateCanvasConfig(:final canvas):
+        _services.configManager.updateCanvas(canvas);
+        return true;
+      default:
+        return false;
     }
-    if (action is UpdateSelectionConfig) {
-      _services.configManager.updateSelection(action.selection);
-      return true;
-    }
-    if (action is UpdateCanvasConfig) {
-      _services.configManager.updateCanvas(action.canvas);
-      return true;
-    }
-    return false;
   }
 
   EditCancelReason? _resolveEditCancelReason(DrawAction action) {
@@ -293,29 +287,20 @@ class ActionProcessor {
       return null;
     }
 
-    if (action is CancelEdit || action is UpdateEdit || action is FinishEdit) {
-      return null;
-    }
-
-    if (action is StartEdit || action is EditIntentAction) {
-      return EditCancelReason.newEditStarted;
-    }
-
-    if (action is Undo) {
-      return _services.historyManager.canUndo
-          ? EditCancelReason.conflictingAction
-          : null;
-    }
-
-    if (action is Redo) {
-      return _services.historyManager.canRedo
-          ? EditCancelReason.conflictingAction
-          : null;
-    }
-
-    return action.conflictsWithEditing
-        ? EditCancelReason.conflictingAction
-        : null;
+    return switch (action) {
+      CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
+      StartEdit _ || EditIntentAction _ => EditCancelReason.newEditStarted,
+      Undo _ =>
+        _services.historyManager.canUndo
+            ? EditCancelReason.conflictingAction
+            : null,
+      Redo _ =>
+        _services.historyManager.canRedo
+            ? EditCancelReason.conflictingAction
+            : null,
+      _ =>
+        action.conflictsWithEditing ? EditCancelReason.conflictingAction : null,
+    };
   }
 
   void _commit({
@@ -343,15 +328,11 @@ class ActionProcessor {
       _services.publishEditEvents(finalContext.events);
     }
 
-    final alreadyEmitted =
-        finalContext.getMetadata<bool>('editEventsEmitted') ?? false;
-    if (!alreadyEmitted) {
-      _emitEditSessionEvents(
-        previousState: initialContext.initialState,
-        nextState: finalContext.currentState,
-        action: initialContext.action,
-      );
-    }
+    _emitEditSessionEvents(
+      previousState: initialContext.initialState,
+      nextState: finalContext.currentState,
+      action: initialContext.action,
+    );
 
     _emitStateChangeEvents(
       previousState: initialContext.initialState,
@@ -374,9 +355,7 @@ class ActionProcessor {
       return;
     }
 
-    final created = nextElements.isNotEmpty ? nextElements.last : null;
-    final data = created?.data;
-    if (data is! SerialNumberData) {
+    if (nextElements.last.data is! SerialNumberData) {
       return;
     }
 
@@ -550,11 +529,18 @@ class ActionProcessor {
       );
     }
 
-    _emitHistoryAvailabilityIfNeeded();
+    syncHistoryAvailability(emitIfChanged: true);
   }
 
-  void _emitHistoryAvailabilityIfNeeded() {
-    syncHistoryAvailability(emitIfChanged: true);
+  void _rethrowIfCritical(
+    DrawAction action,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    if (action.criticality != ActionCriticality.critical) {
+      return;
+    }
+    Error.throwWithStackTrace(error, stackTrace);
   }
 
   EditCancelReason _resolveCancelReason(DrawAction action) => switch (action) {

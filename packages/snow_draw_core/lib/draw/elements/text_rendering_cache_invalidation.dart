@@ -10,7 +10,7 @@ final _textRenderingCacheRevision = ValueNotifier<int>(0);
 ///
 /// Consumers can listen to this value and trigger a repaint so cached
 /// `Paragraph`-based glyph shaping gets rebuilt after runtime font loading.
-ValueListenable<int> get textRenderingCacheRevisionListenable =>
+final ValueListenable<int> textRenderingCacheRevisionListenable =
     _textRenderingCacheRevision;
 
 /// Clears all text-related rendering/layout caches and publishes a revision.
@@ -21,5 +21,5 @@ void invalidateTextRenderingCaches() {
   clearTextLayoutCaches();
   clearSerialNumberTextLayoutCache();
   TextRenderer.clearCaches();
-  _textRenderingCacheRevision.value = _textRenderingCacheRevision.value + 1;
+  _textRenderingCacheRevision.value++;
 }

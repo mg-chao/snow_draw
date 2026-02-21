@@ -10,28 +10,17 @@ bool isTextEditingDraftMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
-    return false;
-  }
-
   final previousApplication = previous.application;
   final nextApplication = next.application;
-  if (previousApplication.view != nextApplication.view ||
-      previousApplication.selectionOverlay !=
-          nextApplication.selectionOverlay) {
-    return false;
-  }
-
   final previousInteraction = previousApplication.interaction;
   final nextInteraction = nextApplication.interaction;
-  if (previousInteraction is! TextEditingState ||
-      nextInteraction is! TextEditingState) {
-    return false;
-  }
-  if (!_isSameTextEditingSession(previousInteraction, nextInteraction)) {
+  if (!identical(previous.domain, next.domain) ||
+      previousApplication.view != nextApplication.view ||
+      previousApplication.selectionOverlay !=
+          nextApplication.selectionOverlay ||
+      previousInteraction is! TextEditingState ||
+      nextInteraction is! TextEditingState ||
+      !_isSameTextEditingSession(previousInteraction, nextInteraction)) {
     return false;
   }
 
@@ -53,16 +42,11 @@ bool shouldRefreshDynamicLayerForTextEditingDraftMutation({
     return false;
   }
 
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  if (previousInteraction is! TextEditingState ||
-      nextInteraction is! TextEditingState) {
-    return false;
-  }
-  if (nextInteraction.isNew) {
-    return false;
-  }
-  return previousInteraction.rect != nextInteraction.rect;
+  final previousInteraction =
+      previous.application.interaction as TextEditingState;
+  final nextInteraction = next.application.interaction as TextEditingState;
+  return !nextInteraction.isNew &&
+      previousInteraction.rect != nextInteraction.rect;
 }
 
 bool _isSameTextEditingSession(

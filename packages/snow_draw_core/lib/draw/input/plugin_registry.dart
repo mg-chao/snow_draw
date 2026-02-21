@@ -52,7 +52,9 @@ class PluginRegistry {
         loadedPlugins.add(plugin);
       } on Object {
         await _rollbackPlugin(plugin);
-        await _rollbackLoadedPlugins(loadedPlugins);
+        for (final loadedPlugin in loadedPlugins.reversed) {
+          await _rollbackPlugin(loadedPlugin);
+        }
         rethrow;
       }
     }
@@ -90,49 +92,47 @@ class PluginRegistry {
   Future<PluginResult?> dispatch(InputEvent event, DrawState state) async {
     _ensureSorted();
     final pluginsForEvent = _pluginsForEventType(event.runtimeType);
+    if (pluginsForEvent.isEmpty) {
+      return null;
+    }
 
     PluginResult? finalResult;
     try {
-      if (pluginsForEvent.isEmpty) {
-        return null;
-      }
-
       if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
-        return finalResult = const PluginResult.handled(
+        finalResult = const PluginResult.handled(
           message: 'Intercepted by before hook',
         );
-      }
-
-      var latestState = state;
-
-      for (final plugin in pluginsForEvent) {
-        latestState = _context.state;
-        final canHandle = _safeCanHandle(
-          plugin: plugin,
-          event: event,
-          state: latestState,
-        );
-        if (!canHandle) {
-          continue;
-        }
-
-        try {
-          final result = await plugin.handleEvent(event);
-          finalResult = result;
-          if (result.shouldStopPropagation) {
-            break;
-          }
-        } on Object catch (e, stackTrace) {
-          _safeLogInputError(
-            message: 'Plugin handleEvent failed',
-            error: e,
-            stackTrace: stackTrace,
-            metadata: {
-              'plugin': plugin.name,
-              'event': event.runtimeType.toString(),
-            },
+      } else {
+        for (var i = 0; i < pluginsForEvent.length; i += 1) {
+          final plugin = pluginsForEvent[i];
+          final pluginState = i == 0 ? state : _context.state;
+          final canHandle = _safeCanHandle(
+            plugin: plugin,
+            event: event,
+            state: pluginState,
           );
-          // Continue with the next plugin.
+          if (!canHandle) {
+            continue;
+          }
+
+          try {
+            final result = await plugin.handleEvent(event);
+            finalResult = result;
+            if (result.shouldStopPropagation) {
+              break;
+            }
+          } on Object catch (e, stackTrace) {
+            _safeLogInputError(
+              message: 'Plugin handleEvent failed',
+              error: e,
+              stackTrace: stackTrace,
+              metadata: {
+                'plugin': plugin.name,
+                'event': event.runtimeType.toString(),
+              },
+            );
+            // Continue with the next plugin.
+          }
         }
       }
 
@@ -178,21 +178,13 @@ class PluginRegistry {
     _eventTypeIndexDirty = false;
   }
 
-  /// Sort plugins by priority.
-  void _sortPlugins() {
+  /// Ensure plugins are sorted.
+  void _ensureSorted() {
     if (_isSorted) {
       return;
     }
-
     _plugins.sort((a, b) => a.priority.compareTo(b.priority));
     _isSorted = true;
-  }
-
-  /// Ensure plugins are sorted.
-  void _ensureSorted() {
-    if (!_isSorted) {
-      _sortPlugins();
-    }
   }
 
   void _ensureEventTypeIndex() {
@@ -227,30 +219,18 @@ class PluginRegistry {
     }
   }
 
-  Future<void> _rollbackLoadedPlugins(List<InputPlugin> loadedPlugins) async {
-    for (final plugin in loadedPlugins.reversed) {
-      await _rollbackPlugin(plugin);
-    }
-  }
-
   Future<void> _rollbackPlugin(InputPlugin plugin) async {
     try {
       await plugin.onUnload();
     } on Object catch (e, stackTrace) {
-      _logRollbackError(plugin: plugin, error: e, stackTrace: stackTrace);
+      _safeLogInputError(
+        message: 'Plugin rollback unload failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: {'plugin': plugin.name},
+      );
     }
   }
-
-  void _logRollbackError({
-    required InputPlugin plugin,
-    required Object error,
-    required StackTrace stackTrace,
-  }) => _safeLogInputError(
-    message: 'Plugin rollback unload failed',
-    error: error,
-    stackTrace: stackTrace,
-    metadata: {'plugin': plugin.name},
-  );
 
   Future<bool> _isInterceptedByBeforeHooks(
     InputEvent event,

@@ -16,11 +16,10 @@ void main() {
   test('computeElbowEdit reroutes diagonal input when no fixed segments', () {
     final points = <DrawPoint>[DrawPoint.zero, const DrawPoint(x: 120, y: 80)];
     final element = _arrowElement(points);
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
     );
@@ -43,11 +42,10 @@ void main() {
       ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
@@ -83,7 +81,6 @@ void main() {
       ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
     final movedPoints = <DrawPoint>[
       const DrawPoint(x: 0, y: 40),
       points[1],
@@ -93,7 +90,7 @@ void main() {
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: movedPoints,
       fixedSegmentsOverride: fixedSegments,
@@ -126,11 +123,10 @@ void main() {
       ),
       startArrowhead: ArrowheadStyle.triangle,
     );
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: points,
     );
@@ -168,11 +164,10 @@ void main() {
       ),
       endArrowhead: ArrowheadStyle.triangle,
     );
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: points,
     );
@@ -944,7 +939,6 @@ void main() {
       ElbowFixedSegment(index: 3, start: points[2], end: points[3]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
 
     final overrideSegments = <ElbowFixedSegment>[
       const ElbowFixedSegment(
@@ -956,7 +950,7 @@ void main() {
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: overrideSegments,
@@ -982,7 +976,6 @@ void main() {
       ElbowFixedSegment(index: 2, start: points[1], end: points[2]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
     final movedPoints = <DrawPoint>[
       const DrawPoint(x: 30, y: 30),
       points[1],
@@ -992,7 +985,7 @@ void main() {
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: movedPoints,
       fixedSegmentsOverride: fixedSegments,
@@ -1029,7 +1022,6 @@ void main() {
       ),
       startArrowhead: ArrowheadStyle.triangle,
     );
-    final data = element.data as ArrowData;
 
     final dragged = <DrawPoint>[
       points.first,
@@ -1040,7 +1032,7 @@ void main() {
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: CombinedElementLookup(base: {'target': target}),
       localPointsOverride: dragged,
       fixedSegmentsOverride: fixedSegments,
@@ -1068,11 +1060,10 @@ void main() {
       ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[0]],
@@ -1099,11 +1090,10 @@ void main() {
       ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: <ElbowFixedSegment>[fixedSegments[1]],
@@ -1127,11 +1117,10 @@ void main() {
       ElbowFixedSegment(index: 4, start: points[3], end: points[4]),
     ];
     final element = _arrowElement(points, fixedSegments: fixedSegments);
-    final data = element.data as ArrowData;
 
     final result = computeElbowEdit(
       element: element,
-      data: data,
+      data: element.data as ArrowData,
       lookup: const CombinedElementLookup(base: {}),
       localPointsOverride: points,
       fixedSegmentsOverride: const <ElbowFixedSegment>[],
@@ -1153,35 +1142,28 @@ ElementState _arrowElement(
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
 }) {
   final rect = elbowRectForPoints(points);
-  final normalized = ArrowGeometry.normalizePoints(
-    worldPoints: points,
-    rect: rect,
-  );
-  final data = ArrowData(
-    points: normalized,
-    arrowType: ArrowType.elbow,
-    fixedSegments: fixedSegments,
-    startBinding: startBinding,
-    endBinding: endBinding,
-    startArrowhead: startArrowhead,
-    endArrowhead: endArrowhead,
-  );
   return ElementState(
     id: 'arrow',
     rect: rect,
     rotation: 0,
     opacity: 1,
     zIndex: 0,
-    data: data,
+    data: ArrowData(
+      points: ArrowGeometry.normalizePoints(worldPoints: points, rect: rect),
+      arrowType: ArrowType.elbow,
+      fixedSegments: fixedSegments,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+    ),
   );
 }
 
 bool _isHorizontal(DrawPoint a, DrawPoint b) =>
     (a.y - b.y).abs() <= (a.x - b.x).abs();
 
-double _segmentAxis(ElbowFixedSegment segment) {
-  if (_isHorizontal(segment.start, segment.end)) {
-    return (segment.start.y + segment.end.y) / 2;
-  }
-  return (segment.start.x + segment.end.x) / 2;
-}
+double _segmentAxis(ElbowFixedSegment segment) =>
+    _isHorizontal(segment.start, segment.end)
+    ? (segment.start.y + segment.end.y) / 2
+    : (segment.start.x + segment.end.x) / 2;

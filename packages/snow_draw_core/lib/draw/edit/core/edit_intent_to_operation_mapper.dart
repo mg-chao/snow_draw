@@ -38,8 +38,11 @@ class EditIntentToOperationMapper {
   const EditIntentToOperationMapper._(this._mappings);
 
   factory EditIntentToOperationMapper.withDefaults() =>
-      EditIntentToOperationMapper._([
-        _IntentMapping(
+      EditIntentToOperationMapper._(_defaultMappings);
+
+  static final _defaultMappings =
+      List<EditIntentToOperationMapping>.unmodifiable([
+        EditIntentToOperationMapping(
           operationId: EditOperationIds.arrowPoint,
           predicate: (intent, _) => intent is StartArrowPointIntent,
           paramsBuilder: (intent, _) {
@@ -52,12 +55,12 @@ class EditIntentToOperationMapper {
             );
           },
         ),
-        _IntentMapping(
+        EditIntentToOperationMapping(
           operationId: EditOperationIds.rotate,
           predicate: (intent, _) => intent is StartRotateIntent,
-          paramsBuilder: (intent, context) => const RotateOperationParams(),
+          paramsBuilder: (_, _) => const RotateOperationParams(),
         ),
-        _IntentMapping(
+        EditIntentToOperationMapping(
           operationId: EditOperationIds.resize,
           predicate: (intent, _) => intent is StartResizeIntent,
           paramsBuilder: (intent, _) {
@@ -68,25 +71,20 @@ class EditIntentToOperationMapper {
             );
           },
         ),
-        _IntentMapping(
+        EditIntentToOperationMapping(
           operationId: EditOperationIds.move,
           predicate: (intent, _) => intent is StartMoveIntent,
-          paramsBuilder: (intent, context) => const MoveOperationParams(),
+          paramsBuilder: (_, _) => const MoveOperationParams(),
         ),
       ]);
 
   /// Creates a mapper from a mapping list (higher priority first).
   factory EditIntentToOperationMapper.custom(
     List<EditIntentToOperationMapping> mappings,
-  ) => EditIntentToOperationMapper._([
-    for (final m in mappings)
-      _IntentMapping(
-        operationId: m.operationId,
-        predicate: m.predicate,
-        paramsBuilder: m.paramsBuilder,
-      ),
-  ]);
-  final List<_IntentMapping> _mappings;
+  ) => EditIntentToOperationMapper._(
+    List<EditIntentToOperationMapping>.unmodifiable(mappings),
+  );
+  final List<EditIntentToOperationMapping> _mappings;
 
   /// Returns a [StartEdit] action, or `null` if the intent is not mapped.
   ///
@@ -125,17 +123,6 @@ class EditIntentToOperationMapper {
 /// Public mapping entry for configuring [EditIntentToOperationMapper].
 class EditIntentToOperationMapping {
   const EditIntentToOperationMapping({
-    required this.operationId,
-    required this.predicate,
-    required this.paramsBuilder,
-  });
-  final EditOperationId operationId;
-  final EditIntentToOperationPredicate predicate;
-  final EditIntentToParamsBuilder paramsBuilder;
-}
-
-class _IntentMapping {
-  const _IntentMapping({
     required this.operationId,
     required this.predicate,
     required this.paramsBuilder,

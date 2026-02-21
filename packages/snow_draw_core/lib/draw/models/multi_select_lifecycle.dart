@@ -16,11 +16,10 @@ class MultiSelectLifecycle {
 
   /// Applies selection changes; resets overlay on change.
   static SelectionOverlayState onSelectionChanged(
-    SelectionOverlayState current,
     Set<String> newSelectedIds, {
     DrawRect? newOverlayBounds,
   }) {
-    if (newSelectedIds.length <= 1 || newOverlayBounds == null) {
+    if (newSelectedIds.length < 2 || newOverlayBounds == null) {
       return SelectionOverlayState.empty;
     }
     return SelectionOverlayState(
@@ -28,55 +27,36 @@ class MultiSelectLifecycle {
     );
   }
 
-  /// Applies rotation finish: update rotation, keep bounds.
+  /// Applies rotation finish: update rotation and bounds.
   static SelectionOverlayState onRotateFinished(
     SelectionOverlayState current, {
     required double newRotation,
-    DrawRect? bounds,
-  }) {
-    final currentOverlay = current.multiSelectOverlay;
-    final nextBounds = bounds ?? currentOverlay?.bounds;
-    if (nextBounds == null) {
-      return current;
-    }
-
-    return current.copyWith(
-      multiSelectOverlay: MultiSelectOverlayState(
-        bounds: nextBounds,
-        rotation: newRotation,
-      ),
-    );
-  }
+    required DrawRect bounds,
+  }) => current.copyWith(
+    multiSelectOverlay: MultiSelectOverlayState(
+      bounds: bounds,
+      rotation: newRotation,
+    ),
+  );
 
   /// Applies move finish: keep rotation, update bounds.
   static SelectionOverlayState onMoveFinished(
     SelectionOverlayState current, {
     required DrawRect newBounds,
-  }) {
-    final rotation = current.multiSelectOverlay?.rotation ?? 0.0;
-    return current.copyWith(
-      multiSelectOverlay: MultiSelectOverlayState(
-        bounds: newBounds,
-        rotation: rotation,
-      ),
-    );
-  }
+  }) => current.copyWith(
+    multiSelectOverlay: MultiSelectOverlayState(
+      bounds: newBounds,
+      rotation: current.multiSelectOverlay?.rotation ?? 0.0,
+    ),
+  );
 
   /// Applies resize finish: keep rotation, update bounds.
   static SelectionOverlayState onResizeFinished(
     SelectionOverlayState current, {
     required DrawRect newBounds,
-  }) {
-    final rotation = current.multiSelectOverlay?.rotation ?? 0.0;
-    return current.copyWith(
-      multiSelectOverlay: MultiSelectOverlayState(
-        bounds: newBounds,
-        rotation: rotation,
-      ),
-    );
-  }
+  }) => onMoveFinished(current, newBounds: newBounds);
 
   /// Clears selection state.
-  static SelectionOverlayState onSelectionCleared(SelectionOverlayState _) =>
+  static SelectionOverlayState onSelectionCleared() =>
       SelectionOverlayState.empty;
 }

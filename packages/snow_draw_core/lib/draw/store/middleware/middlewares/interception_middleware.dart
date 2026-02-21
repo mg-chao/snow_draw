@@ -33,21 +33,16 @@ class InterceptionMiddleware extends MiddlewareBase {
   int get priority => 900; // High priority - intercept early
 
   @override
-  bool shouldExecute(DispatchContext context) =>
-      // Only execute if there are interceptors
-      interceptors.isNotEmpty;
+  bool shouldExecute(DispatchContext context) => interceptors.isNotEmpty;
 
   @override
-  Future<DispatchContext> invoke(
-    DispatchContext context,
-    NextFunction next,
-  ) async {
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
     for (final interceptor in interceptors) {
-      final shouldContinue = interceptor(context.currentState, context.action);
-
-      if (!shouldContinue) {
+      if (!interceptor(context.currentState, context.action)) {
         // Block the action - don't call next(context)
-        return context.withStop('Action blocked by ${interceptor.runtimeType}');
+        return Future<DispatchContext>.value(
+          context.withStop('Action blocked by ${interceptor.runtimeType}'),
+        );
       }
     }
 

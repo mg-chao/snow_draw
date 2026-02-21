@@ -17,15 +17,12 @@ class RandomStringIdGenerator {
   final int _length;
   final String _chars;
 
-  String call() {
-    final randomString = String.fromCharCodes(
-      Iterable.generate(
-        _length,
-        (_) => _chars.codeUnitAt(_random.nextInt(_chars.length)),
-      ),
-    );
-    return randomString;
-  }
+  String call() => String.fromCharCodes(
+    Iterable.generate(
+      _length,
+      (_) => _chars.codeUnitAt(_random.nextInt(_chars.length)),
+    ),
+  );
 }
 
 /// Predictable ID generator (useful for tests).

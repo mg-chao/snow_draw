@@ -7,10 +7,12 @@ import 'highlight_data.dart';
 
 class HighlightRenderer extends ElementTypeRenderer {
   const HighlightRenderer();
+
   static final _fillPaint = Paint()
     ..style = PaintingStyle.fill
     ..blendMode = BlendMode.multiply
     ..isAntiAlias = true;
+
   static final _strokePaint = Paint()
     ..style = PaintingStyle.stroke
     ..isAntiAlias = true;
@@ -30,44 +32,63 @@ class HighlightRenderer extends ElementTypeRenderer {
       );
     }
 
+    final fillOpacity = (data.color.a * element.opacity).clamp(0.0, 1.0);
+    final strokeOpacity = (data.strokeColor.a * element.opacity).clamp(
+      0.0,
+      1.0,
+    );
+    final shouldPaintFill = fillOpacity > 0;
+    final shouldPaintStroke = strokeOpacity > 0 && data.strokeWidth > 0;
+    if (!shouldPaintFill && !shouldPaintStroke) {
+      return;
+    }
+
     final rect = element.rect;
-    final rotation = element.rotation;
-    final opacity = element.opacity;
-    final fillOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-    final strokeOpacity = (data.strokeColor.a * opacity).clamp(0.0, 1.0);
+    final shapeRect = Rect.fromLTWH(0, 0, rect.width, rect.height);
 
     canvas.save();
-    if (rotation != 0) {
+    if (element.rotation != 0) {
       canvas
         ..translate(rect.centerX, rect.centerY)
-        ..rotate(rotation)
+        ..rotate(element.rotation)
         ..translate(-rect.centerX, -rect.centerY);
     }
     canvas.translate(rect.minX, rect.minY);
 
-    final shapeRect = Rect.fromLTWH(0, 0, rect.width, rect.height);
-
-    if (fillOpacity > 0) {
-      final fillPaint = _fillPaint
-        ..color = data.color.withValues(alpha: fillOpacity);
-      if (data.shape == HighlightShape.rectangle) {
-        canvas.drawRect(shapeRect, fillPaint);
-      } else {
-        canvas.drawOval(shapeRect, fillPaint);
-      }
+    if (shouldPaintFill) {
+      _drawShape(
+        canvas: canvas,
+        shape: data.shape,
+        rect: shapeRect,
+        paint: _fillPaint..color = data.color.withValues(alpha: fillOpacity),
+      );
     }
 
-    if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      final strokePaint = _strokePaint
-        ..strokeWidth = data.strokeWidth
-        ..color = data.strokeColor.withValues(alpha: strokeOpacity);
-      if (data.shape == HighlightShape.rectangle) {
-        canvas.drawRect(shapeRect, strokePaint);
-      } else {
-        canvas.drawOval(shapeRect, strokePaint);
-      }
+    if (shouldPaintStroke) {
+      _drawShape(
+        canvas: canvas,
+        shape: data.shape,
+        rect: shapeRect,
+        paint: _strokePaint
+          ..strokeWidth = data.strokeWidth
+          ..color = data.strokeColor.withValues(alpha: strokeOpacity),
+      );
     }
 
     canvas.restore();
+  }
+
+  static void _drawShape({
+    required Canvas canvas,
+    required HighlightShape shape,
+    required Rect rect,
+    required Paint paint,
+  }) {
+    switch (shape) {
+      case HighlightShape.rectangle:
+        canvas.drawRect(rect, paint);
+      case HighlightShape.ellipse:
+        canvas.drawOval(rect, paint);
+    }
   }
 }

@@ -5,10 +5,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
   test('FilterData.fromJson uses defaults', () {
-    final data = FilterData.fromJson(const {});
-
-    expect(data.type, ConfigDefaults.defaultFilterType);
-    expect(data.strength, ConfigDefaults.defaultFilterStrength);
+    expect(FilterData.fromJson(const {}), const FilterData());
   });
 
   test('FilterData.withElementStyle applies filter fields', () {
@@ -17,23 +14,38 @@ void main() {
       filterStrength: 0.75,
     );
 
-    const data = FilterData();
-    final updated = data.withElementStyle(style) as FilterData;
-
-    expect(updated.type, style.filterType);
-    expect(updated.strength, style.filterStrength);
+    expect(
+      const FilterData().withElementStyle(style),
+      const FilterData(
+        type: CanvasFilterType.gaussianBlur,
+        strength: 0.75,
+      ),
+    );
   });
 
   test('FilterData.withStyleUpdate applies filter type and strength', () {
-    const data = FilterData();
     const update = ElementStyleUpdate(
       filterType: CanvasFilterType.inversion,
       filterStrength: 0.3,
     );
 
-    final updated = data.withStyleUpdate(update) as FilterData;
+    expect(
+      const FilterData().withStyleUpdate(update),
+      const FilterData(
+        type: CanvasFilterType.inversion,
+        strength: 0.3,
+      ),
+    );
+  });
 
-    expect(updated.type, update.filterType);
-    expect(updated.strength, update.filterStrength);
+  test('FilterData normalizes strength values into [0, 1]', () {
+    expect(const FilterData(strength: -1).strength, 0);
+    expect(const FilterData(strength: 2).strength, 1);
+    expect(const FilterData(strength: double.nan).strength, 1);
+  });
+
+  test('FilterData.fromJson normalizes out-of-range strengths', () {
+    expect(FilterData.fromJson(const {'strength': -0.5}).strength, 0);
+    expect(FilterData.fromJson(const {'strength': 1.5}).strength, 1);
   });
 }

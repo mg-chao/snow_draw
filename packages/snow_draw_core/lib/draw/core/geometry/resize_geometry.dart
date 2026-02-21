@@ -1,4 +1,3 @@
-import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 
 /// Pure resize geometry helpers.
@@ -10,56 +9,25 @@ class ResizeGeometry {
     required DrawRect scaled,
     bool flipX = false,
     bool flipY = false,
+  }) => (
+    scaleX: _resolveAxisScale(
+      originalSize: original.width,
+      scaledSize: scaled.width,
+      flip: flipX,
+    ),
+    scaleY: _resolveAxisScale(
+      originalSize: original.height,
+      scaledSize: scaled.height,
+      flip: flipY,
+    ),
+  );
+
+  static double _resolveAxisScale({
+    required double originalSize,
+    required double scaledSize,
+    required bool flip,
   }) {
-    if (original.width == 0 || original.height == 0) {
-      return (scaleX: 1.0, scaleY: 1.0);
-    }
-
-    return (
-      scaleX: (scaled.width / original.width) * (flipX ? -1.0 : 1.0),
-      scaleY: (scaled.height / original.height) * (flipY ? -1.0 : 1.0),
-    );
+    final scale = originalSize == 0 ? 1.0 : scaledSize / originalSize;
+    return flip ? -scale : scale;
   }
-
-  static DrawRect scaleRectFromAnchor({
-    required DrawRect rect,
-    required DrawPoint anchor,
-    required double scaleX,
-    required double scaleY,
-  }) {
-    final relMinX = rect.minX - anchor.x;
-    final relMinY = rect.minY - anchor.y;
-    final relMaxX = rect.maxX - anchor.x;
-    final relMaxY = rect.maxY - anchor.y;
-
-    return DrawRect(
-      minX: anchor.x + relMinX * scaleX,
-      minY: anchor.y + relMinY * scaleY,
-      maxX: anchor.x + relMaxX * scaleX,
-      maxY: anchor.y + relMaxY * scaleY,
-    );
-  }
-
-  static DrawPoint getOppositeAnchor(DrawRect rect, ResizeHandle handle) =>
-      switch (handle) {
-        ResizeHandle.topLeft => DrawPoint(x: rect.maxX, y: rect.maxY),
-        ResizeHandle.topRight => DrawPoint(x: rect.minX, y: rect.maxY),
-        ResizeHandle.bottomLeft => DrawPoint(x: rect.maxX, y: rect.minY),
-        ResizeHandle.bottomRight => DrawPoint(x: rect.minX, y: rect.minY),
-        ResizeHandle.top => DrawPoint(x: rect.center.x, y: rect.maxY),
-        ResizeHandle.bottom => DrawPoint(x: rect.center.x, y: rect.minY),
-        ResizeHandle.left => DrawPoint(x: rect.maxX, y: rect.center.y),
-        ResizeHandle.right => DrawPoint(x: rect.minX, y: rect.center.y),
-      };
-}
-
-enum ResizeHandle {
-  topLeft,
-  topRight,
-  bottomLeft,
-  bottomRight,
-  top,
-  bottom,
-  left,
-  right,
 }

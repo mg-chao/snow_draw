@@ -203,16 +203,14 @@ class FilterSegmentRenderer {
   final _filterCache = LruCache<_FilterImageCacheKey, ImageFilter>(
     maxEntries: _filterImageCacheLimit,
   );
-  final _batchPictureCache =
-      LruCache<_BatchPictureCacheKey, _CachedBatchPicture>(
-        maxEntries: _batchPictureCacheLimit,
-        onEvict: (entry) => entry.markEvicted(),
-      );
-  final _prefixSceneCache =
-      LruCache<_PrefixSceneCacheKey, _CachedPrefixScenePicture>(
-        maxEntries: _prefixSceneCacheLimit,
-        onEvict: (entry) => entry.markEvicted(),
-      );
+  final _batchPictureCache = LruCache<_BatchPictureCacheKey, _CachedPicture>(
+    maxEntries: _batchPictureCacheLimit,
+    onEvict: (entry) => entry.markEvicted(),
+  );
+  final _prefixSceneCache = LruCache<_PrefixSceneCacheKey, _CachedPicture>(
+    maxEntries: _prefixSceneCacheLimit,
+    onEvict: (entry) => entry.markEvicted(),
+  );
   final _diagnostics = FilterRenderDiagnosticsCollector();
 
   /// Reusable paint object for `saveLayer` calls.
@@ -280,10 +278,8 @@ class FilterSegmentRenderer {
       return;
     }
 
-    final hasFilter = segments.any(
-      (s) => s is FilterSegment || s is MergedFilterSegment,
-    );
-    if (!hasFilter) {
+    final lastFilterSegmentIndex = _findLastFilterSegmentIndex(segments);
+    if (lastFilterSegmentIndex < 0) {
       for (final segment in segments) {
         if (segment is! ElementBatchSegment) {
           continue;
@@ -295,7 +291,6 @@ class FilterSegmentRenderer {
       _diagnostics.endFrame();
       return;
     }
-    final lastFilterSegmentIndex = _findLastFilterSegmentIndex(segments);
 
     // Accumulate batch pictures and only flatten into a single
     // scene when a filter needs to read the composited result.
@@ -544,25 +539,17 @@ class FilterSegmentRenderer {
     if (dynamicElementIds.isEmpty) {
       return false;
     }
-    if (segment is ElementBatchSegment) {
-      for (final element in segment.elements) {
-        if (dynamicElementIds.contains(element.id)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    if (segment is FilterSegment) {
-      return dynamicElementIds.contains(segment.filterElement.id);
-    }
-    if (segment is MergedFilterSegment) {
-      for (final filter in segment.filters) {
-        if (dynamicElementIds.contains(filter.filterElement.id)) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return switch (segment) {
+      ElementBatchSegment(:final elements) => elements.any(
+        (element) => dynamicElementIds.contains(element.id),
+      ),
+      FilterSegment(:final filterElement) => dynamicElementIds.contains(
+        filterElement.id,
+      ),
+      MergedFilterSegment(:final filters) => filters.any(
+        (filter) => dynamicElementIds.contains(filter.filterElement.id),
+      ),
+    };
   }
 
   _ScenePictureRef? _resolveCachedPrefixScene({
@@ -617,7 +604,7 @@ class FilterSegmentRenderer {
       dynamicElementIds: const <String>{},
       runtimePolicy: runtimePolicy,
     );
-    final cachedEntry = _CachedPrefixScenePicture(picture: picture)..retain();
+    final cachedEntry = _CachedPicture(picture: picture)..retain();
     _prefixSceneCache.put(cacheKey, cachedEntry);
     return _ScenePictureRef.shared(
       picture: picture,
@@ -822,7 +809,7 @@ class FilterSegmentRenderer {
         paintElement(batchCanvas, element);
       }
       final picture = recorder.endRecording();
-      final cachedEntry = _CachedBatchPicture(picture: picture)..retain();
+      final cachedEntry = _CachedPicture(picture: picture)..retain();
       _batchPictureCache.put(cacheKey, cachedEntry);
       return _ScenePictureRef.shared(
         picture: picture,
@@ -871,19 +858,12 @@ class FilterSegmentRenderer {
     required Set<String> dynamicElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
-    final prepared = <_PreparedFilterPass>[];
-    for (final filter in merged.filters) {
-      final pass = _prepareFilterPass(
-        filterElement: filter.filterElement,
-        data: filter.filterData,
-        visibleBounds: visibleBounds,
-        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
-        runtimePolicy: runtimePolicy,
-      );
-      if (pass != null) {
-        prepared.add(pass);
-      }
-    }
+    final prepared = _prepareMergedFilterPasses(
+      merged: merged,
+      visibleBounds: visibleBounds,
+      dynamicElementIds: dynamicElementIds,
+      runtimePolicy: runtimePolicy,
+    );
     if (prepared.isEmpty) {
       return scene;
     }
@@ -959,19 +939,12 @@ class FilterSegmentRenderer {
     required Set<String> dynamicElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
-    final prepared = <_PreparedFilterPass>[];
-    for (final filter in merged.filters) {
-      final pass = _prepareFilterPass(
-        filterElement: filter.filterElement,
-        data: filter.filterData,
-        visibleBounds: visibleBounds,
-        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
-        runtimePolicy: runtimePolicy,
-      );
-      if (pass != null) {
-        prepared.add(pass);
-      }
-    }
+    final prepared = _prepareMergedFilterPasses(
+      merged: merged,
+      visibleBounds: visibleBounds,
+      dynamicElementIds: dynamicElementIds,
+      runtimePolicy: runtimePolicy,
+    );
     if (prepared.isEmpty) {
       canvas.drawPicture(scene);
       return;
@@ -1006,6 +979,28 @@ class FilterSegmentRenderer {
   }
 
   // Prepared filter passes.
+  List<_PreparedFilterPass> _prepareMergedFilterPasses({
+    required MergedFilterSegment merged,
+    required Rect? visibleBounds,
+    required Set<String> dynamicElementIds,
+    required _FilterRuntimePolicy runtimePolicy,
+  }) {
+    final prepared = <_PreparedFilterPass>[];
+    for (final filter in merged.filters) {
+      final pass = _prepareFilterPass(
+        filterElement: filter.filterElement,
+        data: filter.filterData,
+        visibleBounds: visibleBounds,
+        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
+        runtimePolicy: runtimePolicy,
+      );
+      if (pass != null) {
+        prepared.add(pass);
+      }
+    }
+    return prepared;
+  }
+
   _PreparedFilterPass? _prepareFilterPass({
     required ElementState filterElement,
     required FilterData data,
@@ -1203,7 +1198,7 @@ class FilterSegmentRenderer {
     canvas.restore();
   }
 
-  // ── Filter type dispatch ────────────────────────────────
+  // Filter type dispatch.
 
   void _paintFilteredLayer({
     required Canvas canvas,
@@ -1269,7 +1264,7 @@ class FilterSegmentRenderer {
     }
   }
 
-  // ── Individual filter painters ──────────────────────────
+  // Individual filter painters.
 
   void _paintMosaicFilter(
     Canvas canvas,
@@ -1518,7 +1513,7 @@ class FilterSegmentRenderer {
       ..restore();
   }
 
-  // ── Helpers ─────────────────────────────────────────────
+  // Helpers.
 
   /// Configures [_layerPaint] for the next `saveLayer` call.
   ///
@@ -1785,70 +1780,47 @@ class FilterSegmentRenderer {
   int _appendFingerprint(int current, int value) =>
       _hashMask & ((current * 31) + value);
 
-  int _resolveSegmentElementCount(RenderSegment segment) {
-    if (segment is ElementBatchSegment) {
-      return segment.elements.length;
-    }
-    if (segment is FilterSegment) {
-      return 1;
-    }
-    if (segment is MergedFilterSegment) {
-      return segment.filters.length;
-    }
-    return 0;
-  }
+  int _resolveSegmentElementCount(RenderSegment segment) => switch (segment) {
+    ElementBatchSegment(:final elements) => elements.length,
+    FilterSegment() => 1,
+    MergedFilterSegment(:final filters) => filters.length,
+  };
 
-  int _resolveSegmentIdFingerprint(RenderSegment segment) {
-    if (segment is ElementBatchSegment) {
-      return segment.idFingerprint ?? _batchFingerprint(segment.elements);
-    }
-    if (segment is FilterSegment) {
-      return segment.idFingerprint ??
-          _appendFingerprint(
+  int _resolveSegmentIdFingerprint(RenderSegment segment) => switch (segment) {
+    ElementBatchSegment(:final elements, :final idFingerprint) =>
+      idFingerprint ?? _batchFingerprint(elements),
+    FilterSegment(:final filterElement, :final idFingerprint) =>
+      idFingerprint ??
+          _appendFingerprint(_fingerprintSeed, filterElement.id.hashCode),
+    MergedFilterSegment(:final filters, :final idFingerprint) =>
+      idFingerprint ??
+          filters.fold<int>(
             _fingerprintSeed,
-            segment.filterElement.id.hashCode,
-          );
-    }
-    if (segment is MergedFilterSegment) {
-      if (segment.idFingerprint != null) {
-        return segment.idFingerprint!;
-      }
-      var hash = _fingerprintSeed;
-      for (final filter in segment.filters) {
-        hash = _appendFingerprint(hash, _resolveSegmentIdFingerprint(filter));
-      }
-      return hash;
-    }
-    return _fingerprintSeed;
-  }
+            (hash, filter) =>
+                _appendFingerprint(hash, _resolveSegmentIdFingerprint(filter)),
+          ),
+  };
 
-  int _resolveSegmentIdentityFingerprint(RenderSegment segment) {
-    if (segment is ElementBatchSegment) {
-      return segment.identityFingerprint ??
-          _batchIdentityFingerprint(segment.elements);
-    }
-    if (segment is FilterSegment) {
-      return segment.identityFingerprint ??
-          _appendFingerprint(
-            _identityFingerprintSeed,
-            identityHashCode(segment.filterElement),
-          );
-    }
-    if (segment is MergedFilterSegment) {
-      if (segment.identityFingerprint != null) {
-        return segment.identityFingerprint!;
-      }
-      var hash = _identityFingerprintSeed;
-      for (final filter in segment.filters) {
-        hash = _appendFingerprint(
-          hash,
-          _resolveSegmentIdentityFingerprint(filter),
-        );
-      }
-      return hash;
-    }
-    return _identityFingerprintSeed;
-  }
+  int _resolveSegmentIdentityFingerprint(RenderSegment segment) =>
+      switch (segment) {
+        ElementBatchSegment(:final elements, :final identityFingerprint) =>
+          identityFingerprint ?? _batchIdentityFingerprint(elements),
+        FilterSegment(:final filterElement, :final identityFingerprint) =>
+          identityFingerprint ??
+              _appendFingerprint(
+                _identityFingerprintSeed,
+                identityHashCode(filterElement),
+              ),
+        MergedFilterSegment(:final filters, :final identityFingerprint) =>
+          identityFingerprint ??
+              filters.fold<int>(
+                _identityFingerprintSeed,
+                (hash, filter) => _appendFingerprint(
+                  hash,
+                  _resolveSegmentIdentityFingerprint(filter),
+                ),
+              ),
+      };
 
   double _resolveCoverageRatio({
     required Rect region,
@@ -2126,11 +2098,7 @@ class _FilterRuntimePolicy {
       _FilterCoverageTier.huge => hugeCoverageBlurDownsampleScale,
     };
     final scaled = blurDownsampleFactor * scale;
-    final lowerBound = aggressiveCpuFallback
-        ? 0.25
-        : preferFastCpuFallback
-        ? 0.4
-        : 0.8;
+    final lowerBound = aggressiveCpuFallback ? 0.25 : 0.4;
     return scaled.clamp(lowerBound, 1.0);
   }
 
@@ -2206,7 +2174,7 @@ class _FilterRuntimePolicy {
   }
 }
 
-// ── Cache keys ──────────────────────────────────────────
+// Cache keys.
 
 @immutable
 class _SegmentRangeSignature {
@@ -2434,46 +2402,8 @@ class _PrefixSceneCacheKey {
   );
 }
 
-class _CachedBatchPicture {
-  _CachedBatchPicture({required this.picture});
-
-  final Picture picture;
-  var _activeReaders = 0;
-  var _evicted = false;
-  var _disposed = false;
-
-  void retain() {
-    _activeReaders += 1;
-  }
-
-  void release() {
-    if (_activeReaders == 0) {
-      return;
-    }
-    _activeReaders -= 1;
-    if (_activeReaders == 0 && _evicted) {
-      _dispose();
-    }
-  }
-
-  void markEvicted() {
-    _evicted = true;
-    if (_activeReaders == 0) {
-      _dispose();
-    }
-  }
-
-  void _dispose() {
-    if (_disposed) {
-      return;
-    }
-    picture.dispose();
-    _disposed = true;
-  }
-}
-
-class _CachedPrefixScenePicture {
-  _CachedPrefixScenePicture({required this.picture});
+class _CachedPicture {
+  _CachedPicture({required this.picture});
 
   final Picture picture;
   var _activeReaders = 0;
@@ -2600,9 +2530,6 @@ class _ClipInfo {
   final Rect bounds;
   final Path? path;
 
-  /// Whether this clip is a simple axis-aligned rectangle.
-  bool get isAxisAligned => path == null;
-
   /// Applies the clip to [canvas] using the cheapest available method.
   void applyTo(Canvas canvas) {
     if (path != null) {
@@ -2613,7 +2540,7 @@ class _ClipInfo {
   }
 }
 
-// ── Cached color-filter constants ───────────────────────
+// Cached color-filter constants.
 
 const _grayscaleMatrix = <double>[
   0.2126, 0.7152, 0.0722, 0, 0, //

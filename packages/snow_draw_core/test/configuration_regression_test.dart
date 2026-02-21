@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show Color;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,17 +6,26 @@ import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
+Future<void> _flushAsync() => Future<void>.delayed(Duration.zero);
+
 void main() {
   group('ConfigManager freeze behavior', () {
-    test('combines partial updates queued during freeze', () async {
-      final manager = ConfigManager(DrawConfig());
-      final emitted = <DrawConfig>[];
-      final subscription = manager.stream.listen(emitted.add);
-      addTearDown(() async {
-        await subscription.cancel();
-        await manager.dispose();
-      });
+    late ConfigManager manager;
+    late List<DrawConfig> emitted;
+    late StreamSubscription<DrawConfig> subscription;
 
+    setUp(() {
+      manager = ConfigManager(DrawConfig());
+      emitted = <DrawConfig>[];
+      subscription = manager.stream.listen(emitted.add);
+    });
+
+    tearDown(() async {
+      await subscription.cancel();
+      await manager.dispose();
+    });
+
+    test('combines partial updates queued during freeze', () async {
       final nextSelection = manager.current.selection.copyWith(padding: 12);
       final nextCanvas = manager.current.canvas.copyWith(
         backgroundColor: const Color(0xFFF5F5F5),
@@ -25,12 +35,11 @@ void main() {
       expect(manager.updateSelection(nextSelection), isFalse);
       expect(manager.updateCanvas(nextCanvas), isFalse);
 
-      // Reads stay frozen until unfreeze.
       expect(manager.current.selection, isNot(nextSelection));
       expect(manager.current.canvas, isNot(nextCanvas));
 
       manager.unfreeze();
-      await Future<void>.delayed(Duration.zero);
+      await _flushAsync();
 
       expect(manager.current.selection, nextSelection);
       expect(manager.current.canvas, nextCanvas);
@@ -40,14 +49,6 @@ void main() {
     });
 
     test('holds pending updates until the outer freeze completes', () async {
-      final manager = ConfigManager(DrawConfig());
-      final emitted = <DrawConfig>[];
-      final subscription = manager.stream.listen(emitted.add);
-      addTearDown(() async {
-        await subscription.cancel();
-        await manager.dispose();
-      });
-
       final nextSelection = manager.current.selection.copyWith(padding: 9);
 
       manager
@@ -56,44 +57,61 @@ void main() {
       expect(manager.updateSelection(nextSelection), isFalse);
 
       manager.unfreeze();
-      await Future<void>.delayed(Duration.zero);
+      await _flushAsync();
       expect(manager.current.selection, isNot(nextSelection));
       expect(emitted, isEmpty);
 
       manager.unfreeze();
-      await Future<void>.delayed(Duration.zero);
+      await _flushAsync();
       expect(manager.current.selection, nextSelection);
       expect(emitted, hasLength(1));
     });
   });
 
   group('ConfigManager lifecycle behavior', () {
+    late ConfigManager manager;
+
+    setUp(() {
+      manager = ConfigManager(DrawConfig());
+    });
+
+    tearDown(() async {
+      await manager.dispose();
+    });
+
     test('ignores updates after dispose', () async {
-      final manager = ConfigManager(DrawConfig());
       final baseConfig = manager.current;
 
       await manager.dispose();
 
-      final nextConfig = baseConfig.copyWith(
-        canvas: baseConfig.canvas.copyWith(
-          backgroundColor: const Color(0xFF112233),
+      expect(
+        manager.update(
+          baseConfig.copyWith(
+            canvas: baseConfig.canvas.copyWith(
+              backgroundColor: const Color(0xFF112233),
+            ),
+          ),
         ),
+        isFalse,
       );
-      final nextSelection = baseConfig.selection.copyWith(
-        padding: baseConfig.selection.padding + 7,
+      expect(
+        manager.updateSelection(
+          baseConfig.selection.copyWith(
+            padding: baseConfig.selection.padding + 7,
+          ),
+        ),
+        isFalse,
       );
-      final nextCanvas = baseConfig.canvas.copyWith(
-        backgroundColor: const Color(0xFF445566),
+      expect(
+        manager.updateCanvas(
+          baseConfig.canvas.copyWith(backgroundColor: const Color(0xFF445566)),
+        ),
+        isFalse,
       );
-
-      expect(manager.update(nextConfig), isFalse);
-      expect(manager.updateSelection(nextSelection), isFalse);
-      expect(manager.updateCanvas(nextCanvas), isFalse);
       expect(manager.current, same(baseConfig));
     });
 
     test('dispose clears frozen state and drops pending updates', () async {
-      final manager = ConfigManager(DrawConfig());
       final emitted = <DrawConfig>[];
       final subscription = manager.stream.listen(emitted.add);
       addTearDown(() async {
@@ -111,13 +129,11 @@ void main() {
       await manager.dispose();
       expect(manager.unfreeze, returnsNormally);
       expect(manager.current.selection, baseSelection);
-      await Future<void>.delayed(Duration.zero);
+      await _flushAsync();
       expect(emitted, isEmpty);
     });
 
     test('dispose is idempotent', () async {
-      final manager = ConfigManager(DrawConfig());
-
       await manager.dispose();
       await manager.dispose();
     });

@@ -80,29 +80,17 @@ class HistoryDelta {
         afterElements: afterElements,
       );
     } else {
-      for (final entry in beforeById.entries) {
-        final afterElement = afterById[entry.key];
-        if (afterElement == null) {
-          beforeElements[entry.key] = entry.value;
-          continue;
-        }
-        if (afterElement != entry.value) {
-          beforeElements[entry.key] = entry.value;
-          afterElements[entry.key] = afterElement;
-        }
-      }
-
-      for (final entry in afterById.entries) {
-        if (!beforeById.containsKey(entry.key)) {
-          afterElements[entry.key] = entry.value;
-        }
-      }
+      _collectChangedElementsByScan(
+        beforeById: beforeById,
+        afterById: afterById,
+        beforeElements: beforeElements,
+        afterElements: afterElements,
+      );
     }
 
-    final includeOrder = changes?.orderChanged ?? true;
     List<String>? orderBefore;
     List<String>? orderAfter;
-    if (includeOrder) {
+    if (changes?.orderChanged ?? true) {
       final beforeOrder = before.order;
       final afterOrder = after.order;
       if (beforeOrder != null && afterOrder != null) {
@@ -124,10 +112,11 @@ class HistoryDelta {
       globalElementsAfter = after.globalElements;
     }
 
-    final includeSelection = before.includeSelection && after.includeSelection;
     SelectionState? selectionBefore;
     SelectionState? selectionAfter;
-    if (includeSelection) {
+    if (before.includeSelection &&
+        after.includeSelection &&
+        before.selection != after.selection) {
       selectionBefore = _copySelection(before.selection);
       selectionAfter = _copySelection(after.selection);
     }
@@ -154,16 +143,15 @@ class HistoryDelta {
   final SelectionState? selectionAfter;
   final bool reindexZIndices;
 
-  bool get selectionChanged =>
-      selectionBefore != null &&
-      selectionAfter != null &&
-      selectionBefore != selectionAfter;
+  bool get selectionChanged => selectionBefore != selectionAfter;
 
   bool get hasChanges =>
       beforeElements.isNotEmpty ||
       afterElements.isNotEmpty ||
       globalElementsBefore != null ||
+      globalElementsAfter != null ||
       orderBefore != null ||
+      orderAfter != null ||
       selectionChanged;
 
   DrawState applyBackward(DrawState state) => _apply(state, forward: false);
@@ -176,23 +164,20 @@ class HistoryDelta {
       for (final element in currentElements) element.id: element,
     };
 
-    final removedIds = forward
-        ? beforeElements.keys.where((id) => !afterElements.containsKey(id))
-        : afterElements.keys.where((id) => !beforeElements.containsKey(id));
-
     final targetElements = forward ? afterElements : beforeElements;
+    final removedIds = forward ? beforeElements.keys : afterElements.keys;
+    final retainedIds = forward ? afterElements : beforeElements;
     final nextById = Map<String, ElementState>.from(currentById);
 
     for (final id in removedIds) {
-      nextById.remove(id);
+      if (!retainedIds.containsKey(id)) {
+        nextById.remove(id);
+      }
     }
-    for (final entry in targetElements.entries) {
-      nextById[entry.key] = entry.value;
-    }
+    nextById.addAll(targetElements);
 
     final order = forward ? orderAfter : orderBefore;
-    final targetOrder =
-        order ?? currentElements.map((element) => element.id).toList();
+    final targetOrder = order ?? currentById.keys;
 
     final nextElements = <ElementState>[];
     for (final id in targetOrder) {
@@ -203,13 +188,9 @@ class HistoryDelta {
     }
 
     if (order == null && nextElements.length != nextById.length) {
-      final knownOrderIds = targetOrder.toSet();
-      for (final id in nextById.keys) {
-        if (!knownOrderIds.contains(id)) {
-          final element = nextById[id];
-          if (element != null) {
-            nextElements.add(element);
-          }
+      for (final entry in nextById.entries) {
+        if (!currentById.containsKey(entry.key)) {
+          nextElements.add(entry.value);
         }
       }
     }
@@ -237,6 +218,31 @@ class HistoryDelta {
   }
 }
 
+void _collectChangedElementsByScan({
+  required Map<String, ElementState> beforeById,
+  required Map<String, ElementState> afterById,
+  required Map<String, ElementState> beforeElements,
+  required Map<String, ElementState> afterElements,
+}) {
+  for (final entry in beforeById.entries) {
+    final afterElement = afterById[entry.key];
+    if (afterElement == null) {
+      beforeElements[entry.key] = entry.value;
+      continue;
+    }
+    if (afterElement != entry.value) {
+      beforeElements[entry.key] = entry.value;
+      afterElements[entry.key] = afterElement;
+    }
+  }
+
+  for (final entry in afterById.entries) {
+    if (!beforeById.containsKey(entry.key)) {
+      afterElements[entry.key] = entry.value;
+    }
+  }
+}
+
 void _collectChangedElementsById({
   required Map<String, ElementState> beforeById,
   required Map<String, ElementState> afterById,
@@ -248,11 +254,7 @@ void _collectChangedElementsById({
     final beforeElement = beforeById[id];
     final afterElement = afterById[id];
 
-    if (beforeElement != null && afterElement != null) {
-      if (beforeElement != afterElement) {
-        beforeElements[id] = beforeElement;
-        afterElements[id] = afterElement;
-      }
+    if (beforeElement == afterElement) {
       continue;
     }
 

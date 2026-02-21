@@ -19,6 +19,8 @@ import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
 import '../../utils/list_equality.dart';
 
+const _resizeTolerance = 0.01;
+
 /// Single-source-of-truth geometry application for editing.
 ///
 /// Both preview (render/hit-test) and commit (FinishEdit) should use this
@@ -43,15 +45,13 @@ class EditApply {
       }
 
       final newCenter = snapshot.center.translate(DrawPoint(x: dx, y: dy));
-      final halfWidth = current.rect.width / 2;
-      final halfHeight = current.rect.height / 2;
-      final newRect = DrawRect(
-        minX: newCenter.x - halfWidth,
-        minY: newCenter.y - halfHeight,
-        maxX: newCenter.x + halfWidth,
-        maxY: newCenter.y + halfHeight,
+      result[id] = current.copyWith(
+        rect: _rectFromCenter(
+          center: newCenter,
+          width: current.rect.width,
+          height: current.rect.height,
+        ),
       );
-      result[id] = current.copyWith(rect: newRect);
     }
     return result;
   }
@@ -82,17 +82,14 @@ class EditApply {
         center: pivot,
         angle: deltaAngle,
       );
-
-      final halfWidth = current.rect.width / 2;
-      final halfHeight = current.rect.height / 2;
-      final newRect = DrawRect(
-        minX: newCenter.x - halfWidth,
-        minY: newCenter.y - halfHeight,
-        maxX: newCenter.x + halfWidth,
-        maxY: newCenter.y + halfHeight,
+      result[id] = current.copyWith(
+        rect: _rectFromCenter(
+          center: newCenter,
+          width: current.rect.width,
+          height: current.rect.height,
+        ),
+        rotation: newRotation,
       );
-
-      result[id] = current.copyWith(rect: newRect, rotation: newRotation);
     }
     return result;
   }
@@ -113,9 +110,6 @@ class EditApply {
     final isVerticalResize =
         context.resizeMode == ResizeMode.top ||
         context.resizeMode == ResizeMode.bottom;
-    // Epsilon tolerance for floating-point comparisons when checking if text
-    // height or font size has meaningfully changed during resize operations.
-    const textHeightTolerance = 0.01;
 
     final result = <String, ElementState>{};
     for (final id in selectedIds) {
@@ -140,99 +134,32 @@ class EditApply {
         isSingleSelect: isSingleSelect,
         hasRotation: hasRotation,
       );
-      // Special handling for text elements during resize:
-      // 1. Preserve aspect ratio during vertical resize by scaling width
-      // 2. Fit font size to match the new height
-      // 3. Clamp rect to layout constraints
-      // 4. Disable autoResize mode after manual resize
+
       if (resized.data is TextData) {
-        var data = resized.data as TextData;
-        var rect = resized.rect;
-        final heightDelta = (rect.height - startElement.rect.height).abs();
-        // During vertical resize, allow width scaling
-        // if horizontal scale is ~1.0
-        final allowWidthScale =
-            isVerticalResize && (scaleX - 1).abs() <= textHeightTolerance;
-        // Preserve aspect ratio: scale width proportionally to height change
-        if (allowWidthScale && heightDelta > textHeightTolerance) {
-          final startHeight = startElement.rect.height;
-          final heightScale = startHeight <= 0
-              ? 1.0
-              : rect.height / startHeight;
-          if (heightScale.isFinite &&
-              heightScale > 0 &&
-              (heightScale - 1).abs() > textHeightTolerance) {
-            final newWidth = rect.width * heightScale;
-            if (newWidth.isFinite && newWidth > 0) {
-              final centerX = rect.centerX;
-              rect = rect.copyWith(
-                minX: centerX - newWidth / 2,
-                maxX: centerX + newWidth / 2,
-              );
-            }
-          }
-        }
-        // Adjust font size to fit the new height while respecting max width
-        if (heightDelta > textHeightTolerance) {
-          final fittedFontSize = fitTextFontSizeToHeight(
-            data: data,
-            targetHeight: rect.height,
-            maxWidth: rect.width,
-          );
-          if ((fittedFontSize - data.fontSize).abs() > textHeightTolerance) {
-            data = data.copyWith(fontSize: fittedFontSize);
-          }
-        }
-        final clampedRect = clampTextRectToLayout(
-          rect: rect,
+        resized = _applyTextResize(
+          element: resized,
           startRect: startElement.rect,
           anchor: anchor,
-          data: data,
           keepCenter: keepTextCenter,
+          isVerticalResize: isVerticalResize,
+          scaleX: scaleX,
         );
-        if (data.autoResize) {
-          data = data.copyWith(autoResize: false);
-        }
-        if (clampedRect != resized.rect || data != resized.data) {
-          resized = resized.copyWith(rect: clampedRect, data: data);
-        }
       }
+
       if (resized.data is SerialNumberData) {
-        var data = resized.data as SerialNumberData;
-        final startRect = startElement.rect;
-        final startDiameter = math.min(startRect.width, startRect.height);
-        final nextDiameter = math.min(resized.rect.width, resized.rect.height);
-        if (startDiameter > 0 && nextDiameter > 0) {
-          final scale = nextDiameter / startDiameter;
-          if (scale.isFinite && scale > 0) {
-            final nextFontSize = data.fontSize * scale;
-            if ((nextFontSize - data.fontSize).abs() > textHeightTolerance) {
-              data = data.copyWith(fontSize: nextFontSize);
-            }
-          }
-        }
-        if (data != resized.data) {
-          resized = resized.copyWith(data: data);
-        }
+        resized = _applySerialNumberResize(
+          element: resized,
+          startRect: startElement.rect,
+        );
       }
+
       if (resized.data is ArrowData) {
-        var data = resized.data as ArrowData;
-        final fixedSegments = data.fixedSegments;
-        if (data.arrowType == ArrowType.elbow &&
-            fixedSegments != null &&
-            fixedSegments.isNotEmpty) {
-          final scaled = _scaleFixedSegments(
-            fixedSegments: fixedSegments,
-            oldRect: startElement.rect,
-            newRect: resized.rect,
-          );
-          if (scaled != null &&
-              !fixedSegmentListEquals(fixedSegments, scaled)) {
-            data = data.copyWith(fixedSegments: scaled);
-            resized = resized.copyWith(data: data);
-          }
-        }
+        resized = _applyArrowResize(
+          element: resized,
+          startRect: startElement.rect,
+        );
       }
+
       result[id] = resized;
     }
 
@@ -254,60 +181,65 @@ class EditApply {
       return elements;
     }
 
+    List<ElementState>? result;
+    void applyReplacement(int index, ElementState replacement) {
+      result ??= List<ElementState>.of(elements, growable: false);
+      result![index] = replacement;
+    }
+
+    final pending = <String, ElementState>{};
     if (resolveIndex != null) {
-      List<ElementState>? result;
-      final unresolved = <String, ElementState>{};
       for (final entry in replacementsById.entries) {
         final index = resolveIndex(entry.key);
-        if (index == null || index < 0 || index >= elements.length) {
-          unresolved[entry.key] = entry.value;
-          continue;
-        }
-        if (elements[index].id != entry.key) {
-          unresolved[entry.key] = entry.value;
+        if (!_isResolvedIndexValid(
+          index: index,
+          id: entry.key,
+          elements: elements,
+        )) {
+          pending[entry.key] = entry.value;
           continue;
         }
 
+        final resolvedIndex = index!;
         final replacement = entry.value;
-        final current = (result ?? elements)[index];
+        final current = (result ?? elements)[resolvedIndex];
         if (replacement == current) {
           continue;
         }
 
-        result ??= List<ElementState>.of(elements, growable: false);
-        result[index] = replacement;
+        applyReplacement(resolvedIndex, replacement);
       }
+    } else {
+      pending.addAll(replacementsById);
+    }
 
-      if (unresolved.isNotEmpty) {
-        for (var i = 0; i < elements.length; i++) {
-          final current = (result ?? elements)[i];
-          final replacement = unresolved[current.id];
-          if (replacement == null || replacement == current) {
-            continue;
-          }
-
-          result ??= List<ElementState>.of(elements, growable: false);
-          result[i] = replacement;
-        }
-      }
-
+    if (pending.isEmpty) {
       return result ?? elements;
     }
 
-    List<ElementState>? result;
     for (var i = 0; i < elements.length; i++) {
-      final current = elements[i];
-      final replacement = replacementsById[current.id];
+      final current = (result ?? elements)[i];
+      final replacement = pending[current.id];
       if (replacement == null || replacement == current) {
         continue;
       }
 
-      result ??= List<ElementState>.of(elements, growable: false);
-      result[i] = replacement;
+      applyReplacement(i, replacement);
     }
 
     return result ?? elements;
   }
+}
+
+bool _isResolvedIndexValid({
+  required int? index,
+  required String id,
+  required List<ElementState> elements,
+}) {
+  if (index == null || index < 0 || index >= elements.length) {
+    return false;
+  }
+  return elements[index].id == id;
 }
 
 ElementState _applyResize({
@@ -321,13 +253,12 @@ ElementState _applyResize({
   required bool isSingleSelect,
   required bool hasRotation,
 }) {
-  if (isSingleSelect && (startBounds.width == 0 || startBounds.height == 0)) {
+  if (isSingleSelect &&
+      (hasRotation || startBounds.width == 0 || startBounds.height == 0)) {
     return element.copyWith(rect: newSelectionBounds);
   }
+
   if (hasRotation) {
-    if (isSingleSelect) {
-      return element.copyWith(rect: newSelectionBounds);
-    }
     return _applyMultiRotatedResize(
       element: element,
       startBounds: startBounds,
@@ -353,20 +284,19 @@ ElementState _applyDirectResize({
 }) {
   final r = element.rect;
   final a = anchor;
-
   final x1 = a.x + (r.minX - a.x) * scaleX;
   final x2 = a.x + (r.maxX - a.x) * scaleX;
   final y1 = a.y + (r.minY - a.y) * scaleY;
   final y2 = a.y + (r.maxY - a.y) * scaleY;
 
-  final newRect = DrawRect(
-    minX: x1 < x2 ? x1 : x2,
-    minY: y1 < y2 ? y1 : y2,
-    maxX: x1 < x2 ? x2 : x1,
-    maxY: y1 < y2 ? y2 : y1,
+  return element.copyWith(
+    rect: DrawRect(
+      minX: math.min(x1, x2),
+      minY: math.min(y1, y2),
+      maxX: math.max(x1, x2),
+      maxY: math.max(y1, y2),
+    ),
   );
-
-  return element.copyWith(rect: newRect);
 }
 
 ElementState _applyMultiRotatedResize({
@@ -404,24 +334,127 @@ ElementState _applyMultiRotatedResize({
   final newWidth = startRect.width * scaleX.abs();
   final newHeight = startRect.height * scaleY.abs();
 
-  final newRect = DrawRect(
-    minX: newCenterWorldOfElement.x - newWidth / 2,
-    minY: newCenterWorldOfElement.y - newHeight / 2,
-    maxX: newCenterWorldOfElement.x + newWidth / 2,
-    maxY: newCenterWorldOfElement.y + newHeight / 2,
+  return element.copyWith(
+    rect: _rectFromCenter(
+      center: newCenterWorldOfElement,
+      width: newWidth,
+      height: newHeight,
+    ),
   );
-
-  return element.copyWith(rect: newRect);
 }
 
-List<ElbowFixedSegment>? _scaleFixedSegments({
+ElementState _applyTextResize({
+  required ElementState element,
+  required DrawRect startRect,
+  required DrawPoint anchor,
+  required bool keepCenter,
+  required bool isVerticalResize,
+  required double scaleX,
+}) {
+  final originalData = element.data as TextData;
+  var data = originalData;
+  var rect = element.rect;
+  final heightDelta = (rect.height - startRect.height).abs();
+  final allowWidthScale =
+      isVerticalResize && (scaleX - 1).abs() <= _resizeTolerance;
+
+  if (allowWidthScale && heightDelta > _resizeTolerance) {
+    final startHeight = startRect.height;
+    if (startHeight > 0) {
+      final heightScale = rect.height / startHeight;
+      if (heightScale.isFinite &&
+          heightScale > 0 &&
+          (heightScale - 1).abs() > _resizeTolerance) {
+        final newWidth = rect.width * heightScale;
+        if (newWidth.isFinite && newWidth > 0) {
+          final centerX = rect.centerX;
+          rect = rect.copyWith(
+            minX: centerX - newWidth / 2,
+            maxX: centerX + newWidth / 2,
+          );
+        }
+      }
+    }
+  }
+
+  if (heightDelta > _resizeTolerance) {
+    final fittedFontSize = fitTextFontSizeToHeight(
+      data: data,
+      targetHeight: rect.height,
+      maxWidth: rect.width,
+    );
+    if ((fittedFontSize - data.fontSize).abs() > _resizeTolerance) {
+      data = data.copyWith(fontSize: fittedFontSize);
+    }
+  }
+
+  final clampedRect = clampTextRectToLayout(
+    rect: rect,
+    startRect: startRect,
+    anchor: anchor,
+    data: data,
+    keepCenter: keepCenter,
+  );
+  if (data.autoResize) {
+    data = data.copyWith(autoResize: false);
+  }
+  if (clampedRect == element.rect && data == originalData) {
+    return element;
+  }
+  return element.copyWith(rect: clampedRect, data: data);
+}
+
+ElementState _applySerialNumberResize({
+  required ElementState element,
+  required DrawRect startRect,
+}) {
+  final originalData = element.data as SerialNumberData;
+  var data = originalData;
+  final startDiameter = math.min(startRect.width, startRect.height);
+  final nextDiameter = math.min(element.rect.width, element.rect.height);
+  if (startDiameter > 0 && nextDiameter > 0) {
+    final scale = nextDiameter / startDiameter;
+    if (scale.isFinite && scale > 0) {
+      final nextFontSize = data.fontSize * scale;
+      if ((nextFontSize - data.fontSize).abs() > _resizeTolerance) {
+        data = data.copyWith(fontSize: nextFontSize);
+      }
+    }
+  }
+  if (data == originalData) {
+    return element;
+  }
+  return element.copyWith(data: data);
+}
+
+ElementState _applyArrowResize({
+  required ElementState element,
+  required DrawRect startRect,
+}) {
+  final data = element.data as ArrowData;
+  final fixedSegments = data.fixedSegments;
+  if (data.arrowType != ArrowType.elbow ||
+      fixedSegments == null ||
+      fixedSegments.isEmpty) {
+    return element;
+  }
+
+  final scaled = _scaleFixedSegments(
+    fixedSegments: fixedSegments,
+    oldRect: startRect,
+    newRect: element.rect,
+  );
+  if (fixedSegmentListEquals(fixedSegments, scaled)) {
+    return element;
+  }
+  return element.copyWith(data: data.copyWith(fixedSegments: scaled));
+}
+
+List<ElbowFixedSegment> _scaleFixedSegments({
   required List<ElbowFixedSegment> fixedSegments,
   required DrawRect oldRect,
   required DrawRect newRect,
 }) {
-  if (fixedSegments.isEmpty) {
-    return null;
-  }
   final scaled = fixedSegments
       .map(
         (segment) => segment.copyWith(
@@ -431,6 +464,21 @@ List<ElbowFixedSegment>? _scaleFixedSegments({
       )
       .toList(growable: false);
   return List<ElbowFixedSegment>.unmodifiable(scaled);
+}
+
+DrawRect _rectFromCenter({
+  required DrawPoint center,
+  required double width,
+  required double height,
+}) {
+  final halfWidth = width / 2;
+  final halfHeight = height / 2;
+  return DrawRect(
+    minX: center.x - halfWidth,
+    minY: center.y - halfHeight,
+    maxX: center.x + halfWidth,
+    maxY: center.y + halfHeight,
+  );
 }
 
 DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {

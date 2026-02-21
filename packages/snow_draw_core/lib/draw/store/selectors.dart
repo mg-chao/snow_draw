@@ -8,6 +8,20 @@ import '../models/selection_state.dart';
 import '../models/view_state.dart';
 import 'selector.dart';
 
+const _elementListEquality = ListEquality<ElementState>();
+const _stringSetEquality = SetEquality<String>();
+
+List<ElementState> _selectElementsById(
+  DrawState state,
+  Iterable<String> elementIds,
+) {
+  final document = state.domain.document;
+  return elementIds
+      .map(document.getElementById)
+      .whereType<ElementState>()
+      .toList();
+}
+
 /// Predefined state selectors.
 ///
 /// These selectors provide access to common state slices and can be used
@@ -16,7 +30,7 @@ import 'selector.dart';
 /// Select the document element list.
 final documentElementsSelector = SimpleSelector<DrawState, List<ElementState>>(
   (state) => state.domain.document.elements,
-  equals: (prev, next) => const ListEquality<ElementState>().equals(prev, next),
+  equals: _elementListEquality.equals,
 );
 
 /// Select the view state.
@@ -37,26 +51,20 @@ final selectionStateSelector = SimpleSelector<DrawState, SelectionState>(
 /// Select the set of selected element IDs.
 final selectedIdsSelector = SimpleSelector<DrawState, Set<String>>(
   (state) => state.domain.selection.selectedIds,
-  equals: (prev, next) => const SetEquality<String>().equals(prev, next),
+  equals: _stringSetEquality.equals,
 );
 
 /// Select the list of selected elements.
 final selectedElementsSelector = SimpleSelector<DrawState, List<ElementState>>(
-  (state) {
-    final document = state.domain.document;
-    return state.domain.selection.selectedIds
-        .map(document.getElementById)
-        .whereType<ElementState>()
-        .toList();
-  },
-  equals: (prev, next) => const ListEquality<ElementState>().equals(prev, next),
+  (state) => _selectElementsById(state, state.domain.selection.selectedIds),
+  equals: _elementListEquality.equals,
 );
 
 /// Select visible elements (filtering out invisible ones).
 final visibleElementsSelector = SimpleSelector<DrawState, List<ElementState>>(
   (state) =>
       state.domain.document.elements.where((e) => e.opacity > 0).toList(),
-  equals: (prev, next) => const ListEquality<ElementState>().equals(prev, next),
+  equals: _elementListEquality.equals,
 );
 
 /// Select the element count.
@@ -66,7 +74,7 @@ final elementCountSelector = SimpleSelector<DrawState, int>(
 
 /// Select whether any element is selected.
 final hasSelectionSelector = SimpleSelector<DrawState, bool>(
-  (state) => state.domain.selection.selectedIds.isNotEmpty,
+  (state) => state.domain.selection.hasSelection,
 );
 
 /// Select the interaction state.
@@ -106,14 +114,8 @@ StateSelector<DrawState, ElementState?> createElementSelector(
 StateSelector<DrawState, List<ElementState>> createElementsSelector(
   List<String> elementIds,
 ) => SimpleSelector<DrawState, List<ElementState>>(
-  (state) {
-    final document = state.domain.document;
-    return elementIds
-        .map(document.getElementById)
-        .whereType<ElementState>()
-        .toList();
-  },
-  equals: (prev, next) => const ListEquality<ElementState>().equals(prev, next),
+  (state) => _selectElementsById(state, elementIds),
+  equals: _elementListEquality.equals,
 );
 
 /// Create a selector for an element property.
@@ -126,5 +128,8 @@ StateSelector<DrawState, T?> createElementPropertySelector<T>(
   T Function(ElementState) propertySelector,
 ) => SimpleSelector<DrawState, T?>((state) {
   final element = state.domain.document.getElementById(elementId);
-  return element != null ? propertySelector(element) : null;
+  if (element == null) {
+    return null;
+  }
+  return propertySelector(element);
 });

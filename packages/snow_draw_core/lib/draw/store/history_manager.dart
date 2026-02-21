@@ -194,12 +194,13 @@ class HistoryManager {
       return null;
     }
 
-    final parent = _current.parent;
-    if (parent == null) {
-      return null;
-    }
-
-    final parentState = _resolveCurrentParentState(currentState);
+    final currentNode = _current;
+    final parent = currentNode.parent!;
+    final currentDelta = currentNode.delta!;
+    final parentState = _resolveCurrentParentState(
+      currentState: currentState,
+      currentDelta: currentDelta,
+    );
     if (parentState == null) {
       return null;
     }
@@ -207,13 +208,13 @@ class HistoryManager {
     final mergedDelta = _buildCoalescedDelta(
       parentState: parentState,
       afterSnapshot: after,
-      currentDelta: _current.delta!,
+      currentDelta: currentDelta,
       nextState: nextState,
       changes: changes,
       includeSelection: includeSelection,
     );
     if (!mergedDelta.hasChanges) {
-      parent.children.remove(_current);
+      parent.children.remove(currentNode);
       _current = parent;
       _log?.trace('History coalesced and removed empty node', {
         'parentId': parent.id,
@@ -222,14 +223,14 @@ class HistoryManager {
       return false;
     }
 
-    _current
+    currentNode
       ..delta = mergedDelta
       ..metadata = metadata
       ..coalescing = coalescing
       ..recordedAt = recordedAt;
 
     _log?.trace('History coalesced into current node', {
-      'nodeId': _current.id,
+      'nodeId': currentNode.id,
       'parentId': parent.id,
       'coalescingKey': coalescing.key,
       'description': metadata?.description,
@@ -352,17 +353,16 @@ class HistoryManager {
     if (active == null || active.key != coalescing.key) {
       return false;
     }
-    final elapsed = recordedAt.difference(_current.recordedAt);
-    return elapsed.isNegative || elapsed <= coalescing.window;
+    final expiresAt = _current.recordedAt.add(coalescing.window);
+    return !recordedAt.isAfter(expiresAt);
   }
 
-  DrawState? _resolveCurrentParentState(DrawState currentState) {
-    final delta = _current.delta;
-    if (delta == null || _current.parent == null) {
-      return null;
-    }
+  DrawState? _resolveCurrentParentState({
+    required DrawState currentState,
+    required HistoryDelta currentDelta,
+  }) {
     try {
-      return delta.applyBackward(currentState);
+      return currentDelta.applyBackward(currentState);
     } on Object catch (error) {
       _log?.warning('History coalescing anchor resolution failed', {
         'nodeId': _current.id,
@@ -373,15 +373,15 @@ class HistoryManager {
   }
 
   DrawState? undo(DrawState currentState) {
-    final parent = _current.parent;
-    final delta = _current.delta;
-    if (parent == null || delta == null) {
+    final node = _current;
+    final parent = node.parent;
+    if (parent == null) {
       _log?.trace('History undo skipped', {'reason': 'no_parent'});
       return null;
     }
 
-    final restoredState = delta.applyBackward(currentState);
-    _log?.trace('History undo', {'nodeId': _current.id, 'parentId': parent.id});
+    final restoredState = node.delta!.applyBackward(currentState);
+    _log?.trace('History undo', {'nodeId': node.id, 'parentId': parent.id});
     _current = parent;
     return restoredState;
   }
@@ -402,13 +402,7 @@ class HistoryManager {
     }
 
     final child = _current.children[resolvedIndex];
-    final delta = child.delta;
-    if (delta == null) {
-      _log?.trace('History redo skipped', {'reason': 'missing_delta'});
-      return null;
-    }
-
-    final restoredState = delta.applyForward(currentState);
+    final restoredState = child.delta!.applyForward(currentState);
     _log?.trace('History redo', {
       'nodeId': child.id,
       'branchIndex': resolvedIndex,
@@ -525,40 +519,39 @@ class HistoryManager {
     final candidateIndex = depth - maxHistoryLength;
     var resolvedIndex = candidateIndex;
 
-    if (maxBranchPoints > 0 && candidateIndex > 0) {
+    if (maxBranchPoints > 0) {
       final earliestAllowedIndex = candidateIndex - maxBranchPoints < 0
           ? 0
           : candidateIndex - maxBranchPoints;
-      var preservedBranchCount = 0;
 
       for (
         var index = candidateIndex - 1;
-        index >= earliestAllowedIndex && preservedBranchCount < maxBranchPoints;
+        index >= earliestAllowedIndex;
         index--
       ) {
-        if (path[index].children.length <= 1) {
-          continue;
+        if (path[index].children.length > 1) {
+          resolvedIndex = index;
         }
-        resolvedIndex = index;
-        preservedBranchCount++;
       }
     }
 
     final newRoot = path[resolvedIndex];
     final oldParent = newRoot.parent;
-    if (oldParent != null) {
-      oldParent.children.remove(newRoot);
-      _root = newRoot;
-      _normalizeRootPayload();
-      _log?.debug('History pruned', {
-        'newRootId': newRoot.id,
-        'depth': depth,
-        'maxHistoryLength': maxHistoryLength,
-        'maxBranchPoints': maxBranchPoints,
-        'candidateIndex': candidateIndex,
-        'resolvedIndex': resolvedIndex,
-      });
+    if (oldParent == null) {
+      return;
     }
+
+    oldParent.children.remove(newRoot);
+    _root = newRoot;
+    _normalizeRootPayload();
+    _log?.debug('History pruned', {
+      'newRootId': newRoot.id,
+      'depth': depth,
+      'maxHistoryLength': maxHistoryLength,
+      'maxBranchPoints': maxBranchPoints,
+      'candidateIndex': candidateIndex,
+      'resolvedIndex': resolvedIndex,
+    });
   }
 
   void _normalizeRootPayload() {
@@ -744,10 +737,7 @@ class _HistorySnapshotCodec {
     for (final entry in nodesData) {
       final data = entry as Map<String, dynamic>;
       final id = data['id'] as int;
-      final node = byId[id];
-      if (node == null) {
-        continue;
-      }
+      final node = byId[id]!;
       final parentId = data['parentId'] as int?;
       if (parentId != null) {
         node.parent = byId[parentId];
@@ -775,7 +765,8 @@ class _HistorySnapshotCodec {
     final root = (byId[rootId] ?? _HistoryNode.root(rootId))
       ..parent = null
       ..delta = null
-      ..metadata = null;
+      ..metadata = null
+      ..coalescing = null;
     return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
@@ -1093,12 +1084,8 @@ int _resolveNextNodeId({
   required int? requestedNextNodeId,
   required int minNextNodeId,
 }) {
-  final fallback = minNextNodeId < 0 ? 0 : minNextNodeId;
-  final resolved = requestedNextNodeId ?? fallback;
-  if (resolved < fallback) {
-    return fallback;
-  }
-  return resolved;
+  final resolved = requestedNextNodeId ?? minNextNodeId;
+  return resolved < minNextNodeId ? minNextNodeId : resolved;
 }
 
 int _maxNodeId(_HistoryNode root) {

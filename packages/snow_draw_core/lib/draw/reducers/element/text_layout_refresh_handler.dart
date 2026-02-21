@@ -15,11 +15,10 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
 ) {
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;
-  final shouldTrackOverlayRefresh = selectedIds.length > 1;
+  final shouldRefreshSelectionOverlay = selectedIds.length > 1;
 
   List<ElementState>? nextElements;
-  var domainChanged = false;
-  var selectedGeometryChanged = false;
+  var refreshSelectionOverlay = false;
 
   for (var index = 0; index < document.elements.length; index++) {
     final element = document.elements[index];
@@ -36,16 +35,14 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
       continue;
     }
 
-    domainChanged = true;
     nextElements ??= [...document.elements];
     nextElements[index] = element.copyWith(rect: nextRect);
-    if (shouldTrackOverlayRefresh && selectedIds.contains(element.id)) {
-      selectedGeometryChanged = true;
+    if (shouldRefreshSelectionOverlay && selectedIds.contains(element.id)) {
+      refreshSelectionOverlay = true;
     }
   }
 
   TextEditingState? nextTextInteraction;
-  var interactionChanged = false;
   final interaction = state.application.interaction;
   if (interaction is TextEditingState && interaction.draftData.autoResize) {
     final nextRect = resolveAutoResizeTextEditingRect(
@@ -54,27 +51,26 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     );
     if (nextRect != interaction.rect) {
       nextTextInteraction = interaction.copyWith(rect: nextRect);
-      interactionChanged = true;
-      if (shouldTrackOverlayRefresh &&
+      if (shouldRefreshSelectionOverlay &&
           selectedIds.contains(interaction.elementId)) {
-        selectedGeometryChanged = true;
+        refreshSelectionOverlay = true;
       }
     }
   }
 
-  if (!domainChanged && !interactionChanged) {
+  if (nextElements == null && nextTextInteraction == null) {
     return state;
   }
 
   var nextState = state;
-  if (domainChanged && nextElements != null) {
-    nextState = state.copyWith(
-      domain: state.domain.copyWith(
+  if (nextElements != null) {
+    nextState = nextState.copyWith(
+      domain: nextState.domain.copyWith(
         document: document.copyWith(elements: nextElements),
       ),
     );
   }
-  if (interactionChanged && nextTextInteraction != null) {
+  if (nextTextInteraction != null) {
     nextState = nextState.copyWith(
       application: nextState.application.copyWith(
         interaction: nextTextInteraction,
@@ -82,7 +78,7 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     );
   }
 
-  if (!selectedGeometryChanged) {
+  if (!refreshSelectionOverlay) {
     return nextState;
   }
 

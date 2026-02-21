@@ -5,8 +5,8 @@ import 'camera_state.dart';
 /// View/camera state (viewport layer).
 @immutable
 class ViewState {
-  const ViewState({CameraState? camera})
-    : camera = camera ?? CameraState.initial;
+  const ViewState({this.camera = CameraState.initial});
+
   final CameraState camera;
 
   ViewState copyWith({CameraState? camera}) =>
@@ -14,7 +14,7 @@ class ViewState {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is ViewState && other.camera == camera;
+      other is ViewState && other.camera == camera;
 
   @override
   int get hashCode => camera.hashCode;

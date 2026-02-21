@@ -35,6 +35,7 @@ void main() {
       'in one reducer pass', () {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
+
     final deps = _Deps(
       config: DrawConfig(),
       elementRegistry: registry,
@@ -49,11 +50,10 @@ void main() {
         position: DrawPoint(x: 10, y: 10),
       ),
       deps,
-    );
-    expect(started, isNotNull);
+    )!;
 
     final updated = reducer.reduce(
-      started!,
+      started,
       UpdateCreatingElementBatch(
         positions: const [
           DrawPoint(x: 16, y: 20, pressure: 0.2),
@@ -62,18 +62,12 @@ void main() {
         ],
       ),
       deps,
-    );
-    expect(updated, isNotNull);
+    )!;
 
-    final interaction = updated!.application.interaction;
-    expect(interaction, isA<CreatingState>());
-    final creating = interaction as CreatingState;
-    final mode = creating.creationMode;
-    expect(mode, isA<FreeDrawCreationMode>());
-    final freeDrawMode = mode as FreeDrawCreationMode;
+    final creating = updated.application.interaction as CreatingState;
+    final freeDrawMode = creating.creationMode as FreeDrawCreationMode;
     expect(freeDrawMode.revision, 1);
-    expect(freeDrawMode.worldPoints, isNotNull);
-    expect(freeDrawMode.worldPoints!.length, greaterThan(2));
+    expect(freeDrawMode.worldPoints?.length, greaterThan(2));
     expect(creating.currentRect.maxX, greaterThan(10));
     expect(creating.currentRect.maxY, greaterThan(10));
   });

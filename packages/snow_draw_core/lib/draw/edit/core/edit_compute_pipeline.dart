@@ -36,11 +36,13 @@ class EditComputePipeline {
       return null;
     }
 
-    final pipelinePlan = _resolveArrowBindingPipelinePlan(
-      document: state.domain.document,
+    final document = state.domain.document;
+    final hasArrowLikeUpdate = _hasArrowLikeUpdate(updatedById);
+    if (!_shouldRunArrowBindingPipeline(
+      document: document,
       updatedById: updatedById,
-    );
-    if (!pipelinePlan.shouldRun) {
+      hasArrowLikeUpdate: hasArrowLikeUpdate,
+    )) {
       return EditComputedResult(
         updatedElements: Map<String, ElementState>.unmodifiable(updatedById),
         multiSelectBounds: multiSelectBounds,
@@ -48,44 +50,28 @@ class EditComputePipeline {
       );
     }
 
-    var merged = updatedById;
-    Map<String, ElementState>? mutableMerged;
+    final merged = Map<String, ElementState>.of(updatedById);
 
-    Map<String, ElementState> ensureMutableMerged() {
-      final existing = mutableMerged;
-      if (existing != null) {
-        return existing;
-      }
-      final created = Map<String, ElementState>.of(merged);
-      mutableMerged = created;
-      merged = created;
-      return created;
-    }
-
-    if (pipelinePlan.shouldUnbindArrows) {
-      final unboundArrows = unbindArrowLikeElements(
-        transformedElements: merged,
-        baseElements: state.domain.document.elementMap,
+    if (hasArrowLikeUpdate) {
+      merged.addAll(
+        unbindArrowLikeElements(
+          transformedElements: merged,
+          baseElements: document.elementMap,
+        ),
       );
-      if (unboundArrows.isNotEmpty) {
-        ensureMutableMerged().addAll(unboundArrows);
-      }
     }
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
-      baseElements: state.domain.document.elementMap,
+      baseElements: document.elementMap,
       updatedElements: merged,
       changedElementIds: merged.keys.toSet(),
-      document: state.domain.document,
+      document: document,
     );
-    if (bindingUpdates.isNotEmpty) {
-      for (final entry in bindingUpdates.entries) {
-        if (skipBindingUpdate != null &&
-            skipBindingUpdate(entry.key, entry.value)) {
-          continue;
-        }
-        ensureMutableMerged()[entry.key] = entry.value;
+    for (final entry in bindingUpdates.entries) {
+      if (skipBindingUpdate?.call(entry.key, entry.value) ?? false) {
+        continue;
       }
+      merged[entry.key] = entry.value;
     }
 
     return EditComputedResult(
@@ -95,53 +81,40 @@ class EditComputePipeline {
     );
   }
 
-  static _ArrowBindingPipelinePlan _resolveArrowBindingPipelinePlan({
+  static bool _shouldRunArrowBindingPipeline({
     required DocumentState document,
     required Map<String, ElementState> updatedById,
+    required bool hasArrowLikeUpdate,
   }) {
-    var hasArrowLikeUpdate = false;
-    var hasBindableTargetUpdate = false;
+    if (hasArrowLikeUpdate) {
+      return true;
+    }
+
+    if (!_hasBindableTargetUpdate(updatedById)) {
+      return false;
+    }
+
+    return document.hasArrowBoundToAny(updatedById.keys);
+  }
+
+  static bool _hasArrowLikeUpdate(Map<String, ElementState> updatedById) {
     for (final element in updatedById.values) {
-      final data = element.data;
-      if (data is ArrowLikeData) {
-        hasArrowLikeUpdate = true;
+      if (element.data is ArrowLikeData) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _hasBindableTargetUpdate(Map<String, ElementState> updatedById) {
+    for (final element in updatedById.values) {
+      if (element.data is ArrowLikeData) {
         continue;
       }
       if (ArrowBindingUtils.isBindableTarget(element)) {
-        hasBindableTargetUpdate = true;
+        return true;
       }
     }
-
-    if (!hasArrowLikeUpdate && !hasBindableTargetUpdate) {
-      return const _ArrowBindingPipelinePlan(
-        shouldRun: false,
-        shouldUnbindArrows: false,
-      );
-    }
-
-    if (hasArrowLikeUpdate) {
-      // Arrow edits can mutate binding relationships and must keep resolver
-      // caches in sync even when no dependent arrows are updated this frame.
-      return const _ArrowBindingPipelinePlan(
-        shouldRun: true,
-        shouldUnbindArrows: true,
-      );
-    }
-
-    final hasBoundDependents = document.hasArrowBoundToAny(updatedById.keys);
-    return _ArrowBindingPipelinePlan(
-      shouldRun: hasBoundDependents,
-      shouldUnbindArrows: false,
-    );
+    return false;
   }
-}
-
-class _ArrowBindingPipelinePlan {
-  const _ArrowBindingPipelinePlan({
-    required this.shouldRun,
-    required this.shouldUnbindArrows,
-  });
-
-  final bool shouldRun;
-  final bool shouldUnbindArrows;
 }

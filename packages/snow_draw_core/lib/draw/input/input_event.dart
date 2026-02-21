@@ -78,16 +78,6 @@ class PointerMoveInputEvent extends InputEvent {
     double pressure = 0.0,
     List<DrawPoint> sampledPoints = const <DrawPoint>[],
   }) {
-    if (sampledPoints.isEmpty) {
-      return PointerMoveInputEvent._internal(
-        position: position,
-        modifiers: modifiers,
-        pressure: pressure,
-        sampleNode: _PointerSampleSingle(position),
-        sampledPointsCache: const <DrawPoint>[],
-      );
-    }
-
     final normalizedSamples = _normalizePointerMoveSamples(
       sampledPoints: sampledPoints,
       position: position,
@@ -103,14 +93,13 @@ class PointerMoveInputEvent extends InputEvent {
     }
 
     final frozenSamples = List<DrawPoint>.unmodifiable(normalizedSamples);
-    final sampledPointsCache = frozenSamples;
 
     return PointerMoveInputEvent._internal(
       position: position,
       modifiers: modifiers,
       pressure: pressure,
       sampleNode: _PointerSampleLeaf(frozenSamples),
-      sampledPointsCache: sampledPointsCache,
+      sampledPointsCache: frozenSamples,
     );
   }
 
@@ -137,13 +126,10 @@ class PointerMoveInputEvent extends InputEvent {
 
     final resolved = samples().toList(growable: false);
     if (resolved.length <= 1) {
-      _sampledPointsCache = const <DrawPoint>[];
-      return _sampledPointsCache!;
+      return _sampledPointsCache = const <DrawPoint>[];
     }
 
-    final frozen = List<DrawPoint>.unmodifiable(resolved);
-    _sampledPointsCache = frozen;
-    return frozen;
+    return _sampledPointsCache = List<DrawPoint>.unmodifiable(resolved);
   }
 
   /// Total number of pointer samples represented by this event.
@@ -211,11 +197,6 @@ List<DrawPoint> _normalizePointerMoveSamples({
     if (normalized.isEmpty || normalized.last != point) {
       normalized.add(point);
     }
-  }
-
-  if (sampledPoints.isEmpty) {
-    normalized.add(position);
-    return normalized;
   }
 
   for (final point in sampledPoints) {

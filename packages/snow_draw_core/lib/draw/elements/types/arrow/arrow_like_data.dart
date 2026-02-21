@@ -25,10 +25,10 @@ abstract class ArrowLikeData extends ElementData {
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
-    Object? startBinding,
-    Object? endBinding,
-    Object? fixedSegments,
-    Object? startIsSpecial,
-    Object? endIsSpecial,
+    ArrowBinding? startBinding,
+    ArrowBinding? endBinding,
+    List<ElbowFixedSegment>? fixedSegments,
+    bool? startIsSpecial,
+    bool? endIsSpecial,
   });
 }

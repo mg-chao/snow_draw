@@ -4,8 +4,8 @@ import '../types/draw_point.dart';
 
 @immutable
 class CameraState {
-  const CameraState({DrawPoint? position, this.zoom = 1.0})
-    : position = position ?? DrawPoint.zero;
+  const CameraState({this.position = DrawPoint.zero, this.zoom = 1.0});
+
   final DrawPoint position;
   final double zoom;
 
@@ -21,10 +21,6 @@ class CameraState {
   CameraState translated(double dx, double dy) => copyWith(
     position: DrawPoint(x: position.x + dx, y: position.y + dy),
   );
-
-  CameraState movedTo(DrawPoint newPosition) => copyWith(position: newPosition);
-
-  CameraState reset() => CameraState.initial;
 
   @override
   bool operator ==(Object other) =>

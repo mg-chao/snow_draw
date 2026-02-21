@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
@@ -5,6 +6,7 @@ import '../../../config/draw_config.dart';
 import '../../../core/dependency_interfaces.dart';
 import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
+import '../../../elements/core/element_definition.dart';
 import '../../../elements/core/element_style_configurable_data.dart';
 import '../../../elements/core/element_type_id.dart';
 import '../../../elements/core/rect_creation_strategy.dart';
@@ -59,26 +61,21 @@ class CreateElementReducer {
     CreateElementReducerDeps context,
   ) {
     final config = context.config;
-    final definition = context.elementRegistry.getDefinition(action.typeId);
-    if (definition == null) {
-      throw StateError('Element type "${action.typeId}" is not registered');
-    }
-
+    final definition = _requireDefinition(context, action.typeId);
     final strategy =
         definition.creationStrategy ?? const RectCreationStrategy();
     final styleDefaults = _resolveStyleDefaults(state, config, action.typeId);
-    var data = action.initialData ?? definition.createDefaultData();
-    if (action.initialData == null && data is ElementStyleConfigurableData) {
-      data = (data as ElementStyleConfigurableData).withElementStyle(
-        styleDefaults,
-      );
-    }
+    final data = _resolveInitialData(
+      initialData: action.initialData,
+      createDefaultData: definition.createDefaultData,
+      styleDefaults: styleDefaults,
+    );
 
     final elementId = context.idGenerator();
     final gridConfig = config.grid;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappingMode = _resolveSnappingMode(
       config: config,
-      ctrlPressed: action.snapOverride,
+      snapOverride: action.snapOverride,
     );
     final snapToGrid = snappingMode == SnappingMode.grid;
     final startPosition = snapToGrid
@@ -87,12 +84,7 @@ class CreateElementReducer {
             gridSize: gridConfig.size,
           )
         : action.position;
-    final initialRect = DrawRect(
-      minX: startPosition.x,
-      minY: startPosition.y,
-      maxX: startPosition.x,
-      maxY: startPosition.y,
-    );
+    final initialRect = DrawRect.fromPoint(startPosition);
 
     final startResult = strategy.start(
       data: data,
@@ -123,37 +115,51 @@ class CreateElementReducer {
     return clearedState.copyWith(application: nextApplication);
   }
 
+  ElementDefinition<ElementData> _requireDefinition(
+    CreateElementReducerDeps context,
+    ElementTypeId<ElementData> typeId,
+  ) {
+    final definition = context.elementRegistry.getDefinition(typeId);
+    if (definition == null) {
+      throw StateError('Element type "$typeId" is not registered');
+    }
+    return definition;
+  }
+
+  ElementData _resolveInitialData({
+    required ElementData? initialData,
+    required ElementData Function() createDefaultData,
+    required ElementStyleConfig styleDefaults,
+  }) {
+    if (initialData != null) {
+      return initialData;
+    }
+
+    final defaultData = createDefaultData();
+    if (defaultData is ElementStyleConfigurableData) {
+      return (defaultData as ElementStyleConfigurableData).withElementStyle(
+        styleDefaults,
+      );
+    }
+    return defaultData;
+  }
+
   ElementStyleConfig _resolveStyleDefaults(
     DrawState state,
     DrawConfig config,
     ElementTypeId<ElementData> typeId,
-  ) {
-    if (typeId == RectangleData.typeIdToken) {
-      return config.rectangleStyle;
-    }
-    if (typeId == ArrowData.typeIdToken) {
-      return config.arrowStyle;
-    }
-    if (typeId == LineData.typeIdToken) {
-      return config.lineStyle;
-    }
-    if (typeId == FreeDrawData.typeIdToken) {
-      return config.freeDrawStyle;
-    }
-    if (typeId == HighlightData.typeIdToken) {
-      return config.highlightStyle;
-    }
-    if (typeId == FilterData.typeIdToken) {
-      return config.filterStyle;
-    }
-    if (typeId == TextData.typeIdToken) {
-      return config.textStyle;
-    }
-    if (typeId == SerialNumberData.typeIdToken) {
-      return _resolveSerialNumberStyleDefaults(state, config.serialNumberStyle);
-    }
-    return config.elementStyle;
-  }
+  ) => switch (typeId) {
+    _ when typeId == RectangleData.typeIdToken => config.rectangleStyle,
+    _ when typeId == ArrowData.typeIdToken => config.arrowStyle,
+    _ when typeId == LineData.typeIdToken => config.lineStyle,
+    _ when typeId == FreeDrawData.typeIdToken => config.freeDrawStyle,
+    _ when typeId == HighlightData.typeIdToken => config.highlightStyle,
+    _ when typeId == FilterData.typeIdToken => config.filterStyle,
+    _ when typeId == TextData.typeIdToken => config.textStyle,
+    _ when typeId == SerialNumberData.typeIdToken =>
+      _resolveSerialNumberStyleDefaults(state, config.serialNumberStyle),
+    _ => config.elementStyle,
+  };
 
   ElementStyleConfig _resolveSerialNumberStyleDefaults(
     DrawState state,
@@ -175,13 +181,10 @@ class CreateElementReducer {
   int? _resolveMaxExistingSerialNumber(List<ElementState> elements) {
     int? maxNumber;
     for (final element in elements) {
-      final data = element.data;
-      if (data is! SerialNumberData) {
-        continue;
-      }
-      final candidate = data.number;
-      if (maxNumber == null || candidate > maxNumber) {
-        maxNumber = candidate;
+      if (element.data case SerialNumberData(:final number)) {
+        if (maxNumber == null || number > maxNumber) {
+          maxNumber = number;
+        }
       }
     }
     return maxNumber;
@@ -201,9 +204,9 @@ class CreateElementReducer {
       context,
       interaction.element.typeId,
     );
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappingMode = _resolveSnappingMode(
       config: context.config,
-      ctrlPressed: action.snapOverride,
+      snapOverride: action.snapOverride,
     );
     final updateResult = strategy.update(
       state: state,
@@ -214,22 +217,7 @@ class CreateElementReducer {
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
     );
-    if (_isCreationStateUnchanged(interaction, updateResult)) {
-      return state;
-    }
-    final baseElement = interaction.element;
-    final updatedElement = updateResult.data == interaction.elementData
-        ? baseElement
-        : baseElement.copyWith(data: updateResult.data);
-    final nextInteraction = interaction.copyWith(
-      element: updatedElement,
-      currentRect: updateResult.rect,
-      snapGuides: updateResult.snapGuides,
-      creationMode: updateResult.creationMode,
-    );
-    return state.copyWith(
-      application: state.application.copyWith(interaction: nextInteraction),
-    );
+    return _applyCreationUpdate(state, interaction, updateResult);
   }
 
   DrawState _updateCreatingElementBatch(
@@ -246,9 +234,9 @@ class CreateElementReducer {
       context,
       interaction.element.typeId,
     );
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappingMode = _resolveSnappingMode(
       config: context.config,
-      ctrlPressed: action.snapOverride,
+      snapOverride: action.snapOverride,
     );
     final updateResult = strategy.updateBatch(
       state: state,
@@ -259,24 +247,7 @@ class CreateElementReducer {
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
     );
-    if (_isCreationStateUnchanged(interaction, updateResult)) {
-      return state;
-    }
-
-    final baseElement = interaction.element;
-    final updatedElement = updateResult.data == interaction.elementData
-        ? baseElement
-        : baseElement.copyWith(data: updateResult.data);
-    final nextInteraction = interaction.copyWith(
-      element: updatedElement,
-      currentRect: updateResult.rect,
-      snapGuides: updateResult.snapGuides,
-      creationMode: updateResult.creationMode,
-    );
-
-    return state.copyWith(
-      application: state.application.copyWith(interaction: nextInteraction),
-    );
+    return _applyCreationUpdate(state, interaction, updateResult);
   }
 
   DrawState _finishCreateElement(
@@ -324,10 +295,9 @@ class CreateElementReducer {
     }
 
     final clearedState = applySelectionChange(state, const {});
-    final nextApplication = clearedState.application.copyWith(
-      interaction: const IdleState(),
+    return clearedState.copyWith(
+      application: clearedState.application.toIdle(),
     );
-    return clearedState.copyWith(application: nextApplication);
   }
 
   DrawState _addCreationPoint(
@@ -344,9 +314,9 @@ class CreateElementReducer {
       context,
       interaction.element.typeId,
     );
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappingMode = _resolveSnappingMode(
       config: context.config,
-      ctrlPressed: action.snapOverride,
+      snapOverride: action.snapOverride,
     );
     final updateResult = strategy.addPoint(
       state: state,
@@ -358,15 +328,38 @@ class CreateElementReducer {
     if (updateResult == null) {
       return state;
     }
+    return _applyCreationUpdate(state, interaction, updateResult);
+  }
+
+  CreationStrategy _resolveCreationStrategy(
+    CreateElementReducerDeps context,
+    ElementTypeId<ElementData> typeId,
+  ) =>
+      _requireDefinition(context, typeId).creationStrategy ??
+      const RectCreationStrategy();
+
+  SnappingMode _resolveSnappingMode({
+    required DrawConfig config,
+    required bool snapOverride,
+  }) => resolveEffectiveSnappingModeForConfig(
+    config: config,
+    ctrlPressed: snapOverride,
+  );
+
+  DrawState _applyCreationUpdate(
+    DrawState state,
+    CreatingState interaction,
+    CreationUpdateResult updateResult,
+  ) {
     if (_isCreationStateUnchanged(interaction, updateResult)) {
       return state;
     }
-    final baseElement = interaction.element;
-    final updatedElement = updateResult.data == interaction.elementData
-        ? baseElement
-        : baseElement.copyWith(data: updateResult.data);
+
+    final nextElement = updateResult.data == interaction.elementData
+        ? interaction.element
+        : interaction.element.copyWith(data: updateResult.data);
     final nextInteraction = interaction.copyWith(
-      element: updatedElement,
+      element: nextElement,
       currentRect: updateResult.rect,
       snapGuides: updateResult.snapGuides,
       creationMode: updateResult.creationMode,
@@ -376,14 +369,6 @@ class CreateElementReducer {
     );
   }
 
-  CreationStrategy _resolveCreationStrategy(
-    CreateElementReducerDeps context,
-    ElementTypeId<ElementData> typeId,
-  ) {
-    final definition = context.elementRegistry.getDefinition(typeId);
-    return definition?.creationStrategy ?? const RectCreationStrategy();
-  }
-
   bool _isCreationStateUnchanged(
     CreatingState interaction,
     CreationUpdateResult updateResult,
@@ -391,20 +376,5 @@ class CreateElementReducer {
       interaction.elementData == updateResult.data &&
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
-      _listEquals(interaction.snapGuides, updateResult.snapGuides);
-
-  bool _listEquals<T>(List<T> a, List<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var index = 0; index < a.length; index++) {
-      if (a[index] != b[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
+      listEquals(interaction.snapGuides, updateResult.snapGuides);
 }

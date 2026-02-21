@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
@@ -510,26 +508,6 @@ class _CountingDocumentState extends DocumentState {
   final _HitTestCounter counter;
 
   @override
-  void visitElementsAtPoint(
-    DrawPoint point,
-    double tolerance,
-    bool Function(ElementState element) visitor,
-  ) {
-    counter.value++;
-    super.visitElementsAtPoint(point, tolerance, visitor);
-  }
-
-  @override
-  void visitElementsAtPointTopDown(
-    DrawPoint point,
-    double tolerance,
-    bool Function(ElementState element) visitor,
-  ) {
-    counter.value++;
-    super.visitElementsAtPointTopDown(point, tolerance, visitor);
-  }
-
-  @override
   void visitArrowBindableElementsAtPoint(
     DrawPoint point,
     double tolerance,
@@ -549,9 +527,7 @@ class _CountingDocumentState extends DocumentState {
 class _HitTestCounter {
   var value = 0;
 
-  void reset() {
-    value = 0;
-  }
+  void reset() => value = 0;
 }
 
 DrawState _stateWith(
@@ -625,10 +601,18 @@ DrawRect _rectForPoints(List<DrawPoint> points) {
   var maxY = points.first.y;
 
   for (final point in points.skip(1)) {
-    minX = math.min(minX, point.x);
-    maxX = math.max(maxX, point.x);
-    minY = math.min(minY, point.y);
-    maxY = math.max(maxY, point.y);
+    if (point.x < minX) {
+      minX = point.x;
+    }
+    if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    }
+    if (point.y > maxY) {
+      maxY = point.y;
+    }
   }
 
   if (minX == maxX) {

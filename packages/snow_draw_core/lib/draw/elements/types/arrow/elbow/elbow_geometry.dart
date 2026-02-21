@@ -55,81 +55,34 @@ final class ElbowGeometry {
     DrawPoint point,
   ) {
     final center = bounds.center;
-    const scale = 2.0;
-    final topLeft = _scalePointFromOrigin(
-      DrawPoint(x: bounds.minX, y: bounds.minY),
-      center,
-      scale,
-    );
-    final topRight = _scalePointFromOrigin(
-      DrawPoint(x: bounds.maxX, y: bounds.minY),
-      center,
-      scale,
-    );
-    final bottomLeft = _scalePointFromOrigin(
-      DrawPoint(x: bounds.minX, y: bounds.maxY),
-      center,
-      scale,
-    );
-    final bottomRight = _scalePointFromOrigin(
-      DrawPoint(x: bounds.maxX, y: bounds.maxY),
-      center,
-      scale,
-    );
+    final dx = point.x - center.x;
+    final dy = point.y - center.y;
+    final width = bounds.width.abs();
+    final height = bounds.height.abs();
+    if (width <= _headingEpsilon || height <= _headingEpsilon) {
+      return ElbowHeading.left;
+    }
 
-    if (_triangleContainsPoint(topLeft, topRight, center, point)) {
+    final horizontalWeight = dx.abs() * height;
+    final verticalWeight = dy.abs() * width;
+    final tolerance = _headingEpsilon * width * height;
+
+    if (dy <= _headingEpsilon &&
+        dy >= -height - _headingEpsilon &&
+        horizontalWeight <= verticalWeight + tolerance) {
       return ElbowHeading.up;
     }
-    if (_triangleContainsPoint(topRight, bottomRight, center, point)) {
+    if (dx >= -_headingEpsilon &&
+        dx <= width + _headingEpsilon &&
+        verticalWeight <= horizontalWeight + tolerance) {
       return ElbowHeading.right;
     }
-    if (_triangleContainsPoint(bottomRight, bottomLeft, center, point)) {
+    if (dy >= -_headingEpsilon &&
+        dy <= height + _headingEpsilon &&
+        horizontalWeight <= verticalWeight + tolerance) {
       return ElbowHeading.down;
     }
     return ElbowHeading.left;
-  }
-
-  static DrawPoint _scalePointFromOrigin(
-    DrawPoint point,
-    DrawPoint origin,
-    double scale,
-  ) => DrawPoint(
-    x: origin.x + (point.x - origin.x) * scale,
-    y: origin.y + (point.y - origin.y) * scale,
-  );
-
-  static DrawPoint _vectorFromPoints(DrawPoint to, DrawPoint from) =>
-      DrawPoint(x: to.x - from.x, y: to.y - from.y);
-
-  static double _dotProduct(DrawPoint a, DrawPoint b) => a.x * b.x + a.y * b.y;
-
-  static bool _triangleContainsPoint(
-    DrawPoint a,
-    DrawPoint b,
-    DrawPoint c,
-    DrawPoint point,
-  ) {
-    final v0 = _vectorFromPoints(c, a);
-    final v1 = _vectorFromPoints(b, a);
-    final v2 = _vectorFromPoints(point, a);
-
-    final dot00 = _dotProduct(v0, v0);
-    final dot01 = _dotProduct(v0, v1);
-    final dot02 = _dotProduct(v0, v2);
-    final dot11 = _dotProduct(v1, v1);
-    final dot12 = _dotProduct(v1, v2);
-
-    final denom = dot00 * dot11 - dot01 * dot01;
-    if (denom.abs() <= _headingEpsilon) {
-      return false;
-    }
-    final invDenom = 1 / denom;
-    final u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-    final v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-
-    return u >= -_headingEpsilon &&
-        v >= -_headingEpsilon &&
-        u + v <= 1 + _headingEpsilon;
   }
 
   // --- Methods absorbed from ElbowPathUtils ---
@@ -159,13 +112,9 @@ final class ElbowGeometry {
     DrawPoint a,
     DrawPoint b, {
     double epsilon = ElbowConstants.dedupThreshold,
-  }) {
-    final aligned = axisAlignedForSegment(a, b, epsilon: epsilon);
-    if (aligned != null) {
-      return aligned;
-    }
-    return isHorizontal(a, b) ? ElbowAxis.horizontal : ElbowAxis.vertical;
-  }
+  }) =>
+      axisAlignedForSegment(a, b, epsilon: epsilon) ??
+      (isHorizontal(a, b) ? ElbowAxis.horizontal : ElbowAxis.vertical);
 
   /// Returns true when a segment is (or should be treated as) horizontal.
   static bool segmentIsHorizontal(
@@ -233,9 +182,6 @@ final class ElbowGeometry {
     final mid = preferHorizontal
         ? DrawPoint(x: end.x, y: start.y)
         : DrawPoint(x: start.x, y: end.y);
-    if (mid == start || mid == end) {
-      return [start, end];
-    }
     return [start, mid, end];
   }
 
@@ -321,34 +267,25 @@ final class ElbowGeometry {
     if (points.length < 3) {
       return points;
     }
-    var changed = true;
-    var current = points;
-    while (changed) {
-      changed = false;
-      final result = <DrawPoint>[current.first];
-      for (var i = 1; i < current.length - 1; i++) {
-        final prev = result.last;
-        final mid = current[i];
-        final next = current[i + 1];
+    final merged = <DrawPoint>[points.first, points[1]];
+    for (var i = 2; i < points.length; i++) {
+      merged.add(points[i]);
+      while (merged.length >= 3) {
+        final prev = merged[merged.length - 3];
+        final mid = merged[merged.length - 2];
+        final next = merged.last;
         final prevLen = manhattanDistance(prev, mid);
         final nextLen = manhattanDistance(mid, next);
         if (prevLen <= ElbowConstants.dedupThreshold ||
-            nextLen <= ElbowConstants.dedupThreshold) {
-          result.add(mid);
-          continue;
+            nextLen <= ElbowConstants.dedupThreshold ||
+            pinned.contains(mid) ||
+            headingForSegment(prev, mid) != headingForSegment(mid, next)) {
+          break;
         }
-        final prevH = headingForSegment(prev, mid);
-        final nextH = headingForSegment(mid, next);
-        if (prevH == nextH && !pinned.contains(mid)) {
-          changed = true;
-          continue;
-        }
-        result.add(mid);
+        merged.removeAt(merged.length - 2);
       }
-      result.add(current.last);
-      current = result;
     }
-    return List<DrawPoint>.unmodifiable(current);
+    return List<DrawPoint>.unmodifiable(merged);
   }
 
   /// Returns true when any segment is diagonal beyond the tolerance.

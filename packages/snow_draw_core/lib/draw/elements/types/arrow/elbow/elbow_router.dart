@@ -69,19 +69,15 @@ ElbowRouteResult routeElbowArrow({
   ArrowBinding? endBinding,
   ArrowheadStyle startArrowhead = ArrowheadStyle.none,
   ArrowheadStyle endArrowhead = ArrowheadStyle.none,
-}) =>
-    // Route through the explicit step-based pipeline for readability.
-    _ElbowRoutePipeline(
-      _ElbowRouteRequest(
-        start: start,
-        end: end,
-        elementsById: elementsById,
-        startBinding: startBinding,
-        endBinding: endBinding,
-        startArrowhead: startArrowhead,
-        endArrowhead: endArrowhead,
-      ),
-    ).run();
+}) => _routeElbowArrowInternal(
+  start: start,
+  end: end,
+  elementsById: elementsById,
+  startBinding: startBinding,
+  endBinding: endBinding,
+  startArrowhead: startArrowhead,
+  endArrowhead: endArrowhead,
+);
 
 /// Routes an elbow arrow for an element and returns both local + world points.
 ElbowRoutedPoints routeElbowArrowForElement({
@@ -91,17 +87,17 @@ ElbowRoutedPoints routeElbowArrowForElement({
   DrawPoint? startOverride,
   DrawPoint? endOverride,
 }) {
-  final basePoints = ArrowGeometry.resolveWorldPoints(
+  final resolvedPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList();
-  final localStart = startOverride ?? basePoints.first;
-  final localEnd = endOverride ?? basePoints.last;
+  final startPoint = startOverride ?? resolvedPoints.first;
+  final endPoint = endOverride ?? resolvedPoints.last;
 
   return routeElbowArrowForElementPoints(
     element: element,
-    startLocal: localStart,
-    endLocal: localEnd,
+    startLocal: startPoint,
+    endLocal: endPoint,
     elementsById: elementsById,
     startBinding: data.startBinding,
     endBinding: data.endBinding,

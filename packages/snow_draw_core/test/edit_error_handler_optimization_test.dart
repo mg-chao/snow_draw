@@ -10,6 +10,16 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
   group('Edit error handling no-op optimization', () {
+    EditSessionService createService() => EditSessionService(
+      editOperations: DefaultEditOperationRegistry.empty(),
+      configProvider: () => DrawConfig.defaultConfig,
+    );
+
+    void expectNotEditingNoOp(EditOutcome outcome, DrawState state) {
+      expect(outcome.failureReason, EditFailureReason.notEditing);
+      expect(identical(outcome.state, state), isTrue);
+    }
+
     test('toIdle policy keeps identity when state is already idle', () {
       final state = DrawState.initial();
 
@@ -23,64 +33,38 @@ void main() {
 
     test('cancel when not editing preserves state identity', () {
       final state = DrawState.initial();
-      final service = EditSessionService(
-        editOperations: DefaultEditOperationRegistry.empty(),
-        configProvider: () => DrawConfig.defaultConfig,
-      );
-
-      final outcome = service.cancel(state: state);
-
-      expect(outcome.failureReason, EditFailureReason.notEditing);
-      expect(identical(outcome.state, state), isTrue);
+      final outcome = createService().cancel(state: state);
+      expectNotEditingNoOp(outcome, state);
     });
 
     test('finish when not editing preserves state identity', () {
       final state = DrawState.initial();
-      final service = EditSessionService(
-        editOperations: DefaultEditOperationRegistry.empty(),
-        configProvider: () => DrawConfig.defaultConfig,
-      );
-
-      final outcome = service.finish(state: state);
-
-      expect(outcome.failureReason, EditFailureReason.notEditing);
-      expect(identical(outcome.state, state), isTrue);
+      final outcome = createService().finish(state: state);
+      expectNotEditingNoOp(outcome, state);
     });
 
     test(
       'update with default toIdle policy when not editing preserves identity',
       () {
         final state = DrawState.initial();
-        final service = EditSessionService(
-          editOperations: DefaultEditOperationRegistry.empty(),
-          configProvider: () => DrawConfig.defaultConfig,
-        );
-
-        final outcome = service.update(
+        final outcome = createService().update(
           state: state,
           currentPosition: DrawPoint.zero,
         );
 
-        expect(outcome.failureReason, EditFailureReason.notEditing);
-        expect(identical(outcome.state, state), isTrue);
+        expectNotEditingNoOp(outcome, state);
       },
     );
 
     test('update with keepState policy still preserves identity', () {
       final state = DrawState.initial();
-      final service = EditSessionService(
-        editOperations: DefaultEditOperationRegistry.empty(),
-        configProvider: () => DrawConfig.defaultConfig,
-      );
-
-      final outcome = service.update(
+      final outcome = createService().update(
         state: state,
         currentPosition: DrawPoint.zero,
         failurePolicy: EditUpdateFailurePolicy.keepState,
       );
 
-      expect(outcome.failureReason, EditFailureReason.notEditing);
-      expect(identical(outcome.state, state), isTrue);
+      expectNotEditingNoOp(outcome, state);
     });
   });
 }

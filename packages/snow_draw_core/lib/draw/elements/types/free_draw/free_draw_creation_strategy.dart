@@ -57,7 +57,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     final points = <DrawPoint>[startPosition, startPosition];
-    final previewPath = _createPreviewPathIfNeeded(
+    final previewPath = _resolvePreviewPathIfNeeded(
       strokeStyle: data.strokeStyle,
       worldPoints: points,
     );
@@ -83,13 +83,6 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool createFromCenter,
     required SnappingMode snappingMode,
   }) {
-    if (state.application.isCreating) {
-      // Free draw ignores state-derived modifiers during creation updates.
-    }
-    if (createFromCenter) {
-      // Free draw ignores createFromCenter.
-    }
-
     final elementData = creatingState.elementData;
     if (elementData is! FreeDrawData) {
       return CreationUpdateResult(
@@ -99,24 +92,22 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final adjustedPosition = snappingMode == SnappingMode.grid
-        ? gridSnapService.snapPoint(
-            point: currentPosition,
-            gridSize: config.grid.size,
-          )
-        : currentPosition;
+    final adjustedPosition = _snapPointIfNeeded(
+      point: currentPosition,
+      config: config,
+      snappingMode: snappingMode,
+    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
 
-    final worldPoints =
-        mode.worldPoints ??
-        _resolveWorldPoints(
-          rect: creatingState.currentRect,
-          normalizedPoints: elementData.points,
-        );
-
-    final previewPath = _resolvePreviewPath(
+    final worldPoints = _resolveCreationWorldPoints(
       mode: mode,
+      rect: creatingState.currentRect,
+      normalizedPoints: elementData.points,
+    );
+
+    final previewPath = _resolvePreviewPathIfNeeded(
+      existingPath: mode.previewPath,
       worldPoints: worldPoints,
       strokeStyle: elementData.strokeStyle,
     );
@@ -132,12 +123,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
           worldPoints: worldPoints,
           currentPosition: adjustedPosition,
         );
-        if (worldPoints.length >= 2) {
-          lineAnchor = worldPoints[worldPoints.length - 2];
-        } else if (worldPoints.isNotEmpty) {
-          lineAnchor = worldPoints.first;
-        }
-        lineCurrent = worldPoints.isEmpty ? null : worldPoints.last;
+        lineAnchor = worldPoints[worldPoints.length - 2];
+        lineCurrent = worldPoints.last;
         previewChanged = true;
       } else {
         final before = worldPoints.isEmpty ? null : worldPoints.last;
@@ -235,13 +222,6 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    if (state.application.isCreating) {
-      // Free draw ignores state-derived modifiers during creation updates.
-    }
-    if (createFromCenter) {
-      // Free draw ignores createFromCenter.
-    }
-
     final elementData = creatingState.elementData;
     if (elementData is! FreeDrawData) {
       return super.updateBatch(
@@ -256,14 +236,13 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
-    final worldPoints =
-        mode.worldPoints ??
-        _resolveWorldPoints(
-          rect: creatingState.currentRect,
-          normalizedPoints: elementData.points,
-        );
-    final previewPath = _resolvePreviewPath(
+    final worldPoints = _resolveCreationWorldPoints(
       mode: mode,
+      rect: creatingState.currentRect,
+      normalizedPoints: elementData.points,
+    );
+    final previewPath = _resolvePreviewPathIfNeeded(
+      existingPath: mode.previewPath,
       worldPoints: worldPoints,
       strokeStyle: elementData.strokeStyle,
     );
@@ -283,12 +262,11 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     for (final rawPosition in positions) {
-      final adjustedPosition = snappingMode == SnappingMode.grid
-          ? gridSnapService.snapPoint(
-              point: rawPosition,
-              gridSize: config.grid.size,
-            )
-          : rawPosition;
+      final adjustedPosition = _snapPointIfNeeded(
+        point: rawPosition,
+        config: config,
+        snappingMode: snappingMode,
+      );
       final pointMutation = _appendSmoothedPoint(
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
@@ -350,12 +328,11 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
-    final worldPoints =
-        mode.worldPoints ??
-        _resolveWorldPoints(
-          rect: creatingState.currentRect,
-          normalizedPoints: data.points,
-        );
+    final worldPoints = _resolveCreationWorldPoints(
+      mode: mode,
+      rect: creatingState.currentRect,
+      normalizedPoints: data.points,
+    );
 
     var points = _removeAdjacentDuplicates(worldPoints);
     if (points.length < 2) {
@@ -481,25 +458,34 @@ class FreeDrawCreationMode extends CreationMode {
 FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
     mode is FreeDrawCreationMode ? mode : const FreeDrawCreationMode();
 
-Path? _resolvePreviewPath({
-  required FreeDrawCreationMode mode,
-  required List<DrawPoint> worldPoints,
-  required StrokeStyle strokeStyle,
+DrawPoint _snapPointIfNeeded({
+  required DrawPoint point,
+  required DrawConfig config,
+  required SnappingMode snappingMode,
 }) {
-  if (strokeStyle == StrokeStyle.solid) {
-    return null;
+  if (snappingMode != SnappingMode.grid) {
+    return point;
   }
-  return mode.previewPath ?? _buildPreviewPath(worldPoints);
+  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
 }
 
-Path? _createPreviewPathIfNeeded({
-  required StrokeStyle strokeStyle,
+List<DrawPoint> _resolveCreationWorldPoints({
+  required FreeDrawCreationMode mode,
+  required DrawRect rect,
+  required List<DrawPoint> normalizedPoints,
+}) =>
+    mode.worldPoints ??
+    _resolveWorldPoints(rect: rect, normalizedPoints: normalizedPoints);
+
+Path? _resolvePreviewPathIfNeeded({
   required List<DrawPoint> worldPoints,
+  required StrokeStyle strokeStyle,
+  Path? existingPath,
 }) {
   if (strokeStyle == StrokeStyle.solid) {
     return null;
   }
-  return _buildPreviewPath(worldPoints);
+  return existingPath ?? _buildPreviewPath(worldPoints);
 }
 
 List<DrawPoint> _resolveWorldPoints({
@@ -681,12 +667,7 @@ _FreeDrawPointMutation _appendSmoothedPoint({
   required double strokeWidth,
   required bool allowTailReplace,
 }) {
-  if (worldPoints.isEmpty) {
-    worldPoints.add(currentPosition);
-    return _FreeDrawPointMutation.appended(currentPosition);
-  }
-
-  if (worldPoints.length == 1) {
+  if (worldPoints.length < 2) {
     worldPoints.add(currentPosition);
     return _FreeDrawPointMutation.appended(currentPosition);
   }
@@ -761,11 +742,7 @@ bool _shouldReplaceTailPoint({
 
   final lineDistance = (segX * nextY - segY * nextX).abs() / segLength;
   final lineDistanceTolerance = math.max(0.5, strokeWidth * 0.35);
-  if (lineDistance > lineDistanceTolerance) {
-    return false;
-  }
-
-  return true;
+  return lineDistance <= lineDistanceTolerance;
 }
 
 class _FreeDrawPointMutation {
@@ -795,23 +772,18 @@ void _startLineSegment({
   if (worldPoints.isEmpty) {
     worldPoints.add(currentPosition);
   }
-
-  final anchor = worldPoints.last;
-  worldPoints.add(anchor);
-  worldPoints[worldPoints.length - 1] = currentPosition;
+  worldPoints.add(currentPosition);
 }
 
 void _updateLineSegment({
   required List<DrawPoint> worldPoints,
   required DrawPoint currentPosition,
 }) {
-  if (worldPoints.isEmpty) {
-    worldPoints.add(currentPosition);
-    return;
-  }
-
-  if (worldPoints.length == 1) {
-    worldPoints.add(currentPosition);
+  if (worldPoints.length < 2) {
+    _startLineSegment(
+      worldPoints: worldPoints,
+      currentPosition: currentPosition,
+    );
     return;
   }
   worldPoints[worldPoints.length - 1] = currentPosition;

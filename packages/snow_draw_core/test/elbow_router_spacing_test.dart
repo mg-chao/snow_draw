@@ -23,20 +23,16 @@ void main() {
       anchor: DrawPoint(x: 1, y: 0.6),
     );
 
-    final startPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: startBinding,
-          target: element,
-          hasArrowhead: false,
-        ) ??
-        const DrawPoint(x: 152, y: 70);
-    final endPoint =
-        ArrowBindingUtils.resolveElbowBoundPoint(
-          binding: endBinding,
-          target: element,
-          hasArrowhead: true,
-        ) ??
-        const DrawPoint(x: 270, y: 152);
+    final startPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: startBinding,
+      target: element,
+      hasArrowhead: false,
+    )!;
+    final endPoint = ArrowBindingUtils.resolveElbowBoundPoint(
+      binding: endBinding,
+      target: element,
+      hasArrowhead: true,
+    )!;
 
     final result = routeElbowArrow(
       start: startPoint,
@@ -77,22 +73,16 @@ void main() {
 class _SegmentInfo {
   const _SegmentInfo({
     required this.heading,
-    required this.start,
-    required this.end,
+    required this.midX,
+    required this.midY,
   });
 
   final ElbowHeading heading;
-  final DrawPoint start;
-  final DrawPoint end;
-
-  double get midX => (start.x + end.x) / 2;
-  double get midY => (start.y + end.y) / 2;
+  final double midX;
+  final double midY;
 }
 
 List<_SegmentInfo> _significantSegments(List<DrawPoint> points) {
-  if (points.length < 2) {
-    return const <_SegmentInfo>[];
-  }
   final segments = <_SegmentInfo>[];
   for (var i = 0; i < points.length - 1; i++) {
     final start = points[i];
@@ -104,8 +94,8 @@ List<_SegmentInfo> _significantSegments(List<DrawPoint> points) {
     segments.add(
       _SegmentInfo(
         heading: ElbowGeometry.headingForSegment(start, end),
-        start: start,
-        end: end,
+        midX: (start.x + end.x) / 2,
+        midY: (start.y + end.y) / 2,
       ),
     );
   }

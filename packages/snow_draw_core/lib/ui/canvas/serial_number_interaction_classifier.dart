@@ -16,16 +16,15 @@ class SerialNumberInteractionClassifier {
     required InteractionState interaction,
     required DocumentState document,
   }) {
-    if (interaction is! EditingState) {
+    if (interaction is! EditingState ||
+        interaction.context.selectedIdsAtStart.length != 1) {
       return false;
     }
 
-    final selectedIds = interaction.context.selectedIdsAtStart;
-    if (selectedIds.length != 1) {
-      return false;
-    }
-    final selected = document.getElementById(selectedIds.first);
-    return selected?.data is SerialNumberData;
+    return document
+            .getElementById(interaction.context.selectedIdsAtStart.first)
+            ?.data
+        is SerialNumberData;
   }
 
   /// Returns true when pointer moves should prioritize serial latency.

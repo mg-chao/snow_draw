@@ -9,21 +9,23 @@ import 'rotate/rotate_operation.dart';
 
 /// Registry of configured edit operations.
 class DefaultEditOperationRegistry implements EditOperationRegistry {
-  DefaultEditOperationRegistry._(this._operations) {
-    assert(_validateOperations(), 'Invalid operation registration');
-  }
+  DefaultEditOperationRegistry._(
+    Map<EditOperationId, EditOperationBase> operations,
+  ) : _operations = Map.unmodifiable(operations);
 
   factory DefaultEditOperationRegistry.withDefaults() =>
-      DefaultEditOperationRegistry._({
-        for (final op in defaultOperations) op.id: op,
-      });
+      DefaultEditOperationRegistry.custom(defaultOperations);
 
   factory DefaultEditOperationRegistry.custom(
     List<EditOperationBase> operations,
-  ) => DefaultEditOperationRegistry._({for (final op in operations) op.id: op});
+  ) => DefaultEditOperationRegistry._({
+    for (final operation in operations) operation.id: operation,
+  });
 
   factory DefaultEditOperationRegistry.empty() =>
-      DefaultEditOperationRegistry._({});
+      DefaultEditOperationRegistry._(
+        const <EditOperationId, EditOperationBase>{},
+      );
   final Map<EditOperationId, EditOperationBase> _operations;
 
   /// Default operation set (reused by tests and extension points).
@@ -49,18 +51,4 @@ class DefaultEditOperationRegistry implements EditOperationRegistry {
       _operations.containsKey(operationId);
 
   int get operationCount => _operations.length;
-
-  bool _validateOperations() {
-    for (final entry in _operations.entries) {
-      final id = entry.key;
-      final operation = entry.value;
-      if (operation.id != id) {
-        throw StateError(
-          'Operation ID mismatch: registered as $id but operation.id is '
-          '${operation.id}',
-        );
-      }
-    }
-    return true;
-  }
 }

@@ -9,20 +9,8 @@ import '../types/edit_transform.dart' show ArrowPointTransform;
 /// copies that were scattered throughout the codebase.
 
 /// Element-wise equality for [DrawPoint] lists.
-bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
+bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) =>
+    _listEquals(a, b, (left, right) => left == right);
 
 /// Element-wise equality for nullable [ElbowFixedSegment] lists.
 ///
@@ -31,23 +19,7 @@ bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) {
 bool fixedSegmentListEquals(
   List<ElbowFixedSegment>? a,
   List<ElbowFixedSegment>? b,
-) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return a == null && b == null;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
+) => _nullableListEquals(a, b, (left, right) => left == right);
 
 /// Whether segment [a] is horizontal based on its endpoints.
 bool segmentIsHorizontal(DrawPoint a, DrawPoint b) =>
@@ -59,27 +31,7 @@ bool segmentIsHorizontal(DrawPoint a, DrawPoint b) =>
 bool fixedSegmentStructureEquals(
   List<ElbowFixedSegment>? a,
   List<ElbowFixedSegment>? b,
-) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return a == null && b == null;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i].index != b[i].index) {
-      return false;
-    }
-    if (segmentIsHorizontal(a[i].start, a[i].end) !=
-        segmentIsHorizontal(b[i].start, b[i].end)) {
-      return false;
-    }
-  }
-  return true;
-}
+) => _nullableListEquals(a, b, _fixedSegmentStructureItemEquals);
 
 /// Structural equality with axis-value tolerance, used by the arrow
 /// point operation to detect meaningful segment changes.
@@ -88,33 +40,71 @@ bool fixedSegmentStructureEqualsWithTolerance(
   List<ElbowFixedSegment>? b, {
   double tolerance = 1.0,
 }) {
+  assert(tolerance >= 0, 'tolerance must be non-negative.');
+  return _nullableListEquals(
+    a,
+    b,
+    (left, right) =>
+        _fixedSegmentStructureItemEquals(left, right, tolerance: tolerance),
+  );
+}
+
+bool _nullableListEquals<T>(
+  List<T>? a,
+  List<T>? b,
+  bool Function(T left, T right) elementEquals,
+) {
+  if (a == null || b == null) {
+    return a == b;
+  }
+  return _listEquals(a, b, elementEquals);
+}
+
+bool _listEquals<T>(
+  List<T> a,
+  List<T> b,
+  bool Function(T left, T right) elementEquals,
+) {
   if (identical(a, b)) {
     return true;
-  }
-  if (a == null || b == null) {
-    return a == null && b == null;
   }
   if (a.length != b.length) {
     return false;
   }
   for (var i = 0; i < a.length; i++) {
-    if (a[i].index != b[i].index) {
-      return false;
-    }
-    final aH = segmentIsHorizontal(a[i].start, a[i].end);
-    final bH = segmentIsHorizontal(b[i].start, b[i].end);
-    if (aH != bH) {
-      return false;
-    }
-    final aAxis = aH
-        ? (a[i].start.y + a[i].end.y) / 2
-        : (a[i].start.x + a[i].end.x) / 2;
-    final bAxis = bH
-        ? (b[i].start.y + b[i].end.y) / 2
-        : (b[i].start.x + b[i].end.x) / 2;
-    if ((aAxis - bAxis).abs() > tolerance) {
+    if (!elementEquals(a[i], b[i])) {
       return false;
     }
   }
   return true;
+}
+
+bool _fixedSegmentStructureItemEquals(
+  ElbowFixedSegment a,
+  ElbowFixedSegment b, {
+  double? tolerance,
+}) {
+  if (a.index != b.index) {
+    return false;
+  }
+
+  final isHorizontal = segmentIsHorizontal(a.start, a.end);
+  if (isHorizontal != segmentIsHorizontal(b.start, b.end)) {
+    return false;
+  }
+
+  if (tolerance == null) {
+    return true;
+  }
+
+  return (_segmentAxis(a, isHorizontal) - _segmentAxis(b, isHorizontal))
+          .abs() <=
+      tolerance;
+}
+
+double _segmentAxis(ElbowFixedSegment segment, bool isHorizontal) {
+  if (isHorizontal) {
+    return (segment.start.y + segment.end.y) / 2;
+  }
+  return (segment.start.x + segment.end.x) / 2;
 }

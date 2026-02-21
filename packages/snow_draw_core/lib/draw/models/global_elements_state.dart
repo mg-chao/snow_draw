@@ -23,16 +23,11 @@ class GlobalElementsState {
     HighlightMaskConfig? highlightMask,
     WatermarkConfig? watermark,
   }) {
-    final nextHighlightMask = highlightMask ?? this.highlightMask;
-    final nextWatermark = watermark ?? this.watermark;
-    if (nextHighlightMask == this.highlightMask &&
-        nextWatermark == this.watermark) {
-      return this;
-    }
-    return GlobalElementsState(
-      highlightMask: nextHighlightMask,
-      watermark: nextWatermark,
+    final nextState = GlobalElementsState(
+      highlightMask: highlightMask ?? this.highlightMask,
+      watermark: watermark ?? this.watermark,
     );
+    return nextState == this ? this : nextState;
   }
 
   @override

@@ -1,9 +1,6 @@
-import '../../draw/edit/arrow/arrow_point_operation.dart';
 import '../../draw/elements/core/element_data.dart';
 import '../../draw/elements/core/element_type_id.dart';
-import '../../draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import '../../draw/elements/types/free_draw/free_draw_data.dart';
-import '../../draw/elements/types/line/line_data.dart';
 import '../../draw/models/interaction_state.dart';
 
 /// Dispatch strategy for pointer-move events.
@@ -52,17 +49,8 @@ class PointerMoveDispatchPolicy {
       );
     }
 
-    // Keep constrained free-draw line mode frame-aligned. Only the latest
-    // endpoint is meaningful, so dispatching every raw sample is wasted work.
-    if (_isFreeDrawLineConstraint(interaction)) {
-      return const PointerMoveDispatchPlan(PointerMoveDispatchMode.frameLatest);
-    }
-
-    if (_isLineInteraction(interaction) || isLowLatencySerialInteraction) {
-      return const PointerMoveDispatchPlan(PointerMoveDispatchMode.frameLatest);
-    }
-
-    if (interaction is CreatingState ||
+    if (isLowLatencySerialInteraction ||
+        interaction is CreatingState ||
         interaction is EditingState ||
         interaction is BoxSelectingState ||
         interaction is DragPendingState) {
@@ -90,35 +78,9 @@ class PointerMoveDispatchPolicy {
     required InteractionState interaction,
     required ElementTypeId<ElementData>? currentToolTypeId,
     required bool isShiftPressed,
-  }) {
-    if (isShiftPressed) {
-      return false;
-    }
-    if (currentToolTypeId == FreeDrawData.typeIdToken) {
-      return true;
-    }
-    return interaction is CreatingState &&
-        interaction.elementData is FreeDrawData;
-  }
-
-  static bool _isLineInteraction(InteractionState interaction) {
-    if (interaction is CreatingState) {
-      return interaction.elementData is LineData;
-    }
-    if (interaction is EditingState &&
-        interaction.context is ArrowPointEditContext) {
-      final context = interaction.context as ArrowPointEditContext;
-      return context.isLineElement;
-    }
-    return false;
-  }
-
-  static bool _isFreeDrawLineConstraint(InteractionState interaction) {
-    if (interaction is! CreatingState ||
-        interaction.creationMode is! FreeDrawCreationMode) {
-      return false;
-    }
-    final mode = interaction.creationMode as FreeDrawCreationMode;
-    return mode.isLineActive;
-  }
+  }) =>
+      !isShiftPressed &&
+      (currentToolTypeId == FreeDrawData.typeIdToken ||
+          interaction is CreatingState &&
+              interaction.elementData is FreeDrawData);
 }

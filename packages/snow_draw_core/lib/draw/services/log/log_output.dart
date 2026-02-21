@@ -39,10 +39,8 @@ class DefaultLogRecord implements LogRecord {
 
   @override
   String toString() {
-    final buffer = StringBuffer()
-      ..write('[$level] [$module] $message')
-      ..write(error == null ? '' : ' - Error: $error');
-    return buffer.toString();
+    final errorText = error == null ? '' : ' - Error: $error';
+    return '[$level] [$module] $message$errorText';
   }
 }
 
@@ -78,7 +76,7 @@ class MemoryLogCollector implements LogOutputHandler {
 
   /// Get the most recent n records.
   List<LogRecord> getRecent(int count) {
-    if (count <= 0 || _records.isEmpty) {
+    if (count <= 0) {
       return const [];
     }
     if (count >= _records.length) {
@@ -103,9 +101,7 @@ class MemoryLogCollector implements LogOutputHandler {
   @override
   void output(LogRecord record) {
     _records.add(record);
-    if (_records.length > maxRecords) {
-      _trimExcess();
-    }
+    _trimExcess();
   }
 
   /// Removes oldest records when the buffer exceeds capacity.
@@ -114,32 +110,16 @@ class MemoryLogCollector implements LogOutputHandler {
   /// once instead of repeatedly calling `removeAt(0)`.
   void _trimExcess() {
     final excess = _records.length - maxRecords;
-    if (excess > 0) {
-      _records.removeRange(0, excess);
+    if (excess <= 0) {
+      return;
     }
+    _records.removeRange(0, excess);
   }
 
   @override
   void outputBatch(List<LogRecord> records) {
-    if (records.isEmpty) {
-      return;
-    }
-    if (maxRecords == 0) {
-      _records.clear();
-      return;
-    }
-    if (records.length >= maxRecords) {
-      final start = records.length - maxRecords;
-      _records
-        ..clear()
-        ..addAll(records.sublist(start));
-      return;
-    }
-
     _records.addAll(records);
-    if (_records.length > maxRecords) {
-      _trimExcess();
-    }
+    _trimExcess();
   }
 
   @override
@@ -186,33 +166,25 @@ class CompositeLogOutput implements LogOutputHandler {
 
   @override
   void output(LogRecord record) {
-    for (final handler in handlers) {
-      try {
-        handler.output(record);
-      } on Object catch (_) {
-        // Ignore one handler's error to keep others working.
-      }
-    }
+    _forEachHandler((handler) => handler.output(record));
   }
 
   @override
   void outputBatch(List<LogRecord> records) {
-    for (final handler in handlers) {
-      try {
-        handler.outputBatch(records);
-      } on Object catch (_) {
-        // Ignore a handler error.
-      }
-    }
+    _forEachHandler((handler) => handler.outputBatch(records));
   }
 
   @override
   void close() {
+    _forEachHandler((handler) => handler.close());
+  }
+
+  void _forEachHandler(void Function(LogOutputHandler handler) action) {
     for (final handler in handlers) {
       try {
-        handler.close();
+        action(handler);
       } on Object catch (_) {
-        // Ignore close errors.
+        // Ignore one handler error to keep others working.
       }
     }
   }

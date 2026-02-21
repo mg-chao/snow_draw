@@ -6,13 +6,15 @@ import 'free_draw_data.dart';
 import 'free_draw_hit_tester.dart';
 import 'free_draw_renderer.dart';
 
-final freeDrawDefinition = ElementDefinition<FreeDrawData>(
+const freeDrawDefinition = ElementDefinition<FreeDrawData>(
   typeId: FreeDrawData.typeIdToken,
   displayName: 'Free Draw',
   icon: Icons.brush_outlined,
-  renderer: const FreeDrawRenderer(),
-  hitTester: const FreeDrawHitTester(),
-  createDefaultData: () => const FreeDrawData(),
+  renderer: FreeDrawRenderer(),
+  hitTester: FreeDrawHitTester(),
+  createDefaultData: _createDefaultFreeDrawData,
   fromJson: FreeDrawData.fromJson,
-  creationStrategy: const FreeDrawCreationStrategy(),
+  creationStrategy: FreeDrawCreationStrategy(),
 );
+
+FreeDrawData _createDefaultFreeDrawData() => const FreeDrawData();

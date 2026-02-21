@@ -15,17 +15,10 @@ DrawState handleDeleteElements(
   DeleteElements action,
   ElementReducerDeps _,
 ) {
-  if (action.elementIds.isEmpty) {
-    return state;
-  }
-
   final document = state.domain.document;
-  final deleteIds = <String>{};
-  for (final id in action.elementIds) {
-    if (document.getElementById(id) != null) {
-      deleteIds.add(id);
-    }
-  }
+  final deleteIds = action.elementIds
+      .where(document.elementMap.containsKey)
+      .toSet();
   if (deleteIds.isEmpty) {
     return state;
   }
@@ -35,43 +28,14 @@ DrawState handleDeleteElements(
     deleteIds: deleteIds,
   );
 
-  final updatedElements = <String, ElementState>{};
-  for (final element in document.elements) {
-    if (deleteIds.contains(element.id)) {
-      continue;
-    }
-
-    final serialUpdate = _resolveSerialUnbindUpdate(
-      element: element,
-      deleteIds: deleteIds,
-    );
-    if (serialUpdate != null) {
-      updatedElements[element.id] = serialUpdate;
-      continue;
-    }
-
-    final arrowUpdate = _resolveArrowUnbindUpdate(
-      element: element,
-      deleteIds: deleteIds,
-    );
-    if (arrowUpdate != null) {
-      updatedElements[element.id] = arrowUpdate;
-    }
-  }
-
-  var removedAny = false;
   final newElements = <ElementState>[];
   for (final element in document.elements) {
     if (deleteIds.contains(element.id)) {
-      removedAny = true;
       continue;
     }
-    final updated = updatedElements[element.id];
-    newElements.add(updated ?? element);
-  }
-
-  if (!removedAny && updatedElements.isEmpty) {
-    return state;
+    newElements.add(
+      _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
+    );
   }
 
   final selection = state.domain.selection.selectedIds;
@@ -92,60 +56,42 @@ void _expandDeleteIdsForBoundSerialText({
   required Iterable<ElementState> elements,
   required Set<String> deleteIds,
 }) {
-  if (deleteIds.isEmpty) {
-    return;
-  }
-
-  final serialBindings = <String, List<String>>{};
+  final serialBindings = <String, String>{};
   for (final element in elements) {
     final data = element.data;
-    if (data is! SerialNumberData) {
-      continue;
+    if (data is SerialNumberData && data.textElementId != null) {
+      serialBindings[element.id] = data.textElementId!;
     }
-    final boundId = data.textElementId;
-    if (boundId == null) {
-      continue;
-    }
-    serialBindings.putIfAbsent(element.id, () => <String>[]).add(boundId);
   }
 
   final pending = ListQueue<String>.from(deleteIds);
   while (pending.isNotEmpty) {
     final id = pending.removeFirst();
-    final boundIds = serialBindings[id];
-    if (boundIds == null) {
+    final boundId = serialBindings[id];
+    if (boundId == null) {
       continue;
     }
-    for (final boundId in boundIds) {
-      if (deleteIds.add(boundId)) {
-        pending.add(boundId);
-      }
+    if (deleteIds.add(boundId)) {
+      pending.add(boundId);
     }
   }
 }
 
-ElementState? _resolveSerialUnbindUpdate({
+ElementState _applyDeleteElementUpdates({
   required ElementState element,
   required Set<String> deleteIds,
 }) {
   final data = element.data;
-  if (data is! SerialNumberData) {
-    return null;
+  if (data is SerialNumberData) {
+    final boundId = data.textElementId;
+    if (boundId == null || !deleteIds.contains(boundId)) {
+      return element;
+    }
+    return element.copyWith(data: data.copyWith(textElementId: null));
   }
-  final boundId = data.textElementId;
-  if (boundId == null || !deleteIds.contains(boundId)) {
-    return null;
-  }
-  return element.copyWith(data: data.copyWith(textElementId: null));
-}
 
-ElementState? _resolveArrowUnbindUpdate({
-  required ElementState element,
-  required Set<String> deleteIds,
-}) {
-  final data = element.data;
   if (data is! ArrowLikeData) {
-    return null;
+    return element;
   }
 
   final startBinding = data.startBinding;
@@ -155,16 +101,17 @@ ElementState? _resolveArrowUnbindUpdate({
   final clearEnd =
       endBinding != null && deleteIds.contains(endBinding.elementId);
   if (!clearStart && !clearEnd) {
-    return null;
+    return element;
   }
 
-  final nextData = data.copyWith(
-    startBinding: clearStart ? null : startBinding,
-    endBinding: clearEnd ? null : endBinding,
-    startIsSpecial: clearStart ? null : data.startIsSpecial,
-    endIsSpecial: clearEnd ? null : data.endIsSpecial,
+  return element.copyWith(
+    data: data.copyWith(
+      startBinding: clearStart ? null : startBinding,
+      endBinding: clearEnd ? null : endBinding,
+      startIsSpecial: clearStart ? null : data.startIsSpecial,
+      endIsSpecial: clearEnd ? null : data.endIsSpecial,
+    ),
   );
-  return element.copyWith(data: nextData);
 }
 
 DrawState handleDuplicateElements(

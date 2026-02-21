@@ -18,20 +18,15 @@ enum EditFailureReason {
   invalidParams,
 
   /// Unexpected operation failure.
-  operationFailed,
-}
+  operationFailed;
 
-extension EditFailureReasonX on EditFailureReason {
   bool get isRecoverable => switch (this) {
-    EditFailureReason.notEditing => true,
-    EditFailureReason.selectionChanged => true,
-    EditFailureReason.elementsChanged => true,
-    EditFailureReason.noSelection => true,
+    EditFailureReason.notEditing ||
+    EditFailureReason.selectionChanged ||
+    EditFailureReason.elementsChanged ||
+    EditFailureReason.noSelection ||
     EditFailureReason.missingSelectionBounds => true,
-    EditFailureReason.unknownOperationId => false,
-    EditFailureReason.sessionRestoreFailed => false,
-    EditFailureReason.invalidParams => false,
-    EditFailureReason.operationFailed => false,
+    _ => false,
   };
 }
 
@@ -44,5 +39,5 @@ typedef EditOutcome = ({
 
 extension EditOutcomeX on EditOutcome {
   bool get isSuccess => failureReason == null;
-  bool get isFailure => failureReason != null;
+  bool get isFailure => !isSuccess;
 }

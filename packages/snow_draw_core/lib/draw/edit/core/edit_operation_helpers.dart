@@ -6,23 +6,16 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
-import '../move/move_operation.dart' show MoveOperation;
 import '../preview/edit_preview.dart';
-import '../resize/resize_operation.dart' show ResizeOperation;
-import '../rotate/rotate_operation.dart' show RotateOperation;
 import 'edit_errors.dart';
 import 'edit_operation_params.dart';
 
 List<ElementState> snapshotSelectedElements(DrawState state) {
   final document = state.domain.document;
-  final selectedElements = <ElementState>[];
-  for (final id in state.domain.selection.selectedIds) {
-    final element = document.getElementById(id);
-    if (element != null) {
-      selectedElements.add(element);
-    }
-  }
-  return selectedElements;
+  return state.domain.selection.selectedIds
+      .map(document.getElementById)
+      .whereType<ElementState>()
+      .toList();
 }
 
 DrawRect requireSelectionBounds({
@@ -34,13 +27,13 @@ DrawRect requireSelectionBounds({
       initialSelectionBounds ??
       selectionData.overlayBounds ??
       selectionData.selectionBounds;
-  if (bounds == null) {
-    throw EditMissingDataError(
-      dataName: 'selection bounds',
-      operationName: operationName,
-    );
+  if (bounds != null) {
+    return bounds;
   }
-  return bounds;
+  throw EditMissingDataError(
+    dataName: 'selection bounds',
+    operationName: operationName,
+  );
 }
 
 EditPreview buildEditPreview({
@@ -49,27 +42,20 @@ EditPreview buildEditPreview({
   required Map<String, ElementState> previewElementsById,
   DrawRect? multiSelectBounds,
   double? multiSelectRotation,
-}) {
-  final selectionPreview = buildSelectionPreview(
+}) => EditPreview(
+  previewElementsById: previewElementsById,
+  selectionPreview: buildSelectionPreview(
     state: state,
     context: context,
     previewElementsById: previewElementsById,
     multiSelectBounds: multiSelectBounds,
     multiSelectRotation: multiSelectRotation,
-  );
+  ),
+);
 
-  return EditPreview(
-    previewElementsById: previewElementsById,
-    selectionPreview: selectionPreview,
-  );
-}
-
-/// Builds a snapshot map from selected elements.
+/// Builds snapshots keyed by element id.
 ///
-/// Each element is mapped to a lean snapshot via [toSnapshot], keyed by
-/// element id. This generic helper replaces the three near-identical
-/// `buildMoveSnapshots`, `buildResizeSnapshots`, and
-/// `buildRotateSnapshots` functions.
+/// Each element is mapped through [toSnapshot].
 Map<String, S> buildSnapshots<S>(
   Iterable<ElementState> elements,
   S Function(ElementState) toSnapshot,
@@ -98,45 +84,45 @@ C requireContext<C extends EditContext>(
   EditContext context, {
   required String operationName,
 }) {
-  if (context is! C) {
-    throw EditContextTypeMismatchError(
-      expected: C,
-      actual: context.runtimeType,
-      operationName: operationName,
-      additionalInfo:
-          'startPosition=${context.startPosition}, '
-          'selectedIds=${context.selectedIdsAtStart.length}',
-    );
+  if (context is C) {
+    return context;
   }
-  return context;
+  throw EditContextTypeMismatchError(
+    expected: C,
+    actual: context.runtimeType,
+    operationName: operationName,
+    additionalInfo:
+        'startPosition=${context.startPosition}, '
+        'selectedIds=${context.selectedIdsAtStart.length}',
+  );
 }
 
 T requireTransform<T extends EditTransform>(
   EditTransform transform, {
   required String operationName,
 }) {
-  if (transform is! T) {
-    throw EditTransformTypeMismatchError(
-      expected: T,
-      actual: transform.runtimeType,
-      operationName: operationName,
-    );
+  if (transform is T) {
+    return transform;
   }
-  return transform;
+  throw EditTransformTypeMismatchError(
+    expected: T,
+    actual: transform.runtimeType,
+    operationName: operationName,
+  );
 }
 
 P requireParams<P extends EditOperationParams>(
   EditOperationParams params, {
-  String? operationName,
+  required String operationName,
 }) {
-  if (params is! P) {
-    throw EditParamsTypeMismatchError(
-      expected: P,
-      actual: params.runtimeType,
-      operationName: operationName ?? 'EditOperation',
-    );
+  if (params is P) {
+    return params;
   }
-  return params;
+  throw EditParamsTypeMismatchError(
+    expected: P,
+    actual: params.runtimeType,
+    operationName: operationName,
+  );
 }
 
 /// Returns visible elements that are not in [selectedIds].
@@ -156,7 +142,7 @@ List<ElementState> resolveReferenceElements(
 ///
 /// Captures selection bounds, selected IDs, element snapshots, and
 /// version numbers in one call, eliminating the repeated boilerplate
-/// in [MoveOperation], [ResizeOperation], and [RotateOperation].
+/// in move/resize/rotate operations.
 class StandardContextData<S> {
   const StandardContextData({
     required this.startBounds,
@@ -180,21 +166,19 @@ StandardContextData<S> gatherStandardContextData<S>({
   required S Function(ElementState) toSnapshot,
   DrawRect? initialSelectionBounds,
 }) {
-  final selectionData = SelectionDataComputer.compute(state);
-  final startBounds = requireSelectionBounds(
-    selectionData: selectionData,
-    initialSelectionBounds: initialSelectionBounds,
-    operationName: operationName,
-  );
-  final selectedIds = {...state.domain.selection.selectedIds};
-  final elements = snapshotSelectedElements(state);
-  final snapshots = buildSnapshots(elements, toSnapshot);
-
+  final selection = state.domain.selection;
   return StandardContextData<S>(
-    startBounds: startBounds,
-    selectedIds: selectedIds,
-    selectionVersion: state.domain.selection.selectionVersion,
+    startBounds: requireSelectionBounds(
+      selectionData: SelectionDataComputer.compute(state),
+      initialSelectionBounds: initialSelectionBounds,
+      operationName: operationName,
+    ),
+    selectedIds: {...selection.selectedIds},
+    selectionVersion: selection.selectionVersion,
     elementsVersion: state.domain.document.elementsVersion,
-    elementSnapshots: snapshots,
+    elementSnapshots: buildSnapshots(
+      snapshotSelectedElements(state),
+      toSnapshot,
+    ),
   );
 }

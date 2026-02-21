@@ -40,7 +40,7 @@ void main() {
           const HistoryAvailabilityChangedEvent(canUndo: true, canRedo: false),
         );
 
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(received, equals(['doc:1', 'validation:bad']));
 
@@ -106,7 +106,7 @@ void main() {
       expect(documentDispatched, isTrue);
       expect(builtDocument, isTrue);
 
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(received, hasLength(1));
       expect(received.single.elementsVersion, equals(3));
@@ -126,7 +126,7 @@ void main() {
             ValidationFailedEvent(action: 'CreateElement', reason: 'invalid');
 
         final dispatched = bus.emitLazy<DrawEvent>(createEvent);
-        await Future<void>.delayed(Duration.zero);
+        await _flushEventQueue();
 
         expect(dispatched, isTrue);
         expect(received, hasLength(1));
@@ -148,7 +148,7 @@ void main() {
             const DocumentChangedEvent(elementsVersion: 4, elementCount: 2);
 
         final dispatched = bus.emitLazy<StateChangeEvent>(createEvent);
-        await Future<void>.delayed(Duration.zero);
+        await _flushEventQueue();
 
         expect(dispatched, isTrue);
         expect(received, hasLength(1));
@@ -168,14 +168,14 @@ void main() {
         (event) => received.add(event.elementsVersion),
       );
       bus.emit(const DocumentChangedEvent(elementsVersion: 1, elementCount: 1));
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
       await firstSub.cancel();
 
       final secondSub = stream.listen(
         (event) => received.add(event.elementsVersion),
       );
       bus.emit(const DocumentChangedEvent(elementsVersion: 2, elementCount: 1));
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(received, equals([1, 2]));
 
@@ -190,16 +190,8 @@ void main() {
       final stream = bus.streamOf<DocumentChangedEvent>();
       expect(stream.isBroadcast, isTrue);
 
-      final firstDone = Completer<void>();
-      final firstSub = stream.listen((_) {}, onDone: firstDone.complete);
-      await firstDone.future;
-
-      final secondDone = Completer<void>();
-      final secondSub = stream.listen((_) {}, onDone: secondDone.complete);
-      await secondDone.future;
-
-      await firstSub.cancel();
-      await secondSub.cancel();
+      await _expectDoneOnListen(stream);
+      await _expectDoneOnListen(stream);
     });
   });
 
@@ -251,10 +243,11 @@ void main() {
       );
 
       data['step'] = 'mutated';
+      final frozenData = event.data!;
 
-      expect(event.data?['step'], equals('init'));
+      expect(frozenData['step'], equals('init'));
       expect(
-        () => event.data?['extra'] = true,
+        () => frozenData['extra'] = true,
         throwsA(isA<UnsupportedError>()),
       );
     });
@@ -276,28 +269,17 @@ void main() {
       (nested['flags'] as Set<String>).add('beta');
 
       final payload = event.details['payload'] as Map<Object?, Object?>;
-      final frozenPath = payload['path'];
-      final frozenMeta = payload['meta'];
-      final frozenFlags = payload['flags'];
+      final frozenPath = payload['path']! as List<Object?>;
+      final frozenMeta = payload['meta']! as Map<Object?, Object?>;
+      final frozenFlags = payload['flags']! as Set<Object?>;
 
-      expect(frozenPath, isA<List<Object?>>());
-      expect(frozenMeta, isA<Map<Object?, Object?>>());
-      expect(frozenFlags, isA<Set<Object?>>());
+      expect(frozenPath, equals(['root']));
+      expect(frozenMeta['attempt'], equals(1));
+      expect(frozenFlags, equals({'alpha'}));
 
-      final frozenPathList = frozenPath! as List<Object?>;
-      final frozenMetaMap = frozenMeta! as Map<Object?, Object?>;
-      final frozenFlagsSet = frozenFlags! as Set<Object?>;
-
-      expect(payload['path'], equals(['root']));
-      expect(frozenMetaMap['attempt'], equals(1));
-      expect(payload['flags'], equals({'alpha'}));
-
-      expect(() => frozenPathList.add('x'), throwsA(isA<UnsupportedError>()));
-      expect(
-        () => frozenMetaMap['next'] = true,
-        throwsA(isA<UnsupportedError>()),
-      );
-      expect(() => frozenFlagsSet.add('x'), throwsA(isA<UnsupportedError>()));
+      expect(() => frozenPath.add('x'), throwsA(isA<UnsupportedError>()));
+      expect(() => frozenMeta['next'] = true, throwsA(isA<UnsupportedError>()));
+      expect(() => frozenFlags.add('x'), throwsA(isA<UnsupportedError>()));
     });
 
     test('GeneralLogEvent deeply freezes nested data payloads', () {
@@ -316,27 +298,15 @@ void main() {
       (nested['steps'] as List<String>).add('mutated');
       (nested['context'] as Map<String, dynamic>)['phase'] = 'mutated';
 
-      final frozenData = event.data;
-      expect(frozenData, isNotNull);
+      final payload = event.data!['payload'] as Map<Object?, Object?>;
+      final frozenSteps = payload['steps']! as List<Object?>;
+      final frozenContext = payload['context']! as Map<Object?, Object?>;
 
-      final payload = frozenData!['payload'] as Map<Object?, Object?>;
-      final frozenSteps = payload['steps'];
-      final frozenContext = payload['context'];
+      expect(frozenSteps, equals(['init']));
+      expect(frozenContext['phase'], equals('boot'));
 
-      expect(frozenSteps, isA<List<Object?>>());
-      expect(frozenContext, isA<Map<Object?, Object?>>());
-
-      final frozenStepsList = frozenSteps! as List<Object?>;
-      final frozenContextMap = frozenContext! as Map<Object?, Object?>;
-
-      expect(payload['steps'], equals(['init']));
-      expect(frozenContextMap['phase'], equals('boot'));
-
-      expect(() => frozenStepsList.add('x'), throwsA(isA<UnsupportedError>()));
-      expect(
-        () => frozenContextMap['next'] = 1,
-        throwsA(isA<UnsupportedError>()),
-      );
+      expect(() => frozenSteps.add('x'), throwsA(isA<UnsupportedError>()));
+      expect(() => frozenContext['next'] = 1, throwsA(isA<UnsupportedError>()));
     });
 
     test('ValidationFailedEvent rejects cyclic details payloads', () {
@@ -380,16 +350,13 @@ void main() {
       final frozen = freezeEventPayloadMap(payload);
       final first = frozen['first'] as Map<Object?, Object?>;
       final second = frozen['second'] as Map<Object?, Object?>;
-      final firstItems = first['items'];
-      final secondItems = second['items'];
+      final firstItems = first['items']! as List<Object?>;
+      final secondItems = second['items']! as List<Object?>;
 
       expect(identical(first, second), isTrue);
       expect(identical(firstItems, secondItems), isTrue);
       expect(firstItems, equals(['alpha']));
-      expect(
-        () => (firstItems! as List<Object?>).add('beta'),
-        throwsUnsupportedError,
-      );
+      expect(() => firstItems.add('beta'), throwsUnsupportedError);
     });
   });
 
@@ -410,14 +377,11 @@ void main() {
       addTearDown(target.dispose);
 
       final events = <HistoryAvailabilityChangedEvent>[];
-      final subscription = target.eventStream
-          .where((event) => event is HistoryAvailabilityChangedEvent)
-          .cast<HistoryAvailabilityChangedEvent>()
-          .listen(events.add);
+      final subscription = _listenToHistoryAvailability(target, events.add);
       addTearDown(subscription.cancel);
 
       target.restoreHistory(snapshot);
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(target.canUndo, isTrue);
       expect(target.canRedo, isFalse);
@@ -427,7 +391,7 @@ void main() {
 
       events.clear();
       await target.dispatch(const MoveCamera(dx: 4, dy: 0));
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(events, isEmpty);
     });
@@ -445,14 +409,11 @@ void main() {
       addTearDown(target.dispose);
 
       final events = <HistoryAvailabilityChangedEvent>[];
-      final subscription = target.eventStream
-          .where((event) => event is HistoryAvailabilityChangedEvent)
-          .cast<HistoryAvailabilityChangedEvent>()
-          .listen(events.add);
+      final subscription = _listenToHistoryAvailability(target, events.add);
       addTearDown(subscription.cancel);
 
       target.restoreHistoryJson(snapshotJson);
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(events, hasLength(1));
       expect(events.single.canUndo, isTrue);
@@ -482,13 +443,33 @@ void main() {
       await store.dispatch(
         UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
       );
-      await Future<void>.delayed(Duration.zero);
+      await _flushEventQueue();
 
       expect(documentEvents, hasLength(1));
       expect(historyEvents, hasLength(1));
     });
   });
 }
+
+Future<void> _flushEventQueue() => Future<void>.delayed(Duration.zero);
+
+Future<void> _expectDoneOnListen<T>(Stream<T> stream) async {
+  final subscription = stream.listen((_) {});
+  try {
+    await subscription.asFuture<void>();
+  } finally {
+    await subscription.cancel();
+  }
+}
+
+StreamSubscription<HistoryAvailabilityChangedEvent>
+_listenToHistoryAvailability(
+  DefaultDrawStore store,
+  void Function(HistoryAvailabilityChangedEvent event) onEvent,
+) => store.eventStream
+    .where((event) => event is HistoryAvailabilityChangedEvent)
+    .cast<HistoryAvailabilityChangedEvent>()
+    .listen(onEvent);
 
 DefaultDrawStore _createStore({DrawState? initialState}) {
   final registry = DefaultElementRegistry();

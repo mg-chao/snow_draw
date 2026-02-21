@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../../../core/coordinates/element_space.dart';
@@ -15,15 +15,9 @@ class ArrowHitTester implements ElementHitTester {
   const ArrowHitTester();
 
   static const _cacheLimit = 512;
-  static const _hotCacheSize = 16;
   static final _cache = LruCache<String, _ArrowHitTestCacheEntry>(
     maxEntries: _cacheLimit,
   );
-  static final _hotCache = List<_ArrowHitTestCacheEntry?>.filled(
-    _hotCacheSize,
-    null,
-  );
-  static var _hotCacheCursor = 0;
 
   @override
   bool hitTest({
@@ -80,10 +74,6 @@ class ArrowHitTester implements ElementHitTester {
   }
 
   bool _hitTestSegments(List<Offset> points, Offset position, double radiusSq) {
-    if (points.length < 2) {
-      return false;
-    }
-
     for (var i = 1; i < points.length; i++) {
       final distance = _distanceSquaredToSegment(
         position,
@@ -137,31 +127,17 @@ class ArrowHitTester implements ElementHitTester {
     ArrowLikeData data,
   ) {
     final id = element.id;
-    final width = element.rect.width;
-    final height = element.rect.height;
-    for (final entry in _hotCache) {
-      if (entry != null &&
-          entry.id == id &&
-          entry.matches(width, height, data)) {
-        return entry;
-      }
-    }
-
+    final rect = element.rect;
+    final width = rect.width;
+    final height = rect.height;
     final cached = _cache.get(id);
     if (cached != null && cached.matches(width, height, data)) {
-      _touchHotCache(cached);
       return cached;
     }
 
     final next = _ArrowHitTestCacheEntry.build(element: element, data: data);
     _cache.put(id, next);
-    _touchHotCache(next);
     return next;
-  }
-
-  void _touchHotCache(_ArrowHitTestCacheEntry entry) {
-    _hotCache[_hotCacheCursor] = entry;
-    _hotCacheCursor = (_hotCacheCursor + 1) % _hotCacheSize;
   }
 
   @override
@@ -170,7 +146,6 @@ class ArrowHitTester implements ElementHitTester {
 
 class _ArrowHitTestCacheEntry {
   _ArrowHitTestCacheEntry({
-    required this.id,
     required this.width,
     required this.height,
     required this.data,
@@ -178,7 +153,6 @@ class _ArrowHitTestCacheEntry {
     required this.arrowheadTargets,
   });
 
-  final String id;
   final double width;
   final double height;
   final ArrowLikeData data;
@@ -200,13 +174,12 @@ class _ArrowHitTestCacheEntry {
     final hasCurvedShaft =
         data.arrowType == ArrowType.curved && points.length > 2;
     final shaftPoints = hasCurvedShaft
-        ? _flattenCurvedShaft(points, _sampleStep(data.strokeWidth))
+        ? _flattenCurvedShaft(points, data.strokeWidth)
         : points;
 
     final arrowheadTargets = _buildArrowheadTargets(geometry);
 
     return _ArrowHitTestCacheEntry(
-      id: element.id,
       width: rect.width,
       height: rect.height,
       data: data,
@@ -227,7 +200,7 @@ class _ArrowheadSegment {
 }
 
 _ArrowheadHitTarget _segmentsTarget(List<_ArrowheadSegment> segments) =>
-    (position, radius, radiusSq) {
+    (position, _, radiusSq) {
       for (final segment in segments) {
         final distance = ArrowHitTester._distanceSquaredToSegment(
           position,
@@ -244,7 +217,7 @@ _ArrowheadHitTarget _segmentsTarget(List<_ArrowheadSegment> segments) =>
 _ArrowheadHitTarget _circleTarget({
   required Offset center,
   required double radius,
-}) => (position, tolerance, radiusSq) {
+}) => (position, tolerance, _) {
   final dx = position.dx - center.dx;
   final dy = position.dy - center.dy;
   final distanceSq = dx * dx + dy * dy;
@@ -276,36 +249,11 @@ class _CubicSegment {
   }
 }
 
-class _CubicSegmentPool {
-  _CubicSegmentPool(this.capacity)
-    : _segments = List<_CubicSegment>.generate(
-        capacity,
-        (_) => _CubicSegment.empty(),
-      );
-
-  final int capacity;
-  final List<_CubicSegment> _segments;
-  var _cursor = 0;
-
-  _CubicSegment acquire() {
-    if (_cursor < _segments.length) {
-      return _segments[_cursor++];
-    }
-    return _CubicSegment.empty();
-  }
-
-  void reset() {
-    _cursor = 0;
-  }
-}
-
-double _sampleStep(double strokeWidth) => math.max(1, strokeWidth).toDouble();
-
 double _arrowheadExtent(ArrowLikeData data) {
   final hasArrowhead =
       data.startArrowhead != ArrowheadStyle.none ||
       data.endArrowhead != ArrowheadStyle.none;
-  if (!hasArrowhead || data.strokeWidth <= 0) {
+  if (!hasArrowhead) {
     return 0;
   }
   final length = _arrowheadLength(data.strokeWidth);
@@ -320,14 +268,8 @@ bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
     position.y >= rect.minY - padding &&
     position.y <= rect.maxY + padding;
 
-final _segmentPool = _CubicSegmentPool(96);
-
-List<Offset> _flattenCurvedShaft(List<Offset> points, double step) {
-  if (points.length < 2 || step <= 0) {
-    return const <Offset>[];
-  }
-
-  _segmentPool.reset();
+List<Offset> _flattenCurvedShaft(List<Offset> points, double strokeWidth) {
+  final step = math.max(1, strokeWidth).toDouble();
   final tolerance = math.max(0.5, step * 0.35);
   final toleranceSq = tolerance * tolerance;
   const maxPoints = 120;
@@ -337,14 +279,8 @@ List<Offset> _flattenCurvedShaft(List<Offset> points, double step) {
     if (flattened.length >= maxPoints) {
       break;
     }
-    final segment = _buildCubicSegment(points, i, _segmentPool);
-    _flattenCubicSegment(
-      segment,
-      toleranceSq,
-      flattened,
-      maxPoints,
-      _segmentPool,
-    );
+    final segment = _buildCubicSegment(points, i);
+    _flattenCubicSegment(segment, toleranceSq, flattened, maxPoints);
   }
 
   return flattened;
@@ -355,7 +291,6 @@ void _flattenCubicSegment(
   double toleranceSq,
   List<Offset> output,
   int maxPoints,
-  _CubicSegmentPool pool,
 ) {
   final stack = <_CubicSegment>[segment];
   while (stack.isNotEmpty && output.length < maxPoints) {
@@ -365,8 +300,8 @@ void _flattenCubicSegment(
       output.add(current.end);
       continue;
     }
-    final left = pool.acquire();
-    final right = pool.acquire();
+    final left = _CubicSegment.empty();
+    final right = _CubicSegment.empty();
     _splitCubicSegment(current, left, right);
     stack
       ..add(right)
@@ -419,11 +354,7 @@ void _splitCubicSegment(
   right.set(p0123, p123, p23, segment.end);
 }
 
-_CubicSegment _buildCubicSegment(
-  List<Offset> points,
-  int index,
-  _CubicSegmentPool pool,
-) {
+_CubicSegment _buildCubicSegment(List<Offset> points, int index) {
   final p0 = index == 0 ? points[index] : points[index - 1];
   final p1 = points[index];
   final p2 = points[index + 1];
@@ -432,7 +363,7 @@ _CubicSegment _buildCubicSegment(
   const tension = 1.0;
   final control1 = p1 + (p2 - p0) * (tension / 6);
   final control2 = p2 - (p3 - p1) * (tension / 6);
-  return pool.acquire()..set(p1, control1, control2, p2);
+  return _CubicSegment(p1, control1, control2, p2);
 }
 
 List<_ArrowheadHitTarget> _buildArrowheadTargets(
@@ -440,9 +371,6 @@ List<_ArrowheadHitTarget> _buildArrowheadTargets(
 ) {
   final points = geometry.localPoints;
   final data = geometry.data;
-  if (points.length < 2 || data.strokeWidth <= 0) {
-    return const <_ArrowheadHitTarget>[];
-  }
 
   final targets = <_ArrowheadHitTarget>[];
   final startDirection = geometry.startDirection;
@@ -480,9 +408,6 @@ _ArrowheadHitTarget? _arrowheadTargetForStyle({
   required ArrowheadStyle style,
   required double strokeWidth,
 }) {
-  if (style == ArrowheadStyle.none || strokeWidth <= 0) {
-    return null;
-  }
   final normalized = _normalize(direction);
   if (normalized == null) {
     return null;
@@ -490,9 +415,6 @@ _ArrowheadHitTarget? _arrowheadTargetForStyle({
 
   var dir = normalized;
   final length = _arrowheadLength(strokeWidth);
-  if (length <= 0) {
-    return null;
-  }
   final width = length * 0.6;
 
   if (style == ArrowheadStyle.invertedTriangle) {
@@ -547,9 +469,6 @@ _ArrowheadHitTarget? _arrowheadTargetForStyle({
 }
 
 List<_ArrowheadSegment> _closedSegments(List<Offset> vertices) {
-  if (vertices.length < 2) {
-    return const <_ArrowheadSegment>[];
-  }
   final segments = <_ArrowheadSegment>[];
   for (var i = 0; i < vertices.length; i++) {
     final next = vertices[(i + 1) % vertices.length];

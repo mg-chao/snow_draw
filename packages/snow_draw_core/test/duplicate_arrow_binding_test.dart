@@ -19,8 +19,7 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 class _TestDeps implements ElementReducerDeps {
-  _TestDeps() : _counter = 0;
-  int _counter;
+  int _counter = 0;
 
   @override
   LogService get log => LogService.fallback;
@@ -421,18 +420,8 @@ ElementState _arrowBoundTo({
   opacity: 1,
   zIndex: 1,
   data: ArrowData(
-    startBinding: startTargetId == null
-        ? null
-        : ArrowBinding(
-            elementId: startTargetId,
-            anchor: const DrawPoint(x: 0.5, y: 0.5),
-          ),
-    endBinding: endTargetId == null
-        ? null
-        : ArrowBinding(
-            elementId: endTargetId,
-            anchor: const DrawPoint(x: 0.5, y: 0.5),
-          ),
+    startBinding: _binding(startTargetId),
+    endBinding: _binding(endTargetId),
   ),
 );
 
@@ -447,20 +436,21 @@ ElementState _lineBoundTo({
   opacity: 1,
   zIndex: 1,
   data: LineData(
-    startBinding: startTargetId == null
-        ? null
-        : ArrowBinding(
-            elementId: startTargetId,
-            anchor: const DrawPoint(x: 0.5, y: 0.5),
-          ),
-    endBinding: endTargetId == null
-        ? null
-        : ArrowBinding(
-            elementId: endTargetId,
-            anchor: const DrawPoint(x: 0.5, y: 0.5),
-          ),
+    startBinding: _binding(startTargetId),
+    endBinding: _binding(endTargetId),
   ),
 );
+
+ArrowBinding? _binding(String? targetId) {
+  if (targetId == null) {
+    return null;
+  }
+
+  return ArrowBinding(
+    elementId: targetId,
+    anchor: const DrawPoint(x: 0.5, y: 0.5),
+  );
+}
 
 DrawState _stateWith(List<ElementState> elements) => DrawState(
   domain: DomainState(document: DocumentState(elements: elements)),
@@ -473,18 +463,18 @@ ElementState? _findDuplicated(
   required String originalId,
   required DrawState state,
 }) {
+  final original = state.domain.document.getElementById(originalId);
+  if (original == null) {
+    return null;
+  }
+
   final originalIds = state.domain.document.elements.map((e) => e.id).toSet();
-  final newElements = result.domain.document.elements.where(
-    (e) => !originalIds.contains(e.id),
-  );
-  // Match by data type and position offset pattern.
-  for (final element in newElements) {
-    final original = state.domain.document.getElementById(originalId);
-    if (original == null) {
+  for (final element in result.domain.document.elements) {
+    if (originalIds.contains(element.id)) {
       continue;
     }
+
     if (element.data.typeId == original.data.typeId) {
-      // Verify it's offset from the original (default offset is 10,10).
       final dx = element.rect.minX - original.rect.minX;
       final dy = element.rect.minY - original.rect.minY;
       if ((dx - 10).abs() < 0.01 && (dy - 10).abs() < 0.01) {

@@ -22,14 +22,10 @@ class DrawState {
   }) => DrawState(domain: domain, application: application);
 
   /// Factory method: create initial state.
-  factory DrawState.initial({ViewState? view}) {
-    final domainState = DomainState.empty();
-    final applicationState = ApplicationState.initial(view: view);
-    return DrawState.fromLayers(
-      domain: domainState,
-      application: applicationState,
-    );
-  }
+  factory DrawState.initial({ViewState? view}) => DrawState(
+    domain: DomainState.empty(),
+    application: ApplicationState.initial(view: view),
+  );
 
   /// Domain state (participates in undo/redo and is persisted).
   final DomainState domain;
@@ -49,15 +45,13 @@ class DrawState {
   DomainState get domainSnapshot => domain;
 
   /// Restore domain state from history.
-  DrawState restoreFromSnapshot(DomainState snapshot) {
-    // Restore domain state while keeping the current application state.
-    // Also reset interaction to recompute selection overlays.
-    final newApplication = application.copyWith(
+  DrawState restoreFromSnapshot(DomainState snapshot) => DrawState(
+    domain: snapshot,
+    application: application.copyWith(
       interaction: const IdleState(),
       selectionOverlay: SelectionOverlayState.empty,
-    );
-    return DrawState(domain: snapshot, application: newApplication);
-  }
+    ),
+  );
 
   @override
   bool operator ==(Object other) =>

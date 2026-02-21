@@ -12,22 +12,6 @@ sealed class EditSessionEvent {
   const EditSessionEvent();
 }
 
-enum EditFailureCategory { business, system }
-
-extension EditFailureReasonCategory on EditFailureReason {
-  EditFailureCategory get category => switch (this) {
-    EditFailureReason.noSelection => EditFailureCategory.business,
-    EditFailureReason.missingSelectionBounds => EditFailureCategory.business,
-    EditFailureReason.selectionChanged => EditFailureCategory.business,
-    EditFailureReason.elementsChanged => EditFailureCategory.business,
-    EditFailureReason.notEditing => EditFailureCategory.business,
-    EditFailureReason.unknownOperationId => EditFailureCategory.system,
-    EditFailureReason.invalidParams => EditFailureCategory.system,
-    EditFailureReason.sessionRestoreFailed => EditFailureCategory.system,
-    EditFailureReason.operationFailed => EditFailureCategory.system,
-  };
-}
-
 @immutable
 class EditStartFailed extends EditSessionEvent {
   const EditStartFailed({required this.reason, required this.operationId});

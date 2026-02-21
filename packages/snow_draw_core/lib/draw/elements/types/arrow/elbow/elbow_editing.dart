@@ -54,7 +54,6 @@ ElbowEditResult computeElbowEdit({
   bool endBindingOverrideIsSet = false,
   bool finalize = false,
 }) {
-  // Route the edit through a step-based pipeline for clarity.
   final result = _ElbowEditPipeline(
     element: element,
     data: data,
@@ -66,19 +65,18 @@ ElbowEditResult computeElbowEdit({
     startBindingOverrideIsSet: startBindingOverrideIsSet,
     endBindingOverrideIsSet: endBindingOverrideIsSet,
   ).run();
-  if (!finalize) {
-    return result;
-  }
-  return _finalizeElbowEditResult(
-    element: element,
-    data: data,
-    lookup: lookup,
-    result: result,
-    startBindingOverride: startBindingOverride,
-    endBindingOverride: endBindingOverride,
-    startBindingOverrideIsSet: startBindingOverrideIsSet,
-    endBindingOverrideIsSet: endBindingOverrideIsSet,
-  );
+  return finalize
+      ? _finalizeElbowEditResult(
+          element: element,
+          data: data,
+          lookup: lookup,
+          result: result,
+          startBindingOverride: startBindingOverride,
+          endBindingOverride: endBindingOverride,
+          startBindingOverrideIsSet: startBindingOverrideIsSet,
+          endBindingOverrideIsSet: endBindingOverrideIsSet,
+        )
+      : result;
 }
 
 /// Transforms fixed segments when the owning element is resized/rotated.

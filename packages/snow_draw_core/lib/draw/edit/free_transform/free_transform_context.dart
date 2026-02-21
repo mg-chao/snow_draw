@@ -16,40 +16,25 @@ final class FreeTransformEditContext extends EditContext {
     required super.elementsVersion,
     required this.currentMode,
     required this.elementSnapshots,
-    this.handleOffset,
     this.selectionRotation = 0.0,
   });
+
   final FreeTransformMode currentMode;
   final Map<String, ElementFullSnapshot> elementSnapshots;
-  final DrawPoint? handleOffset;
   final double selectionRotation;
 
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
-
-  FreeTransformEditContext withMode(FreeTransformMode mode) =>
-      FreeTransformEditContext(
-        startPosition: startPosition,
-        startBounds: startBounds,
-        selectedIdsAtStart: selectedIdsAtStart,
-        selectionVersion: selectionVersion,
-        elementsVersion: elementsVersion,
-        currentMode: mode,
-        elementSnapshots: elementSnapshots,
-        handleOffset: handleOffset,
-        selectionRotation: selectionRotation,
-      );
 }
 
 @immutable
-class ElementFullSnapshot {
+final class ElementFullSnapshot {
   const ElementFullSnapshot({
-    required this.id,
     required this.center,
     required this.bounds,
     required this.rotation,
   });
-  final String id;
+
   final DrawPoint center;
   final DrawRect bounds;
   final double rotation;

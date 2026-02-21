@@ -24,59 +24,47 @@ class HighlightHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = element.rotation == 0
+        ? position
+        : ElementSpace(
+            rotation: element.rotation,
+            origin: rect.center,
+          ).fromWorld(position);
 
-    switch (data.shape) {
-      case HighlightShape.rectangle:
-        if (_testRectStroke(
-          rect: rect,
-          position: localPosition,
-          strokeWidth: data.strokeWidth,
-          tolerance: tolerance,
-        )) {
-          return true;
-        }
-        return _isInsideRect(rect, localPosition);
-      case HighlightShape.ellipse:
-        if (_testEllipseStroke(
-          rect: rect,
-          position: localPosition,
-          strokeWidth: data.strokeWidth,
-          tolerance: tolerance,
-        )) {
-          return true;
-        }
-        return _isInsideEllipse(rect, localPosition);
-    }
+    return switch (data.shape) {
+      HighlightShape.rectangle =>
+        _testRectStroke(
+              rect: rect,
+              position: localPosition,
+              strokeWidth: data.strokeWidth,
+              tolerance: tolerance,
+            ) ||
+            rect.containsPoint(localPosition),
+      HighlightShape.ellipse =>
+        _testEllipseStroke(
+              rect: rect,
+              position: localPosition,
+              strokeWidth: data.strokeWidth,
+              tolerance: tolerance,
+            ) ||
+            _ellipseContains(
+              dx: localPosition.x - rect.centerX,
+              dy: localPosition.y - rect.centerY,
+              rx: rect.width / 2,
+              ry: rect.height / 2,
+            ),
+    };
   }
 
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
-  }
-
-  bool _isInsideRect(DrawRect rect, DrawPoint position) =>
-      position.x >= rect.minX &&
-      position.x <= rect.maxX &&
-      position.y >= rect.minY &&
-      position.y <= rect.maxY;
-
-  bool _isInsideEllipse(DrawRect rect, DrawPoint position) {
-    final rx = rect.width / 2;
-    final ry = rect.height / 2;
+  bool _ellipseContains({
+    required double dx,
+    required double dy,
+    required double rx,
+    required double ry,
+  }) {
     if (rx <= 0 || ry <= 0) {
       return false;
     }
-    final dx = position.x - rect.centerX;
-    final dy = position.y - rect.centerY;
-    return _ellipseContains(dx, dy, rx, ry);
-  }
-
-  bool _ellipseContains(double dx, double dy, double rx, double ry) {
     final nx = dx / rx;
     final ny = dy / ry;
     return (nx * nx) + (ny * ny) <= 1;
@@ -93,17 +81,13 @@ class HighlightHitTester implements ElementHitTester {
     }
 
     final strokeMargin = (strokeWidth / 2) + tolerance;
-    final outerMinX = rect.minX - strokeMargin;
-    final outerMaxX = rect.maxX + strokeMargin;
-    final outerMinY = rect.minY - strokeMargin;
-    final outerMaxY = rect.maxY + strokeMargin;
-
-    final insideOuter =
-        position.x >= outerMinX &&
-        position.x <= outerMaxX &&
-        position.y >= outerMinY &&
-        position.y <= outerMaxY;
-    if (!insideOuter) {
+    final outerRect = DrawRect(
+      minX: rect.minX - strokeMargin,
+      minY: rect.minY - strokeMargin,
+      maxX: rect.maxX + strokeMargin,
+      maxY: rect.maxY + strokeMargin,
+    );
+    if (!outerRect.containsPoint(position)) {
       return false;
     }
 
@@ -112,17 +96,12 @@ class HighlightHitTester implements ElementHitTester {
     final innerMinY = rect.minY + strokeMargin;
     final innerMaxY = rect.maxY - strokeMargin;
 
-    final innerValid = innerMinX < innerMaxX && innerMinY < innerMaxY;
-    if (!innerValid) {
-      return true;
-    }
-
-    final insideInner =
-        position.x > innerMinX &&
-        position.x < innerMaxX &&
-        position.y > innerMinY &&
-        position.y < innerMaxY;
-    return !insideInner;
+    return innerMinX >= innerMaxX ||
+        innerMinY >= innerMaxY ||
+        position.x <= innerMinX ||
+        position.x >= innerMaxX ||
+        position.y <= innerMinY ||
+        position.y >= innerMaxY;
   }
 
   bool _testEllipseStroke({
@@ -147,17 +126,15 @@ class HighlightHitTester implements ElementHitTester {
     final dx = position.x - rect.centerX;
     final dy = position.y - rect.centerY;
 
-    if (!_ellipseContains(dx, dy, outerRx, outerRy)) {
+    if (!_ellipseContains(dx: dx, dy: dy, rx: outerRx, ry: outerRy)) {
       return false;
     }
 
     final innerRx = rx - margin;
     final innerRy = ry - margin;
-    if (innerRx <= 0 || innerRy <= 0) {
-      return true;
-    }
-
-    return !_ellipseContains(dx, dy, innerRx, innerRy);
+    return innerRx <= 0 ||
+        innerRy <= 0 ||
+        !_ellipseContains(dx: dx, dy: dy, rx: innerRx, ry: innerRy);
   }
 
   @override

@@ -12,18 +12,23 @@ final class FilterData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
   const FilterData({
     this.type = ConfigDefaults.defaultFilterType,
-    this.strength = ConfigDefaults.defaultFilterStrength,
-  }) : assert(strength >= 0 && strength <= 1, 'strength must be in [0, 1]');
+    double strength = ConfigDefaults.defaultFilterStrength,
+  }) : strength = strength != strength
+           ? 1.0
+           : strength <= 0
+           ? 0.0
+           : strength >= 1
+           ? 1.0
+           : strength;
 
   factory FilterData.fromJson(Map<String, dynamic> json) => FilterData(
     type: CanvasFilterType.values.firstWhere(
       (type) => type.name == json['type'],
       orElse: () => ConfigDefaults.defaultFilterType,
     ),
-    strength: _normalizeStrength(
-      (json['strength'] as num?)?.toDouble() ??
-          ConfigDefaults.defaultFilterStrength,
-    ),
+    strength:
+        (json['strength'] as num?)?.toDouble() ??
+        ConfigDefaults.defaultFilterStrength,
   );
 
   static const typeIdToken = ElementTypeId<FilterData>('filter');
@@ -32,19 +37,17 @@ final class FilterData extends ElementData
   final double strength;
 
   @override
-  ElementTypeId<FilterData> get typeId => FilterData.typeIdToken;
+  ElementTypeId<FilterData> get typeId => typeIdToken;
 
-  FilterData copyWith({CanvasFilterType? type, double? strength}) => FilterData(
-    type: type ?? this.type,
-    strength: _normalizeStrength(strength ?? this.strength),
-  );
+  FilterData copyWith({CanvasFilterType? type, double? strength}) =>
+      FilterData(type: type ?? this.type, strength: strength ?? this.strength);
 
   @override
-  ElementData withElementStyle(ElementStyleConfig style) =>
+  FilterData withElementStyle(ElementStyleConfig style) =>
       copyWith(type: style.filterType, strength: style.filterStrength);
 
   @override
-  ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
+  FilterData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     type: update.filterType ?? type,
     strength: update.filterStrength ?? strength,
   );
@@ -58,11 +61,8 @@ final class FilterData extends ElementData
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
       other is FilterData && other.type == type && other.strength == strength;
 
   @override
   int get hashCode => Object.hash(type, strength);
-
-  static double _normalizeStrength(double value) => value.clamp(0.0, 1.0);
 }

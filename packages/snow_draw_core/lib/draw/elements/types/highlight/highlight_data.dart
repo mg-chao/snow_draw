@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -20,10 +20,11 @@ final class HighlightData extends ElementData
   });
 
   factory HighlightData.fromJson(Map<String, dynamic> json) => HighlightData(
-    shape: HighlightShape.values.firstWhere(
-      (shape) => shape.name == json['shape'],
-      orElse: () => ConfigDefaults.defaultHighlightShape,
-    ),
+    shape: switch (json['shape']) {
+      'rectangle' => HighlightShape.rectangle,
+      'ellipse' => HighlightShape.ellipse,
+      _ => ConfigDefaults.defaultHighlightShape,
+    },
     color: Color(
       (json['color'] as int?) ??
           ConfigDefaults.defaultHighlightColor.toARGB32(),
@@ -32,9 +33,7 @@ final class HighlightData extends ElementData
       (json['strokeColor'] as int?) ??
           ConfigDefaults.defaultHighlightStrokeColor.toARGB32(),
     ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextStrokeWidth,
+    strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 0,
   );
 
   static const typeIdToken = ElementTypeId<HighlightData>('highlight');
@@ -60,7 +59,7 @@ final class HighlightData extends ElementData
   );
 
   @override
-  ElementData withElementStyle(ElementStyleConfig style) => copyWith(
+  HighlightData withElementStyle(ElementStyleConfig style) => copyWith(
     color: style.color,
     strokeColor: style.textStrokeColor,
     strokeWidth: style.textStrokeWidth,
@@ -68,7 +67,7 @@ final class HighlightData extends ElementData
   );
 
   @override
-  ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
+  HighlightData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     color: update.color ?? color,
     strokeColor: update.textStrokeColor ?? strokeColor,
     strokeWidth: update.textStrokeWidth ?? strokeWidth,
@@ -86,12 +85,11 @@ final class HighlightData extends ElementData
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
       other is HighlightData &&
-          other.shape == shape &&
-          other.color == color &&
-          other.strokeColor == strokeColor &&
-          other.strokeWidth == strokeWidth;
+      other.shape == shape &&
+      other.color == color &&
+      other.strokeColor == strokeColor &&
+      other.strokeWidth == strokeWidth;
 
   @override
   int get hashCode => Object.hash(shape, color, strokeColor, strokeWidth);

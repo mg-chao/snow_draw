@@ -28,7 +28,8 @@ class HighlightMaskStaticSceneCache {
     : _renderMask = renderMask ?? paintHighlightMask;
 
   final HighlightMaskSceneRenderer _renderMask;
-  _CachedStaticMaskScene? _cached;
+  _StaticMaskSceneKey? _cachedKey;
+  Picture? _cachedPicture;
 
   /// Paints the cached static highlight-mask scene when available.
   ///
@@ -50,9 +51,7 @@ class HighlightMaskStaticSceneCache {
 
     final key = _StaticMaskSceneKey(
       document: document,
-      excludedDocumentHighlightIds: Set<String>.unmodifiable(
-        excludedDocumentHighlightIds,
-      ),
+      excludedDocumentHighlightIds: excludedDocumentHighlightIds,
       viewportRect: viewportRect,
       maskConfig: maskConfig,
       scaleKey: _quantize(scaleFactor),
@@ -60,29 +59,50 @@ class HighlightMaskStaticSceneCache {
       cameraYKey: _quantize(cameraPosition.dy),
     );
 
-    final cached = _cached;
-    if (cached == null || !cached.key.matches(key)) {
-      cached?.picture.dispose();
-      _cached = _CachedStaticMaskScene(
-        key: key,
-        picture: _recordStaticMaskScene(
-          staticHighlights: staticHighlights,
-          viewportRect: viewportRect,
-          maskConfig: maskConfig,
-          scaleFactor: scaleFactor,
-          cameraPosition: cameraPosition,
-        ),
-      );
-    }
-
-    canvas.drawPicture(_cached!.picture);
+    final picture = _resolveCachedPicture(
+      key: key,
+      staticHighlights: staticHighlights,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scaleFactor,
+      cameraPosition: cameraPosition,
+    );
+    canvas.drawPicture(picture);
     return true;
   }
 
   /// Clears cached picture resources.
   void clear() {
-    _cached?.picture.dispose();
-    _cached = null;
+    _cachedPicture?.dispose();
+    _cachedPicture = null;
+    _cachedKey = null;
+  }
+
+  Picture _resolveCachedPicture({
+    required _StaticMaskSceneKey key,
+    required List<ElementState> staticHighlights,
+    required DrawRect viewportRect,
+    required HighlightMaskConfig maskConfig,
+    required double scaleFactor,
+    required Offset cameraPosition,
+  }) {
+    final cachedPicture = _cachedPicture;
+    final cachedKey = _cachedKey;
+    if (cachedPicture != null && cachedKey != null && cachedKey.matches(key)) {
+      return cachedPicture;
+    }
+
+    cachedPicture?.dispose();
+    final recordedPicture = _recordStaticMaskScene(
+      staticHighlights: staticHighlights,
+      viewportRect: viewportRect,
+      maskConfig: maskConfig,
+      scaleFactor: scaleFactor,
+      cameraPosition: cameraPosition,
+    );
+    _cachedPicture = recordedPicture;
+    _cachedKey = key;
+    return recordedPicture;
   }
 
   Picture _recordStaticMaskScene({
@@ -108,23 +128,18 @@ class HighlightMaskStaticSceneCache {
   int _quantize(double value) => (value * 1000).round();
 }
 
-class _CachedStaticMaskScene {
-  const _CachedStaticMaskScene({required this.key, required this.picture});
-
-  final _StaticMaskSceneKey key;
-  final Picture picture;
-}
-
 class _StaticMaskSceneKey {
-  const _StaticMaskSceneKey({
+  _StaticMaskSceneKey({
     required this.document,
-    required this.excludedDocumentHighlightIds,
+    required Set<String> excludedDocumentHighlightIds,
     required this.viewportRect,
     required this.maskConfig,
     required this.scaleKey,
     required this.cameraXKey,
     required this.cameraYKey,
-  });
+  }) : excludedDocumentHighlightIds = Set<String>.unmodifiable(
+         excludedDocumentHighlightIds,
+       );
 
   final DocumentState document;
   final Set<String> excludedDocumentHighlightIds;
@@ -146,18 +161,6 @@ class _StaticMaskSceneKey {
         other.excludedDocumentHighlightIds,
       );
 
-  bool _setEquals(Set<String> a, Set<String> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final value in a) {
-      if (!b.contains(value)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  bool _setEquals(Set<String> a, Set<String> b) =>
+      a.length == b.length && a.containsAll(b);
 }

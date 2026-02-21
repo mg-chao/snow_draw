@@ -18,21 +18,15 @@ void main() {
   group('isArrowInteractionMutationOnly', () {
     test('returns true for arrow create rect updates', () {
       final base = _baseState(elements: const []);
-      final previous = _withInteraction(
-        base,
-        CreatingState(
-          element: _arrowElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
-          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
-        ),
+      final previous = _creatingState(
+        base: base,
+        element: _arrowElement,
+        currentRect: _collapsedRect,
       );
-      final next = _withInteraction(
-        base,
-        CreatingState(
-          element: _arrowElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
-          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 70),
-        ),
+      final next = _creatingState(
+        base: base,
+        element: _arrowElement,
+        currentRect: _expandedRect,
       );
 
       expect(
@@ -46,30 +40,17 @@ void main() {
         elements: const [_arrowElement],
         selectedIds: const {'arrow'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
-        selectedIdsAtStart: {'arrow'},
-        selectionVersion: 1,
-        elementsVersion: 1,
+      final previous = _editingState(
+        base: base,
+        sessionId: 'arrow_edit',
+        context: _arrowEditContext,
+        transform: MoveTransform.zero,
       );
-      final previous = _withInteraction(
-        base,
-        const EditingState(
-          operationId: EditOperationIds.move,
-          sessionId: 'arrow_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
-        ),
-      );
-      final next = _withInteraction(
-        base,
-        const EditingState(
-          operationId: EditOperationIds.move,
-          sessionId: 'arrow_edit',
-          context: context,
-          currentTransform: MoveTransform(dx: 8, dy: 6),
-        ),
+      final next = _editingState(
+        base: base,
+        sessionId: 'arrow_edit',
+        context: _arrowEditContext,
+        transform: const MoveTransform(dx: 8, dy: 6),
       );
 
       expect(
@@ -83,30 +64,17 @@ void main() {
         elements: const [_arrowElement, _rectangleElement],
         selectedIds: const {'arrow', 'rect'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 150, maxY: 90),
-        selectedIdsAtStart: {'arrow', 'rect'},
-        selectionVersion: 1,
-        elementsVersion: 1,
+      final previous = _editingState(
+        base: base,
+        sessionId: 'mixed_edit',
+        context: _mixedEditContext,
+        transform: MoveTransform.zero,
       );
-      final previous = _withInteraction(
-        base,
-        const EditingState(
-          operationId: EditOperationIds.move,
-          sessionId: 'mixed_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
-        ),
-      );
-      final next = _withInteraction(
-        base,
-        const EditingState(
-          operationId: EditOperationIds.move,
-          sessionId: 'mixed_edit',
-          context: context,
-          currentTransform: MoveTransform(dx: 4, dy: 4),
-        ),
+      final next = _editingState(
+        base: base,
+        sessionId: 'mixed_edit',
+        context: _mixedEditContext,
+        transform: const MoveTransform(dx: 4, dy: 4),
       );
 
       expect(
@@ -117,21 +85,15 @@ void main() {
 
     test('returns false when interaction is not arrow-based', () {
       final base = _baseState(elements: const [_rectangleElement]);
-      final previous = _withInteraction(
-        base,
-        CreatingState(
-          element: _rectangleElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
-          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
-        ),
+      final previous = _creatingState(
+        base: base,
+        element: _rectangleElement,
+        currentRect: _collapsedRect,
       );
-      final next = _withInteraction(
-        base,
-        CreatingState(
-          element: _rectangleElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
-          currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 70),
-        ),
+      final next = _creatingState(
+        base: base,
+        element: _rectangleElement,
+        currentRect: _expandedRect,
       );
 
       expect(
@@ -145,31 +107,18 @@ void main() {
         elements: const [_arrowElement],
         selectedIds: const {'arrow'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
-        selectedIdsAtStart: {'arrow'},
-        selectionVersion: 1,
-        elementsVersion: 1,
-      );
-      final previous = _withInteraction(
-        base,
-        const EditingState(
-          operationId: EditOperationIds.move,
-          sessionId: 'arrow_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
-        ),
+      final previous = _editingState(
+        base: base,
+        sessionId: 'arrow_edit',
+        context: _arrowEditContext,
+        transform: MoveTransform.zero,
       );
       final next =
-          _withInteraction(
-            base,
-            const EditingState(
-              operationId: EditOperationIds.move,
-              sessionId: 'arrow_edit',
-              context: context,
-              currentTransform: MoveTransform(dx: 8, dy: 4),
-            ),
+          _editingState(
+            base: base,
+            sessionId: 'arrow_edit',
+            context: _arrowEditContext,
+            transform: const MoveTransform(dx: 8, dy: 4),
           ).copyWith(
             domain: DomainState(
               document: DocumentState(elements: const [_arrowElement]),
@@ -203,6 +152,28 @@ const _rectangleElement = ElementState(
   data: RectangleData(),
 );
 
+const _startPosition = DrawPoint(x: 20, y: 20);
+const _collapsedRect = DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20);
+const _expandedRect = DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 70);
+
+const _arrowEditContext = MoveEditContext(
+  startPosition: _startPosition,
+  startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
+  selectedIdsAtStart: {'arrow'},
+  selectionVersion: 1,
+  elementsVersion: 1,
+  elementSnapshots: {},
+);
+
+const _mixedEditContext = MoveEditContext(
+  startPosition: _startPosition,
+  startBounds: DrawRect(minX: 10, minY: 10, maxX: 150, maxY: 90),
+  selectedIdsAtStart: {'arrow', 'rect'},
+  selectionVersion: 1,
+  elementsVersion: 1,
+  elementSnapshots: {},
+);
+
 DrawState _baseState({
   required List<ElementState> elements,
   Set<String> selectedIds = const <String>{},
@@ -216,12 +187,30 @@ DrawState _baseState({
 DrawState _withInteraction(DrawState base, InteractionState interaction) => base
     .copyWith(application: base.application.copyWith(interaction: interaction));
 
-class _TestEditContext extends EditContext {
-  const _TestEditContext({
-    required super.startPosition,
-    required super.startBounds,
-    required super.selectedIdsAtStart,
-    required super.selectionVersion,
-    required super.elementsVersion,
-  });
-}
+DrawState _creatingState({
+  required DrawState base,
+  required ElementState element,
+  required DrawRect currentRect,
+}) => _withInteraction(
+  base,
+  CreatingState(
+    element: element,
+    startPosition: _startPosition,
+    currentRect: currentRect,
+  ),
+);
+
+DrawState _editingState({
+  required DrawState base,
+  required String sessionId,
+  required EditContext context,
+  required EditTransform transform,
+}) => _withInteraction(
+  base,
+  EditingState(
+    operationId: EditOperationIds.move,
+    sessionId: sessionId,
+    context: context,
+    currentTransform: transform,
+  ),
+);

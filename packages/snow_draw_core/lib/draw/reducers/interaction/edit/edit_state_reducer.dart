@@ -10,7 +10,6 @@ import '../../../edit/core/edit_result_unified.dart';
 import '../../../edit/core/edit_session_id_generator.dart';
 import '../../../edit/core/edit_session_service.dart';
 import '../../../models/draw_state.dart';
-import '../../../types/edit_operation_id.dart';
 import '../interaction_transition.dart';
 
 /// Reducer dedicated to edit operations.
@@ -48,21 +47,6 @@ class EditStateReducer {
     _ => null,
   };
 
-  /// Cancel the current edit (if editing).
-  ///
-  /// Used during conflict handling.
-  DrawState cancelIfEditing(DrawState state) {
-    final outcome = cancelIfEditingOutcome(state);
-    return outcome?.state ?? state;
-  }
-
-  EditOutcome? cancelIfEditingOutcome(DrawState state) {
-    if (!state.application.isEditing) {
-      return null;
-    }
-    return editSessionService.cancel(state: state);
-  }
-
   InteractionTransition _reduceStartEdit({
     required StartEdit action,
     required DrawState state,
@@ -71,31 +55,28 @@ class EditStateReducer {
     var currentState = state;
     final events = <EditSessionEvent>[];
 
-    // When starting a new edit, cancel the current edit first.
     if (currentState.application.isEditing) {
-      final cancel = cancelIfEditingOutcome(currentState);
-      if (cancel != null) {
-        currentState = cancel.state;
-        events.add(_eventForCancel(cancel));
-      }
+      final cancel = editSessionService.cancel(state: currentState);
+      currentState = cancel.state;
+      events.add(_eventForCancel(cancel));
     }
 
-    final injectedParams = _injectParams(
-      action.params,
-      context.editConfigProvider.editConfig,
-    );
-    final sessionId = sessionIdGenerator();
     final start = editSessionService.start(
       state: currentState,
       operationId: action.operationId,
       position: action.position,
-      params: injectedParams,
-      sessionId: sessionId,
+      params: _injectParams(
+        action.params,
+        context.editConfigProvider.editConfig,
+      ),
+      sessionId: sessionIdGenerator(),
     );
 
-    final startEvent = _eventForStart(start, action.operationId);
-    if (startEvent != null) {
-      events.add(startEvent);
+    final reason = start.failureReason;
+    if (reason != null) {
+      events.add(
+        EditStartFailed(reason: reason, operationId: action.operationId),
+      );
     }
 
     return InteractionTransition(nextState: start.state, events: events);
@@ -111,20 +92,23 @@ class EditStateReducer {
       modifiers: action.modifiers,
       failurePolicy: updateFailurePolicy,
     );
-
-    final updateEvent = _eventForUpdate(update);
+    final reason = update.failureReason;
     return InteractionTransition(
       nextState: update.state,
-      events: updateEvent == null ? const [] : [updateEvent],
+      events: reason == null
+          ? const []
+          : [EditUpdateFailed(reason: reason, operationId: update.operationId)],
     );
   }
 
   InteractionTransition _reduceFinishEdit({required DrawState state}) {
     final finish = editSessionService.finish(state: state);
-    final finishEvent = _eventForFinish(finish);
+    final reason = finish.failureReason;
     return InteractionTransition(
       nextState: finish.state,
-      events: finishEvent == null ? const [] : [finishEvent],
+      events: reason == null
+          ? const []
+          : [EditFinishFailed(reason: reason, operationId: finish.operationId)],
     );
   }
 
@@ -136,43 +120,14 @@ class EditStateReducer {
     );
   }
 
-  EditSessionEvent? _eventForStart(
-    EditOutcome outcome,
-    EditOperationId fallbackOperationId,
-  ) {
-    final reason = outcome.failureReason;
-    if (reason == null) {
-      return null;
-    }
-    return EditStartFailed(
-      reason: reason,
-      operationId: outcome.operationId ?? fallbackOperationId,
-    );
-  }
-
-  EditSessionEvent? _eventForUpdate(EditOutcome outcome) {
-    final reason = outcome.failureReason;
-    if (reason == null) {
-      return null;
-    }
-    return EditUpdateFailed(reason: reason, operationId: outcome.operationId);
-  }
-
-  EditSessionEvent? _eventForFinish(EditOutcome outcome) {
-    final reason = outcome.failureReason;
-    if (reason == null) {
-      return null;
-    }
-    return EditFinishFailed(reason: reason, operationId: outcome.operationId);
-  }
-
-  EditSessionEvent _eventForCancel(EditOutcome outcome) {
-    final reason = outcome.failureReason;
-    if (reason == null) {
-      return EditCancelled(operationId: outcome.operationId);
-    }
-    return EditCancelFailed(reason: reason, operationId: outcome.operationId);
-  }
+  EditSessionEvent _eventForCancel(EditOutcome outcome) =>
+      switch (outcome.failureReason) {
+        final reason? => EditCancelFailed(
+          reason: reason,
+          operationId: outcome.operationId,
+        ),
+        null => EditCancelled(operationId: outcome.operationId),
+      };
 
   EditOperationParams _injectParams(
     EditOperationParams params,

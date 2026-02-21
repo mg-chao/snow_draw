@@ -9,26 +9,46 @@ import 'package:snow_draw_core/ui/canvas/filter_pipeline/filter_segment_builder.
 
 void main() {
   const builder = FilterSegmentBuilder();
+  const rectA = DrawRect(maxX: 10, maxY: 10);
+  const rectB = DrawRect(minX: 5, maxX: 15, maxY: 10);
+  const rectC = DrawRect(minX: 10, maxX: 20, maxY: 10);
+
+  ElementState rectangle({
+    required String id,
+    required DrawRect rect,
+    required int zIndex,
+  }) {
+    return ElementState(
+      id: id,
+      rect: rect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: zIndex,
+      data: const RectangleData(),
+    );
+  }
+
+  ElementState filter({
+    required String id,
+    required DrawRect rect,
+    required int zIndex,
+    FilterData data = const FilterData(),
+  }) {
+    return ElementState(
+      id: id,
+      rect: rect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: zIndex,
+      data: data,
+    );
+  }
 
   test('build returns one batch for non-filter scene', () {
-    final segments = builder.build(const [
-      ElementState(
-        id: 'e1',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      ),
-      ElementState(
-        id: 'e2',
-        rect: DrawRect(minX: 10, maxX: 20, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: RectangleData(),
-      ),
-    ]);
+    final segments = builder.build(List.unmodifiable([
+      rectangle(id: 'e1', rect: rectA, zIndex: 0),
+      rectangle(id: 'e2', rect: rectC, zIndex: 1),
+    ]));
 
     expect(segments.length, 1);
     expect(segments.first, isA<ElementBatchSegment>());
@@ -37,32 +57,11 @@ void main() {
   });
 
   test('build alternates batches and filters', () {
-    final segments = builder.build(const [
-      ElementState(
-        id: 'e1',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      ),
-      ElementState(
-        id: 'f1',
-        rect: DrawRect(minX: 5, maxX: 15, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(),
-      ),
-      ElementState(
-        id: 'e2',
-        rect: DrawRect(minX: 10, maxX: 20, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 2,
-        data: RectangleData(),
-      ),
-    ]);
+    final segments = builder.build(List.unmodifiable([
+      rectangle(id: 'e1', rect: rectA, zIndex: 0),
+      filter(id: 'f1', rect: rectB, zIndex: 1),
+      rectangle(id: 'e2', rect: rectC, zIndex: 2),
+    ]));
 
     expect(segments.length, 3);
     expect(segments[0], isA<ElementBatchSegment>());
@@ -71,32 +70,11 @@ void main() {
   });
 
   test('build handles consecutive filters without empty batches', () {
-    final segments = builder.build(const [
-      ElementState(
-        id: 'f1',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: FilterData(),
-      ),
-      ElementState(
-        id: 'f2',
-        rect: DrawRect(minX: 5, maxX: 15, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(),
-      ),
-      ElementState(
-        id: 'e1',
-        rect: DrawRect(minX: 10, maxX: 20, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 2,
-        data: RectangleData(),
-      ),
-    ]);
+    final segments = builder.build(List.unmodifiable([
+      filter(id: 'f1', rect: rectA, zIndex: 0),
+      filter(id: 'f2', rect: rectB, zIndex: 1),
+      rectangle(id: 'e1', rect: rectC, zIndex: 2),
+    ]));
 
     expect(segments.length, 2);
     expect(segments[0], isA<MergedFilterSegment>());
@@ -108,32 +86,16 @@ void main() {
   });
 
   test('build keeps different-type consecutive filters separate', () {
-    final segments = builder.build(const [
-      ElementState(
-        id: 'f1',
-        rect: DrawRect(maxX: 10, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: FilterData(),
-      ),
-      ElementState(
+    final segments = builder.build(List.unmodifiable([
+      filter(id: 'f1', rect: rectA, zIndex: 0),
+      filter(
         id: 'f2',
-        rect: DrawRect(minX: 5, maxX: 15, maxY: 10),
-        rotation: 0,
-        opacity: 1,
+        rect: rectB,
         zIndex: 1,
-        data: FilterData(type: CanvasFilterType.grayscale),
+        data: const FilterData(type: CanvasFilterType.grayscale),
       ),
-      ElementState(
-        id: 'e1',
-        rect: DrawRect(minX: 10, maxX: 20, maxY: 10),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 2,
-        data: RectangleData(),
-      ),
-    ]);
+      rectangle(id: 'e1', rect: rectC, zIndex: 2),
+    ]));
 
     expect(segments.length, 3);
     expect(segments[0], isA<FilterSegment>());

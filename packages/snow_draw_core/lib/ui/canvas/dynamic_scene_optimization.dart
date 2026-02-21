@@ -85,43 +85,24 @@ DynamicSceneOptimizationPlan? _resolveLightweightLineOptimizationPlan(
   )) {
     return null;
   }
-  if (interaction is! EditingState) {
-    return null;
-  }
 
-  final selectedIds = interaction.context.selectedIdsAtStart;
-  if (selectedIds.isEmpty ||
-      selectedIds.length > _maxLocalizedPreviewElementCount) {
+  final selectedIds = (interaction as EditingState).context.selectedIdsAtStart;
+  if (selectedIds.length > _maxLocalizedPreviewElementCount) {
     return null;
   }
 
   final previewElementsById = view.previewElementsById;
-  final candidateIds = <String>{};
   for (final elementId in selectedIds) {
     final effective =
         previewElementsById[elementId] ?? document.getElementById(elementId);
     if (effective == null || _isBlendSensitiveElement(effective)) {
       return null;
     }
-    candidateIds.add(elementId);
   }
 
-  if (candidateIds.isEmpty) {
-    return null;
-  }
-
-  final orderIndex = _resolveLowestOrderIndex(
+  return _resolvePlanForCandidates(
     document: document,
-    elementIds: candidateIds,
-  );
-  if (orderIndex == null ||
-      !_canApplyLocalizedOptimization(document, orderIndex)) {
-    return null;
-  }
-
-  return DynamicSceneOptimizationPlan(
-    optimizedElementIds: candidateIds,
-    staticHiddenElementIds: candidateIds,
+    candidateIds: selectedIds,
   );
 }
 
@@ -153,9 +134,10 @@ DynamicSceneOptimizationPlan? _resolveTextEditingOptimizationPlan(
     return null;
   }
 
-  final orderIndex = document.getOrderIndex(interaction.elementId);
-  if (orderIndex == null ||
-      !_canApplyLocalizedOptimization(document, orderIndex)) {
+  if (!_canApplyLocalizedOptimizationForElement(
+    document: document,
+    elementId: interaction.elementId,
+  )) {
     return null;
   }
 
@@ -187,9 +169,10 @@ DynamicSceneOptimizationPlan? _resolveArrowPointOptimizationPlan(
     return null;
   }
 
-  final orderIndex = document.getOrderIndex(elementId);
-  if (orderIndex == null ||
-      !_canApplyLocalizedOptimization(document, orderIndex)) {
+  if (!_canApplyLocalizedOptimizationForElement(
+    document: document,
+    elementId: elementId,
+  )) {
     return null;
   }
 
@@ -207,21 +190,15 @@ DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
   )) {
     return null;
   }
-  if (interaction is! EditingState) {
-    return null;
-  }
 
-  final selectedId = interaction.context.selectedIdsAtStart.first;
+  final selectedId =
+      (interaction as EditingState).context.selectedIdsAtStart.first;
   if (view.selectedIds.length != 1 || !view.selectedIds.contains(selectedId)) {
     return null;
   }
 
-  final element = document.getElementById(selectedId);
   final preview = view.previewElementsById[selectedId];
-  if (element == null ||
-      preview == null ||
-      element.data is! SerialNumberData ||
-      preview.data is! SerialNumberData) {
+  if (preview == null || preview.data is! SerialNumberData) {
     return null;
   }
 
@@ -235,18 +212,9 @@ DynamicSceneOptimizationPlan? _resolveSerialNumberOptimizationPlan(
     }
   }
 
-  final orderIndex = _resolveLowestOrderIndex(
+  return _resolvePlanForCandidates(
     document: document,
-    elementIds: companionIds,
-  );
-  if (orderIndex == null ||
-      !_canApplyLocalizedOptimization(document, orderIndex)) {
-    return null;
-  }
-
-  return DynamicSceneOptimizationPlan(
-    optimizedElementIds: companionIds,
-    staticHiddenElementIds: companionIds,
+    candidateIds: companionIds,
   );
 }
 
@@ -297,18 +265,9 @@ DynamicSceneOptimizationPlan? _resolveHighlightEditOptimizationPlan(
     }
   }
 
-  final orderIndex = _resolveLowestOrderIndex(
+  return _resolvePlanForCandidates(
     document: document,
-    elementIds: candidateIds,
-  );
-  if (orderIndex == null ||
-      !_canApplyLocalizedOptimization(document, orderIndex)) {
-    return null;
-  }
-
-  return DynamicSceneOptimizationPlan(
-    optimizedElementIds: candidateIds,
-    staticHiddenElementIds: candidateIds,
+    candidateIds: candidateIds,
   );
 }
 
@@ -343,6 +302,16 @@ DynamicSceneOptimizationPlan? _resolveSingleSelectionEditOptimizationPlan(
     previewElementsById: previewElements,
     candidateIds: candidateIds,
   );
+  return _resolvePlanForCandidates(
+    document: document,
+    candidateIds: candidateIds,
+  );
+}
+
+DynamicSceneOptimizationPlan? _resolvePlanForCandidates({
+  required DocumentState document,
+  required Set<String> candidateIds,
+}) {
   if (candidateIds.isEmpty) {
     return null;
   }
@@ -362,6 +331,17 @@ DynamicSceneOptimizationPlan? _resolveSingleSelectionEditOptimizationPlan(
   );
 }
 
+bool _canApplyLocalizedOptimizationForElement({
+  required DocumentState document,
+  required String elementId,
+}) {
+  final orderIndex = document.getOrderIndex(elementId);
+  if (orderIndex == null) {
+    return false;
+  }
+  return _canApplyLocalizedOptimization(document, orderIndex);
+}
+
 bool _canApplyLocalizedOptimization(DocumentState document, int orderIndex) =>
     !document.hasBlendSensitiveElementAboveOrderIndex(
       orderIndex,
@@ -378,10 +358,6 @@ void _includeSerialCompanionTextIds({
   required Map<String, ElementState> previewElementsById,
   required Set<String> candidateIds,
 }) {
-  if (candidateIds.isEmpty) {
-    return;
-  }
-
   final companionTextIds = <String>{};
   for (final id in candidateIds) {
     final effectiveCandidate =
@@ -403,24 +379,22 @@ void _includeSerialCompanionTextIds({
     }
   }
 
-  if (companionTextIds.isNotEmpty) {
-    candidateIds.addAll(companionTextIds);
-  }
+  candidateIds.addAll(companionTextIds);
 }
 
 int? _resolveLowestOrderIndex({
   required DocumentState document,
   required Set<String> elementIds,
 }) {
-  var lowestOrderIndex = -1;
+  int? lowestOrderIndex;
   for (final elementId in elementIds) {
     final orderIndex = document.getOrderIndex(elementId);
     if (orderIndex == null) {
       continue;
     }
-    if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
+    if (lowestOrderIndex == null || orderIndex < lowestOrderIndex) {
       lowestOrderIndex = orderIndex;
     }
   }
-  return lowestOrderIndex < 0 ? null : lowestOrderIndex;
+  return lowestOrderIndex;
 }

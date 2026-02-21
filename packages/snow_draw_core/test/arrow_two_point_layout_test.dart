@@ -7,28 +7,26 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 void main() {
   group('computeArrowTwoPointLayout', () {
     test('matches generic two-point rect + normalization', () {
-      final samples = <(DrawPoint, DrawPoint)>[
-        (DrawPoint.zero, const DrawPoint(x: 100, y: 50)),
-        (const DrawPoint(x: 100, y: 50), DrawPoint.zero),
-        (const DrawPoint(x: 10, y: 20), const DrawPoint(x: 10, y: 90)),
-        (const DrawPoint(x: 30, y: 40), const DrawPoint(x: 130, y: 40)),
+      const samples = <(DrawPoint, DrawPoint)>[
+        (DrawPoint.zero, DrawPoint(x: 100, y: 50)),
+        (DrawPoint(x: 100, y: 50), DrawPoint.zero),
+        (DrawPoint(x: 10, y: 20), DrawPoint(x: 10, y: 90)),
+        (DrawPoint(x: 30, y: 40), DrawPoint(x: 130, y: 40)),
       ];
 
-      for (final sample in samples) {
-        final first = sample.$1;
-        final second = sample.$2;
+      for (final (first, second) in samples) {
         final fast = computeArrowTwoPointLayout(first: first, second: second);
-        final genericRect = ArrowGeometry.calculatePathBounds(
+        final rect = ArrowGeometry.calculatePathBounds(
           worldPoints: [first, second],
           arrowType: ArrowType.straight,
         );
-        final genericPoints = ArrowGeometry.normalizePoints(
+        final normalizedPoints = ArrowGeometry.normalizePoints(
           worldPoints: [first, second],
-          rect: genericRect,
+          rect: rect,
         );
 
-        expect(fast.rect, genericRect);
-        expect(fast.normalizedPoints, genericPoints);
+        expect(fast.rect, rect);
+        expect(fast.normalizedPoints, normalizedPoints);
       }
     });
 
@@ -37,9 +35,10 @@ void main() {
       const second = DrawPoint(x: 48, y: 72, pressure: 0.8);
 
       final layout = computeArrowTwoPointLayout(first: first, second: second);
+      final points = layout.normalizedPoints;
 
-      expect(layout.normalizedPoints[0].pressure, first.pressure);
-      expect(layout.normalizedPoints[1].pressure, second.pressure);
+      expect(points.first.pressure, first.pressure);
+      expect(points.last.pressure, second.pressure);
     });
   });
 }

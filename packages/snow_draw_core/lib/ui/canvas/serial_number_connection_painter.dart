@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:meta/meta.dart';
 
 import '../../draw/elements/types/serial_number/serial_number_binding.dart';
-import '../../draw/elements/types/text/text_data.dart';
 import '../../draw/models/draw_state_view.dart';
 import '../../draw/models/element_state.dart';
 import 'serial_number_connector_cache.dart';
@@ -68,34 +67,28 @@ SerialNumberConnectorMap resolveSerialNumberConnectorMap(
 
 void drawSerialNumberConnectorsForText({
   required Canvas canvas,
-  required ElementState textElement,
+  required String textElementId,
   required SerialNumberConnectorMap connectorsByTextId,
 }) {
-  if (textElement.data is! TextData) {
-    return;
-  }
-
-  final connectors = connectorsByTextId[textElement.id];
-  if (connectors == null || connectors.isEmpty) {
+  final connectors = connectorsByTextId[textElementId];
+  if (connectors == null) {
     return;
   }
 
   for (final connector in connectors) {
-    final connection = connector.connection;
-    final paint = connector.paint;
-    final textBaselineStart = connection.textBaselineStart;
-    final textBaselineEnd = connection.textBaselineEnd;
-    if (textBaselineStart != null && textBaselineEnd != null) {
+    final baselineStart = connector.connection.textBaselineStart;
+    final baselineEnd = connector.connection.textBaselineEnd;
+    if (baselineStart != null && baselineEnd != null) {
       canvas.drawLine(
-        Offset(textBaselineStart.x, textBaselineStart.y),
-        Offset(textBaselineEnd.x, textBaselineEnd.y),
-        paint,
+        Offset(baselineStart.x, baselineStart.y),
+        Offset(baselineEnd.x, baselineEnd.y),
+        connector.paint,
       );
     }
     canvas.drawLine(
-      Offset(connection.start.x, connection.start.y),
-      Offset(connection.end.x, connection.end.y),
-      paint,
+      Offset(connector.connection.start.x, connector.connection.start.y),
+      Offset(connector.connection.end.x, connector.connection.end.y),
+      connector.paint,
     );
   }
 }

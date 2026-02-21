@@ -20,17 +20,15 @@ void main() {
       final base = _baseState(elements: const []);
       final previous = _withInteraction(
         base,
-        CreatingState(
+        _creatingState(
           element: _highlightElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
         ),
       );
       final next = _withInteraction(
         base,
-        CreatingState(
+        _creatingState(
           element: _highlightElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 70),
         ),
       );
@@ -46,29 +44,20 @@ void main() {
         elements: const [_highlightElement],
         selectedIds: const {'highlight'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
-        selectedIdsAtStart: {'highlight'},
-        selectionVersion: 1,
-        elementsVersion: 1,
-      );
       final previous = _withInteraction(
         base,
-        const EditingState(
-          operationId: EditOperationIds.move,
+        _moveEditingState(
           sessionId: 'highlight_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
+          context: _highlightEditContext,
+          transform: MoveTransform.zero,
         ),
       );
       final next = _withInteraction(
         base,
-        const EditingState(
-          operationId: EditOperationIds.move,
+        _moveEditingState(
           sessionId: 'highlight_edit',
-          context: context,
-          currentTransform: MoveTransform(dx: 8, dy: 6),
+          context: _highlightEditContext,
+          transform: const MoveTransform(dx: 8, dy: 6),
         ),
       );
 
@@ -83,29 +72,20 @@ void main() {
         elements: const [_highlightElement, _rectangleElement],
         selectedIds: const {'highlight', 'rect'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 140, maxY: 90),
-        selectedIdsAtStart: {'highlight', 'rect'},
-        selectionVersion: 1,
-        elementsVersion: 1,
-      );
       final previous = _withInteraction(
         base,
-        const EditingState(
-          operationId: EditOperationIds.move,
+        _moveEditingState(
           sessionId: 'mixed_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
+          context: _mixedEditContext,
+          transform: MoveTransform.zero,
         ),
       );
       final next = _withInteraction(
         base,
-        const EditingState(
-          operationId: EditOperationIds.move,
+        _moveEditingState(
           sessionId: 'mixed_edit',
-          context: context,
-          currentTransform: MoveTransform(dx: 4, dy: 4),
+          context: _mixedEditContext,
+          transform: const MoveTransform(dx: 4, dy: 4),
         ),
       );
 
@@ -120,30 +100,21 @@ void main() {
         elements: const [_highlightElement],
         selectedIds: const {'highlight'},
       );
-      const context = _TestEditContext(
-        startPosition: DrawPoint(x: 20, y: 20),
-        startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
-        selectedIdsAtStart: {'highlight'},
-        selectionVersion: 1,
-        elementsVersion: 1,
-      );
       final previous = _withInteraction(
         base,
-        const EditingState(
-          operationId: EditOperationIds.move,
+        _moveEditingState(
           sessionId: 'highlight_edit',
-          context: context,
-          currentTransform: MoveTransform.zero,
+          context: _highlightEditContext,
+          transform: MoveTransform.zero,
         ),
       );
       final next =
           _withInteraction(
             base,
-            const EditingState(
-              operationId: EditOperationIds.move,
+            _moveEditingState(
               sessionId: 'highlight_edit',
-              context: context,
-              currentTransform: MoveTransform(dx: 8, dy: 4),
+              context: _highlightEditContext,
+              transform: const MoveTransform(dx: 8, dy: 4),
             ),
           ).copyWith(
             domain: DomainState(
@@ -162,17 +133,15 @@ void main() {
       final base = _baseState(elements: const []);
       final previous = _withInteraction(
         base,
-        CreatingState(
+        _creatingState(
           element: _rectangleElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
         ),
       );
       final next = _withInteraction(
         base,
-        CreatingState(
+        _creatingState(
           element: _rectangleElement,
-          startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 70),
         ),
       );
@@ -203,6 +172,24 @@ const _rectangleElement = ElementState(
   data: RectangleData(),
 );
 
+const _highlightEditContext = MoveEditContext(
+  startPosition: DrawPoint(x: 20, y: 20),
+  startBounds: DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 80),
+  selectedIdsAtStart: {'highlight'},
+  selectionVersion: 1,
+  elementsVersion: 1,
+  elementSnapshots: {},
+);
+
+const _mixedEditContext = MoveEditContext(
+  startPosition: DrawPoint(x: 20, y: 20),
+  startBounds: DrawRect(minX: 10, minY: 10, maxX: 140, maxY: 90),
+  selectedIdsAtStart: {'highlight', 'rect'},
+  selectionVersion: 1,
+  elementsVersion: 1,
+  elementSnapshots: {},
+);
+
 DrawState _baseState({
   required List<ElementState> elements,
   Set<String> selectedIds = const <String>{},
@@ -216,12 +203,22 @@ DrawState _baseState({
 DrawState _withInteraction(DrawState base, InteractionState interaction) => base
     .copyWith(application: base.application.copyWith(interaction: interaction));
 
-class _TestEditContext extends EditContext {
-  const _TestEditContext({
-    required super.startPosition,
-    required super.startBounds,
-    required super.selectedIdsAtStart,
-    required super.selectionVersion,
-    required super.elementsVersion,
-  });
-}
+CreatingState _creatingState({
+  required ElementState element,
+  required DrawRect currentRect,
+}) => CreatingState(
+  element: element,
+  startPosition: const DrawPoint(x: 20, y: 20),
+  currentRect: currentRect,
+);
+
+EditingState _moveEditingState({
+  required String sessionId,
+  required EditContext context,
+  required MoveTransform transform,
+}) => EditingState(
+  operationId: EditOperationIds.move,
+  sessionId: sessionId,
+  context: context,
+  currentTransform: transform,
+);

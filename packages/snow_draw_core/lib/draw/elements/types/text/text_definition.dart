@@ -6,13 +6,13 @@ import 'text_data.dart';
 import 'text_hit_tester.dart';
 import 'text_renderer.dart';
 
-final textDefinition = ElementDefinition<TextData>(
+const textDefinition = ElementDefinition<TextData>(
   typeId: TextData.typeIdToken,
   displayName: 'Text',
   icon: Icons.text_fields,
-  renderer: const TextRenderer(),
-  hitTester: const TextHitTester(),
-  createDefaultData: () => const TextData(),
+  renderer: TextRenderer(),
+  hitTester: TextHitTester(),
+  createDefaultData: TextData.new,
   fromJson: TextData.fromJson,
-  creationStrategy: const RectCreationStrategy(),
+  creationStrategy: RectCreationStrategy(),
 );

@@ -98,10 +98,8 @@ class DefaultDrawStore implements DrawStore {
 
   var _isDisposed = false;
   var _isBatching = false;
-  PersistentSnapshot? _batchStartSnapshot;
-  DrawState? _batchStartState;
-  var _batchSequence = 0;
-  String? _currentBatchId;
+  late PersistentSnapshot _batchStartSnapshot;
+  late DrawState _batchStartState;
   var _editSessionSequence = 0;
 
   @override
@@ -168,15 +166,11 @@ class DefaultDrawStore implements DrawStore {
   }) {
     _checkNotDisposed();
 
-    // Read the current value on init, but do not notify.
+    final equalsFn = equals ?? selector.equals;
     var previousValue = selector.select(state);
 
     return listen((state) {
       final newValue = selector.select(state);
-
-      // Use custom or default equality.
-      final equalsFn = equals ?? selector.equals;
-
       if (!equalsFn(previousValue, newValue)) {
         previousValue = newValue;
         listener(newValue);
@@ -188,17 +182,15 @@ class DefaultDrawStore implements DrawStore {
     if (_isBatching) {
       return;
     }
+    final startState = state;
     _isBatching = true;
-    _currentBatchId = 'batch_${_batchSequence++}';
-    _batchStartState = state;
+    _batchStartState = startState;
     _batchStartSnapshot = _snapshotBuilder.buildSnapshotFromState(
-      state: state,
+      state: startState,
       includeSelection: includeSelectionInHistory,
     );
-    context.log.store.info('Batch started', {'batchId': _currentBatchId});
     context.log.store.debug('Batch snapshot captured', {
-      'batchId': _currentBatchId,
-      'elements': state.domain.document.elements.length,
+      'elements': startState.domain.document.elements.length,
     });
   }
 
@@ -210,42 +202,21 @@ class DefaultDrawStore implements DrawStore {
 
     final startState = _batchStartState;
     final startSnapshot = _batchStartSnapshot;
-    _batchStartState = null;
-    _batchStartSnapshot = null;
-
-    if (startSnapshot == null) {
-      context.log.store.warning('Batch ended without snapshot', {
-        'batchId': _currentBatchId,
-      });
-      _currentBatchId = null;
-      return;
-    }
 
     final endSnapshot = _snapshotBuilder.buildSnapshotFromState(
       state: state,
       includeSelection: includeSelectionInHistory,
     );
 
-    if (endSnapshot != startSnapshot) {
+    final recorded = endSnapshot != startSnapshot;
+    if (recorded) {
       _historyManager.record(startSnapshot, endSnapshot);
-      context.log.store.info('Batch ended', {
-        'batchId': _currentBatchId,
-        'recorded': true,
-      });
-    } else {
-      context.log.store.info('Batch ended', {
-        'batchId': _currentBatchId,
-        'recorded': false,
-      });
     }
+    context.log.store.debug('Batch ended', {'recorded': recorded});
 
-    _currentBatchId = null;
-
-    if (startState == null || startState == state) {
-      return;
+    if (startState != state) {
+      _listenerRegistry.notify(startState, state);
     }
-
-    _listenerRegistry.notify(startState, state);
   }
 
   @override
@@ -270,8 +241,7 @@ class DefaultDrawStore implements DrawStore {
     _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
-  Map<String, dynamic> exportHistoryJson() =>
-      _historyManager.snapshot().toJson();
+  Map<String, dynamic> exportHistoryJson() => exportHistory().toJson();
 
   void restoreHistoryJson(Map<String, dynamic> json) {
     final snapshot = HistoryManagerSnapshot.fromJson(
@@ -286,8 +256,7 @@ class DefaultDrawStore implements DrawStore {
         });
       },
     );
-    _historyManager.restore(snapshot);
-    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
+    restoreHistory(snapshot);
   }
 
   void _checkNotDisposed() {
@@ -315,8 +284,7 @@ class DefaultDrawStore implements DrawStore {
   }
 
   EditSessionId _generateEditSessionId() {
-    final id = _editSessionSequence++;
-    final sessionId = 'edit_$id';
+    final sessionId = 'edit_${_editSessionSequence++}';
     context.log.edit.debug('Edit session id generated', {
       'sessionId': sessionId,
     });

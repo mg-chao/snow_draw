@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
+import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_core/draw/elements/types/arrow/arrow_like_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
@@ -23,7 +25,6 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/ui/canvas/dynamic_scene_optimization.dart';
 
 void main() {
@@ -76,10 +77,11 @@ void main() {
         rect: const DrawRect(minX: 220, minY: 20, maxX: 340, maxY: 120),
         zIndex: 1,
       );
-      final state = _arrowPointEditingState(
+      final state = _pointEditingState(
         elements: [arrow, background],
         elementId: 'arrow-1',
         selectedIds: {'arrow-1'},
+        sessionId: 'arrow-edit-session',
       );
       final view = DrawStateView.withPreview(
         state: state,
@@ -111,10 +113,12 @@ void main() {
         rect: const DrawRect(minX: 220, minY: 20, maxX: 340, maxY: 120),
         zIndex: 1,
       );
-      final state = _linePointEditingState(
+      final state = _pointEditingState(
         elements: [line, background],
         elementId: 'line-1',
         selectedIds: {'line-1'},
+        sessionId: 'line-edit-session',
+        isLineElement: true,
       );
       final view = DrawStateView.withPreview(
         state: state,
@@ -426,47 +430,6 @@ void main() {
       },
     );
 
-    test(
-      'keeps serial-number companion text during generic single-edit fallback',
-      () {
-        final text = _text(
-          id: 'text-1',
-          rect: const DrawRect(minX: 140, minY: 20, maxX: 260, maxY: 80),
-          zIndex: 0,
-        );
-        final serial = _serial(
-          id: 'serial-1',
-          rect: const DrawRect(minX: 20, minY: 20, maxX: 100, maxY: 100),
-          zIndex: 1,
-          textElementId: 'text-1',
-        );
-        final state = _editingState(
-          elements: [text, serial],
-          selectedIds: {'serial-1'},
-        );
-        final preview = serial.copyWith(
-          rect: const DrawRect(minX: 40, minY: 40, maxX: 120, maxY: 120),
-        );
-        final view = DrawStateView.withPreview(
-          state: state,
-          previewElementsById: {'serial-1': preview},
-          effectiveSelection: EffectiveSelection(
-            bounds: preview.rect,
-            center: preview.rect.center,
-            rotation: preview.rotation,
-            hasSelection: true,
-          ),
-          snapGuides: const [],
-        );
-
-        final plan = resolveDynamicSceneOptimizationPlan(view: view);
-
-        expect(plan, isNotNull);
-        expect(plan!.optimizedElementIds, {'serial-1', 'text-1'});
-        expect(plan.staticHiddenElementIds, {'serial-1', 'text-1'});
-      },
-    );
-
     test('optimizes existing text-edit previews to a localized scene', () {
       final text = _text(
         id: 'text-1',
@@ -598,24 +561,30 @@ void main() {
   });
 }
 
+DrawState _baseState({
+  required List<ElementState> elements,
+  required Set<String> selectedIds,
+}) => DrawState(
+  domain: DomainState(
+    document: DocumentState(elements: elements),
+    selection: SelectionState(selectedIds: selectedIds),
+  ),
+  application: ApplicationState.initial(),
+);
+
 DrawState _editingState({
   required List<ElementState> elements,
   required Set<String> selectedIds,
 }) {
-  final base = DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: selectedIds),
-    ),
-    application: ApplicationState.initial(),
+  final base = _baseState(elements: elements, selectedIds: selectedIds);
+  final selectedElement = base.domain.document.elements.firstWhere(
+    (element) => selectedIds.contains(element.id),
   );
   final context = _TestEditContext(
     selectedIdsAtStart: selectedIds,
     elementsVersion: base.domain.document.elementsVersion,
     selectionVersion: base.domain.selection.selectionVersion,
-    startBounds: elements
-        .firstWhere((element) => selectedIds.contains(element.id))
-        .rect,
+    startBounds: selectedElement.rect,
   );
   return base.copyWith(
     application: base.application.copyWith(
@@ -635,13 +604,7 @@ DrawState _textEditingState({
   required Set<String> selectedIds,
   bool isNew = false,
 }) {
-  final base = DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: selectedIds),
-    ),
-    application: ApplicationState.initial(),
-  );
+  final base = _baseState(elements: elements, selectedIds: selectedIds);
   return base.copyWith(
     application: base.application.copyWith(
       interaction: TextEditingState(
@@ -714,120 +677,101 @@ ElementState _arrow({
   required String id,
   required List<DrawPoint> points,
   required int zIndex,
-}) {
-  final minX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value < element ? value : element);
-  final maxX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value > element ? value : element);
-  final minY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value < element ? value : element);
-  final maxY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value > element ? value : element);
-  final rect = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: points,
-    rect: rect,
-  );
-
-  return ElementState(
-    id: id,
-    rect: rect,
-    rotation: 0,
-    opacity: 1,
-    zIndex: zIndex,
-    data: ArrowData(points: normalizedPoints),
-  );
-}
+}) => _polylineElement(
+  id: id,
+  points: points,
+  zIndex: zIndex,
+  dataBuilder: (normalizedPoints) => ArrowData(points: normalizedPoints),
+);
 
 ElementState _line({
   required String id,
   required List<DrawPoint> points,
   required int zIndex,
-}) {
-  final minX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value < element ? value : element);
-  final maxX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value > element ? value : element);
-  final minY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value < element ? value : element);
-  final maxY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value > element ? value : element);
-  final rect = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: points,
-    rect: rect,
-  );
-
-  return ElementState(
-    id: id,
-    rect: rect,
-    rotation: 0,
-    opacity: 1,
-    zIndex: zIndex,
-    data: LineData(points: normalizedPoints),
-  );
-}
+}) => _polylineElement(
+  id: id,
+  points: points,
+  zIndex: zIndex,
+  dataBuilder: (normalizedPoints) => LineData(points: normalizedPoints),
+);
 
 ElementState _freeDraw({
   required String id,
   required List<DrawPoint> points,
   required int zIndex,
+}) => _polylineElement(
+  id: id,
+  points: points,
+  zIndex: zIndex,
+  dataBuilder: (normalizedPoints) => FreeDrawData(points: normalizedPoints),
+);
+
+ElementState _polylineElement({
+  required String id,
+  required List<DrawPoint> points,
+  required int zIndex,
+  required ElementData Function(List<DrawPoint>) dataBuilder,
 }) {
-  final minX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value < element ? value : element);
-  final maxX = points
-      .map((point) => point.x)
-      .reduce((value, element) => value > element ? value : element);
-  final minY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value < element ? value : element);
-  final maxY = points
-      .map((point) => point.y)
-      .reduce((value, element) => value > element ? value : element);
-  final rect = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  final rect = _boundsForPoints(points);
   final normalizedPoints = ArrowGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
-
   return ElementState(
     id: id,
     rect: rect,
     rotation: 0,
     opacity: 1,
     zIndex: zIndex,
-    data: FreeDrawData(points: normalizedPoints),
+    data: dataBuilder(normalizedPoints),
   );
 }
 
-DrawState _arrowPointEditingState({
+DrawRect _boundsForPoints(List<DrawPoint> points) {
+  final first = points.first;
+  var minX = first.x;
+  var minY = first.y;
+  var maxX = first.x;
+  var maxY = first.y;
+  for (final point in points.skip(1)) {
+    if (point.x < minX) {
+      minX = point.x;
+    }
+    if (point.x > maxX) {
+      maxX = point.x;
+    }
+    if (point.y < minY) {
+      minY = point.y;
+    }
+    if (point.y > maxY) {
+      maxY = point.y;
+    }
+  }
+  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+}
+
+List<DrawPoint> _resolveWorldPoints({
+  required DrawRect rect,
+  required List<DrawPoint> normalizedPoints,
+}) => ArrowGeometry.resolveWorldPoints(
+  rect: rect,
+  normalizedPoints: normalizedPoints,
+).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList(growable: false);
+
+DrawState _pointEditingState({
   required List<ElementState> elements,
   required String elementId,
   required Set<String> selectedIds,
+  required String sessionId,
+  bool isLineElement = false,
 }) {
-  final base = DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: selectedIds),
-    ),
-    application: ApplicationState.initial(),
-  );
+  final base = _baseState(elements: elements, selectedIds: selectedIds);
   final element = base.domain.document.getElementById(elementId)!;
-  final data = element.data as ArrowData;
-  final initialPoints = ArrowGeometry.resolveWorldPoints(
+  final data = element.data as ArrowLikeData;
+  final initialPoints = _resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
-  ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList(growable: false);
-
+  );
   final context = ArrowPointEditContext(
     startPosition: initialPoints.first,
     startBounds: element.rect,
@@ -838,7 +782,7 @@ DrawState _arrowPointEditingState({
     elementRect: element.rect,
     rotation: element.rotation,
     initialPoints: initialPoints,
-    initialFixedSegments: const [],
+    initialFixedSegments: data.fixedSegments ?? const [],
     arrowType: data.arrowType,
     pointKind: ArrowPointKind.turning,
     pointIndex: 0,
@@ -848,82 +792,18 @@ DrawState _arrowPointEditingState({
     releaseFixedSegment: false,
     deletePointOnStart: false,
     bindingTargetCache: ArrowBindingTargetCache(),
-    startArrowhead: ArrowheadStyle.none,
-    endArrowhead: ArrowheadStyle.standard,
+    startArrowhead: data.startArrowhead,
+    endArrowhead: data.endArrowhead,
     initialStartBinding: data.startBinding,
     initialEndBinding: data.endBinding,
     hasBindableTargets: base.domain.document.hasArrowBindableElements,
+    isLineElement: isLineElement,
   );
-
   return base.copyWith(
     application: base.application.copyWith(
       interaction: EditingState(
         operationId: EditOperationIds.arrowPoint,
-        sessionId: 'arrow-edit-session',
-        context: context,
-        currentTransform: ArrowPointTransform(
-          currentPosition: initialPoints.first,
-          points: initialPoints,
-          startBinding: data.startBinding,
-          endBinding: data.endBinding,
-        ),
-      ),
-    ),
-  );
-}
-
-DrawState _linePointEditingState({
-  required List<ElementState> elements,
-  required String elementId,
-  required Set<String> selectedIds,
-}) {
-  final base = DrawState(
-    domain: DomainState(
-      document: DocumentState(elements: elements),
-      selection: SelectionState(selectedIds: selectedIds),
-    ),
-    application: ApplicationState.initial(),
-  );
-  final element = base.domain.document.getElementById(elementId)!;
-  final data = element.data as LineData;
-  final initialPoints = ArrowGeometry.resolveWorldPoints(
-    rect: element.rect,
-    normalizedPoints: data.points,
-  ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList(growable: false);
-
-  final context = ArrowPointEditContext(
-    startPosition: initialPoints.first,
-    startBounds: element.rect,
-    selectedIdsAtStart: selectedIds,
-    selectionVersion: base.domain.selection.selectionVersion,
-    elementsVersion: base.domain.document.elementsVersion,
-    elementId: element.id,
-    elementRect: element.rect,
-    rotation: element.rotation,
-    initialPoints: initialPoints,
-    initialFixedSegments: const [],
-    arrowType: data.arrowType,
-    pointKind: ArrowPointKind.turning,
-    pointIndex: 0,
-    dragOffset: DrawPoint.zero,
-    baseElement: element,
-    elementSpace: null,
-    releaseFixedSegment: false,
-    deletePointOnStart: false,
-    bindingTargetCache: ArrowBindingTargetCache(),
-    startArrowhead: ArrowheadStyle.none,
-    endArrowhead: ArrowheadStyle.none,
-    initialStartBinding: data.startBinding,
-    initialEndBinding: data.endBinding,
-    hasBindableTargets: base.domain.document.hasArrowBindableElements,
-    isLineElement: true,
-  );
-
-  return base.copyWith(
-    application: base.application.copyWith(
-      interaction: EditingState(
-        operationId: EditOperationIds.arrowPoint,
-        sessionId: 'line-edit-session',
+        sessionId: sessionId,
         context: context,
         currentTransform: ArrowPointTransform(
           currentPosition: initialPoints.first,

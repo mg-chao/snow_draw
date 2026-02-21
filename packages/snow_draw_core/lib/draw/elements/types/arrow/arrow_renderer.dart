@@ -33,9 +33,7 @@ class ArrowRenderer extends ElementTypeRenderer {
       );
     }
 
-    final rect = element.rect;
-    final opacity = element.opacity;
-    final strokeOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
+    final strokeOpacity = (data.color.a * element.opacity).clamp(0.0, 1.0);
     if (strokeOpacity <= 0 || data.strokeWidth <= 0) {
       return;
     }
@@ -44,6 +42,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     if (cached.geometry.localPoints.length < 2) {
       return;
     }
+
+    final rect = element.rect;
+    final strokeColor = data.color.withValues(alpha: strokeOpacity);
 
     canvas.save();
     if (element.rotation != 0) {
@@ -56,25 +57,25 @@ class ArrowRenderer extends ElementTypeRenderer {
 
     final strokePaint = _strokePaint
       ..strokeWidth = data.strokeWidth
-      ..color = data.color.withValues(alpha: strokeOpacity);
+      ..color = strokeColor;
 
-    if (data.strokeStyle == StrokeStyle.dotted) {
-      final dotPositions = cached.dotPositions;
-      if (dotPositions != null && dotPositions.isNotEmpty) {
-        final dotPaint = _dotPaint
-          ..strokeWidth = cached.dotRadius * 2
-          ..color = data.color.withValues(alpha: strokeOpacity);
-        canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
-      }
-
-      for (final arrowheadPath in cached.arrowheadPaths) {
-        canvas.drawPath(arrowheadPath, strokePaint);
-      }
-    } else {
-      final combinedPath = cached.combinedStrokePath;
-      if (combinedPath != null) {
-        canvas.drawPath(combinedPath, strokePaint);
-      }
+    switch (data.strokeStyle) {
+      case StrokeStyle.dotted:
+        final dotPositions = cached.dotPositions;
+        if (dotPositions != null && dotPositions.isNotEmpty) {
+          final dotPaint = _dotPaint
+            ..strokeWidth = cached.dotRadius * 2
+            ..color = strokeColor;
+          canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
+        }
+        for (final arrowheadPath in cached.arrowheadPaths) {
+          canvas.drawPath(arrowheadPath, strokePaint);
+        }
+      case StrokeStyle.solid || StrokeStyle.dashed:
+        final combinedPath = cached.combinedStrokePath;
+        if (combinedPath != null) {
+          canvas.drawPath(combinedPath, strokePaint);
+        }
     }
 
     canvas.restore();

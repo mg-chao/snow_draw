@@ -42,8 +42,7 @@ class DrawPoint {
     timestamp: timestamp ?? this.timestamp,
   );
 
-  DrawPoint translate(DrawPoint position) =>
-      DrawPoint(x: x + position.x, y: y + position.y);
+  DrawPoint translate(DrawPoint position) => this + position;
 
   DrawPoint operator +(DrawPoint other) =>
       DrawPoint(x: x + other.x, y: y + other.y);
@@ -59,24 +58,14 @@ class DrawPoint {
   Point<double> toPoint() => Point(x, y);
 
   DrawRect toRect(DrawPoint other) {
-    var minX = x;
-    var maxX = other.x;
-    var minY = y;
-    var maxY = other.y;
-
-    if (minX > maxX) {
-      final temp = minX;
-      minX = maxX;
-      maxX = temp;
-    }
-
-    if (minY > maxY) {
-      final temp = minY;
-      minY = maxY;
-      maxY = temp;
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    final swapX = x > other.x;
+    final swapY = y > other.y;
+    return DrawRect(
+      minX: swapX ? other.x : x,
+      minY: swapY ? other.y : y,
+      maxX: swapX ? x : other.x,
+      maxY: swapY ? y : other.y,
+    );
   }
 
   /// Computes the Euclidean distance to [other].

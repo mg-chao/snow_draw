@@ -5,27 +5,36 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
   test('headingForVector prefers dominant axis and horizontal ties', () {
-    expect(ElbowGeometry.headingForVector(10, 2), ElbowHeading.right);
-    expect(ElbowGeometry.headingForVector(-10, 2), ElbowHeading.left);
-    expect(ElbowGeometry.headingForVector(2, 10), ElbowHeading.down);
-    expect(ElbowGeometry.headingForVector(2, -10), ElbowHeading.up);
-    expect(ElbowGeometry.headingForVector(5, 5), ElbowHeading.right);
+    const cases = <({double dx, double dy, ElbowHeading expected})>[
+      (dx: 10, dy: 2, expected: ElbowHeading.right),
+      (dx: -10, dy: 2, expected: ElbowHeading.left),
+      (dx: 2, dy: 10, expected: ElbowHeading.down),
+      (dx: 2, dy: -10, expected: ElbowHeading.up),
+      (dx: 5, dy: 5, expected: ElbowHeading.right),
+    ];
+
+    for (final testCase in cases) {
+      expect(
+        ElbowGeometry.headingForVector(testCase.dx, testCase.dy),
+        testCase.expected,
+      );
+    }
   });
 
   test('headingForSegment mirrors headingForVector', () {
     const start = DrawPoint.zero;
-    expect(
-      ElbowGeometry.headingForSegment(start, const DrawPoint(x: 40, y: 5)),
-      ElbowHeading.right,
-    );
-    expect(
-      ElbowGeometry.headingForSegment(start, const DrawPoint(x: -40, y: 5)),
-      ElbowHeading.left,
-    );
-    expect(
-      ElbowGeometry.headingForSegment(start, const DrawPoint(x: 5, y: 40)),
-      ElbowHeading.down,
-    );
+    const cases = <({DrawPoint end, ElbowHeading expected})>[
+      (end: DrawPoint(x: 40, y: 5), expected: ElbowHeading.right),
+      (end: DrawPoint(x: -40, y: 5), expected: ElbowHeading.left),
+      (end: DrawPoint(x: 5, y: 40), expected: ElbowHeading.down),
+    ];
+
+    for (final testCase in cases) {
+      expect(
+        ElbowGeometry.headingForSegment(start, testCase.end),
+        testCase.expected,
+      );
+    }
   });
 
   test('manhattanDistance sums axis deltas', () {
@@ -35,13 +44,16 @@ void main() {
   });
 
   test('isHorizontal flags segments with wider X delta', () {
-    expect(
-      ElbowGeometry.isHorizontal(DrawPoint.zero, const DrawPoint(x: 10, y: 1)),
-      isTrue,
-    );
-    expect(
-      ElbowGeometry.isHorizontal(DrawPoint.zero, const DrawPoint(x: 1, y: 10)),
-      isFalse,
-    );
+    const cases = <({DrawPoint end, bool expected})>[
+      (end: DrawPoint(x: 10, y: 1), expected: true),
+      (end: DrawPoint(x: 1, y: 10), expected: false),
+    ];
+
+    for (final testCase in cases) {
+      expect(
+        ElbowGeometry.isHorizontal(DrawPoint.zero, testCase.end),
+        testCase.expected,
+      );
+    }
   });
 }

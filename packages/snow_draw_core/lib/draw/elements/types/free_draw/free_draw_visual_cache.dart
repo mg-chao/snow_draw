@@ -78,7 +78,7 @@ class FreeDrawVisualEntry {
 
   /// Returns cached flattened points, building them on first call.
   ///
-  /// Uses a coarser step than rendering (2× stroke width) because
+  /// Uses a coarser step than rendering (2x stroke width) because
   /// hit testing only needs segment-level precision, not pixel-
   /// level smoothness. This halves the number of native
   /// `getTangentForOffset` calls.
@@ -105,14 +105,9 @@ class FreeDrawVisualEntry {
     return _closedFillPath!;
   }
 
-  /// Returns a cached [Picture] for the given [opacity], or null
-  /// if none has been recorded yet.
-  Picture? getCachedPicture(double opacity) {
-    if (_cachedPicture != null && _cachedPictureOpacity == opacity) {
-      return _cachedPicture;
-    }
-    return null;
-  }
+  /// Returns a cached [Picture] for [opacity], or null if unavailable.
+  Picture? getCachedPicture(double opacity) =>
+      _cachedPictureOpacity == opacity ? _cachedPicture : null;
 
   /// Returns true once this geometry has remained stable long enough
   /// to justify recording a reusable [Picture].
@@ -124,12 +119,11 @@ class FreeDrawVisualEntry {
     if (_cachedPicture != null && _cachedPictureOpacity == opacity) {
       return false;
     }
-    if (_pictureCandidateOpacity == opacity) {
-      _pictureCandidateFrameCount += 1;
-    } else {
+    if (_pictureCandidateOpacity != opacity) {
       _pictureCandidateOpacity = opacity;
-      _pictureCandidateFrameCount = 1;
+      _pictureCandidateFrameCount = 0;
     }
+    _pictureCandidateFrameCount += 1;
     return _pictureCandidateFrameCount >= 2;
   }
 
@@ -189,25 +183,25 @@ class FreeDrawVisualCache {
     final width = element.rect.width;
     final height = element.rect.height;
     final existing = _entries.get(id);
-    if (existing != null && existing.matches(data, width, height)) {
-      return existing;
-    }
-
-    if (existing != null && identical(existing.data, data)) {
-      final resized = _buildEntryFromPreviousGeometry(
-        data: data,
-        previous: existing,
-        width: width,
-        height: height,
-      );
-      if (resized != null) {
-        _entries.put(id, resized);
-        return resized;
+    if (existing != null) {
+      if (existing.matches(data, width, height)) {
+        return existing;
+      }
+      if (identical(existing.data, data)) {
+        final resized = _buildEntryFromPreviousGeometry(
+          data: data,
+          previous: existing,
+          width: width,
+          height: height,
+        );
+        if (resized != null) {
+          _entries.put(id, resized);
+          return resized;
+        }
       }
     }
 
-    // Try incremental path building when only the tail changed.
-    final entry = _buildEntry(element: element, data: data, previous: existing);
+    final entry = _buildEntry(element: element, data: data);
     // The LRU's onEvict callback handles disposing the old entry.
     _entries.put(id, entry);
     return entry;
@@ -216,40 +210,15 @@ class FreeDrawVisualCache {
   FreeDrawVisualEntry _buildEntry({
     required ElementState element,
     required FreeDrawData data,
-    FreeDrawVisualEntry? previous,
   }) {
     final rect = element.rect;
     final localPoints = resolveFreeDrawLocalPoints(
       rect: rect,
       points: data.points,
     );
-    if (localPoints.length < 2) {
-      return FreeDrawVisualEntry(
-        data: data,
-        width: rect.width,
-        height: rect.height,
-        pointCount: localPoints.length,
-        path: Path(),
-        strokePath: null,
-      );
-    }
-
-    // Attempt incremental path extension when the previous entry
-    // has the same data identity prefix (i.e. points were only
-    // appended, not modified). This is the common case during
-    // active drawing.
-    Path? basePath;
-    if (previous != null &&
-        previous.pointCount >= 3 &&
-        localPoints.length > previous.pointCount &&
-        data.strokeStyle == StrokeStyle.solid) {
-      basePath = buildFreeDrawSmoothPathIncremental(
-        allPoints: localPoints,
-        basePath: previous.path,
-        basePointCount: previous.pointCount,
-      );
-    }
-    basePath ??= buildFreeDrawSmoothPath(localPoints);
+    final basePath = localPoints.length < 2
+        ? Path()
+        : buildFreeDrawSmoothPath(localPoints);
 
     final strokeVisuals = _buildStrokeVisuals(data: data, basePath: basePath);
 
@@ -310,19 +279,16 @@ class FreeDrawVisualCache {
 
     switch (data.strokeStyle) {
       case StrokeStyle.solid:
-        return _StrokeVisuals(strokePath: basePath);
+        return const _StrokeVisuals();
       case StrokeStyle.dashed:
         final dashLength = data.strokeWidth * 2.0;
-        final gapLength = dashLength * 1.2;
         return _StrokeVisuals(
-          strokePath: buildDashedPath(basePath, dashLength, gapLength),
+          strokePath: buildDashedPath(basePath, dashLength, dashLength * 1.2),
         );
       case StrokeStyle.dotted:
-        final dotSpacing = data.strokeWidth * 2.0;
-        final dotRadius = data.strokeWidth * 0.5;
         return _StrokeVisuals(
-          dotPositions: buildDotPositions(basePath, dotSpacing),
-          dotRadius: dotRadius,
+          dotPositions: buildDotPositions(basePath, data.strokeWidth * 2.0),
+          dotRadius: data.strokeWidth * 0.5,
         );
     }
   }
@@ -333,30 +299,19 @@ class FreeDrawVisualCache {
 // ============================================================
 
 List<Offset> _flattenPath(Path path, double step) {
-  if (step <= 0) {
+  if (step <= 0 || !step.isFinite) {
     return const <Offset>[];
   }
 
-  // Single-pass: collect metrics and total length together to
-  // avoid calling computeMetrics() twice (each call creates
-  // native path metric iterators).
-  final metrics = path.computeMetrics().toList(growable: false);
-  var totalPathLength = 0.0;
-  for (final metric in metrics) {
-    totalPathLength += metric.length;
-  }
-  final needed = (totalPathLength / step).ceil() + 1;
-  // Cap at 4096 to bound memory for extremely long paths while
-  // preserving hit-test precision for typical strokes. The previous
-  // clamp(512, 2048) wasted the min bound (the list grows on demand)
-  // and was too tight on the max for complex drawings.
-  final maxPoints = needed.clamp(2, 4096);
-
+  const maxPoints = 4096;
   final flattened = <Offset>[];
-  for (final metric in metrics) {
+  for (final metric in path.computeMetrics()) {
     final length = metric.length;
     var distance = 0.0;
-    while (distance < length && flattened.length < maxPoints) {
+    while (distance < length) {
+      if (flattened.length >= maxPoints) {
+        return flattened;
+      }
       final tangent = metric.getTangentForOffset(distance);
       if (tangent != null) {
         final point = tangent.position;
@@ -367,13 +322,16 @@ List<Offset> _flattenPath(Path path, double step) {
       distance += step;
     }
     if (flattened.length >= maxPoints) {
-      break;
+      return flattened;
     }
     final endTangent = metric.getTangentForOffset(length);
     if (endTangent != null) {
       final point = endTangent.position;
       if (flattened.isEmpty || point != flattened.last) {
         flattened.add(point);
+        if (flattened.length >= maxPoints) {
+          return flattened;
+        }
       }
     }
   }

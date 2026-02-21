@@ -8,7 +8,7 @@ class ElementTypeId<T> {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is ElementTypeId && other.value == value;
+      other is ElementTypeId<Object?> && other.value == value;
 
   @override
   int get hashCode => value.hashCode;

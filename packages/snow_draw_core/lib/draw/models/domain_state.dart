@@ -49,8 +49,11 @@ class DomainState {
 
   /// Whether this is a multi-selection.
   bool get isMultiSelection => selection.isMultiSelect;
+
   Set<String> get selectedIds => selection.selectedIds;
+
   int get selectionVersion => selection.selectionVersion;
+
   DomainState copyWith({DocumentState? document, SelectionState? selection}) =>
       DomainState(
         document: document ?? this.document,
@@ -93,15 +96,11 @@ class DomainState {
   ///
   /// Only compare fields that participate in history.
   @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) {
-      return true;
-    }
-    if (other is! DomainState) {
-      return false;
-    }
-    return document == other.document && selection == other.selection;
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DomainState &&
+          document == other.document &&
+          selection == other.selection;
 
   @override
   int get hashCode => Object.hash(document, selection);
@@ -109,5 +108,5 @@ class DomainState {
   @override
   String toString() =>
       'DomainState(elements: ${elements.length}, '
-      'selectedIds: ${selectedIds.length})';
+      'selectedIds: $selectionCount)';
 }

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
@@ -23,45 +21,79 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
+const _defaultRect = DrawRect(maxX: 100, maxY: 100);
+const _boundTargetRect = DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120);
+const _boundArrowPoints = <DrawPoint>[
+  DrawPoint(x: 10, y: 80),
+  DrawPoint(x: 200, y: 80),
+];
+const _boundStartBinding = ArrowBinding(
+  elementId: 'target',
+  anchor: DrawPoint(x: 0, y: 0.5),
+);
+
 void main() {
   setUp(ArrowBindingResolver.instance.invalidate);
 
-  // =========================================================================
-  // Shared helpers
-  // =========================================================================
-
   DrawState stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
-    final ids = selectedIds ?? {elements.first.id};
+    assert(elements.isNotEmpty, 'stateWith requires at least one element.');
     return DrawState(
       domain: DomainState(
         document: DocumentState(elements: elements),
-        selection: SelectionState(selectedIds: ids),
+        selection: SelectionState(
+          selectedIds: selectedIds ?? {elements.first.id},
+        ),
       ),
     );
   }
 
-  // =========================================================================
-  // Move operation: finish + preview consistency
-  // =========================================================================
+  ElementState rect0({String id = 'r1'}) =>
+      _rectangleElement(id: id, rect: _defaultRect);
+
+  ({ElementState target, ElementState arrow, DrawState state})
+  boundArrowFixture({bool? startIsSpecial}) {
+    final target = _rectangleElement(id: 'target', rect: _boundTargetRect);
+    final arrow = _arrowElement(
+      id: 'arrow',
+      points: _boundArrowPoints,
+      startBinding: _boundStartBinding,
+      startIsSpecial: startIsSpecial,
+    );
+    return (
+      target: target,
+      arrow: arrow,
+      state: stateWith([target, arrow], selectedIds: {'arrow'}),
+    );
+  }
+
+  DrawState multiSelectState() {
+    final r1 = _rectangleElement(
+      id: 'r1',
+      rect: const DrawRect(maxX: 50, maxY: 50),
+    );
+    final r2 = _rectangleElement(
+      id: 'r2',
+      rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
+    );
+    return stateWith([r1, r2], selectedIds: {'r1', 'r2'});
+  }
 
   group('MoveOperation finish/preview pipeline', () {
     test('finish moves element and transitions to idle', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = MoveOperation();
+      const start = DrawPoint(x: 50, y: 50);
       final ctx = op.createContext(
         state: state,
-        position: const DrawPoint(x: 50, y: 50),
+        position: start,
         params: const MoveOperationParams(),
       );
       final t0 = op.initialTransform(
         state: state,
         context: ctx,
-        startPosition: const DrawPoint(x: 50, y: 50),
+        startPosition: start,
       );
       final update = op.update(
         state: state,
@@ -84,22 +116,20 @@ void main() {
     });
 
     test('preview matches finish geometry', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = MoveOperation();
+      const start = DrawPoint(x: 50, y: 50);
       final ctx = op.createContext(
         state: state,
-        position: const DrawPoint(x: 50, y: 50),
+        position: start,
         params: const MoveOperationParams(),
       );
       final t0 = op.initialTransform(
         state: state,
         context: ctx,
-        startPosition: const DrawPoint(x: 50, y: 50),
+        startPosition: start,
       );
       final update = op.update(
         state: state,
@@ -127,10 +157,7 @@ void main() {
     });
 
     test('identity transform returns idle without changes', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = MoveOperation();
@@ -153,10 +180,7 @@ void main() {
     });
 
     test('identity transform preview returns none', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = MoveOperation();
@@ -175,20 +199,9 @@ void main() {
     });
 
     test('move unbinds arrow elements', () {
-      final target = _rectangleElement(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = _arrowElement(
-        id: 'arrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-      );
-      final state = stateWith([target, arrow], selectedIds: {'arrow'});
+      final fixture = boundArrowFixture();
+      final state = fixture.state;
+      final arrow = fixture.arrow;
 
       const op = MoveOperation();
       final ctx = op.createContext(
@@ -221,16 +234,9 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // Resize operation: finish + preview consistency
-  // =========================================================================
-
   group('ResizeOperation finish/preview pipeline', () {
     test('finish resizes element and transitions to idle', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = ResizeOperation();
@@ -269,10 +275,7 @@ void main() {
     });
 
     test('preview matches finish geometry', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = ResizeOperation();
@@ -316,10 +319,7 @@ void main() {
     });
 
     test('incomplete transform returns idle without changes', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = ResizeOperation();
@@ -347,21 +347,9 @@ void main() {
     });
 
     test('resize unbinds arrow elements', () {
-      final target = _rectangleElement(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = _arrowElement(
-        id: 'arrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-        startIsSpecial: true,
-      );
-      final state = stateWith([target, arrow], selectedIds: {'arrow'});
+      final fixture = boundArrowFixture(startIsSpecial: true);
+      final state = fixture.state;
+      final arrow = fixture.arrow;
 
       const op = ResizeOperation();
       final handlePos = DrawPoint(x: arrow.rect.maxX, y: arrow.rect.centerY);
@@ -398,16 +386,9 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // Rotate operation: finish + preview consistency
-  // =========================================================================
-
   group('RotateOperation finish/preview pipeline', () {
     test('finish rotates element and transitions to idle', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = RotateOperation();
@@ -443,10 +424,7 @@ void main() {
     });
 
     test('preview matches finish geometry', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = RotateOperation();
@@ -489,10 +467,7 @@ void main() {
     });
 
     test('identity transform returns idle without changes', () {
-      final element = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 100, maxY: 100),
-      );
+      final element = rect0();
       final state = stateWith([element]);
 
       const op = RotateOperation();
@@ -517,21 +492,9 @@ void main() {
     });
 
     test('rotate unbinds arrow elements', () {
-      final target = _rectangleElement(
-        id: 'target',
-        rect: const DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120),
-      );
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0, y: 0.5),
-      );
-      final arrow = _arrowElement(
-        id: 'arrow',
-        points: const [DrawPoint(x: 10, y: 80), DrawPoint(x: 200, y: 80)],
-        startBinding: binding,
-        startIsSpecial: true,
-      );
-      final state = stateWith([target, arrow], selectedIds: {'arrow'});
+      final fixture = boundArrowFixture(startIsSpecial: true);
+      final state = fixture.state;
+      final arrow = fixture.arrow;
 
       const op = RotateOperation();
       final center = arrow.rect.center;
@@ -566,32 +529,21 @@ void main() {
     });
   });
 
-  // =========================================================================
-  // Multi-select overlay updates
-  // =========================================================================
-
   group('Multi-select overlay updates', () {
     test('move updates multi-select overlay bounds', () {
-      final r1 = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 50, maxY: 50),
-      );
-      final r2 = _rectangleElement(
-        id: 'r2',
-        rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
-      );
-      final state = stateWith([r1, r2], selectedIds: {'r1', 'r2'});
+      final state = multiSelectState();
 
       const op = MoveOperation();
+      const start = DrawPoint(x: 75, y: 75);
       final ctx = op.createContext(
         state: state,
-        position: const DrawPoint(x: 75, y: 75),
+        position: start,
         params: const MoveOperationParams(),
       );
       final t0 = op.initialTransform(
         state: state,
         context: ctx,
-        startPosition: const DrawPoint(x: 75, y: 75),
+        startPosition: start,
       );
       final update = op.update(
         state: state,
@@ -613,15 +565,7 @@ void main() {
     });
 
     test('rotate updates multi-select overlay rotation', () {
-      final r1 = _rectangleElement(
-        id: 'r1',
-        rect: const DrawRect(maxX: 50, maxY: 50),
-      );
-      final r2 = _rectangleElement(
-        id: 'r2',
-        rect: const DrawRect(minX: 100, minY: 100, maxX: 150, maxY: 150),
-      );
-      final state = stateWith([r1, r2], selectedIds: {'r1', 'r2'});
+      final state = multiSelectState();
 
       const op = RotateOperation();
       final center = const DrawRect(maxX: 150, maxY: 150).center;
@@ -657,10 +601,6 @@ void main() {
   });
 }
 
-// ===========================================================================
-// Test helpers
-// ===========================================================================
-
 ElementState _rectangleElement({required String id, required DrawRect rect}) =>
     ElementState(
       id: id,
@@ -675,9 +615,7 @@ ElementState _arrowElement({
   required String id,
   required List<DrawPoint> points,
   ArrowBinding? startBinding,
-  ArrowBinding? endBinding,
   bool? startIsSpecial,
-  bool? endIsSpecial,
 }) {
   final rect = _rectForPoints(points);
   final normalized = ArrowGeometry.normalizePoints(
@@ -693,32 +631,30 @@ ElementState _arrowElement({
     data: ArrowData(
       points: normalized,
       startBinding: startBinding,
-      endBinding: endBinding,
       startIsSpecial: startIsSpecial,
-      endIsSpecial: endIsSpecial,
     ),
   );
 }
 
 DrawRect _rectForPoints(List<DrawPoint> points) {
+  assert(points.isNotEmpty, '_rectForPoints requires at least one point.');
+
   var minX = points.first.x;
   var maxX = points.first.x;
   var minY = points.first.y;
   var maxY = points.first.y;
 
   for (final point in points.skip(1)) {
-    minX = math.min(minX, point.x);
-    maxX = math.max(maxX, point.x);
-    minY = math.min(minY, point.y);
-    maxY = math.max(maxY, point.y);
+    minX = point.x < minX ? point.x : minX;
+    maxX = point.x > maxX ? point.x : maxX;
+    minY = point.y < minY ? point.y : minY;
+    maxY = point.y > maxY ? point.y : maxY;
   }
 
-  if (minX == maxX) {
-    maxX = minX + 1;
-  }
-  if (minY == maxY) {
-    maxY = minY + 1;
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return DrawRect(
+    minX: minX,
+    minY: minY,
+    maxX: maxX == minX ? minX + 1 : maxX,
+    maxY: maxY == minY ? minY + 1 : maxY,
+  );
 }

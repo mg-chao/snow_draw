@@ -3,20 +3,14 @@ import 'package:meta/meta.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 
-/// Element geometry snapshot (move operations only).
-///
-/// Stores the minimal data needed for moves: element center.
-/// Compared to full ElementState (~200B), uses ~16B, saving ~92% memory.
+/// Geometry snapshot used by move operations.
 @immutable
 class ElementMoveSnapshot {
   const ElementMoveSnapshot({required this.center});
   final DrawPoint center;
 }
 
-/// Element geometry snapshot (resize operations).
-///
-/// Stores data needed for resizing: rect and rotation.
-/// Compared to full ElementState (~200B), uses ~40B, saving ~80% memory.
+/// Geometry snapshot used by resize operations.
 @immutable
 class ElementResizeSnapshot {
   const ElementResizeSnapshot({required this.rect, required this.rotation});
@@ -28,10 +22,7 @@ class ElementResizeSnapshot {
   double get height => rect.height;
 }
 
-/// Element rotation snapshot (rotate operations).
-///
-/// Stores data needed for rotation: center and rotation.
-/// Compared to full ElementState (~200B), uses ~24B, saving ~88% memory.
+/// Geometry snapshot used by rotate operations.
 @immutable
 class ElementRotateSnapshot {
   const ElementRotateSnapshot({required this.center, required this.rotation});

@@ -1,177 +1,119 @@
 part of 'elbow_router.dart';
 
-/// Internal routing pipeline that coordinates endpoint resolution, obstacle
-/// planning, grid routing, and final path cleanup.
-@immutable
-final class _ElbowRouteRequest {
-  const _ElbowRouteRequest({
-    required this.start,
-    required this.end,
-    required this.elementsById,
-    required this.startBinding,
-    required this.endBinding,
-    required this.startArrowhead,
-    required this.endArrowhead,
-  });
+/// Internal routing flow for [routeElbowArrow].
+ElbowRouteResult _routeElbowArrowInternal({
+  required DrawPoint start,
+  required DrawPoint end,
+  required Map<String, ElementState> elementsById,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
+  final endpoints = _resolveRouteEndpoints(
+    startPoint: start,
+    endPoint: end,
+    elementsById: elementsById,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+  );
+  final startEndpoint = endpoints.start;
+  final endEndpoint = endpoints.end;
 
-  final DrawPoint start;
-  final DrawPoint end;
-  final Map<String, ElementState> elementsById;
-  final ArrowBinding? startBinding;
-  final ArrowBinding? endBinding;
-  final ArrowheadStyle startArrowhead;
-  final ArrowheadStyle endArrowhead;
-}
-
-/// Shared routing context for a single elbow routing run.
-@immutable
-final class _ElbowRouteContext {
-  const _ElbowRouteContext({required this.request, required this.endpoints});
-
-  final _ElbowRouteRequest request;
-  final _ResolvedEndpoints endpoints;
-
-  bool get hasAnyBinding => endpoints.start.isBound || endpoints.end.isBound;
-}
-
-/// Step-by-step routing orchestration used by [routeElbowArrow].
-final class _ElbowRoutePipeline {
-  const _ElbowRoutePipeline(this.request);
-
-  final _ElbowRouteRequest request;
-
-  ElbowRouteResult run() {
-    // Step 1: resolve bindings/headings into concrete endpoints.
-    final context = _ElbowRouteContext(
-      request: request,
-      endpoints: _resolveRouteEndpoints(request),
-    );
-
-    // Step 2: if nothing is bound, prefer the simple fallback path.
-    final unboundFallback = _tryUnboundFallback(context);
-    if (unboundFallback != null) {
-      return unboundFallback;
-    }
-
-    // Step 3: plan obstacles and attempt a direct route first.
-    final plan = _ElbowRoutePlan.fromEndpoints(context.endpoints);
-    final direct = plan.tryDirectRoute();
-    if (direct != null) {
-      return _buildRouteResult(
-        startPoint: context.endpoints.start.point,
-        endPoint: context.endpoints.end.point,
-        points: direct,
-      );
-    }
-
-    // Step 4/5: route via the sparse grid and post-process.
-    final routed = plan.routeViaGrid();
-    final finalized = _finalizeRoutedPath(
-      points: routed,
-      startHeading: plan.start.heading,
-      obstacles: plan.layout.obstacles,
-    );
-    final harmonized = _harmonizeBoundSpacing(
-      points: finalized,
-      start: plan.start,
-      end: plan.end,
-    );
-
+  if (!startEndpoint.isBound && !endEndpoint.isBound) {
     return _buildRouteResult(
-      startPoint: context.endpoints.start.point,
-      endPoint: context.endpoints.end.point,
-      points: harmonized,
-    );
-  }
-
-  /// Builds the simple fallback route when both endpoints are unbound.
-  ElbowRouteResult? _tryUnboundFallback(_ElbowRouteContext context) {
-    if (context.hasAnyBinding) {
-      return null;
-    }
-    final endpoints = context.endpoints;
-    return _buildRouteResult(
-      startPoint: endpoints.start.point,
-      endPoint: endpoints.end.point,
+      startPoint: startEndpoint.point,
+      endPoint: endEndpoint.point,
       points: _fallbackPath(
-        start: endpoints.start.point,
-        end: endpoints.end.point,
-        startHeading: endpoints.start.heading,
-        endHeading: endpoints.end.heading,
+        start: startEndpoint.point,
+        end: endEndpoint.point,
+        startHeading: startEndpoint.heading,
+        endHeading: endEndpoint.heading,
       ),
     );
   }
-}
 
-/// Planned routing context: resolved endpoints + obstacle layout.
-@immutable
-final class _ElbowRoutePlan {
-  const _ElbowRoutePlan({
-    required this.start,
-    required this.end,
-    required this.layout,
-  });
-
-  factory _ElbowRoutePlan.fromEndpoints(_ResolvedEndpoints endpoints) =>
-      _ElbowRoutePlan(
-        start: endpoints.start,
-        end: endpoints.end,
-        layout: _planObstacleLayout(start: endpoints.start, end: endpoints.end),
-      );
-
-  final _ResolvedEndpoint start;
-  final _ResolvedEndpoint end;
-  final _ElbowObstacleLayout layout;
-
-  List<DrawPoint>? tryDirectRoute() => _directPathIfClear(
-    start: start.point,
-    end: end.point,
+  final layout = _planObstacleLayout(start: startEndpoint, end: endEndpoint);
+  final direct = _directPathIfClear(
+    start: startEndpoint.point,
+    end: endEndpoint.point,
     obstacles: layout.obstacles,
-    startHeading: start.heading,
-    endHeading: end.heading,
-    startConstrained: start.isBound,
-    endConstrained: end.isBound,
+    startHeading: startEndpoint.heading,
+    endHeading: endEndpoint.heading,
+    startConstrained: startEndpoint.isBound,
+    endConstrained: endEndpoint.isBound,
+  );
+  if (direct != null) {
+    return _buildRouteResult(
+      startPoint: startEndpoint.point,
+      endPoint: endEndpoint.point,
+      points: direct,
+    );
+  }
+
+  final routed = _routeViaGridOrFallback(
+    start: startEndpoint,
+    end: endEndpoint,
+    layout: layout,
+  );
+  final finalized = _finalizeRoutedPath(
+    points: routed,
+    startHeading: startEndpoint.heading,
+    obstacles: layout.obstacles,
+  );
+  final harmonized = _harmonizeBoundSpacing(
+    points: finalized,
+    start: startEndpoint,
+    end: endEndpoint,
   );
 
-  /// Attempts a sparse-grid route. Falls back to a midpoint elbow if A* fails.
-  List<DrawPoint> routeViaGrid() {
-    // Step 4: route through a sparse grid using A* with bend penalties.
-    final grid = _buildGrid(
-      obstacles: layout.obstacles,
-      start: layout.startExit,
+  return _buildRouteResult(
+    startPoint: startEndpoint.point,
+    endPoint: endEndpoint.point,
+    points: harmonized,
+  );
+}
+
+List<DrawPoint> _routeViaGridOrFallback({
+  required _ResolvedEndpoint start,
+  required _ResolvedEndpoint end,
+  required _ElbowObstacleLayout layout,
+}) {
+  final grid = _buildGrid(
+    obstacles: layout.obstacles,
+    start: layout.startExit,
+    end: layout.endExit,
+    bounds: layout.commonBounds,
+  );
+
+  final path = _tryRouteGridPath(
+    grid: grid,
+    start: start,
+    end: end,
+    startExit: layout.startExit,
+    endExit: layout.endExit,
+    obstacles: layout.obstacles,
+  );
+
+  if (path == null) {
+    return _fallbackPath(
+      start: start.point,
+      end: end.point,
       startHeading: start.heading,
-      end: layout.endExit,
       endHeading: end.heading,
-      bounds: layout.commonBounds,
+      startConstrained: start.isBound,
+      endConstrained: end.isBound,
     );
-
-    final path = _tryRouteGridPath(
-      grid: grid,
-      start: start,
-      end: end,
-      startExit: layout.startExit,
-      endExit: layout.endExit,
-      obstacles: layout.obstacles,
-    );
-
-    if (path == null) {
-      return _fallbackPath(
-        start: start.point,
-        end: end.point,
-        startHeading: start.heading,
-        endHeading: end.heading,
-        startConstrained: start.isBound,
-        endConstrained: end.isBound,
-      );
-    }
-    final points = [
-      if (layout.startExit != start.point && path.first.pos != start.point)
-        start.point,
-      for (final node in path) node.pos,
-      if (layout.endExit != end.point && path.last.pos != end.point) end.point,
-    ];
-    return points.isEmpty ? [start.point, end.point] : points;
   }
+
+  final points = path.map((node) => node.pos);
+  return [
+    if (layout.startExit != start.point) start.point,
+    ...points,
+    if (layout.endExit != end.point) end.point,
+  ];
 }
 
 ElbowRouteResult _buildRouteResult({
@@ -184,10 +126,6 @@ ElbowRouteResult _buildRouteResult({
   endPoint: endPoint,
 );
 
-// ---------------------------------------------------------------------------
-// Endpoint resolution (merged from elbow_router_endpoints.dart)
-// ---------------------------------------------------------------------------
-
 /// Fully resolved endpoint for elbow routing.
 @immutable
 final class _ResolvedEndpoint {
@@ -195,7 +133,6 @@ final class _ResolvedEndpoint {
     required this.point,
     required this.heading,
     required this.hasArrowhead,
-    this.element,
     this.elementBounds,
     this.anchor,
   });
@@ -203,21 +140,14 @@ final class _ResolvedEndpoint {
   final DrawPoint point;
   final ElbowHeading heading;
   final bool hasArrowhead;
-  final ElementState? element;
   final DrawRect? elementBounds;
   final DrawPoint? anchor;
 
-  bool get isBound => element != null;
+  bool get isBound => elementBounds != null;
   DrawPoint get anchorOrPoint => anchor ?? point;
 }
 
-@immutable
-final class _ResolvedEndpoints {
-  const _ResolvedEndpoints({required this.start, required this.end});
-
-  final _ResolvedEndpoint start;
-  final _ResolvedEndpoint end;
-}
+typedef _ResolvedEndpoints = ({_ResolvedEndpoint start, _ResolvedEndpoint end});
 
 _ResolvedEndpoint _resolveEndpoint({
   required DrawPoint point,
@@ -226,15 +156,8 @@ _ResolvedEndpoint _resolveEndpoint({
   required bool hasArrowhead,
   required ElbowHeading fallbackHeading,
 }) {
-  if (binding == null) {
-    return _ResolvedEndpoint(
-      point: point,
-      heading: fallbackHeading,
-      hasArrowhead: hasArrowhead,
-    );
-  }
-  final element = elementsById[binding.elementId];
-  if (element == null) {
+  final element = binding == null ? null : elementsById[binding.elementId];
+  if (binding == null || element == null) {
     return _ResolvedEndpoint(
       point: point,
       heading: fallbackHeading,
@@ -262,42 +185,39 @@ _ResolvedEndpoint _resolveEndpoint({
     point: resolved,
     heading: heading,
     hasArrowhead: hasArrowhead,
-    element: element,
     elementBounds: bounds,
     anchor: anchor,
   );
 }
 
-_ResolvedEndpoints _resolveRouteEndpoints(_ElbowRouteRequest request) {
-  final hasStartArrowhead = request.startArrowhead != ArrowheadStyle.none;
-  final hasEndArrowhead = request.endArrowhead != ArrowheadStyle.none;
-
-  // Resolve start first (without heading) to get its point for the
-  // fallback heading vector, then resolve end, then assign headings.
-  // We need both points to compute the fallback vector heading.
-  final vectorHeading = ElbowGeometry.headingForVector(
-    request.end.x - request.start.x,
-    request.end.y - request.start.y,
-  );
-  final reverseVectorHeading = ElbowGeometry.headingForVector(
-    request.start.x - request.end.x,
-    request.start.y - request.end.y,
-  );
-
+_ResolvedEndpoints _resolveRouteEndpoints({
+  required DrawPoint startPoint,
+  required DrawPoint endPoint,
+  required Map<String, ElementState> elementsById,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
   final start = _resolveEndpoint(
-    point: request.start,
-    binding: request.startBinding,
-    elementsById: request.elementsById,
-    hasArrowhead: hasStartArrowhead,
-    fallbackHeading: vectorHeading,
+    point: startPoint,
+    binding: startBinding,
+    elementsById: elementsById,
+    hasArrowhead: startArrowhead != ArrowheadStyle.none,
+    fallbackHeading: ElbowGeometry.headingForVector(
+      endPoint.x - startPoint.x,
+      endPoint.y - startPoint.y,
+    ),
   );
   final end = _resolveEndpoint(
-    point: request.end,
-    binding: request.endBinding,
-    elementsById: request.elementsById,
-    hasArrowhead: hasEndArrowhead,
-    fallbackHeading: reverseVectorHeading,
+    point: endPoint,
+    binding: endBinding,
+    elementsById: elementsById,
+    hasArrowhead: endArrowhead != ArrowheadStyle.none,
+    fallbackHeading: ElbowGeometry.headingForVector(
+      startPoint.x - endPoint.x,
+      startPoint.y - endPoint.y,
+    ),
   );
-
-  return _ResolvedEndpoints(start: start, end: end);
+  return (start: start, end: end);
 }

@@ -31,16 +31,14 @@ void main() {
         data: FilterData(),
       );
 
-      final initialState = DrawState(
-        domain: DomainState(
-          document: DocumentState(elements: const [initialElement]),
-          selection: const SelectionState(selectedIds: {filterId}),
-        ),
-      );
-
       final store = DefaultDrawStore(
         context: context,
-        initialState: initialState,
+        initialState: DrawState(
+          domain: DomainState(
+            document: DocumentState(elements: const [initialElement]),
+            selection: const SelectionState(selectedIds: {filterId}),
+          ),
+        ),
       );
       addTearDown(store.dispose);
 
@@ -52,13 +50,13 @@ void main() {
         ),
       );
 
-      final updated = store.state.domain.document
-          .getElementById(filterId)
-          ?.data;
-      expect(updated, isA<FilterData>());
-      final filter = updated! as FilterData;
-      expect(filter.type, CanvasFilterType.gaussianBlur);
-      expect(filter.strength, 0.9);
+      final updatedFilter =
+          store.state.domain.document.getElementById(filterId)!.data
+              as FilterData;
+      expect(
+        updatedFilter,
+        const FilterData(type: CanvasFilterType.gaussianBlur, strength: 0.9),
+      );
     },
   );
 }

@@ -16,6 +16,9 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
+const _selectedIds = {'selected'};
+const _noModifiers = EditModifiers();
+
 void main() {
   group('Edit system snapshot consistency', () {
     test(
@@ -25,10 +28,7 @@ void main() {
           id: 'selected',
           rect: const DrawRect(maxX: 10, maxY: 10),
         );
-        final baseState = _stateWith(
-          [selected],
-          selectedIds: const {'selected'},
-        );
+        final baseState = _stateWith([selected], selectedIds: _selectedIds);
 
         const operation = MoveOperation();
         const startPosition = DrawPoint(x: 5, y: 5);
@@ -51,25 +51,23 @@ void main() {
           context: context,
           transform: initialTransform,
           currentPosition: const DrawPoint(x: 11, y: 5),
-          modifiers: const EditModifiers(),
+          modifiers: _noModifiers,
           config: config,
         );
 
         final driftedSelected = selected.copyWith(
           rect: const DrawRect(minX: 103, maxX: 113, maxY: 10),
         );
-        final driftedState = _stateWith(
-          [driftedSelected],
-          selectedIds: const {'selected'},
-          elementsVersion: baseState.domain.document.elementsVersion,
-        );
+        final driftedState = _stateWithSnapshotVersion(baseState, [
+          driftedSelected,
+        ], selectedIds: _selectedIds);
 
         final drifted = operation.update(
           state: driftedState,
           context: context,
           transform: initialTransform,
           currentPosition: const DrawPoint(x: 11, y: 5),
-          modifiers: const EditModifiers(),
+          modifiers: _noModifiers,
           config: config,
         );
 
@@ -89,10 +87,10 @@ void main() {
         id: 'reference',
         rect: const DrawRect(minX: 30, maxX: 40, maxY: 10),
       );
-      final baseState = _stateWith(
-        [selected, reference],
-        selectedIds: const {'selected'},
-      );
+      final baseState = _stateWith([
+        selected,
+        reference,
+      ], selectedIds: _selectedIds);
 
       const operation = MoveOperation();
       const startPosition = DrawPoint(x: 5, y: 5);
@@ -119,25 +117,24 @@ void main() {
         context: context,
         transform: initialTransform,
         currentPosition: const DrawPoint(x: 24, y: 5),
-        modifiers: const EditModifiers(),
+        modifiers: _noModifiers,
         config: config,
       );
 
       final movedReference = reference.copyWith(
         rect: const DrawRect(minX: 80, maxX: 90, maxY: 10),
       );
-      final driftedState = _stateWith(
-        [selected, movedReference],
-        selectedIds: const {'selected'},
-        elementsVersion: baseState.domain.document.elementsVersion,
-      );
+      final driftedState = _stateWithSnapshotVersion(baseState, [
+        selected,
+        movedReference,
+      ], selectedIds: _selectedIds);
 
       final drifted = operation.update(
         state: driftedState,
         context: context,
         transform: initialTransform,
         currentPosition: const DrawPoint(x: 24, y: 5),
-        modifiers: const EditModifiers(),
+        modifiers: _noModifiers,
         config: config,
       );
 
@@ -156,10 +153,10 @@ void main() {
         id: 'reference',
         rect: const DrawRect(minX: 30, maxX: 40, maxY: 10),
       );
-      final baseState = _stateWith(
-        [selected, reference],
-        selectedIds: const {'selected'},
-      );
+      final baseState = _stateWith([
+        selected,
+        reference,
+      ], selectedIds: _selectedIds);
 
       const operation = ResizeOperation();
       const handlePosition = DrawPoint(x: 10, y: 5);
@@ -189,7 +186,7 @@ void main() {
         context: context,
         transform: initialTransform,
         currentPosition: const DrawPoint(x: 23, y: 5),
-        modifiers: const EditModifiers(),
+        modifiers: _noModifiers,
         config: config,
       );
       final baselineTransform = baseline.transform as ResizeTransform;
@@ -199,18 +196,17 @@ void main() {
       final movedReference = reference.copyWith(
         rect: const DrawRect(minX: 80, maxX: 90, maxY: 10),
       );
-      final driftedState = _stateWith(
-        [selected, movedReference],
-        selectedIds: const {'selected'},
-        elementsVersion: baseState.domain.document.elementsVersion,
-      );
+      final driftedState = _stateWithSnapshotVersion(baseState, [
+        selected,
+        movedReference,
+      ], selectedIds: _selectedIds);
 
       final drifted = operation.update(
         state: driftedState,
         context: context,
         transform: initialTransform,
         currentPosition: const DrawPoint(x: 23, y: 5),
-        modifiers: const EditModifiers(),
+        modifiers: _noModifiers,
         config: config,
       );
       final driftedTransform = drifted.transform as ResizeTransform;
@@ -229,10 +225,7 @@ void main() {
           zIndex: 0,
           data: SerialNumberData(),
         );
-        final baseState = _stateWith(
-          [selected],
-          selectedIds: const {'selected'},
-        );
+        final baseState = _stateWith([selected], selectedIds: _selectedIds);
 
         const operation = ResizeOperation();
         const handlePosition = DrawPoint(x: 10, y: 5);
@@ -255,7 +248,7 @@ void main() {
           context: context,
           transform: initialTransform,
           currentPosition: const DrawPoint(x: 20, y: 5),
-          modifiers: const EditModifiers(),
+          modifiers: _noModifiers,
           config: DrawConfig.defaultConfig,
         );
         final baselineTransform = baseline.transform as ResizeTransform;
@@ -265,18 +258,16 @@ void main() {
         expect(baselineBounds.height, isNot(10));
 
         final driftedSelected = selected.copyWith(data: const RectangleData());
-        final driftedState = _stateWith(
-          [driftedSelected],
-          selectedIds: const {'selected'},
-          elementsVersion: baseState.domain.document.elementsVersion,
-        );
+        final driftedState = _stateWithSnapshotVersion(baseState, [
+          driftedSelected,
+        ], selectedIds: _selectedIds);
 
         final drifted = operation.update(
           state: driftedState,
           context: context,
           transform: initialTransform,
           currentPosition: const DrawPoint(x: 20, y: 5),
-          modifiers: const EditModifiers(),
+          modifiers: _noModifiers,
           config: DrawConfig.defaultConfig,
         );
         final driftedTransform = drifted.transform as ResizeTransform;
@@ -300,12 +291,23 @@ ElementState _rectangle({required String id, required DrawRect rect}) =>
 DrawState _stateWith(
   List<ElementState> elements, {
   required Set<String> selectedIds,
-  int? elementsVersion,
+  int elementsVersion = 0,
 }) => DrawState(
   domain: DomainState(
-    document: elementsVersion == null
-        ? DocumentState(elements: elements)
-        : DocumentState(elements: elements, elementsVersion: elementsVersion),
+    document: DocumentState(
+      elements: elements,
+      elementsVersion: elementsVersion,
+    ),
     selection: SelectionState(selectedIds: selectedIds),
   ),
+);
+
+DrawState _stateWithSnapshotVersion(
+  DrawState snapshot,
+  List<ElementState> elements, {
+  required Set<String> selectedIds,
+}) => _stateWith(
+  elements,
+  selectedIds: selectedIds,
+  elementsVersion: snapshot.domain.document.elementsVersion,
 );

@@ -20,7 +20,7 @@ void main() {
       final base = _baseState(elements: const [_filterElement]);
       final previous = _withInteraction(
         base,
-        _creatingState(
+        CreatingState(
           element: _filterElement,
           startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 20, maxY: 20),
@@ -28,7 +28,7 @@ void main() {
       );
       final next = _withInteraction(
         base,
-        _creatingState(
+        CreatingState(
           element: _filterElement,
           startPosition: const DrawPoint(x: 20, y: 20),
           currentRect: const DrawRect(minX: 20, minY: 20, maxX: 64, maxY: 54),
@@ -46,12 +46,13 @@ void main() {
         elements: const [_filterElement],
         selectedIds: const {'filter'},
       );
-      const context = _TestEditContext(
+      const context = MoveEditContext(
         startPosition: DrawPoint(x: 20, y: 20),
         startBounds: DrawRect(minX: 10, minY: 10, maxX: 40, maxY: 40),
         selectedIdsAtStart: {'filter'},
         selectionVersion: 1,
         elementsVersion: 1,
+        elementSnapshots: {},
       );
       final previous = _withInteraction(
         base,
@@ -83,12 +84,13 @@ void main() {
         elements: const [_filterElement, _rectangleElement],
         selectedIds: const {'filter', 'rect'},
       );
-      const context = _TestEditContext(
+      const context = MoveEditContext(
         startPosition: DrawPoint(x: 20, y: 20),
         startBounds: DrawRect(minX: 10, minY: 10, maxX: 90, maxY: 90),
         selectedIdsAtStart: {'filter', 'rect'},
         selectionVersion: 1,
         elementsVersion: 1,
+        elementSnapshots: {},
       );
       final previous = _withInteraction(
         base,
@@ -116,18 +118,6 @@ void main() {
     });
   });
 }
-
-CreatingState _creatingState({
-  required ElementState element,
-  required DrawPoint startPosition,
-  required DrawRect currentRect,
-  CreationMode creationMode = const RectCreationMode(),
-}) => CreatingState(
-  element: element,
-  startPosition: startPosition,
-  currentRect: currentRect,
-  creationMode: creationMode,
-);
 
 const _filterElement = ElementState(
   id: 'filter',
@@ -159,13 +149,3 @@ DrawState _baseState({
 
 DrawState _withInteraction(DrawState base, InteractionState interaction) => base
     .copyWith(application: base.application.copyWith(interaction: interaction));
-
-class _TestEditContext extends EditContext {
-  const _TestEditContext({
-    required super.startPosition,
-    required super.startBounds,
-    required super.selectedIdsAtStart,
-    required super.selectionVersion,
-    required super.elementsVersion,
-  });
-}

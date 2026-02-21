@@ -13,23 +13,7 @@ void main() {
 
   test('reuses cached static mask picture for stable interaction frames', () {
     var renderCount = 0;
-    final cache = HighlightMaskStaticSceneCache(
-      renderMask:
-          ({
-            required canvas,
-            required highlights,
-            required viewportRect,
-            required maskConfig,
-            required scaleFactor,
-            required cameraPosition,
-          }) {
-            renderCount += 1;
-            canvas.drawRect(
-              const ui.Rect.fromLTWH(0, 0, 1, 1),
-              ui.Paint()..color = const ui.Color(0xFF000000),
-            );
-          },
-    );
+    final cache = _buildCache(() => renderCount += 1);
     final document = DocumentState(elements: const [_highlightOne]);
 
     _paintMaskFrame(
@@ -52,23 +36,7 @@ void main() {
 
   test('rebuilds cached picture when excluded highlight ids change', () {
     var renderCount = 0;
-    final cache = HighlightMaskStaticSceneCache(
-      renderMask:
-          ({
-            required canvas,
-            required highlights,
-            required viewportRect,
-            required maskConfig,
-            required scaleFactor,
-            required cameraPosition,
-          }) {
-            renderCount += 1;
-            canvas.drawRect(
-              const ui.Rect.fromLTWH(0, 0, 1, 1),
-              ui.Paint()..color = const ui.Color(0xFF000000),
-            );
-          },
-    );
+    final cache = _buildCache(() => renderCount += 1);
     final document = DocumentState(
       elements: const [_highlightOne, _highlightTwo],
     );
@@ -93,23 +61,7 @@ void main() {
 
   test('rebuilds cached picture when mask config changes', () {
     var renderCount = 0;
-    final cache = HighlightMaskStaticSceneCache(
-      renderMask:
-          ({
-            required canvas,
-            required highlights,
-            required viewportRect,
-            required maskConfig,
-            required scaleFactor,
-            required cameraPosition,
-          }) {
-            renderCount += 1;
-            canvas.drawRect(
-              const ui.Rect.fromLTWH(0, 0, 1, 1),
-              ui.Paint()..color = const ui.Color(0xFF000000),
-            );
-          },
-    );
+    final cache = _buildCache(() => renderCount += 1);
     final document = DocumentState(elements: const [_highlightOne]);
 
     _paintMaskFrame(
@@ -132,25 +84,38 @@ void main() {
 
   test('returns false without static highlights', () {
     final cache = HighlightMaskStaticSceneCache();
-    final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder);
-    final painted = cache.paint(
-      canvas: canvas,
+    final painted = _paintMaskFrame(
+      cache: cache,
       document: DocumentState(),
       staticHighlights: const <ElementState>[],
       excludedDocumentHighlightIds: const <String>{},
-      viewportRect: const DrawRect(maxX: 200, maxY: 120),
       maskConfig: const HighlightMaskConfig(maskOpacity: 0.6),
-      scaleFactor: 1,
-      cameraPosition: ui.Offset.zero,
     );
-    recorder.endRecording().dispose();
 
     expect(painted, isFalse);
   });
 }
 
-void _paintMaskFrame({
+HighlightMaskStaticSceneCache _buildCache(void Function() onRender) =>
+    HighlightMaskStaticSceneCache(
+      renderMask:
+          ({
+            required canvas,
+            required highlights,
+            required viewportRect,
+            required maskConfig,
+            required scaleFactor,
+            required cameraPosition,
+          }) {
+            onRender();
+            canvas.drawRect(
+              const ui.Rect.fromLTWH(0, 0, 1, 1),
+              ui.Paint()..color = const ui.Color(0xFF000000),
+            );
+          },
+    );
+
+bool _paintMaskFrame({
   required HighlightMaskStaticSceneCache cache,
   required DocumentState document,
   required List<ElementState> staticHighlights,
@@ -159,7 +124,7 @@ void _paintMaskFrame({
 }) {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
-  cache.paint(
+  final painted = cache.paint(
     canvas: canvas,
     document: document,
     staticHighlights: staticHighlights,
@@ -170,6 +135,7 @@ void _paintMaskFrame({
     cameraPosition: ui.Offset.zero,
   );
   recorder.endRecording().dispose();
+  return painted;
 }
 
 const _highlightOne = ElementState(

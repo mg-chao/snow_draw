@@ -21,34 +21,28 @@ Map<String, ElementState> unbindArrowLikeElements({
     overlay: transformedElements,
   );
   final updates = <String, ElementState>{};
-  for (final entry in transformedElements.entries) {
-    final transformed = entry.value;
-    final data = transformed.data;
-    if (data is! ArrowLikeData) {
+  for (final element in transformedElements.values) {
+    final data = element.data;
+    if (data is! ArrowLikeData || !_hasBindingState(data)) {
       continue;
     }
 
-    final hasBinding = data.startBinding != null || data.endBinding != null;
-    final hasSpecialFlags =
-        data.startIsSpecial != null || data.endIsSpecial != null;
-    if (!hasBinding && !hasSpecialFlags) {
-      continue;
-    }
-
-    final updated = _unbindArrowElement(
-      element: transformed,
+    updates[element.id] = _unbindArrowElement(
+      element: element,
       data: data,
       lookup: lookup,
     );
-    if (updated == null || updated == transformed) {
-      continue;
-    }
-    updates[transformed.id] = updated;
   }
   return updates;
 }
 
-ElementState? _unbindArrowElement({
+bool _hasBindingState(ArrowLikeData data) =>
+    data.startBinding != null ||
+    data.endBinding != null ||
+    data.startIsSpecial != null ||
+    data.endIsSpecial != null;
+
+ElementState _unbindArrowElement({
   required ElementState element,
   required ArrowLikeData data,
   required CombinedElementLookup lookup,
@@ -67,7 +61,6 @@ ElementState? _unbindArrowElement({
       oldRect: element.rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final transformedFixedSegments = transformFixedSegments(
       segments: unboundElbow.fixedSegments,

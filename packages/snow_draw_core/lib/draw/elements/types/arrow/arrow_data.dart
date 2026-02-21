@@ -18,14 +18,14 @@ import 'elbow/elbow_fixed_segment.dart';
 final class ArrowData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData
     implements ArrowLikeData {
-  static const _startBindingUnset = Object();
-  static const _endBindingUnset = Object();
-  static const _fixedSegmentsUnset = Object();
-  static const _startIsSpecialUnset = Object();
-  static const _endIsSpecialUnset = Object();
+  static const _unset = Object();
+  static const List<DrawPoint> _defaultPoints = [
+    DrawPoint.zero,
+    DrawPoint(x: 1, y: 1),
+  ];
 
   const ArrowData({
-    this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
+    this.points = _defaultPoints,
     this.color = ConfigDefaults.defaultColor,
     this.strokeWidth = ConfigDefaults.defaultStrokeWidth,
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
@@ -47,18 +47,25 @@ final class ArrowData extends ElementData
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: StrokeStyle.values.firstWhere(
-      (style) => style.name == json['strokeStyle'],
-      orElse: () => ConfigDefaults.defaultStrokeStyle,
+    strokeStyle: _decodeEnum(
+      values: StrokeStyle.values,
+      raw: json['strokeStyle'],
+      fallback: ConfigDefaults.defaultStrokeStyle,
     ),
-    arrowType: _decodeArrowType(json['arrowType']),
-    startArrowhead: ArrowheadStyle.values.firstWhere(
-      (style) => style.name == json['startArrowhead'],
-      orElse: () => ConfigDefaults.defaultStartArrowhead,
+    arrowType: _decodeEnum(
+      values: ArrowType.values,
+      raw: json['arrowType'],
+      fallback: ConfigDefaults.defaultArrowType,
     ),
-    endArrowhead: ArrowheadStyle.values.firstWhere(
-      (style) => style.name == json['endArrowhead'],
-      orElse: () => ConfigDefaults.defaultEndArrowhead,
+    startArrowhead: _decodeEnum(
+      values: ArrowheadStyle.values,
+      raw: json['startArrowhead'],
+      fallback: ConfigDefaults.defaultStartArrowhead,
+    ),
+    endArrowhead: _decodeEnum(
+      values: ArrowheadStyle.values,
+      raw: json['endArrowhead'],
+      fallback: ConfigDefaults.defaultEndArrowhead,
     ),
     startBinding: _decodeBinding(json['startBinding']),
     endBinding: _decodeBinding(json['endBinding']),
@@ -106,11 +113,11 @@ final class ArrowData extends ElementData
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
-    Object? startBinding = _startBindingUnset,
-    Object? endBinding = _endBindingUnset,
-    Object? fixedSegments = _fixedSegmentsUnset,
-    Object? startIsSpecial = _startIsSpecialUnset,
-    Object? endIsSpecial = _endIsSpecialUnset,
+    Object? startBinding = _unset,
+    Object? endBinding = _unset,
+    Object? fixedSegments = _unset,
+    Object? startIsSpecial = _unset,
+    Object? endIsSpecial = _unset,
   }) => ArrowData(
     points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
     color: color ?? this.color,
@@ -119,19 +126,19 @@ final class ArrowData extends ElementData
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,
     endArrowhead: endArrowhead ?? this.endArrowhead,
-    startBinding: startBinding == _startBindingUnset
+    startBinding: identical(startBinding, _unset)
         ? this.startBinding
         : startBinding as ArrowBinding?,
-    endBinding: endBinding == _endBindingUnset
+    endBinding: identical(endBinding, _unset)
         ? this.endBinding
         : endBinding as ArrowBinding?,
-    fixedSegments: fixedSegments == _fixedSegmentsUnset
+    fixedSegments: identical(fixedSegments, _unset)
         ? this.fixedSegments
-        : _coerceFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
-    startIsSpecial: startIsSpecial == _startIsSpecialUnset
+        : _normalizeFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
+    startIsSpecial: identical(startIsSpecial, _unset)
         ? this.startIsSpecial
         : startIsSpecial as bool?,
-    endIsSpecial: endIsSpecial == _endIsSpecialUnset
+    endIsSpecial: identical(endIsSpecial, _unset)
         ? this.endIsSpecial
         : endIsSpecial as bool?,
   );
@@ -188,20 +195,24 @@ final class ArrowData extends ElementData
     }
 
     if (points.length < 2) {
-      return const [DrawPoint.zero, DrawPoint(x: 1, y: 1)];
+      return _defaultPoints;
     }
 
     return List<DrawPoint>.unmodifiable(points);
   }
 
-  static ArrowType _decodeArrowType(Object? raw) {
-    if (raw is String) {
-      return ArrowType.values.firstWhere(
-        (style) => style.name == raw,
-        orElse: () => ConfigDefaults.defaultArrowType,
-      );
+  static T _decodeEnum<T extends Enum>({
+    required List<T> values,
+    required Object? raw,
+    required T fallback,
+  }) {
+    if (raw is! String) {
+      return fallback;
     }
-    return ConfigDefaults.defaultArrowType;
+    return values.firstWhere(
+      (value) => value.name == raw,
+      orElse: () => fallback,
+    );
   }
 
   @override
@@ -238,13 +249,11 @@ final class ArrowData extends ElementData
   );
 
   static ArrowBinding? _decodeBinding(Object? raw) {
-    if (raw is Map<String, dynamic>) {
-      return ArrowBinding.fromJson(raw);
+    final map = _asJsonMap(raw);
+    if (map == null) {
+      return null;
     }
-    if (raw is Map) {
-      return ArrowBinding.fromJson(raw.cast<String, dynamic>());
-    }
-    return null;
+    return ArrowBinding.fromJson(map);
   }
 
   static List<ElbowFixedSegment>? _decodeFixedSegments(Object? raw) {
@@ -253,34 +262,44 @@ final class ArrowData extends ElementData
     }
     final segments = <ElbowFixedSegment>[];
     for (final entry in raw) {
-      if (entry is Map<String, dynamic>) {
-        try {
-          segments.add(ElbowFixedSegment.fromJson(entry));
-        } on FormatException {
-          // Skip invalid segment entries.
-        }
-      } else if (entry is Map) {
-        try {
-          segments.add(
-            ElbowFixedSegment.fromJson(entry.cast<String, dynamic>()),
-          );
-        } on FormatException {
-          // Skip invalid segment entries.
-        }
+      final map = _asJsonMap(entry);
+      if (map == null) {
+        continue;
+      }
+      try {
+        segments.add(ElbowFixedSegment.fromJson(map));
+      } on FormatException {
+        // Skip invalid segment entries.
       }
     }
-    if (segments.isEmpty) {
-      return null;
-    }
-    return List<ElbowFixedSegment>.unmodifiable(segments);
+    return _normalizeFixedSegments(segments);
   }
 
-  static List<ElbowFixedSegment>? _coerceFixedSegments(
+  static List<ElbowFixedSegment>? _normalizeFixedSegments(
     List<ElbowFixedSegment>? segments,
   ) {
     if (segments == null || segments.isEmpty) {
       return null;
     }
     return List<ElbowFixedSegment>.unmodifiable(segments);
+  }
+
+  static Map<String, dynamic>? _asJsonMap(Object? raw) {
+    if (raw is Map<String, dynamic>) {
+      return raw;
+    }
+    if (raw is! Map) {
+      return null;
+    }
+
+    final map = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        return null;
+      }
+      map[key] = entry.value;
+    }
+    return map;
   }
 }

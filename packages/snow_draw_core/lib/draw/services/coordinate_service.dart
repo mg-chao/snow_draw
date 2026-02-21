@@ -15,8 +15,7 @@ class CoordinateService {
     : assert(
         scaleFactor > 0 && scaleFactor < double.infinity,
         'scaleFactor must be finite and > 0',
-      ),
-      _inverseScaleFactor = 1 / scaleFactor;
+      );
 
   factory CoordinateService.fromCamera(
     CameraState camera, {
@@ -27,7 +26,8 @@ class CoordinateService {
   );
   final CameraState camera;
   final double scaleFactor;
-  final double _inverseScaleFactor;
+
+  double get _inverseScaleFactor => 1 / scaleFactor;
 
   /// Screen/widget coordinates -> world coordinates.
   DrawPoint screenToWorld(DrawPoint screenPoint) => DrawPoint(
@@ -46,10 +46,10 @@ class CoordinateService {
       screenToWorld(DrawPoint(x: offset.dx, y: offset.dy));
 
   /// Convenience: world coordinates -> Flutter [Offset].
-  Offset toOffset(DrawPoint worldPoint) {
-    final screen = worldToScreen(worldPoint);
-    return Offset(screen.x, screen.y);
-  }
+  Offset toOffset(DrawPoint worldPoint) => Offset(
+    worldPoint.x * scaleFactor + camera.position.x,
+    worldPoint.y * scaleFactor + camera.position.y,
+  );
 
   /// Screen distance -> world distance.
   double screenDistanceToWorld(double screenDistance) =>

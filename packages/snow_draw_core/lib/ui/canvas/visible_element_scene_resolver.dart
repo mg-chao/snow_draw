@@ -44,32 +44,35 @@ List<ElementState> resolveVisibleElementScene({
 
   final effectiveById = <String, ElementState>{};
   for (final element in visibleElements) {
-    if (element.id == excludedElementId) {
+    final elementId = element.id;
+    if (elementId == excludedElementId) {
       continue;
     }
-    final preview = previewElementsById[element.id];
-    final effective = preview ?? element;
-    if (preview != null) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(effective);
-      if (!_rectsIntersect(aabb, viewportRect)) {
-        continue;
-      }
+
+    final preview = previewElementsById[elementId];
+    if (preview == null) {
+      effectiveById[elementId] = element;
+      continue;
     }
-    effectiveById[element.id] = effective;
+
+    final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
+    if (!_rectsIntersect(previewAabb, viewportRect)) {
+      continue;
+    }
+    effectiveById[elementId] = preview;
   }
 
   var addedPreviewOnlyElement = false;
   for (final preview in previewElementsById.values) {
-    if (preview.id == excludedElementId ||
-        effectiveById.containsKey(preview.id)) {
+    final previewId = preview.id;
+    if (previewId == excludedElementId ||
+        effectiveById.containsKey(previewId)) {
       continue;
     }
 
     final orderIndex = _resolveOrderIndex(document: document, element: preview);
-    if (minOrderIndex != null && orderIndex < minOrderIndex) {
-      continue;
-    }
-    if (maxOrderIndex != null && orderIndex > maxOrderIndex) {
+    if ((minOrderIndex != null && orderIndex < minOrderIndex) ||
+        (maxOrderIndex != null && orderIndex > maxOrderIndex)) {
       continue;
     }
 
@@ -77,12 +80,8 @@ List<ElementState> resolveVisibleElementScene({
     if (!_rectsIntersect(aabb, viewportRect)) {
       continue;
     }
-    effectiveById[preview.id] = preview;
+    effectiveById[previewId] = preview;
     addedPreviewOnlyElement = true;
-  }
-
-  if (effectiveById.isEmpty) {
-    return <ElementState>[];
   }
 
   final effectiveElements = effectiveById.values.toList();

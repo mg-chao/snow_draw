@@ -16,8 +16,7 @@ void main() {
       scale: 1,
     );
 
-    final alpha = (paint.color.a * 255.0).round().clamp(0, 255);
-    expect(alpha, 82);
+    expect((paint.color.a * 255.0).round(), 82);
     expect(paint.strokeWidth, 6);
   });
 

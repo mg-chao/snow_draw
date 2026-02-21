@@ -23,20 +23,17 @@ class FilterHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = element.rotation == 0
+        ? position
+        : ElementSpace(
+            rotation: element.rotation,
+            origin: rect.center,
+          ).fromWorld(position);
+
     return localPosition.x >= rect.minX - tolerance &&
         localPosition.x <= rect.maxX + tolerance &&
         localPosition.y >= rect.minY - tolerance &&
         localPosition.y <= rect.maxY + tolerance;
-  }
-
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
   }
 
   @override

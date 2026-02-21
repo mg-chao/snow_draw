@@ -8,42 +8,31 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
+  setUp(() {
+    elbowForceGridFailure = true;
+  });
+
+  tearDown(() {
+    elbowForceGridFailure = false;
+  });
+
   test('grid fallback respects end heading when start is unbound', () {
     const endRect = DrawRect(minX: 200, minY: 100, maxX: 300, maxY: 200);
     final endElement = elbowRectangleElement(id: 'end', rect: endRect);
 
-    elbowForceGridFailure = true;
-    try {
-      final result = routeElbowArrow(
-        start: DrawPoint.zero,
-        end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
-        endBinding: const ArrowBinding(
-          elementId: 'end',
-          anchor: DrawPoint(x: 1, y: 0.5),
-        ),
-        elementsById: {'end': endElement},
-        endArrowhead: ArrowheadStyle.triangle,
-      );
+    final result = routeElbowArrow(
+      start: DrawPoint.zero,
+      end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
+      endBinding: const ArrowBinding(
+        elementId: 'end',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      ),
+      elementsById: {'end': endElement},
+      endArrowhead: ArrowheadStyle.triangle,
+    );
 
-      expect(elbowPathIsOrthogonal(result.points), isTrue);
-      expect(result.points.length, greaterThan(2));
-
-      final penultimate = result.points[result.points.length - 2];
-      final endPoint = result.points.last;
-      expect(
-        (penultimate.y - endPoint.y).abs() <=
-            ElbowConstants.intersectionEpsilon,
-        isTrue,
-        reason: 'Right binding should approach horizontally.',
-      );
-      expect(
-        penultimate.x > endPoint.x,
-        isTrue,
-        reason: 'Right binding should approach from the right.',
-      );
-    } finally {
-      elbowForceGridFailure = false;
-    }
+    _expectOrthogonalFallbackPath(result.points);
+    _expectApproachFromRight(result.points);
   });
 
   test(
@@ -54,57 +43,62 @@ void main() {
       final startElement = elbowRectangleElement(id: 'start', rect: startRect);
       final endElement = elbowRectangleElement(id: 'end', rect: endRect);
 
-      elbowForceGridFailure = true;
-      try {
-        final result = routeElbowArrow(
-          start: DrawPoint(x: startRect.centerX, y: startRect.centerY),
-          end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
-          startBinding: const ArrowBinding(
-            elementId: 'start',
-            anchor: DrawPoint(x: 0.5, y: 0),
-          ),
-          endBinding: const ArrowBinding(
-            elementId: 'end',
-            anchor: DrawPoint(x: 1, y: 0.5),
-          ),
-          elementsById: {'start': startElement, 'end': endElement},
-          startArrowhead: ArrowheadStyle.triangle,
-          endArrowhead: ArrowheadStyle.triangle,
-        );
+      final result = routeElbowArrow(
+        start: DrawPoint(x: startRect.centerX, y: startRect.centerY),
+        end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
+        startBinding: const ArrowBinding(
+          elementId: 'start',
+          anchor: DrawPoint(x: 0.5, y: 0),
+        ),
+        endBinding: const ArrowBinding(
+          elementId: 'end',
+          anchor: DrawPoint(x: 1, y: 0.5),
+        ),
+        elementsById: {'start': startElement, 'end': endElement},
+        startArrowhead: ArrowheadStyle.triangle,
+        endArrowhead: ArrowheadStyle.triangle,
+      );
 
-        expect(elbowPathIsOrthogonal(result.points), isTrue);
-        expect(result.points.length, greaterThan(2));
-
-        final startPoint = result.points.first;
-        final nextPoint = result.points[1];
-        expect(
-          (startPoint.x - nextPoint.x).abs() <=
-              ElbowConstants.intersectionEpsilon,
-          isTrue,
-          reason: 'Top binding should depart vertically.',
-        );
-        expect(
-          nextPoint.y < startPoint.y,
-          isTrue,
-          reason: 'Top binding should depart upward.',
-        );
-
-        final penultimate = result.points[result.points.length - 2];
-        final endPoint = result.points.last;
-        expect(
-          (penultimate.y - endPoint.y).abs() <=
-              ElbowConstants.intersectionEpsilon,
-          isTrue,
-          reason: 'Right binding should approach horizontally.',
-        );
-        expect(
-          penultimate.x > endPoint.x,
-          isTrue,
-          reason: 'Right binding should approach from the right.',
-        );
-      } finally {
-        elbowForceGridFailure = false;
-      }
+      _expectOrthogonalFallbackPath(result.points);
+      _expectDepartureUpward(result.points);
+      _expectApproachFromRight(result.points);
     },
+  );
+}
+
+void _expectOrthogonalFallbackPath(List<DrawPoint> points) {
+  expect(elbowPathIsOrthogonal(points), isTrue);
+  expect(points.length, greaterThan(2));
+}
+
+void _expectDepartureUpward(List<DrawPoint> points) {
+  final startPoint = points.first;
+  final nextPoint = points[1];
+
+  expect(
+    (startPoint.x - nextPoint.x).abs() <= ElbowConstants.intersectionEpsilon,
+    isTrue,
+    reason: 'Top binding should depart vertically.',
+  );
+  expect(
+    nextPoint.y < startPoint.y,
+    isTrue,
+    reason: 'Top binding should depart upward.',
+  );
+}
+
+void _expectApproachFromRight(List<DrawPoint> points) {
+  final penultimate = points[points.length - 2];
+  final endPoint = points.last;
+
+  expect(
+    (penultimate.y - endPoint.y).abs() <= ElbowConstants.intersectionEpsilon,
+    isTrue,
+    reason: 'Right binding should approach horizontally.',
+  );
+  expect(
+    penultimate.x > endPoint.x,
+    isTrue,
+    reason: 'Right binding should approach from the right.',
   );
 }

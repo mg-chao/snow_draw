@@ -4,10 +4,11 @@ import '../../draw/models/element_state.dart';
 import 'filter_pipeline/filter_render_diagnostics.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
 export 'filter_pipeline/filter_segment_renderer.dart'
-    show FilterRenderCacheContext, FilterRenderCacheDomain, FilterRenderHints;
-
-typedef SceneElementPainter =
-    void Function(Canvas canvas, ElementState element);
+    show
+        FilterRenderCacheContext,
+        FilterRenderCacheDomain,
+        FilterRenderHints,
+        SceneElementPainter;
 
 /// Backward-compatible facade over the segmented filter pipeline.
 ///
@@ -44,9 +45,7 @@ class FilterSceneCompositor {
   }
 
   /// Clears internal caches held by the renderer.
-  void clearCaches() {
-    _renderer.clearCaches();
-  }
+  void clearCaches() => _renderer.clearCaches();
 }
 
 final filterSceneCompositor = FilterSceneCompositor();

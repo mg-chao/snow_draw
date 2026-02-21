@@ -89,25 +89,12 @@ void main() {
       () async {
         final eventBus = EventBus();
         final store = _createStore(eventBus: eventBus);
-        final received = <DocumentChangedEvent>[];
-        final subscription = eventBus.on<DocumentChangedEvent>(received.add);
-
-        addTearDown(() async {
-          await subscription.cancel();
-          await eventBus.dispose();
-        });
-
-        store.dispose();
-
-        expect(eventBus.isDisposed, isFalse);
-
-        eventBus.emit(
-          const DocumentChangedEvent(elementsVersion: 7, elementCount: 3),
+        await _expectExternalEventBusStillActive(
+          store: store,
+          eventBus: eventBus,
+          elementsVersion: 7,
+          elementCount: 3,
         );
-        await Future<void>.delayed(Duration.zero);
-
-        expect(received, hasLength(1));
-        expect(received.single.elementsVersion, equals(7));
       },
     );
 
@@ -119,32 +106,18 @@ void main() {
         registerBuiltInElements(registry);
         final context = DrawContext.withDefaults(elementRegistry: registry);
         final store = DefaultDrawStore(context: context, eventBus: eventBus);
-        final received = <DocumentChangedEvent>[];
-        final subscription = eventBus.on<DocumentChangedEvent>(received.add);
-
-        addTearDown(() async {
-          await subscription.cancel();
-          await eventBus.dispose();
-        });
-
-        store.dispose();
-
-        expect(eventBus.isDisposed, isFalse);
-
-        eventBus.emit(
-          const DocumentChangedEvent(elementsVersion: 9, elementCount: 1),
+        await _expectExternalEventBusStillActive(
+          store: store,
+          eventBus: eventBus,
+          elementsVersion: 9,
+          elementCount: 1,
         );
-        await Future<void>.delayed(Duration.zero);
-
-        expect(received, hasLength(1));
-        expect(received.single.elementsVersion, equals(9));
       },
     );
 
     test('disposing store disposes internally owned event bus', () {
       final store = _createStore();
       final internalBus = store.eventBus;
-      addTearDown(store.dispose);
 
       store.dispose();
 
@@ -181,30 +154,47 @@ DrawState _stateWithOneSelectedElement() => DrawState(
   ),
 );
 
+Future<void> _expectExternalEventBusStillActive({
+  required DefaultDrawStore store,
+  required EventBus eventBus,
+  required int elementsVersion,
+  required int elementCount,
+}) async {
+  final received = <DocumentChangedEvent>[];
+  final subscription = eventBus.on<DocumentChangedEvent>(received.add);
+
+  addTearDown(() async {
+    await subscription.cancel();
+    await eventBus.dispose();
+  });
+
+  store.dispose();
+
+  expect(eventBus.isDisposed, isFalse);
+
+  eventBus.emit(
+    DocumentChangedEvent(
+      elementsVersion: elementsVersion,
+      elementCount: elementCount,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+
+  expect(received, hasLength(1));
+  expect(received.single.elementsVersion, equals(elementsVersion));
+  expect(received.single.elementCount, equals(elementCount));
+}
+
 class _RecordingEventBus extends EventBus {
   _RecordingEventBus({required bool hasListeners})
-    : _hasListeners = hasListeners;
+    : _shouldRecordEvents = hasListeners;
 
   final emittedEvents = <DrawEvent>[];
-  final bool _hasListeners;
-
-  @override
-  bool get hasListeners => _hasListeners;
-
-  @override
-  bool hasListenersFor<T extends DrawEvent>() => _hasListeners;
-
-  @override
-  void emit(DrawEvent event) {
-    if (!_hasListeners) {
-      return;
-    }
-    emittedEvents.add(event);
-  }
+  final bool _shouldRecordEvents;
 
   @override
   bool emitLazy<T extends DrawEvent>(T Function() eventFactory) {
-    if (!_hasListeners) {
+    if (!_shouldRecordEvents) {
       return false;
     }
     emittedEvents.add(eventFactory());

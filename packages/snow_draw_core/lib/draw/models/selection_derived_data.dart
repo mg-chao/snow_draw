@@ -4,7 +4,6 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import 'draw_state.dart' show DrawState;
 import 'element_state.dart';
-import 'models.dart' show DrawState;
 
 /// Immutable snapshot of selection-derived data.
 ///

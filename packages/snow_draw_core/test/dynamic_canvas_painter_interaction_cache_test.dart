@@ -58,47 +58,22 @@ void main() {
         data: _CacheTestData(),
       ),
     ];
-    final state = DrawState.fromLayers(
-      domain: DomainState(
-        document: DocumentState(elements: elements, elementsVersion: 424242),
-      ),
-      application: ApplicationState.initial(),
-    );
+    final state = _buildState(elements: elements, elementsVersion: 424242);
 
     final firstPreview = elements[1].copyWith(
       rect: const DrawRect(minX: 52, minY: 2, maxX: 92, maxY: 42),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {firstPreview.id: firstPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {firstPreview.id: firstPreview},
-      ),
-    );
+    _paintPreviewFrame(state: state, registry: registry, preview: firstPreview);
     expect(counter.count, 3);
 
     counter.reset();
     final secondPreview = elements[1].copyWith(
       rect: const DrawRect(minX: 80, minY: 20, maxX: 120, maxY: 60),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {secondPreview.id: secondPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {secondPreview.id: secondPreview},
-      ),
+    _paintPreviewFrame(
+      state: state,
+      registry: registry,
+      preview: secondPreview,
     );
 
     // Only the dynamic preview element should be repainted on the second
@@ -129,29 +104,12 @@ void main() {
           data: _CacheTestData(),
         ),
       ];
-      final state = DrawState.fromLayers(
-        domain: DomainState(
-          document: DocumentState(elements: elements, elementsVersion: 898989),
-        ),
-        application: ApplicationState.initial(),
-      );
+      final state = _buildState(elements: elements, elementsVersion: 898989);
 
       final preview = elements[1].copyWith(
         rect: const DrawRect(minX: 60, minY: 20, maxX: 100, maxY: 60),
       );
-      _paintFrame(
-        stateView: DrawStateView.withPreview(
-          state: state,
-          previewElementsById: {preview.id: preview},
-          effectiveSelection: EffectiveSelection.none,
-          snapGuides: const [],
-        ),
-        renderKey: _buildRenderKey(
-          state: state,
-          registry: registry,
-          previewElementsById: {preview.id: preview},
-        ),
-      );
+      _paintPreviewFrame(state: state, registry: registry, preview: preview);
 
       // The offscreen persisted element must still be painted once its preview
       // moves into the viewport.
@@ -188,47 +146,22 @@ void main() {
         data: _CacheTestData(),
       ),
     ];
-    final state = DrawState.fromLayers(
-      domain: DomainState(
-        document: DocumentState(elements: elements, elementsVersion: 314159),
-      ),
-      application: ApplicationState.initial(),
-    );
+    final state = _buildState(elements: elements, elementsVersion: 314159);
 
     final firstPreview = elements[1].copyWith(
       rect: const DrawRect(minX: 70, minY: 92, maxX: 106, maxY: 128),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {firstPreview.id: firstPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {firstPreview.id: firstPreview},
-      ),
-    );
+    _paintPreviewFrame(state: state, registry: registry, preview: firstPreview);
     expect(counter.count, 3);
 
     counter.reset();
     final secondPreview = firstPreview.copyWith(
       rect: const DrawRect(minX: 92, minY: 108, maxX: 128, maxY: 144),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {secondPreview.id: secondPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {secondPreview.id: secondPreview},
-      ),
+    _paintPreviewFrame(
+      state: state,
+      registry: registry,
+      preview: secondPreview,
     );
 
     // Serial connector rendering keeps both the preview serial node and
@@ -267,28 +200,15 @@ void main() {
           data: _CacheTestData(),
         ),
       ];
-      final state = DrawState.fromLayers(
-        domain: DomainState(
-          document: DocumentState(elements: elements, elementsVersion: 424000),
-        ),
-        application: ApplicationState.initial(),
-      );
+      final state = _buildState(elements: elements, elementsVersion: 424000);
 
       final unboundSerialPreview = elements[1].copyWith(
         rect: const DrawRect(minX: 78, minY: 96, maxX: 114, maxY: 132),
       );
-      _paintFrame(
-        stateView: DrawStateView.withPreview(
-          state: state,
-          previewElementsById: {unboundSerialPreview.id: unboundSerialPreview},
-          effectiveSelection: EffectiveSelection.none,
-          snapGuides: const [],
-        ),
-        renderKey: _buildRenderKey(
-          state: state,
-          registry: registry,
-          previewElementsById: {unboundSerialPreview.id: unboundSerialPreview},
-        ),
+      _paintPreviewFrame(
+        state: state,
+        registry: registry,
+        preview: unboundSerialPreview,
       );
       expect(counter.count, 3);
 
@@ -296,18 +216,10 @@ void main() {
       final serialPreview = elements[1].copyWith(
         data: const SerialNumberData(textElementId: 'text-preview-target'),
       );
-      _paintFrame(
-        stateView: DrawStateView.withPreview(
-          state: state,
-          previewElementsById: {serialPreview.id: serialPreview},
-          effectiveSelection: EffectiveSelection.none,
-          snapGuides: const [],
-        ),
-        renderKey: _buildRenderKey(
-          state: state,
-          registry: registry,
-          previewElementsById: {serialPreview.id: serialPreview},
-        ),
+      _paintPreviewFrame(
+        state: state,
+        registry: registry,
+        preview: serialPreview,
       );
 
       // Introducing a serial preview must invalidate the static context so the
@@ -362,47 +274,22 @@ void main() {
         data: _CacheTestData(),
       ),
     ];
-    final state = DrawState.fromLayers(
-      domain: DomainState(
-        document: DocumentState(elements: elements, elementsVersion: 271828),
-      ),
-      application: ApplicationState.initial(),
-    );
+    final state = _buildState(elements: elements, elementsVersion: 271828);
 
     final firstPreview = elements[1].copyWith(
       rect: const DrawRect(minX: 72, minY: 96, maxX: 108, maxY: 132),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {firstPreview.id: firstPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {firstPreview.id: firstPreview},
-      ),
-    );
+    _paintPreviewFrame(state: state, registry: registry, preview: firstPreview);
     expect(counter.count, 5);
 
     counter.reset();
     final secondPreview = firstPreview.copyWith(
       rect: const DrawRect(minX: 96, minY: 112, maxX: 132, maxY: 148),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {secondPreview.id: secondPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {secondPreview.id: secondPreview},
-      ),
+    _paintPreviewFrame(
+      state: state,
+      registry: registry,
+      preview: secondPreview,
     );
 
     // Only the moved serial and its own bound text should be dynamic.
@@ -439,47 +326,22 @@ void main() {
         data: _CacheTestData(),
       ),
     ];
-    final state = DrawState.fromLayers(
-      domain: DomainState(
-        document: DocumentState(elements: elements, elementsVersion: 777777),
-      ),
-      application: ApplicationState.initial(),
-    );
+    final state = _buildState(elements: elements, elementsVersion: 777777);
 
     final firstPreview = elements[1].copyWith(
       rect: const DrawRect(minX: 60, minY: 10, maxX: 100, maxY: 50),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {firstPreview.id: firstPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {firstPreview.id: firstPreview},
-      ),
-    );
+    _paintPreviewFrame(state: state, registry: registry, preview: firstPreview);
     expect(counter.count, 3);
 
     counter.reset();
     final offscreenPreview = firstPreview.copyWith(
       rect: const DrawRect(minX: 400, minY: 400, maxX: 440, maxY: 440),
     );
-    _paintFrame(
-      stateView: DrawStateView.withPreview(
-        state: state,
-        previewElementsById: {offscreenPreview.id: offscreenPreview},
-        effectiveSelection: EffectiveSelection.none,
-        snapGuides: const [],
-      ),
-      renderKey: _buildRenderKey(
-        state: state,
-        registry: registry,
-        previewElementsById: {offscreenPreview.id: offscreenPreview},
-      ),
+    _paintPreviewFrame(
+      state: state,
+      registry: registry,
+      preview: offscreenPreview,
     );
 
     // Static ranges stay cached and the offscreen preview is culled.
@@ -511,16 +373,10 @@ void main() {
         startPosition: const DrawPoint(x: 20, y: 20),
         currentRect: const DrawRect(minX: 20, minY: 20, maxX: 90, maxY: 90),
       );
-      final state = DrawState.fromLayers(
-        domain: DomainState(
-          document: DocumentState(
-            elements: const [persisted],
-            elementsVersion: 7,
-          ),
-        ),
-        application: ApplicationState.initial().copyWith(
-          interaction: interaction,
-        ),
+      final state = _buildState(
+        elements: const [persisted],
+        elementsVersion: 7,
+        interaction: interaction,
       );
 
       expect(
@@ -542,6 +398,54 @@ void main() {
   );
 }
 
+DrawState _buildState({
+  required List<ElementState> elements,
+  required int elementsVersion,
+  InteractionState? interaction,
+}) {
+  final application = ApplicationState.initial();
+  return DrawState.fromLayers(
+    domain: DomainState(
+      document: DocumentState(
+        elements: elements,
+        elementsVersion: elementsVersion,
+      ),
+    ),
+    application: interaction == null
+        ? application
+        : application.copyWith(interaction: interaction),
+  );
+}
+
+void _paintPreviewFrame({
+  required DrawState state,
+  required DefaultElementRegistry registry,
+  required ElementState preview,
+}) {
+  final previewElementsById = <String, ElementState>{preview.id: preview};
+  _paintFrame(
+    stateView: _buildPreviewStateView(
+      state: state,
+      previewElementsById: previewElementsById,
+    ),
+    renderKey: _buildRenderKey(
+      state: state,
+      registry: registry,
+      previewElementsById: previewElementsById,
+    ),
+  );
+}
+
+DrawStateView _buildPreviewStateView({
+  required DrawState state,
+  required Map<String, ElementState> previewElementsById,
+}) => DrawStateView.withPreview(
+  state: state,
+  previewElementsById: previewElementsById,
+  effectiveSelection: EffectiveSelection.none,
+  snapGuides: const [],
+);
+
 DefaultElementRegistry _buildRegistry(_RenderCounter counter) =>
     DefaultElementRegistry()..register<_CacheTestData>(
       ElementDefinition<_CacheTestData>(
@@ -554,55 +458,49 @@ DefaultElementRegistry _buildRegistry(_RenderCounter counter) =>
       ),
     );
 
-DefaultElementRegistry _buildRegistryWithSerialSupport(_RenderCounter counter) {
-  final registry = _buildRegistry(counter)
-    ..register<TextData>(
-      ElementDefinition<TextData>(
-        typeId: TextData.typeIdToken,
-        displayName: 'text',
-        renderer: _CacheCountingRenderer(counter),
-        hitTester: const _CacheHitTester(),
-        createDefaultData: TextData.new,
-        fromJson: TextData.fromJson,
-      ),
-    )
-    ..register<SerialNumberData>(
-      ElementDefinition<SerialNumberData>(
-        typeId: SerialNumberData.typeIdToken,
-        displayName: 'serial',
-        renderer: _CacheCountingRenderer(counter),
-        hitTester: const _CacheHitTester(),
-        createDefaultData: SerialNumberData.new,
-        fromJson: SerialNumberData.fromJson,
-      ),
-    );
-  return registry;
-}
+DefaultElementRegistry _buildRegistryWithSerialSupport(
+  _RenderCounter counter,
+) => _buildRegistry(counter)
+  ..register<TextData>(
+    ElementDefinition<TextData>(
+      typeId: TextData.typeIdToken,
+      displayName: 'text',
+      renderer: _CacheCountingRenderer(counter),
+      hitTester: const _CacheHitTester(),
+      createDefaultData: TextData.new,
+      fromJson: TextData.fromJson,
+    ),
+  )
+  ..register<SerialNumberData>(
+    ElementDefinition<SerialNumberData>(
+      typeId: SerialNumberData.typeIdToken,
+      displayName: 'serial',
+      renderer: _CacheCountingRenderer(counter),
+      hitTester: const _CacheHitTester(),
+      createDefaultData: SerialNumberData.new,
+      fromJson: SerialNumberData.fromJson,
+    ),
+  );
 
 DefaultElementRegistry _buildRegistryWithHighlightSupport(
   _RenderCounter counter,
-) {
-  final registry = _buildRegistry(counter)
-    ..register<HighlightData>(
-      ElementDefinition<HighlightData>(
-        typeId: HighlightData.typeIdToken,
-        displayName: 'highlight',
-        renderer: _CacheCountingRenderer(counter),
-        hitTester: const _CacheHitTester(),
-        createDefaultData: HighlightData.new,
-        fromJson: HighlightData.fromJson,
-      ),
-    );
-  return registry;
-}
+) => _buildRegistry(counter)
+  ..register<HighlightData>(
+    ElementDefinition<HighlightData>(
+      typeId: HighlightData.typeIdToken,
+      displayName: 'highlight',
+      renderer: _CacheCountingRenderer(counter),
+      hitTester: const _CacheHitTester(),
+      createDefaultData: HighlightData.new,
+      fromJson: HighlightData.fromJson,
+    ),
+  );
 
 DynamicCanvasRenderKey _buildRenderKey({
   required DrawState state,
   required DefaultElementRegistry registry,
   required Map<String, ElementState> previewElementsById,
   CreatingElementSnapshot? creatingElement,
-  int? previewElementsRevision,
-  Set<String>? dynamicPreviewElementIds,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
@@ -619,8 +517,6 @@ DynamicCanvasRenderKey _buildRenderKey({
   textRenderingCacheRevision: 0,
   camera: state.application.view.camera,
   previewElementsById: previewElementsById,
-  previewElementsRevision: previewElementsRevision,
-  dynamicPreviewElementIds: dynamicPreviewElementIds,
   optimizedDynamicElementIds: const <String>{},
   optimizedSceneHasPotentialOccluders: false,
   dynamicLayerStartIndex: 0,
@@ -654,13 +550,9 @@ void _paintFrame({
 class _RenderCounter {
   var count = 0;
 
-  void increment() {
-    count += 1;
-  }
+  void increment() => count += 1;
 
-  void reset() {
-    count = 0;
-  }
+  void reset() => count = 0;
 }
 
 class _CacheCountingRenderer extends ElementTypeRenderer {
@@ -687,15 +579,14 @@ class _CacheHitTester implements ElementHitTester {
     required ElementState element,
     required DrawPoint position,
     double tolerance = 0,
-  }) {
-    final expanded = element.rect.copyWith(
-      minX: element.rect.minX - tolerance,
-      minY: element.rect.minY - tolerance,
-      maxX: element.rect.maxX + tolerance,
-      maxY: element.rect.maxY + tolerance,
-    );
-    return expanded.containsPoint(position);
-  }
+  }) => element.rect
+      .copyWith(
+        minX: element.rect.minX - tolerance,
+        minY: element.rect.minY - tolerance,
+        maxX: element.rect.maxX + tolerance,
+        maxY: element.rect.maxY + tolerance,
+      )
+      .containsPoint(position);
 
   @override
   DrawRect getBounds(ElementState element) => element.rect;

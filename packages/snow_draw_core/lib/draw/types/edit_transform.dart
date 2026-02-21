@@ -56,7 +56,17 @@ final class ResizeTransform extends EditTransform {
     this.scaleX,
     this.scaleY,
     this.anchor,
-  });
+  }) : assert(
+         (newSelectionBounds == null &&
+                 scaleX == null &&
+                 scaleY == null &&
+                 anchor == null) ||
+             (newSelectionBounds != null &&
+                 scaleX != null &&
+                 scaleY != null &&
+                 anchor != null),
+         'ResizeTransform must be either fully complete or fully incomplete.',
+       );
 
   const ResizeTransform.incomplete({required DrawPoint currentPosition})
     : this._(currentPosition: currentPosition);
@@ -83,52 +93,54 @@ final class ResizeTransform extends EditTransform {
   bool get isComplete => newSelectionBounds != null;
 
   @override
-  bool get isIdentity => !isComplete || (scaleX == 1.0 && scaleY == 1.0);
+  bool get isIdentity => !isComplete || (scaleX! == 1.0 && scaleY! == 1.0);
 
   @override
   DrawPoint applyToPoint(DrawPoint point, {DrawPoint? pivot}) {
-    if (scaleX == null || scaleY == null) {
+    if (!isComplete) {
       return point;
     }
-    final p = pivot ?? anchor;
-    if (p == null) {
-      return point;
-    }
-
-    final dx = (point.x - p.x) * scaleX! + p.x;
-    final dy = (point.y - p.y) * scaleY! + p.y;
-    return DrawPoint(x: dx, y: dy);
+    return _scalePoint(
+      point: point,
+      pivot: pivot ?? anchor!,
+      scaleX: scaleX!,
+      scaleY: scaleY!,
+    );
   }
 
   @override
   DrawRect applyToRect(DrawRect rect, {DrawPoint? pivot}) {
-    if (scaleX == null || scaleY == null) {
+    if (!isComplete) {
       return rect;
     }
-    final p = pivot ?? anchor;
-    if (p == null) {
-      return rect;
-    }
-
-    final corners = [
-      applyToPoint(
-        DrawPoint(x: rect.minX, y: rect.minY),
-        pivot: p,
-      ),
-      applyToPoint(
-        DrawPoint(x: rect.maxX, y: rect.minY),
-        pivot: p,
-      ),
-      applyToPoint(
-        DrawPoint(x: rect.minX, y: rect.maxY),
-        pivot: p,
-      ),
-      applyToPoint(
-        DrawPoint(x: rect.maxX, y: rect.maxY),
-        pivot: p,
-      ),
-    ];
-    return _boundingBox(corners);
+    final resolvedPivot = pivot ?? anchor!;
+    final sx = scaleX!;
+    final sy = scaleY!;
+    final topLeft = _scalePoint(
+      point: DrawPoint(x: rect.minX, y: rect.minY),
+      pivot: resolvedPivot,
+      scaleX: sx,
+      scaleY: sy,
+    );
+    final topRight = _scalePoint(
+      point: DrawPoint(x: rect.maxX, y: rect.minY),
+      pivot: resolvedPivot,
+      scaleX: sx,
+      scaleY: sy,
+    );
+    final bottomLeft = _scalePoint(
+      point: DrawPoint(x: rect.minX, y: rect.maxY),
+      pivot: resolvedPivot,
+      scaleX: sx,
+      scaleY: sy,
+    );
+    final bottomRight = _scalePoint(
+      point: DrawPoint(x: rect.maxX, y: rect.maxY),
+      pivot: resolvedPivot,
+      scaleX: sx,
+      scaleY: sy,
+    );
+    return _boundingRect(topLeft, topRight, bottomLeft, bottomRight);
   }
 
   @override
@@ -350,27 +362,21 @@ final class CompositeTransform extends EditTransform {
   int get hashCode => Object.hashAll(transforms);
 }
 
-DrawRect _boundingBox(List<DrawPoint> points) {
-  var minX = points.first.x;
-  var minY = points.first.y;
-  var maxX = points.first.x;
-  var maxY = points.first.y;
+DrawPoint _scalePoint({
+  required DrawPoint point,
+  required DrawPoint pivot,
+  required double scaleX,
+  required double scaleY,
+}) => DrawPoint(
+  x: (point.x - pivot.x) * scaleX + pivot.x,
+  y: (point.y - pivot.y) * scaleY + pivot.y,
+);
 
-  for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
+DrawRect _boundingRect(DrawPoint a, DrawPoint b, DrawPoint c, DrawPoint d) {
+  final minX = math.min(math.min(a.x, b.x), math.min(c.x, d.x));
+  final minY = math.min(math.min(a.y, b.y), math.min(c.y, d.y));
+  final maxX = math.max(math.max(a.x, b.x), math.max(c.x, d.x));
+  final maxY = math.max(math.max(a.y, b.y), math.max(c.y, d.y));
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
 }
 

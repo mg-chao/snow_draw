@@ -49,7 +49,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final arrowRect = _calculateArrowRect(
       points: [startPosition, startPosition],
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: [startPosition, startPosition],
@@ -78,9 +77,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required bool createFromCenter,
     required SnappingMode snappingMode,
   }) {
-    if (maintainAspectRatio || createFromCenter) {
-      // Point creation ignores these modifiers.
-    }
     final elementData = creatingState.elementData;
     if (elementData is! ArrowLikeData) {
       return CreationUpdateResult(
@@ -136,12 +132,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final segmentStart = fixedPoints.isNotEmpty
         ? fixedPoints.last
         : startPosition;
-    adjustedCurrent = _resolveArrowSegmentPosition(
-      segmentStart: segmentStart,
-      currentPosition: adjustedCurrent,
-    );
 
-    var snapGuides = const <SnapGuide>[];
     final snapResult = _snapCreatePoint(
       state: state,
       config: config,
@@ -150,7 +141,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       sessionData: sessionData,
     );
     adjustedCurrent = snapResult.position;
-    snapGuides = snapResult.guides;
+    final snapGuides = snapResult.guides;
 
     final bindingResult = _snapBindingPoint(
       state: state,
@@ -196,7 +187,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowRect = _calculateArrowRect(
         points: routedPoints,
         arrowType: elementData.arrowType,
-        strokeWidth: elementData.strokeWidth,
       );
       normalizedPoints = ArrowGeometry.normalizePoints(
         worldPoints: routedPoints,
@@ -213,7 +203,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       arrowRect = _calculateArrowRect(
         points: allPoints,
         arrowType: elementData.arrowType,
-        strokeWidth: elementData.strokeWidth,
       );
       normalizedPoints = ArrowGeometry.normalizePoints(
         worldPoints: allPoints,
@@ -293,10 +282,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final segmentStart = fixedPoints.isNotEmpty
         ? fixedPoints.last
         : startPosition;
-    adjustedPosition = _resolveArrowSegmentPosition(
-      segmentStart: segmentStart,
-      currentPosition: adjustedPosition,
-    );
     final snapResult = _snapCreatePoint(
       state: state,
       config: config,
@@ -339,7 +324,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final arrowRect = _calculateArrowRect(
       points: allPoints,
       arrowType: elementData.arrowType,
-      strokeWidth: elementData.strokeWidth,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: allPoints,
@@ -379,7 +363,12 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final minSize = config.element.minCreateSize;
     final finishTolerance = config.selection.interaction.handleTolerance;
-    final rawPoints = creatingState.isPointCreation
+    final finalPoints = data.arrowType == ArrowType.elbow
+        ? _resolveArrowWorldPoints(
+            rect: creatingState.currentRect,
+            normalizedPoints: data.points,
+          )
+        : creatingState.isPointCreation
         ? _resolveFinalArrowPoints(
             interaction: creatingState,
             finishTolerance: finishTolerance,
@@ -388,12 +377,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
             rect: creatingState.currentRect,
             normalizedPoints: data.points,
           );
-    final finalPoints = data.arrowType == ArrowType.elbow
-        ? _resolveArrowWorldPoints(
-            rect: creatingState.currentRect,
-            normalizedPoints: data.points,
-          )
-        : rawPoints;
     final closeTolerance = finishTolerance * _loopCloseToleranceMultiplier;
     final closedPoints = data.arrowType == ArrowType.elbow
         ? finalPoints
@@ -409,7 +392,6 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final arrowRect = _calculateArrowRect(
       points: closedPoints,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: closedPoints,
@@ -514,7 +496,6 @@ CreationUpdateResult _updateLine({
     lineRect = _calculateArrowRect(
       points: worldPoints,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: worldPoints,
@@ -564,7 +545,7 @@ _LineEndpointResolution _resolveLineEndpoints({
           gridSize: gridConfig.size,
         )
       : creatingState.startPosition;
-  var adjustedCurrent = snapToGrid
+  final adjustedCurrent = snapToGrid
       ? gridSnapService.snapPoint(
           point: currentPosition,
           gridSize: gridConfig.size,
@@ -591,10 +572,6 @@ _LineEndpointResolution _resolveLineEndpoints({
   final segmentStart = fixedPoints.isNotEmpty
       ? fixedPoints.last
       : startPosition;
-  adjustedCurrent = _resolveArrowSegmentPosition(
-    segmentStart: segmentStart,
-    currentPosition: adjustedCurrent,
-  );
 
   return _LineEndpointResolution(
     fixedPoints: fixedPoints,
@@ -608,18 +585,10 @@ _LineEndpointResolution _resolveLineEndpoints({
 DrawRect _calculateArrowRect({
   required List<DrawPoint> points,
   required ArrowType arrowType,
-  required double strokeWidth,
 }) => ArrowGeometry.calculatePathBounds(
   worldPoints: points,
   arrowType: arrowType,
 );
-
-DrawPoint _resolveArrowSegmentPosition({
-  required DrawPoint segmentStart,
-  required DrawPoint currentPosition,
-}) =>
-    // For all arrow types, allow free positioning.
-    currentPosition;
 
 List<DrawPoint> _appendCurrentPoint({
   required List<DrawPoint> fixedPoints,
@@ -701,7 +670,7 @@ _PointSnapResult _snapCreatePoint({
   required DrawConfig config,
   required DrawPoint position,
   required SnappingMode snappingMode,
-  _ArrowCreationSessionData? sessionData,
+  required _ArrowCreationSessionData sessionData,
 }) {
   if (snappingMode != SnappingMode.object) {
     return _PointSnapResult(position: position);
@@ -710,14 +679,13 @@ _PointSnapResult _snapCreatePoint({
   if (!snapConfig.enablePointSnaps && !snapConfig.enableGapSnaps) {
     return _PointSnapResult(position: position);
   }
-  final referenceElements = _resolveReferenceElements(
-    state,
-    sessionData: sessionData,
+  final referenceElements = sessionData.resolveReferenceElements(
+    state.domain.document,
   );
   if (referenceElements.isEmpty) {
     return _PointSnapResult(position: position);
   }
-  final referenceAabbs = sessionData?.resolveReferenceElementAabbs(
+  final referenceAabbs = sessionData.resolveReferenceElementAabbs(
     document: state.domain.document,
     referenceElements: referenceElements,
   );
@@ -877,17 +845,6 @@ _BindingSnapResult _resolveStartBindingPoint({
     result: resolved,
   );
   return resolved;
-}
-
-List<ElementState> _resolveReferenceElements(
-  DrawState state, {
-  _ArrowCreationSessionData? sessionData,
-}) {
-  final document = state.domain.document;
-  if (sessionData != null) {
-    return sessionData.resolveReferenceElements(document);
-  }
-  return document.elements.where((element) => element.opacity > 0).toList();
 }
 
 _ArrowCreationSessionData _resolveSessionData(CreationMode mode) {

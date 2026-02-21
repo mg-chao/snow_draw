@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
@@ -17,7 +19,15 @@ void main() {
     addTearDown(store.dispose);
 
     final events = <DocumentChangedEvent>[];
-    final subscription = store.onEvent<DocumentChangedEvent>(events.add);
+    final firstEvent = Completer<DocumentChangedEvent>();
+    final subscription = store.eventStreamOf<DocumentChangedEvent>().listen((
+      event,
+    ) {
+      events.add(event);
+      if (!firstEvent.isCompleted) {
+        firstEvent.complete(event);
+      }
+    });
     addTearDown(subscription.cancel);
 
     final initialVersion = store.state.domain.document.elementsVersion;
@@ -27,13 +37,15 @@ void main() {
         watermark: WatermarkConfig(text: 'CONFIDENTIAL'),
       ),
     );
-    await Future<void>.delayed(Duration.zero);
+
+    final event = await firstEvent.future;
+    await pumpEventQueue();
 
     expect(
       store.state.domain.document.elementsVersion,
       equals(initialVersion + 1),
     );
     expect(events, hasLength(1));
-    expect(events.single.elementsVersion, equals(initialVersion + 1));
+    expect(event.elementsVersion, equals(initialVersion + 1));
   });
 }

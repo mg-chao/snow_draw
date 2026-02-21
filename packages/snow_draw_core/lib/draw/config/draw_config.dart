@@ -238,82 +238,67 @@ class DrawConfig {
     GridConfig? grid,
     SnapConfig? snap,
   }) {
-    final nextSelection = selection ?? this.selection;
-    final nextElementConfig = element ?? this.element;
-    final nextCanvas = canvas ?? this.canvas;
-    final nextBoxSelection = boxSelection ?? this.boxSelection;
     final nextElementStyle = elementStyle ?? this.elementStyle;
-    final elementStyleChanged = nextElementStyle != this.elementStyle;
+    final shouldSyncLinkedStyles = nextElementStyle != this.elementStyle;
 
-    final nextRectangleStyle =
-        rectangleStyle ??
-        (elementStyleChanged ? nextElementStyle : this.rectangleStyle);
-    final nextArrowStyle =
-        arrowStyle ??
-        (elementStyleChanged ? nextElementStyle : this.arrowStyle);
-    final nextLineStyle =
-        lineStyle ?? (elementStyleChanged ? nextElementStyle : this.lineStyle);
-    final nextFreeDrawStyle =
-        freeDrawStyle ??
-        (elementStyleChanged ? nextElementStyle : this.freeDrawStyle);
-    final nextTextStyle =
-        textStyle ?? (elementStyleChanged ? nextElementStyle : this.textStyle);
-    final nextSerialNumberStyle =
-        serialNumberStyle ??
-        (elementStyleChanged
-            ? _deriveSerialNumberStyle(
-                nextElementStyle,
-                serialNumber: this.serialNumberStyle.serialNumber,
-              )
-            : this.serialNumberStyle);
-    final nextFilterStyle =
-        filterStyle ??
-        (elementStyleChanged
-            ? _deriveFilterStyle(nextElementStyle)
-            : this.filterStyle);
-    final nextHighlightStyle =
-        highlightStyle ??
-        (elementStyleChanged
-            ? _deriveHighlightStyle(nextElementStyle)
-            : this.highlightStyle);
-    final nextGrid = grid ?? this.grid;
-    final nextSnap = snap ?? this.snap;
-
-    if (nextSelection == this.selection &&
-        nextElementConfig == this.element &&
-        nextCanvas == this.canvas &&
-        nextBoxSelection == this.boxSelection &&
-        nextElementStyle == this.elementStyle &&
-        nextRectangleStyle == this.rectangleStyle &&
-        nextArrowStyle == this.arrowStyle &&
-        nextLineStyle == this.lineStyle &&
-        nextFreeDrawStyle == this.freeDrawStyle &&
-        nextTextStyle == this.textStyle &&
-        nextSerialNumberStyle == this.serialNumberStyle &&
-        nextFilterStyle == this.filterStyle &&
-        nextHighlightStyle == this.highlightStyle &&
-        nextGrid == this.grid &&
-        nextSnap == this.snap) {
-      return this;
+    ElementStyleConfig resolveLinkedStyle(
+      ElementStyleConfig? explicitStyle,
+      ElementStyleConfig currentStyle,
+    ) {
+      if (explicitStyle != null) {
+        return explicitStyle;
+      }
+      return shouldSyncLinkedStyles ? nextElementStyle : currentStyle;
     }
 
-    return DrawConfig(
-      selection: nextSelection,
-      element: nextElementConfig,
-      canvas: nextCanvas,
-      boxSelection: nextBoxSelection,
+    ElementStyleConfig resolveDerivedStyle(
+      ElementStyleConfig? explicitStyle,
+      ElementStyleConfig currentStyle,
+      ElementStyleConfig Function(ElementStyleConfig) derive,
+    ) {
+      if (explicitStyle != null) {
+        return explicitStyle;
+      }
+      if (!shouldSyncLinkedStyles) {
+        return currentStyle;
+      }
+      return derive(nextElementStyle);
+    }
+
+    final nextConfig = DrawConfig(
+      selection: selection ?? this.selection,
+      element: element ?? this.element,
+      canvas: canvas ?? this.canvas,
+      boxSelection: boxSelection ?? this.boxSelection,
       elementStyle: nextElementStyle,
-      rectangleStyle: nextRectangleStyle,
-      arrowStyle: nextArrowStyle,
-      lineStyle: nextLineStyle,
-      freeDrawStyle: nextFreeDrawStyle,
-      textStyle: nextTextStyle,
-      serialNumberStyle: nextSerialNumberStyle,
-      filterStyle: nextFilterStyle,
-      highlightStyle: nextHighlightStyle,
-      grid: nextGrid,
-      snap: nextSnap,
+      rectangleStyle: resolveLinkedStyle(rectangleStyle, this.rectangleStyle),
+      arrowStyle: resolveLinkedStyle(arrowStyle, this.arrowStyle),
+      lineStyle: resolveLinkedStyle(lineStyle, this.lineStyle),
+      freeDrawStyle: resolveLinkedStyle(freeDrawStyle, this.freeDrawStyle),
+      textStyle: resolveLinkedStyle(textStyle, this.textStyle),
+      serialNumberStyle: resolveDerivedStyle(
+        serialNumberStyle,
+        this.serialNumberStyle,
+        (style) => _deriveSerialNumberStyle(
+          style,
+          serialNumber: this.serialNumberStyle.serialNumber,
+        ),
+      ),
+      filterStyle: resolveDerivedStyle(
+        filterStyle,
+        this.filterStyle,
+        _deriveFilterStyle,
+      ),
+      highlightStyle: resolveDerivedStyle(
+        highlightStyle,
+        this.highlightStyle,
+        _deriveHighlightStyle,
+      ),
+      grid: grid ?? this.grid,
+      snap: snap ?? this.snap,
     );
+
+    return nextConfig == this ? this : nextConfig;
   }
 
   static ElementStyleConfig _deriveSerialNumberStyle(

@@ -9,21 +9,15 @@ class GridSnapService {
   const GridSnapService();
 
   double snapValue(double value, double gridSize) {
-    if (!_isSnapEnabled(gridSize) || !value.isFinite) {
+    if (!value.isFinite || !gridSize.isFinite || gridSize <= 0) {
       return value;
     }
-    final normalized = value / gridSize;
-    if (!normalized.isFinite) {
-      return value;
-    }
-    final snapped = normalized.roundToDouble() * gridSize;
+
+    final snapped = (value / gridSize).roundToDouble() * gridSize;
     return snapped.isFinite ? snapped : value;
   }
 
   DrawPoint snapPoint({required DrawPoint point, required double gridSize}) {
-    if (!_isSnapEnabled(gridSize)) {
-      return point;
-    }
     final snappedX = snapValue(point.x, gridSize);
     final snappedY = snapValue(point.y, gridSize);
     if (_sameCoordinate(snappedX, point.x) &&
@@ -41,9 +35,6 @@ class GridSnapService {
     bool snapMinY = false,
     bool snapMaxY = false,
   }) {
-    if (!_isSnapEnabled(gridSize)) {
-      return rect;
-    }
     if (!snapMinX && !snapMaxX && !snapMinY && !snapMaxY) {
       return rect;
     }
@@ -67,8 +58,6 @@ class GridSnapService {
       maxY: snappedMaxY,
     );
   }
-
-  bool _isSnapEnabled(double gridSize) => gridSize.isFinite && gridSize > 0;
 
   bool _sameCoordinate(double a, double b) => a == b || (a.isNaN && b.isNaN);
 }

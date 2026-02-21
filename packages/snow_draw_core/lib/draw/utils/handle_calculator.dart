@@ -7,10 +7,20 @@ import '../types/draw_rect.dart';
 /// Centralizes:
 /// - resize handle positions (corners + edges midpoints)
 /// - rotate handle position
-/// - coordinate transforms for rotated selections (world <-> local)
 /// - hit testing for handle points
 class HandleCalculator {
   HandleCalculator._();
+
+  static const _resizeHitTestOrder = <ResizeMode>[
+    ResizeMode.topLeft,
+    ResizeMode.topRight,
+    ResizeMode.bottomRight,
+    ResizeMode.bottomLeft,
+    ResizeMode.top,
+    ResizeMode.right,
+    ResizeMode.bottom,
+    ResizeMode.left,
+  ];
 
   // ===== Resize handles =====
 
@@ -19,29 +29,23 @@ class HandleCalculator {
     required ResizeMode mode,
     double padding = 0.0,
   }) {
-    final paddedMinX = bounds.minX - padding;
-    final paddedMinY = bounds.minY - padding;
-    final paddedMaxX = bounds.maxX + padding;
-    final paddedMaxY = bounds.maxY + padding;
+    final minX = bounds.minX - padding;
+    final minY = bounds.minY - padding;
+    final maxX = bounds.maxX + padding;
+    final maxY = bounds.maxY + padding;
+    final centerX = bounds.centerX;
+    final centerY = bounds.centerY;
 
-    switch (mode) {
-      case ResizeMode.topLeft:
-        return DrawPoint(x: paddedMinX, y: paddedMinY);
-      case ResizeMode.top:
-        return DrawPoint(x: bounds.centerX, y: paddedMinY);
-      case ResizeMode.topRight:
-        return DrawPoint(x: paddedMaxX, y: paddedMinY);
-      case ResizeMode.right:
-        return DrawPoint(x: paddedMaxX, y: bounds.centerY);
-      case ResizeMode.bottomRight:
-        return DrawPoint(x: paddedMaxX, y: paddedMaxY);
-      case ResizeMode.bottom:
-        return DrawPoint(x: bounds.centerX, y: paddedMaxY);
-      case ResizeMode.bottomLeft:
-        return DrawPoint(x: paddedMinX, y: paddedMaxY);
-      case ResizeMode.left:
-        return DrawPoint(x: paddedMinX, y: bounds.centerY);
-    }
+    return switch (mode) {
+      ResizeMode.topLeft => DrawPoint(x: minX, y: minY),
+      ResizeMode.top => DrawPoint(x: centerX, y: minY),
+      ResizeMode.topRight => DrawPoint(x: maxX, y: minY),
+      ResizeMode.right => DrawPoint(x: maxX, y: centerY),
+      ResizeMode.bottomRight => DrawPoint(x: maxX, y: maxY),
+      ResizeMode.bottom => DrawPoint(x: centerX, y: maxY),
+      ResizeMode.bottomLeft => DrawPoint(x: minX, y: maxY),
+      ResizeMode.left => DrawPoint(x: minX, y: centerY),
+    };
   }
 
   static Map<ResizeMode, DrawPoint> getAllResizeHandlePositions({
@@ -70,11 +74,7 @@ class HandleCalculator {
     required DrawPoint testPoint,
     required DrawPoint handleCenter,
     required double tolerance,
-  }) {
-    final dx = testPoint.x - handleCenter.x;
-    final dy = testPoint.y - handleCenter.y;
-    return (dx * dx + dy * dy) <= (tolerance * tolerance);
-  }
+  }) => testPoint.distanceSquared(handleCenter) <= (tolerance * tolerance);
 
   /// Hit-tests all resize handles (corners + edge midpoints) in local space.
   static ResizeMode? hitTestResizeHandles({
@@ -83,14 +83,7 @@ class HandleCalculator {
     required double tolerance,
     double padding = 0.0,
   }) {
-    // Prefer corners first (more precise targets).
-    const cornerOrder = <ResizeMode>[
-      ResizeMode.topLeft,
-      ResizeMode.topRight,
-      ResizeMode.bottomRight,
-      ResizeMode.bottomLeft,
-    ];
-    for (final mode in cornerOrder) {
+    for (final mode in _resizeHitTestOrder) {
       final handle = getResizeHandlePosition(
         bounds: bounds,
         mode: mode,
@@ -104,29 +97,6 @@ class HandleCalculator {
         return mode;
       }
     }
-
-    // Then edge midpoints.
-    const edgeOrder = <ResizeMode>[
-      ResizeMode.top,
-      ResizeMode.right,
-      ResizeMode.bottom,
-      ResizeMode.left,
-    ];
-    for (final mode in edgeOrder) {
-      final handle = getResizeHandlePosition(
-        bounds: bounds,
-        mode: mode,
-        padding: padding,
-      );
-      if (isPointInHandle(
-        testPoint: testPoint,
-        handleCenter: handle,
-        tolerance: tolerance,
-      )) {
-        return mode;
-      }
-    }
-
     return null;
   }
 }

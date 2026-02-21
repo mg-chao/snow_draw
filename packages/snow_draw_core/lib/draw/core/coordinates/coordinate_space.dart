@@ -19,24 +19,14 @@ abstract class CoordinateSpace {
     if (rotation == 0) {
       return localVector;
     }
-    final cosR = math.cos(rotation);
-    final sinR = math.sin(rotation);
-    return DrawPoint(
-      x: localVector.x * cosR - localVector.y * sinR,
-      y: localVector.x * sinR + localVector.y * cosR,
-    );
+    return _rotate(localVector.x, localVector.y, rotation);
   }
 
   DrawPoint rotateVectorToLocal(DrawPoint worldVector) {
     if (rotation == 0) {
       return worldVector;
     }
-    final cosR = math.cos(-rotation);
-    final sinR = math.sin(-rotation);
-    return DrawPoint(
-      x: worldVector.x * cosR - worldVector.y * sinR,
-      y: worldVector.x * sinR + worldVector.y * cosR,
-    );
+    return _rotate(worldVector.x, worldVector.y, -rotation);
   }
 
   /// Rotates [point] around [center] by [angle].
@@ -48,16 +38,13 @@ abstract class CoordinateSpace {
     if (angle == 0) {
       return point;
     }
+    final rotated = _rotate(point.x - center.x, point.y - center.y, angle);
+    return DrawPoint(x: center.x + rotated.x, y: center.y + rotated.y);
+  }
 
+  DrawPoint _rotate(double x, double y, double angle) {
     final cosA = math.cos(angle);
     final sinA = math.sin(angle);
-
-    final dx = point.x - center.x;
-    final dy = point.y - center.y;
-
-    return DrawPoint(
-      x: center.x + dx * cosA - dy * sinA,
-      y: center.y + dx * sinA + dy * cosA,
-    );
+    return DrawPoint(x: x * cosA - y * sinA, y: x * sinA + y * cosA);
   }
 }

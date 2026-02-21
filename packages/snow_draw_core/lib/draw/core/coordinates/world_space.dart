@@ -2,12 +2,13 @@ import '../../types/draw_point.dart';
 import 'coordinate_space.dart';
 
 class WorldSpace extends CoordinateSpace {
-  const WorldSpace({this.rotation = 0.0, this.origin = DrawPoint.zero});
-  @override
-  final double rotation;
+  const WorldSpace();
 
   @override
-  final DrawPoint origin;
+  double get rotation => 0;
+
+  @override
+  DrawPoint get origin => DrawPoint.zero;
 
   @override
   DrawPoint fromWorld(DrawPoint worldPoint) => worldPoint;

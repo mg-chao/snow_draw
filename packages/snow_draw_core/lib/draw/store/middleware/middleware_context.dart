@@ -147,18 +147,8 @@ class DispatchContext {
   DispatchContext withCurrentState(DrawState newState) =>
       copyWith(currentState: newState);
 
-  DispatchContext withInitialState(DrawState newState) =>
-      copyWith(initialState: newState);
-
-  DispatchContext withEvents(List<EditSessionEvent> newEvents) {
-    if (newEvents.isEmpty) {
-      return this;
-    }
-    return copyWith(events: [...events, ...newEvents]);
-  }
-
-  DispatchContext withEvent(EditSessionEvent event) =>
-      copyWith(events: [...events, event]);
+  DispatchContext withEvents(List<EditSessionEvent> newEvents) =>
+      newEvents.isEmpty ? this : copyWith(events: [...events, ...newEvents]);
 
   DispatchContext withStop(String reason) =>
       copyWith(shouldStop: true, stopReason: reason);

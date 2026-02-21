@@ -20,9 +20,6 @@ mixin HistoryPolicyProvider {
   /// History policy for this action.
   HistoryPolicy get historyPolicy;
 
-  /// Whether this action needs a special "pre-action" snapshot.
-  ///
-  /// Most actions can snapshot the current state directly. Some actions (e.g.
-  /// finishing element creation) need a snapshot that excludes transient state.
+  /// Whether this action needs a special pre-action snapshot.
   bool get requiresPreActionSnapshot => false;
 }

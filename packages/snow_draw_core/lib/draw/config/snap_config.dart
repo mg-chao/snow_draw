@@ -81,51 +81,39 @@ class SnapConfig {
     double? gapDashLength,
     double? gapDashGap,
   }) {
-    final nextEnabled = enabled ?? this.enabled;
-    final nextDistance = distance ?? this.distance;
-    final nextEnablePointSnaps = enablePointSnaps ?? this.enablePointSnaps;
-    final nextEnableGapSnaps = enableGapSnaps ?? this.enableGapSnaps;
-    final nextEnableArrowBinding =
-        enableArrowBinding ?? this.enableArrowBinding;
-    final nextArrowBindingDistance =
-        arrowBindingDistance ?? this.arrowBindingDistance;
-    final nextShowGuides = showGuides ?? this.showGuides;
-    final nextShowGapSize = showGapSize ?? this.showGapSize;
-    final nextLineColor = lineColor ?? this.lineColor;
-    final nextLineWidth = lineWidth ?? this.lineWidth;
-    final nextMarkerSize = markerSize ?? this.markerSize;
-    final nextGapDashLength = gapDashLength ?? this.gapDashLength;
-    final nextGapDashGap = gapDashGap ?? this.gapDashGap;
-    if (nextEnabled == this.enabled &&
-        nextDistance == this.distance &&
-        nextEnablePointSnaps == this.enablePointSnaps &&
-        nextEnableGapSnaps == this.enableGapSnaps &&
-        nextEnableArrowBinding == this.enableArrowBinding &&
-        nextArrowBindingDistance == this.arrowBindingDistance &&
-        nextShowGuides == this.showGuides &&
-        nextShowGapSize == this.showGapSize &&
-        nextLineColor == this.lineColor &&
-        nextLineWidth == this.lineWidth &&
-        nextMarkerSize == this.markerSize &&
-        nextGapDashLength == this.gapDashLength &&
-        nextGapDashGap == this.gapDashGap) {
+    if (enabled == null &&
+        distance == null &&
+        enablePointSnaps == null &&
+        enableGapSnaps == null &&
+        enableArrowBinding == null &&
+        arrowBindingDistance == null &&
+        showGuides == null &&
+        showGapSize == null &&
+        lineColor == null &&
+        lineWidth == null &&
+        markerSize == null &&
+        gapDashLength == null &&
+        gapDashGap == null) {
       return this;
     }
-    return SnapConfig(
-      enabled: nextEnabled,
-      distance: nextDistance,
-      enablePointSnaps: nextEnablePointSnaps,
-      enableGapSnaps: nextEnableGapSnaps,
-      enableArrowBinding: nextEnableArrowBinding,
-      arrowBindingDistance: nextArrowBindingDistance,
-      showGuides: nextShowGuides,
-      showGapSize: nextShowGapSize,
-      lineColor: nextLineColor,
-      lineWidth: nextLineWidth,
-      markerSize: nextMarkerSize,
-      gapDashLength: nextGapDashLength,
-      gapDashGap: nextGapDashGap,
+
+    final next = SnapConfig(
+      enabled: enabled ?? this.enabled,
+      distance: distance ?? this.distance,
+      enablePointSnaps: enablePointSnaps ?? this.enablePointSnaps,
+      enableGapSnaps: enableGapSnaps ?? this.enableGapSnaps,
+      enableArrowBinding: enableArrowBinding ?? this.enableArrowBinding,
+      arrowBindingDistance: arrowBindingDistance ?? this.arrowBindingDistance,
+      showGuides: showGuides ?? this.showGuides,
+      showGapSize: showGapSize ?? this.showGapSize,
+      lineColor: lineColor ?? this.lineColor,
+      lineWidth: lineWidth ?? this.lineWidth,
+      markerSize: markerSize ?? this.markerSize,
+      gapDashLength: gapDashLength ?? this.gapDashLength,
+      gapDashGap: gapDashGap ?? this.gapDashGap,
     );
+
+    return next == this ? this : next;
   }
 
   @override

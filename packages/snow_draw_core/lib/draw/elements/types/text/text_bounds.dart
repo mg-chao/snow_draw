@@ -10,47 +10,42 @@ DrawRect clampTextRectToLayout({
   required TextData data,
   bool keepCenter = false,
 }) {
-  final initialLayout = layoutText(data: data, maxWidth: rect.width);
+  final baseLayout = layoutText(data: data, maxWidth: rect.width);
   final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    initialLayout.lineHeight,
+    baseLayout.lineHeight,
   );
   final minWidth = _resolveMinWidth(data) + horizontalPadding * 2;
-  final widthForLayout = rect.width < minWidth ? minWidth : rect.width;
-  final layout = widthForLayout == rect.width
-      ? initialLayout
-      : layoutText(data: data, maxWidth: widthForLayout);
-  final minHeight = resolveTextLayoutHeight(layout);
+  final shouldClampWidth = rect.width < minWidth;
 
   var minX = rect.minX;
   var maxX = rect.maxX;
-  var minY = rect.minY;
-  var maxY = rect.maxY;
-
-  if (rect.width < minWidth) {
+  if (shouldClampWidth) {
     if (keepCenter) {
-      final centerX = rect.centerX;
-      minX = centerX - minWidth / 2;
-      maxX = centerX + minWidth / 2;
+      final halfWidth = minWidth / 2;
+      minX = rect.centerX - halfWidth;
+      maxX = rect.centerX + halfWidth;
     } else if (anchor.x <= rect.minX) {
-      minX = rect.minX;
       maxX = rect.minX + minWidth;
     } else if (anchor.x >= rect.maxX) {
-      maxX = rect.maxX;
       minX = rect.maxX - minWidth;
     } else {
       final ratio = _anchorRatio(anchor.x, startRect.minX, startRect.maxX);
       minX = anchor.x - minWidth * ratio;
-      maxX = anchor.x + minWidth * (1 - ratio);
+      maxX = minX + minWidth;
     }
   }
 
-  if (rect.height != minHeight) {
-    // Always keep the top edge fixed when height changes
-    minY = rect.minY;
-    maxY = rect.minY + minHeight;
-  }
+  final layout = shouldClampWidth
+      ? layoutText(data: data, maxWidth: minWidth)
+      : baseLayout;
+  final minHeight = resolveTextLayoutHeight(layout);
 
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return DrawRect(
+    minX: minX,
+    minY: rect.minY,
+    maxX: maxX,
+    maxY: rect.minY + minHeight,
+  );
 }
 
 double resolveTextLayoutHeight(TextLayoutMetrics layout) => _sanitizeExtent(
@@ -70,32 +65,31 @@ double fitTextFontSizeToHeight({
   final safeWidth = _sanitizeExtent(maxWidth);
   final safeTargetHeight = _sanitizeExtent(targetHeight);
   final safeMinFontSize = _sanitizeExtent(minFontSize);
-  var baseFontSize = _sanitizeExtent(data.fontSize);
-  if (baseFontSize < safeMinFontSize) {
-    baseFontSize = safeMinFontSize;
-  }
+  final safeMaxIterations = maxIterations < 1 ? 1 : maxIterations;
+  final safeTolerance = tolerance < 0 ? 0.0 : tolerance;
+  final sanitizedFontSize = _sanitizeExtent(data.fontSize);
+  final baseFontSize = sanitizedFontSize < safeMinFontSize
+      ? safeMinFontSize
+      : sanitizedFontSize;
 
   final baseHeight = _resolveHeight(
     data: data,
     fontSize: baseFontSize,
     maxWidth: safeWidth,
   );
-  if ((baseHeight - safeTargetHeight).abs() <= tolerance) {
+  if ((baseHeight - safeTargetHeight).abs() <= safeTolerance) {
     return baseFontSize;
   }
 
-  final minHeight = _resolveHeight(
+  final lowHeight = _resolveHeight(
     data: data,
     fontSize: safeMinFontSize,
     maxWidth: safeWidth,
   );
-  if (minHeight >= safeTargetHeight) {
+  if (lowHeight >= safeTargetHeight) {
     return safeMinFontSize;
   }
 
-  // Use a linear estimate to seed the binary search with a tighter
-  // initial range. Font height scales roughly linearly with font size
-  // for single-line text, so this often lands close on the first try.
   var low = safeMinFontSize;
   var high = baseFontSize < safeTargetHeight ? safeTargetHeight : baseFontSize;
   var highHeight = high == baseFontSize
@@ -104,7 +98,7 @@ double fitTextFontSizeToHeight({
 
   if (highHeight < safeTargetHeight) {
     var attempts = 0;
-    while (highHeight < safeTargetHeight && attempts < maxIterations) {
+    while (highHeight < safeTargetHeight && attempts < safeMaxIterations) {
       high *= 1.5;
       highHeight = _resolveHeight(
         data: data,
@@ -118,35 +112,33 @@ double fitTextFontSizeToHeight({
     }
   }
 
-  final lowHeight = minHeight;
   final span = highHeight - lowHeight;
   if (span > 0) {
     final ratio = (safeTargetHeight - lowHeight) / span;
     final estimate = low + (high - low) * ratio;
-    final estHeight = _resolveHeight(
+    final estimateHeight = _resolveHeight(
       data: data,
       fontSize: estimate,
       maxWidth: safeWidth,
     );
-    if ((estHeight - safeTargetHeight).abs() <= tolerance) {
+    if ((estimateHeight - safeTargetHeight).abs() <= safeTolerance) {
       return estimate;
     }
-    // Narrow the search range based on the estimate.
-    if (estHeight > safeTargetHeight) {
+    if (estimateHeight > safeTargetHeight) {
       high = estimate;
     } else {
       low = estimate;
     }
   }
 
-  for (var i = 0; i < maxIterations; i++) {
+  for (var i = 0; i < safeMaxIterations; i++) {
     final mid = (low + high) / 2;
     final height = _resolveHeight(
       data: data,
       fontSize: mid,
       maxWidth: safeWidth,
     );
-    if ((height - safeTargetHeight).abs() <= tolerance) {
+    if ((height - safeTargetHeight).abs() <= safeTolerance) {
       return mid;
     }
     if (height > safeTargetHeight) {
@@ -167,36 +159,26 @@ double _resolveMinWidth(TextData data) {
       maxLineWidth = line.width;
     }
   }
-  if (maxLineWidth.isNaN || maxLineWidth.isInfinite || maxLineWidth <= 0) {
+  if (maxLineWidth <= 0 || !maxLineWidth.isFinite) {
     return _sanitizeExtent(layout.size.width);
   }
-  return maxLineWidth;
+  return _sanitizeExtent(maxLineWidth);
 }
 
 double _anchorRatio(double anchor, double min, double max) {
   final span = max - min;
-  if (span <= 0 || span.isNaN || span.isInfinite) {
+  if (span <= 0 || !span.isFinite) {
     return 0.5;
   }
   final raw = (anchor - min) / span;
-  if (raw.isNaN || raw.isInfinite) {
+  if (!raw.isFinite) {
     return 0.5;
   }
-  if (raw < 0) {
-    return 0;
-  }
-  if (raw > 1) {
-    return 1;
-  }
-  return raw;
+  return raw.clamp(0.0, 1.0);
 }
 
-double _sanitizeExtent(double value) {
-  if (value <= 0 || value.isNaN || value.isInfinite) {
-    return 1;
-  }
-  return value;
-}
+double _sanitizeExtent(double value) =>
+    value > 0 && value.isFinite ? value : 1.0;
 
 double _resolveHeight({
   required TextData data,

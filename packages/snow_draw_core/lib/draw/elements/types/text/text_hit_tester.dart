@@ -22,25 +22,17 @@ class TextHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
-    final minX = rect.minX - tolerance;
-    final maxX = rect.maxX + tolerance;
-    final minY = rect.minY - tolerance;
-    final maxY = rect.maxY + tolerance;
+    final localPosition = element.rotation == 0
+        ? position
+        : ElementSpace(
+            rotation: element.rotation,
+            origin: rect.center,
+          ).fromWorld(position);
 
-    return localPosition.x >= minX &&
-        localPosition.x <= maxX &&
-        localPosition.y >= minY &&
-        localPosition.y <= maxY;
-  }
-
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
+    return localPosition.x >= rect.minX - tolerance &&
+        localPosition.x <= rect.maxX + tolerance &&
+        localPosition.y >= rect.minY - tolerance &&
+        localPosition.y <= rect.maxY + tolerance;
   }
 
   @override

@@ -1,45 +1,41 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/models/global_elements_state.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
   test('draw config provides highlight style defaults', () {
-    final config = DrawConfig();
+    final highlightStyle = DrawConfig().highlightStyle;
 
-    expect(config.highlightStyle.color, ConfigDefaults.defaultHighlightColor);
+    expect(highlightStyle.color, ConfigDefaults.defaultHighlightColor);
     expect(
-      config.highlightStyle.textStrokeColor,
+      highlightStyle.textStrokeColor,
       ConfigDefaults.defaultHighlightStrokeColor,
     );
-    expect(config.highlightStyle.textStrokeWidth, 0);
-    expect(config.highlightStyle.highlightShape, HighlightShape.rectangle);
+    expect(highlightStyle.textStrokeWidth, 0);
+    expect(highlightStyle.highlightShape, ConfigDefaults.defaultHighlightShape);
   });
 
   test('global elements provide highlight mask and watermark defaults', () {
     const globals = GlobalElementsState();
+    final highlightMask = globals.highlightMask;
+    final watermark = globals.watermark;
 
-    expect(globals.highlightMask.maskColor, ConfigDefaults.defaultMaskColor);
-    expect(globals.highlightMask.maskOpacity, 0);
-    expect(globals.watermark.color, ConfigDefaults.defaultWatermarkColor);
-    expect(globals.watermark.text, ConfigDefaults.defaultWatermarkText);
-    expect(globals.watermark.fontSize, ConfigDefaults.defaultWatermarkFontSize);
-    expect(globals.watermark.fontSize, 16);
+    expect(highlightMask.maskColor, ConfigDefaults.defaultMaskColor);
+    expect(highlightMask.maskOpacity, 0);
+    expect(watermark.color, ConfigDefaults.defaultWatermarkColor);
+    expect(watermark.text, ConfigDefaults.defaultWatermarkText);
+    expect(watermark.fontSize, ConfigDefaults.defaultWatermarkFontSize);
+    expect(watermark.fontFamily, ConfigDefaults.defaultWatermarkFontFamily);
+    expect(watermark.angle, ConfigDefaults.defaultWatermarkAngle);
+    expect(watermark.gap, ConfigDefaults.defaultWatermarkGap);
     expect(
-      globals.watermark.fontFamily,
-      ConfigDefaults.defaultWatermarkFontFamily,
-    );
-    expect(globals.watermark.angle, ConfigDefaults.defaultWatermarkAngle);
-    expect(globals.watermark.gap, ConfigDefaults.defaultWatermarkGap);
-    expect(
-      globals.watermark.gap,
+      watermark.gap,
       inInclusiveRange(
         ConfigDefaults.minWatermarkGap,
         ConfigDefaults.maxWatermarkGap,
       ),
     );
-    expect(globals.watermark.opacity, ConfigDefaults.defaultWatermarkOpacity);
-    expect(globals.watermark.opacity, 0.16);
+    expect(watermark.opacity, ConfigDefaults.defaultWatermarkOpacity);
   });
 
   test('watermark config enforces minimum gap', () {

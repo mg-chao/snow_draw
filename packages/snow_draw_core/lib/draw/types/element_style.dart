@@ -91,46 +91,4 @@ class ElementStyleUpdate {
       textStrokeColor == null &&
       textStrokeWidth == null &&
       serialNumber == null;
-
-  ElementStyleUpdate copyWith({
-    Color? color,
-    Color? fillColor,
-    double? strokeWidth,
-    StrokeStyle? strokeStyle,
-    FillStyle? fillStyle,
-    HighlightShape? highlightShape,
-    CanvasFilterType? filterType,
-    double? filterStrength,
-    double? cornerRadius,
-    ArrowType? arrowType,
-    ArrowheadStyle? startArrowhead,
-    ArrowheadStyle? endArrowhead,
-    double? fontSize,
-    String? fontFamily,
-    TextHorizontalAlign? textAlign,
-    TextVerticalAlign? verticalAlign,
-    Color? textStrokeColor,
-    double? textStrokeWidth,
-    int? serialNumber,
-  }) => ElementStyleUpdate(
-    color: color ?? this.color,
-    fillColor: fillColor ?? this.fillColor,
-    strokeWidth: strokeWidth ?? this.strokeWidth,
-    strokeStyle: strokeStyle ?? this.strokeStyle,
-    fillStyle: fillStyle ?? this.fillStyle,
-    highlightShape: highlightShape ?? this.highlightShape,
-    filterType: filterType ?? this.filterType,
-    filterStrength: filterStrength ?? this.filterStrength,
-    cornerRadius: cornerRadius ?? this.cornerRadius,
-    arrowType: arrowType ?? this.arrowType,
-    startArrowhead: startArrowhead ?? this.startArrowhead,
-    endArrowhead: endArrowhead ?? this.endArrowhead,
-    fontSize: fontSize ?? this.fontSize,
-    fontFamily: fontFamily ?? this.fontFamily,
-    textAlign: textAlign ?? this.textAlign,
-    verticalAlign: verticalAlign ?? this.verticalAlign,
-    textStrokeColor: textStrokeColor ?? this.textStrokeColor,
-    textStrokeWidth: textStrokeWidth ?? this.textStrokeWidth,
-    serialNumber: serialNumber ?? this.serialNumber,
-  );
 }

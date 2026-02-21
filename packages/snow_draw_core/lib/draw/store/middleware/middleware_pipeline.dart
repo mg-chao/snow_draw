@@ -24,38 +24,25 @@ class MiddlewarePipeline {
   ///
   /// Returns the final context after all middlewares have executed.
   Future<DispatchContext> execute(DispatchContext initialContext) {
-    if (initialContext.shouldStop ||
-        initialContext.hasError ||
-        middlewares.isEmpty) {
+    if (initialContext.shouldStop || initialContext.hasError) {
       return Future<DispatchContext>.value(initialContext);
     }
-    return _executeFromIndex(
-      context: initialContext,
-      index: 0,
-      pipelineMiddlewares: middlewares,
-      middlewareCount: middlewares.length,
-    );
+    return _executeFromIndex(context: initialContext, index: 0);
   }
 
   Future<DispatchContext> _executeFromIndex({
     required DispatchContext context,
     required int index,
-    required List<Middleware> pipelineMiddlewares,
-    required int middlewareCount,
   }) async {
     var currentContext = context;
     var currentIndex = index;
 
-    while (true) {
+    while (currentIndex < middlewares.length) {
       if (currentContext.shouldStop || currentContext.hasError) {
         return currentContext;
       }
 
-      if (currentIndex >= middlewareCount) {
-        return currentContext;
-      }
-
-      final middleware = pipelineMiddlewares[currentIndex];
+      final middleware = middlewares[currentIndex];
 
       bool shouldExecute;
       try {
@@ -102,21 +89,16 @@ class MiddlewarePipeline {
         final downstreamCompleter = Completer<DispatchContext>();
         unawaited(() async {
           try {
-            final downstreamContext = await Future<DispatchContext>.microtask(
-              () => _executeFromIndex(
-                context: nextContext,
-                index: currentIndex + 1,
-                pipelineMiddlewares: pipelineMiddlewares,
-                middlewareCount: middlewareCount,
+            downstreamCompleter.complete(
+              await Future<DispatchContext>.microtask(
+                () => _executeFromIndex(
+                  context: nextContext,
+                  index: currentIndex + 1,
+                ),
               ),
             );
-            if (!downstreamCompleter.isCompleted) {
-              downstreamCompleter.complete(downstreamContext);
-            }
           } on Object catch (error, stackTrace) {
-            if (!downstreamCompleter.isCompleted) {
-              downstreamCompleter.completeError(error, stackTrace);
-            }
+            downstreamCompleter.completeError(error, stackTrace);
           }
         }());
         final downstreamFuture = downstreamCompleter.future.whenComplete(
@@ -136,7 +118,7 @@ class MiddlewarePipeline {
           final downstreamContext = await _resolveDownstreamContext(
             fallbackContext: nextInputContext ?? currentContext,
             middleware: middleware,
-            downstreamFuture: nextFuture,
+            downstreamFuture: nextFuture!,
           );
           final detachedNextError = !nextObserved
               ? StateError(
@@ -164,7 +146,7 @@ class MiddlewarePipeline {
               final downstreamContext = await _resolveDownstreamContext(
                 fallbackContext: nextInputContext ?? currentContext,
                 middleware: middleware,
-                downstreamFuture: nextFuture,
+                downstreamFuture: nextFuture!,
               );
               return _markSkipped(
                 context: downstreamContext,
@@ -182,7 +164,7 @@ class MiddlewarePipeline {
                 ? await _resolveDownstreamContext(
                     fallbackContext: nextInputContext ?? currentContext,
                     middleware: middleware,
-                    downstreamFuture: nextFuture,
+                    downstreamFuture: nextFuture!,
                   )
                 : currentContext;
             return contextForStop.withError(
@@ -195,17 +177,15 @@ class MiddlewarePipeline {
         }
       }
     }
+
+    return currentContext;
   }
 
   Future<DispatchContext> _resolveDownstreamContext({
     required DispatchContext fallbackContext,
     required Middleware middleware,
-    required Future<DispatchContext>? downstreamFuture,
+    required Future<DispatchContext> downstreamFuture,
   }) async {
-    if (downstreamFuture == null) {
-      return fallbackContext;
-    }
-
     try {
       return await downstreamFuture;
     } on Object catch (error, stackTrace) {

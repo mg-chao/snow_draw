@@ -8,15 +8,36 @@ import '../../elements/text_rendering_cache_invalidation.dart';
 
 final revisionNotifier = ValueNotifier<int>(0);
 
-// ---------------------------------------------------------------------------
-// Public entry points
-// ---------------------------------------------------------------------------
+final Map<String, _FontFamilyEntry> _fontIndex = {};
+final Set<String> _loadedFamilies = {};
+final Map<String, Future<void>> _fontLoadTasks = {};
+final Map<String, bool> _fileExistsCache = {};
+
+List<String>? _sortedFamilyCache;
+Future<void>? _fontIndexTask;
+
+const _windowsFontRegistryPaths = [
+  r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
+  r'HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
+];
+
+final _windowsFontSuffixPattern = RegExp(
+  r'\s*\((TrueType|OpenType|Type 1|PostScript|Bitmap|All res)\)',
+  caseSensitive: false,
+);
+
+final String _windowsFontsDir = _resolveWindowsFontsDir();
+final String _windowsUserFontsDir = _resolveWindowsUserFontsDir();
+
+const _macFamilyKeys = ['family', 'name', '_name', 'full_name'];
+const _macPathKeys = ['path', 'location', 'file', 'font_path'];
 
 Future<List<String>> listFamiliesImpl() async {
   final cached = _sortedFamilyCache;
   if (cached != null) {
     return cached;
   }
+
   await _ensureFontIndex();
   final sorted = _sortedFamilyNames();
   _sortedFamilyCache = sorted;
@@ -24,25 +45,30 @@ Future<List<String>> listFamiliesImpl() async {
 }
 
 Future<void> ensureLoadedImpl(String family) async {
-  final trimmed = family.trim();
-  if (trimmed.isEmpty) {
+  final trimmedFamily = family.trim();
+  if (trimmedFamily.isEmpty) {
     return;
   }
+
   await _ensureFontIndex();
-  final key = _normalizeFamilyKey(trimmed);
+
+  final key = _normalizeFamilyKey(trimmedFamily);
   if (_loadedFamilies.contains(key)) {
     return;
   }
-  final inFlight = _fontLoadTasks[key];
-  if (inFlight != null) {
-    await inFlight;
+
+  final inFlightTask = _fontLoadTasks[key];
+  if (inFlightTask != null) {
+    await inFlightTask;
     return;
   }
+
   final entry = _fontIndex[key];
   if (entry == null || entry.files.isEmpty) {
     return;
   }
-  final task = _loadFontFamily(trimmed, key, entry);
+
+  final task = _loadFontFamily(trimmedFamily, key, entry);
   _fontLoadTasks[key] = task;
   try {
     await task;
@@ -51,49 +77,32 @@ Future<void> ensureLoadedImpl(String family) async {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Internal state
-// ---------------------------------------------------------------------------
-
-final Map<String, _FontFamilyEntry> _fontIndex = {};
-final Set<String> _loadedFamilies = {};
-final Map<String, Future<void>> _fontLoadTasks = {};
-final Map<String, bool> _fileExistsCache = {};
-List<String>? _sortedFamilyCache;
-Future<void>? _fontIndexTask;
-
-// ---------------------------------------------------------------------------
-// Index building
-// ---------------------------------------------------------------------------
-
 Future<void> _ensureFontIndex() async {
-  final existing = _fontIndexTask;
-  if (existing != null) {
-    await existing;
-    return;
-  }
-  final task = _buildFontIndex();
-  _fontIndexTask = task;
+  final task = _fontIndexTask ??= _buildFontIndex();
   await task;
 }
 
 Future<void> _buildFontIndex() async {
+  _fontIndex.clear();
   _sortedFamilyCache = null;
   _fileExistsCache.clear();
+
   try {
     if (Platform.isWindows) {
       await _indexWindowsFonts();
-    } else if (Platform.isMacOS) {
+      return;
+    }
+    if (Platform.isMacOS) {
       await _indexMacFonts();
-    } else if (Platform.isLinux) {
+      return;
+    }
+    if (Platform.isLinux) {
       await _indexLinuxFonts();
     }
-  } on Exception catch (_) {}
+  } on Exception {
+    // Ignore discovery failures; callers can fall back to built-in fonts.
+  }
 }
-
-// ---------------------------------------------------------------------------
-// Font loading
-// ---------------------------------------------------------------------------
 
 Future<void> _loadFontFamily(
   String family,
@@ -113,12 +122,15 @@ Future<void> _loadFontFamily(
   if (addedFonts == 0) {
     return;
   }
+
   try {
     await loader.load();
     _loadedFamilies.add(key);
     invalidateTextRenderingCaches();
-    revisionNotifier.value = revisionNotifier.value + 1;
-  } on Exception catch (_) {}
+    revisionNotifier.value += 1;
+  } on Exception {
+    // Ignore load failures; unavailable fonts should not crash drawing.
+  }
 }
 
 Future<ByteData?> _readFontBytes(String path) async {
@@ -128,7 +140,7 @@ Future<ByteData?> _readFontBytes(String path) async {
       return null;
     }
     return bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes);
-  } on Exception catch (_) {
+  } on Exception {
     return null;
   }
 }
@@ -138,29 +150,13 @@ List<String> _sortedFamilyNames() {
   return names..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 }
 
-// ---------------------------------------------------------------------------
-// Windows font indexing
-// ---------------------------------------------------------------------------
-
-const _windowsFontRegistryPaths = [
-  r'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
-  r'HKCU\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts',
-];
-
-final _windowsFontSuffixPattern = RegExp(
-  r'\s*\((TrueType|OpenType|Type 1|PostScript|Bitmap|All res)\)',
-  caseSensitive: false,
-);
-
-final String _windowsFontsDir = _resolveWindowsFontsDir();
-final String _windowsUserFontsDir = _resolveWindowsUserFontsDir();
-
 Future<void> _indexWindowsFonts() async {
-  for (final hive in _windowsFontRegistryPaths) {
-    final output = await _runCommand('reg', ['query', hive]);
+  for (final registryPath in _windowsFontRegistryPaths) {
+    final output = await _runCommand('reg', ['query', registryPath]);
     if (output == null) {
       continue;
     }
+
     for (final record in _parseWindowsRegistryFonts(output)) {
       _addFontEntry(record.name, record.files);
     }
@@ -168,20 +164,22 @@ Future<void> _indexWindowsFonts() async {
 }
 
 Iterable<_FontRecord> _parseWindowsRegistryFonts(String output) sync* {
-  for (final line in const LineSplitter().convert(output)) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty || trimmed.startsWith('HKEY')) {
+  for (final rawLine in const LineSplitter().convert(output)) {
+    final line = rawLine.trim();
+    if (line.isEmpty || line.startsWith('HKEY')) {
       continue;
     }
-    final parts = trimmed.split(RegExp(r'\s{2,}'));
+
+    final parts = line.split(RegExp(r'\s{2,}'));
     if (parts.length < 3) {
       continue;
     }
-    var name = parts[0];
-    name = name.replaceAll(_windowsFontSuffixPattern, '').trim();
+
+    final name = parts[0].replaceAll(_windowsFontSuffixPattern, '').trim();
     if (name.isEmpty) {
       continue;
     }
+
     final value = parts.sublist(2).join(' ').trim();
     if (value.isEmpty) {
       continue;
@@ -199,6 +197,7 @@ List<String> _resolveWindowsFontFiles(String value) {
   if (cleaned.isEmpty) {
     return const [];
   }
+
   final files = <String>[];
   for (final rawPart in cleaned.split(RegExp(r'\s*&\s*'))) {
     for (final segment in rawPart.split(RegExp(r'\s*,\s*'))) {
@@ -210,6 +209,7 @@ List<String> _resolveWindowsFontFiles(String value) {
         files.add(part);
         continue;
       }
+
       files.add('$_windowsFontsDir\\$part');
       if (_windowsUserFontsDir != _windowsFontsDir) {
         files.add('$_windowsUserFontsDir\\$part');
@@ -233,14 +233,10 @@ String _resolveWindowsFontsDir() {
 String _resolveWindowsUserFontsDir() {
   final localAppData = Platform.environment['LOCALAPPDATA'];
   if (localAppData == null || localAppData.isEmpty) {
-    return _resolveWindowsFontsDir();
+    return _windowsFontsDir;
   }
   return '$localAppData\\Microsoft\\Windows\\Fonts';
 }
-
-// ---------------------------------------------------------------------------
-// Linux font indexing
-// ---------------------------------------------------------------------------
 
 Future<void> _indexLinuxFonts() async {
   final output = await _runCommand('fc-list', ['-f', '%{family}::%{file}\n']);
@@ -251,10 +247,6 @@ Future<void> _indexLinuxFonts() async {
     _addFontEntry(record.name, record.files);
   }
 }
-
-// ---------------------------------------------------------------------------
-// macOS font indexing
-// ---------------------------------------------------------------------------
 
 Future<void> _indexMacFonts() async {
   final fcListOutput = await _runCommand('fc-list', [
@@ -279,30 +271,30 @@ Future<void> _indexMacFonts() async {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared parsers
-// ---------------------------------------------------------------------------
-
 Iterable<_FontRecord> _parseFontConfigEntries(String output) sync* {
-  for (final line in const LineSplitter().convert(output)) {
+  for (final rawLine in const LineSplitter().convert(output)) {
+    final line = rawLine.trim();
     if (line.isEmpty) {
       continue;
     }
-    final parts = line.split('::');
-    if (parts.length < 2) {
+
+    final separatorIndex = line.indexOf('::');
+    if (separatorIndex <= 0 || separatorIndex + 2 >= line.length) {
       continue;
     }
-    final familyPart = parts.first.trim();
-    final filePart = parts.sublist(1).join('::').trim();
+
+    final familyPart = line.substring(0, separatorIndex).trim();
+    final filePart = line.substring(separatorIndex + 2).trim();
     if (familyPart.isEmpty || filePart.isEmpty) {
       continue;
     }
+
     for (final family in familyPart.split(',')) {
-      final trimmed = family.trim();
-      if (trimmed.isEmpty) {
+      final name = family.trim();
+      if (name.isEmpty) {
         continue;
       }
-      yield _FontRecord(trimmed, [filePart]);
+      yield _FontRecord(name, [filePart]);
     }
   }
 }
@@ -317,22 +309,14 @@ Iterable<_FontRecord> _parseSystemProfilerEntries(String output) sync* {
     if (entries is! List) {
       return;
     }
-    for (final entry in entries) {
-      if (entry is! Map<String, Object?>) {
+
+    for (final rawEntry in entries) {
+      if (rawEntry is! Map<String, Object?>) {
         continue;
       }
-      final family = _firstString(entry, const [
-        'family',
-        'name',
-        '_name',
-        'full_name',
-      ]);
-      final path = _firstString(entry, const [
-        'path',
-        'location',
-        'file',
-        'font_path',
-      ]);
+
+      final family = _firstString(rawEntry, _macFamilyKeys);
+      final path = _firstString(rawEntry, _macPathKeys);
       if (family == null || path == null) {
         continue;
       }
@@ -343,7 +327,9 @@ Iterable<_FontRecord> _parseSystemProfilerEntries(String output) sync* {
       }
       yield _FontRecord(trimmedFamily, [trimmedPath]);
     }
-  } on Exception catch (_) {}
+  } on Exception {
+    // Ignore malformed system_profiler payloads.
+  }
 }
 
 String? _firstString(Map<String, Object?> entry, List<String> keys) {
@@ -356,32 +342,28 @@ String? _firstString(Map<String, Object?> entry, List<String> keys) {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Shared helpers
-// ---------------------------------------------------------------------------
-
 void _addFontEntry(String family, Iterable<String> files) {
-  final trimmed = family.trim();
-  if (trimmed.isEmpty) {
+  final trimmedFamily = family.trim();
+  if (trimmedFamily.isEmpty) {
     return;
   }
-  final key = _normalizeFamilyKey(trimmed);
+
+  final key = _normalizeFamilyKey(trimmedFamily);
   final entry = _fontIndex.putIfAbsent(
     key,
-    () => _FontFamilyEntry(displayName: trimmed),
+    () => _FontFamilyEntry(displayName: trimmedFamily),
   );
+
   for (final file in files) {
-    final trimmedPath = file.trim();
-    if (trimmedPath.isEmpty) {
+    final path = file.trim();
+    if (path.isEmpty) {
       continue;
     }
-    final exists = _fileExistsCache[trimmedPath] ??= File(
-      trimmedPath,
-    ).existsSync();
-    if (!exists) {
-      continue;
+
+    final exists = _fileExistsCache[path] ??= File(path).existsSync();
+    if (exists) {
+      entry.files.add(path);
     }
-    entry.files.add(trimmedPath);
   }
 }
 
@@ -398,14 +380,10 @@ Future<String?> _runCommand(String command, List<String> args) async {
       return null;
     }
     return stdoutText;
-  } on Exception catch (_) {
+  } on Exception {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Data classes
-// ---------------------------------------------------------------------------
 
 class _FontFamilyEntry {
   _FontFamilyEntry({required this.displayName});

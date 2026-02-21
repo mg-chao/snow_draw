@@ -22,8 +22,8 @@ DrawState handleUpdateElementsStyle(
   UpdateElementsStyle action,
   ElementReducerDeps _,
 ) {
-  final ids = action.elementIds.toSet();
-  if (ids.isEmpty) {
+  final targetIds = action.elementIds.toSet();
+  if (targetIds.isEmpty) {
     return state;
   }
 
@@ -50,16 +50,13 @@ DrawState handleUpdateElementsStyle(
   );
 
   final document = state.domain.document;
-  final elementsById = document.elementMap;
   final selectedIds = state.domain.selection.selectedIds;
-  final shouldTrackOverlayRefresh = selectedIds.length > 1;
+  final trackSelectionOverlay = selectedIds.length > 1;
   var domainChanged = false;
-  var interactionChanged = false;
-  var selectedGeometryChanged = false;
-  TextEditingState? nextTextEdit;
+  var selectionGeometryChanged = false;
   List<ElementState>? nextElements;
 
-  for (final id in ids) {
+  for (final id in targetIds) {
     final orderIndex = document.getOrderIndex(id);
     if (orderIndex == null) {
       continue;
@@ -69,9 +66,8 @@ DrawState handleUpdateElementsStyle(
       element: element,
       styleUpdate: styleUpdate,
       opacity: action.opacity,
-      trackGeometryChange:
-          shouldTrackOverlayRefresh && selectedIds.contains(id),
-      elementsById: elementsById,
+      trackGeometryChange: trackSelectionOverlay && selectedIds.contains(id),
+      elementsById: document.elementMap,
     );
     if (update == null) {
       continue;
@@ -80,28 +76,25 @@ DrawState handleUpdateElementsStyle(
     nextElements ??= [...document.elements];
     nextElements[orderIndex] = update.element;
     if (update.geometryChanged) {
-      selectedGeometryChanged = true;
+      selectionGeometryChanged = true;
     }
   }
 
   final interaction = state.application.interaction;
-  if (interaction is TextEditingState && ids.contains(interaction.elementId)) {
-    nextTextEdit = _applyTextEditingStyleUpdate(
-      interaction,
-      styleUpdate,
-      action.opacity,
-    );
-    interactionChanged = nextTextEdit != null;
-  }
+  final nextTextEdit =
+      interaction is TextEditingState &&
+          targetIds.contains(interaction.elementId)
+      ? _applyTextEditingStyleUpdate(interaction, styleUpdate, action.opacity)
+      : null;
+  final interactionChanged = nextTextEdit != null;
 
   if (!domainChanged && !interactionChanged) {
     return state;
   }
 
-  final updatedElements = nextElements;
-  final nextDomain = domainChanged && updatedElements != null
+  final nextDomain = domainChanged
       ? state.domain.copyWith(
-          document: document.copyWith(elements: updatedElements),
+          document: document.copyWith(elements: nextElements),
         )
       : state.domain;
   final nextApplication = interactionChanged
@@ -113,7 +106,7 @@ DrawState handleUpdateElementsStyle(
     application: nextApplication,
   );
 
-  if (!selectedGeometryChanged) {
+  if (!selectionGeometryChanged) {
     return nextState;
   }
 
@@ -134,7 +127,7 @@ DrawState handleUpdateElementsStyle(
   var next = element;
   var changed = false;
   var geometryChanged = false;
-  final data = element.data;
+  final data = next.data;
 
   if (!styleUpdate.isEmpty && data is ElementStyleUpdatableData) {
     final updatedData = (data as ElementStyleUpdatableData).withStyleUpdate(
@@ -143,43 +136,47 @@ DrawState handleUpdateElementsStyle(
     if (updatedData != data) {
       next = next.copyWith(data: updatedData);
       changed = true;
-      if (data is TextData &&
-          updatedData is TextData &&
-          _shouldRelayoutText(styleUpdate)) {
-        final nextRect = resolveTextEditingRect(
-          origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
-          currentRect: next.rect,
-          data: updatedData,
-          allowShrinkHeight: true,
-        );
-        if (nextRect != next.rect) {
-          geometryChanged = trackGeometryChange;
-          next = next.copyWith(rect: nextRect);
-        }
-      } else if (data is SerialNumberData &&
-          updatedData is SerialNumberData &&
-          _shouldRelayoutSerialNumber(styleUpdate)) {
-        final nextRect = resolveSerialNumberRect(
-          origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
-          data: updatedData,
-        );
-        if (nextRect != next.rect) {
-          geometryChanged = trackGeometryChange;
-          next = next.copyWith(rect: nextRect);
-        }
-      } else if (data is ArrowData &&
-          updatedData is ArrowData &&
-          _shouldRecalculateArrowRect(data, updatedData)) {
-        final result = _resolveArrowRectAndData(
-          element: next,
-          data: updatedData,
-          previousArrowType: data.arrowType,
-          elementsById: elementsById,
-        );
-        if (result.rect != next.rect && trackGeometryChange) {
-          geometryChanged = true;
-        }
-        next = next.copyWith(rect: result.rect, data: result.data);
+      switch ((data, updatedData)) {
+        case (TextData _, final TextData updatedTextData)
+            when _shouldRelayoutText(styleUpdate):
+          final nextRect = resolveTextEditingRect(
+            origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
+            currentRect: next.rect,
+            data: updatedTextData,
+            allowShrinkHeight: true,
+          );
+          if (nextRect != next.rect) {
+            geometryChanged = trackGeometryChange;
+            next = next.copyWith(rect: nextRect);
+          }
+        case (
+              SerialNumberData _,
+              final SerialNumberData updatedSerialNumberData,
+            )
+            when _shouldRelayoutSerialNumber(styleUpdate):
+          final nextRect = resolveSerialNumberRect(
+            origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
+            data: updatedSerialNumberData,
+          );
+          if (nextRect != next.rect) {
+            geometryChanged = trackGeometryChange;
+            next = next.copyWith(rect: nextRect);
+          }
+        case (
+              final ArrowData previousArrowData,
+              final ArrowData updatedArrowData,
+            )
+            when previousArrowData.arrowType != updatedArrowData.arrowType:
+          final result = _resolveArrowRectAndData(
+            element: next,
+            data: updatedArrowData,
+            elementsById: elementsById,
+          );
+          if (result.rect != next.rect && trackGeometryChange) {
+            geometryChanged = true;
+          }
+          next = next.copyWith(rect: result.rect, data: result.data);
+        case _:
       }
     }
   }
@@ -201,41 +198,29 @@ TextEditingState? _applyTextEditingStyleUpdate(
   ElementStyleUpdate styleUpdate,
   double? opacity,
 ) {
-  var nextData = interaction.draftData;
-  var nextRect = interaction.rect;
-  var nextOpacity = interaction.opacity;
-  var changed = false;
+  final updatedData = styleUpdate.isEmpty
+      ? interaction.draftData
+      : interaction.draftData.withStyleUpdate(styleUpdate) as TextData;
+  final dataChanged = updatedData != interaction.draftData;
+  final opacityChanged = opacity != null && opacity != interaction.opacity;
 
-  if (!styleUpdate.isEmpty) {
-    final updatedData = interaction.draftData.withStyleUpdate(styleUpdate);
-    if (updatedData is TextData && updatedData != interaction.draftData) {
-      nextData = updatedData;
-      changed = true;
-      nextRect = resolveTextEditingRect(
-        origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
-        currentRect: interaction.rect,
-        data: nextData,
-        allowShrinkHeight: true,
-      );
-      if (nextRect != interaction.rect) {
-        changed = true;
-      }
-    }
-  }
-
-  if (opacity != null && opacity != interaction.opacity) {
-    nextOpacity = opacity;
-    changed = true;
-  }
-
-  if (!changed) {
+  if (!dataChanged && !opacityChanged) {
     return null;
   }
 
+  final nextRect = dataChanged
+      ? resolveTextEditingRect(
+          origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
+          currentRect: interaction.rect,
+          data: updatedData,
+          allowShrinkHeight: true,
+        )
+      : interaction.rect;
+
   return interaction.copyWith(
-    draftData: nextData,
+    draftData: updatedData,
     rect: nextRect,
-    opacity: nextOpacity,
+    opacity: opacityChanged ? opacity : interaction.opacity,
   );
 }
 
@@ -247,17 +232,12 @@ bool _shouldRelayoutSerialNumber(ElementStyleUpdate update) =>
     update.fontFamily != null ||
     update.serialNumber != null;
 
-bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
-    oldData.arrowType != newData.arrowType;
-
 ({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
   required ElementState element,
   required ArrowData data,
-  required ArrowType previousArrowType,
   required Map<String, ElementState> elementsById,
 }) {
-  if (data.arrowType == ArrowType.elbow &&
-      previousArrowType != ArrowType.elbow) {
+  if (data.arrowType == ArrowType.elbow) {
     final elbowData = data.copyWith(
       fixedSegments: null,
       startIsSpecial: null,
@@ -273,7 +253,6 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
       oldRect: element.rect,
       rotation: element.rotation,
       arrowType: data.arrowType,
-      strokeWidth: data.strokeWidth,
     );
     final normalized = ArrowGeometry.normalizePoints(
       worldPoints: result.localPoints,
@@ -283,33 +262,27 @@ bool _shouldRecalculateArrowRect(ArrowData oldData, ArrowData newData) =>
     return (rect: result.rect, data: updatedData);
   }
 
-  final sanitizedData = data.arrowType == ArrowType.elbow
-      ? data
-      : data.copyWith(
-          fixedSegments: null,
-          startIsSpecial: null,
-          endIsSpecial: null,
-        );
+  final sanitizedData = data.copyWith(
+    fixedSegments: null,
+    startIsSpecial: null,
+    endIsSpecial: null,
+  );
 
-  // Resolve world points from the current rect and normalized points
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: sanitizedData.points,
   ).map((offset) => DrawPoint(x: offset.dx, y: offset.dy)).toList();
 
-  // Calculate new bounds based on arrow type
   final newRect = ArrowGeometry.calculatePathBounds(
     worldPoints: worldPoints,
     arrowType: data.arrowType,
   );
 
-  // Normalize points to the new rect
   final normalizedPoints = ArrowGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: newRect,
   );
 
-  // Update data with normalized points to maintain consistency
   final updatedData = sanitizedData.copyWith(points: normalizedPoints);
 
   return (rect: newRect, data: updatedData);

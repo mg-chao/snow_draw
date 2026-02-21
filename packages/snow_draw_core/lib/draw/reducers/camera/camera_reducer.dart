@@ -7,10 +7,10 @@ import '../../types/draw_point.dart';
 DrawState? cameraReducer(
   DrawState state,
   DrawAction action,
-  CameraReducerDeps context,
+  CameraReducerDeps _,
 ) => switch (action) {
   final MoveCamera a => _handleMoveCamera(state, a),
-  final ZoomCamera a => _handleZoomCamera(state, a, context),
+  final ZoomCamera a => _handleZoomCamera(state, a),
   _ => null,
 };
 
@@ -28,30 +28,23 @@ DrawState _handleMoveCamera(DrawState state, MoveCamera action) {
   );
 }
 
-DrawState _handleZoomCamera(
-  DrawState state,
-  ZoomCamera action,
-  CameraReducerDeps _,
-) {
+DrawState _handleZoomCamera(DrawState state, ZoomCamera action) {
   final camera = state.application.view.camera;
   final currentZoom = camera.zoom <= 0 ? 1.0 : camera.zoom;
   final targetZoom = CameraState.clampZoom(currentZoom * action.scale);
   if (targetZoom == currentZoom) {
     return state;
   }
-  final scale = targetZoom / currentZoom;
   final center = action.center ?? camera.position;
-  final offset = DrawPoint(
-    x: (center.x - camera.position.x) * (1 - scale),
-    y: (center.y - camera.position.y) * (1 - scale),
+  final zoomRatio = targetZoom / currentZoom;
+  final nextPosition = DrawPoint(
+    x: camera.position.x + (center.x - camera.position.x) * (1 - zoomRatio),
+    y: camera.position.y + (center.y - camera.position.y) * (1 - zoomRatio),
   );
   return state.copyWith(
     application: state.application.copyWith(
       view: state.application.view.copyWith(
-        camera: camera.copyWith(
-          position: camera.position.translate(offset),
-          zoom: targetZoom,
-        ),
+        camera: camera.copyWith(position: nextPosition, zoom: targetZoom),
       ),
     ),
   );

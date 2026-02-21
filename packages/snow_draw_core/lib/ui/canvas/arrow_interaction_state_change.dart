@@ -13,10 +13,7 @@ bool isArrowInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next)) {
-    return false;
-  }
-  if (!identical(previous.domain, next.domain)) {
+  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
     return false;
   }
 
@@ -83,8 +80,7 @@ bool _isArrowEditingMutationOnly({
   if (!_isSameEditSession(previous, next)) {
     return false;
   }
-  if (!_isArrowEditContext(context: previous.context, document: document) ||
-      !_isArrowEditContext(context: next.context, document: document)) {
+  if (!_isArrowEditContext(context: next.context, document: document)) {
     return false;
   }
 
@@ -101,16 +97,13 @@ bool _isArrowEditContext({
   required EditContext context,
   required DocumentState document,
 }) {
-  if (context.selectedIdsAtStart.isEmpty) {
+  final selectedIds = context.selectedIdsAtStart;
+  if (selectedIds.isEmpty) {
     return false;
   }
-  for (final elementId in context.selectedIdsAtStart) {
-    final element = document.getElementById(elementId);
-    if (element?.data is! ArrowData) {
-      return false;
-    }
-  }
-  return true;
+  return selectedIds.every(
+    (elementId) => document.getElementById(elementId)?.data is ArrowData,
+  );
 }
 
 bool _listEquals<T>(List<T> a, List<T> b) {

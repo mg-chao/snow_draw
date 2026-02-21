@@ -12,6 +12,8 @@ import '../../core/element_type_id.dart';
 @immutable
 final class RectangleData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData {
+  static const typeIdToken = ElementTypeId<RectangleData>('rectangle');
+
   const RectangleData({
     this.cornerRadius = ConfigDefaults.defaultCornerRadius,
     this.fillColor = ConfigDefaults.defaultFillColor,
@@ -36,16 +38,17 @@ final class RectangleData extends ElementData
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: StrokeStyle.values.firstWhere(
-      (style) => style.name == json['strokeStyle'],
-      orElse: () => ConfigDefaults.defaultStrokeStyle,
+    strokeStyle: _decodeEnum(
+      values: StrokeStyle.values,
+      raw: json['strokeStyle'],
+      fallback: ConfigDefaults.defaultStrokeStyle,
     ),
-    fillStyle: FillStyle.values.firstWhere(
-      (style) => style.name == json['fillStyle'],
-      orElse: () => ConfigDefaults.defaultFillStyle,
+    fillStyle: _decodeEnum(
+      values: FillStyle.values,
+      raw: json['fillStyle'],
+      fallback: ConfigDefaults.defaultFillStyle,
     ),
   );
-  static const typeIdToken = ElementTypeId<RectangleData>('rectangle');
 
   final double cornerRadius;
   final Color fillColor;
@@ -124,4 +127,18 @@ final class RectangleData extends ElementData
     strokeStyle,
     fillStyle,
   );
+
+  static T _decodeEnum<T extends Enum>({
+    required List<T> values,
+    required Object? raw,
+    required T fallback,
+  }) {
+    if (raw is! String) {
+      return fallback;
+    }
+    return values.firstWhere(
+      (value) => value.name == raw,
+      orElse: () => fallback,
+    );
+  }
 }

@@ -13,6 +13,10 @@ import '../../draw/types/snap_guides.dart';
 import 'highlight_mask_visibility.dart';
 import 'watermark_visibility.dart';
 
+int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
+  map.entries.map((entry) => Object.hash(entry.key, entry.value)),
+);
+
 /// Snapshot of element creation state for render key comparison.
 @immutable
 class CreatingElementSnapshot {
@@ -134,7 +138,7 @@ class StaticCanvasRenderKey {
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
-          _mapsEqual(other.previewElementsById, previewElementsById) &&
+          mapEquals(other.previewElementsById, previewElementsById) &&
           other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
           other.skipBaseElementScene == skipBaseElementScene &&
           other.scaleFactor == scaleFactor &&
@@ -166,25 +170,6 @@ class StaticCanvasRenderKey {
     elementRegistry,
     performanceMonitoringEnabled,
     locale,
-  );
-
-  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
-    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
   );
 }
 
@@ -357,19 +342,19 @@ class DynamicCanvasRenderKey {
           other.creatingElement == creatingElement &&
           other.effectiveSelection == effectiveSelection &&
           other.boxSelectionBounds == boxSelectionBounds &&
-          _setEquals(other.selectedIds, selectedIds) &&
+          setEquals(other.selectedIds, selectedIds) &&
           other.hoveredElementId == hoveredElementId &&
           other.hoveredBindingElementId == hoveredBindingElementId &&
           other.hoveredArrowHandle == hoveredArrowHandle &&
           other.activeArrowHandle == activeArrowHandle &&
           other.arrowDeleteIndicatorVisible == arrowDeleteIndicatorVisible &&
           other.hoverSelectionConfig == hoverSelectionConfig &&
-          _listEquals(other.snapGuides, snapGuides) &&
+          listEquals(other.snapGuides, snapGuides) &&
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
           _previewMapsEqual(other) &&
-          _setEquals(
+          setEquals(
             other.optimizedDynamicElementIds,
             optimizedDynamicElementIds,
           ) &&
@@ -426,13 +411,13 @@ class DynamicCanvasRenderKey {
   ]);
 
   bool _previewMapsEqual(DynamicCanvasRenderKey other) {
-    final revision = previewElementsRevision;
-    final otherRevision = other.previewElementsRevision;
-    if (revision != null || otherRevision != null) {
-      return revision == otherRevision &&
-          identical(other.previewElementsById, previewElementsById);
+    if (previewElementsRevision != other.previewElementsRevision) {
+      return false;
     }
-    return _mapsEqual(other.previewElementsById, previewElementsById);
+    if (previewElementsRevision != null) {
+      return identical(other.previewElementsById, previewElementsById);
+    }
+    return mapEquals(other.previewElementsById, previewElementsById);
   }
 
   int _previewMapHash() {
@@ -442,53 +427,4 @@ class DynamicCanvasRenderKey {
     }
     return _mapHash(previewElementsById);
   }
-
-  static bool _setEquals<T>(Set<T> a, Set<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final item in a) {
-      if (!b.contains(item)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _listEquals(List<SnapGuide> a, List<SnapGuide> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
-    map.entries.map((entry) => Object.hash(entry.key, entry.value)),
-  );
 }

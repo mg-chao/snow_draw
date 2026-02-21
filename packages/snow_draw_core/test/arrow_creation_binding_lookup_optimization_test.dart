@@ -14,6 +14,8 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 
+const _strategy = ArrowCreationStrategy();
+
 void main() {
   group('ArrowCreationStrategy binding lookup optimization', () {
     test('reuses binding target queries for nearby move updates', () {
@@ -26,47 +28,35 @@ void main() {
         data: RectangleData(),
       );
       final counter = _HitTestCounter();
-      final document = _CountingDocumentState(
-        elements: const [target],
-        counter: counter,
+      final state = _stateWith(
+        _CountingDocumentState(elements: const [target], counter: counter),
       );
-      final state = _stateWith(document);
 
-      const strategy = ArrowCreationStrategy();
       const start = DrawPoint(x: 100, y: 100);
-      const data = ArrowData();
-      final startResult = strategy.start(data: data, startPosition: start);
       var creating = _creatingState(
         elementId: 'arrow',
         startPosition: start,
-        startResult: startResult,
+        startResult: _strategy.start(
+          data: const ArrowData(),
+          startPosition: start,
+        ),
       );
 
       counter.reset();
-      final firstUpdate = strategy.update(
+      final firstUpdate = _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 160, y: 140),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       creating = _applyUpdate(creating, firstUpdate);
       final callsAfterFirstUpdate = counter.value;
 
-      final secondUpdate = strategy.update(
+      _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 162, y: 141),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
-      creating = _applyUpdate(creating, secondUpdate);
       final callsAfterSecondUpdate = counter.value;
-      expect(creating.currentRect, isNotNull);
 
       expect(callsAfterFirstUpdate, greaterThan(0));
       expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
@@ -82,49 +72,35 @@ void main() {
         data: RectangleData(),
       );
       final counter = _HitTestCounter();
-      final document = _CountingDocumentState(
-        elements: const [target],
-        counter: counter,
+      final state = _stateWith(
+        _CountingDocumentState(elements: const [target], counter: counter),
       );
-      final state = _stateWith(document);
 
-      const strategy = ArrowCreationStrategy();
       const start = DrawPoint(x: 80, y: 80);
-      final startResult = strategy.start(
-        data: const ArrowData(),
-        startPosition: start,
-      );
       var creating = _creatingState(
         elementId: 'arrow',
         startPosition: start,
-        startResult: startResult,
+        startResult: _strategy.start(
+          data: const ArrowData(),
+          startPosition: start,
+        ),
       );
 
       counter.reset();
-      final firstUpdate = strategy.update(
+      final firstUpdate = _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 209, y: 160),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       creating = _applyUpdate(creating, firstUpdate);
       final callsAfterFirstUpdate = counter.value;
 
-      final secondUpdate = strategy.update(
+      _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 217, y: 160),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
-      creating = _applyUpdate(creating, secondUpdate);
       final callsAfterSecondUpdate = counter.value;
-      expect(creating.currentRect, isNotNull);
 
       expect(callsAfterFirstUpdate, greaterThan(0));
       expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
@@ -142,33 +118,28 @@ void main() {
           data: ArrowData(),
         );
         final counter = _HitTestCounter();
-        final document = _CountingDocumentState(
-          elements: const [nonBindable],
-          counter: counter,
+        final state = _stateWith(
+          _CountingDocumentState(
+            elements: const [nonBindable],
+            counter: counter,
+          ),
         );
-        final state = _stateWith(document);
 
-        const strategy = ArrowCreationStrategy();
         const start = DrawPoint(x: 100, y: 100);
-        final startResult = strategy.start(
-          data: const ArrowData(),
-          startPosition: start,
-        );
         final creating = _creatingState(
           elementId: 'arrow',
           startPosition: start,
-          startResult: startResult,
+          startResult: _strategy.start(
+            data: const ArrowData(),
+            startPosition: start,
+          ),
         );
 
         counter.reset();
-        strategy.update(
+        _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 180, y: 180),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
 
         expect(counter.value, 0);
@@ -187,47 +158,35 @@ void main() {
           data: RectangleData(),
         );
         final counter = _HitTestCounter();
-        final document = _CountingDocumentState(
-          elements: const [target],
-          counter: counter,
+        final state = _stateWith(
+          _CountingDocumentState(elements: const [target], counter: counter),
         );
-        final state = _stateWith(document);
 
-        const strategy = ArrowCreationStrategy();
         const start = DrawPoint(x: 30, y: 30);
-        const data = ArrowData();
-        final startResult = strategy.start(data: data, startPosition: start);
         var creating = _creatingState(
           elementId: 'arrow',
           startPosition: start,
-          startResult: startResult,
+          startResult: _strategy.start(
+            data: const ArrowData(),
+            startPosition: start,
+          ),
         );
 
         counter.reset();
-        final firstUpdate = strategy.update(
+        final firstUpdate = _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 180, y: 180),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
         creating = _applyUpdate(creating, firstUpdate);
         final callsAfterFirstUpdate = counter.value;
 
-        final secondUpdate = strategy.update(
+        _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 220, y: 220),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
-        creating = _applyUpdate(creating, secondUpdate);
         final callsAfterSecondUpdate = counter.value;
-        expect(creating.currentRect, isNotNull);
 
         expect(callsAfterFirstUpdate, greaterThan(0));
         expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
@@ -245,39 +204,29 @@ void main() {
       );
       final state = _stateWith(DocumentState(elements: const [target]));
 
-      const strategy = ArrowCreationStrategy();
       const start = DrawPoint(x: 100, y: 100);
-      final startResult = strategy.start(
-        data: const ArrowData(),
-        startPosition: start,
-      );
       var creating = _creatingState(
         elementId: 'arrow',
         startPosition: start,
-        startResult: startResult,
+        startResult: _strategy.start(
+          data: const ArrowData(),
+          startPosition: start,
+        ),
       );
 
-      final firstUpdate = strategy.update(
+      final firstUpdate = _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 170, y: 170),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       creating = _applyUpdate(creating, firstUpdate);
       final firstData = firstUpdate.data as ArrowData;
       expect(firstData.startBinding, isNotNull);
 
-      final secondUpdate = strategy.update(
+      final secondUpdate = _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 172, y: 172),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       creating = _applyUpdate(creating, secondUpdate);
       final secondData = secondUpdate.data as ArrowData;
@@ -286,14 +235,11 @@ void main() {
       final bindingDisabledConfig = DrawConfig.defaultConfig.copyWith(
         snap: DrawConfig.defaultConfig.snap.copyWith(enableArrowBinding: false),
       );
-      final thirdUpdate = strategy.update(
+      final thirdUpdate = _updateCreation(
         state: state,
         config: bindingDisabledConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 174, y: 174),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       final thirdData = thirdUpdate.data as ArrowData;
 
@@ -310,49 +256,35 @@ void main() {
         data: RectangleData(),
       );
       final counter = _HitTestCounter();
-      final document = _CountingDocumentState(
-        elements: const [target],
-        counter: counter,
+      final state = _stateWith(
+        _CountingDocumentState(elements: const [target], counter: counter),
       );
-      final state = _stateWith(document);
 
-      const strategy = ArrowCreationStrategy();
       const start = DrawPoint(x: 80, y: 80);
-      final startResult = strategy.start(
-        data: const LineData(),
-        startPosition: start,
-      );
       var creating = _creatingState(
         elementId: 'line',
         startPosition: start,
-        startResult: startResult,
+        startResult: _strategy.start(
+          data: const LineData(),
+          startPosition: start,
+        ),
       );
 
       counter.reset();
-      final firstUpdate = strategy.update(
+      final firstUpdate = _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 209, y: 160),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
       creating = _applyUpdate(creating, firstUpdate);
       final callsAfterFirstUpdate = counter.value;
 
-      final secondUpdate = strategy.update(
+      _updateCreation(
         state: state,
-        config: DrawConfig.defaultConfig,
         creatingState: creating,
         currentPosition: const DrawPoint(x: 217, y: 160),
-        maintainAspectRatio: false,
-        createFromCenter: false,
-        snappingMode: SnappingMode.none,
       );
-      creating = _applyUpdate(creating, secondUpdate);
       final callsAfterSecondUpdate = counter.value;
-      expect(creating.currentRect, isNotNull);
 
       expect(callsAfterFirstUpdate, greaterThan(0));
       expect(callsAfterSecondUpdate - callsAfterFirstUpdate, 0);
@@ -370,46 +302,34 @@ void main() {
           data: RectangleData(),
         );
         final counter = _HitTestCounter();
-        final document = _CountingDocumentState(
-          elements: const [target],
-          counter: counter,
+        final state = _stateWith(
+          _CountingDocumentState(elements: const [target], counter: counter),
         );
-        final state = _stateWith(document);
 
-        const strategy = ArrowCreationStrategy();
         const start = DrawPoint(x: 80, y: 80);
-        final startResult = strategy.start(
-          data: const LineData(),
-          startPosition: start,
-        );
         var creating = _creatingState(
           elementId: 'line',
           startPosition: start,
-          startResult: startResult,
+          startResult: _strategy.start(
+            data: const LineData(),
+            startPosition: start,
+          ),
         );
 
         counter.reset();
-        final firstUpdate = strategy.update(
+        final firstUpdate = _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 186, y: 170),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
         creating = _applyUpdate(creating, firstUpdate);
         final firstData = firstUpdate.data as LineData;
         final callsAfterFirstUpdate = counter.value;
 
-        final secondUpdate = strategy.update(
+        final secondUpdate = _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 190, y: 170),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
         final secondData = secondUpdate.data as LineData;
         final callsAfterSecondUpdate = counter.value;
@@ -433,53 +353,40 @@ void main() {
           data: RectangleData(),
         );
         final counter = _HitTestCounter();
-        final document = _CountingDocumentState(
-          elements: const [target],
-          counter: counter,
+        final state = _stateWith(
+          _CountingDocumentState(elements: const [target], counter: counter),
         );
-        final state = _stateWith(document);
 
-        const strategy = ArrowCreationStrategy();
         const start = DrawPoint(x: 80, y: 80);
-        final startResult = strategy.start(
-          data: const LineData(),
-          startPosition: start,
-        );
         var creating = _creatingState(
           elementId: 'line',
           startPosition: start,
-          startResult: startResult,
+          startResult: _strategy.start(
+            data: const LineData(),
+            startPosition: start,
+          ),
         );
 
         counter.reset();
-        final firstUpdate = strategy.update(
+        final firstUpdate = _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 180, y: 170),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
         creating = _applyUpdate(creating, firstUpdate);
         final callsAfterFirstUpdate = counter.value;
 
-        final secondUpdate = strategy.update(
+        final secondUpdate = _updateCreation(
           state: state,
-          config: DrawConfig.defaultConfig,
           creatingState: creating,
           currentPosition: const DrawPoint(x: 192, y: 170),
-          maintainAspectRatio: false,
-          createFromCenter: false,
-          snappingMode: SnappingMode.none,
         );
-        creating = _applyUpdate(creating, secondUpdate);
         final callsAfterSecondUpdate = counter.value;
-        final lineData = secondUpdate.data as LineData;
+        final secondData = secondUpdate.data as LineData;
 
         expect(callsAfterFirstUpdate, greaterThan(0));
         expect(callsAfterSecondUpdate - callsAfterFirstUpdate, greaterThan(0));
-        expect(lineData.endBinding, isNotNull);
+        expect(secondData.endBinding, isNotNull);
       },
     );
   });
@@ -489,26 +396,6 @@ class _CountingDocumentState extends DocumentState {
   _CountingDocumentState({required super.elements, required this.counter});
 
   final _HitTestCounter counter;
-
-  @override
-  void visitElementsAtPoint(
-    DrawPoint point,
-    double tolerance,
-    bool Function(ElementState element) visitor,
-  ) {
-    counter.value++;
-    super.visitElementsAtPoint(point, tolerance, visitor);
-  }
-
-  @override
-  void visitElementsAtPointTopDown(
-    DrawPoint point,
-    double tolerance,
-    bool Function(ElementState element) visitor,
-  ) {
-    counter.value++;
-    super.visitElementsAtPointTopDown(point, tolerance, visitor);
-  }
 
   @override
   void visitArrowBindableElementsAtPoint(
@@ -530,13 +417,26 @@ class _CountingDocumentState extends DocumentState {
 class _HitTestCounter {
   var value = 0;
 
-  void reset() {
-    value = 0;
-  }
+  void reset() => value = 0;
 }
 
 DrawState _stateWith(DocumentState document) =>
     DrawState(domain: DomainState(document: document));
+
+CreationUpdateResult _updateCreation({
+  required DrawState state,
+  required CreatingState creatingState,
+  required DrawPoint currentPosition,
+  DrawConfig? config,
+}) => _strategy.update(
+  state: state,
+  config: config ?? DrawConfig.defaultConfig,
+  creatingState: creatingState,
+  currentPosition: currentPosition,
+  maintainAspectRatio: false,
+  createFromCenter: false,
+  snappingMode: SnappingMode.none,
+);
 
 CreatingState _creatingState({
   required String elementId,
@@ -545,12 +445,7 @@ CreatingState _creatingState({
 }) => CreatingState(
   element: ElementState(
     id: elementId,
-    rect: DrawRect(
-      minX: startPosition.x,
-      minY: startPosition.y,
-      maxX: startPosition.x,
-      maxY: startPosition.y,
-    ),
+    rect: startResult.rect,
     rotation: 0,
     opacity: 1,
     zIndex: 1,

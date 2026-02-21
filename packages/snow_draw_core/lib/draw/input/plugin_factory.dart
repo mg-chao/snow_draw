@@ -71,22 +71,22 @@ class PluginFactory {
     bool isSelectionToolActive = true,
     InputRoutingPolicy routingPolicy = InputRoutingPolicy.defaultPolicy,
   }) => [
-    EditPlugin(routingPolicy: routingPolicy),
-    TextToolPlugin(
+    createEditPlugin(routingPolicy: routingPolicy),
+    createTextToolPlugin(
       currentToolTypeId: currentToolTypeId,
       isSelectionToolActive: isSelectionToolActive,
       routingPolicy: routingPolicy,
     ),
-    CreatePlugin(
+    createCreatePlugin(
       currentToolTypeId: currentToolTypeId,
       routingPolicy: routingPolicy,
     ),
-    SelectPlugin(
+    createSelectPlugin(
       currentToolTypeId: currentToolTypeId,
       isSelectionToolActive: isSelectionToolActive,
       routingPolicy: routingPolicy,
     ),
-    BoxSelectPlugin(routingPolicy: routingPolicy),
+    createBoxSelectPlugin(routingPolicy: routingPolicy),
   ];
 }
 

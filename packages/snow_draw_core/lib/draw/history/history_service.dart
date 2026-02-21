@@ -1,5 +1,3 @@
-import 'package:meta/meta.dart';
-
 import '../models/draw_state.dart';
 import 'history_metadata.dart';
 
@@ -23,7 +21,6 @@ abstract interface class HistoryService {
   void clear();
 }
 
-@immutable
 class HistoryEntry {
   HistoryEntry({
     required this.state,

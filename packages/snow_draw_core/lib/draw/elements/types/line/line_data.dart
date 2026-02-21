@@ -18,14 +18,14 @@ import '../arrow/elbow/elbow_fixed_segment.dart';
 final class LineData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData
     implements ArrowLikeData {
-  static const _startBindingUnset = Object();
-  static const _endBindingUnset = Object();
-  static const _fixedSegmentsUnset = Object();
-  static const _startIsSpecialUnset = Object();
-  static const _endIsSpecialUnset = Object();
+  static const _unset = Object();
+  static const List<DrawPoint> _defaultPoints = [
+    DrawPoint.zero,
+    DrawPoint(x: 1, y: 1),
+  ];
 
   const LineData({
-    this.points = const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
+    this.points = _defaultPoints,
     this.color = ConfigDefaults.defaultColor,
     this.fillColor = ConfigDefaults.defaultFillColor,
     this.fillStyle = ConfigDefaults.defaultFillStyle,
@@ -51,13 +51,15 @@ final class LineData extends ElementData
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: StrokeStyle.values.firstWhere(
-      (style) => style.name == json['strokeStyle'],
-      orElse: () => ConfigDefaults.defaultStrokeStyle,
+    strokeStyle: _decodeEnum(
+      values: StrokeStyle.values,
+      raw: json['strokeStyle'],
+      fallback: ConfigDefaults.defaultStrokeStyle,
     ),
-    fillStyle: FillStyle.values.firstWhere(
-      (style) => style.name == json['fillStyle'],
-      orElse: () => ConfigDefaults.defaultFillStyle,
+    fillStyle: _decodeEnum(
+      values: FillStyle.values,
+      raw: json['fillStyle'],
+      fallback: ConfigDefaults.defaultFillStyle,
     ),
     startBinding: _decodeBinding(json['startBinding']),
     endBinding: _decodeBinding(json['endBinding']),
@@ -109,11 +111,11 @@ final class LineData extends ElementData
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
-    Object? startBinding = _startBindingUnset,
-    Object? endBinding = _endBindingUnset,
-    Object? fixedSegments = _fixedSegmentsUnset,
-    Object? startIsSpecial = _startIsSpecialUnset,
-    Object? endIsSpecial = _endIsSpecialUnset,
+    Object? startBinding = _unset,
+    Object? endBinding = _unset,
+    Object? fixedSegments = _unset,
+    Object? startIsSpecial = _unset,
+    Object? endIsSpecial = _unset,
   }) {
     assert(
       arrowType == null || arrowType == ArrowType.curved,
@@ -136,19 +138,19 @@ final class LineData extends ElementData
       fillStyle: fillStyle ?? this.fillStyle,
       strokeWidth: strokeWidth ?? this.strokeWidth,
       strokeStyle: strokeStyle ?? this.strokeStyle,
-      startBinding: startBinding == _startBindingUnset
+      startBinding: identical(startBinding, _unset)
           ? this.startBinding
           : startBinding as ArrowBinding?,
-      endBinding: endBinding == _endBindingUnset
+      endBinding: identical(endBinding, _unset)
           ? this.endBinding
           : endBinding as ArrowBinding?,
-      fixedSegments: fixedSegments == _fixedSegmentsUnset
+      fixedSegments: identical(fixedSegments, _unset)
           ? this.fixedSegments
-          : _coerceFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
-      startIsSpecial: startIsSpecial == _startIsSpecialUnset
+          : _normalizeFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
+      startIsSpecial: identical(startIsSpecial, _unset)
           ? this.startIsSpecial
           : startIsSpecial as bool?,
-      endIsSpecial: endIsSpecial == _endIsSpecialUnset
+      endIsSpecial: identical(endIsSpecial, _unset)
           ? this.endIsSpecial
           : endIsSpecial as bool?,
     );
@@ -206,51 +208,42 @@ final class LineData extends ElementData
     }
 
     if (points.length < 2) {
-      return const [DrawPoint.zero, DrawPoint(x: 1, y: 1)];
+      return _defaultPoints;
     }
 
     return List<DrawPoint>.unmodifiable(points);
   }
 
   static ArrowBinding? _decodeBinding(Object? raw) {
-    if (raw is Map<String, dynamic>) {
-      return ArrowBinding.fromJson(raw);
+    final map = _asJsonMap(raw);
+    if (map == null) {
+      return null;
     }
-    if (raw is Map) {
-      return ArrowBinding.fromJson(raw.cast<String, dynamic>());
-    }
-    return null;
+    return ArrowBinding.fromJson(map);
   }
 
   static List<ElbowFixedSegment>? _decodeFixedSegments(Object? raw) {
     if (raw is! List) {
       return null;
     }
+
     final segments = <ElbowFixedSegment>[];
     for (final entry in raw) {
-      if (entry is Map<String, dynamic>) {
-        try {
-          segments.add(ElbowFixedSegment.fromJson(entry));
-        } on FormatException {
-          // Skip invalid segment entries.
-        }
-      } else if (entry is Map) {
-        try {
-          segments.add(
-            ElbowFixedSegment.fromJson(entry.cast<String, dynamic>()),
-          );
-        } on FormatException {
-          // Skip invalid segment entries.
-        }
+      final map = _asJsonMap(entry);
+      if (map == null) {
+        continue;
+      }
+      try {
+        segments.add(ElbowFixedSegment.fromJson(map));
+      } on FormatException {
+        // Skip invalid segment entries.
       }
     }
-    if (segments.isEmpty) {
-      return null;
-    }
-    return List<ElbowFixedSegment>.unmodifiable(segments);
+
+    return _normalizeFixedSegments(segments);
   }
 
-  static List<ElbowFixedSegment>? _coerceFixedSegments(
+  static List<ElbowFixedSegment>? _normalizeFixedSegments(
     List<ElbowFixedSegment>? segments,
   ) {
     if (segments == null || segments.isEmpty) {
@@ -289,4 +282,37 @@ final class LineData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
+
+  static T _decodeEnum<T extends Enum>({
+    required List<T> values,
+    required Object? raw,
+    required T fallback,
+  }) {
+    if (raw is! String) {
+      return fallback;
+    }
+    return values.firstWhere(
+      (value) => value.name == raw,
+      orElse: () => fallback,
+    );
+  }
+
+  static Map<String, dynamic>? _asJsonMap(Object? raw) {
+    if (raw is Map<String, dynamic>) {
+      return raw;
+    }
+    if (raw is! Map) {
+      return null;
+    }
+
+    final map = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        return null;
+      }
+      map[key] = entry.value;
+    }
+    return map;
+  }
 }

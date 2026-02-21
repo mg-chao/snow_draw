@@ -33,7 +33,7 @@ class GeneralLogEvent extends LogEvent {
     required this.message,
     required this.timestamp,
     Map<String, dynamic>? data,
-  }) : data = _freezeData(data);
+  }) : data = data == null ? null : freezeEventPayloadMap(data);
   @override
   final Level level;
   @override
@@ -45,13 +45,6 @@ class GeneralLogEvent extends LogEvent {
 
   /// Additional data.
   final Map<String, dynamic>? data;
-
-  static Map<String, dynamic>? _freezeData(Map<String, dynamic>? data) {
-    if (data == null) {
-      return null;
-    }
-    return freezeEventPayloadMap(data);
-  }
 
   @override
   String toString() =>
@@ -121,10 +114,8 @@ class PerformanceLogEvent extends LogEvent {
 
   @override
   String toString() =>
-      'PerformanceLogEvent('
-      'operation: $operation, '
-      'duration: ${duration.inMilliseconds}ms, '
-      'success: $success)';
+      'PerformanceLogEvent(operation: $operation, duration: '
+      '${duration.inMilliseconds}ms, success: $success)';
 }
 
 /// Pipeline execution log event.
@@ -167,8 +158,6 @@ class PipelineLogEvent extends LogEvent {
 
   @override
   String toString() =>
-      'PipelineLogEvent('
-      'action: $actionType, '
-      'stage: $stage, '
-      'duration: ${duration?.inMilliseconds}ms)';
+      'PipelineLogEvent(action: $actionType, stage: $stage, duration: '
+      '${duration?.inMilliseconds}ms)';
 }

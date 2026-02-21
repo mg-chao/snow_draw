@@ -6,12 +6,16 @@ import '../types/draw_rect.dart';
 @immutable
 class SelectionGeometry {
   const SelectionGeometry({
-    this.bounds,
-    this.center,
-    this.rotation,
+    DrawRect? bounds,
+    DrawPoint? center,
+    double? rotation,
     this.hasSelection = false,
-    this.isMultiSelect = false,
-  });
+    bool isMultiSelect = false,
+  }) : bounds = hasSelection ? bounds : null,
+       center = hasSelection ? center : null,
+       rotation = hasSelection ? rotation : null,
+       isMultiSelect = hasSelection && isMultiSelect;
+
   final DrawRect? bounds;
   final DrawPoint? center;
   final double? rotation;

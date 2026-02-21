@@ -12,20 +12,22 @@ void main() {
       position: DrawPoint.zero,
     );
 
-    final result = resolveHoverBindingHighlightId(
-      hoveredBindingElementId: 'rect',
-      hoveredArrowHandle: handle,
+    expect(
+      resolveHoverBindingHighlightId(
+        hoveredBindingElementId: 'rect',
+        hoveredArrowHandle: handle,
+      ),
+      isNull,
     );
-
-    expect(result, isNull);
   });
 
   test('binding highlight stays when no arrow handle is hovered', () {
-    final result = resolveHoverBindingHighlightId(
-      hoveredBindingElementId: 'rect',
-      hoveredArrowHandle: null,
+    expect(
+      resolveHoverBindingHighlightId(
+        hoveredBindingElementId: 'rect',
+        hoveredArrowHandle: null,
+      ),
+      'rect',
     );
-
-    expect(result, 'rect');
   });
 }

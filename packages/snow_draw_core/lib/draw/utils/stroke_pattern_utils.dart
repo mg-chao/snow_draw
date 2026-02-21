@@ -21,12 +21,12 @@ Shader buildLineShader({
   required double lineWidth,
   required double angle,
 }) {
-  final safeSpacing = spacing <= 0 ? 1.0 : spacing;
-  final lineStop = (lineWidth / safeSpacing).clamp(0.0, 1.0);
+  _requirePositive(spacing, name: 'spacing');
+  _requireNonNegative(lineWidth, name: 'lineWidth');
+
+  final lineStop = (lineWidth / spacing).clamp(0.0, 1.0);
   final cosAngle = math.cos(angle).abs();
-  final adjustedSpacing = cosAngle > 0.01
-      ? safeSpacing / cosAngle
-      : safeSpacing;
+  final adjustedSpacing = cosAngle > 0.01 ? spacing / cosAngle : spacing;
   return LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -59,6 +59,9 @@ Paint buildLineFillPaint({
 
 /// Builds a dashed version of [basePath].
 Path buildDashedPath(Path basePath, double dashLength, double gapLength) {
+  _requirePositive(dashLength, name: 'dashLength');
+  _requireNonNegative(gapLength, name: 'gapLength');
+
   final dashed = Path();
   for (final metric in basePath.computeMetrics()) {
     var distance = 0.0;
@@ -77,17 +80,17 @@ Path buildDashedPath(Path basePath, double dashLength, double gapLength) {
 /// dot positions as a `Float32List` and using
 /// `Canvas.drawRawPoints` with `PointMode.points`.
 Path buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
+  _requirePositive(dotSpacing, name: 'dotSpacing');
+  _requireNonNegative(dotRadius, name: 'dotRadius');
+
   final dotted = Path();
   for (final metric in basePath.computeMetrics()) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent != null) {
-        dotted.addOval(
-          Rect.fromCircle(center: tangent.position, radius: dotRadius),
-        );
-      }
-      distance += dotSpacing;
+    final dotCount = (metric.length / dotSpacing).ceil();
+    for (var i = 0; i < dotCount; i++) {
+      final tangent = metric.getTangentForOffset(i * dotSpacing)!;
+      dotted.addOval(
+        Rect.fromCircle(center: tangent.position, radius: dotRadius),
+      );
     }
   }
   return dotted;
@@ -100,34 +103,23 @@ Path buildDottedPath(Path basePath, double dotSpacing, double dotRadius) {
 /// than building a [Path] of individual ovals because Impeller
 /// does not need to tessellate each oval separately.
 Float32List buildDotPositions(Path basePath, double dotSpacing) {
-  final metrics = basePath.computeMetrics().toList(growable: false);
+  _requirePositive(dotSpacing, name: 'dotSpacing');
 
-  // Count dots first to pre-allocate the Float32List.
+  final metrics = basePath.computeMetrics().toList(growable: false);
   var dotCount = 0;
   for (final metric in metrics) {
-    if (metric.length <= 0) {
-      continue;
-    }
-    dotCount += (metric.length / dotSpacing).floor() + 1;
+    dotCount += (metric.length / dotSpacing).ceil();
   }
 
   final positions = Float32List(dotCount * 2);
   var idx = 0;
   for (final metric in metrics) {
-    var distance = 0.0;
-    while (distance < metric.length) {
-      final tangent = metric.getTangentForOffset(distance);
-      if (tangent != null) {
-        positions[idx++] = tangent.position.dx;
-        positions[idx++] = tangent.position.dy;
-      }
-      distance += dotSpacing;
+    final metricDotCount = (metric.length / dotSpacing).ceil();
+    for (var i = 0; i < metricDotCount; i++) {
+      final tangent = metric.getTangentForOffset(i * dotSpacing)!;
+      positions[idx++] = tangent.position.dx;
+      positions[idx++] = tangent.position.dy;
     }
-  }
-
-  // Trim if we over-estimated (e.g. getTangentForOffset returned null).
-  if (idx < positions.length) {
-    return Float32List.sublistView(positions, 0, idx);
   }
   return positions;
 }
@@ -172,4 +164,16 @@ class LineShaderKey {
 
   @override
   int get hashCode => Object.hash(spacing, lineWidth, angle);
+}
+
+void _requirePositive(double value, {required String name}) {
+  if (value <= 0 || !value.isFinite) {
+    throw ArgumentError.value(value, name, 'must be finite and > 0');
+  }
+}
+
+void _requireNonNegative(double value, {required String name}) {
+  if (value < 0 || !value.isFinite) {
+    throw ArgumentError.value(value, name, 'must be finite and >= 0');
+  }
 }

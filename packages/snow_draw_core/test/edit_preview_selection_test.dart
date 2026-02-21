@@ -5,7 +5,6 @@ import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 
@@ -28,19 +27,10 @@ void main() {
         zIndex: 0,
         data: FilterData(),
       );
-      final state = _state(
+      final preview = _selectionPreview(
         elements: const [baseElement],
         selectedIds: const {'a'},
-      );
-      final context = _moveContext(
-        selectedIds: const {'a'},
         startBounds: baseElement.rect,
-        elementsVersion: state.domain.document.elementsVersion,
-      );
-
-      final preview = buildSelectionPreview(
-        state: state,
-        context: context,
         previewElementsById: const {'a': previewElement},
       );
 
@@ -58,16 +48,10 @@ void main() {
         zIndex: 0,
         data: FilterData(),
       );
-      final state = _state(elements: const [element], selectedIds: const {'a'});
-      final context = _moveContext(
+      final preview = _selectionPreview(
+        elements: const [element],
         selectedIds: const {'a'},
         startBounds: element.rect,
-        elementsVersion: state.domain.document.elementsVersion,
-      );
-
-      final preview = buildSelectionPreview(
-        state: state,
-        context: context,
         previewElementsById: const {},
       );
 
@@ -85,16 +69,10 @@ void main() {
         zIndex: 3,
         data: FilterData(),
       );
-      final state = _state(elements: const [], selectedIds: const {'ghost'});
-      final context = _moveContext(
+      final preview = _selectionPreview(
+        elements: const [],
         selectedIds: const {'ghost'},
         startBounds: previewElement.rect,
-        elementsVersion: state.domain.document.elementsVersion,
-      );
-
-      final preview = buildSelectionPreview(
-        state: state,
-        context: context,
         previewElementsById: const {'ghost': previewElement},
       );
 
@@ -105,25 +83,38 @@ void main() {
   });
 }
 
-DrawState _state({
+SelectionPreview? _selectionPreview({
   required List<ElementState> elements,
   required Set<String> selectedIds,
-}) => DrawState(
-  domain: DomainState(
-    document: DocumentState(elements: elements),
-    selection: SelectionState(selectedIds: selectedIds),
-  ),
+  required DrawRect startBounds,
+  required Map<String, ElementState> previewElementsById,
+}) {
+  final state = _state(elements: elements);
+
+  return buildSelectionPreview(
+    state: state,
+    context: _moveContext(
+      state: state,
+      selectedIds: selectedIds,
+      startBounds: startBounds,
+    ),
+    previewElementsById: previewElementsById,
+  );
+}
+
+DrawState _state({required List<ElementState> elements}) => DrawState(
+  domain: DomainState(document: DocumentState(elements: elements)),
 );
 
 MoveEditContext _moveContext({
+  required DrawState state,
   required Set<String> selectedIds,
   required DrawRect startBounds,
-  required int elementsVersion,
 }) => MoveEditContext(
   startPosition: startBounds.center,
   startBounds: startBounds,
   selectedIdsAtStart: selectedIds,
   selectionVersion: 0,
-  elementsVersion: elementsVersion,
+  elementsVersion: state.domain.document.elementsVersion,
   elementSnapshots: const {},
 );

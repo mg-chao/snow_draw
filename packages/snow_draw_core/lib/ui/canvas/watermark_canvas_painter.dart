@@ -25,23 +25,21 @@ class WatermarkCanvasLayerState {
 }
 
 /// Mutable state holder that repaints the watermark layer on demand.
-class WatermarkCanvasLayerController extends ChangeNotifier {
+class WatermarkCanvasLayerController
+    extends ValueNotifier<WatermarkCanvasLayerState> {
   WatermarkCanvasLayerController({
     required WatermarkCanvasLayerState initialState,
-  }) : _state = initialState;
-
-  WatermarkCanvasLayerState _state;
+  }) : super(initialState);
 
   /// Current snapshot used by the painter.
-  WatermarkCanvasLayerState get state => _state;
+  WatermarkCanvasLayerState get state => value;
 
   /// Replace the current snapshot and request repaint when it changes.
   void update(WatermarkCanvasLayerState nextState) {
-    if (_state == nextState) {
+    if (value == nextState) {
       return;
     }
-    _state = nextState;
-    notifyListeners();
+    value = nextState;
   }
 }
 
@@ -60,12 +58,12 @@ class WatermarkCanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final state = controller.state;
-    if (!state.isVisible) {
+    final config = controller.state.config;
+    if (!isWatermarkVisible(config)) {
       return;
     }
 
-    paintWatermark(canvas: canvas, viewportSize: size, config: state.config);
+    paintWatermark(canvas: canvas, viewportSize: size, config: config);
   }
 
   @override

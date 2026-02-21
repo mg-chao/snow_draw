@@ -13,10 +13,8 @@ void main() {
       tester,
     ) async {
       final dispatched = <PointerMoveInputEvent>[];
-      final dispatcher = FrameAlignedPointerMoveDispatcher(
-        dispatchMove: (event) async {
-          dispatched.add(event);
-        },
+      final dispatcher = _createDispatcher(
+        dispatchMove: (event) async => dispatched.add(event),
         shouldCoalesce: () => true,
       );
 
@@ -32,20 +30,17 @@ void main() {
     });
 
     testWidgets('flush dispatches the latest pending move immediately', (
-      tester,
+      _,
     ) async {
       final dispatched = <PointerMoveInputEvent>[];
-      final dispatcher = FrameAlignedPointerMoveDispatcher(
-        dispatchMove: (event) async {
-          dispatched.add(event);
-        },
+      final dispatcher = _createDispatcher(
+        dispatchMove: (event) async => dispatched.add(event),
         shouldCoalesce: () => true,
       );
 
       _dispatchMoves(dispatcher, const [5, 9]);
 
       await dispatcher.flush();
-      await tester.pump();
 
       expect(dispatched, hasLength(1));
       expect(dispatched.single.position.x, 9);
@@ -54,10 +49,8 @@ void main() {
 
     testWidgets('merge callback keeps coalesced move samples', (tester) async {
       final dispatched = <PointerMoveInputEvent>[];
-      final dispatcher = FrameAlignedPointerMoveDispatcher(
-        dispatchMove: (event) async {
-          dispatched.add(event);
-        },
+      final dispatcher = _createDispatcher(
+        dispatchMove: (event) async => dispatched.add(event),
         shouldCoalesce: () => true,
         mergeCoalescedEvents: (pending, incoming) =>
             pending.mergeWith(incoming),
@@ -78,20 +71,17 @@ void main() {
     });
 
     testWidgets('dispatches every move immediately when coalescing is off', (
-      tester,
+      _,
     ) async {
       final dispatched = <PointerMoveInputEvent>[];
-      final dispatcher = FrameAlignedPointerMoveDispatcher(
-        dispatchMove: (event) async {
-          dispatched.add(event);
-        },
+      final dispatcher = _createDispatcher(
+        dispatchMove: (event) async => dispatched.add(event),
         shouldCoalesce: () => false,
       );
 
       _dispatchMoves(dispatcher, const [1, 2]);
 
       await dispatcher.flush();
-      await tester.pump();
 
       expect(dispatched, hasLength(2));
       expect(dispatched[0].position.x, 1);
@@ -103,18 +93,12 @@ void main() {
       final dispatched = <PointerMoveInputEvent>[];
       final firstMoveGate = Completer<void>();
       final secondMoveGate = Completer<void>();
-      var moveCount = 0;
-      final dispatcher = FrameAlignedPointerMoveDispatcher(
+      final moveGates = [firstMoveGate, secondMoveGate];
+      var moveGateIndex = 0;
+      final dispatcher = _createDispatcher(
         dispatchMove: (event) async {
           dispatched.add(event);
-          moveCount += 1;
-          if (moveCount == 1) {
-            await firstMoveGate.future;
-            return;
-          }
-          if (moveCount == 2) {
-            await secondMoveGate.future;
-          }
+          await moveGates[moveGateIndex++].future;
         },
         shouldCoalesce: () => false,
       );
@@ -147,13 +131,11 @@ void main() {
 
     testWidgets(
       'preserves pending coalesced move before immediate dispatch mode',
-      (tester) async {
+      (_) async {
         final dispatched = <PointerMoveInputEvent>[];
         var shouldCoalesce = true;
-        final dispatcher = FrameAlignedPointerMoveDispatcher(
-          dispatchMove: (event) async {
-            dispatched.add(event);
-          },
+        final dispatcher = _createDispatcher(
+          dispatchMove: (event) async => dispatched.add(event),
           shouldCoalesce: () => shouldCoalesce,
         );
 
@@ -163,7 +145,6 @@ void main() {
         dispatch(_moveEvent(x: 7));
 
         await dispatcher.flush();
-        await tester.pump();
 
         expect(dispatched, hasLength(2));
         expect(dispatched[0].position.x, 4);
@@ -186,4 +167,20 @@ void _dispatchMoves(
   for (final x in xs) {
     dispatcher.dispatch(_moveEvent(x: x));
   }
+}
+
+FrameAlignedPointerMoveDispatcher _createDispatcher({
+  required PointerMoveEventSink dispatchMove,
+  required bool Function() shouldCoalesce,
+  PointerMoveInputEvent Function(
+    PointerMoveInputEvent pending,
+    PointerMoveInputEvent incoming,
+  )?
+  mergeCoalescedEvents,
+}) {
+  return FrameAlignedPointerMoveDispatcher(
+    dispatchMove: dispatchMove,
+    shouldCoalesce: shouldCoalesce,
+    mergeCoalescedEvents: mergeCoalescedEvents,
+  );
 }

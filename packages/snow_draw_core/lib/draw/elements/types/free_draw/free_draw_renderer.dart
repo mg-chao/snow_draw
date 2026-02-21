@@ -49,19 +49,23 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       return;
     }
 
-    if (_canUseTwoPointStrokeFastPath(
-      data: data,
-      strokeOpacity: strokeOpacity,
-      fillOpacity: fillOpacity,
-    )) {
-      if (_renderTwoPointStrokeFastPath(
-        canvas: canvas,
-        element: element,
-        data: data,
-        strokeOpacity: strokeOpacity,
-      )) {
-        return;
-      }
+    if (canUseTwoPointStrokeFastPath(
+          pointCount: data.points.length,
+          strokeOpacity: strokeOpacity,
+          fillOpacity: fillOpacity,
+          strokeWidth: data.strokeWidth,
+        ) &&
+        renderTwoPointNormalizedStroke(
+          canvas: canvas,
+          rect: rect,
+          rotation: element.rotation,
+          startPoint: data.points.first,
+          endPoint: data.points.last,
+          strokeWidth: data.strokeWidth,
+          strokeStyle: data.strokeStyle,
+          strokeColor: data.color.withValues(alpha: strokeOpacity),
+        )) {
+      return;
     }
 
     final cached = FreeDrawVisualCache.instance.resolve(
@@ -72,69 +76,46 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       return;
     }
 
-    // Try to replay a previously recorded Picture for this
-    // element. This avoids re-issuing potentially hundreds of
-    // draw calls for completed strokes.
-    final existingPicture = cached.getCachedPicture(opacity);
-    if (existingPicture != null) {
-      _paintInElementSpace(
-        canvas: canvas,
-        rect: rect,
-        rotation: element.rotation,
-        paint: (localCanvas) => localCanvas.drawPicture(existingPicture),
+    var picture = cached.getCachedPicture(opacity);
+    if (picture == null && cached.shouldRecordPicture(opacity)) {
+      final recorder = PictureRecorder();
+      final recordCanvas = Canvas(
+        recorder,
+        Rect.fromLTWH(0, 0, rect.width, rect.height),
       );
-      return;
+      _renderToCanvas(
+        canvas: recordCanvas,
+        data: data,
+        rect: rect,
+        cached: cached,
+        strokeOpacity: strokeOpacity,
+        fillOpacity: fillOpacity,
+      );
+      picture = recorder.endRecording();
+      cached.setCachedPicture(picture, opacity);
     }
 
-    if (!cached.shouldRecordPicture(opacity)) {
-      _paintInElementSpace(
-        canvas: canvas,
-        rect: rect,
-        rotation: element.rotation,
-        paint: (localCanvas) => _renderToCanvas(
+    _paintInElementSpace(
+      canvas: canvas,
+      rect: rect,
+      rotation: element.rotation,
+      paint: (localCanvas) {
+        if (picture != null) {
+          localCanvas.drawPicture(picture);
+          return;
+        }
+        _renderToCanvas(
           canvas: localCanvas,
           data: data,
           rect: rect,
           cached: cached,
           strokeOpacity: strokeOpacity,
           fillOpacity: fillOpacity,
-        ),
-      );
-      return;
-    }
-
-    // Record draw commands into a Picture for future reuse.
-    final recorder = PictureRecorder();
-    final recordCanvas = Canvas(
-      recorder,
-      Rect.fromLTWH(0, 0, rect.width, rect.height),
-    );
-
-    _renderToCanvas(
-      canvas: recordCanvas,
-      data: data,
-      rect: rect,
-      cached: cached,
-      strokeOpacity: strokeOpacity,
-      fillOpacity: fillOpacity,
-    );
-
-    final picture = recorder.endRecording();
-    cached.setCachedPicture(picture, opacity);
-
-    // Draw the just-recorded picture.
-    _paintInElementSpace(
-      canvas: canvas,
-      rect: rect,
-      rotation: element.rotation,
-      paint: (localCanvas) => localCanvas.drawPicture(picture),
+        );
+      },
     );
   }
 
-  /// Issues the actual fill + stroke draw commands.
-  ///
-  /// Called once to record into a [PictureRecorder]; subsequent
-  /// frames replay the recorded [Picture] directly.
   void _renderToCanvas({
     required Canvas canvas,
     required FreeDrawData data,
@@ -181,42 +162,36 @@ class FreeDrawRenderer extends ElementTypeRenderer {
       }
     }
 
-    if (strokeOpacity > 0 && data.strokeWidth > 0) {
-      final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    if (strokeOpacity <= 0 || data.strokeWidth <= 0) {
+      return;
+    }
 
-      if (data.strokeStyle == StrokeStyle.dotted) {
-        final positions = cached.dotPositions;
-        if (positions != null && positions.isNotEmpty) {
-          final dotPaint = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = cached.dotRadius * 2
-            ..strokeCap = StrokeCap.round
-            ..color = strokeColor
-            ..isAntiAlias = true;
-          canvas.drawRawPoints(PointMode.points, positions, dotPaint);
+    final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = data.strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = strokeColor
+      ..isAntiAlias = true;
+
+    switch (data.strokeStyle) {
+      case StrokeStyle.solid:
+        canvas.drawPath(cached.path, strokePaint);
+      case StrokeStyle.dashed:
+        canvas.drawPath(cached.strokePath!, strokePaint);
+      case StrokeStyle.dotted:
+        final dotPositions = cached.dotPositions!;
+        if (dotPositions.isEmpty) {
+          return;
         }
-      } else if (data.strokeStyle == StrokeStyle.dashed) {
-        final dashedPath = cached.strokePath;
-        if (dashedPath != null) {
-          final strokePaint = Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = data.strokeWidth
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round
-            ..color = strokeColor
-            ..isAntiAlias = true;
-          canvas.drawPath(dashedPath, strokePaint);
-        }
-      } else {
-        final strokePaint = Paint()
+        final dotPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = data.strokeWidth
+          ..strokeWidth = cached.dotRadius * 2
           ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
           ..color = strokeColor
           ..isAntiAlias = true;
-        canvas.drawPath(cached.path, strokePaint);
-      }
+        canvas.drawRawPoints(PointMode.points, dotPositions, dotPaint);
     }
   }
 
@@ -236,33 +211,6 @@ class FreeDrawRenderer extends ElementTypeRenderer {
     final dy = (first.y - last.y) * rect.height;
     return (dx * dx + dy * dy) <= tolerance * tolerance;
   }
-
-  bool _canUseTwoPointStrokeFastPath({
-    required FreeDrawData data,
-    required double strokeOpacity,
-    required double fillOpacity,
-  }) => canUseTwoPointStrokeFastPath(
-    pointCount: data.points.length,
-    strokeOpacity: strokeOpacity,
-    fillOpacity: fillOpacity,
-    strokeWidth: data.strokeWidth,
-  );
-
-  bool _renderTwoPointStrokeFastPath({
-    required Canvas canvas,
-    required ElementState element,
-    required FreeDrawData data,
-    required double strokeOpacity,
-  }) => renderTwoPointNormalizedStroke(
-    canvas: canvas,
-    rect: element.rect,
-    rotation: element.rotation,
-    startPoint: data.points.first,
-    endPoint: data.points.last,
-    strokeWidth: data.strokeWidth,
-    strokeStyle: data.strokeStyle,
-    strokeColor: data.color.withValues(alpha: strokeOpacity),
-  );
 
   void _paintInElementSpace({
     required Canvas canvas,

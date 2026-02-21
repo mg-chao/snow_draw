@@ -19,8 +19,7 @@ class ArrowVisualCacheEntry {
     required this.combinedStrokePath,
     this.dotPositions,
     this.dotRadius = 0,
-    List<PathMetric>? pathMetrics,
-  }) : _pathMetrics = pathMetrics;
+  });
 
   final ArrowLikeData data;
   final double width;
@@ -40,8 +39,6 @@ class ArrowVisualCacheEntry {
   /// Radius of each dot for dotted strokes.
   final double dotRadius;
 
-  List<PathMetric>? _pathMetrics;
-
   /// Lazily built closed copy of [shaftPath] for fill hit testing.
   Path? _closedFillPath;
 
@@ -49,9 +46,6 @@ class ArrowVisualCacheEntry {
       identical(this.data, data) &&
       this.width == width &&
       this.height == height;
-
-  List<PathMetric> resolvePathMetrics() =>
-      _pathMetrics ??= shaftPath.computeMetrics().toList(growable: false);
 
   /// Returns a cached closed copy of [shaftPath] for fill testing.
   ///
@@ -101,28 +95,8 @@ class ArrowVisualCache {
   }) {
     final rect = element.rect;
     final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
-    final localPoints = geometry.localPoints;
-
-    if (localPoints.length < 2) {
-      return ArrowVisualCacheEntry(
-        data: data,
-        width: rect.width,
-        height: rect.height,
-        geometry: geometry,
-        shaftPath: Path(),
-        arrowheadPaths: const [],
-        combinedStrokePath: null,
-      );
-    }
-
-    final startInset = geometry.startInset;
-    final endInset = geometry.endInset;
-
-    final shaftPoints = (startInset <= 0 && endInset <= 0)
-        ? localPoints
-        : geometry.insetPoints;
     final shaftPath = ArrowGeometry.buildShaftPathFromResolvedPoints(
-      points: shaftPoints,
+      points: geometry.insetPoints,
       arrowType: data.arrowType,
     );
 
@@ -131,7 +105,6 @@ class ArrowVisualCache {
     Path? combinedStrokePath;
     Float32List? dotPositions;
     double dotRadius = 0;
-    List<PathMetric>? pathMetrics;
 
     if (data.strokeWidth > 0) {
       switch (data.strokeStyle) {
@@ -140,22 +113,20 @@ class ArrowVisualCache {
         case StrokeStyle.dashed:
           final dashLength = data.strokeWidth * 2.0;
           final gapLength = dashLength * 1.2;
-          pathMetrics = shaftPath.computeMetrics().toList(growable: false);
+          final metrics = shaftPath.computeMetrics().toList(growable: false);
           final dashedShaft = _buildDashedPath(
-            shaftPath,
-            dashLength,
-            gapLength,
-            metrics: pathMetrics,
+            metrics: metrics,
+            dashLength: dashLength,
+            gapLength: gapLength,
           );
           combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
         case StrokeStyle.dotted:
           final dotSpacing = data.strokeWidth * 2.0;
           dotRadius = data.strokeWidth * 0.5;
-          pathMetrics = shaftPath.computeMetrics().toList(growable: false);
+          final metrics = shaftPath.computeMetrics().toList(growable: false);
           dotPositions = _buildDotPositions(
-            shaftPath,
-            dotSpacing,
-            metrics: pathMetrics,
+            metrics: metrics,
+            dotSpacing: dotSpacing,
           );
       }
     }
@@ -170,18 +141,17 @@ class ArrowVisualCache {
       combinedStrokePath: combinedStrokePath,
       dotPositions: dotPositions,
       dotRadius: dotRadius,
-      pathMetrics: pathMetrics,
     );
   }
 
   List<Path> _buildArrowheadPaths(ArrowGeometryDescriptor geometry) {
-    final paths = <Path>[];
     final points = geometry.localPoints;
     final data = geometry.data;
-    if (points.length < 2 || data.strokeWidth <= 0) {
-      return paths;
+    if (data.strokeWidth <= 0) {
+      return const [];
     }
 
+    final paths = <Path>[];
     final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       paths.add(
@@ -217,16 +187,13 @@ class ArrowVisualCache {
     return combined;
   }
 
-  Path _buildDashedPath(
-    Path basePath,
-    double dashLength,
-    double gapLength, {
-    List<PathMetric>? metrics,
+  Path _buildDashedPath({
+    required List<PathMetric> metrics,
+    required double dashLength,
+    required double gapLength,
   }) {
     final dashed = Path();
-    final resolved =
-        metrics ?? basePath.computeMetrics().toList(growable: false);
-    for (final metric in resolved) {
+    for (final metric in metrics) {
       var distance = 0.0;
       while (distance < metric.length) {
         final next = math.min(distance + dashLength, metric.length);
@@ -243,17 +210,13 @@ class ArrowVisualCache {
   /// batches all dots into a single GPU draw call. This replaces the
   /// previous approach of adding individual ovals to a [Path], which
   /// required Impeller to tessellate each oval separately.
-  Float32List _buildDotPositions(
-    Path basePath,
-    double dotSpacing, {
-    List<PathMetric>? metrics,
+  Float32List _buildDotPositions({
+    required List<PathMetric> metrics,
+    required double dotSpacing,
   }) {
-    final resolved =
-        metrics ?? basePath.computeMetrics().toList(growable: false);
-
     // Count dots first to pre-allocate the Float32List.
     var dotCount = 0;
-    for (final metric in resolved) {
+    for (final metric in metrics) {
       if (metric.length <= 0) {
         continue;
       }
@@ -263,7 +226,7 @@ class ArrowVisualCache {
 
     final positions = Float32List(dotCount * 2);
     var idx = 0;
-    for (final metric in resolved) {
+    for (final metric in metrics) {
       var distance = 0.0;
       while (distance < metric.length) {
         final tangent = metric.getTangentForOffset(distance);

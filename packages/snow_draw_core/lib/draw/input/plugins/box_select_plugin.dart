@@ -25,30 +25,22 @@ class BoxSelectPlugin extends DrawInputPlugin {
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) async {
-    if (event is PointerMoveInputEvent) {
-      if (!state.application.isBoxSelecting) {
-        return unhandled();
-      }
-      await dispatch(UpdateBoxSelect(currentPosition: event.position));
-      return handled(message: 'Box select updated');
+    if (!state.application.isBoxSelecting) {
+      return unhandled();
     }
 
-    if (event is PointerUpInputEvent) {
-      if (!state.application.isBoxSelecting) {
+    switch (event) {
+      case PointerMoveInputEvent(:final position):
+        await dispatch(UpdateBoxSelect(currentPosition: position));
+        return handled(message: 'Box select updated');
+      case PointerUpInputEvent():
+        await dispatch(const FinishBoxSelect());
+        return handled(message: 'Box select finished');
+      case PointerCancelInputEvent():
+        await dispatch(const CancelBoxSelect());
+        return consumed(message: 'Box select canceled');
+      default:
         return unhandled();
-      }
-      await dispatch(const FinishBoxSelect());
-      return handled(message: 'Box select finished');
     }
-
-    if (event is PointerCancelInputEvent) {
-      if (!state.application.isBoxSelecting) {
-        return unhandled();
-      }
-      await dispatch(const CancelBoxSelect());
-      return consumed(message: 'Box select canceled');
-    }
-
-    return unhandled();
   }
 }

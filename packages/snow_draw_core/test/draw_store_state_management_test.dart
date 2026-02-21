@@ -39,7 +39,7 @@ void main() {
         final trace = <String>[];
         final pipeline = MiddlewarePipeline(
           middlewares: [
-            _RecordingDelayMiddleware(
+            _MoveCameraDelayMiddleware(
               trace: trace,
               delay: const Duration(milliseconds: 5),
             ),
@@ -171,8 +171,8 @@ DrawState _stateWithSelectableElement() => DrawState(
   ),
 );
 
-class _RecordingDelayMiddleware extends MiddlewareBase {
-  const _RecordingDelayMiddleware({required this.trace, required this.delay});
+class _MoveCameraDelayMiddleware extends MiddlewareBase {
+  const _MoveCameraDelayMiddleware({required this.trace, required this.delay});
 
   final List<String> trace;
   final Duration delay;
@@ -182,19 +182,12 @@ class _RecordingDelayMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    final action = context.action;
-    if (action is MoveCamera) {
-      trace.add('start:${action.dx.toInt()}');
-    } else {
-      trace.add('start:${action.runtimeType}');
-    }
+    final action = context.action as MoveCamera;
+    final actionIndex = action.dx.toInt();
+    trace.add('start:$actionIndex');
     await Future<void>.delayed(delay);
     final nextContext = await next(context);
-    if (action is MoveCamera) {
-      trace.add('end:${action.dx.toInt()}');
-    } else {
-      trace.add('end:${action.runtimeType}');
-    }
+    trace.add('end:$actionIndex');
     return nextContext;
   }
 }

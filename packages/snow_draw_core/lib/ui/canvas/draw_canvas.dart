@@ -7,7 +7,7 @@ import '../../draw/elements/core/element_type_id.dart';
 import '../../draw/store/draw_store_interface.dart';
 import 'plugin_draw_canvas.dart';
 
-class DrawCanvas extends StatefulWidget {
+class DrawCanvas extends StatelessWidget {
   const DrawCanvas({
     required this.size,
     required this.store,
@@ -25,9 +25,6 @@ class DrawCanvas extends StatefulWidget {
   final bool isSelectionToolActive;
   final bool isEraserToolActive;
   final ValueListenable<WatermarkConfig?>? watermarkPreviewListenable;
-
-  @override
-  State<DrawCanvas> createState() => DrawCanvasState();
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
@@ -56,17 +53,15 @@ class DrawCanvas extends StatefulWidget {
         ),
       );
   }
-}
 
-class DrawCanvasState extends State<DrawCanvas> {
   @override
   Widget build(BuildContext context) => PluginDrawCanvas(
-    size: widget.size,
-    store: widget.store,
-    scaleFactor: widget.scaleFactor,
-    currentToolTypeId: widget.currentToolTypeId,
-    isSelectionToolActive: widget.isSelectionToolActive,
-    isEraserToolActive: widget.isEraserToolActive,
-    watermarkPreviewListenable: widget.watermarkPreviewListenable,
+    size: size,
+    store: store,
+    scaleFactor: scaleFactor,
+    currentToolTypeId: currentToolTypeId,
+    isSelectionToolActive: isSelectionToolActive,
+    isEraserToolActive: isEraserToolActive,
+    watermarkPreviewListenable: watermarkPreviewListenable,
   );
 }

@@ -57,7 +57,6 @@ class FreeDrawCreationPreviewCache {
   static const _minCullPadding = 1.0;
   static const _maxRasterExtent = 1536;
   static const int _maxRasterPixels = 1024 * 1024;
-  static const _minRasterExtent = 1;
 
   static final _segmentImagePaint = Paint()
     ..isAntiAlias = false
@@ -68,9 +67,7 @@ class FreeDrawCreationPreviewCache {
   var _processedPointCount = 0;
   DrawPoint? _lastProcessedPoint;
 
-  DrawPoint? _tailLastPoint;
   var _tailPath = Path();
-  var _tailPointCount = 0;
   final _tailPoints = <DrawPoint>[];
   final _tailBounds = _MutableBoundsAccumulator();
   double _cullPadding = _minCullPadding;
@@ -100,7 +97,7 @@ class FreeDrawCreationPreviewCache {
   int get sealedSegmentCount => _sealedSegments.length;
 
   @visibleForTesting
-  int get tailPointCount => _tailPointCount;
+  int get tailPointCount => _tailPoints.length;
 
   @visibleForTesting
   int get processedPointCount => _processedPointCount;
@@ -112,17 +109,7 @@ class FreeDrawCreationPreviewCache {
     _disposeSealedSegments();
     _elementId = null;
     _signature = null;
-    _processedPointCount = 0;
-    _lastProcessedPoint = null;
-    _tailLastPoint = null;
-    _tailPath = Path();
-    _tailPointCount = 0;
-    _tailPoints.clear();
-    _tailBounds.reset();
-    _cullPadding = _minCullPadding;
-    _candidateSegmentIndices.clear();
-    _candidateSegmentIndexSet.clear();
-    _tailMutationCount = 0;
+    _resetMutableState(cullPadding: _minCullPadding);
   }
 
   void sync({
@@ -162,7 +149,8 @@ class FreeDrawCreationPreviewCache {
       _startTail(points.first);
     }
 
-    for (var i = _processedPointCount; i < effectivePointCount; i++) {
+    final startIndex = _processedPointCount == 0 ? 1 : _processedPointCount;
+    for (var i = startIndex; i < effectivePointCount; i++) {
       _appendPoint(points[i], strokePaint);
     }
 
@@ -193,7 +181,7 @@ class FreeDrawCreationPreviewCache {
       _candidateSegmentIndexSet.clear();
     }
 
-    if (_tailPointCount < 2) {
+    if (_tailPoints.length < 2) {
       return;
     }
 
@@ -207,33 +195,17 @@ class FreeDrawCreationPreviewCache {
     required String elementId,
     required int pointCount,
     required FreeDrawPreviewStrokeSignature signature,
-  }) {
-    if (_elementId != elementId || _signature != signature) {
-      return true;
-    }
-    if (_processedPointCount == 0) {
-      return false;
-    }
-    if (_processedPointCount > pointCount) {
-      return true;
-    }
-    return _lastProcessedPoint == null;
-  }
+  }) =>
+      _elementId != elementId ||
+      _signature != signature ||
+      _processedPointCount > pointCount;
 
   int _resolveVisiblePointCount({
     required List<DrawPoint> points,
     required int? visiblePointCount,
   }) {
-    if (visiblePointCount == null) {
-      return points.length;
-    }
-    if (visiblePointCount <= 0) {
-      return 0;
-    }
-    if (visiblePointCount > points.length) {
-      return points.length;
-    }
-    return visiblePointCount;
+    final requestedCount = visiblePointCount ?? points.length;
+    return requestedCount.clamp(0, points.length);
   }
 
   void _resetForSession({
@@ -243,14 +215,20 @@ class FreeDrawCreationPreviewCache {
     _disposeSealedSegments();
     _elementId = elementId;
     _signature = signature;
+    _resetMutableState(
+      cullPadding: math.max(_minCullPadding, signature.strokeWidth / 2),
+    );
+  }
+
+  void _resetMutableState({required double cullPadding}) {
     _processedPointCount = 0;
     _lastProcessedPoint = null;
-    _tailLastPoint = null;
     _tailPath = Path();
-    _tailPointCount = 0;
     _tailPoints.clear();
     _tailBounds.reset();
-    _cullPadding = math.max(_minCullPadding, signature.strokeWidth / 2);
+    _cullPadding = cullPadding;
+    _candidateSegmentIndices.clear();
+    _candidateSegmentIndexSet.clear();
     _tailMutationCount = 0;
   }
 
@@ -262,39 +240,29 @@ class FreeDrawCreationPreviewCache {
   }
 
   void _appendPoint(DrawPoint point, Paint strokePaint) {
-    final lastPoint = _tailLastPoint;
-    if (lastPoint == null) {
-      _startTail(point);
-      return;
-    }
+    final lastPoint = _tailPoints.last;
 
     if (lastPoint.x == point.x && lastPoint.y == point.y) {
-      _tailLastPoint = point;
       _tailPoints[_tailPoints.length - 1] = point;
       return;
     }
 
     _tailPath.lineTo(point.x, point.y);
     _tailBounds.includePoint(point);
-    _tailLastPoint = point;
     _tailPoints.add(point);
-    _tailPointCount = _tailPoints.length;
 
-    if (_tailPointCount >= _chunkPointThreshold) {
+    if (_tailPoints.length >= _chunkPointThreshold) {
       _sealTail(strokePaint);
     }
   }
 
   void _sealTail(Paint strokePaint) {
-    if (_tailPointCount < _chunkPointThreshold || _tailPoints.length < 2) {
+    if (_tailPoints.length < _chunkPointThreshold) {
       return;
     }
 
-    final retainedCount = _resolveRetainedTailPointCount();
+    final retainedCount = math.min(_tailPoints.length, _retainedTailPointCount);
     final sealedPointCount = _tailPoints.length - retainedCount + 1;
-    if (sealedPointCount < 2) {
-      return;
-    }
 
     final sealedPath = Path();
     final sealedBounds = _MutableBoundsAccumulator();
@@ -303,7 +271,6 @@ class FreeDrawCreationPreviewCache {
     sealedBounds.includePoint(first);
 
     var previous = first;
-    var hasSegment = false;
     for (var index = 1; index < sealedPointCount; index++) {
       final point = _tailPoints[index];
       if (point.x == previous.x && point.y == previous.y) {
@@ -313,10 +280,6 @@ class FreeDrawCreationPreviewCache {
       sealedPath.lineTo(point.x, point.y);
       sealedBounds.includePoint(point);
       previous = point;
-      hasSegment = true;
-    }
-    if (!hasSegment) {
-      return;
     }
 
     final tailBounds = sealedBounds.toRect(padding: _cullPadding);
@@ -344,26 +307,11 @@ class FreeDrawCreationPreviewCache {
     _rebuildTailPath();
   }
 
-  int _resolveRetainedTailPointCount() {
-    if (_tailPoints.length <= 2) {
-      return _tailPoints.length;
-    }
-    return _retainedTailPointCount;
-  }
-
   bool _tryUpdateTailLastPoint(DrawPoint point) {
-    if (_tailPoints.isEmpty) {
-      return false;
-    }
-    if (_tailPoints.length == 1 && _sealedSegments.isNotEmpty) {
-      _tailPoints.add(point);
-      _rebuildTailPath();
-      _lastProcessedPoint = point;
-      _tailMutationCount += 1;
-      return true;
-    }
     final lastProcessedPoint = _lastProcessedPoint;
-    if (lastProcessedPoint == null || _tailPoints.last != lastProcessedPoint) {
+    if (lastProcessedPoint == null ||
+        _tailPoints.isEmpty ||
+        _tailPoints.last != lastProcessedPoint) {
       return false;
     }
     _tailPoints[_tailPoints.length - 1] = point;
@@ -376,9 +324,7 @@ class FreeDrawCreationPreviewCache {
   void _rebuildTailPath() {
     _tailPath = Path();
     _tailBounds.reset();
-    _tailPointCount = _tailPoints.length;
     if (_tailPoints.isEmpty) {
-      _tailLastPoint = null;
       return;
     }
 
@@ -396,31 +342,19 @@ class FreeDrawCreationPreviewCache {
       _tailBounds.includePoint(point);
       previous = point;
     }
-    _tailLastPoint = _tailPoints.last;
   }
 
   void _compactSealedSegmentsIfNeeded() {
     while (_sealedSegments.length > _maxSealedSegmentCount) {
-      if (!_compactOldestSegments()) {
-        break;
-      }
+      _compactOldestSegments();
     }
   }
 
-  bool _compactOldestSegments() {
-    if (_sealedSegments.length < 2) {
-      return false;
-    }
-
+  void _compactOldestSegments() {
     final batchSize = math.min(_compactionBatchSize, _sealedSegments.length);
-    if (batchSize < 2) {
-      return false;
-    }
-
-    final merged = _mergeSegments(_sealedSegments.take(batchSize));
-    if (merged == null) {
-      return false;
-    }
+    final merged = _mergeSegments(
+      _sealedSegments.take(batchSize).toList(growable: false),
+    );
 
     for (var index = 0; index < batchSize; index++) {
       _sealedSegments[index].dispose();
@@ -429,15 +363,9 @@ class FreeDrawCreationPreviewCache {
       ..removeRange(0, batchSize)
       ..insert(0, merged);
     _rebuildSegmentIndex();
-    return true;
   }
 
-  _PreviewSegment? _mergeSegments(Iterable<_PreviewSegment> source) {
-    final segments = source.toList(growable: false);
-    if (segments.length < 2) {
-      return null;
-    }
-
+  _PreviewSegment _mergeSegments(List<_PreviewSegment> segments) {
     var bounds = segments.first.bounds;
     for (var index = 1; index < segments.length; index++) {
       bounds = _unionRect(bounds, segments[index].bounds);
@@ -481,10 +409,7 @@ class FreeDrawCreationPreviewCache {
 
     final pixelWidth = width.ceil();
     final pixelHeight = height.ceil();
-    if (pixelWidth < _minRasterExtent ||
-        pixelHeight < _minRasterExtent ||
-        pixelWidth > _maxRasterExtent ||
-        pixelHeight > _maxRasterExtent) {
+    if (pixelWidth > _maxRasterExtent || pixelHeight > _maxRasterExtent) {
       return null;
     }
     if (pixelWidth * pixelHeight > _maxRasterPixels) {
@@ -511,10 +436,6 @@ class FreeDrawCreationPreviewCache {
   void _collectCandidateSegmentIndices(DrawRect viewportRect) {
     _candidateSegmentIndices.clear();
     _candidateSegmentIndexSet.clear();
-
-    if (_sealedSegments.isEmpty) {
-      return;
-    }
 
     final tileMinX = _resolveTileIndex(viewportRect.minX);
     final tileMaxX = _resolveTileIndex(viewportRect.maxX);
@@ -635,10 +556,7 @@ final class _PreviewSegment {
       return;
     }
 
-    final vector = picture;
-    if (vector == null) {
-      return;
-    }
+    final vector = picture!;
     canvas
       ..save()
       ..translate(dx, dy)
@@ -688,12 +606,11 @@ final class _MutableBoundsAccumulator {
       return const DrawRect();
     }
 
-    final clampedPadding = padding < 0 ? 0.0 : padding;
     return DrawRect(
-      minX: minX - clampedPadding,
-      minY: minY - clampedPadding,
-      maxX: maxX + clampedPadding,
-      maxY: maxY + clampedPadding,
+      minX: minX - padding,
+      minY: minY - padding,
+      maxX: maxX + padding,
+      maxY: maxY + padding,
     );
   }
 }

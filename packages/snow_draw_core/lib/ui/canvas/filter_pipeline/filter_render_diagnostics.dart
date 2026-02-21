@@ -7,14 +7,14 @@ import 'package:meta/meta.dart';
 @immutable
 class FilterRenderDiagnostics {
   const FilterRenderDiagnostics({
-    required this.pictureRecorders,
-    required this.saveLayers,
-    required this.filterPasses,
-    required this.batchCount,
-    required this.batchCacheHits,
-    required this.batchCacheMisses,
-    required this.prefixSceneCacheHits,
-    required this.prefixSceneCacheMisses,
+    this.pictureRecorders = 0,
+    this.saveLayers = 0,
+    this.filterPasses = 0,
+    this.batchCount = 0,
+    this.batchCacheHits = 0,
+    this.batchCacheMisses = 0,
+    this.prefixSceneCacheHits = 0,
+    this.prefixSceneCacheMisses = 0,
   });
 
   /// Number of picture recorders created by the filter pipeline.
@@ -42,29 +42,19 @@ class FilterRenderDiagnostics {
   final int prefixSceneCacheMisses;
 
   /// Empty diagnostics snapshot.
-  static const zero = FilterRenderDiagnostics(
-    pictureRecorders: 0,
-    saveLayers: 0,
-    filterPasses: 0,
-    batchCount: 0,
-    batchCacheHits: 0,
-    batchCacheMisses: 0,
-    prefixSceneCacheHits: 0,
-    prefixSceneCacheMisses: 0,
-  );
+  static const zero = FilterRenderDiagnostics();
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
       other is FilterRenderDiagnostics &&
-          other.pictureRecorders == pictureRecorders &&
-          other.saveLayers == saveLayers &&
-          other.filterPasses == filterPasses &&
-          other.batchCount == batchCount &&
-          other.batchCacheHits == batchCacheHits &&
-          other.batchCacheMisses == batchCacheMisses &&
-          other.prefixSceneCacheHits == prefixSceneCacheHits &&
-          other.prefixSceneCacheMisses == prefixSceneCacheMisses;
+      other.pictureRecorders == pictureRecorders &&
+      other.saveLayers == saveLayers &&
+      other.filterPasses == filterPasses &&
+      other.batchCount == batchCount &&
+      other.batchCacheHits == batchCacheHits &&
+      other.batchCacheMisses == batchCacheMisses &&
+      other.prefixSceneCacheHits == prefixSceneCacheHits &&
+      other.prefixSceneCacheMisses == prefixSceneCacheMisses;
 
   @override
   int get hashCode => Object.hash(
@@ -81,70 +71,45 @@ class FilterRenderDiagnostics {
 
 /// Mutable collector that aggregates diagnostics for one paint call.
 class FilterRenderDiagnosticsCollector {
-  var _pictureRecorders = 0;
-  var _saveLayers = 0;
-  var _filterPasses = 0;
-  var _batchCount = 0;
-  var _batchCacheHits = 0;
-  var _batchCacheMisses = 0;
-  var _prefixSceneCacheHits = 0;
-  var _prefixSceneCacheMisses = 0;
+  int _pictureRecorders = 0;
+  int _saveLayers = 0;
+  int _filterPasses = 0;
+  int _batchCount = 0;
+  int _batchCacheHits = 0;
+  int _batchCacheMisses = 0;
+  int _prefixSceneCacheHits = 0;
+  int _prefixSceneCacheMisses = 0;
   FilterRenderDiagnostics _lastFrame = FilterRenderDiagnostics.zero;
 
   /// Latest completed frame snapshot.
   FilterRenderDiagnostics get lastFrame => _lastFrame;
 
   /// Begins a new frame collection.
-  void beginFrame() {
-    _pictureRecorders = 0;
-    _saveLayers = 0;
-    _filterPasses = 0;
-    _batchCount = 0;
-    _batchCacheHits = 0;
-    _batchCacheMisses = 0;
-    _prefixSceneCacheHits = 0;
-    _prefixSceneCacheMisses = 0;
-  }
+  void beginFrame() => _resetCounters();
 
   /// Records one picture recorder allocation.
-  void markPictureRecorder() {
-    _pictureRecorders += 1;
-  }
+  void markPictureRecorder() => _pictureRecorders += 1;
 
   /// Records one saveLayer call.
-  void markSaveLayer() {
-    _saveLayers += 1;
-  }
+  void markSaveLayer() => _saveLayers += 1;
 
   /// Records one filter pass.
-  void markFilterPass() {
-    _filterPasses += 1;
-  }
+  void markFilterPass() => _filterPasses += 1;
 
   /// Records one non-empty batch.
-  void markBatch() {
-    _batchCount += 1;
-  }
+  void markBatch() => _batchCount += 1;
 
   /// Records one batch cache hit.
-  void markBatchCacheHit() {
-    _batchCacheHits += 1;
-  }
+  void markBatchCacheHit() => _batchCacheHits += 1;
 
   /// Records one cache-eligible batch cache miss.
-  void markBatchCacheMiss() {
-    _batchCacheMisses += 1;
-  }
+  void markBatchCacheMiss() => _batchCacheMisses += 1;
 
   /// Records one prefix-scene cache hit.
-  void markPrefixSceneCacheHit() {
-    _prefixSceneCacheHits += 1;
-  }
+  void markPrefixSceneCacheHit() => _prefixSceneCacheHits += 1;
 
   /// Records one prefix-scene cache miss.
-  void markPrefixSceneCacheMiss() {
-    _prefixSceneCacheMisses += 1;
-  }
+  void markPrefixSceneCacheMiss() => _prefixSceneCacheMisses += 1;
 
   /// Finalizes the current frame.
   void endFrame() {
@@ -158,5 +123,16 @@ class FilterRenderDiagnosticsCollector {
       prefixSceneCacheHits: _prefixSceneCacheHits,
       prefixSceneCacheMisses: _prefixSceneCacheMisses,
     );
+  }
+
+  void _resetCounters() {
+    _pictureRecorders = 0;
+    _saveLayers = 0;
+    _filterPasses = 0;
+    _batchCount = 0;
+    _batchCacheHits = 0;
+    _batchCacheMisses = 0;
+    _prefixSceneCacheHits = 0;
+    _prefixSceneCacheMisses = 0;
   }
 }

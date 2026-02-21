@@ -1,5 +1,4 @@
 import '../../models/draw_state.dart';
-import '../../models/interaction_state.dart';
 import '../../models/selection_overlay_state.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
@@ -59,39 +58,36 @@ mixin StandardFinishMixin on EditOperation {
     required EditContext context,
     required EditTransform transform,
   }) {
+    final application = state.application.toIdle();
     final result = computeFinishResult(
       state: state,
       context: context,
       transform: transform,
     );
     if (result == null) {
-      return state.copyWith(application: state.application.toIdle());
+      return state.copyWith(application: application);
     }
 
     final document = state.domain.document;
-    final newElements = EditApply.replaceElementsById(
+    final elements = EditApply.replaceElementsById(
       elements: document.elements,
       replacementsById: result.updatedElements,
       resolveIndex: document.getOrderIndex,
     );
-
     final overlay = context.isMultiSelect
         ? updateOverlay(
-            current: state.application.selectionOverlay,
+            current: application.selectionOverlay,
             result: result,
             context: context,
           )
-        : state.application.selectionOverlay;
+        : application.selectionOverlay;
 
-    final nextDomain = state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: newElements),
+    return state.copyWith(
+      domain: state.domain.copyWith(
+        document: document.copyWith(elements: elements),
+      ),
+      application: application.copyWith(selectionOverlay: overlay),
     );
-    final nextApplication = state.application.copyWith(
-      interaction: const IdleState(),
-      selectionOverlay: overlay,
-    );
-
-    return state.copyWith(domain: nextDomain, application: nextApplication);
   }
 
   @override

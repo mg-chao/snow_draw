@@ -33,10 +33,7 @@ FilterStyleMutation? resolveFilterStyleMutation({
 
   final previousApplication = previous.application;
   final nextApplication = next.application;
-  if (previousApplication.view != nextApplication.view ||
-      previousApplication.interaction != nextApplication.interaction ||
-      previousApplication.selectionOverlay !=
-          nextApplication.selectionOverlay) {
+  if (previousApplication != nextApplication) {
     return null;
   }
 
@@ -65,8 +62,7 @@ FilterStyleMutation? resolveFilterStyleMutation({
     if (previousElement.id != nextElement.id) {
       return null;
     }
-    if (identical(previousElement, nextElement) ||
-        previousElement == nextElement) {
+    if (previousElement == nextElement) {
       continue;
     }
     if (!_isFilterStyleOnlyElementChange(
@@ -78,10 +74,9 @@ FilterStyleMutation? resolveFilterStyleMutation({
     changedFilterElementIds.add(nextElement.id);
   }
 
-  if (changedFilterElementIds.isEmpty) {
-    return null;
-  }
-  return FilterStyleMutation(changedFilterElementIds: changedFilterElementIds);
+  return changedFilterElementIds.isEmpty
+      ? null
+      : FilterStyleMutation(changedFilterElementIds: changedFilterElementIds);
 }
 
 bool _isFilterStyleOnlyElementChange({
@@ -99,7 +94,6 @@ bool _isFilterStyleOnlyElementChange({
     return false;
   }
 
-  final filterDataChanged = previousData != nextData;
-  final opacityChanged = previousElement.opacity != nextElement.opacity;
-  return filterDataChanged || opacityChanged;
+  return previousData != nextData ||
+      previousElement.opacity != nextElement.opacity;
 }
