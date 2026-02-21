@@ -19,7 +19,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
-import 'package:snow_draw_flutter_backend/extensions/draw_color_extensions.dart';
+import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 import 'config_update_queue.dart';
 import 'style_toolbar_state.dart';

@@ -1,4 +1,4 @@
-import 'package:snow_draw_flutter_backend/services/font/flutter_system_font_service.dart';
+import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 const FlutterSystemFontService _service = FlutterSystemFontService.instance;
 

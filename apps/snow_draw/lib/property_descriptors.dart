@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:snow_draw_flutter_backend/extensions/draw_color_extensions.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 import 'property_descriptor.dart';
 import 'property_ids.dart';
 import 'property_utils.dart';
