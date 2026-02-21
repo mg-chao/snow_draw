@@ -33,6 +33,15 @@ void main() {
     );
     expect(counters.sceneEncodes, 0);
   });
+
+  test('falls back safely when element type is unknown', () {
+    final elementRegistry = DefaultElementRegistry();
+
+    expect(
+      () => _renderElement(elementRegistry: elementRegistry),
+      returnsNormally,
+    );
+  });
 }
 
 DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>

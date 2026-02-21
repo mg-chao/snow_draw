@@ -14,6 +14,13 @@ import 'scene/scene_primitive_renderer.dart';
 
 final ModuleLogger _renderFallbackLog = LogService.fallback.render;
 
+enum _SceneRenderResult {
+  rendered,
+  missingDefinition,
+  missingSceneEncoder,
+  failed,
+}
+
 /// Flutter element renderer.
 ///
 /// Renders elements via backend-agnostic scene primitives.
@@ -112,24 +119,36 @@ class ElementRenderer {
     required ElementRegistry elementRegistry,
     Locale? locale,
   }) {
-    final renderedByScene = _renderSceneIfAvailable(
+    final sceneResult = _renderSceneIfAvailable(
       canvas: canvas,
       element: element,
       scaleFactor: scaleFactor,
       elementRegistry: elementRegistry,
       locale: locale,
     );
-    if (renderedByScene) {
-      return;
+    switch (sceneResult) {
+      case _SceneRenderResult.rendered:
+        return;
+      case _SceneRenderResult.missingDefinition:
+        _renderFallbackLog.warning(
+          'Unknown element type "${element.typeId}", '
+          'using unknown-element fallback',
+          {'typeId': element.typeId.value},
+        );
+      case _SceneRenderResult.missingSceneEncoder:
+        _renderFallbackLog.error(
+          'Registered element type is missing a scene encoder, '
+          'using unknown-element fallback',
+          {'typeId': element.typeId.value},
+        );
+      case _SceneRenderResult.failed:
+        // Error details are emitted by _renderSceneIfAvailable.
+        break;
     }
-    _renderFallbackLog.warning(
-      'No scene encoder for element type "${element.typeId}", using fallback',
-      {'typeId': element.typeId},
-    );
     _renderUnknownElement(canvas, element, scaleFactor);
   }
 
-  bool _renderSceneIfAvailable({
+  _SceneRenderResult _renderSceneIfAvailable({
     required Canvas canvas,
     required ElementState element,
     required double scaleFactor,
@@ -139,9 +158,12 @@ class ElementRenderer {
     final definition = elementRegistry.getDefinitionByValue(
       element.typeId.value,
     );
-    final sceneEncoder = definition?.sceneEncoder;
+    if (definition == null) {
+      return _SceneRenderResult.missingDefinition;
+    }
+    final sceneEncoder = definition.sceneEncoder;
     if (sceneEncoder == null) {
-      return false;
+      return _SceneRenderResult.missingSceneEncoder;
     }
     try {
       final scene = sceneEncoder.encodeScene(
@@ -150,7 +172,7 @@ class ElementRenderer {
         localeTag: locale?.toLanguageTag(),
       );
       _sceneRenderer.renderScene(canvas: canvas, scene: scene);
-      return true;
+      return _SceneRenderResult.rendered;
     } on Object catch (error, stackTrace) {
       _renderFallbackLog.warning(
         'Scene renderer failed, using unknown-element fallback',
@@ -160,7 +182,7 @@ class ElementRenderer {
           'stackTrace': stackTrace,
         },
       );
-      return false;
+      return _SceneRenderResult.failed;
     }
   }
 
