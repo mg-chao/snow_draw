@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
@@ -975,8 +975,14 @@ class StyleToolbarAdapter {
     final defaults = _config.rectangleStyle;
     if (_selectedRectangles.isEmpty) {
       return RectangleStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
@@ -989,8 +995,14 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! RectangleData) {
       return RectangleStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
@@ -1002,8 +1014,14 @@ class StyleToolbarAdapter {
     if (_selectedRectangles.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return RectangleStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(firstData.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(firstData.fillColor),
+          isMixed: false,
+        ),
         strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
         fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
@@ -1063,7 +1081,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return RectangleStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       fillColor: MixedValue(
         value: fillColorMixed ? null : _asFlutterColor(fillColor),
         isMixed: fillColorMixed,
@@ -1093,7 +1114,10 @@ class StyleToolbarAdapter {
     final defaults = _config.arrowStyle;
     if (_selectedArrows.isEmpty) {
       return ArrowStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
         arrowType: MixedValue(value: defaults.arrowType, isMixed: false),
@@ -1110,7 +1134,10 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! ArrowData) {
       return ArrowStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
         arrowType: MixedValue(value: defaults.arrowType, isMixed: false),
@@ -1126,7 +1153,10 @@ class StyleToolbarAdapter {
     if (_selectedArrows.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return ArrowStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
         strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
         arrowType: MixedValue(value: firstData.arrowType, isMixed: false),
@@ -1189,7 +1219,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return ArrowStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       strokeWidth: MixedValue(
         value: strokeWidthMixed ? null : strokeWidth,
         isMixed: strokeWidthMixed,
@@ -1219,8 +1252,14 @@ class StyleToolbarAdapter {
     final defaults = _config.lineStyle;
     if (_selectedLines.isEmpty) {
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
@@ -1232,8 +1271,14 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! LineData) {
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
@@ -1244,8 +1289,14 @@ class StyleToolbarAdapter {
     if (_selectedLines.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(firstData.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(firstData.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
@@ -1297,7 +1348,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return LineStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       fillColor: MixedValue(
         value: fillColorMixed ? null : _asFlutterColor(fillColor),
         isMixed: fillColorMixed,
@@ -1323,8 +1377,14 @@ class StyleToolbarAdapter {
     final defaults = _config.freeDrawStyle;
     if (_selectedFreeDraws.isEmpty) {
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
@@ -1336,8 +1396,14 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! FreeDrawData) {
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: defaults.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: defaults.strokeStyle, isMixed: false),
@@ -1348,8 +1414,14 @@ class StyleToolbarAdapter {
     if (_selectedFreeDraws.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return LineStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(firstData.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(firstData.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
         strokeWidth: MixedValue(value: firstData.strokeWidth, isMixed: false),
         strokeStyle: MixedValue(value: firstData.strokeStyle, isMixed: false),
@@ -1401,7 +1473,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return LineStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       fillColor: MixedValue(
         value: fillColorMixed ? null : _asFlutterColor(fillColor),
         isMixed: fillColorMixed,
@@ -1440,7 +1515,10 @@ class StyleToolbarAdapter {
     final defaults = _config.textStyle;
     if (_selectedTexts.isEmpty) {
       return TextStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
         fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
         horizontalAlign: MixedValue(value: defaults.textAlign, isMixed: false),
@@ -1448,7 +1526,10 @@ class StyleToolbarAdapter {
           value: defaults.verticalAlign,
           isMixed: false,
         ),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         textStrokeColor: MixedValue(
           value: _asFlutterColor(defaults.textStrokeColor),
@@ -1467,7 +1548,10 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! TextData) {
       return TextStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
         fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
         horizontalAlign: MixedValue(value: defaults.textAlign, isMixed: false),
@@ -1475,7 +1559,10 @@ class StyleToolbarAdapter {
           value: defaults.verticalAlign,
           isMixed: false,
         ),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         textStrokeColor: MixedValue(
           value: _asFlutterColor(defaults.textStrokeColor),
@@ -1493,7 +1580,10 @@ class StyleToolbarAdapter {
     if (_selectedTexts.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return TextStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
         fontSize: MixedValue(value: firstData.fontSize, isMixed: false),
         fontFamily: MixedValue(value: firstData.fontFamily, isMixed: false),
         horizontalAlign: MixedValue(
@@ -1504,7 +1594,10 @@ class StyleToolbarAdapter {
           value: firstData.verticalAlign,
           isMixed: false,
         ),
-        fillColor: MixedValue(value: _asFlutterColor(firstData.fillColor), isMixed: false),
+        fillColor: MixedValue(
+          value: _asFlutterColor(firstData.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
         textStrokeColor: MixedValue(
           value: _asFlutterColor(firstData.strokeColor),
@@ -1595,7 +1688,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return TextStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       fontSize: MixedValue(
         value: fontSizeMixed ? null : fontSize,
         isMixed: fontSizeMixed,
@@ -1641,7 +1737,10 @@ class StyleToolbarAdapter {
     final defaults = _config.highlightStyle;
     if (_selectedHighlights.isEmpty) {
       return HighlightStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         highlightShape: MixedValue(
           value: defaults.highlightShape,
           isMixed: false,
@@ -1662,7 +1761,10 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! HighlightData) {
       return HighlightStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
         highlightShape: MixedValue(
           value: defaults.highlightShape,
           isMixed: false,
@@ -1682,7 +1784,10 @@ class StyleToolbarAdapter {
     if (_selectedHighlights.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return HighlightStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
         highlightShape: MixedValue(value: firstData.shape, isMixed: false),
         textStrokeColor: MixedValue(
           value: _asFlutterColor(firstData.strokeColor),
@@ -1735,7 +1840,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return HighlightStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       highlightShape: MixedValue(
         value: highlightShapeMixed ? null : highlightShape,
         isMixed: highlightShapeMixed,
@@ -1824,8 +1932,14 @@ class StyleToolbarAdapter {
     final defaults = _config.serialNumberStyle;
     if (_selectedSerialNumbers.isEmpty) {
       return SerialNumberStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
         fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
@@ -1838,8 +1952,14 @@ class StyleToolbarAdapter {
     final firstData = first.data;
     if (firstData is! SerialNumberData) {
       return SerialNumberStyleValues(
-        color: MixedValue(value: _asFlutterColor(defaults.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(defaults.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(defaults.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(defaults.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: defaults.fillStyle, isMixed: false),
         fontSize: MixedValue(value: defaults.fontSize, isMixed: false),
         fontFamily: MixedValue(value: defaults.fontFamily, isMixed: false),
@@ -1851,8 +1971,14 @@ class StyleToolbarAdapter {
     if (_selectedSerialNumbers.length == 1) {
       final opacity = _resolveMixedOpacity(defaults.opacity);
       return SerialNumberStyleValues(
-        color: MixedValue(value: _asFlutterColor(firstData.color), isMixed: false),
-        fillColor: MixedValue(value: _asFlutterColor(firstData.fillColor), isMixed: false),
+        color: MixedValue(
+          value: _asFlutterColor(firstData.color),
+          isMixed: false,
+        ),
+        fillColor: MixedValue(
+          value: _asFlutterColor(firstData.fillColor),
+          isMixed: false,
+        ),
         fillStyle: MixedValue(value: firstData.fillStyle, isMixed: false),
         fontSize: MixedValue(value: firstData.fontSize, isMixed: false),
         fontFamily: MixedValue(value: firstData.fontFamily, isMixed: false),
@@ -1911,7 +2037,10 @@ class StyleToolbarAdapter {
     final opacity = _resolveMixedOpacity(defaults.opacity);
 
     return SerialNumberStyleValues(
-      color: MixedValue(value: colorMixed ? null : _asFlutterColor(color), isMixed: colorMixed),
+      color: MixedValue(
+        value: colorMixed ? null : _asFlutterColor(color),
+        isMixed: colorMixed,
+      ),
       fillColor: MixedValue(
         value: fillColorMixed ? null : _asFlutterColor(fillColor),
         isMixed: fillColorMixed,
@@ -2513,5 +2642,3 @@ class _ElementStyleSnapshot {
       identical(dataIdentity, other.dataIdentity) &&
       equals(opacity, other.opacity);
 }
-
-

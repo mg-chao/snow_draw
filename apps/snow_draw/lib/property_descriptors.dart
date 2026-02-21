@@ -70,17 +70,20 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.rectangle,
       valueSelector: (context) => context.rectangleStyleValues.color,
-      defaultSelector: (context) => context.rectangleDefaults.color.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.rectangleDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.highlight,
       valueSelector: (context) => context.highlightStyleValues.color,
-      defaultSelector: (context) => context.highlightDefaults.color.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.highlightDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.arrow,
       valueSelector: (context) => context.arrowStyleValues.color,
-      defaultSelector: (context) => context.arrowDefaults.color.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.arrowDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.line,
@@ -90,7 +93,8 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.freeDraw,
       valueSelector: (context) => context.freeDrawStyleValues.color,
-      defaultSelector: (context) => context.freeDrawDefaults.color.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.freeDrawDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.text,
@@ -100,7 +104,8 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.serialNumber,
       valueSelector: (context) => context.serialNumberStyleValues.color,
-      defaultSelector: (context) => context.serialNumberDefaults.color.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.serialNumberDefaults.color.toFlutterColor(),
     ),
   ];
 
@@ -336,7 +341,8 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.line,
       valueSelector: (context) => context.lineStyleValues.fillColor,
-      defaultSelector: (context) => context.lineDefaults.fillColor.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.lineDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.freeDraw,
@@ -347,7 +353,8 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.text,
       valueSelector: (context) => context.textStyleValues.fillColor,
-      defaultSelector: (context) => context.textDefaults.fillColor.toFlutterColor(),
+      defaultSelector: (context) =>
+          context.textDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.serialNumber,

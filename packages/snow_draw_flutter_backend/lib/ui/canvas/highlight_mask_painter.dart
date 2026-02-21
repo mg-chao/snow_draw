@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -113,9 +113,9 @@ void _paintHighlightMaskFallback({
     viewportRect.height,
   );
 
-  _fallbackMaskPaint.color = maskConfig.maskColor.withValues(
-    alpha: effectiveAlpha,
-  ).toFlutterColor();
+  _fallbackMaskPaint.color = maskConfig.maskColor
+      .withValues(alpha: effectiveAlpha)
+      .toFlutterColor();
   final visibleHoles = _collectVisibleHighlightHoles(
     highlights: highlights,
     viewportRect: viewportRect,

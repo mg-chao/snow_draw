@@ -4,11 +4,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/render/text/text_renderer.dart';
+import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

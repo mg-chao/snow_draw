@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
@@ -16,7 +15,6 @@ import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
@@ -29,11 +27,13 @@ import 'package:snow_draw_core/draw/types/snap_guides.dart';
 import 'package:snow_draw_core/draw/utils/arrow_binding_highlight.dart';
 import 'package:snow_draw_core/draw/utils/binding_highlight_visibility.dart';
 import 'package:snow_draw_core/draw/utils/selection_calculator.dart';
+
 import '../../extensions/draw_color_extensions.dart';
 import '../../render/arrow/arrow_visual_cache.dart';
 import '../../render/element_renderer.dart';
 import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
+import '../../services/text/flutter_text_layout.dart';
 import 'binding_highlight_style.dart';
 import 'filter_scene_compositor.dart';
 import 'free_draw_creation_preview_cache.dart';

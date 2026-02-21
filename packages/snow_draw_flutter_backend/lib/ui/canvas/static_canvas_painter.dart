@@ -302,12 +302,12 @@ class StaticCanvasPainter extends CustomPainter {
     );
     final majorStep = baseSize * majorEveryFactor;
 
-    final minorColor = config.lineColor.withValues(
-      alpha: config.lineOpacity * minorOpacityRatio * 0.5,
-    ).toFlutterColor();
-    final majorColor = config.lineColor.withValues(
-      alpha: config.majorLineOpacity,
-    ).toFlutterColor();
+    final minorColor = config.lineColor
+        .withValues(alpha: config.lineOpacity * minorOpacityRatio * 0.5)
+        .toFlutterColor();
+    final majorColor = config.lineColor
+        .withValues(alpha: config.majorLineOpacity)
+        .toFlutterColor();
     final minorPaint = _minorGridPaint
       ..strokeWidth = minorStrokeWidth
       ..color = minorColor;

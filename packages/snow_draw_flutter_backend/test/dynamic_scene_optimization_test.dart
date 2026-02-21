@@ -3,7 +3,6 @@ import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_like_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
@@ -25,6 +24,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
+import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_scene_optimization.dart';
 
 void main() {

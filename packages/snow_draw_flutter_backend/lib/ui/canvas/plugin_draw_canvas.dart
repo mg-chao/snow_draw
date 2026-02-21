@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' hide TextLayoutMetrics;
-
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/coordinates/element_space.dart';
@@ -24,7 +23,6 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
-import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/plugin_system.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
@@ -41,10 +39,12 @@ import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart' as draw_hit_test;
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
+
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
 import '../../render/geometry/arrow_geometry.dart';
 import '../../render/text/text_renderer.dart';
+import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
