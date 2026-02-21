@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -14,34 +16,23 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
+const _textId = 'text-1';
+const _baseText = 'before';
+
 void main() {
   group('FinishTextEdit history consistency', () {
     test('UpdateTextEdit ignores repeated text payloads', () async {
-      final store = _createStore(
-        initialState: _stateWithActiveTextEdit(
-          elementId: 'text-1',
-          initialText: 'before',
-          draftText: 'before',
-        ),
-      );
-      addTearDown(store.dispose);
+      final store = _storeWithActiveTextEdit();
 
       final before = store.state;
 
-      await store.dispatch(const UpdateTextEdit(text: 'before'));
+      await store.dispatch(const UpdateTextEdit(text: _baseText));
 
       expect(store.state, same(before));
     });
 
     test('UpdateTextEdit applies provided draft rect override', () async {
-      final store = _createStore(
-        initialState: _stateWithActiveTextEdit(
-          elementId: 'text-1',
-          initialText: 'before',
-          draftText: 'before',
-        ),
-      );
-      addTearDown(store.dispose);
+      final store = _storeWithActiveTextEdit();
 
       const overrideRect = DrawRect(minX: 4, minY: 5, maxX: 104, maxY: 48);
       await store.dispatch(
@@ -59,16 +50,12 @@ void main() {
       'UpdateTextEdit shrinks fixed-width text edit bounds to fit content',
       () async {
         const initialRect = DrawRect(minX: 10, minY: 10, maxX: 210, maxY: 210);
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'seed',
-            draftText: 'seed',
-            rect: initialRect,
-            autoResize: false,
-          ),
+        final store = _storeWithActiveTextEdit(
+          initialText: 'seed',
+          draftText: 'seed',
+          rect: initialRect,
+          autoResize: false,
         );
-        addTearDown(store.dispose);
 
         const nextText = 'short';
         const nextData = TextData(text: nextText, autoResize: false);
@@ -91,16 +78,12 @@ void main() {
       'FinishTextEdit persists shrunk bounds for fixed-width text elements',
       () async {
         const initialRect = DrawRect(minX: 10, minY: 10, maxX: 210, maxY: 210);
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'seed',
-            draftText: 'seed',
-            rect: initialRect,
-            autoResize: false,
-          ),
+        final store = _storeWithActiveTextEdit(
+          initialText: 'seed',
+          draftText: 'seed',
+          rect: initialRect,
+          autoResize: false,
         );
-        addTearDown(store.dispose);
 
         const nextText = 'short';
         const nextData = TextData(text: nextText, autoResize: false);
@@ -111,58 +94,37 @@ void main() {
 
         await store.dispatch(
           const FinishTextEdit(
-            elementId: 'text-1',
+            elementId: _textId,
             text: nextText,
             isNew: false,
           ),
         );
 
-        final element = store.state.domain.document.getElementById('text-1');
+        final element = store.state.domain.document.getElementById(_textId);
         expect(element, isNotNull);
         expect(element!.rect, equals(expectedRect));
       },
     );
 
-    test(
-      'undo restores text content when action payload matches session',
-      () async {
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'before',
-            draftText: 'before',
-          ),
-        );
-        addTearDown(store.dispose);
+    test('undo restores text content for finished edits', () async {
+      final store = _storeWithActiveTextEdit();
 
-        await store.dispatch(
-          const FinishTextEdit(
-            elementId: 'text-1',
-            text: 'after',
-            isNew: false,
-          ),
-        );
+      await store.dispatch(
+        const FinishTextEdit(elementId: _textId, text: 'after', isNew: false),
+      );
 
-        expect(_textOf(store, 'text-1'), 'after');
-        expect(store.canUndo, isTrue);
+      expect(_textOf(store, _textId), 'after');
+      expect(store.canUndo, isTrue);
 
-        await store.dispatch(const Undo());
+      await store.dispatch(const Undo());
 
-        expect(_textOf(store, 'text-1'), 'before');
-      },
-    );
+      expect(_textOf(store, _textId), _baseText);
+    });
 
     test(
       'undo still restores text when action payload elementId is stale',
       () async {
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'before',
-            draftText: 'before',
-          ),
-        );
-        addTearDown(store.dispose);
+        final store = _storeWithActiveTextEdit();
 
         await store.dispatch(
           const FinishTextEdit(
@@ -172,25 +134,22 @@ void main() {
           ),
         );
 
-        expect(_textOf(store, 'text-1'), 'after');
+        expect(_textOf(store, _textId), 'after');
         expect(store.canUndo, isTrue);
 
         await store.dispatch(const Undo());
 
-        expect(_textOf(store, 'text-1'), 'before');
+        expect(_textOf(store, _textId), _baseText);
       },
     );
 
     test(
       'undo removes created text when action payload marks session as existing',
       () async {
-        final store = _createStore(
-          initialState: _stateWithNewTextEdit(
-            elementId: 'text-new',
-            draftText: '',
-          ),
+        final store = _storeWithNewTextEdit(
+          elementId: 'text-new',
+          draftText: '',
         );
-        addTearDown(store.dispose);
 
         await store.dispatch(
           const FinishTextEdit(
@@ -212,48 +171,33 @@ void main() {
     test(
       'undo restores deleted text when action payload marks session as new',
       () async {
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'before',
-            draftText: 'before',
-          ),
-        );
-        addTearDown(store.dispose);
+        final store = _storeWithActiveTextEdit();
 
         await store.dispatch(
           const FinishTextEdit(elementId: 'stale-id', text: '   ', isNew: true),
         );
 
-        expect(_elementExists(store, 'text-1'), isFalse);
+        expect(_elementExists(store, _textId), isFalse);
         expect(store.canUndo, isTrue);
 
         await store.dispatch(const Undo());
 
-        expect(_textOf(store, 'text-1'), 'before');
+        expect(_textOf(store, _textId), _baseText);
       },
     );
 
     test(
       'finishing unchanged text keeps the document snapshot intact',
       () async {
-        final alignedRect = _autoResizeTextRect('before');
-        final store = _createStore(
-          initialState: _stateWithActiveTextEdit(
-            elementId: 'text-1',
-            initialText: 'before',
-            draftText: 'before',
-            rect: alignedRect,
-          ),
-        );
-        addTearDown(store.dispose);
+        final alignedRect = _autoResizeTextRect(_baseText);
+        final store = _storeWithActiveTextEdit(rect: alignedRect);
 
         final before = store.state;
 
         await store.dispatch(
           const FinishTextEdit(
-            elementId: 'text-1',
-            text: 'before',
+            elementId: _textId,
+            text: _baseText,
             isNew: false,
           ),
         );
@@ -264,6 +208,40 @@ void main() {
       },
     );
   });
+}
+
+DefaultDrawStore _storeWithActiveTextEdit({
+  String elementId = _textId,
+  String initialText = _baseText,
+  String draftText = _baseText,
+  DrawRect? rect,
+  bool autoResize = true,
+}) {
+  final store = _createStore(
+    initialState: _stateWithActiveTextEdit(
+      elementId: elementId,
+      initialText: initialText,
+      draftText: draftText,
+      rect: rect,
+      autoResize: autoResize,
+    ),
+  );
+  addTearDown(store.dispose);
+  return store;
+}
+
+DefaultDrawStore _storeWithNewTextEdit({
+  required String elementId,
+  required String draftText,
+}) {
+  final store = _createStore(
+    initialState: _stateWithNewTextEdit(
+      elementId: elementId,
+      draftText: draftText,
+    ),
+  );
+  addTearDown(store.dispose);
+  return store;
 }
 
 DefaultDrawStore _createStore({required DrawState initialState}) {
@@ -334,12 +312,8 @@ DrawState _stateWithNewTextEdit({
 }
 
 String _textOf(DefaultDrawStore store, String elementId) {
-  final element = store.state.domain.document.getElementById(elementId);
-  final data = element?.data;
-  if (data is! TextData) {
-    return '';
-  }
-  return data.text;
+  final element = store.state.domain.document.getElementById(elementId)!;
+  return (element.data as TextData).text;
 }
 
 bool _elementExists(DefaultDrawStore store, String elementId) =>
@@ -356,9 +330,7 @@ DrawRect _autoResizeTextRect(
     layout.lineHeight,
   );
   final width = layout.size.width + horizontalPadding * 2;
-  final height = layout.size.height > layout.lineHeight
-      ? layout.size.height
-      : layout.lineHeight;
+  final height = math.max(layout.size.height, layout.lineHeight);
   return DrawRect(
     minX: originX,
     minY: originY,
@@ -372,9 +344,7 @@ DrawRect _fixedWidthTextRect({
   required TextData data,
 }) {
   final layout = layoutText(data: data, maxWidth: currentRect.width);
-  final height = layout.size.height > layout.lineHeight
-      ? layout.size.height
-      : layout.lineHeight;
+  final height = math.max(layout.size.height, layout.lineHeight);
   return DrawRect(
     minX: currentRect.minX,
     minY: currentRect.minY,
