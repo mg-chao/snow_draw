@@ -2,7 +2,8 @@ import 'package:meta/meta.dart';
 
 /// Signals that scene encoding is unavailable for the current element state.
 ///
-/// Backends should fall back to legacy element rendering when this is thrown.
+/// Backends should gracefully fall back to their generic unsupported-element
+/// rendering path when this is thrown.
 @immutable
 final class SceneEncodingNotSupported implements Exception {
   /// Creates an unsupported-scene encoding signal.

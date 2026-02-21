@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/elements/core/element_scene_encoder.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/render/scene/scene_encoding_not_supported.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
@@ -32,6 +33,15 @@ void main() {
       returnsNormally,
     );
     expect(counters.sceneEncodes, 0);
+  });
+
+  test('falls back safely when scene encoding is not supported', () {
+    final elementRegistry = _buildElementRegistryWithUnsupportedEncoder();
+
+    expect(
+      () => _renderElement(elementRegistry: elementRegistry),
+      returnsNormally,
+    );
   });
 
   test('falls back safely when element type is unknown', () {
@@ -64,6 +74,18 @@ DefaultElementRegistry _buildElementRegistryWithoutSceneEncoder() =>
         hitTester: const _NoopHitTester(),
         createDefaultData: _SceneTestData.new,
         fromJson: (_) => const _SceneTestData(),
+      ),
+    );
+
+DefaultElementRegistry _buildElementRegistryWithUnsupportedEncoder() =>
+    DefaultElementRegistry()..register<_SceneTestData>(
+      ElementDefinition<_SceneTestData>(
+        typeId: _SceneTestData.typeIdToken,
+        displayName: 'scene-test',
+        hitTester: const _NoopHitTester(),
+        createDefaultData: _SceneTestData.new,
+        fromJson: (_) => const _SceneTestData(),
+        sceneEncoder: const _UnsupportedSceneEncoder(),
       ),
     );
 
@@ -144,4 +166,15 @@ class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
       ],
     );
   }
+}
+
+class _UnsupportedSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
+  const _UnsupportedSceneEncoder();
+
+  @override
+  RenderScene encodeScene({
+    required ElementState element,
+    required double scaleFactor,
+    String? localeTag,
+  }) => throw const SceneEncodingNotSupported('test-only unsupported scene');
 }

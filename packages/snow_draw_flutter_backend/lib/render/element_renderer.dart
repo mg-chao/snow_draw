@@ -5,6 +5,7 @@ import 'package:flutter/painting.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry_interface.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/render/scene/scene_encoding_not_supported.dart';
 import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
@@ -18,6 +19,7 @@ enum _SceneRenderResult {
   rendered,
   missingDefinition,
   missingSceneEncoder,
+  unsupported,
   failed,
 }
 
@@ -141,6 +143,9 @@ class ElementRenderer {
           'using unknown-element fallback',
           {'typeId': element.typeId.value},
         );
+      case _SceneRenderResult.unsupported:
+        // Unsupported reason/details are logged by _renderSceneIfAvailable.
+        break;
       case _SceneRenderResult.failed:
         // Error details are emitted by _renderSceneIfAvailable.
         break;
@@ -173,6 +178,12 @@ class ElementRenderer {
       );
       _sceneRenderer.renderScene(canvas: canvas, scene: scene);
       return _SceneRenderResult.rendered;
+    } on SceneEncodingNotSupported catch (signal) {
+      _renderFallbackLog.warning(
+        'Scene encoding not supported, using unknown-element fallback',
+        {'typeId': element.typeId.value, 'reason': signal.reason},
+      );
+      return _SceneRenderResult.unsupported;
     } on Object catch (error, stackTrace) {
       _renderFallbackLog.warning(
         'Scene renderer failed, using unknown-element fallback',
