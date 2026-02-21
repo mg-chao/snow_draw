@@ -1,8 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/input/input_event.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/frame_aligned_pointer_move_dispatcher.dart';
 
 void main() {

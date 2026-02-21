@@ -1,9 +1,7 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/free_draw_creation_preview_cache.dart';
 
 const _defaultStrokeColor = Color(0xFF1576FE);
