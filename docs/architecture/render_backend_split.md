@@ -101,6 +101,7 @@ This verifies:
 - built-in core scene encoder coverage in element registry
 - draw config default primitive contract stability
 - action payload immutability contract for collection-backed actions
+- `DrawColor` ARGB32 channel/update behavior stability
 - backend visual registration coverage for built-in core elements
 - backend built-in icon mapping compatibility
 - backend package entrypoint export contract for app boundary usage
