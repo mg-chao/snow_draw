@@ -1,6 +1,4 @@
-﻿import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Resolves serial-number specific interaction categories.
 class SerialNumberInteractionClassifier {

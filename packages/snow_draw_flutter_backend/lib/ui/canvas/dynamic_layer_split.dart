@@ -1,7 +1,4 @@
-﻿import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Resolves the first document index rendered on the dynamic canvas layer.
 ///
