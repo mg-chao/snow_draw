@@ -47,6 +47,7 @@ const _allowedExports = <String>{
   'draw/store/draw_store_interface.dart',
   'draw/store/selector.dart',
   'draw/types/draw_color.dart',
+  'draw/types/edit_context.dart',
   'draw/types/element_style.dart',
   'draw/types/draw_point.dart',
   'draw/types/draw_rect.dart',

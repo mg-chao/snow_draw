@@ -1,9 +1,4 @@
-﻿import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
-import 'package:snow_draw_core/draw/types/edit_context.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Returns true when only an in-progress lightweight line interaction changed.
 ///
