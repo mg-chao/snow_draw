@@ -42,6 +42,7 @@ Boundary checks are enforced with Melos scripts:
 - `dart run melos run check:backend-legacy`
 - `dart run melos run check:app-backend-import-boundary`
 - `dart run melos run check:architecture`
+- `dart run melos run check:compatibility-contracts`
 
 See `docs/architecture/render_backend_split.md` for detailed contracts and
 extension guidance.

@@ -75,6 +75,18 @@ This aggregates:
 - `check:backend-legacy`
 - `check:app-backend-import-boundary`
 
+Run compatibility contract checks with:
+
+```bash
+dart run melos run check:compatibility-contracts
+```
+
+This verifies:
+
+- built-in element JSON roundtrip compatibility
+- built-in element type id token stability
+- backend visual registration coverage for built-in core elements
+
 ## Adding a New Rendering Backend
 
 1. Create a new package (for example `snow_draw_skia_backend`).
