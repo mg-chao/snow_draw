@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_scene_encoder.dart';
@@ -7,6 +5,7 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_scene_encoder.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -29,7 +28,7 @@ void main() {
             DrawPoint(x: 0.65, y: 0.9),
             DrawPoint(x: 1, y: 0.45),
           ],
-          color: Color(0xFF203040),
+          color: DrawColor(0xFF203040),
           strokeStyle: StrokeStyle.dotted,
         ),
       );
@@ -57,7 +56,7 @@ void main() {
             DrawPoint(x: 1, y: 1),
             DrawPoint.zero,
           ],
-          fillColor: Color(0x44000000),
+          fillColor: DrawColor(0x44000000),
           fillStyle: FillStyle.line,
         ),
       );
@@ -86,7 +85,7 @@ void main() {
         opacity: 1,
         zIndex: 0,
         data: RectangleData(
-          color: Color(0xFF223344),
+          color: DrawColor(0xFF223344),
           strokeStyle: StrokeStyle.dotted,
         ),
       );
@@ -108,7 +107,7 @@ void main() {
         opacity: 1,
         zIndex: 0,
         data: RectangleData(
-          fillColor: Color(0x44000000),
+          fillColor: DrawColor(0x44000000),
           fillStyle: FillStyle.crossLine,
         ),
       );

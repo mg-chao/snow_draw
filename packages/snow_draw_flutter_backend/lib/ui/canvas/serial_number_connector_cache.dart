@@ -10,6 +10,7 @@ import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import '../../extensions/draw_color_extensions.dart';
 import 'serial_number_connection_painter.dart';
 
 /// Cached serial number connector resolver.
@@ -402,7 +403,9 @@ class SerialNumberConnectorCache {
       return null;
     }
 
-    final color = serialData.color.withValues(alpha: opacity);
+    final color = serialData.color
+        .withValues(alpha: opacity)
+        .toFlutterColor();
     final paint = _paintCache.getOrCreate(
       _PaintKey(color: color, strokeWidth: lineWidth),
       () => Paint()

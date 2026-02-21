@@ -12,12 +12,12 @@ class HighlightMaskConfig {
        );
 
   /// Mask color applied to the canvas.
-  final Color maskColor;
+  final DrawColor maskColor;
 
   /// Mask opacity multiplier applied to [maskColor].
   final double maskOpacity;
 
-  HighlightMaskConfig copyWith({Color? maskColor, double? maskOpacity}) {
+  HighlightMaskConfig copyWith({DrawColor? maskColor, double? maskOpacity}) {
     final nextMaskColor = maskColor ?? this.maskColor;
     final nextMaskOpacity = maskOpacity ?? this.maskOpacity;
     if (nextMaskColor == this.maskColor &&

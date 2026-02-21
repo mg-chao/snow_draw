@@ -82,7 +82,9 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     Rect circleRect,
     double fillOpacity,
   ) {
-    final fillColor = data.fillColor.withValues(alpha: fillOpacity);
+    final fillColor = Color(
+      data.fillColor.withValues(alpha: fillOpacity).toARGB32(),
+    );
     switch (data.fillStyle) {
       case FillStyle.solid:
         final paint = Paint()
@@ -129,7 +131,7 @@ class SerialNumberRenderer extends ElementTypeRenderer {
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..color = data.color.withValues(alpha: strokeOpacity)
+      ..color = Color(data.color.withValues(alpha: strokeOpacity).toARGB32())
       ..isAntiAlias = true;
 
     switch (data.strokeStyle) {
@@ -189,7 +191,9 @@ class SerialNumberRenderer extends ElementTypeRenderer {
   ) {
     final layout = layoutSerialNumberText(
       data: data,
-      colorOverride: data.color.withValues(alpha: textOpacity),
+      colorOverride: Color(
+        data.color.withValues(alpha: textOpacity).toARGB32(),
+      ),
       locale: locale,
     );
     final visualCenter =

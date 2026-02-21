@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:snow_draw_flutter_backend/extensions/draw_color_extensions.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'property_descriptor.dart';
 import 'property_ids.dart';
@@ -69,37 +70,37 @@ class ColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.rectangle,
       valueSelector: (context) => context.rectangleStyleValues.color,
-      defaultSelector: (context) => context.rectangleDefaults.color,
+      defaultSelector: (context) => context.rectangleDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.highlight,
       valueSelector: (context) => context.highlightStyleValues.color,
-      defaultSelector: (context) => context.highlightDefaults.color,
+      defaultSelector: (context) => context.highlightDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.arrow,
       valueSelector: (context) => context.arrowStyleValues.color,
-      defaultSelector: (context) => context.arrowDefaults.color,
+      defaultSelector: (context) => context.arrowDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.line,
       valueSelector: (context) => context.lineStyleValues.color,
-      defaultSelector: (context) => context.lineDefaults.color,
+      defaultSelector: (context) => context.lineDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.freeDraw,
       valueSelector: (context) => context.freeDrawStyleValues.color,
-      defaultSelector: (context) => context.freeDrawDefaults.color,
+      defaultSelector: (context) => context.freeDrawDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.text,
       valueSelector: (context) => context.textStyleValues.color,
-      defaultSelector: (context) => context.textDefaults.color,
+      defaultSelector: (context) => context.textDefaults.color.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.serialNumber,
       valueSelector: (context) => context.serialNumberStyleValues.color,
-      defaultSelector: (context) => context.serialNumberDefaults.color,
+      defaultSelector: (context) => context.serialNumberDefaults.color.toFlutterColor(),
     ),
   ];
 
@@ -218,7 +219,7 @@ class HighlightTextStrokeColorPropertyDescriptor
 
   @override
   Color getDefaultValue(StylePropertyContext context) =>
-      context.highlightDefaults.textStrokeColor;
+      context.highlightDefaults.textStrokeColor.toFlutterColor();
 }
 
 /// Property descriptor for stroke width
@@ -329,27 +330,30 @@ class FillColorPropertyDescriptor extends PropertyDescriptor<Color> {
     _PropertySource(
       elementType: ElementType.rectangle,
       valueSelector: (context) => context.rectangleStyleValues.fillColor,
-      defaultSelector: (context) => context.rectangleDefaults.fillColor,
+      defaultSelector: (context) =>
+          context.rectangleDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.line,
       valueSelector: (context) => context.lineStyleValues.fillColor,
-      defaultSelector: (context) => context.lineDefaults.fillColor,
+      defaultSelector: (context) => context.lineDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.freeDraw,
       valueSelector: (context) => context.freeDrawStyleValues.fillColor,
-      defaultSelector: (context) => context.freeDrawDefaults.fillColor,
+      defaultSelector: (context) =>
+          context.freeDrawDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.text,
       valueSelector: (context) => context.textStyleValues.fillColor,
-      defaultSelector: (context) => context.textDefaults.fillColor,
+      defaultSelector: (context) => context.textDefaults.fillColor.toFlutterColor(),
     ),
     _PropertySource(
       elementType: ElementType.serialNumber,
       valueSelector: (context) => context.serialNumberStyleValues.fillColor,
-      defaultSelector: (context) => context.serialNumberDefaults.fillColor,
+      defaultSelector: (context) =>
+          context.serialNumberDefaults.fillColor.toFlutterColor(),
     ),
   ];
 
@@ -487,14 +491,17 @@ class MaskColorPropertyDescriptor extends PropertyDescriptor<Color> {
   @override
   MixedValue<Color> extractValue(StylePropertyContext context) {
     if (context.selectedElementTypes.contains(ElementType.highlight)) {
-      return MixedValue(value: context.highlightMask.maskColor, isMixed: false);
+      return MixedValue(
+        value: context.highlightMask.maskColor.toFlutterColor(),
+        isMixed: false,
+      );
     }
     return const MixedValue(value: null, isMixed: true);
   }
 
   @override
   Color getDefaultValue(StylePropertyContext context) =>
-      context.highlightMask.maskColor;
+      context.highlightMask.maskColor.toFlutterColor();
 }
 
 /// Property descriptor for highlight mask opacity
@@ -532,14 +539,17 @@ class WatermarkColorPropertyDescriptor extends PropertyDescriptor<Color> {
   @override
   MixedValue<Color> extractValue(StylePropertyContext context) {
     if (context.selectedElementTypes.contains(ElementType.watermark)) {
-      return MixedValue(value: context.watermark.color, isMixed: false);
+      return MixedValue(
+        value: context.watermark.color.toFlutterColor(),
+        isMixed: false,
+      );
     }
     return const MixedValue(value: null, isMixed: true);
   }
 
   @override
   Color getDefaultValue(StylePropertyContext context) =>
-      context.watermark.color;
+      context.watermark.color.toFlutterColor();
 }
 
 /// Property descriptor for watermark label text.
@@ -898,7 +908,7 @@ class TextStrokeColorPropertyDescriptor extends PropertyDescriptor<Color> {
 
   @override
   Color getDefaultValue(StylePropertyContext context) =>
-      context.textDefaults.textStrokeColor;
+      context.textDefaults.textStrokeColor.toFlutterColor();
 }
 
 /// Property descriptor for text stroke width

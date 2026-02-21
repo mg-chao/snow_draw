@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/list_equality.dart';
@@ -41,7 +40,7 @@ final class ArrowData extends ElementData
 
   factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
     points: _decodePoints(json['points']),
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
     strokeWidth:
@@ -79,7 +78,7 @@ final class ArrowData extends ElementData
   /// Normalized control points in element-local space (0..1).
   @override
   final List<DrawPoint> points;
-  final Color color;
+  final DrawColor color;
   @override
   final double strokeWidth;
   @override
@@ -107,7 +106,7 @@ final class ArrowData extends ElementData
   @override
   ArrowData copyWith({
     List<DrawPoint>? points,
-    Color? color,
+    DrawColor? color,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
     ArrowType? arrowType,
@@ -155,7 +154,7 @@ final class ArrowData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: update.color ?? color,
+    color: _resolveColor(update.color, color),
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
     arrowType: update.arrowType ?? arrowType,
@@ -302,4 +301,7 @@ final class ArrowData extends ElementData
     }
     return map;
   }
+
+  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
+      next ?? fallback;
 }

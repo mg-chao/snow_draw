@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_scene_encoder.dart';
@@ -7,6 +5,7 @@ import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_scene_encoder.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
@@ -23,8 +22,8 @@ void main() {
         zIndex: 0,
         data: HighlightData(
           shape: HighlightShape.ellipse,
-          color: Color(0x88FFFF00),
-          strokeColor: Color(0xFF112233),
+          color: DrawColor(0x88FFFF00),
+          strokeColor: DrawColor(0xFF112233),
           strokeWidth: 2,
         ),
       );

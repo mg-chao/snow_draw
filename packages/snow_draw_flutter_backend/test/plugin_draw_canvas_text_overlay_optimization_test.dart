@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -14,6 +14,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/models/view_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
@@ -114,7 +115,7 @@ void main() {
         TextData(
           text: 'decorated',
           strokeWidth: 1,
-          fillColor: Colors.yellow.withValues(alpha: 0.3),
+          fillColor: DrawColor(Colors.yellow.withValues(alpha: 0.3).toARGB32()),
         ),
       );
       addTearDown(store.dispose);

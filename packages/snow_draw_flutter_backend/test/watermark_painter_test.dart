@@ -1,8 +1,9 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/watermark_painter.dart';
 
 void main() {
@@ -182,7 +183,7 @@ void main() {
     cache.paint(
       canvas: ui.Canvas(r3),
       viewportSize: size,
-      config: baseConfig.copyWith(color: const ui.Color(0xFF1677FF)),
+      config: baseConfig.copyWith(color: const DrawColor(0xFF1677FF)),
     );
     r3.endRecording();
     expect(cache.debugFallbackPictureBuildCount, 1);
@@ -205,7 +206,7 @@ void main() {
       text: longText,
       gap: ConfigDefaults.maxWatermarkGap,
       opacity: 0.45,
-      color: const ui.Color(0xFF1677FF),
+      color: const DrawColor(0xFF1677FF),
     );
     const background = ui.Color(0xFFFF0000);
 

@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
@@ -31,7 +30,7 @@ final class TextData extends ElementData
 
   factory TextData.fromJson(Map<String, dynamic> json) => TextData(
     text: json['text'] as String? ?? '',
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
     fontSize:
@@ -48,7 +47,7 @@ final class TextData extends ElementData
       raw: json['verticalAlign'],
       fallback: ConfigDefaults.defaultTextVerticalAlign,
     ),
-    fillColor: Color(
+    fillColor: DrawColor(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     fillStyle: _decodeEnum(
@@ -56,7 +55,7 @@ final class TextData extends ElementData
       raw: json['fillStyle'],
       fallback: ConfigDefaults.defaultFillStyle,
     ),
-    strokeColor: Color(
+    strokeColor: DrawColor(
       (json['strokeColor'] as int?) ??
           ConfigDefaults.defaultTextStrokeColor.toARGB32(),
     ),
@@ -73,14 +72,14 @@ final class TextData extends ElementData
   static const typeIdToken = ElementTypeId<TextData>('text');
 
   final String text;
-  final Color color;
+  final DrawColor color;
   final double fontSize;
   final String? fontFamily;
   final TextHorizontalAlign horizontalAlign;
   final TextVerticalAlign verticalAlign;
-  final Color fillColor;
+  final DrawColor fillColor;
   final FillStyle fillStyle;
-  final Color strokeColor;
+  final DrawColor strokeColor;
   final double strokeWidth;
   final double cornerRadius;
   final bool autoResize;
@@ -90,14 +89,14 @@ final class TextData extends ElementData
 
   TextData copyWith({
     String? text,
-    Color? color,
+    DrawColor? color,
     double? fontSize,
     Object? fontFamily = _fontFamilyUnset,
     TextHorizontalAlign? horizontalAlign,
     TextVerticalAlign? verticalAlign,
-    Color? fillColor,
+    DrawColor? fillColor,
     FillStyle? fillStyle,
-    Color? strokeColor,
+    DrawColor? strokeColor,
     double? strokeWidth,
     double? cornerRadius,
     bool? autoResize,
@@ -132,14 +131,14 @@ final class TextData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: update.color,
+    color: _resolveColor(update.color),
     fontSize: update.fontSize,
     fontFamily: update.fontFamily ?? _fontFamilyUnset,
     horizontalAlign: update.textAlign,
     verticalAlign: update.verticalAlign,
-    fillColor: update.fillColor,
+    fillColor: _resolveColor(update.fillColor),
     fillStyle: update.fillStyle,
-    strokeColor: update.textStrokeColor,
+    strokeColor: _resolveColor(update.textStrokeColor),
     strokeWidth: update.textStrokeWidth,
     cornerRadius: update.cornerRadius,
   );
@@ -225,4 +224,6 @@ final class TextData extends ElementData
       orElse: () => fallback,
     );
   }
+
+  static DrawColor? _resolveColor(DrawColor? color) => color;
 }

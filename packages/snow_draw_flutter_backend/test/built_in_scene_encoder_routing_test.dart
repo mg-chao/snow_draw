@@ -19,6 +19,7 @@ import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_d
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_definition.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -35,8 +36,8 @@ void main() {
           opacity: 1,
           zIndex: 0,
           data: RectangleData(
-            fillColor: ui.Color(0xFFCCDDEE),
-            color: ui.Color(0xFF112233),
+            fillColor: DrawColor(0xFFCCDDEE),
+            color: DrawColor(0xFF112233),
             strokeStyle: StrokeStyle.dotted,
             fillStyle: FillStyle.crossLine,
           ),
@@ -126,7 +127,7 @@ void main() {
           zIndex: 0,
           data: HighlightData(
             shape: HighlightShape.ellipse,
-            strokeColor: ui.Color(0xFF123456),
+            strokeColor: DrawColor(0xFF123456),
             strokeWidth: 2,
           ),
         ),
@@ -162,8 +163,8 @@ void main() {
           zIndex: 0,
           data: TextData(
             text: 'Scene',
-            color: ui.Color(0xFF123456),
-            strokeColor: ui.Color(0xFF102030),
+            color: DrawColor(0xFF123456),
+            strokeColor: DrawColor(0xFF102030),
             strokeWidth: 1.5,
             fillStyle: FillStyle.line,
           ),
@@ -184,8 +185,8 @@ void main() {
           zIndex: 0,
           data: SerialNumberData(
             number: 8,
-            color: ui.Color(0xFF102030),
-            fillColor: ui.Color(0xFFCCDDEE),
+            color: DrawColor(0xFF102030),
+            fillColor: DrawColor(0xFFCCDDEE),
             strokeStyle: StrokeStyle.dotted,
             fillStyle: FillStyle.crossLine,
           ),

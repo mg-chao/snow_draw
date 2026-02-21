@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_renderer.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -23,7 +24,7 @@ void main() {
       rotation: 0,
       opacity: 1,
       zIndex: 0,
-      data: HighlightData(color: ui.Color(0xFFFF0000)),
+      data: HighlightData(color: DrawColor(0xFFFF0000)),
     );
 
     const HighlightRenderer().render(
@@ -63,8 +64,8 @@ void main() {
       opacity: 1,
       zIndex: 0,
       data: HighlightData(
-        color: ui.Color(0x00FF0000),
-        strokeColor: ui.Color(0xFFFF0000),
+        color: DrawColor(0x00FF0000),
+        strokeColor: DrawColor(0xFFFF0000),
         strokeWidth: 4,
       ),
     );

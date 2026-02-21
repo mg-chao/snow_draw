@@ -1,11 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show FontLoader;
-
-import '../../core/value_listenable.dart';
-import '../../elements/text_rendering_cache_invalidation.dart';
+import 'package:snow_draw_core/draw/elements/text_rendering_cache_invalidation.dart';
 
 final revisionNotifier = ValueNotifier<int>(0);
 

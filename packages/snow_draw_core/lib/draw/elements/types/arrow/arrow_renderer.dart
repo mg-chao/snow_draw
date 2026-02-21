@@ -44,7 +44,9 @@ class ArrowRenderer extends ElementTypeRenderer {
     }
 
     final rect = element.rect;
-    final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    final strokeColor = Color(
+      data.color.withValues(alpha: strokeOpacity).toARGB32(),
+    );
 
     canvas.save();
     if (element.rotation != 0) {

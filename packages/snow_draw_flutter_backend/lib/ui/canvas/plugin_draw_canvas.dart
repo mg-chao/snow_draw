@@ -44,6 +44,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart' as draw_hit_test;
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
 import '../../extensions/coordinate_service_offset_extensions.dart';
+import '../../extensions/draw_color_extensions.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
 import 'dynamic_layer_split.dart';
@@ -3289,7 +3290,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           : snapshot.data.copyWith(text: text);
       final opacity = snapshot.opacity;
       final textOpacity = (data.color.a * opacity).clamp(0.0, 1.0);
-      final textColor = data.color.withValues(alpha: textOpacity);
+      final textColor = data.color
+          .withValues(alpha: textOpacity)
+          .toFlutterColor();
       final textStyle = buildTextStyle(
         data: data,
         colorOverride: textColor,

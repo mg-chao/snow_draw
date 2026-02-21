@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/list_equality.dart';
@@ -42,10 +41,10 @@ final class LineData extends ElementData
 
   factory LineData.fromJson(Map<String, dynamic> json) => LineData(
     points: _decodePoints(json['points']),
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
-    fillColor: Color(
+    fillColor: DrawColor(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     strokeWidth:
@@ -73,8 +72,8 @@ final class LineData extends ElementData
   /// Normalized control points in element-local space (0..1).
   @override
   final List<DrawPoint> points;
-  final Color color;
-  final Color fillColor;
+  final DrawColor color;
+  final DrawColor fillColor;
   final FillStyle fillStyle;
   @override
   final double strokeWidth;
@@ -103,8 +102,8 @@ final class LineData extends ElementData
   @override
   LineData copyWith({
     List<DrawPoint>? points,
-    Color? color,
-    Color? fillColor,
+    DrawColor? color,
+    DrawColor? fillColor,
     FillStyle? fillStyle,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
@@ -167,8 +166,8 @@ final class LineData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: update.color ?? color,
-    fillColor: update.fillColor ?? fillColor,
+    color: _resolveColor(update.color, color),
+    fillColor: _resolveColor(update.fillColor, fillColor),
     fillStyle: update.fillStyle ?? fillStyle,
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
@@ -315,4 +314,7 @@ final class LineData extends ElementData
     }
     return map;
   }
+
+  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
+      next ?? fallback;
 }

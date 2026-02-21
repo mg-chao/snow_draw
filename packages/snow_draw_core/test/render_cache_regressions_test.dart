@@ -8,6 +8,7 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_visual_ca
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
@@ -17,7 +18,7 @@ void main() {
   test('layoutText paragraph cache respects paint attributes', () {
     const data = TextData(
       text: 'layout-cache-color-regression',
-      color: Colors.black,
+      color: DrawColor(0xFF000000),
     );
 
     final redLayout = layoutText(

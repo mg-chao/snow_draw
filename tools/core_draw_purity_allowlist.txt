@@ -2,7 +2,6 @@
 # Format: path:line:dart:ui or path:line:package:flutter
 # Keep this file in sync with tools/check_core_draw_import_purity.dart.
 
-packages/snow_draw_core/lib/draw/actions/draw_actions.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/config/draw_config.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/edit/arrow/arrow_point_operation.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/elements/core/element_renderer.dart:1:dart:ui
@@ -35,9 +34,7 @@ packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:2:dart:u
 packages/snow_draw_core/lib/draw/elements/types/text/text_renderer.dart:4:package:flutter
 packages/snow_draw_core/lib/draw/elements/types/text/text_scene_encoder.dart:2:dart:ui
 packages/snow_draw_core/lib/draw/elements/types/text/text_scene_encoder.dart:4:package:flutter
-packages/snow_draw_core/lib/draw/services/font/system_font_service_io.dart:5:package:flutter
 packages/snow_draw_core/lib/draw/store/history_manager.dart:1:dart:ui
-packages/snow_draw_core/lib/draw/types/element_style.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/utils/binding_highlight_style.dart:1:dart:ui
 packages/snow_draw_core/lib/draw/utils/stroke_pattern_utils.dart:3:dart:ui
 packages/snow_draw_core/lib/draw/utils/stroke_pattern_utils.dart:5:package:flutter

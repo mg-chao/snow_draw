@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import '../../extensions/draw_color_extensions.dart';
 
 final ModuleLogger _log = LogService.fallback.render;
 
@@ -120,7 +121,7 @@ class HighlightMaskShaderManager {
       shader: shader,
       screenWidth: screenWidth,
       screenHeight: screenHeight,
-      maskColor: maskConfig.maskColor,
+      maskColor: maskConfig.maskColor.toFlutterColor(),
       alpha: effectiveAlpha,
       highlights: visible,
     );

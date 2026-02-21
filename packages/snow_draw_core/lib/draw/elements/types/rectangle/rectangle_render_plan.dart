@@ -55,8 +55,12 @@ class RectangleRenderPlan {
       backend: backend,
       paintFill: paintFill,
       paintStroke: paintStroke,
-      fillColor: data.fillColor.withValues(alpha: fillOpacity),
-      strokeColor: data.color.withValues(alpha: strokeOpacity),
+      fillColor: Color(
+        data.fillColor.withValues(alpha: fillOpacity).toARGB32(),
+      ),
+      strokeColor: Color(
+        data.color.withValues(alpha: strokeOpacity).toARGB32(),
+      ),
     );
   }
 

@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
@@ -27,10 +26,10 @@ final class RectangleData extends ElementData
     cornerRadius:
         (json['cornerRadius'] as num?)?.toDouble() ??
         ConfigDefaults.defaultCornerRadius,
-    fillColor: Color(
+    fillColor: DrawColor(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ??
           (json['strokeColor'] as int?) ??
           ConfigDefaults.defaultColor.toARGB32(),
@@ -51,8 +50,8 @@ final class RectangleData extends ElementData
   );
 
   final double cornerRadius;
-  final Color fillColor;
-  final Color color;
+  final DrawColor fillColor;
+  final DrawColor color;
   final double strokeWidth;
   final StrokeStyle strokeStyle;
   final FillStyle fillStyle;
@@ -62,8 +61,8 @@ final class RectangleData extends ElementData
 
   RectangleData copyWith({
     double? cornerRadius,
-    Color? fillColor,
-    Color? color,
+    DrawColor? fillColor,
+    DrawColor? color,
     double? strokeWidth,
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
@@ -89,8 +88,8 @@ final class RectangleData extends ElementData
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     cornerRadius: update.cornerRadius ?? cornerRadius,
-    fillColor: update.fillColor ?? fillColor,
-    color: update.color ?? color,
+    fillColor: _resolveColor(update.fillColor, fillColor),
+    color: _resolveColor(update.color, color),
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
     fillStyle: update.fillStyle ?? fillStyle,
@@ -141,4 +140,7 @@ final class RectangleData extends ElementData
       orElse: () => fallback,
     );
   }
+
+  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
+      next ?? fallback;
 }

@@ -13,6 +13,7 @@ import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void main() {
   testWidgets(
@@ -70,7 +71,7 @@ void main() {
 
     final nextConfig = store.config.copyWith(
       rectangleStyle: store.config.rectangleStyle.copyWith(
-        color: const Color(0xFF52C41A),
+        color: const DrawColor(0xFF52C41A),
       ),
     );
     await store.dispatch(UpdateConfig(nextConfig));

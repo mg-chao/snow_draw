@@ -1,12 +1,10 @@
-import 'dart:math' as math;
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
 import 'package:snow_draw_core/draw/models/application_state.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -14,6 +12,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -155,17 +154,7 @@ DrawRect _expectedAutoResizeRect({
   required double originX,
   required double originY,
   required TextData data,
-}) {
-  final layout = layoutText(data: data, maxWidth: double.infinity);
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
-    layout.lineHeight,
-  );
-  final height = math.max(layout.lineHeight, layout.size.height);
-  final width = layout.size.width + horizontalPadding * 2;
-  return DrawRect(
-    minX: originX,
-    minY: originY,
-    maxX: originX + width,
-    maxY: originY + height,
-  );
-}
+}) => resolveAutoResizeTextEditingRect(
+  origin: DrawPoint(x: originX, y: originY),
+  data: data,
+);

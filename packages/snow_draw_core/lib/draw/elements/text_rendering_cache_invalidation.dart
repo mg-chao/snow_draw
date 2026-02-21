@@ -2,6 +2,7 @@ import '../core/value_listenable.dart';
 import '../services/text/text_metrics_service.dart';
 
 import 'types/serial_number/serial_number_layout.dart';
+import 'types/text/text_layout.dart';
 import 'types/text/text_renderer.dart';
 
 final _textRenderingCacheRevision = ValueNotifier<int>(0);
@@ -18,6 +19,7 @@ final ValueListenable<int> textRenderingCacheRevisionListenable =
 /// Call this after runtime font registration completes to avoid stale
 /// fallback-glyph paragraphs being reused.
 void invalidateTextRenderingCaches() {
+  clearTextLayoutCaches();
   defaultTextMetricsService.clearCaches();
   clearSerialNumberTextLayoutCache();
   TextRenderer.clearCaches();

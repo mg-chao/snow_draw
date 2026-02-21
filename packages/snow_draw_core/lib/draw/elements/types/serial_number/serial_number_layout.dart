@@ -156,7 +156,7 @@ SerialNumberTextLayout layoutSerialNumberText({
     fontFamily: sanitizedFamily,
     locale: locale,
   );
-  final color = colorOverride ?? data.color;
+  final color = colorOverride ?? Color(data.color.toARGB32());
   final painterKey = _TextPainterKey(geometryKey: geometryKey, color: color);
   final painter = _textPainterCache.getOrCreate(painterKey, () {
     _textPainterBuildCount += 1;

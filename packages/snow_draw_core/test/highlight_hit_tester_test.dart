@@ -1,9 +1,8 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_hit_tester.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -41,7 +40,7 @@ void main() {
 
   test('rectangle highlight with transparent fill still hits inside', () {
     final transparentElement = baseElement.copyWith(
-      data: const HighlightData(color: Color(0x00000000)),
+      data: const HighlightData(color: DrawColor(0x00000000)),
     );
 
     final hit = tester.hitTest(
@@ -56,7 +55,7 @@ void main() {
     final transparentEllipseElement = baseElement.copyWith(
       data: const HighlightData(
         shape: HighlightShape.ellipse,
-        color: Color(0x00000000),
+        color: DrawColor(0x00000000),
       ),
     );
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/services/log/log_service.dart';
+import '../../extensions/draw_color_extensions.dart';
 
 final ModuleLogger _gridShaderLog = LogService.fallback.render;
 
@@ -73,10 +74,10 @@ class GridShaderManager {
 
     final minorColor = config.lineColor.withValues(
       alpha: config.lineOpacity * minorOpacityRatio * 0.5,
-    );
+    ).toFlutterColor();
     final majorColor = config.lineColor.withValues(
       alpha: config.majorLineOpacity,
-    );
+    ).toFlutterColor();
 
     var idx = 0;
     shader

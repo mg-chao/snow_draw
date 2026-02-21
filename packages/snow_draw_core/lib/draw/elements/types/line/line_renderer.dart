@@ -50,7 +50,9 @@ class LineRenderer extends ElementTypeRenderer {
           endPoint: data.points.last,
           strokeWidth: data.strokeWidth,
           strokeStyle: data.strokeStyle,
-          strokeColor: data.color.withValues(alpha: strokeOpacity),
+          strokeColor: Color(
+            data.color.withValues(alpha: strokeOpacity).toARGB32(),
+          ),
         )) {
       return;
     }
@@ -75,10 +77,13 @@ class LineRenderer extends ElementTypeRenderer {
 
     if (shouldFill) {
       final fillPath = cached.getOrBuildClosedFillPath();
+      final fillColor = Color(
+        data.fillColor.withValues(alpha: fillOpacity).toARGB32(),
+      );
       if (data.fillStyle == FillStyle.solid) {
         final paint = Paint()
           ..style = PaintingStyle.fill
-          ..color = data.fillColor.withValues(alpha: fillOpacity)
+          ..color = fillColor
           ..isAntiAlias = true;
         canvas.drawPath(fillPath, paint);
       } else {
@@ -88,7 +93,6 @@ class LineRenderer extends ElementTypeRenderer {
         );
         const lineToSpacingRatio = 4.0;
         final spacing = (fillLineWidth * lineToSpacingRatio).clamp(3.0, 18.0);
-        final fillColor = data.fillColor.withValues(alpha: fillOpacity);
         final fillPaint = buildLineFillPaint(
           spacing: spacing,
           lineWidth: fillLineWidth,
@@ -109,7 +113,9 @@ class LineRenderer extends ElementTypeRenderer {
     }
 
     if (shouldStroke) {
-      final strokeColor = data.color.withValues(alpha: strokeOpacity);
+      final strokeColor = Color(
+        data.color.withValues(alpha: strokeOpacity).toARGB32(),
+      );
       final strokePaint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = data.strokeWidth

@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_layout.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void main() {
   setUp(() {
@@ -13,7 +14,7 @@ void main() {
   test('reuses text geometry when only text color changes', () {
     const data = SerialNumberData(
       number: 42,
-      color: Color(0xFF101010),
+      color: DrawColor(0xFF101010),
       fontSize: 21,
     );
 
@@ -59,10 +60,10 @@ void main() {
   });
 
   test('reuses canonical geometry and painter across font-size changes', () {
-    const baseData = SerialNumberData(number: 7, color: Color(0xFF222222));
+    const baseData = SerialNumberData(number: 7, color: DrawColor(0xFF222222));
     const scaledData = SerialNumberData(
       number: 7,
-      color: Color(0xFF222222),
+      color: DrawColor(0xFF222222),
       fontSize: 32,
     );
     final expectedScale = scaledData.fontSize / baseData.fontSize;

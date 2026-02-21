@@ -60,7 +60,8 @@ class HighlightRenderer extends ElementTypeRenderer {
         canvas: canvas,
         shape: data.shape,
         rect: shapeRect,
-        paint: _fillPaint..color = data.color.withValues(alpha: fillOpacity),
+        paint: _fillPaint
+          ..color = Color(data.color.withValues(alpha: fillOpacity).toARGB32()),
       );
     }
 
@@ -71,7 +72,9 @@ class HighlightRenderer extends ElementTypeRenderer {
         rect: shapeRect,
         paint: _strokePaint
           ..strokeWidth = data.strokeWidth
-          ..color = data.strokeColor.withValues(alpha: strokeOpacity),
+          ..color = Color(
+            data.strokeColor.withValues(alpha: strokeOpacity).toARGB32(),
+          ),
       );
     }
 

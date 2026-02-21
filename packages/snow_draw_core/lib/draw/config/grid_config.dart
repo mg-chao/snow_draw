@@ -36,7 +36,7 @@ class GridConfig {
   final double size;
 
   /// Base color for grid lines.
-  final Color lineColor;
+  final DrawColor lineColor;
 
   /// Opacity for minor grid lines.
   final double lineOpacity;
@@ -63,7 +63,7 @@ class GridConfig {
   GridConfig copyWith({
     bool? enabled,
     double? size,
-    Color? lineColor,
+    DrawColor? lineColor,
     double? lineOpacity,
     double? majorLineOpacity,
     double? lineWidth,

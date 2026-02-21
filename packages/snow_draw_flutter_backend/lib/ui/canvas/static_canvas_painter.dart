@@ -11,6 +11,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import '../../extensions/draw_color_extensions.dart';
 import '../../render/element_renderer.dart';
 import 'filter_scene_compositor.dart';
 import 'grid_shader_painter.dart';
@@ -209,7 +210,7 @@ class StaticCanvasPainter extends CustomPainter {
   /// Reuses a cached [Paint] when the background color hasn't changed
   /// to avoid a native allocation on every frame.
   void _drawBackground(Canvas canvas, Size size) {
-    final color = renderKey.canvasConfig.backgroundColor;
+    final color = renderKey.canvasConfig.backgroundColor.toFlutterColor();
     final paint = _resolveBackgroundPaint(color);
     canvas.drawRect(Offset.zero & size, paint);
   }
@@ -303,10 +304,10 @@ class StaticCanvasPainter extends CustomPainter {
 
     final minorColor = config.lineColor.withValues(
       alpha: config.lineOpacity * minorOpacityRatio * 0.5,
-    );
+    ).toFlutterColor();
     final majorColor = config.lineColor.withValues(
       alpha: config.majorLineOpacity,
-    );
+    ).toFlutterColor();
     final minorPaint = _minorGridPaint
       ..strokeWidth = minorStrokeWidth
       ..color = minorColor;

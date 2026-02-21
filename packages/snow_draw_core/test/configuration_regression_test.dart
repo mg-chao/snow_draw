@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:ui' show Color;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 Future<void> _flushAsync() => Future<void>.delayed(Duration.zero);
@@ -28,7 +28,7 @@ void main() {
     test('combines partial updates queued during freeze', () async {
       final nextSelection = manager.current.selection.copyWith(padding: 12);
       final nextCanvas = manager.current.canvas.copyWith(
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: const DrawColor(0xFFF5F5F5),
       );
 
       manager.freeze();
@@ -88,7 +88,7 @@ void main() {
         manager.update(
           baseConfig.copyWith(
             canvas: baseConfig.canvas.copyWith(
-              backgroundColor: const Color(0xFF112233),
+              backgroundColor: const DrawColor(0xFF112233),
             ),
           ),
         ),
@@ -104,7 +104,9 @@ void main() {
       );
       expect(
         manager.updateCanvas(
-          baseConfig.canvas.copyWith(backgroundColor: const Color(0xFF445566)),
+          baseConfig.canvas.copyWith(
+            backgroundColor: const DrawColor(0xFF445566),
+          ),
         ),
         isFalse,
       );
@@ -147,12 +149,12 @@ void main() {
           serialNumberStyle: const ElementStyleConfig(
             serialNumber: 41,
             fontSize: 19,
-            color: Color(0xFF334455),
+            color: DrawColor(0xFF334455),
           ),
         );
 
         final nextElementStyle = config.elementStyle.copyWith(
-          color: const Color(0xFF009966),
+          color: const DrawColor(0xFF009966),
           fontSize: 34,
         );
 
@@ -170,22 +172,22 @@ void main() {
     test('does not reset specialized styles on value-equal element style', () {
       final config = DrawConfig(
         elementStyle: const ElementStyleConfig(
-          color: Color(0xFF112233),
+          color: DrawColor(0xFF112233),
           strokeWidth: 3,
         ),
         serialNumberStyle: const ElementStyleConfig(
           serialNumber: 9,
-          color: Color(0xFFAA3300),
+          color: DrawColor(0xFFAA3300),
           fontSize: 24,
         ),
         filterStyle: const ElementStyleConfig(
-          color: Color(0xFF334455),
+          color: DrawColor(0xFF334455),
           filterType: CanvasFilterType.gaussianBlur,
           filterStrength: 0.9,
         ),
         highlightStyle: const ElementStyleConfig(
-          color: Color(0xFF22AA55),
-          textStrokeColor: Color(0xFF101010),
+          color: DrawColor(0xFF22AA55),
+          textStrokeColor: DrawColor(0xFF101010),
           textStrokeWidth: 1.5,
           highlightShape: HighlightShape.ellipse,
         ),

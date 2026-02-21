@@ -9,6 +9,7 @@ import 'package:snow_draw_core/draw/services/log/log_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
+import '../extensions/draw_color_extensions.dart';
 import 'scene/scene_primitive_renderer.dart';
 
 final ModuleLogger _renderFallbackLog = LogService.fallback.render;
@@ -193,10 +194,10 @@ class ElementRenderer {
     );
 
     final handleFillPaint = _selectionHandleFillPaint
-      ..color = config.render.cornerFillColor;
+      ..color = config.render.cornerFillColor.toFlutterColor();
     final handleStrokePaint = _selectionHandleStrokePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor;
+      ..color = config.render.strokeColor.toFlutterColor();
 
     final handleSize = config.render.controlPointSize / scale;
     final cornerRadius = config.render.cornerRadius / scale;
@@ -253,7 +254,7 @@ class ElementRenderer {
 
     final paint = _selectionOutlinePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor;
+      ..color = config.render.strokeColor.toFlutterColor();
 
     canvas.save();
     _applyRotation(canvas, rotation: rotation, rotationCenter: rotationCenter);
@@ -290,10 +291,10 @@ class ElementRenderer {
     );
 
     final handlePaint = _selectionHandleFillPaint
-      ..color = config.render.cornerFillColor;
+      ..color = config.render.cornerFillColor.toFlutterColor();
     final handleStrokePaint = _selectionHandleStrokePaint
       ..strokeWidth = config.render.strokeWidth / scale
-      ..color = config.render.strokeColor;
+      ..color = config.render.strokeColor.toFlutterColor();
 
     final handleRadius = config.render.controlPointSize / (2 * scale);
 

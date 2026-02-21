@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_scene_encoder.dart';
@@ -7,6 +5,7 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_scene_encoder.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -137,7 +136,7 @@ void main() {
         opacity: 1,
         zIndex: 0,
         data: FreeDrawData(
-          fillColor: Color(0x44000000),
+          fillColor: DrawColor(0x44000000),
           fillStyle: FillStyle.crossLine,
           points: <DrawPoint>[
             DrawPoint.zero,

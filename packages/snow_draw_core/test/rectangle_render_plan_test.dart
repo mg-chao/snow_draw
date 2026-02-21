@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_render_plan.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
@@ -10,8 +9,8 @@ void main() {
     test('uses solid fast path for solid styles', () {
       final plan = RectangleRenderPlan.resolve(
         data: const RectangleData(
-          fillColor: Color(0x3300FF00),
-          color: Color(0xFF0000FF),
+          fillColor: DrawColor(0x3300FF00),
+          color: DrawColor(0xFF0000FF),
         ),
         elementOpacity: 1,
         shaderReady: true,
@@ -56,7 +55,7 @@ void main() {
 
     test('disables fill and stroke painting when opacity resolves to zero', () {
       final plan = RectangleRenderPlan.resolve(
-        data: const RectangleData(color: Color(0x00000000)),
+        data: const RectangleData(color: DrawColor(0x00000000)),
         elementOpacity: 0,
         shaderReady: true,
       );

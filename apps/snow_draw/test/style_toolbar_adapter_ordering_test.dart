@@ -18,6 +18,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/selector.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -59,8 +60,11 @@ void main() {
           .getElementById('r1')
           ?.data;
       expect(updatedData, isA<RectangleData>());
-      expect((updatedData! as RectangleData).color, secondColor);
-      expect(store.config.rectangleStyle.color, secondColor);
+      expect(
+        (updatedData! as RectangleData).color,
+        const DrawColor(0xFFAA0055),
+      );
+      expect(store.config.rectangleStyle.color, const DrawColor(0xFFAA0055));
     },
   );
 }
@@ -162,8 +166,9 @@ class _OutOfOrderStyleStore implements DrawStore {
       }
       final data = element.data;
       if (data is RectangleData) {
+        final nextColor = action.color;
         updatedElements.add(
-          element.copyWith(data: data.copyWith(color: action.color)),
+          element.copyWith(data: data.copyWith(color: nextColor)),
         );
         continue;
       }

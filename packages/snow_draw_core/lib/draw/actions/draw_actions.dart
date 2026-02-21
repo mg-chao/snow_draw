@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 import '../config/draw_config.dart';
 import '../edit/core/edit_cancel_reason.dart';
 import '../edit/core/edit_modifiers.dart';
@@ -9,6 +7,7 @@ import '../elements/core/element_type_id.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/interaction_state.dart';
+import '../types/draw_color.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/edit_operation_id.dart';
@@ -316,8 +315,8 @@ class UpdateElementsStyle extends DrawAction {
   }) : elementIds = _freezeList(elementIds);
 
   final List<String> elementIds;
-  final Color? color;
-  final Color? fillColor;
+  final DrawColor? color;
+  final DrawColor? fillColor;
   final double? strokeWidth;
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
@@ -332,7 +331,7 @@ class UpdateElementsStyle extends DrawAction {
   final TextHorizontalAlign? textAlign;
   final TextVerticalAlign? verticalAlign;
   final double? opacity;
-  final Color? textStrokeColor;
+  final DrawColor? textStrokeColor;
   final double? textStrokeWidth;
   final HighlightShape? highlightShape;
   final int? serialNumber;

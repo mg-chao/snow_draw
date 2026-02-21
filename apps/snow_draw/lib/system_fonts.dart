@@ -1,6 +1,6 @@
-import 'package:snow_draw_core/draw/services/font/system_font_service.dart';
+import 'package:snow_draw_flutter_backend/services/font/flutter_system_font_service.dart';
 
-const SystemFontService _service = SystemFontService.instance;
+const FlutterSystemFontService _service = FlutterSystemFontService.instance;
 
 Future<List<String>> loadSystemFontFamilies() => _service.listFamilies();
 

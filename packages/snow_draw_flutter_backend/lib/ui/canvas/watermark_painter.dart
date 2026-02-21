@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import '../../extensions/draw_color_extensions.dart';
 
 /// Hard cap on the number of tiles to prevent runaway loops on
 /// extreme viewport/gap combinations.
@@ -114,7 +115,7 @@ class _WatermarkRenderConfig {
     final effectiveAlpha = (config.color.a * config.opacity).clamp(0.0, 1.0);
     return _WatermarkRenderConfig(
       layout: _WatermarkLayoutConfig.fromConfig(config),
-      color: config.color.withValues(alpha: effectiveAlpha),
+      color: config.color.withValues(alpha: effectiveAlpha).toFlutterColor(),
       effectiveAlpha: effectiveAlpha,
       rotationRadians: config.angle * math.pi / 180,
     );

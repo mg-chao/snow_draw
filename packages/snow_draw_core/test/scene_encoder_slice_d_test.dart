@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_scene_encoder.dart';
@@ -7,6 +5,7 @@ import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_scene_encoder.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
@@ -23,7 +22,7 @@ void main() {
         zIndex: 0,
         data: TextData(
           text: 'Scene',
-          color: Color(0xFF112233),
+          color: DrawColor(0xFF112233),
           horizontalAlign: TextHorizontalAlign.center,
         ),
       );
@@ -47,7 +46,7 @@ void main() {
         zIndex: 0,
         data: TextData(
           text: 'Scene',
-          strokeColor: Color(0xFF102030),
+          strokeColor: DrawColor(0xFF102030),
           strokeWidth: 1.5,
         ),
       );
@@ -70,7 +69,7 @@ void main() {
         zIndex: 0,
         data: TextData(
           text: 'Scene',
-          fillColor: Color(0x44000000),
+          fillColor: DrawColor(0x44000000),
           cornerRadius: 6,
         ),
       );
@@ -99,7 +98,7 @@ void main() {
         zIndex: 0,
         data: TextData(
           text: 'Scene',
-          fillColor: Color(0x44000000),
+          fillColor: DrawColor(0x44000000),
           fillStyle: FillStyle.line,
         ),
       );
@@ -131,8 +130,8 @@ void main() {
           zIndex: 0,
           data: SerialNumberData(
             number: 12,
-            color: Color(0xFF112233),
-            fillColor: Color(0xFFCCDDEE),
+            color: DrawColor(0xFF112233),
+            fillColor: DrawColor(0xFFCCDDEE),
             strokeStyle: StrokeStyle.dashed,
           ),
         );
@@ -168,7 +167,7 @@ void main() {
         opacity: 1,
         zIndex: 0,
         data: SerialNumberData(
-          fillColor: Color(0xFFCCDDEE),
+          fillColor: DrawColor(0xFFCCDDEE),
           fillStyle: FillStyle.line,
         ),
       );
@@ -193,7 +192,7 @@ void main() {
         opacity: 1,
         zIndex: 0,
         data: SerialNumberData(
-          color: Color(0xFF112233),
+          color: DrawColor(0xFF112233),
           strokeStyle: StrokeStyle.dotted,
         ),
       );

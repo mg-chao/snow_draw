@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_renderer.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -27,8 +28,8 @@ void main() {
       const elementRect = DrawRect(minX: 10, minY: 10, maxX: 190, maxY: 190);
       const data = TextData(
         text: 'AAAA\nAAAA',
-        color: ui.Color(0x00000000),
-        fillColor: ui.Color(0x80FF0000),
+        color: DrawColor(0x00000000),
+        fillColor: DrawColor(0x80FF0000),
       );
       const element = ElementState(
         id: 'text-bg-opacity',
@@ -44,7 +45,10 @@ void main() {
         maxWidth: elementRect.width,
         minWidth: elementRect.width,
         widthBasis: TextWidthBasis.parent,
-        styleOverride: buildTextStyle(data: data, colorOverride: data.color),
+        styleOverride: buildTextStyle(
+          data: data,
+          colorOverride: ui.Color(data.color.toARGB32()),
+        ),
       );
       final boxes = fillLayout.paragraph.getBoxesForRange(
         0,

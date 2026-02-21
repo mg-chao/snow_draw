@@ -33,6 +33,7 @@ import 'package:snow_draw_core/draw/utils/binding_highlight_style.dart';
 import 'package:snow_draw_core/draw/utils/binding_highlight_visibility.dart';
 import 'package:snow_draw_core/draw/utils/selection_calculator.dart';
 import 'package:snow_draw_core/draw/utils/stroke_pattern_utils.dart';
+import '../../extensions/draw_color_extensions.dart';
 import '../../render/element_renderer.dart';
 import 'filter_scene_compositor.dart';
 import 'free_draw_creation_preview_cache.dart';
@@ -354,7 +355,9 @@ class DynamicCanvasPainter extends CustomPainter {
       return true;
     }
 
-    final strokeColor = data.color.withValues(alpha: strokeOpacity);
+    final strokeColor = data.color
+        .withValues(alpha: strokeOpacity)
+        .toFlutterColor();
     final strokePaint = _freeDrawStrokePaint
       ..strokeWidth = data.strokeWidth
       ..color = strokeColor;
@@ -1504,8 +1507,8 @@ class DynamicCanvasPainter extends CustomPainter {
       return;
     }
     final strokeWidth = selectionConfig.render.strokeWidth / scale;
-    final fillColor = selectionConfig.render.cornerFillColor;
-    final strokeColor = selectionConfig.render.strokeColor;
+    final fillColor = selectionConfig.render.cornerFillColor.toFlutterColor();
+    final strokeColor = selectionConfig.render.strokeColor.toFlutterColor();
     final highlightStroke = strokeColor.withValues(alpha: 0.95);
 
     final hoveredHandle = renderKey.hoveredArrowHandle;
@@ -1618,7 +1621,8 @@ class DynamicCanvasPainter extends CustomPainter {
     if (highlights.isEmpty) {
       return;
     }
-    final strokeColor = renderKey.selectionConfig.render.strokeColor;
+    final strokeColor = renderKey.selectionConfig.render.strokeColor
+        .toFlutterColor();
     final paint = createBindingHighlightPaint(color: strokeColor, scale: scale);
 
     for (final highlight in highlights) {
@@ -1722,7 +1726,8 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.translate(rect.minX, rect.minY);
 
     // Use hover selection color with modified appearance
-    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor
+        .toFlutterColor();
     final strokePaint = _arrowHoverStrokePaint
       ..strokeWidth = hoverStrokeWidth / scale
       ..color = hoverColor;
@@ -1772,7 +1777,8 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.translate(rect.minX, rect.minY);
 
     final hoverStrokeWidth = renderKey.hoverSelectionConfig.render.strokeWidth;
-    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final hoverColor = renderKey.hoverSelectionConfig.render.strokeColor
+        .toFlutterColor();
     final strokePaint = _arrowHoverStrokePaint
       ..strokeWidth = hoverStrokeWidth / scale
       ..color = hoverColor;
@@ -1832,7 +1838,8 @@ class DynamicCanvasPainter extends CustomPainter {
     canvas.translate(rect.minX, rect.minY);
 
     // Use hover selection color for underlines
-    final underlineColor = renderKey.hoverSelectionConfig.render.strokeColor;
+    final underlineColor = renderKey.hoverSelectionConfig.render.strokeColor
+        .toFlutterColor();
     final underlinePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5 / scale
@@ -1864,7 +1871,7 @@ class DynamicCanvasPainter extends CustomPainter {
       canvas: canvas,
       element: element,
       scale: scale,
-      color: renderKey.hoverSelectionConfig.render.strokeColor,
+      color: renderKey.hoverSelectionConfig.render.strokeColor.toFlutterColor(),
     );
   }
 
@@ -2063,15 +2070,15 @@ class DynamicCanvasPainter extends CustomPainter {
     // Draw translucent fill.
     final fillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = boxSelectionConfig.fillColor.withValues(
-        alpha: boxSelectionConfig.fillOpacity,
-      );
+      ..color = boxSelectionConfig.fillColor
+          .withValues(alpha: boxSelectionConfig.fillOpacity)
+          .toFlutterColor();
 
     // Draw stroke.
     final strokePaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = boxSelectionConfig.strokeWidth / scale
-      ..color = boxSelectionConfig.strokeColor
+      ..color = boxSelectionConfig.strokeColor.toFlutterColor()
       ..isAntiAlias = true;
     canvas
       ..save()
@@ -2099,7 +2106,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..color = config.lineColor
+      ..color = config.lineColor.toFlutterColor()
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true;
@@ -2191,7 +2198,7 @@ class DynamicCanvasPainter extends CustomPainter {
           canvas: canvas,
           guide: guide,
           scale: scale,
-          color: config.lineColor,
+          color: config.lineColor.toFlutterColor(),
         );
       }
     }
@@ -2410,7 +2417,7 @@ class DynamicCanvasPainter extends CustomPainter {
       canvas: canvas,
       element: element,
       scale: scale,
-      color: renderKey.selectionConfig.render.strokeColor,
+      color: renderKey.selectionConfig.render.strokeColor.toFlutterColor(),
     );
   }
 

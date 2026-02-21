@@ -118,8 +118,8 @@ class TextRenderer extends ElementTypeRenderer {
       final verticalPadding = resolveTextBackgroundVerticalPadding(
         layout.lineHeight,
       );
-      final backgroundColor = data.fillColor.withValues(
-        alpha: backgroundOpacity,
+      final backgroundColor = Color(
+        data.fillColor.withValues(alpha: backgroundOpacity).toARGB32(),
       );
       late final Paint backgroundPaint;
       Paint? crossLinePaint;
@@ -253,7 +253,7 @@ class TextRenderer extends ElementTypeRenderer {
       () => _buildRawParagraph(
         text: text,
         data: data,
-        color: fillColor,
+        color: Color(fillColor.toARGB32()),
         locale: locale,
         maxWidth: maxWidth,
       ),
@@ -284,7 +284,7 @@ class TextRenderer extends ElementTypeRenderer {
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = data.strokeWidth
-        ..color = strokeColor
+        ..color = Color(strokeColor.toARGB32())
         ..isAntiAlias = true;
       return _buildRawParagraph(
         text: text,

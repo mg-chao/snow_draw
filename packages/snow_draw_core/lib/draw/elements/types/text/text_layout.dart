@@ -167,7 +167,7 @@ TextStyle buildTextStyle({
   Locale? locale,
 }) => TextStyle(
   inherit: false,
-  color: colorOverride ?? data.color,
+  color: colorOverride ?? Color(data.color.toARGB32()),
   fontSize: fontSizeOverride ?? data.fontSize,
   fontFamily: _sanitizeFontFamily(data.fontFamily),
   locale: locale,

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
@@ -14,6 +14,7 @@ import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
@@ -321,7 +322,7 @@ Future<String> _createRectangle(
     CreateElement(
       typeId: RectangleData.typeIdToken,
       position: start,
-      initialData: const RectangleData(fillColor: Color(0x401576FE)),
+      initialData: const RectangleData(fillColor: DrawColor(0x401576FE)),
     ),
   );
   await store.dispatch(UpdateCreatingElement(currentPosition: end));

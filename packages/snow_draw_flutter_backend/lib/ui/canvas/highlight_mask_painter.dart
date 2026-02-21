@@ -7,6 +7,7 @@ import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import '../../extensions/draw_color_extensions.dart';
 import 'highlight_mask_shader_manager.dart';
 
 /// Paints a dimming mask over the viewport with holes for highlights.
@@ -114,7 +115,7 @@ void _paintHighlightMaskFallback({
 
   _fallbackMaskPaint.color = maskConfig.maskColor.withValues(
     alpha: effectiveAlpha,
-  );
+  ).toFlutterColor();
   final visibleHoles = _collectVisibleHighlightHoles(
     highlights: highlights,
     viewportRect: viewportRect,

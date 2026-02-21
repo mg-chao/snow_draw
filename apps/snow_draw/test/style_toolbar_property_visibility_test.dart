@@ -17,6 +17,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
         toolType: ToolType.text,
         configure: (store) async {
           final nextTextStyle = store.config.textStyle.copyWith(
-            fillColor: const Color(0xFFFFCCC7),
+            fillColor: const DrawColor(0xFFFFCCC7),
             textStrokeWidth: 2,
           );
           await store.dispatch(

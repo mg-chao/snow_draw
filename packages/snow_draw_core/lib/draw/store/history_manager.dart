@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 import 'package:meta/meta.dart';
 
 import '../actions/history_coalescing.dart';
@@ -15,6 +13,7 @@ import '../models/global_elements_state.dart';
 import '../models/selection_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_rect.dart';
+import '../types/draw_color.dart';
 import 'history_change_set.dart';
 import 'history_delta.dart';
 import 'snapshot.dart';
@@ -995,7 +994,7 @@ class _HistorySnapshotCodec {
 
   HighlightMaskConfig _highlightMaskFromJson(Map<String, dynamic> json) =>
       HighlightMaskConfig(
-        maskColor: Color(
+        maskColor: DrawColor(
           json['maskColor'] as int? ??
               ConfigDefaults.defaultMaskColor.toARGB32(),
         ),
@@ -1015,7 +1014,7 @@ class _HistorySnapshotCodec {
   WatermarkConfig _watermarkFromJson(
     Map<String, dynamic> json,
   ) => WatermarkConfig(
-    color: Color(
+    color: DrawColor(
       json['color'] as int? ?? ConfigDefaults.defaultWatermarkColor.toARGB32(),
     ),
     text: json['text'] as String? ?? ConfigDefaults.defaultWatermarkText,

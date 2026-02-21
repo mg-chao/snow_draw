@@ -7,6 +7,7 @@ import 'package:snow_draw/property_registry.dart';
 import 'package:snow_draw/style_toolbar_state.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
@@ -40,10 +41,7 @@ void main() {
         value: HighlightShape.rectangle,
         isMixed: false,
       ),
-      textStrokeColor: MixedValue(
-        value: ConfigDefaults.defaultHighlightStrokeColor,
-        isMixed: false,
-      ),
+      textStrokeColor: MixedValue(value: Color(0xFF000000), isMixed: false),
       textStrokeWidth: MixedValue(value: 0, isMixed: false),
       opacity: MixedValue(value: 1, isMixed: false),
     );
@@ -126,7 +124,7 @@ void main() {
       textDefaults: ElementStyleConfig(),
       serialNumberDefaults: ElementStyleConfig(),
       highlightDefaults: ElementStyleConfig(
-        color: Color(0xFFF5222D),
+        color: DrawColor(0xFFF5222D),
         textStrokeColor: ConfigDefaults.defaultHighlightStrokeColor,
       ),
       filterDefaults: ElementStyleConfig(),
