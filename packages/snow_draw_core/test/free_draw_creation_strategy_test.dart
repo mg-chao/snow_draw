@@ -81,15 +81,15 @@ void main() {
     test(
       'long straight strokes reuse tail point instead of growing forever',
       () {
-        final harness = _FreeDrawTestHarness.start();
-        harness.draw(const [
-          DrawPoint(x: 12, y: 0),
-          DrawPoint(x: 24, y: 0),
-          DrawPoint(x: 36, y: 0),
-          DrawPoint(x: 48, y: 0),
-          DrawPoint(x: 60, y: 0),
-          DrawPoint(x: 72, y: 0),
-        ]);
+        final harness = _FreeDrawTestHarness.start()
+          ..draw(const [
+            DrawPoint(x: 12, y: 0),
+            DrawPoint(x: 24, y: 0),
+            DrawPoint(x: 36, y: 0),
+            DrawPoint(x: 48, y: 0),
+            DrawPoint(x: 60, y: 0),
+            DrawPoint(x: 72, y: 0),
+          ]);
 
         final mode = harness.creatingState.creationMode as FreeDrawCreationMode;
         final points = mode.worldPoints!;
@@ -122,14 +122,13 @@ void main() {
     });
 
     test('finish normalizes once and returns commit-ready data', () {
-      final harness = _FreeDrawTestHarness.start(
-        start: const DrawPoint(x: 100, y: 100),
-      );
-      harness.draw(const [
-        DrawPoint(x: 130, y: 130),
-        DrawPoint(x: 160, y: 120),
-        DrawPoint(x: 190, y: 150),
-      ]);
+      final harness =
+          _FreeDrawTestHarness.start(start: const DrawPoint(x: 100, y: 100))
+            ..draw(const [
+              DrawPoint(x: 130, y: 130),
+              DrawPoint(x: 160, y: 120),
+              DrawPoint(x: 190, y: 150),
+            ]);
       final finish = harness.finish();
 
       expect(finish.shouldCommit, isTrue);
@@ -173,7 +172,7 @@ class _FreeDrawTestHarness {
   final FreeDrawCreationStrategy strategy;
   CreatingState creatingState;
 
-  static _FreeDrawTestHarness start({
+  factory _FreeDrawTestHarness.start({
     FreeDrawData data = const FreeDrawData(),
     DrawPoint start = DrawPoint.zero,
   }) {
@@ -188,32 +187,28 @@ class _FreeDrawTestHarness {
   CreationUpdateResult update(
     DrawPoint currentPosition, {
     bool maintainAspectRatio = false,
-  }) {
-    return strategy.update(
-      state: DrawState(),
-      config: DrawConfig(),
-      creatingState: creatingState,
-      currentPosition: currentPosition,
-      maintainAspectRatio: maintainAspectRatio,
-      createFromCenter: false,
-      snappingMode: SnappingMode.none,
-    );
-  }
+  }) => strategy.update(
+    state: DrawState(),
+    config: DrawConfig(),
+    creatingState: creatingState,
+    currentPosition: currentPosition,
+    maintainAspectRatio: maintainAspectRatio,
+    createFromCenter: false,
+    snappingMode: SnappingMode.none,
+  );
 
   CreationUpdateResult updateBatch(
     List<DrawPoint> positions, {
     bool maintainAspectRatio = false,
-  }) {
-    return strategy.updateBatch(
-      state: DrawState(),
-      config: DrawConfig(),
-      creatingState: creatingState,
-      positions: positions,
-      maintainAspectRatio: maintainAspectRatio,
-      createFromCenter: false,
-      snappingMode: SnappingMode.none,
-    );
-  }
+  }) => strategy.updateBatch(
+    state: DrawState(),
+    config: DrawConfig(),
+    creatingState: creatingState,
+    positions: positions,
+    maintainAspectRatio: maintainAspectRatio,
+    createFromCenter: false,
+    snappingMode: SnappingMode.none,
+  );
 
   CreationUpdateResult step(
     DrawPoint currentPosition, {
@@ -241,26 +236,23 @@ class _FreeDrawTestHarness {
     );
   }
 
-  CreationFinishResult finish() {
-    return strategy.finish(config: DrawConfig(), creatingState: creatingState);
-  }
+  CreationFinishResult finish() =>
+      strategy.finish(config: DrawConfig(), creatingState: creatingState);
 }
 
 CreatingState _toCreatingState({
   required CreationUpdateResult result,
   required DrawPoint startPosition,
-}) {
-  return CreatingState(
-    element: ElementState(
-      id: 'free-draw-test',
-      rect: result.rect,
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: result.data,
-    ),
-    startPosition: startPosition,
-    currentRect: result.rect,
-    creationMode: result.creationMode,
-  );
-}
+}) => CreatingState(
+  element: ElementState(
+    id: 'free-draw-test',
+    rect: result.rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: result.data,
+  ),
+  startPosition: startPosition,
+  currentRect: result.rect,
+  creationMode: result.creationMode,
+);
