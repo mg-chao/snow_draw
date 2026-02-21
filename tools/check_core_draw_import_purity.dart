@@ -1,7 +1,7 @@
 import 'dart:io';
 
 const _allowlistPath = 'tools/core_draw_purity_allowlist.txt';
-const _scanRootPath = 'packages/snow_draw_core/lib/draw';
+const _scanRootPath = 'packages/snow_draw_core/lib';
 
 void main() {
   final root = Directory(_scanRootPath);
@@ -92,7 +92,7 @@ Set<String> _scanViolations(Directory root) {
 
 String? _matchDependency(String line) {
   final trimmed = line.trimLeft();
-  if (!trimmed.startsWith('import ')) {
+  if (!(trimmed.startsWith('import ') || trimmed.startsWith('export '))) {
     return null;
   }
   if (trimmed.contains('package:flutter/')) {
