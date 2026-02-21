@@ -1,8 +1,8 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/scheduler.dart';
 
-import 'package:snow_draw_core/draw/input/input_event.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 typedef PointerMoveEventSink =
     Future<void> Function(PointerMoveInputEvent event);

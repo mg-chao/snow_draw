@@ -1,15 +1,6 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_like_data.dart';
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state_view.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'lightweight_line_edit_state_change.dart';
 import 'serial_number_interaction_classifier.dart';
 
