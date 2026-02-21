@@ -65,6 +65,10 @@ melos:
       description: Run architecture boundary and purity guards.
       run: dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:app-backend-import-boundary
 
+    check:compatibility-contracts:
+      description: Run focused compatibility tests for stable schema and type contracts.
+      run: dart test packages/snow_draw_core/test/element_serialization_compatibility_test.dart && dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart && flutter test packages/snow_draw_flutter_backend/test/built_in_element_visuals_test.dart
+
     test:core:
       description: Run tests for the pure-Dart core package.
       packageFilters:
