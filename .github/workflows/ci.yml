@@ -41,5 +41,8 @@ jobs:
       - name: Verify core purity
         run: dart run melos run check:core-purity
 
+      - name: Verify backend legacy namespace
+        run: dart run melos run check:backend-legacy
+
       - name: Run test suite
         run: dart run melos run test
