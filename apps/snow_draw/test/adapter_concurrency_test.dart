@@ -16,6 +16,7 @@ import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/selector.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +67,7 @@ void main() {
     await Future.wait([updateStyle, enableSnap]);
     await pumpEventQueue();
 
-    expect(store.config.rectangleStyle.color, const Color(0xFF00AA55));
+    expect(store.config.rectangleStyle.color, const DrawColor(0xFF00AA55));
     expect(store.config.snap.enabled, isTrue);
   });
 }

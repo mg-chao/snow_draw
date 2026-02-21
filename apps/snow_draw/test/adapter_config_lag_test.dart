@@ -16,6 +16,7 @@ import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/selector.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -82,7 +83,7 @@ void main() {
       toolType: ToolType.rectangle,
     );
 
-    expect(store.config.rectangleStyle.color, const Color(0xFF008A44));
+    expect(store.config.rectangleStyle.color, const DrawColor(0xFF008A44));
     expect(store.config.lineStyle.strokeWidth, 17);
   });
 }

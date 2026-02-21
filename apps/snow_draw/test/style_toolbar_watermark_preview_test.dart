@@ -12,6 +12,7 @@ import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -85,7 +86,7 @@ void main() {
       final persisted =
           harness.store.state.domain.document.globalElements.watermark;
       expect(persisted.text, 'draft');
-      expect(persisted.color, const Color(0xFFFF0000));
+      expect(persisted.color, const DrawColor(0xFFFF0000));
       expect(harness.adapter.watermarkPreviewListenable.value, isNull);
     },
   );

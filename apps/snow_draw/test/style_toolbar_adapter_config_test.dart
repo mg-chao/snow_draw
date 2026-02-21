@@ -13,6 +13,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
       await Future.wait([first, second]);
       await pumpEventQueue();
 
-      expect(store.config.rectangleStyle.color, const Color(0xFF00FF00));
+      expect(store.config.rectangleStyle.color, const DrawColor(0xFF00FF00));
       expect(store.config.rectangleStyle.strokeWidth, 9);
     },
   );
@@ -112,7 +113,7 @@ void main() {
       );
       await pumpEventQueue();
 
-      expect(store.config.rectangleStyle.color, const Color(0xFFAA22CC));
+      expect(store.config.rectangleStyle.color, const DrawColor(0xFFAA22CC));
       expect(store.config.lineStyle.strokeWidth, 17);
     },
   );
