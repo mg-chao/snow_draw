@@ -1,0 +1,3 @@
+﻿# Baseline allowlist for core package Flutter/UI imports.
+# Format: path:line:dart:ui or path:line:package:flutter
+# Keep this file in sync with tools/check_core_import_purity.dart.

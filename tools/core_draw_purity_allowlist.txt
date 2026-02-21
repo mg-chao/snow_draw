@@ -1,5 +1,0 @@
-﻿# Baseline allowlist for core draw Flutter/UI imports.
-# Format: path:line:dart:ui or path:line:package:flutter
-# Keep this file in sync with tools/check_core_draw_import_purity.dart.
-
-

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-const _allowlistPath = 'tools/core_draw_purity_allowlist.txt';
+const _allowlistPath = 'tools/core_purity_allowlist.txt';
 const _scanRootPath = 'packages/snow_draw_core/lib';
 
 void main() {

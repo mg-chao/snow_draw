@@ -50,8 +50,8 @@ melos:
         dart run melos exec -- dart fix --apply
 
     check:core-purity:
-      description: Block new Flutter/UI imports under core draw during migration.
-      run: dart run tools/check_core_draw_import_purity.dart && dart run tools/check_core_pubspec_purity.dart
+      description: Block new Flutter/UI imports and Flutter dependencies in core.
+      run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart
 
     test:core:
       description: Run tests for the pure-Dart core package.
