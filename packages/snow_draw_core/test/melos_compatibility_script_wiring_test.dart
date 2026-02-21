@@ -16,6 +16,7 @@ void main() {
       'dart test packages/snow_draw_core/test/element_registry_characterization_test.dart',
       'dart test packages/snow_draw_core/test/draw_config_defaults_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/action_payload_immutability_test.dart',
+      'dart test packages/snow_draw_core/test/action_type_name_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/types/draw_color_test.dart',
       'dart test packages/snow_draw_core/test/text_metrics_service_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/draw_context_text_metrics_compatibility_test.dart',
