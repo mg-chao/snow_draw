@@ -11,19 +11,18 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 void main() {
   const tester = FilterHitTester();
   const rect = DrawRect(maxX: 100, maxY: 50);
+  const baseFilterElement = ElementState(
+    id: 'filter',
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: FilterData(),
+  );
 
   test('hits inside an unrotated filter rect', () {
-    const element = ElementState(
-      id: 'filter',
-      rect: rect,
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: FilterData(),
-    );
-
     final hit = tester.hitTest(
-      element: element,
+      element: baseFilterElement,
       position: const DrawPoint(x: 40, y: 20),
     );
 
@@ -31,17 +30,8 @@ void main() {
   });
 
   test('uses local-space conversion for rotated filters', () {
-    const element = ElementState(
-      id: 'filter',
-      rect: rect,
-      rotation: math.pi / 2,
-      opacity: 1,
-      zIndex: 0,
-      data: FilterData(),
-    );
-
     final hit = tester.hitTest(
-      element: element,
+      element: baseFilterElement.copyWith(rotation: math.pi / 2),
       position: const DrawPoint(x: 50, y: 70),
     );
 
@@ -49,18 +39,14 @@ void main() {
   });
 
   test('throws when element data is not filter data', () {
-    const element = ElementState(
+    final invalidElement = baseFilterElement.copyWith(
       id: 'not-filter',
-      rect: rect,
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: TextData(),
+      data: const TextData(),
     );
 
     expect(
       () => tester.hitTest(
-        element: element,
+        element: invalidElement,
         position: const DrawPoint(x: 10, y: 10),
       ),
       throwsStateError,
