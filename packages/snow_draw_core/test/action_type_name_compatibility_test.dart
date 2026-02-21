@@ -1,4 +1,3 @@
-import 'package:snow_draw_core/draw/utils/edit_intent_detector.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:test/test.dart';
 

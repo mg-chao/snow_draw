@@ -23,11 +23,16 @@ void main() {
       registerBuiltInElements(registry);
       const arrow = ArrowData(strokeStyle: StrokeStyle.dotted);
       const interaction = IdleState();
+      const intentAction = EditIntentAction(
+        intent: StartRotateIntent(),
+        position: DrawPoint.zero,
+      );
 
       expect(registry.registeredTypeIds, isNotEmpty);
       expect(registry, isA<ElementRegistry>());
       expect(arrow.strokeStyle, StrokeStyle.dotted);
       expect(interaction, isA<InteractionState>());
+      expect(intentAction.intent, isA<EditIntent>());
     });
 
     test('exports coordinate and scene contracts', () {

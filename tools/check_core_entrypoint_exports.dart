@@ -72,6 +72,7 @@ const _allowedExports = <String>{
   'draw/types/snap_guides.dart',
   'draw/utils/arrow_binding_highlight.dart',
   'draw/utils/binding_highlight_visibility.dart',
+  'draw/utils/edit_intent_detector.dart',
   'draw/utils/hit_test.dart',
   'draw/utils/lru_cache.dart',
   'draw/utils/selection_calculator.dart',

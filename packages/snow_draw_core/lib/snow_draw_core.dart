@@ -70,6 +70,7 @@ export 'draw/types/snap_guides.dart';
 export 'draw/utils/lru_cache.dart';
 export 'draw/utils/arrow_binding_highlight.dart';
 export 'draw/utils/binding_highlight_visibility.dart';
+export 'draw/utils/edit_intent_detector.dart';
 export 'draw/utils/hit_test.dart';
 export 'draw/utils/selection_calculator.dart';
 export 'draw/utils/snapping_mode.dart';
