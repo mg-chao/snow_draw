@@ -51,7 +51,7 @@ melos:
 
     check:core-purity:
       description: Block new Flutter/UI imports and Flutter dependencies in core.
-      run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart
+      run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart && dart run tools/check_core_dependency_graph_purity.dart
 
     check:core-ui-boundary:
       description: Ensure UI/rendering Dart files do not re-enter core package.

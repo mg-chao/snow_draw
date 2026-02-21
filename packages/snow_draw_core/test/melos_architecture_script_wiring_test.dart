@@ -33,6 +33,8 @@ void main() {
       pubspec,
       contains('run: dart run tools/check_core_ui_boundary.dart'),
     );
+    expect(pubspec, contains('check:core-purity:'));
+    expect(pubspec, contains('tools/check_core_dependency_graph_purity.dart'));
     expect(pubspec, contains('check:ci-workflow:'));
     expect(
       pubspec,
