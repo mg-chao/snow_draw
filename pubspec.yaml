@@ -53,6 +53,10 @@ melos:
       description: Block new Flutter/UI imports and Flutter dependencies in core.
       run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart
 
+    check:core-ui-boundary:
+      description: Ensure UI/rendering Dart files do not re-enter core package.
+      run: dart run tools/check_core_ui_boundary.dart
+
     check:backend-legacy:
       description: Enforce shim-only legacy namespace and block internal legacy imports.
       run: dart run tools/check_backend_legacy_namespace.dart
@@ -71,7 +75,7 @@ melos:
 
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:backend-legacy && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary
+      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-ui-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.

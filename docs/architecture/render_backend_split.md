@@ -72,6 +72,7 @@ dart run melos run check:architecture
 This aggregates:
 
 - `check:core-purity`
+- `check:core-ui-boundary`
 - `check:backend-legacy`
 - `check:backend-entrypoint`
 - `check:ci-workflow`
