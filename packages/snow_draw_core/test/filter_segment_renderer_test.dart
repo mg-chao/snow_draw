@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'dart:ui';
-import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
@@ -64,7 +63,7 @@ void main() {
 
   test('renderer paints all split non-filter batches on original canvas', () {
     final renderer = FilterSegmentRenderer(
-      segmentBuilder: const _SplitBatchSegmentBuilder(),
+      segmentBuilder: const _SplitNonFilterSegmentBuilder(),
     );
     var paintCount = 0;
     final recorder = PictureRecorder();
@@ -165,7 +164,7 @@ void main() {
 
   test('renderer filter opacity blends filtered result', () async {
     final renderer = FilterSegmentRenderer();
-    const imageSize = ui.Size(80, 80);
+    const imageSize = Size(80, 80);
     const baseColor = Color(0xFF204080);
     const filterOpacity = 0.25;
 
@@ -282,7 +281,7 @@ void main() {
     'overlapping inversions keep sequential compositing semantics',
     () async {
       final renderer = FilterSegmentRenderer();
-      const imageSize = ui.Size(80, 80);
+      const imageSize = Size(80, 80);
 
       Future<Color> renderWithFilterCount(int filterCount) async {
         final elements = <ElementState>[
@@ -1666,22 +1665,29 @@ void main() {
   );
 }
 
-Color _lerpColor(Color a, Color b, double t) {
-  final clampedT = t.clamp(0.0, 1.0);
-  final baseR = _channelFromUnit(a.r);
-  final baseG = _channelFromUnit(a.g);
-  final baseB = _channelFromUnit(a.b);
-  final baseA = _channelFromUnit(a.a);
-  final targetR = _channelFromUnit(b.r);
-  final targetG = _channelFromUnit(b.g);
-  final targetB = _channelFromUnit(b.b);
-  final targetA = _channelFromUnit(b.a);
+Color _lerpColor(Color a, Color b, double t) =>
+    Color.lerp(a, b, t.clamp(0.0, 1.0))!;
 
-  final r = (baseR + ((targetR - baseR) * clampedT)).round().clamp(0, 255);
-  final g = (baseG + ((targetG - baseG) * clampedT)).round().clamp(0, 255);
-  final bl = (baseB + ((targetB - baseB) * clampedT)).round().clamp(0, 255);
-  final alpha = (baseA + ((targetA - baseA) * clampedT)).round().clamp(0, 255);
-  return Color.fromARGB(alpha, r, g, bl);
+class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
+  const _SplitNonFilterSegmentBuilder();
+
+  @override
+  List<RenderSegment> build(List<ElementState> elements) {
+    final splitSegments = <RenderSegment>[];
+    for (final segment in super.build(elements)) {
+      if (segment is! ElementBatchSegment || segment.elements.length <= 1) {
+        splitSegments.add(segment);
+        continue;
+      }
+      splitSegments.addAll(
+        segment.elements.map(
+          (element) =>
+              ElementBatchSegment(List<ElementState>.unmodifiable([element])),
+        ),
+      );
+    }
+    return splitSegments;
+  }
 }
 
 int _channelFromUnit(double value) => (value * 255).round().clamp(0, 255);
@@ -1696,45 +1702,6 @@ Color _readPixel(ByteData data, int width, Offset offset) {
   final b = data.getUint8(index + 2);
   final a = data.getUint8(index + 3);
   return Color.fromARGB(a, r, g, b);
-}
-
-class _SplitBatchSegmentBuilder extends FilterSegmentBuilder {
-  const _SplitBatchSegmentBuilder();
-
-  @override
-  List<RenderSegment> build(List<ElementState> elements) {
-    if (elements.length < 2) {
-      return super.build(elements);
-    }
-    return elements
-        .map(
-          (element) =>
-              ElementBatchSegment(List<ElementState>.unmodifiable([element])),
-        )
-        .toList(growable: false);
-  }
-}
-
-class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
-  const _SplitNonFilterSegmentBuilder();
-
-  @override
-  List<RenderSegment> build(List<ElementState> elements) {
-    final segments = super.build(elements);
-    final splitSegments = <RenderSegment>[];
-    for (final segment in segments) {
-      if (segment is! ElementBatchSegment || segment.elements.length <= 1) {
-        splitSegments.add(segment);
-        continue;
-      }
-      for (final element in segment.elements) {
-        splitSegments.add(
-          ElementBatchSegment(List<ElementState>.unmodifiable([element])),
-        );
-      }
-    }
-    return splitSegments;
-  }
 }
 
 class _TestKernelFactory implements FilterKernelFactory {
