@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,7 +7,7 @@ import 'package:snow_draw_core/draw/services/log/log_service.dart';
 
 final ModuleLogger _filterShaderLog = LogService.fallback.render;
 const _mosaicShaderAssetPath =
-    'packages/snow_draw_core/shaders/filter_mosaic.frag';
+    'packages/snow_draw_flutter_backend/shaders/filter_mosaic.frag';
 
 /// Manages shader-backed image filters used by canvas filter elements.
 class FilterShaderManager {

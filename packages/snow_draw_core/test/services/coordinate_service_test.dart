@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/camera_state.dart';
 import 'package:snow_draw_core/draw/services/coordinate_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
@@ -45,19 +45,19 @@ void main() {
 
       expect(
         () => CoordinateService(camera: camera, scaleFactor: 0),
-        throwsAssertionError,
+        throwsA(isA<AssertionError>()),
       );
       expect(
         () => CoordinateService(camera: camera, scaleFactor: -1),
-        throwsAssertionError,
+        throwsA(isA<AssertionError>()),
       );
       expect(
         () => CoordinateService(camera: camera, scaleFactor: double.infinity),
-        throwsAssertionError,
+        throwsA(isA<AssertionError>()),
       );
       expect(
         () => CoordinateService(camera: camera, scaleFactor: double.nan),
-        throwsAssertionError,
+        throwsA(isA<AssertionError>()),
       );
     });
   });

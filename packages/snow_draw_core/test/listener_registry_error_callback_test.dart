@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';

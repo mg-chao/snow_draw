@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -55,7 +55,7 @@ class RectangleShaderManager {
     _isLoading = true;
     try {
       _program = await ui.FragmentProgram.fromAsset(
-        'packages/snow_draw_core/shaders/rectangle.frag',
+        'packages/snow_draw_flutter_backend/shaders/rectangle.frag',
       );
     } on Exception catch (e) {
       _loadFailed = true;

@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -64,7 +64,7 @@ class HighlightMaskShaderManager {
     _isLoading = true;
     try {
       final program = await ui.FragmentProgram.fromAsset(
-        'packages/snow_draw_core/shaders/highlight_mask.frag',
+        'packages/snow_draw_flutter_backend/shaders/highlight_mask.frag',
       );
       _shader = program.fragmentShader();
     } on Exception catch (error, stackTrace) {

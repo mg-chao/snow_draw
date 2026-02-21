@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';

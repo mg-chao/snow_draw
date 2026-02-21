@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_hit_tester.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';

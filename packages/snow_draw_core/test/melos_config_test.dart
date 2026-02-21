@@ -2,7 +2,7 @@
 //
 // These are compile-time smoke tests: if the workspace resolution
 // breaks, these imports will fail to resolve.
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 // Cross-package import: the app depends on the core package via path.
 // If workspace resolution is broken, this import fails.
@@ -12,8 +12,6 @@ import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   group('workspace resolution', () {
     test('core package creates a DrawContext', () {
       final registry = DefaultElementRegistry();

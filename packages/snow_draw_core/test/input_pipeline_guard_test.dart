@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/middleware/default_middlewares.dart';
 import 'package:snow_draw_core/draw/input/middleware/input_middleware.dart';
@@ -8,8 +8,6 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   group('InputPipeline safety guards', () {
     test('creates a defensive copy of middleware list', () {
       final source = <InputMiddleware>[const ValidationMiddleware()];

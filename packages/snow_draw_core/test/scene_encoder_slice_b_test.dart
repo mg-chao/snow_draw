@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_scene_encoder.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';

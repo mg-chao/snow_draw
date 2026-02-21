@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 

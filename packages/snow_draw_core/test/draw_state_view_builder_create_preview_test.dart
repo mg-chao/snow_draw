@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/edit/edit_operations.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
@@ -14,8 +14,6 @@ import 'package:snow_draw_core/draw/store/middleware/middleware_pipeline.dart';
 import 'package:snow_draw_core/draw/store/snapshot_builder.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   group('MiddlewarePipeline', () {
     test('returns initial context when pipeline has no middleware', () async {
       final pipeline = MiddlewarePipeline(middlewares: const []);

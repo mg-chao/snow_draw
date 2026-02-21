@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -41,7 +41,7 @@ class GridShaderManager {
     _isLoading = true;
     try {
       _shader = (await ui.FragmentProgram.fromAsset(
-        'packages/snow_draw_core/shaders/grid.frag',
+        'packages/snow_draw_flutter_backend/shaders/grid.frag',
       )).fragmentShader();
     } on Exception catch (error, stackTrace) {
       _loadFailed = true;
@@ -72,12 +72,12 @@ class GridShaderManager {
       return false;
     }
 
-    final minorColor = config.lineColor.withValues(
-      alpha: config.lineOpacity * minorOpacityRatio * 0.5,
-    ).toFlutterColor();
-    final majorColor = config.lineColor.withValues(
-      alpha: config.majorLineOpacity,
-    ).toFlutterColor();
+    final minorColor = config.lineColor
+        .withValues(alpha: config.lineOpacity * minorOpacityRatio * 0.5)
+        .toFlutterColor();
+    final majorColor = config.lineColor
+        .withValues(alpha: config.majorLineOpacity)
+        .toFlutterColor();
 
     var idx = 0;
     shader

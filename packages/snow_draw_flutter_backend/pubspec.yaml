@@ -22,3 +22,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - shaders/grid.frag
+    - shaders/rectangle.frag
+    - shaders/filter_mosaic.frag
+    - shaders/highlight_mask.frag

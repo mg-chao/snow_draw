@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_compute_pipeline.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';

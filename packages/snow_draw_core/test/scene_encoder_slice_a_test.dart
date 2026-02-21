@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_scene_encoder.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';

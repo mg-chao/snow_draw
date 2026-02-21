@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';

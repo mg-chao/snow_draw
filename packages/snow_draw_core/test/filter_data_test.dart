@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
@@ -16,10 +16,7 @@ void main() {
 
     expect(
       const FilterData().withElementStyle(style),
-      const FilterData(
-        type: CanvasFilterType.gaussianBlur,
-        strength: 0.75,
-      ),
+      const FilterData(type: CanvasFilterType.gaussianBlur, strength: 0.75),
     );
   });
 
@@ -31,10 +28,7 @@ void main() {
 
     expect(
       const FilterData().withStyleUpdate(update),
-      const FilterData(
-        type: CanvasFilterType.inversion,
-        strength: 0.3,
-      ),
+      const FilterData(type: CanvasFilterType.inversion, strength: 0.3),
     );
   });
 

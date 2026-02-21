@@ -2,11 +2,9 @@
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
-// Core dependencies that MUST remain importable:
+// Core dependencies that must remain importable in pure Dart.
 import 'package:collection/collection.dart';
-// Flutter SDK dependency:
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
 // Internal package imports that exercise the dependency graph:
@@ -42,7 +40,7 @@ void main() {
       expect(cache.length, 2);
 
       // Adding a third entry evicts the LRU entry.
-      // Order after gets: b (front), a (back) — 'a' is evicted.
+      // Order after gets: b (front), a (back), so 'a' is evicted.
       cache.put('c', 3);
       expect(cache.length, 2);
       expect(cache.get('b'), 2);

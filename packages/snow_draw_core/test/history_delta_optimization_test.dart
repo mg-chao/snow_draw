@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/global_elements_state.dart';

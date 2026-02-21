@@ -11,7 +11,7 @@
 ///    handled (commit) instead of falling through.
 library;
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/middleware/default_middlewares.dart';
 import 'package:snow_draw_core/draw/input/middleware/input_middleware.dart';

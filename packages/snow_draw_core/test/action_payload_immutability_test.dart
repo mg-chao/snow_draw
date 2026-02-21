@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 

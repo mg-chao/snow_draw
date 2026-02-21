@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 

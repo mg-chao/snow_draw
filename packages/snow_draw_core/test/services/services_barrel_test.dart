@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/camera_state.dart';
 // These imports verify that the barrel file re-exports the expected
 // services. If a service is missing from the barrel, the corresponding

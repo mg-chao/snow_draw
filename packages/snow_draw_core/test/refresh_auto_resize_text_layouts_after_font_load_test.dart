@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -16,12 +16,10 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
-
   group('RefreshAutoResizeTextLayoutsAfterFontLoad', () {
     test('recomputes bounds for auto-resize text elements', () async {
       const data = TextData(
-        text: '字体加载后应重新计算宽度',
+        text: '瀛椾綋鍔犺浇鍚庡簲閲嶆柊璁＄畻瀹藉害',
         fontSize: 42,
         autoResize: true,
       );
