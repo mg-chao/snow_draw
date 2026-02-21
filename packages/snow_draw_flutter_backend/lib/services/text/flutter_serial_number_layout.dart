@@ -1,78 +1,23 @@
 import 'dart:math' as math;
 
+import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
+import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
-import '../../../config/draw_config.dart';
-import '../../../services/text/text_metrics_service.dart';
-import '../../../types/draw_point.dart';
-import '../../../types/draw_rect.dart';
-import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
-import '../text/text_data.dart';
-import 'serial_number_data.dart';
-
+const _serialNumberTextHeightBehavior = TextHeightBehavior();
+const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
 const _serialNumberPaddingFactor = 0.26;
 const _textGeometryCacheMaxEntries = 64;
 const _textPainterCacheMaxEntries = 192;
 const double _canonicalSerialNumberFontSize =
     ConfigDefaults.defaultSerialNumberFontSize;
 
-/// Lightweight serial-number text size snapshot.
-@immutable
-class SerialNumberLayoutSize {
-  /// Creates a serial-number size snapshot.
-  const SerialNumberLayoutSize({required this.width, required this.height});
-
-  /// Width in logical pixels.
-  final double width;
-
-  /// Height in logical pixels.
-  final double height;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SerialNumberLayoutSize &&
-          other.width == width &&
-          other.height == height;
-
-  @override
-  int get hashCode => Object.hash(width, height);
-}
-
-/// Lightweight visual bounds snapshot in local text coordinates.
-@immutable
-class SerialNumberVisualBounds {
-  /// Creates visual bounds.
-  const SerialNumberVisualBounds({
-    required this.left,
-    required this.top,
-    required this.right,
-    required this.bottom,
-  });
-
-  /// Left edge in local text coordinates.
-  final double left;
-
-  /// Top edge in local text coordinates.
-  final double top;
-
-  /// Right edge in local text coordinates.
-  final double right;
-
-  /// Bottom edge in local text coordinates.
-  final double bottom;
-
-  /// Horizontal center in local coordinates.
-  double get centerX => (left + right) / 2;
-
-  /// Vertical center in local coordinates.
-  double get centerY => (top + bottom) / 2;
-}
-
 @immutable
 class SerialNumberTextLayout {
-  /// Creates serial-number text layout metrics.
   const SerialNumberTextLayout({
     required this.painter,
     required this.size,
@@ -81,19 +26,10 @@ class SerialNumberTextLayout {
     required this.paintScale,
   });
 
-  /// Stable layout token used for cache identity checks.
-  final Object painter;
-
-  /// Unscaled layout size.
-  final SerialNumberLayoutSize size;
-
-  /// Unscaled line height.
+  final TextPainter painter;
+  final Size size;
   final double lineHeight;
-
-  /// Optional visual glyph bounds.
-  final SerialNumberVisualBounds? visualBounds;
-
-  /// Paint scale relative to canonical font size.
+  final Rect? visualBounds;
   final double paintScale;
 }
 
@@ -106,12 +42,12 @@ class _TextGeometryKey {
   const _TextGeometryKey({
     required this.number,
     required this.fontFamily,
-    required this.localeTag,
+    required this.locale,
   });
 
   final int number;
   final String? fontFamily;
-  final String? localeTag;
+  final Locale? locale;
 
   @override
   bool operator ==(Object other) =>
@@ -119,29 +55,29 @@ class _TextGeometryKey {
       other is _TextGeometryKey &&
           other.number == number &&
           other.fontFamily == fontFamily &&
-          other.localeTag == localeTag;
+          other.locale == locale;
 
   @override
-  int get hashCode => Object.hash(number, fontFamily, localeTag);
+  int get hashCode => Object.hash(number, fontFamily, locale);
 }
 
-/// Cache key for color-specific layout tokens.
+/// Cache key for color-specific [TextPainter] instances.
 @immutable
 class _TextPainterKey {
-  const _TextPainterKey({required this.geometryKey, required this.colorArgb});
+  const _TextPainterKey({required this.geometryKey, required this.color});
 
   final _TextGeometryKey geometryKey;
-  final int colorArgb;
+  final Color color;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _TextPainterKey &&
           other.geometryKey == geometryKey &&
-          other.colorArgb == colorArgb;
+          other.color == color;
 
   @override
-  int get hashCode => Object.hash(geometryKey, colorArgb);
+  int get hashCode => Object.hash(geometryKey, color);
 }
 
 @immutable
@@ -152,15 +88,15 @@ class _TextGeometry {
     required this.visualBounds,
   });
 
-  final SerialNumberLayoutSize size;
+  final Size size;
   final double lineHeight;
-  final SerialNumberVisualBounds? visualBounds;
+  final Rect? visualBounds;
 }
 
 final _textGeometryCache = LruCache<_TextGeometryKey, _TextGeometry>(
   maxEntries: _textGeometryCacheMaxEntries,
 );
-final _textPainterCache = LruCache<_TextPainterKey, Object>(
+final _textPainterCache = LruCache<_TextPainterKey, TextPainter>(
   maxEntries: _textPainterCacheMaxEntries,
 );
 
@@ -178,7 +114,6 @@ void clearSerialNumberTextLayoutCache() {
 /// Cache diagnostics for serial-number text layout.
 @immutable
 class SerialNumberLayoutCacheStats {
-  /// Creates cache stats.
   const SerialNumberLayoutCacheStats({
     required this.geometryBuildCount,
     required this.painterBuildCount,
@@ -186,16 +121,9 @@ class SerialNumberLayoutCacheStats {
     required this.painterCacheEntries,
   });
 
-  /// Number of geometry cache misses.
   final int geometryBuildCount;
-
-  /// Number of painter-token cache misses.
   final int painterBuildCount;
-
-  /// Number of geometry cache entries.
   final int geometryCacheEntries;
-
-  /// Number of painter-token cache entries.
   final int painterCacheEntries;
 }
 
@@ -214,42 +142,37 @@ void resetSerialNumberLayoutCacheStats() {
   _textPainterBuildCount = 0;
 }
 
-/// Measures serial-number text with backend-agnostic metrics.
 SerialNumberTextLayout layoutSerialNumberText({
   required SerialNumberData data,
-  int? colorArgbOverride,
-  String? localeTag,
-  TextMetricsService textMetricsService = defaultTextMetricsService,
+  Color? colorOverride,
+  Locale? locale,
 }) {
+  final text = data.number.toString();
   final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
-  final resolvedLocaleTag = _normalizeLocaleTag(localeTag);
   final fontScale = _resolveSerialNumberFontScale(data.fontSize);
   final geometryKey = _TextGeometryKey(
     number: data.number,
     fontFamily: sanitizedFamily,
-    localeTag: resolvedLocaleTag,
+    locale: locale,
   );
-  final colorArgb = colorArgbOverride ?? data.color.toARGB32();
-  final painterKey = _TextPainterKey(
-    geometryKey: geometryKey,
-    colorArgb: colorArgb,
-  );
-  final painterToken = _textPainterCache.getOrCreate(painterKey, () {
+  final color = colorOverride ?? Color(data.color.toARGB32());
+  final painterKey = _TextPainterKey(geometryKey: geometryKey, color: color);
+  final painter = _textPainterCache.getOrCreate(painterKey, () {
     _textPainterBuildCount += 1;
-    return Object();
+    return _buildTextPainter(
+      text: text,
+      sanitizedFamily: sanitizedFamily,
+      locale: geometryKey.locale,
+      color: color,
+    );
   });
-
   final geometry = _textGeometryCache.getOrCreate(geometryKey, () {
     _textGeometryBuildCount += 1;
-    return _buildTextGeometry(
-      data: data,
-      localeTag: resolvedLocaleTag,
-      textMetricsService: textMetricsService,
-    );
+    return _buildTextGeometry(painter: painter);
   });
 
   return _buildScaledTextLayout(
-    painterToken: painterToken,
+    painter: painter,
     geometry: geometry,
     fontScale: fontScale,
   );
@@ -260,12 +183,10 @@ SerialNumberTextLayout layoutSerialNumberTextForScene({
   required SerialNumberData data,
   required int colorArgb,
   String? localeTag,
-  TextMetricsService textMetricsService = defaultTextMetricsService,
 }) => layoutSerialNumberText(
   data: data,
-  colorArgbOverride: colorArgb,
-  localeTag: localeTag,
-  textMetricsService: textMetricsService,
+  colorOverride: Color(colorArgb),
+  locale: _resolveLocaleTag(localeTag),
 );
 
 /// Resolves the visual center of the laid-out serial-number glyphs.
@@ -274,17 +195,18 @@ DrawPoint resolveSerialNumberVisualCenter(SerialNumberTextLayout layout) {
   if (bounds == null) {
     return DrawPoint(x: layout.size.width / 2, y: layout.size.height / 2);
   }
-  return DrawPoint(x: bounds.centerX, y: bounds.centerY);
+  final center = bounds.center;
+  return DrawPoint(x: center.dx, y: center.dy);
 }
 
 SerialNumberTextLayout _buildScaledTextLayout({
-  required Object painterToken,
+  required TextPainter painter,
   required _TextGeometry geometry,
   required double fontScale,
 }) {
   if (_doubleEquals(fontScale, 1)) {
     return SerialNumberTextLayout(
-      painter: painterToken,
+      painter: painter,
       size: geometry.size,
       lineHeight: geometry.lineHeight,
       visualBounds: geometry.visualBounds,
@@ -293,67 +215,64 @@ SerialNumberTextLayout _buildScaledTextLayout({
   }
 
   return SerialNumberTextLayout(
-    painter: painterToken,
+    painter: painter,
     size: _scaleSize(geometry.size, fontScale),
     lineHeight: geometry.lineHeight * fontScale,
-    visualBounds: _scaleVisualBounds(geometry.visualBounds, fontScale),
+    visualBounds: _scaleRect(geometry.visualBounds, fontScale),
     paintScale: fontScale,
   );
 }
 
-SerialNumberLayoutSize _scaleSize(SerialNumberLayoutSize size, double scale) =>
-    SerialNumberLayoutSize(
-      width: size.width * scale,
-      height: size.height * scale,
-    );
+Size _scaleSize(Size size, double scale) =>
+    Size(size.width * scale, size.height * scale);
 
-SerialNumberVisualBounds? _scaleVisualBounds(
-  SerialNumberVisualBounds? bounds,
-  double scale,
-) {
-  if (bounds == null) {
+Rect? _scaleRect(Rect? rect, double scale) {
+  if (rect == null) {
     return null;
   }
-  return SerialNumberVisualBounds(
-    left: bounds.left * scale,
-    top: bounds.top * scale,
-    right: bounds.right * scale,
-    bottom: bounds.bottom * scale,
+  return Rect.fromLTRB(
+    rect.left * scale,
+    rect.top * scale,
+    rect.right * scale,
+    rect.bottom * scale,
   );
 }
 
-_TextGeometry _buildTextGeometry({
-  required SerialNumberData data,
-  required String? localeTag,
-  required TextMetricsService textMetricsService,
-}) {
-  final metrics = textMetricsService.measure(
-    TextLayoutRequest(
-      data: TextData(
-        text: data.number.toString(),
-        fontSize: _canonicalSerialNumberFontSize,
-        fontFamily: _sanitizeFontFamily(data.fontFamily),
-        horizontalAlign: TextHorizontalAlign.center,
-      ),
-      maxWidth: double.infinity,
-      localeTag: localeTag,
-    ),
-  );
-
-  final width = _sanitizeExtent(metrics.width, fallback: 1);
-  final lineHeight = _sanitizeExtent(metrics.lineHeight, fallback: 1);
-  final height = _sanitizeExtent(metrics.height, fallback: lineHeight);
-
+_TextGeometry _buildTextGeometry({required TextPainter painter}) {
+  final metrics = painter.computeLineMetrics();
+  final lineHeight = metrics.isNotEmpty
+      ? metrics.first.height
+      : painter.preferredLineHeight;
   return _TextGeometry(
-    size: SerialNumberLayoutSize(width: width, height: height),
+    size: painter.size,
     lineHeight: lineHeight,
-    visualBounds: SerialNumberVisualBounds(
-      left: 0,
-      top: 0,
-      right: width,
-      bottom: height,
-    ),
+    visualBounds: _resolveVisualBounds(painter),
   );
+}
+
+TextPainter _buildTextPainter({
+  required String text,
+  required String? sanitizedFamily,
+  required Locale? locale,
+  required Color color,
+}) {
+  final style = TextStyle(
+    inherit: false,
+    color: color,
+    fontSize: _canonicalSerialNumberFontSize,
+    fontFamily: sanitizedFamily,
+    locale: locale,
+    textBaseline: TextBaseline.alphabetic,
+  );
+  return TextPainter(
+    text: TextSpan(text: text, style: style),
+    textAlign: TextAlign.center,
+    textDirection: TextDirection.ltr,
+    textHeightBehavior: _serialNumberTextHeightBehavior,
+    textScaler: _serialNumberTextScaler,
+    strutStyle: StrutStyle.fromTextStyle(style, forceStrutHeight: true),
+    locale: locale,
+  )..layout();
 }
 
 double _resolveSerialNumberFontScale(double fontSize) {
@@ -369,22 +288,11 @@ double _resolveSerialNumberFontScale(double fontSize) {
 
 bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
 
-double _sanitizeExtent(double value, {required double fallback}) {
-  if (value.isFinite && value > 0) {
-    return value;
-  }
-  return fallback;
-}
-
 double resolveSerialNumberDiameter({
   required SerialNumberData data,
   double minDiameter = 0,
-  TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
-  final layout = layoutSerialNumberText(
-    data: data,
-    textMetricsService: textMetricsService,
-  );
+  final layout = layoutSerialNumberText(data: data);
   final textHeight = math.max(layout.size.height, layout.lineHeight);
   final baseSize = math.max(layout.size.width, textHeight);
   final padding = layout.lineHeight * _serialNumberPaddingFactor;
@@ -414,12 +322,10 @@ DrawRect resolveSerialNumberRect({
   required DrawPoint origin,
   required SerialNumberData data,
   double minDiameter = 0,
-  TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
   final diameter = resolveSerialNumberDiameter(
     data: data,
     minDiameter: minDiameter,
-    textMetricsService: textMetricsService,
   );
   return DrawRect(
     minX: origin.x,
@@ -437,13 +343,68 @@ String? _sanitizeFontFamily(String? fontFamily) {
   return trimmed;
 }
 
-String? _normalizeLocaleTag(String? localeTag) {
+Locale? _resolveLocaleTag(String? localeTag) {
   if (localeTag == null || localeTag.isEmpty) {
     return null;
   }
-  final normalized = localeTag.trim();
-  if (normalized.isEmpty) {
+  final parts = localeTag
+      .split(RegExp('[-_]'))
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
+  if (parts.isEmpty) {
     return null;
   }
-  return normalized;
+
+  final languageCode = parts.first.toLowerCase();
+  if (!RegExp(r'^[a-z]{2,8}$').hasMatch(languageCode)) {
+    return null;
+  }
+
+  String? scriptCode;
+  String? countryCode;
+  for (final part in parts.skip(1)) {
+    if (scriptCode == null && part.length == 4) {
+      final normalizedScript =
+          '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
+      if (!RegExp(r'^[A-Z][a-z]{3}$').hasMatch(normalizedScript)) {
+        return null;
+      }
+      scriptCode = normalizedScript;
+      continue;
+    }
+    if (countryCode == null && (part.length == 2 || part.length == 3)) {
+      final normalizedCountry = part.toUpperCase();
+      if (!RegExp(r'^[A-Z]{2}$|^\d{3}$').hasMatch(normalizedCountry)) {
+        return null;
+      }
+      countryCode = normalizedCountry;
+    }
+  }
+
+  return Locale.fromSubtags(
+    languageCode: languageCode,
+    scriptCode: scriptCode,
+    countryCode: countryCode,
+  );
+}
+
+Rect? _resolveVisualBounds(TextPainter painter) {
+  final textLength = painter.plainText.length;
+  final selection = TextSelection(baseOffset: 0, extentOffset: textLength);
+  final boxes = painter.getBoxesForSelection(selection);
+  if (boxes.isEmpty) {
+    return null;
+  }
+  var left = boxes.first.left;
+  var top = boxes.first.top;
+  var right = boxes.first.right;
+  var bottom = boxes.first.bottom;
+  for (var i = 1; i < boxes.length; i++) {
+    final box = boxes[i];
+    left = math.min(left, box.left);
+    top = math.min(top, box.top);
+    right = math.max(right, box.right);
+    bottom = math.max(bottom, box.bottom);
+  }
+  return Rect.fromLTRB(left, top, right, bottom);
 }

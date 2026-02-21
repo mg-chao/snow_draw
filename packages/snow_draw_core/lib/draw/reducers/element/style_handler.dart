@@ -166,6 +166,7 @@ DrawState handleUpdateElementsStyle(
           final nextRect = resolveSerialNumberRect(
             origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
             data: updatedSerialNumberData,
+            textMetricsService: textMetricsService,
           );
           if (nextRect != next.rect) {
             geometryChanged = trackGeometryChange;

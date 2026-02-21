@@ -17,7 +17,7 @@ import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';

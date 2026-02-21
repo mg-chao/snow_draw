@@ -25,7 +25,7 @@ import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/plugin_system.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';

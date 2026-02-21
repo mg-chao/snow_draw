@@ -1,10 +1,10 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_layout.dart';
+import 'package:snow_draw_flutter_backend/services/text/flutter_serial_number_layout.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
@@ -403,9 +403,7 @@ class SerialNumberConnectorCache {
       return null;
     }
 
-    final color = serialData.color
-        .withValues(alpha: opacity)
-        .toFlutterColor();
+    final color = serialData.color.withValues(alpha: opacity).toFlutterColor();
     final paint = _paintCache.getOrCreate(
       _PaintKey(color: color, strokeWidth: lineWidth),
       () => Paint()

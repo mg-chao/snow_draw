@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 
 /// Flutter-backed text metrics service used by app/backend boundaries.
