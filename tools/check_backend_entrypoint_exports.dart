@@ -3,7 +3,7 @@ import 'dart:io';
 const _backendEntrypointPath =
     'packages/snow_draw_flutter_backend/lib/snow_draw_flutter_backend.dart';
 
-const _requiredExports = <String>{
+const _allowedExports = <String>{
   'extensions/coordinate_service_offset_extensions.dart',
   'extensions/draw_color_extensions.dart',
   'render/element_renderer.dart',
@@ -58,12 +58,22 @@ void main() {
     }
   }
 
-  for (final required in _requiredExports) {
-    if (!exports.contains(required)) {
+  for (final allowed in _allowedExports) {
+    if (!exports.contains(allowed)) {
       violations.add(
-        '$_backendEntrypointPath: missing required export "$required"',
+        '$_backendEntrypointPath: missing required export "$allowed"',
       );
     }
+  }
+
+  for (final exportPath in exports) {
+    if (_allowedExports.contains(exportPath)) {
+      continue;
+    }
+    violations.add(
+      '$_backendEntrypointPath: unexpected export "$exportPath" is not part '
+      'of the backend entrypoint contract',
+    );
   }
 
   if (violations.isNotEmpty) {
@@ -77,6 +87,6 @@ void main() {
 
   stdout.writeln(
     'Backend entrypoint export guard passed. Required public API exports are '
-    'present and legacy exports are blocked.',
+    'present, legacy exports are blocked, and unexpected exports are denied.',
   );
 }
