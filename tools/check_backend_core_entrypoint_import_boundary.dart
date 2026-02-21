@@ -1,6 +1,8 @@
 import 'dart:io';
 
 const _targetFiles = <String>[
+  'packages/snow_draw_flutter_backend/lib/render/element_renderer.dart',
+  'packages/snow_draw_flutter_backend/lib/services/text/flutter_text_rendering_cache_invalidation.dart',
   'packages/snow_draw_flutter_backend/lib/ui/canvas/draw_canvas.dart',
   'packages/snow_draw_flutter_backend/lib/visual/built_in_element_visuals.dart',
   'packages/snow_draw_flutter_backend/lib/visual/element_visual_definition.dart',

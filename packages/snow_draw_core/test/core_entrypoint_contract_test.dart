@@ -61,6 +61,13 @@ void main() {
       expect(domainState.selection, isA<SelectionState>());
       expect(validation.action, 'test-action');
       expect(eventBus.tryEmit(validation), isFalse);
+      final invalidator = () {};
+      registerTextRenderingCacheInvalidator(invalidator);
+      unregisterTextRenderingCacheInvalidator(invalidator);
+      expect(
+        const SceneEncodingNotSupported('missing-encoder').reason,
+        'missing-encoder',
+      );
       expect(cache.get('a'), 1);
       await eventBus.dispose();
     });

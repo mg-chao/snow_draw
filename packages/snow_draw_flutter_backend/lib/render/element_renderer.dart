@@ -2,13 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/painting.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry_interface.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/render/scene/scene_encoding_not_supported.dart';
-import 'package:snow_draw_core/draw/services/log/log_service.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../extensions/draw_color_extensions.dart';
 import 'scene/scene_primitive_renderer.dart';
