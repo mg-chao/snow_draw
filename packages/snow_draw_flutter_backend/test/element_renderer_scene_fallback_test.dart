@@ -23,6 +23,15 @@ void main() {
     );
   });
 
+  test('uses unknown-element fallback when scene encoding throws', () {
+    final elementRegistry = _buildElementRegistryWithThrowingEncoder();
+
+    expect(
+      () => _renderElement(elementRegistry: elementRegistry),
+      returnsNormally,
+    );
+  });
+
   test('uses unknown-element fallback when element type is unknown', () {
     final elementRegistry = DefaultElementRegistry();
 
@@ -54,6 +63,18 @@ DefaultElementRegistry _buildElementRegistryWithUnsupportedEncoder() =>
         createDefaultData: _SceneTestData.new,
         fromJson: (_) => const _SceneTestData(),
         sceneEncoder: const _UnsupportedSceneEncoder(),
+      ),
+    );
+
+DefaultElementRegistry _buildElementRegistryWithThrowingEncoder() =>
+    DefaultElementRegistry()..register<_SceneTestData>(
+      ElementDefinition<_SceneTestData>(
+        typeId: _SceneTestData.typeIdToken,
+        displayName: 'scene-test',
+        hitTester: const _NoopHitTester(),
+        createDefaultData: _SceneTestData.new,
+        fromJson: (_) => const _SceneTestData(),
+        sceneEncoder: const _ThrowingSceneEncoder(),
       ),
     );
 
@@ -145,4 +166,15 @@ class _UnsupportedSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
     required double scaleFactor,
     String? localeTag,
   }) => throw const SceneEncodingNotSupported('test-only unsupported scene');
+}
+
+class _ThrowingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
+  const _ThrowingSceneEncoder();
+
+  @override
+  RenderScene encodeScene({
+    required ElementState element,
+    required double scaleFactor,
+    String? localeTag,
+  }) => throw StateError('test-only failing scene encoder');
 }
