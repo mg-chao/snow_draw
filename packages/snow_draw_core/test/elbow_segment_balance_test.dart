@@ -128,36 +128,25 @@ void _expectBalancedThreeSegmentPath({
 }
 
 class _SegmentInfo {
-  const _SegmentInfo({
-    required this.heading,
-    required this.start,
-    required this.end,
-  });
+  const _SegmentInfo({required this.heading, required this.length});
 
   final ElbowHeading heading;
-  final DrawPoint start;
-  final DrawPoint end;
-
-  double get length => (start.x - end.x).abs() + (start.y - end.y).abs();
+  final double length;
 }
 
 List<_SegmentInfo> _significantSegments(List<DrawPoint> points) {
-  if (points.length < 2) {
-    return const <_SegmentInfo>[];
-  }
   final segments = <_SegmentInfo>[];
   for (var i = 0; i < points.length - 1; i++) {
     final start = points[i];
     final end = points[i + 1];
-    if (ElbowGeometry.manhattanDistance(start, end) <=
-        ElbowConstants.dedupThreshold) {
+    final length = ElbowGeometry.manhattanDistance(start, end);
+    if (length <= ElbowConstants.dedupThreshold) {
       continue;
     }
     segments.add(
       _SegmentInfo(
         heading: ElbowGeometry.headingForSegment(start, end),
-        start: start,
-        end: end,
+        length: length,
       ),
     );
   }
