@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
@@ -376,5 +375,20 @@ class CreateElementReducer {
       interaction.elementData == updateResult.data &&
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
-      listEquals(interaction.snapGuides, updateResult.snapGuides);
+      _listEquals(interaction.snapGuides, updateResult.snapGuides);
+}
+
+bool _listEquals<T>(List<T> left, List<T> right) {
+  if (identical(left, right)) {
+    return true;
+  }
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var i = 0; i < left.length; i++) {
+    if (left[i] != right[i]) {
+      return false;
+    }
+  }
+  return true;
 }

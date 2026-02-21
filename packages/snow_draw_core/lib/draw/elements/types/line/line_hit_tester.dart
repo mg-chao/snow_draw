@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
@@ -7,7 +5,7 @@ import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
 import '../arrow/arrow_hit_tester.dart';
 import '../arrow/arrow_visual_cache.dart';
-import '../shared/two_point_stroke_utils.dart';
+import '../shared/hit_test_geometry.dart';
 import 'line_data.dart';
 
 class LineHitTester implements ElementHitTester {
@@ -49,12 +47,17 @@ class LineHitTester implements ElementHitTester {
     }
 
     final cached = arrowVisualCache.resolve(element: element, data: data);
-    final fillPath = cached.getOrBuildClosedFillPath();
-    final testPoint = Offset(
-      localPosition.x - rect.minX,
-      localPosition.y - rect.minY,
+    final fillOutline = cached.getOrBuildClosedFillOutlinePoints(
+      data.strokeWidth,
     );
-    return fillPath.contains(testPoint);
+    if (fillOutline.length < 3) {
+      return false;
+    }
+    final testPoint = DrawPoint(
+      x: localPosition.x - rect.minX,
+      y: localPosition.y - rect.minY,
+    );
+    return isPointInsidePolygon(testPoint, fillOutline);
   }
 
   bool _hitTestStroke({
@@ -97,10 +100,7 @@ class LineHitTester implements ElementHitTester {
   }
 
   bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
-      position.x >= rect.minX - padding &&
-      position.x <= rect.maxX + padding &&
-      position.y >= rect.minY - padding &&
-      position.y <= rect.maxY + padding;
+      isPointInsideRect(rect, position, padding);
 
   bool _isClosed(LineData data) =>
       data.points.length > 2 && data.points.first == data.points.last;
@@ -118,20 +118,28 @@ class LineHitTester implements ElementHitTester {
     if (!_isInsideRect(rect, localPosition, radius)) {
       return false;
     }
-
-    final segment = resolveTwoPointStrokeSegmentWorld(
-      rect: rect,
-      startPoint: data.points.first,
-      endPoint: data.points.last,
-    );
-    if (segment == null) {
+    if (!rect.width.isFinite ||
+        !rect.height.isFinite ||
+        rect.width < 0 ||
+        rect.height < 0) {
       return false;
     }
-    return hitTestTwoPointStrokeSegment(
-      segment: segment,
-      point: Offset(localPosition.x, localPosition.y),
-      radius: radius,
+
+    final startPoint = data.points.first;
+    final endPoint = data.points.last;
+    final start = DrawPoint(
+      x: rect.minX + (startPoint.x * rect.width),
+      y: rect.minY + (startPoint.y * rect.height),
     );
+    final end = DrawPoint(
+      x: rect.minX + (endPoint.x * rect.width),
+      y: rect.minY + (endPoint.y * rect.height),
+    );
+    if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
+      return false;
+    }
+    return distanceSquaredToSegment(localPosition, start, end) <=
+        radius * radius;
   }
 
   @override

@@ -1,0 +1,24 @@
+name: snow_draw_flutter_backend
+resolution: workspace
+description: "Flutter rendering backend and canvas UI for Snow Draw."
+homepage: https://github.com/mg-chao/snow_draw
+publish_to: none
+version: 0.0.1-dev
+
+environment:
+  sdk: ^3.10.7
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  meta: ^1.15.0
+  snow_draw_core:
+    path: ../snow_draw_core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

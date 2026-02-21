@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:meta/meta.dart';
 
 import '../../../models/element_state.dart';
+import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../../utils/stroke_pattern_utils.dart';
@@ -61,11 +62,17 @@ class FreeDrawVisualEntry {
   /// reused for subsequent hit tests on the same element version.
   List<Offset>? _flattenedPoints;
 
+  /// Lazily converted flattened points in pure-core coordinates.
+  List<DrawPoint>? _flattenedDrawPoints;
+
   /// Lazily built closed copy of [path] for fill hit testing.
   ///
   /// Avoids allocating and copying a new [Path] on every
   /// `hitTest` / render call for filled free-draw shapes.
   Path? _closedFillPath;
+
+  /// Lazily flattened closed fill outline for pure geometry hit testing.
+  List<DrawPoint>? _closedFillOutlinePoints;
 
   /// Lazily recorded picture for completed strokes.
   ///
@@ -91,6 +98,18 @@ class FreeDrawVisualEntry {
     return _flattenedPoints!;
   }
 
+  /// Returns flattened points as [DrawPoint] for pure geometry hit testing.
+  List<DrawPoint> getOrBuildFlattenedPoints(double strokeWidth) {
+    if (_flattenedDrawPoints != null) {
+      return _flattenedDrawPoints!;
+    }
+    final flattened = getOrBuildFlattened(strokeWidth);
+    _flattenedDrawPoints = List<DrawPoint>.unmodifiable(
+      flattened.map((point) => DrawPoint(x: point.dx, y: point.dy)),
+    );
+    return _flattenedDrawPoints!;
+  }
+
   /// Returns a cached closed copy of [path] for fill hit testing.
   ///
   /// Built once on first access and reused for subsequent calls,
@@ -103,6 +122,19 @@ class FreeDrawVisualEntry {
       ..addPath(path, Offset.zero)
       ..close();
     return _closedFillPath!;
+  }
+
+  /// Returns flattened closed fill outline for point-in-polygon hit testing.
+  List<DrawPoint> getOrBuildClosedFillOutlinePoints(double strokeWidth) {
+    if (_closedFillOutlinePoints != null) {
+      return _closedFillOutlinePoints!;
+    }
+    final step = math.max(1, strokeWidth).toDouble();
+    final flattened = _flattenPath(getOrBuildClosedFillPath(), step);
+    _closedFillOutlinePoints = List<DrawPoint>.unmodifiable(
+      flattened.map((point) => DrawPoint(x: point.dx, y: point.dy)),
+    );
+    return _closedFillOutlinePoints!;
   }
 
   /// Returns a cached [Picture] for [opacity], or null if unavailable.

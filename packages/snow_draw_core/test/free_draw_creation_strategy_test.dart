@@ -27,7 +27,7 @@ void main() {
         final mode = update.creationMode as FreeDrawCreationMode;
         expect(mode.revision, 1);
         expect(mode.worldPoints, isNotNull);
-        expect(mode.previewPath, isNull);
+        expect(mode.previewPoints, isNull);
         expect(
           update.rect.maxX,
           greaterThan(harness.creatingState.currentRect.maxX),
@@ -39,7 +39,7 @@ void main() {
       },
     );
 
-    test('non-solid strokes keep incremental preview path', () {
+    test('non-solid strokes keep incremental preview points', () {
       final harness = _FreeDrawTestHarness.start(
         data: const FreeDrawData(strokeStyle: StrokeStyle.dashed),
         start: const DrawPoint(x: 10, y: 10),
@@ -47,7 +47,8 @@ void main() {
       final update = harness.update(const DrawPoint(x: 40, y: 25));
 
       final mode = update.creationMode as FreeDrawCreationMode;
-      expect(mode.previewPath, isNotNull);
+      expect(mode.previewPoints, isNotNull);
+      expect(mode.previewPoints, isNotEmpty);
       expect(mode.revision, 1);
     });
 

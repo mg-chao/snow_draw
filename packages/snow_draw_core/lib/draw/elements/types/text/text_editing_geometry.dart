@@ -1,12 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui' show Locale;
 
 import 'package:meta/meta.dart';
 
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import 'text_data.dart';
-import 'text_layout.dart';
 
 /// Geometry resolved for an in-progress text draft.
 ///
@@ -18,18 +17,20 @@ class TextEditingGeometry {
   const TextEditingGeometry({required this.rect, required this.layout});
 
   final DrawRect rect;
-  final TextLayoutMetrics layout;
+  final TextMetrics layout;
 }
 
 /// Resolves the initial text editing rect for a newly created text element.
 DrawRect resolveInitialTextEditingRect({
   required DrawPoint position,
   required TextData data,
-  Locale? locale,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
+  String? localeTag,
 }) => resolveInitialTextEditingGeometry(
   position: position,
   data: data,
-  locale: locale,
+  textMetricsService: textMetricsService,
+  localeTag: localeTag,
 ).rect;
 
 /// Resolves geometry for the initial text editing rect of a newly created text
@@ -37,11 +38,13 @@ DrawRect resolveInitialTextEditingRect({
 TextEditingGeometry resolveInitialTextEditingGeometry({
   required DrawPoint position,
   required TextData data,
-  Locale? locale,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
+  String? localeTag,
 }) => _resolveContentSizedTextEditingGeometry(
   origin: position,
   data: data,
-  locale: locale,
+  textMetricsService: textMetricsService,
+  localeTag: localeTag,
 );
 
 /// Resolves the text editing rect for the next draft payload.
@@ -53,14 +56,16 @@ DrawRect resolveTextEditingRect({
   required DrawPoint origin,
   required DrawRect currentRect,
   required TextData data,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
   bool allowShrinkHeight = false,
-  Locale? locale,
+  String? localeTag,
 }) => resolveTextEditingGeometry(
   origin: origin,
   currentRect: currentRect,
   data: data,
+  textMetricsService: textMetricsService,
   allowShrinkHeight: allowShrinkHeight,
-  locale: locale,
+  localeTag: localeTag,
 ).rect;
 
 /// Resolves geometry for an in-progress text edit draft.
@@ -71,21 +76,25 @@ TextEditingGeometry resolveTextEditingGeometry({
   required DrawPoint origin,
   required DrawRect currentRect,
   required TextData data,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
   bool allowShrinkHeight = false,
-  Locale? locale,
+  String? localeTag,
 }) {
   if (data.autoResize) {
     return _resolveContentSizedTextEditingGeometry(
       origin: origin,
       data: data,
-      locale: locale,
+      textMetricsService: textMetricsService,
+      localeTag: localeTag,
     );
   }
 
-  final layout = layoutText(
-    data: data,
-    maxWidth: currentRect.width,
-    locale: locale,
+  final layout = textMetricsService.measure(
+    TextLayoutRequest(
+      data: data,
+      maxWidth: currentRect.width,
+      localeTag: localeTag,
+    ),
   );
   final contentHeight = _resolveContentHeight(layout);
   final nextHeight = allowShrinkHeight
@@ -103,33 +112,40 @@ TextEditingGeometry resolveTextEditingGeometry({
 DrawRect resolveAutoResizeTextEditingRect({
   required DrawPoint origin,
   required TextData data,
-  Locale? locale,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
+  String? localeTag,
 }) => resolveAutoResizeTextEditingGeometry(
   origin: origin,
   data: data,
-  locale: locale,
+  textMetricsService: textMetricsService,
+  localeTag: localeTag,
 ).rect;
 
 /// Resolves geometry for auto-resizing text when font metrics change.
 TextEditingGeometry resolveAutoResizeTextEditingGeometry({
   required DrawPoint origin,
   required TextData data,
-  Locale? locale,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
+  String? localeTag,
 }) => _resolveContentSizedTextEditingGeometry(
   origin: origin,
   data: data,
-  locale: locale,
+  textMetricsService: textMetricsService,
+  localeTag: localeTag,
 );
 
 TextEditingGeometry _resolveContentSizedTextEditingGeometry({
   required DrawPoint origin,
   required TextData data,
-  Locale? locale,
+  required TextMetricsService textMetricsService,
+  required String? localeTag,
 }) {
-  final layout = layoutText(
-    data: data,
-    maxWidth: double.infinity,
-    locale: locale,
+  final layout = textMetricsService.measure(
+    TextLayoutRequest(
+      data: data,
+      maxWidth: double.infinity,
+      localeTag: localeTag,
+    ),
   );
   return _buildTextEditingGeometry(
     origin: origin,
@@ -143,7 +159,7 @@ TextEditingGeometry _buildTextEditingGeometry({
   required DrawPoint origin,
   required double width,
   required double height,
-  required TextLayoutMetrics layout,
+  required TextMetrics layout,
 }) => TextEditingGeometry(
   rect: DrawRect(
     minX: origin.x,
@@ -154,12 +170,20 @@ TextEditingGeometry _buildTextEditingGeometry({
   layout: layout,
 );
 
-double _resolveContentWidth(TextLayoutMetrics layout) {
-  final horizontalPadding = resolveTextLayoutHorizontalPadding(
+double _resolveContentWidth(TextMetrics layout) {
+  final horizontalPadding = _resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
   );
-  return layout.size.width + horizontalPadding * 2;
+  return layout.width + horizontalPadding * 2;
 }
 
-double _resolveContentHeight(TextLayoutMetrics layout) =>
-    math.max(layout.size.height, layout.lineHeight);
+double _resolveContentHeight(TextMetrics layout) =>
+    math.max(layout.height, layout.lineHeight);
+
+double _resolveTextLayoutHorizontalPadding(double lineHeight) {
+  final padding = lineHeight * 0.01;
+  if (padding.isNaN || padding.isInfinite) {
+    return 0;
+  }
+  return padding;
+}

@@ -9,6 +9,7 @@ environment:
 workspace:
   - apps/snow_draw
   - packages/snow_draw_core
+  - packages/snow_draw_flutter_backend
 dev_dependencies:
   lint_hard: ^7.1.0
   melos: ^7.3.0
@@ -29,6 +30,10 @@ melos:
         dart run melos exec -- flutter analyze
         dart run melos exec -- dart format .
         dart run melos exec -- dart fix --apply
+
+    check:core-purity:
+      description: Block new Flutter/UI imports under core draw during migration.
+      run: dart run tools/check_core_draw_import_purity.dart
 
     test:
       description: Run tests in all packages.

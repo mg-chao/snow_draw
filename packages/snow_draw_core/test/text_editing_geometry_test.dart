@@ -24,7 +24,7 @@ void main() {
     );
 
     expect(geometry.rect, rect);
-    expect(geometry.layout.size.height, greaterThan(0));
+    expect(geometry.layout.height, greaterThan(0));
     expect(geometry.layout.lineHeight, greaterThan(0));
   });
 
@@ -51,6 +51,6 @@ void main() {
       data: data,
     );
     expect(autoResizeGeometry.rect, autoResizeRect);
-    expect(autoResizeGeometry.layout.size.width, greaterThan(0));
+    expect(autoResizeGeometry.layout.width, greaterThan(0));
   });
 }

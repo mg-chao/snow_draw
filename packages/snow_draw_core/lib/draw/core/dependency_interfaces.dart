@@ -6,6 +6,7 @@ import '../edit/edit_operation_registry_interface.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
+import '../services/text/text_metrics_service.dart';
 
 /// Lightweight dependency interfaces to avoid service-locator coupling.
 abstract class HasConfig {
@@ -40,16 +41,26 @@ abstract class HasEventBus {
   EventBus? get eventBus;
 }
 
+abstract class HasTextMetricsService {
+  TextMetricsService get textMetricsService;
+}
+
 /// Reducer-specific dependency interfaces.
 abstract class CreateElementReducerDeps
     implements HasConfig, HasElementRegistry, HasIdGenerator {}
 
-abstract class TextEditReducerDeps implements HasConfig, HasIdGenerator {}
+abstract class TextEditReducerDeps
+    implements HasConfig, HasIdGenerator, HasTextMetricsService {}
 
 abstract class SelectionReducerDeps implements HasLogService, HasEventBus {}
 
 abstract class ElementReducerDeps
-    implements HasLogService, HasEventBus, HasIdGenerator, HasConfig {}
+    implements
+        HasLogService,
+        HasEventBus,
+        HasIdGenerator,
+        HasConfig,
+        HasTextMetricsService {}
 
 abstract class EditReducerDeps implements HasEditConfigProvider {}
 

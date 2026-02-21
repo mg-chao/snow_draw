@@ -1,7 +1,6 @@
 import 'dart:collection';
 
-import 'package:flutter/foundation.dart';
-
+import '../core/callbacks.dart';
 import '../models/draw_state.dart';
 import '../models/interaction_state.dart';
 import 'draw_store_interface.dart';

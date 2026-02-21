@@ -3,3 +3,4 @@ export 'arrow_definition.dart';
 export 'arrow_hit_tester.dart';
 export 'arrow_points.dart';
 export 'arrow_renderer.dart';
+export 'arrow_scene_encoder.dart';

@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:ui' show VoidCallback;
 
 import '../actions/draw_actions.dart';
 import '../config/draw_config.dart';
+import '../core/callbacks.dart';
 import '../core/draw_context.dart';
 import '../events/event_bus.dart';
 import '../input/plugin_core.dart';

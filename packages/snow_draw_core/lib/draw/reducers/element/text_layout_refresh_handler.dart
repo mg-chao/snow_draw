@@ -11,7 +11,7 @@ import '../core/reducer_utils.dart';
 DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
   DrawState state,
   RefreshAutoResizeTextLayoutsAfterFontLoad _,
-  ElementReducerDeps _,
+  ElementReducerDeps context,
 ) {
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;
@@ -30,6 +30,7 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     final nextRect = resolveAutoResizeTextEditingRect(
       origin: DrawPoint(x: element.rect.minX, y: element.rect.minY),
       data: data,
+      textMetricsService: context.textMetricsService,
     );
     if (nextRect == element.rect) {
       continue;
@@ -48,6 +49,7 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     final nextRect = resolveAutoResizeTextEditingRect(
       origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
       data: interaction.draftData,
+      textMetricsService: context.textMetricsService,
     );
     if (nextRect != interaction.rect) {
       nextTextInteraction = interaction.copyWith(rect: nextRect);

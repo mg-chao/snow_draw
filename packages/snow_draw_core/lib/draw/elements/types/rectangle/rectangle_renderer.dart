@@ -1,9 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
-import '../../../../ui/canvas/rectangle_shader_manager.dart';
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
@@ -54,7 +53,7 @@ class RectangleRenderer extends ElementTypeRenderer {
     final renderPlan = RectangleRenderPlan.resolve(
       data: data,
       elementOpacity: element.opacity,
-      shaderReady: RectangleShaderManager.instance.isReady,
+      shaderReady: false,
     );
 
     if (!renderPlan.paintFill && !renderPlan.paintStroke) {
@@ -66,57 +65,10 @@ class RectangleRenderer extends ElementTypeRenderer {
         _renderSolidFastPath(canvas, element, data, renderPlan);
         return;
       case RectangleRenderBackend.shaderPattern:
-        if (_renderWithShader(canvas, element, data, renderPlan, scaleFactor)) {
-          return;
-        }
-        _renderPatternFallback(canvas, element, data, renderPlan);
-        return;
       case RectangleRenderBackend.cpuPattern:
         _renderPatternFallback(canvas, element, data, renderPlan);
         return;
     }
-  }
-
-  /// Renders the rectangle using the GPU fragment shader.
-  ///
-  /// Returns true if shader was used, false if fallback is needed.
-  bool _renderWithShader(
-    Canvas canvas,
-    ElementState element,
-    RectangleData data,
-    RectangleRenderPlan renderPlan,
-    double scaleFactor,
-  ) {
-    final rect = element.rect;
-    final fillLineWidth = _resolveFillLineWidth(data.strokeWidth);
-    final fillLineSpacing = _resolveFillLineSpacing(fillLineWidth);
-
-    final dashLength = data.strokeWidth * 3.0;
-    final gapLength = dashLength * 0.5;
-    final dotSpacing = data.strokeWidth * 2.0;
-    final dotRadius = data.strokeWidth * 0.5;
-    final effectiveScale = _resolveScaleFactor(scaleFactor);
-
-    return RectangleShaderManager.instance.paintRectangle(
-      canvas: canvas,
-      elementId: element.id,
-      center: Offset(rect.centerX, rect.centerY),
-      size: Size(rect.width, rect.height),
-      rotation: element.rotation,
-      cornerRadius: data.cornerRadius,
-      fillStyle: data.fillStyle,
-      fillColor: renderPlan.fillColor,
-      fillLineWidth: fillLineWidth,
-      fillLineSpacing: fillLineSpacing,
-      strokeStyle: data.strokeStyle,
-      strokeColor: renderPlan.strokeColor,
-      strokeWidth: data.strokeWidth,
-      dashLength: dashLength,
-      gapLength: gapLength,
-      dotSpacing: dotSpacing,
-      dotRadius: dotRadius,
-      aaWidth: 1.5 / effectiveScale,
-    );
   }
 
   /// Fast path for common solid-style rectangles.
@@ -194,9 +146,6 @@ class RectangleRenderer extends ElementTypeRenderer {
 
     canvas.restore();
   }
-
-  static double _resolveScaleFactor(double scaleFactor) =>
-      scaleFactor == 0 ? 1.0 : scaleFactor;
 
   static double _resolveFillLineWidth(double strokeWidth) =>
       (1 + (strokeWidth - 1) * 0.6).clamp(0.5, 3.0);

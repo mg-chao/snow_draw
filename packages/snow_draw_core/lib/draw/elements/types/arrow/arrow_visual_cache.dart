@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../../models/element_state.dart';
+import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import 'arrow_geometry.dart';
@@ -41,6 +42,7 @@ class ArrowVisualCacheEntry {
 
   /// Lazily built closed copy of [shaftPath] for fill hit testing.
   Path? _closedFillPath;
+  List<DrawPoint>? _closedFillOutlinePoints;
 
   bool matches(ArrowLikeData data, double width, double height) =>
       identical(this.data, data) &&
@@ -59,6 +61,19 @@ class ArrowVisualCacheEntry {
       ..addPath(shaftPath, Offset.zero)
       ..close();
     return _closedFillPath!;
+  }
+
+  /// Returns flattened closed fill outline for pure geometry hit testing.
+  List<DrawPoint> getOrBuildClosedFillOutlinePoints(double strokeWidth) {
+    if (_closedFillOutlinePoints != null) {
+      return _closedFillOutlinePoints!;
+    }
+    final step = math.max(1, strokeWidth).toDouble();
+    final flattened = _flattenPath(getOrBuildClosedFillPath(), step);
+    _closedFillOutlinePoints = List<DrawPoint>.unmodifiable(
+      flattened.map((point) => DrawPoint(x: point.dx, y: point.dy)),
+    );
+    return _closedFillOutlinePoints!;
   }
 }
 
@@ -244,6 +259,46 @@ class ArrowVisualCache {
     }
     return positions;
   }
+}
+
+List<Offset> _flattenPath(Path path, double step) {
+  if (step <= 0 || !step.isFinite) {
+    return const <Offset>[];
+  }
+
+  const maxPoints = 4096;
+  final flattened = <Offset>[];
+  for (final metric in path.computeMetrics()) {
+    final length = metric.length;
+    var distance = 0.0;
+    while (distance < length) {
+      if (flattened.length >= maxPoints) {
+        return flattened;
+      }
+      final tangent = metric.getTangentForOffset(distance);
+      if (tangent != null) {
+        final point = tangent.position;
+        if (flattened.isEmpty || point != flattened.last) {
+          flattened.add(point);
+        }
+      }
+      distance += step;
+    }
+    if (flattened.length >= maxPoints) {
+      return flattened;
+    }
+    final endTangent = metric.getTangentForOffset(length);
+    if (endTangent != null) {
+      final point = endTangent.position;
+      if (flattened.isEmpty || point != flattened.last) {
+        flattened.add(point);
+        if (flattened.length >= maxPoints) {
+          return flattened;
+        }
+      }
+    }
+  }
+  return flattened;
 }
 
 final arrowVisualCache = ArrowVisualCache();

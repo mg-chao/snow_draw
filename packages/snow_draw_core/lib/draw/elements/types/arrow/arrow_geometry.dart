@@ -813,10 +813,14 @@ class ArrowGeometryDescriptor {
   final DrawRect rect;
 
   List<Offset>? _localPoints;
+  List<DrawPoint>? _localDrawPoints;
   List<Offset>? _worldPoints;
   List<Offset>? _insetPoints;
+  List<DrawPoint>? _insetDrawPoints;
   Offset? _startDirection;
   Offset? _endDirection;
+  DrawPoint? _startDirectionPoint;
+  DrawPoint? _endDirectionPoint;
   double? _startInset;
   double? _endInset;
   double? _startDirectionOffset;
@@ -830,6 +834,11 @@ class ArrowGeometryDescriptor {
       _localPoints ??= ArrowGeometry.resolveLocalPoints(
         rect: rect,
         normalizedPoints: data.points,
+      );
+
+  List<DrawPoint> get localDrawPoints =>
+      _localDrawPoints ??= List<DrawPoint>.unmodifiable(
+        localPoints.map((point) => DrawPoint(x: point.dx, y: point.dy)),
       );
 
   List<Offset> get worldPoints {
@@ -884,11 +893,44 @@ class ArrowGeometryDescriptor {
     return applied;
   }
 
+  List<DrawPoint> get insetDrawPoints =>
+      _insetDrawPoints ??= List<DrawPoint>.unmodifiable(
+        insetPoints.map((point) => DrawPoint(x: point.dx, y: point.dy)),
+      );
+
   Offset? get startDirection =>
       _startDirection ??= _resolveDirection(fromStart: true);
 
   Offset? get endDirection =>
       _endDirection ??= _resolveDirection(fromStart: false);
+
+  DrawPoint? get startDirectionPoint {
+    final direction = startDirection;
+    if (direction == null) {
+      return null;
+    }
+    final cached = _startDirectionPoint;
+    if (cached != null) {
+      return cached;
+    }
+    final converted = DrawPoint(x: direction.dx, y: direction.dy);
+    _startDirectionPoint = converted;
+    return converted;
+  }
+
+  DrawPoint? get endDirectionPoint {
+    final direction = endDirection;
+    if (direction == null) {
+      return null;
+    }
+    final cached = _endDirectionPoint;
+    if (cached != null) {
+      return cached;
+    }
+    final converted = DrawPoint(x: direction.dx, y: direction.dy);
+    _endDirectionPoint = converted;
+    return converted;
+  }
 
   double get shaftLength {
     final cached = _shaftLength;

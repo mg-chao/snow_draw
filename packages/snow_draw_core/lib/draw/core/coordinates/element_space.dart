@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 import '../../types/draw_point.dart';
 import 'coordinate_space.dart';

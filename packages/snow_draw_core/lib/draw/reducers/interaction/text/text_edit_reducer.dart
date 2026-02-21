@@ -24,8 +24,8 @@ class TextEditReducer {
     TextEditReducerDeps context,
   ) => switch (action) {
     final StartTextEdit a => _startTextEdit(state, a, context),
-    final UpdateTextEdit a => _updateTextEdit(state, a),
-    final FinishTextEdit a => _finishTextEdit(state, a),
+    final UpdateTextEdit a => _updateTextEdit(state, a, context),
+    final FinishTextEdit a => _finishTextEdit(state, a, context),
     CancelTextEdit _ => _cancelTextEdit(state),
     _ => null,
   };
@@ -102,6 +102,7 @@ class TextEditReducer {
       rect: resolveInitialTextEditingRect(
         position: action.position,
         data: draftData,
+        textMetricsService: context.textMetricsService,
       ),
       isNew: true,
       opacity: defaults.opacity,
@@ -109,7 +110,11 @@ class TextEditReducer {
     );
   }
 
-  DrawState _updateTextEdit(DrawState state, UpdateTextEdit action) {
+  DrawState _updateTextEdit(
+    DrawState state,
+    UpdateTextEdit action,
+    TextEditReducerDeps context,
+  ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
       return state;
@@ -125,7 +130,11 @@ class TextEditReducer {
         : interaction.draftData.copyWith(text: action.text);
     final nextRect =
         action.rect ??
-        _resolveTextDraftRect(currentRect: interaction.rect, data: nextData);
+        _resolveTextDraftRect(
+          currentRect: interaction.rect,
+          data: nextData,
+          context: context,
+        );
     if (nextData == interaction.draftData && nextRect == interaction.rect) {
       return state;
     }
@@ -137,7 +146,11 @@ class TextEditReducer {
     );
   }
 
-  DrawState _finishTextEdit(DrawState state, FinishTextEdit action) {
+  DrawState _finishTextEdit(
+    DrawState state,
+    FinishTextEdit action,
+    TextEditReducerDeps context,
+  ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
       return state;
@@ -153,6 +166,7 @@ class TextEditReducer {
     final nextRect = _resolveTextDraftRect(
       currentRect: interaction.rect,
       data: nextData,
+      context: context,
     );
 
     if (interaction.isNew) {
@@ -274,10 +288,12 @@ class TextEditReducer {
   DrawRect _resolveTextDraftRect({
     required DrawRect currentRect,
     required TextData data,
+    required TextEditReducerDeps context,
   }) => resolveTextEditingRect(
     origin: DrawPoint(x: currentRect.minX, y: currentRect.minY),
     currentRect: currentRect,
     data: data,
+    textMetricsService: context.textMetricsService,
     allowShrinkHeight: true,
   );
 

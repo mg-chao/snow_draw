@@ -1,8 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 import 'log_config.dart';
 import 'log_output.dart';
+
+bool _resolveReleaseMode() {
+  var inReleaseMode = true;
+  assert(() {
+    inReleaseMode = false;
+    return true;
+  }(), 'Assert callback runs only in debug/profile modes.');
+  return inReleaseMode;
+}
 
 /// Snow Draw logging service.
 ///
@@ -34,7 +42,9 @@ class LogService {
     List<LogOutputHandler>? outputs,
   }) : _config =
            config ??
-           (kReleaseMode ? LogConfig.production : LogConfig.development),
+           (_resolveReleaseMode()
+               ? LogConfig.production
+               : LogConfig.development),
        _logger =
            logger ??
            Logger(

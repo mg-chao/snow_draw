@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 import '../../../models/element_state.dart';
 import '../../../types/element_style.dart';

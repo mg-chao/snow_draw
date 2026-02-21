@@ -1,9 +1,9 @@
-import 'package:flutter/widgets.dart';
+import 'package:meta/meta.dart';
 
 import 'creation_strategy.dart';
 import 'element_data.dart';
 import 'element_hit_tester.dart';
-import 'element_renderer.dart';
+import 'element_scene_encoder.dart';
 import 'element_type_id.dart';
 
 /// Definition for a single element type.
@@ -15,19 +15,17 @@ class ElementDefinition<T extends ElementData> {
   const ElementDefinition({
     required this.typeId,
     required this.displayName,
-    required this.renderer,
     required this.hitTester,
     required this.createDefaultData,
     required this.fromJson,
     this.creationStrategy,
-    this.icon,
+    this.sceneEncoder,
   });
   final ElementTypeId<T> typeId;
   final String displayName;
-  final ElementTypeRenderer renderer;
   final ElementHitTester hitTester;
   final T Function() createDefaultData;
   final T Function(Map<String, dynamic> json) fromJson;
   final CreationStrategy? creationStrategy;
-  final IconData? icon;
+  final ElementSceneEncoder<T>? sceneEncoder;
 }

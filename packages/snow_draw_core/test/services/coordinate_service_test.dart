@@ -18,19 +18,6 @@ void main() {
       expect(service.screenToWorld(screenPoint), worldPoint);
     });
 
-    test('fromOffset and toOffset preserve coordinate conversion', () {
-      const service = CoordinateService(
-        camera: CameraState(position: DrawPoint(x: -20, y: 30), zoom: 1.5),
-        scaleFactor: 1.5,
-      );
-
-      const offset = Offset(25, 60);
-      final worldPoint = service.fromOffset(offset);
-
-      expect(worldPoint, const DrawPoint(x: 30, y: 20));
-      expect(service.toOffset(worldPoint), offset);
-    });
-
     test('fromCamera uses camera zoom when scaleFactor is omitted', () {
       const camera = CameraState(position: DrawPoint(x: 40, y: 10), zoom: 2.5);
       final service = CoordinateService.fromCamera(camera);

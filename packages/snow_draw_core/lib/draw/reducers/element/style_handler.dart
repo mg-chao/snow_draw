@@ -12,6 +12,7 @@ import '../../elements/types/text/text_editing_geometry.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
@@ -20,7 +21,7 @@ import '../core/reducer_utils.dart';
 DrawState handleUpdateElementsStyle(
   DrawState state,
   UpdateElementsStyle action,
-  ElementReducerDeps _,
+  ElementReducerDeps context,
 ) {
   final targetIds = action.elementIds.toSet();
   if (targetIds.isEmpty) {
@@ -68,6 +69,7 @@ DrawState handleUpdateElementsStyle(
       opacity: action.opacity,
       trackGeometryChange: trackSelectionOverlay && selectedIds.contains(id),
       elementsById: document.elementMap,
+      textMetricsService: context.textMetricsService,
     );
     if (update == null) {
       continue;
@@ -84,7 +86,12 @@ DrawState handleUpdateElementsStyle(
   final nextTextEdit =
       interaction is TextEditingState &&
           targetIds.contains(interaction.elementId)
-      ? _applyTextEditingStyleUpdate(interaction, styleUpdate, action.opacity)
+      ? _applyTextEditingStyleUpdate(
+          interaction,
+          styleUpdate,
+          action.opacity,
+          context: context,
+        )
       : null;
   final interactionChanged = nextTextEdit != null;
 
@@ -123,6 +130,7 @@ DrawState handleUpdateElementsStyle(
   required double? opacity,
   required bool trackGeometryChange,
   required Map<String, ElementState> elementsById,
+  required TextMetricsService textMetricsService,
 }) {
   var next = element;
   var changed = false;
@@ -143,6 +151,7 @@ DrawState handleUpdateElementsStyle(
             origin: DrawPoint(x: next.rect.minX, y: next.rect.minY),
             currentRect: next.rect,
             data: updatedTextData,
+            textMetricsService: textMetricsService,
             allowShrinkHeight: true,
           );
           if (nextRect != next.rect) {
@@ -196,8 +205,9 @@ DrawState handleUpdateElementsStyle(
 TextEditingState? _applyTextEditingStyleUpdate(
   TextEditingState interaction,
   ElementStyleUpdate styleUpdate,
-  double? opacity,
-) {
+  double? opacity, {
+  required ElementReducerDeps context,
+}) {
   final updatedData = styleUpdate.isEmpty
       ? interaction.draftData
       : interaction.draftData.withStyleUpdate(styleUpdate) as TextData;
@@ -213,6 +223,7 @@ TextEditingState? _applyTextEditingStyleUpdate(
           origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
           currentRect: interaction.rect,
           data: updatedData,
+          textMetricsService: context.textMetricsService,
           allowShrinkHeight: true,
         )
       : interaction.rect;

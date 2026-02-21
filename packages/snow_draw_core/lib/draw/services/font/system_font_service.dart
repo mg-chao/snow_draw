@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import '../../core/value_listenable.dart';
 
 import 'system_font_service_stub.dart'
     if (dart.library.io) 'system_font_service_io.dart'

@@ -1,12 +1,9 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
 import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -67,7 +64,6 @@ ElementDefinition<_TestElementData> _testElementDefinition({
 }) => ElementDefinition<_TestElementData>(
   typeId: _TestElementData.typeIdToken,
   displayName: 'Test Element',
-  renderer: const _NoopRenderer(),
   hitTester: _ToggleHitTester(shouldHit: shouldHit),
   createDefaultData: () => const _TestElementData(),
   fromJson: (_) => const _TestElementData(),
@@ -101,16 +97,4 @@ class _ToggleHitTester implements ElementHitTester {
     required DrawPoint position,
     double tolerance = 0,
   }) => shouldHit;
-}
-
-class _NoopRenderer extends ElementTypeRenderer {
-  const _NoopRenderer();
-
-  @override
-  void render({
-    required Canvas canvas,
-    required ElementState element,
-    required double scaleFactor,
-    Locale? locale,
-  }) {}
 }

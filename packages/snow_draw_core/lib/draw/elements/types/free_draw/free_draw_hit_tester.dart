@@ -1,12 +1,10 @@
-import 'dart:ui';
-
 import '../../../config/draw_config.dart';
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
-import '../shared/two_point_stroke_utils.dart';
+import '../shared/hit_test_geometry.dart';
 import 'free_draw_data.dart';
 import 'free_draw_visual_cache.dart';
 
@@ -67,16 +65,21 @@ class FreeDrawHitTester implements ElementHitTester {
 
     if (!hasFill ||
         cached.pointCount < 3 ||
-        !_isInsideRect(rect, localPosition, 0)) {
+        !isPointInsideRect(rect, localPosition, 0)) {
       return false;
     }
 
-    final fillPath = cached.getOrBuildClosedFillPath();
-    final testPoint = Offset(
-      localPosition.x - rect.minX,
-      localPosition.y - rect.minY,
+    final fillOutline = cached.getOrBuildClosedFillOutlinePoints(
+      data.strokeWidth,
     );
-    return fillPath.contains(testPoint);
+    if (fillOutline.length < 3) {
+      return false;
+    }
+    final testPoint = DrawPoint(
+      x: localPosition.x - rect.minX,
+      y: localPosition.y - rect.minY,
+    );
+    return isPointInsidePolygon(testPoint, fillOutline);
   }
 
   DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
@@ -118,24 +121,32 @@ class FreeDrawHitTester implements ElementHitTester {
     if (!radius.isFinite || radius <= 0) {
       return false;
     }
-    if (!_isInsideRect(rect, localPosition, radius)) {
+    if (!isPointInsideRect(rect, localPosition, radius)) {
+      return false;
+    }
+    if (!rect.width.isFinite ||
+        !rect.height.isFinite ||
+        rect.width < 0 ||
+        rect.height < 0) {
       return false;
     }
 
-    final segment = resolveTwoPointStrokeSegmentWorld(
-      rect: rect,
-      startPoint: data.points.first,
-      endPoint: data.points.last,
+    final startPoint = data.points.first;
+    final endPoint = data.points.last;
+    final start = DrawPoint(
+      x: rect.minX + (startPoint.x * rect.width),
+      y: rect.minY + (startPoint.y * rect.height),
     );
-    if (segment == null) {
+    final end = DrawPoint(
+      x: rect.minX + (endPoint.x * rect.width),
+      y: rect.minY + (endPoint.y * rect.height),
+    );
+    if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
       return false;
     }
 
-    return hitTestTwoPointStrokeSegment(
-      segment: segment,
-      point: Offset(localPosition.x, localPosition.y),
-      radius: radius,
-    );
+    return distanceSquaredToSegment(localPosition, start, end) <=
+        radius * radius;
   }
 
   bool _hitTestStroke({
@@ -149,22 +160,22 @@ class FreeDrawHitTester implements ElementHitTester {
     if (!radius.isFinite || radius <= 0) {
       return false;
     }
-    if (!_isInsideRect(rect, localPosition, radius)) {
+    if (!isPointInsideRect(rect, localPosition, radius)) {
       return false;
     }
 
-    final flattened = cached.getOrBuildFlattened(data.strokeWidth);
+    final flattened = cached.getOrBuildFlattenedPoints(data.strokeWidth);
     if (flattened.length < 2) {
       return false;
     }
 
-    final testPoint = Offset(
-      localPosition.x - rect.minX,
-      localPosition.y - rect.minY,
+    final testPoint = DrawPoint(
+      x: localPosition.x - rect.minX,
+      y: localPosition.y - rect.minY,
     );
     final radiusSq = radius * radius;
     for (var i = 1; i < flattened.length; i++) {
-      final distance = _distanceSquaredToSegment(
+      final distance = distanceSquaredToSegment(
         testPoint,
         flattened[i - 1],
         flattened[i],
@@ -175,31 +186,4 @@ class FreeDrawHitTester implements ElementHitTester {
     }
     return false;
   }
-}
-
-bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
-    position.x >= rect.minX - padding &&
-    position.x <= rect.maxX + padding &&
-    position.y >= rect.minY - padding &&
-    position.y <= rect.maxY + padding;
-
-double _distanceSquaredToSegment(Offset p, Offset a, Offset b) {
-  final ab = b - a;
-  final ap = p - a;
-  final abLengthSq = ab.dx * ab.dx + ab.dy * ab.dy;
-  if (abLengthSq == 0) {
-    final dx = ap.dx;
-    final dy = ap.dy;
-    return dx * dx + dy * dy;
-  }
-  var t = (ap.dx * ab.dx + ap.dy * ab.dy) / abLengthSq;
-  if (t < 0) {
-    t = 0;
-  } else if (t > 1) {
-    t = 1;
-  }
-  final closest = Offset(a.dx + ab.dx * t, a.dy + ab.dy * t);
-  final dx = p.dx - closest.dx;
-  final dy = p.dy - closest.dy;
-  return dx * dx + dy * dy;
 }

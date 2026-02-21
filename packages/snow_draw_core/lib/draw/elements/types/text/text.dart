@@ -3,3 +3,4 @@ export 'text_definition.dart';
 export 'text_hit_tester.dart';
 export 'text_layout.dart';
 export 'text_renderer.dart';
+export 'text_scene_encoder.dart';

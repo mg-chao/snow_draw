@@ -1,0 +1,138 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:snow_draw_core/draw/elements/core/element_data.dart';
+import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
+import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
+import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_core/draw/elements/core/element_scene_encoder.dart';
+import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
+
+void main() {
+  test('encodes scene primitives when scene encoder is available', () {
+    final counters = _RenderCounters();
+    final elementRegistry = _buildElementRegistry(counters);
+
+    _renderElement(elementRegistry: elementRegistry);
+
+    expect(counters.sceneEncodes, 1);
+  });
+
+  test('falls back safely when scene encoder is unavailable', () {
+    final counters = _RenderCounters();
+    final elementRegistry = _buildElementRegistryWithoutSceneEncoder();
+
+    expect(
+      () => _renderElement(elementRegistry: elementRegistry),
+      returnsNormally,
+    );
+    expect(counters.sceneEncodes, 0);
+  });
+}
+
+DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>
+    DefaultElementRegistry()..register<_SceneTestData>(
+      ElementDefinition<_SceneTestData>(
+        typeId: _SceneTestData.typeIdToken,
+        displayName: 'scene-test',
+        hitTester: const _NoopHitTester(),
+        createDefaultData: _SceneTestData.new,
+        fromJson: (_) => const _SceneTestData(),
+        sceneEncoder: _CountingSceneEncoder(counters),
+      ),
+    );
+
+DefaultElementRegistry _buildElementRegistryWithoutSceneEncoder() =>
+    DefaultElementRegistry()..register<_SceneTestData>(
+      ElementDefinition<_SceneTestData>(
+        typeId: _SceneTestData.typeIdToken,
+        displayName: 'scene-test',
+        hitTester: const _NoopHitTester(),
+        createDefaultData: _SceneTestData.new,
+        fromJson: (_) => const _SceneTestData(),
+      ),
+    );
+
+void _renderElement({required DefaultElementRegistry elementRegistry}) {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  const element = ElementState(
+    id: 'scene-test-element',
+    rect: DrawRect(maxX: 40, maxY: 40),
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: _SceneTestData(),
+  );
+
+  elementRenderer.renderElement(
+    canvas: canvas,
+    element: element,
+    scaleFactor: 1,
+    elementRegistry: elementRegistry,
+  );
+  recorder.endRecording().dispose();
+}
+
+class _RenderCounters {
+  var sceneEncodes = 0;
+}
+
+class _SceneTestData extends ElementData {
+  const _SceneTestData();
+
+  static const typeIdToken = ElementTypeId<_SceneTestData>('scene_test_data');
+
+  @override
+  ElementTypeId<_SceneTestData> get typeId => typeIdToken;
+
+  @override
+  Map<String, dynamic> toJson() => const {'typeId': 'scene_test_data'};
+}
+
+class _NoopHitTester implements ElementHitTester {
+  const _NoopHitTester();
+
+  @override
+  DrawRect getBounds(ElementState element) => element.rect;
+
+  @override
+  bool hitTest({
+    required ElementState element,
+    required DrawPoint position,
+    double tolerance = 0,
+  }) => false;
+}
+
+class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
+  _CountingSceneEncoder(this._counters);
+
+  final _RenderCounters _counters;
+
+  @override
+  RenderScene encodeScene({
+    required ElementState element,
+    required double scaleFactor,
+    String? localeTag,
+  }) {
+    _counters.sceneEncodes += 1;
+    return const RenderScene(
+      primitives: <RenderPrimitive>[
+        RenderPathFillPrimitive(
+          path: RenderPath(<RenderPathCommand>[
+            RenderMoveTo(DrawPoint.zero),
+            RenderLineTo(DrawPoint(x: 10, y: 0)),
+            RenderLineTo(DrawPoint(x: 10, y: 10)),
+            RenderClosePath(),
+          ]),
+          colorArgb: 0xFF1576FE,
+        ),
+      ],
+    );
+  }
+}
