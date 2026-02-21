@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:snow_draw_core/draw/elements/core/element_data.dart';
-import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Flutter visual metadata for a single element type.
 ///

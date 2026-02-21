@@ -1,10 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/core/element_data.dart';
-import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
-import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'plugin_draw_canvas.dart';
 
 class DrawCanvas extends StatelessWidget {

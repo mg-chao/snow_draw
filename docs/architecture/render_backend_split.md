@@ -89,6 +89,7 @@ This aggregates:
 - `check:backend-app-import-boundary`
 - `check:backend-pubspec-boundary`
 - `check:backend-dependency-graph`
+- `check:backend-core-entrypoint-import-boundary`
 - `check:backend-entrypoint`
 - `check:ci-workflow`
 - `check:app-backend-import-boundary`
