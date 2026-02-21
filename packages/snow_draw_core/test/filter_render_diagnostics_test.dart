@@ -10,10 +10,10 @@ import 'package:snow_draw_core/ui/canvas/filter_scene_compositor.dart';
 
 void main() {
   test('diagnostics are bounded by batches and filters', () {
-    final elements = <ElementState>[];
-    for (var i = 0; i < 1000; i++) {
-      elements.add(
-        ElementState(
+    final elements = [
+      ...List.generate(
+        1000,
+        (i) => ElementState(
           id: 'e$i',
           rect: DrawRect(minX: i.toDouble(), maxX: i + 1, maxY: 10),
           rotation: 0,
@@ -21,10 +21,8 @@ void main() {
           zIndex: i,
           data: const RectangleData(),
         ),
-      );
-    }
-    elements.addAll(const [
-      ElementState(
+      ),
+      const ElementState(
         id: 'f1',
         rect: DrawRect(maxX: 100, maxY: 20),
         rotation: 0,
@@ -32,7 +30,7 @@ void main() {
         zIndex: 1000,
         data: FilterData(type: CanvasFilterType.inversion),
       ),
-      ElementState(
+      const ElementState(
         id: 'f2',
         rect: DrawRect(minX: 20, maxX: 120, maxY: 20),
         rotation: 0,
@@ -40,7 +38,7 @@ void main() {
         zIndex: 1001,
         data: FilterData(type: CanvasFilterType.grayscale),
       ),
-      ElementState(
+      const ElementState(
         id: 'f3',
         rect: DrawRect(minX: 40, maxX: 140, maxY: 20),
         rotation: 0,
@@ -48,25 +46,29 @@ void main() {
         zIndex: 1002,
         data: FilterData(type: CanvasFilterType.gaussianBlur, strength: 0.8),
       ),
-    ]);
+    ];
 
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
+    final fillPaint = Paint()..color = const Color(0xFF2266AA);
+
     filterSceneCompositor.paintElements(
       canvas: canvas,
       elements: elements,
       paintElement: (sceneCanvas, element) {
-        if (element.data is RectangleData) {
-          sceneCanvas.drawRect(
-            Rect.fromLTWH(
-              element.rect.minX,
-              element.rect.minY,
-              element.rect.width,
-              element.rect.height,
-            ),
-            Paint()..color = const Color(0xFF2266AA),
-          );
+        if (element.data is! RectangleData) {
+          return;
         }
+
+        sceneCanvas.drawRect(
+          Rect.fromLTWH(
+            element.rect.minX,
+            element.rect.minY,
+            element.rect.width,
+            element.rect.height,
+          ),
+          fillPaint,
+        );
       },
     );
 
