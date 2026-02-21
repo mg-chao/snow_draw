@@ -49,6 +49,8 @@ rendering backends.
 - No `package:flutter` imports.
 - No `dart:ui` imports.
 - No `package:flutter` or `dart:ui` imports under `lib/draw`.
+- Core package entrypoint (`lib/snow_draw_core.dart`) exports pure-Dart APIs
+  only.
 - No reachable Flutter SDK packages in the core dependency graph.
 - No reachable backend/app workspace packages in the core dependency graph.
 - No shader/material declarations in core package metadata.
@@ -77,6 +79,7 @@ This aggregates:
 - `check:core-purity`
 - `check:core-draw-purity`
 - `check:core-ui-boundary`
+- `check:core-entrypoint`
 - `check:backend-legacy`
 - `check:backend-app-import-boundary`
 - `check:backend-pubspec-boundary`
