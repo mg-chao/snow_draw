@@ -10,6 +10,15 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
+const _strokeWidth = 4.0;
+const _elementRect = DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110);
+const _canvasBounds = Rect.fromLTWH(0, 0, 256, 256);
+const _hitPosition = DrawPoint(x: 60, y: 60);
+const _multiPointStrokeData = FreeDrawData(
+  points: [DrawPoint.zero, DrawPoint(x: 0.4, y: 0.3), DrawPoint(x: 1, y: 1)],
+  strokeWidth: _strokeWidth,
+);
+
 void main() {
   group('FreeDraw two-point fast path', () {
     setUp(FreeDrawVisualCache.instance.clear);
@@ -17,73 +26,53 @@ void main() {
     for (final strokeStyle in StrokeStyle.values) {
       test('renderer bypasses visual cache for $strokeStyle strokes', () {
         final element = _freeDrawElement(
-          FreeDrawData(strokeStyle: strokeStyle, strokeWidth: 4),
+          FreeDrawData(strokeStyle: strokeStyle, strokeWidth: _strokeWidth),
         );
 
         _render(element);
 
-        expect(FreeDrawVisualCache.instance.entryCount, 0);
+        _expectCacheEntryCount(0);
       });
     }
 
     test('renderer still uses visual cache for multi-point strokes', () {
-      final element = _freeDrawElement(
-        const FreeDrawData(
-          points: [
-            DrawPoint.zero,
-            DrawPoint(x: 0.45, y: 0.35),
-            DrawPoint(x: 1, y: 1),
-          ],
-          strokeWidth: 4,
-        ),
-      );
+      final element = _freeDrawElement(_multiPointStrokeData);
 
       _render(element);
 
-      expect(FreeDrawVisualCache.instance.entryCount, 1);
+      _expectCacheEntryCount(1);
     });
 
     test('hit tester bypasses visual cache for two-point strokes', () {
       const hitTester = FreeDrawHitTester();
-      final element = _freeDrawElement(const FreeDrawData(strokeWidth: 4));
+      final element = _freeDrawElement(
+        const FreeDrawData(strokeWidth: _strokeWidth),
+      );
 
       final isHit = hitTester.hitTest(
         element: element,
-        position: const DrawPoint(x: 60, y: 60),
+        position: _hitPosition,
         tolerance: 1,
       );
 
       expect(isHit, isTrue);
-      expect(FreeDrawVisualCache.instance.entryCount, 0);
+      _expectCacheEntryCount(0);
     });
 
     test('hit tester keeps cached path flow for multi-point strokes', () {
       const hitTester = FreeDrawHitTester();
-      final element = _freeDrawElement(
-        const FreeDrawData(
-          points: [
-            DrawPoint.zero,
-            DrawPoint(x: 0.4, y: 0.25),
-            DrawPoint(x: 1, y: 1),
-          ],
-          strokeWidth: 4,
-        ),
-      );
+      final element = _freeDrawElement(_multiPointStrokeData);
 
-      hitTester.hitTest(
-        element: element,
-        position: const DrawPoint(x: 60, y: 60),
-        tolerance: 2,
-      );
+      hitTester.hitTest(element: element, position: _hitPosition, tolerance: 2);
 
-      expect(FreeDrawVisualCache.instance.entryCount, 1);
+      _expectCacheEntryCount(1);
     });
   });
 }
 
 ElementState _freeDrawElement(FreeDrawData data) => ElementState(
   id: 'free_draw_line',
-  rect: const DrawRect(minX: 10, minY: 10, maxX: 110, maxY: 110),
+  rect: _elementRect,
   rotation: 0,
   opacity: 1,
   zIndex: 0,
@@ -92,11 +81,15 @@ ElementState _freeDrawElement(FreeDrawData data) => ElementState(
 
 void _render(ElementState element) {
   final recorder = PictureRecorder();
-  final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, 256, 256));
+  final canvas = Canvas(recorder, _canvasBounds);
   const FreeDrawRenderer().render(
     canvas: canvas,
     element: element,
     scaleFactor: 1,
   );
   recorder.endRecording().dispose();
+}
+
+void _expectCacheEntryCount(int expectedCount) {
+  expect(FreeDrawVisualCache.instance.entryCount, expectedCount);
 }
