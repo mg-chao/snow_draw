@@ -1,6 +1,6 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/models/draw_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'arrow_interaction_state_change.dart';
 import 'filter_interaction_state_change.dart';
 import 'highlight_interaction_state_change.dart';

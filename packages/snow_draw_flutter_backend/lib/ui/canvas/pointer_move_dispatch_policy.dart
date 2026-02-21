@@ -1,7 +1,4 @@
-﻿import 'package:snow_draw_core/draw/elements/core/element_data.dart';
-import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
-import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Dispatch strategy for pointer-move events.
 ///

@@ -1,6 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'watermark_painter.dart';
 import 'watermark_visibility.dart';
 

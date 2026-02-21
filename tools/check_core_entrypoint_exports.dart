@@ -31,6 +31,7 @@ const _allowedExports = <String>{
   'draw/models/document_state.dart',
   'draw/models/domain_state.dart',
   'draw/models/draw_state.dart',
+  'draw/models/draw_state_view.dart',
   'draw/models/element_state.dart',
   'draw/models/interaction_state.dart',
   'draw/models/selection_state.dart',

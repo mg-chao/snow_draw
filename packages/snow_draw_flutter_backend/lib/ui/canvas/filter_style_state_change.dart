@@ -1,8 +1,6 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Diff result for a filter-style-only document mutation.
 @immutable

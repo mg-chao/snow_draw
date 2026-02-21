@@ -1,6 +1,4 @@
-﻿import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'visible_element_scene_resolver.dart';
 
 /// Caches the latest base visible scene query for dynamic painter frames.

@@ -2,11 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
 const TextScaler _serialNumberTextScaler = TextScaler.noScaling;

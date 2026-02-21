@@ -1,9 +1,8 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Callback used to draw a single element into a target [Canvas].
 typedef SceneElementPainter =

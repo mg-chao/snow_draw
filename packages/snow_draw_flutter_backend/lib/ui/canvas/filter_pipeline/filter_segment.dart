@@ -1,7 +1,6 @@
-﻿import 'package:meta/meta.dart';
+import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// A render segment in the filter pipeline.
 sealed class RenderSegment {

@@ -47,6 +47,7 @@ void main() {
     test('exports app-facing state, event, and cache contracts', () async {
       final appState = ApplicationState.initial();
       final domainState = DomainState.empty();
+      final drawStateView = DrawStateView.fromState(DrawState.initial());
       final eventBus = EventBus();
       final cache = LruCache<String, int>(maxEntries: 2);
       final validation = ValidationFailedEvent(
@@ -59,6 +60,7 @@ void main() {
       expect(appState.view, isA<ViewState>());
       expect(domainState.document, isA<DocumentState>());
       expect(domainState.selection, isA<SelectionState>());
+      expect(drawStateView.state, isA<DrawState>());
       expect(validation.action, 'test-action');
       expect(eventBus.tryEmit(validation), isFalse);
       final invalidator = () {};

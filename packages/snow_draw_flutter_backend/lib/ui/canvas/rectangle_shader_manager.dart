@@ -4,8 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/draw/types/element_style.dart';
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Manages the rectangle fragment shader for GPU-accelerated rendering.
 ///

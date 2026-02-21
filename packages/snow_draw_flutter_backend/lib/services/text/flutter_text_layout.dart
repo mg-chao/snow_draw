@@ -2,9 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
-import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 const _fallbackText = ' ';
 const _fontMetricsProbeText = 'Mg';
@@ -277,7 +275,7 @@ List<TextRangeBox> resolveTextRangeBoxes({
 }
 
 // ---------------------------------------------------------------------------
-// layoutText – fast path using dart:ui.Paragraph directly
+// layoutText - fast path using dart:ui.Paragraph directly
 // ---------------------------------------------------------------------------
 
 /// Lays out text and returns lightweight [TextLayoutMetrics].
@@ -360,7 +358,7 @@ TextLayoutMetrics layoutText({
 }
 
 // ---------------------------------------------------------------------------
-// layoutTextWithPainter – slow path for cursor / selection queries
+// layoutTextWithPainter - slow path for cursor / selection queries
 // ---------------------------------------------------------------------------
 
 /// Lays out text and returns [PainterTextLayoutMetrics] with a

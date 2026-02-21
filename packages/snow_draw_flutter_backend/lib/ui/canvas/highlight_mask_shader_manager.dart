@@ -3,12 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/services/log/log_service.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import '../../extensions/draw_color_extensions.dart';
 
 final ModuleLogger _log = LogService.fallback.render;

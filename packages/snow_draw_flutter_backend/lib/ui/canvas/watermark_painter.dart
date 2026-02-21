@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import '../../extensions/draw_color_extensions.dart';
 
 /// Hard cap on the number of tiles to prevent runaway loops on

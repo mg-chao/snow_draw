@@ -1,6 +1,6 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
-import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'filter_pipeline/filter_render_diagnostics.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
 export 'filter_pipeline/filter_segment_renderer.dart'

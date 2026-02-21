@@ -28,6 +28,7 @@ export 'draw/models/camera_state.dart';
 export 'draw/models/document_state.dart';
 export 'draw/models/domain_state.dart';
 export 'draw/models/draw_state.dart';
+export 'draw/models/draw_state_view.dart';
 export 'draw/models/element_state.dart';
 export 'draw/models/interaction_state.dart';
 export 'draw/models/selection_state.dart';

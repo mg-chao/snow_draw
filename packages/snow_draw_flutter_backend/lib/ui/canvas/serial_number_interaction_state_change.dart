@@ -1,6 +1,4 @@
-﻿import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/models/interaction_state.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'serial_number_interaction_classifier.dart';
 
 /// Returns true when only an in-progress serial-number interaction changed.

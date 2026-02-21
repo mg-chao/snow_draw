@@ -1,9 +1,6 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/models/document_state.dart';
-import 'package:snow_draw_core/draw/models/element_state.dart';
-import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 import 'highlight_mask_painter.dart';
 
 /// Signature for rendering a highlight-mask scene into a target [Canvas].

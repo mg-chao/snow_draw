@@ -1,4 +1,4 @@
-﻿import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 enum HighlightMaskLayer { none, staticLayer, dynamicLayer }
 
