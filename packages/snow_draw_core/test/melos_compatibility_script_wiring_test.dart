@@ -28,5 +28,15 @@ void main() {
       );
       lastIndex = index;
     }
+
+    final backendFlutterInvocationCount = RegExp(
+      r'flutter test packages/snow_draw_flutter_backend/test/',
+    ).allMatches(pubspec).length;
+    expect(
+      backendFlutterInvocationCount,
+      1,
+      reason:
+          'Expected a single backend flutter test invocation in compatibility checks',
+    );
   });
 }
