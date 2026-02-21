@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import 'flutter_text_layout.dart';
 

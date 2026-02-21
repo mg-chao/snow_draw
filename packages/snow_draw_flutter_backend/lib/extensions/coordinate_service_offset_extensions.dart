@@ -1,7 +1,6 @@
 import 'dart:ui' show Offset;
 
-import 'package:snow_draw_core/draw/services/coordinate_service.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Flutter offset adapters for core [CoordinateService].
 extension CoordinateServiceOffsetExtensions on CoordinateService {
