@@ -84,6 +84,7 @@ dart run melos run check:compatibility-contracts
 This verifies:
 
 - built-in element JSON roundtrip compatibility
+- built-in element default JSON snapshot compatibility
 - built-in element type id token stability
 - backend visual registration coverage for built-in core elements
 
