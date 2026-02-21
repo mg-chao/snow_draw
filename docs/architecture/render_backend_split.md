@@ -88,6 +88,7 @@ This verifies:
 - built-in element type id token stability
 - backend visual registration coverage for built-in core elements
 - backend package entrypoint export contract for app boundary usage
+- built-in scene encoder routing coverage through backend scene rendering
 
 ## Adding a New Rendering Backend
 
