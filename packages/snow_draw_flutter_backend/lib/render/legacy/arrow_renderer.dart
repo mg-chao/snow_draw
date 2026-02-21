@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_visual_cache.dart';
+import 'arrow_visual_cache.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
