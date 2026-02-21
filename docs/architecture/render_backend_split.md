@@ -55,7 +55,7 @@ rendering backends.
 
 ### App/backend import discipline
 
-- App imports backend APIs only through
+- App imports/exports backend APIs only through
   `package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart`.
 - Deep backend path imports from app are disallowed by guard scripts.
 

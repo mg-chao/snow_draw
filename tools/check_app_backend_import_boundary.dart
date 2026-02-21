@@ -5,6 +5,9 @@ const _skipDirectoryNames = <String>{'.dart_tool', 'build', '.symlinks'};
 final _allowedImportPattern = RegExp(
   r"""^import\s+['"]package:snow_draw_flutter_backend/snow_draw_flutter_backend\.dart['"];$""",
 );
+final _allowedExportPattern = RegExp(
+  r"""^export\s+['"]package:snow_draw_flutter_backend/snow_draw_flutter_backend\.dart['"];$""",
+);
 
 void main() {
   final appRoot = Directory(_appRootPath);
@@ -26,17 +29,20 @@ void main() {
     final lines = entity.readAsLinesSync();
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index].trimLeft();
-      if (!line.startsWith('import ')) {
+      final isImport = line.startsWith('import ');
+      final isExport = line.startsWith('export ');
+      if (!isImport && !isExport) {
         continue;
       }
       if (!line.contains('package:snow_draw_flutter_backend/')) {
         continue;
       }
-      if (_allowedImportPattern.hasMatch(line)) {
+      if ((isImport && _allowedImportPattern.hasMatch(line)) ||
+          (isExport && _allowedExportPattern.hasMatch(line))) {
         continue;
       }
       violations.add(
-        '$normalizedPath:${index + 1}: app must import backend via '
+        '$normalizedPath:${index + 1}: app must reference backend via '
         'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart',
       );
     }
@@ -53,7 +59,7 @@ void main() {
 
   stdout.writeln(
     'App/backend import boundary check passed. '
-    'App imports backend through the package entrypoint only.',
+    'App import/export references use the backend package entrypoint only.',
   );
 }
 
