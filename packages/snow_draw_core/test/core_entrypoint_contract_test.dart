@@ -5,9 +5,13 @@ void main() {
   group('core entrypoint contract', () {
     test('exports draw context and core value types', () {
       final context = DrawContext.withDefaults();
+      final idGenerator = RandomStringIdGenerator();
 
       expect(context.config, isA<DrawConfig>());
       expect(context.textMetricsService, same(defaultTextMetricsService));
+      expect(LogConfig.production.minLevel.toString(), contains('warning'));
+      expect(LogConfig.production.emojiOutput, isFalse);
+      expect(idGenerator.call(), isNotEmpty);
 
       const color = DrawColor(0xFF102030);
       expect(color.toARGB32(), 0xFF102030);
@@ -18,6 +22,7 @@ void main() {
       registerBuiltInElements(registry);
 
       expect(registry.registeredTypeIds, isNotEmpty);
+      expect(registry, isA<ElementRegistry>());
     });
 
     test('exports coordinate and scene contracts', () {

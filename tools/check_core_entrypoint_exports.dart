@@ -18,12 +18,15 @@ const _allowedExports = <String>{
   'draw/models/element_state.dart',
   'draw/render/scene/render_scene.dart',
   'draw/services/coordinate_service.dart',
+  'draw/services/log/log_config.dart',
   'draw/services/log/log_service.dart',
   'draw/services/text/text_metrics_service.dart',
   'draw/store/draw_store.dart',
+  'draw/store/draw_store_interface.dart',
   'draw/types/draw_color.dart',
   'draw/types/draw_point.dart',
   'draw/types/draw_rect.dart',
+  'utils/id_generator.dart',
 };
 
 final _exportPattern = RegExp(r"""^export\s+['"](.+)['"];$""");
