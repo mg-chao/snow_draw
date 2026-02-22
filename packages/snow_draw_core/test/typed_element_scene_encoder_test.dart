@@ -17,7 +17,11 @@ void main() {
 
     final scene = encoder.encodeScene(element: element, scaleFactor: 1);
 
-    expect(scene.cullRect, element.rect);
+    final cullRect = scene.cullRect;
+    expect(cullRect, isNotNull);
+    expect(cullRect!.center, element.rect.center);
+    expect(cullRect.width, greaterThan(element.rect.width));
+    expect(cullRect.height, greaterThan(element.rect.height));
     expect(scene.primitives.length, 1);
     final root = scene.primitives.single as RenderTransformPrimitive;
     expect(root.translate, element.center);
@@ -25,6 +29,21 @@ void main() {
     expect(root.child.primitives.length, 1);
     final fill = root.child.primitives.single as RenderPathFillPrimitive;
     expect(fill.colorArgb, 0xFF123456);
+  });
+
+  test('keeps cull rect unchanged for non-rotated elements', () {
+    const element = ElementState(
+      id: 'typed-scene-no-rotation',
+      rect: DrawRect(minX: 10, minY: 20, maxX: 110, maxY: 80),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: _TestData(colorArgb: 0xFF123456),
+    );
+
+    final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+
+    expect(scene.cullRect, element.rect);
   });
 
   test('throws state error for mismatched element data types', () {

@@ -17,7 +17,7 @@ void main() {
     const scene = RenderScene(
       primitives: <RenderPrimitive>[
         RenderFilterGroupPrimitive(
-          filterType: 'blend_multiply',
+          filter: RenderBlendMultiplyFilter(),
           child: RenderScene(
             primitives: <RenderPrimitive>[
               RenderPathFillPrimitive(

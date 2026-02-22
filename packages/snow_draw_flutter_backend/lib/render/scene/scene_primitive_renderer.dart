@@ -206,24 +206,20 @@ class ScenePrimitiveRenderer {
     RenderFilterGroupPrimitive primitive, {
     Locale? locale,
   }) {
-    final opacity = primitive.parameters['opacity'];
-    if (primitive.filterType == 'opacity' && opacity != null) {
-      final alpha = (opacity.clamp(0, 1) * 255).round();
-      canvas.saveLayer(
-        null,
-        Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
-      );
-      renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-      canvas.restore();
-      return;
+    switch (primitive.filter) {
+      case RenderOpacityFilter(:final opacity):
+        final alpha = (opacity.clamp(0, 1) * 255).round();
+        canvas.saveLayer(
+          null,
+          Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
+        );
+        renderScene(canvas: canvas, scene: primitive.child, locale: locale);
+        canvas.restore();
+      case RenderBlendMultiplyFilter():
+        canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
+        renderScene(canvas: canvas, scene: primitive.child, locale: locale);
+        canvas.restore();
     }
-    if (primitive.filterType == 'blend_multiply') {
-      canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
-      renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-      canvas.restore();
-      return;
-    }
-    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
   }
 
   Path? _toFlutterPath(RenderPath path) {

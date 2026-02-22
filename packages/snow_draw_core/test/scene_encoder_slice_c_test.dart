@@ -37,7 +37,7 @@ void main() {
       expect(localPrimitives.last, isA<RenderPathStrokePrimitive>());
 
       final fillGroup = localPrimitives.first as RenderFilterGroupPrimitive;
-      expect(fillGroup.filterType, 'blend_multiply');
+      expect(fillGroup.filter, isA<RenderBlendMultiplyFilter>());
       expect(fillGroup.child.primitives, hasLength(1));
       expect(fillGroup.child.primitives.single, isA<RenderPathFillPrimitive>());
     });

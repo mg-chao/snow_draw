@@ -107,6 +107,28 @@ enum RenderTextAlign { left, center, right }
 /// Hatch fill pattern style.
 enum RenderHatchPattern { line, crossLine }
 
+/// Base contract for backend-agnostic filter descriptors.
+sealed class RenderFilter {
+  const RenderFilter();
+}
+
+/// Opacity filter descriptor.
+@immutable
+class RenderOpacityFilter extends RenderFilter {
+  /// Creates an opacity filter descriptor.
+  const RenderOpacityFilter(this.opacity);
+
+  /// Opacity multiplier in [0, 1].
+  final double opacity;
+}
+
+/// Multiply-blend filter descriptor.
+@immutable
+class RenderBlendMultiplyFilter extends RenderFilter {
+  /// Creates a multiply-blend filter descriptor.
+  const RenderBlendMultiplyFilter();
+}
+
 /// Stroke primitive for a path.
 @immutable
 class RenderPathStrokePrimitive extends RenderPrimitive {
@@ -277,17 +299,10 @@ class RenderTransformPrimitive extends RenderPrimitive {
 @immutable
 class RenderFilterGroupPrimitive extends RenderPrimitive {
   /// Creates a filter-group primitive.
-  const RenderFilterGroupPrimitive({
-    required this.filterType,
-    required this.child,
-    this.parameters = const <String, double>{},
-  });
+  const RenderFilterGroupPrimitive({required this.filter, required this.child});
 
-  /// Backend-defined filter type identifier.
-  final String filterType;
-
-  /// Filter parameters.
-  final Map<String, double> parameters;
+  /// Filter descriptor.
+  final RenderFilter filter;
 
   /// Child scene that the filter applies to.
   final RenderScene child;
@@ -404,17 +419,23 @@ class SceneBuilder {
 
   /// Adds a filter group primitive.
   void addFilterGroup({
-    required String filterType,
+    required RenderFilter filter,
     required RenderScene child,
-    Map<String, double> parameters = const <String, double>{},
   }) {
-    _primitives.add(
-      RenderFilterGroupPrimitive(
-        filterType: filterType,
-        child: child,
-        parameters: parameters,
-      ),
-    );
+    _primitives.add(RenderFilterGroupPrimitive(filter: filter, child: child));
+  }
+
+  /// Adds an opacity filter group primitive.
+  void addOpacityFilterGroup({
+    required double opacity,
+    required RenderScene child,
+  }) {
+    addFilterGroup(filter: RenderOpacityFilter(opacity), child: child);
+  }
+
+  /// Adds a multiply-blend filter group primitive.
+  void addBlendMultiplyFilterGroup({required RenderScene child}) {
+    addFilterGroup(filter: const RenderBlendMultiplyFilter(), child: child);
   }
 
   /// Builds an immutable [RenderScene].

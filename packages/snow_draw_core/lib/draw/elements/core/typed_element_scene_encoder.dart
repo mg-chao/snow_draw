@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 import '../../models/element_state.dart';
 import '../../render/scene/render_scene.dart';
 import '../../services/text/text_metrics_service.dart';
+import '../../types/draw_rect.dart';
 import 'element_data.dart';
 import 'element_scene_encoder.dart';
 
@@ -57,13 +60,14 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
     required ElementState element,
     required RenderScene localScene,
   }) {
+    final cullRect = _resolveElementCullRect(element);
     final sceneBuilder = SceneBuilder()
       ..addTransform(
         child: localScene,
         translate: element.center,
         rotation: element.rotation,
       );
-    return sceneBuilder.build(cullRect: element.rect);
+    return sceneBuilder.build(cullRect: cullRect);
   }
 
   @protected
@@ -77,6 +81,27 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
     assert(
       localeTag == null || localeTag.isNotEmpty,
       'localeTag must be null or non-empty.',
+    );
+  }
+
+  static DrawRect _resolveElementCullRect(ElementState element) {
+    final rect = element.rect;
+    final rotation = element.rotation;
+    if (rotation == 0 || !rotation.isFinite) {
+      return rect;
+    }
+    final halfWidth = rect.width / 2;
+    final halfHeight = rect.height / 2;
+    final absCos = math.cos(rotation).abs();
+    final absSin = math.sin(rotation).abs();
+    final extentX = halfWidth * absCos + halfHeight * absSin;
+    final extentY = halfWidth * absSin + halfHeight * absCos;
+    final center = rect.center;
+    return DrawRect(
+      minX: center.x - extentX,
+      minY: center.y - extentY,
+      maxX: center.x + extentX,
+      maxY: center.y + extentY,
     );
   }
 }
