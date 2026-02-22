@@ -2,8 +2,6 @@ import 'dart:math' as math;
 
 import 'package:snow_draw_core/snow_draw_core.dart';
 
-import '../../render/geometry/arrow_geometry.dart';
-
 const _defaultMaxLineOccluderQueryRects = 12;
 const _defaultLineOccluderPaddingFloor = 3.0;
 const _defaultLineOccluderPaddingStrokeFactor = 0.75;
@@ -91,13 +89,19 @@ _TwoPointLineSeed? _resolveTwoPointLineSeed(ElementState seedElement) {
   required ElementState seedElement,
   required List<DrawPoint> normalizedPoints,
 }) {
-  final rawPoints = ArrowGeometry.resolveWorldPoints(
-    rect: seedElement.rect,
-    normalizedPoints: normalizedPoints,
+  final rect = seedElement.rect;
+  final width = rect.width;
+  final height = rect.height;
+  final startNormalized = normalizedPoints[0];
+  final endNormalized = normalizedPoints[1];
+  final start = DrawPoint(
+    x: rect.minX + startNormalized.x * width,
+    y: rect.minY + startNormalized.y * height,
   );
-
-  final start = DrawPoint(x: rawPoints[0].dx, y: rawPoints[0].dy);
-  final end = DrawPoint(x: rawPoints[1].dx, y: rawPoints[1].dy);
+  final end = DrawPoint(
+    x: rect.minX + endNormalized.x * width,
+    y: rect.minY + endNormalized.y * height,
+  );
   if (seedElement.rotation == 0) {
     return (start, end);
   }

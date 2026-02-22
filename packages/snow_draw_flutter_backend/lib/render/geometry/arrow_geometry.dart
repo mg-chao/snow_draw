@@ -72,25 +72,6 @@ class ArrowGeometry {
     );
   }
 
-  static Path buildShaftPath({
-    required List<Offset> points,
-    required ArrowType arrowType,
-    double startInset = 0,
-    double endInset = 0,
-  }) {
-    final adjustedPoints = (startInset <= 0 && endInset <= 0)
-        ? points
-        : _applyInsets(
-            points: points,
-            startInset: startInset,
-            endInset: endInset,
-          );
-    return buildShaftPathFromResolvedPoints(
-      points: adjustedPoints,
-      arrowType: arrowType,
-    );
-  }
-
   static Path buildShaftPathFromResolvedPoints({
     required List<Offset> points,
     required ArrowType arrowType,
@@ -103,93 +84,6 @@ class ArrowGeometry {
       ArrowType.straight => _buildStraightPath(points),
       ArrowType.elbow => _buildStraightPath(points),
     };
-  }
-
-  static double calculateShaftLength({
-    required List<Offset> points,
-    required ArrowType arrowType,
-  }) {
-    if (points.length < 2) {
-      return 0;
-    }
-    if (arrowType == ArrowType.curved && points.length > 2) {
-      return _approximateCurvedLength(points);
-    }
-    return _calculatePolylineLength(points);
-  }
-
-  static Offset? resolveStartDirection(
-    List<Offset> points,
-    ArrowType arrowType, {
-    double startInset = 0,
-    double endInset = 0,
-    double directionOffset = 0,
-  }) {
-    if (points.length < 2) {
-      return null;
-    }
-
-    final hasInsets = startInset > 0 || endInset > 0;
-    final workingPoints = hasInsets
-        ? _applyInsets(
-            points: points,
-            startInset: startInset,
-            endInset: endInset,
-          )
-        : points;
-    if (workingPoints.length < 2) {
-      return null;
-    }
-
-    if (arrowType == ArrowType.curved && workingPoints.length > 2) {
-      final effectiveOffset = math.max(0, directionOffset - startInset);
-      final direction = _CurvedPathAnalysis(
-        workingPoints,
-      ).directionFromStart(effectiveOffset.toDouble());
-      if (direction != null) {
-        return Offset(-direction.dx, -direction.dy);
-      }
-    }
-
-    final vector = workingPoints.first - workingPoints[1];
-    return _normalize(vector);
-  }
-
-  static Offset? resolveEndDirection(
-    List<Offset> points,
-    ArrowType arrowType, {
-    double startInset = 0,
-    double endInset = 0,
-    double directionOffset = 0,
-  }) {
-    if (points.length < 2) {
-      return null;
-    }
-
-    final hasInsets = startInset > 0 || endInset > 0;
-    final workingPoints = hasInsets
-        ? _applyInsets(
-            points: points,
-            startInset: startInset,
-            endInset: endInset,
-          )
-        : points;
-    if (workingPoints.length < 2) {
-      return null;
-    }
-
-    if (arrowType == ArrowType.curved && workingPoints.length > 2) {
-      final effectiveOffset = math.max(0, directionOffset - endInset);
-      final direction = _CurvedPathAnalysis(
-        workingPoints,
-      ).directionFromEnd(effectiveOffset.toDouble());
-      if (direction != null) {
-        return direction;
-      }
-    }
-
-    final vector = workingPoints.last - workingPoints[workingPoints.length - 2];
-    return _normalize(vector);
   }
 
   static Path buildArrowheadPath({
@@ -283,65 +177,6 @@ class ArrowGeometry {
       );
     }
     return path;
-  }
-
-  /// Calculates a point on the curved path at parameter t (0.0 to 1.0) between
-  /// two consecutive control points at segmentIndex and segmentIndex+1.
-  /// Uses the same Catmull-Rom spline formula as _buildCurvedPath.
-  /// Returns null if the segment is invalid.
-  static Offset? calculateCurvePoint({
-    required List<Offset> points,
-    required int segmentIndex,
-    required double t,
-  }) {
-    if (points.length < 2 ||
-        segmentIndex < 0 ||
-        segmentIndex >= points.length - 1) {
-      return null;
-    }
-
-    // For straight segments (less than 3 points), use linear interpolation
-    if (points.length < 3) {
-      final p1 = points[segmentIndex];
-      final p2 = points[segmentIndex + 1];
-      return Offset(p1.dx + (p2.dx - p1.dx) * t, p1.dy + (p2.dy - p1.dy) * t);
-    }
-
-    return _evaluateCubic(_buildCubicSegment(points, segmentIndex), t);
-  }
-
-  /// Calculates a point on the curved path using [DrawPoint] inputs.
-  ///
-  /// This mirrors [calculateCurvePoint] while keeping call sites free of
-  /// Flutter/UI coordinate types.
-  static DrawPoint? calculateCurveDrawPoint({
-    required List<DrawPoint> points,
-    required int segmentIndex,
-    required double t,
-  }) {
-    if (points.length < 2 ||
-        segmentIndex < 0 ||
-        segmentIndex >= points.length - 1) {
-      return null;
-    }
-
-    if (points.length < 3) {
-      final p1 = points[segmentIndex];
-      final p2 = points[segmentIndex + 1];
-      return DrawPoint(
-        x: p1.x + (p2.x - p1.x) * t,
-        y: p1.y + (p2.y - p1.y) * t,
-      );
-    }
-
-    final offsetPoints = points
-        .map((point) => Offset(point.x, point.y))
-        .toList(growable: false);
-    final curvePoint = _evaluateCubic(
-      _buildCubicSegment(offsetPoints, segmentIndex),
-      t,
-    );
-    return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
   }
 
   static Path _buildVArrowhead(
@@ -514,27 +349,6 @@ class ArrowGeometry {
     return Offset(value.dx / length, value.dy / length);
   }
 
-  static double _approximateCurvedLength(List<Offset> points) {
-    if (points.length < 2) {
-      return 0;
-    }
-
-    var length = 0.0;
-    for (var i = 0; i < points.length - 1; i++) {
-      final segment = _buildCubicSegment(points, i);
-      length += _approximateCubicLength(segment);
-    }
-    return length;
-  }
-
-  static double _calculatePolylineLength(List<Offset> points) {
-    var length = 0.0;
-    for (var i = 1; i < points.length; i++) {
-      length += (points[i] - points[i - 1]).distance;
-    }
-    return length;
-  }
-
   static _CubicSegment _buildCubicSegment(List<Offset> points, int index) {
     final p0 = index == 0 ? points[index] : points[index - 1];
     final p1 = points[index];
@@ -693,14 +507,9 @@ class ArrowGeometryDescriptor {
   final DrawRect rect;
 
   List<Offset>? _localPoints;
-  List<DrawPoint>? _localDrawPoints;
-  List<Offset>? _worldPoints;
   List<Offset>? _insetPoints;
-  List<DrawPoint>? _insetDrawPoints;
   Offset? _startDirection;
   Offset? _endDirection;
-  DrawPoint? _startDirectionPoint;
-  DrawPoint? _endDirectionPoint;
   double? _startInset;
   double? _endInset;
   double? _startDirectionOffset;
@@ -712,24 +521,6 @@ class ArrowGeometryDescriptor {
         rect: rect,
         normalizedPoints: data.points,
       );
-
-  List<DrawPoint> get localDrawPoints =>
-      _localDrawPoints ??= List<DrawPoint>.unmodifiable(
-        localPoints.map((point) => DrawPoint(x: point.dx, y: point.dy)),
-      );
-
-  List<Offset> get worldPoints {
-    final cached = _worldPoints;
-    if (cached != null) {
-      return cached;
-    }
-    final local = localPoints;
-    final world = local
-        .map((point) => Offset(point.dx + rect.minX, point.dy + rect.minY))
-        .toList(growable: false);
-    _worldPoints = world;
-    return world;
-  }
 
   double get startInset =>
       _startInset ??= ArrowGeometry.calculateArrowheadInset(
@@ -770,44 +561,11 @@ class ArrowGeometryDescriptor {
     return applied;
   }
 
-  List<DrawPoint> get insetDrawPoints =>
-      _insetDrawPoints ??= List<DrawPoint>.unmodifiable(
-        insetPoints.map((point) => DrawPoint(x: point.dx, y: point.dy)),
-      );
-
   Offset? get startDirection =>
       _startDirection ??= _resolveDirection(fromStart: true);
 
   Offset? get endDirection =>
       _endDirection ??= _resolveDirection(fromStart: false);
-
-  DrawPoint? get startDirectionPoint {
-    final direction = startDirection;
-    if (direction == null) {
-      return null;
-    }
-    final cached = _startDirectionPoint;
-    if (cached != null) {
-      return cached;
-    }
-    final converted = DrawPoint(x: direction.dx, y: direction.dy);
-    _startDirectionPoint = converted;
-    return converted;
-  }
-
-  DrawPoint? get endDirectionPoint {
-    final direction = endDirection;
-    if (direction == null) {
-      return null;
-    }
-    final cached = _endDirectionPoint;
-    if (cached != null) {
-      return cached;
-    }
-    final converted = DrawPoint(x: direction.dx, y: direction.dy);
-    _endDirectionPoint = converted;
-    return converted;
-  }
 
   Offset? _resolveDirection({required bool fromStart}) {
     final points = insetPoints;
@@ -847,18 +605,14 @@ class _CurvedPathAnalysis {
         (index) => ArrowGeometry._buildCubicSegment(points, index),
       ),
       lengths = List<double>.filled(points.length - 1, 0) {
-    var total = 0.0;
     for (var i = 0; i < segments.length; i++) {
       final length = ArrowGeometry._approximateCubicLength(segments[i]);
       lengths[i] = length;
-      total += length;
     }
-    totalLength = total;
   }
 
   final List<_CubicSegment> segments;
   final List<double> lengths;
-  late final double totalLength;
 
   Offset? directionFromStart(double offset) {
     if (segments.isEmpty) {
