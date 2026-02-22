@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
 import '../../../services/text/text_metrics_service.dart';
@@ -8,6 +6,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
 import '../shared/hit_test_geometry.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'line_data.dart';
 
@@ -15,7 +14,6 @@ import 'line_data.dart';
 final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
   /// Creates a line scene encoder.
   const LineSceneEncoder();
-  static const double _lineFillAngle = -math.pi / 4;
   static const _defaultPoints = <DrawPoint>[
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
@@ -47,7 +45,7 @@ final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
     final path = _buildPath(element.rect, data);
     final localBuilder = SceneBuilder();
     if (fillVisible) {
-      final closedPath = _closePathIfNeeded(path);
+      final closedPath = closeRenderPathIfNeeded(path);
       if (data.fillStyle == FillStyle.solid) {
         localBuilder.addPathFill(path: closedPath, colorArgb: fillColorArgb);
       } else {
@@ -58,7 +56,7 @@ final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
           colorArgb: fillColorArgb,
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
-          angleRadians: _lineFillAngle,
+          angleRadians: defaultHatchAngleRadians,
           pattern: resolveHatchPattern(data.fillStyle),
         );
       }
@@ -111,16 +109,6 @@ final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
       commands.add(RenderLineTo(point));
     }
     return RenderPath(commands);
-  }
-
-  static RenderPath _closePathIfNeeded(RenderPath path) {
-    if (path.commands.isEmpty || path.commands.last is RenderClosePath) {
-      return path;
-    }
-    return RenderPath(<RenderPathCommand>[
-      ...path.commands,
-      const RenderClosePath(),
-    ]);
   }
 
   static List<DrawPoint> _resolveCenterLocalPoints({

@@ -8,6 +8,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
@@ -20,9 +21,7 @@ final class SerialNumberSceneEncoder
   /// Creates a serial-number scene encoder.
   const SerialNumberSceneEncoder();
 
-  static const _kappa = 0.5522847498307936;
   static const _scaleTolerance = 0.0001;
-  static const double _lineFillAngle = -math.pi / 4;
 
   @override
   RenderScene encodeTypedScene({
@@ -67,7 +66,7 @@ final class SerialNumberSceneEncoder
           colorArgb: fillColorArgb,
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
-          angleRadians: _lineFillAngle,
+          angleRadians: defaultHatchAngleRadians,
           pattern: resolveHatchPattern(data.fillStyle),
         );
       }
@@ -128,7 +127,7 @@ final class SerialNumberSceneEncoder
       DrawRect(minX: -radius, minY: -radius, maxX: radius, maxY: radius);
 
   static RenderPath _buildCirclePath({required double radius}) {
-    final control = radius * _kappa;
+    final control = radius * circularArcControlPointRatio;
     return RenderPath(<RenderPathCommand>[
       RenderMoveTo(DrawPoint(x: radius, y: 0)),
       RenderCubicTo(

@@ -5,6 +5,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'highlight_data.dart';
 
@@ -13,8 +14,6 @@ final class HighlightSceneEncoder
     extends TypedElementSceneEncoder<HighlightData> {
   /// Creates a highlight scene encoder.
   const HighlightSceneEncoder();
-
-  static const _kappa = 0.5522847498307936;
 
   @override
   RenderScene encodeTypedScene({
@@ -65,19 +64,9 @@ final class HighlightSceneEncoder
   }) {
     final width = rect.width;
     final height = rect.height;
-    final left = -width / 2;
-    final top = -height / 2;
-    final right = width / 2;
-    final bottom = height / 2;
 
     return switch (data.shape) {
-      HighlightShape.rectangle => RenderPath(<RenderPathCommand>[
-        RenderMoveTo(DrawPoint(x: left, y: top)),
-        RenderLineTo(DrawPoint(x: right, y: top)),
-        RenderLineTo(DrawPoint(x: right, y: bottom)),
-        RenderLineTo(DrawPoint(x: left, y: bottom)),
-        const RenderClosePath(),
-      ]),
+      HighlightShape.rectangle => buildCenteredRectPath(rect),
       HighlightShape.ellipse => _buildEllipsePath(width: width, height: height),
     };
   }
@@ -88,8 +77,8 @@ final class HighlightSceneEncoder
   }) {
     final radiusX = width / 2;
     final radiusY = height / 2;
-    final controlX = radiusX * _kappa;
-    final controlY = radiusY * _kappa;
+    final controlX = radiusX * circularArcControlPointRatio;
+    final controlY = radiusY * circularArcControlPointRatio;
     return RenderPath(<RenderPathCommand>[
       RenderMoveTo(DrawPoint(x: 0, y: -radiusY)),
       RenderCubicTo(

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../../../config/draw_config.dart';
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
@@ -8,6 +6,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'free_draw_data.dart';
 
@@ -16,7 +15,7 @@ final class FreeDrawSceneEncoder
     extends TypedElementSceneEncoder<FreeDrawData> {
   /// Creates a free-draw scene encoder.
   const FreeDrawSceneEncoder();
-  static const double _lineFillAngle = -math.pi / 4;
+
   @override
   RenderScene encodeTypedScene({
     required ElementState element,
@@ -54,7 +53,7 @@ final class FreeDrawSceneEncoder
     final path = _buildSmoothPath(points);
     final localScene = SceneBuilder();
     if (shouldFill) {
-      final closedPath = _closedPath(path);
+      final closedPath = closeRenderPathIfNeeded(path);
       if (data.fillStyle == FillStyle.solid) {
         localScene.addPathFill(path: closedPath, colorArgb: fillColorArgb);
       } else {
@@ -65,7 +64,7 @@ final class FreeDrawSceneEncoder
           colorArgb: fillColorArgb,
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
-          angleRadians: _lineFillAngle,
+          angleRadians: defaultHatchAngleRadians,
           pattern: resolveHatchPattern(data.fillStyle),
         );
       }
@@ -232,16 +231,6 @@ final class FreeDrawSceneEncoder
         ),
       );
     }
-  }
-
-  static RenderPath _closedPath(RenderPath path) {
-    if (path.commands.isEmpty || path.commands.last is RenderClosePath) {
-      return path;
-    }
-    return RenderPath(<RenderPathCommand>[
-      ...path.commands,
-      const RenderClosePath(),
-    ]);
   }
 
   static bool _sameLocation(DrawPoint a, DrawPoint b) =>

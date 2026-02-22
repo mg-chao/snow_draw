@@ -4,6 +4,9 @@ import '../../../render/scene/render_scene.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 
+/// Default hatch angle shared by built-in scene encoders.
+const double defaultHatchAngleRadians = -math.pi / 4;
+
 /// Returns the alpha channel for packed ARGB32 color values.
 int alphaChannelOfArgb(int argb) => (argb >>> 24) & 0xFF;
 

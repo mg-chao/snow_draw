@@ -1,11 +1,10 @@
-import 'dart:math' as math;
-
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
@@ -16,8 +15,6 @@ import 'text_layout.dart';
 final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
   /// Creates a text scene encoder.
   const TextSceneEncoder();
-  static const _kappa = 0.5522847498307936;
-  static const double _lineFillAngle = -math.pi / 4;
 
   @override
   RenderScene encodeTypedScene({
@@ -93,7 +90,7 @@ final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
             colorArgb: backgroundColorArgb,
             lineWidth: hatch.lineWidth,
             spacing: hatch.spacing,
-            angleRadians: _lineFillAngle,
+            angleRadians: defaultHatchAngleRadians,
             pattern: resolveHatchPattern(data.fillStyle),
           );
         }
@@ -172,16 +169,20 @@ final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
           !top.isFinite) {
         continue;
       }
-      final radius = _clampCornerRadius(cornerRadius, width, height);
+      final radius = clampRoundedRectCornerRadius(
+        cornerRadius: cornerRadius,
+        width: width,
+        height: height,
+      );
       commands.addAll(
         radius <= 0
-            ? _rectPathCommands(
+            ? buildRectPathCommands(
                 left: left,
                 top: top,
                 right: right,
                 bottom: bottom,
               )
-            : _roundedRectPathCommands(
+            : buildRoundedRectPathCommands(
                 left: left,
                 top: top,
                 right: right,
@@ -194,72 +195,6 @@ final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
       return const RenderPath(<RenderPathCommand>[]);
     }
     return RenderPath(commands);
-  }
-
-  static double _clampCornerRadius(
-    double cornerRadius,
-    double width,
-    double height,
-  ) {
-    if (cornerRadius <= 0) {
-      return 0;
-    }
-    final maxRadius = (width < height ? width : height) / 2;
-    if (cornerRadius > maxRadius) {
-      return maxRadius;
-    }
-    return cornerRadius;
-  }
-
-  static List<RenderPathCommand> _rectPathCommands({
-    required double left,
-    required double top,
-    required double right,
-    required double bottom,
-  }) => <RenderPathCommand>[
-    RenderMoveTo(DrawPoint(x: left, y: top)),
-    RenderLineTo(DrawPoint(x: right, y: top)),
-    RenderLineTo(DrawPoint(x: right, y: bottom)),
-    RenderLineTo(DrawPoint(x: left, y: bottom)),
-    const RenderClosePath(),
-  ];
-
-  static List<RenderPathCommand> _roundedRectPathCommands({
-    required double left,
-    required double top,
-    required double right,
-    required double bottom,
-    required double radius,
-  }) {
-    final controlOffset = radius * _kappa;
-    return <RenderPathCommand>[
-      RenderMoveTo(DrawPoint(x: left + radius, y: top)),
-      RenderLineTo(DrawPoint(x: right - radius, y: top)),
-      RenderCubicTo(
-        control1: DrawPoint(x: right - radius + controlOffset, y: top),
-        control2: DrawPoint(x: right, y: top + radius - controlOffset),
-        end: DrawPoint(x: right, y: top + radius),
-      ),
-      RenderLineTo(DrawPoint(x: right, y: bottom - radius)),
-      RenderCubicTo(
-        control1: DrawPoint(x: right, y: bottom - radius + controlOffset),
-        control2: DrawPoint(x: right - radius + controlOffset, y: bottom),
-        end: DrawPoint(x: right - radius, y: bottom),
-      ),
-      RenderLineTo(DrawPoint(x: left + radius, y: bottom)),
-      RenderCubicTo(
-        control1: DrawPoint(x: left + radius - controlOffset, y: bottom),
-        control2: DrawPoint(x: left, y: bottom - radius + controlOffset),
-        end: DrawPoint(x: left, y: bottom - radius),
-      ),
-      RenderLineTo(DrawPoint(x: left, y: top + radius)),
-      RenderCubicTo(
-        control1: DrawPoint(x: left, y: top + radius - controlOffset),
-        control2: DrawPoint(x: left + radius - controlOffset, y: top),
-        end: DrawPoint(x: left + radius, y: top),
-      ),
-      const RenderClosePath(),
-    ];
   }
 
   static RenderTextAlign _toRenderTextAlign(TextHorizontalAlign align) {
