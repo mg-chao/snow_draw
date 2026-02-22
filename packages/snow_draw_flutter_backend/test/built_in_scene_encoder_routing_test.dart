@@ -190,7 +190,7 @@ void _render(ElementState element) {
   recorder.endRecording().dispose();
 }
 
-final _elementRegistry = (() {
+final DefaultElementRegistry _elementRegistry = (() {
   final registry = DefaultElementRegistry();
   registerBuiltInElements(registry);
   return registry;

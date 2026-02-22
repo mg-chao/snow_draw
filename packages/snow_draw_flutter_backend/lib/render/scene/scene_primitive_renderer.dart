@@ -439,7 +439,7 @@ class ScenePrimitiveRenderer {
       return maxWidth;
     }
     if (maxWidth == 0 || maxWidth.isNaN) {
-      return 1.0;
+      return 1;
     }
     return _unboundedTextLayoutWidth;
   }

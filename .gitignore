@@ -1,5 +1,6 @@
 .dart_tool/
 .idea
+*.iml
 melos_snow_draw_workspace.iml
 build
 .worktrees/
