@@ -1,21 +1,7 @@
-import 'dart:math';
-
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/multi_select_lifecycle.dart';
-import '../../types/draw_rect.dart';
 import '../../utils/selection_calculator.dart';
-
-/// Normalize angle to [-pi, pi].
-double normalizeAngle(double angle) => atan2(sin(angle), cos(angle));
-
-/// Returns true when the two rectangles intersect (touching counts as
-/// intersecting).
-bool rectsIntersect(DrawRect a, DrawRect b) =>
-    a.minX <= b.maxX &&
-    a.maxX >= b.minX &&
-    a.minY <= b.maxY &&
-    a.maxY >= b.minY;
 
 /// Resolves the next z-index for a newly appended element.
 ///

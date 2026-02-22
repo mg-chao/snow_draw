@@ -169,12 +169,7 @@ class WatermarkPainterCache {
   ui.Picture? _picture;
   Color? _fallbackTintColor;
   Paint? _fallbackTintPaint;
-  var _tileRebuildCount = 0;
   var _fallbackPictureBuildCount = 0;
-
-  /// Number of shader tile rebuilds since the last [invalidate].
-  @visibleForTesting
-  int get debugTileRebuildCount => _tileRebuildCount;
 
   /// Number of fallback pictures recorded since the last [invalidate].
   @visibleForTesting
@@ -234,7 +229,6 @@ class WatermarkPainterCache {
     _renderConfig = null;
     _clearTileCache();
     _clearFallbackPictureCache();
-    _tileRebuildCount = 0;
     _fallbackPictureBuildCount = 0;
   }
 
@@ -287,7 +281,6 @@ class WatermarkPainterCache {
   void _rebuildTileCache(_WatermarkLayoutConfig layoutConfig) {
     _clearTileCache();
     _tileConfig = layoutConfig;
-    _tileRebuildCount += 1;
 
     final image = _buildTileImage(layoutConfig);
     if (image == null) {

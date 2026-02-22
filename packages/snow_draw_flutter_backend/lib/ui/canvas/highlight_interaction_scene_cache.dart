@@ -24,9 +24,6 @@ class InteractionSceneCache {
   final LruCache<int, _CachedSegment> _segmentCache;
   _SegmentLayoutCacheEntry? _layoutCacheEntry;
 
-  @visibleForTesting
-  int get debugEntryCount => _segmentCache.length;
-
   /// Clears all cached segments and disposes the underlying pictures.
   void clear() {
     _segmentCache.clear();

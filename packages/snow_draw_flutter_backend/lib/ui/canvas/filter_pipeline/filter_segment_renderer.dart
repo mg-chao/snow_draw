@@ -230,12 +230,6 @@ class FilterSegmentRenderer {
   @visibleForTesting
   int get debugBatchPictureCacheLimit => _batchPictureCacheLimit;
 
-  @visibleForTesting
-  int get debugPrefixSceneCacheSize => _prefixSceneCache.length;
-
-  @visibleForTesting
-  int get debugPrefixSceneCacheLimit => _prefixSceneCacheLimit;
-
   /// Clears internal caches.
   void clearCaches() {
     _clipInfoCache.clear();

@@ -589,157 +589,6 @@ class ArrowGeometry {
     return a + b + c;
   }
 
-  static void _expandBoundsForCubic({
-    required _CubicSegment segment,
-    required void Function(double) minX,
-    required void Function(double) maxX,
-    required void Function(double) minY,
-    required void Function(double) maxY,
-  }) {
-    final tValues = <double>{0.0, 1.0}
-      ..addAll(
-        _cubicDerivativeRoots(
-          segment.start.dx,
-          segment.control1.dx,
-          segment.control2.dx,
-          segment.end.dx,
-        ),
-      )
-      ..addAll(
-        _cubicDerivativeRoots(
-          segment.start.dy,
-          segment.control1.dy,
-          segment.control2.dy,
-          segment.end.dy,
-        ),
-      );
-
-    for (final t in tValues) {
-      final point = _evaluateCubic(segment, t);
-      minX(point.dx);
-      maxX(point.dx);
-      minY(point.dy);
-      maxY(point.dy);
-    }
-  }
-
-  static List<double> _cubicDerivativeRoots(
-    double p0,
-    double p1,
-    double p2,
-    double p3,
-  ) {
-    const epsilon = 1e-9;
-    final a = -p0 + 3 * p1 - 3 * p2 + p3;
-    final b = 3 * p0 - 6 * p1 + 3 * p2;
-    final c = -3 * p0 + 3 * p1;
-
-    if (a.abs() < epsilon) {
-      if (b.abs() < epsilon) {
-        return const [];
-      }
-      final t = -c / (2 * b);
-      if (t > 0 && t < 1) {
-        return [t];
-      }
-      return const [];
-    }
-
-    final A = 3 * a;
-    final B = 2 * b;
-    final C = c;
-    final discriminant = B * B - 4 * A * C;
-    if (discriminant < 0) {
-      return const [];
-    }
-    final sqrtDisc = math.sqrt(discriminant);
-    final denom = 2 * A;
-    if (denom.abs() < epsilon) {
-      return const [];
-    }
-
-    final t1 = (-B + sqrtDisc) / denom;
-    final t2 = (-B - sqrtDisc) / denom;
-    final roots = <double>[];
-    if (t1 > 0 && t1 < 1) {
-      roots.add(t1);
-    }
-    if (t2 > 0 && t2 < 1) {
-      roots.add(t2);
-    }
-    return roots;
-  }
-
-  /// Calculates accurate bounding box for arrow paths, accounting for
-  /// curve overshoot.
-  /// For curved arrows, computes cubic bounds analytically.
-  /// For straight arrows, uses control points.
-  static DrawRect calculatePathBounds({
-    required List<DrawPoint> worldPoints,
-    required ArrowType arrowType,
-  }) {
-    if (worldPoints.isEmpty) {
-      return const DrawRect();
-    }
-
-    // For straight arrows, control points define the bounds
-    if (arrowType != ArrowType.curved || worldPoints.length < 3) {
-      return _boundsFromPoints(worldPoints);
-    }
-
-    // For curved arrows, compute cubic bezier bounds analytically.
-    final offsetPoints = worldPoints
-        .map((p) => Offset(p.x, p.y))
-        .toList(growable: false);
-
-    var minX = offsetPoints.first.dx;
-    var maxX = offsetPoints.first.dx;
-    var minY = offsetPoints.first.dy;
-    var maxY = offsetPoints.first.dy;
-
-    for (var i = 0; i < offsetPoints.length - 1; i++) {
-      final segment = _buildCubicSegment(offsetPoints, i);
-      _expandBoundsForCubic(
-        segment: segment,
-        minX: (value) => minX = math.min(minX, value),
-        maxX: (value) => maxX = math.max(maxX, value),
-        minY: (value) => minY = math.min(minY, value),
-        maxY: (value) => maxY = math.max(maxY, value),
-      );
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
-
-  /// Helper to calculate bounds from a list of points
-  static DrawRect _boundsFromPoints(List<DrawPoint> points) {
-    if (points.isEmpty) {
-      return const DrawRect();
-    }
-
-    var minX = points.first.x;
-    var maxX = points.first.x;
-    var minY = points.first.y;
-    var maxY = points.first.y;
-
-    for (final point in points.skip(1)) {
-      if (point.x < minX) {
-        minX = point.x;
-      }
-      if (point.x > maxX) {
-        maxX = point.x;
-      }
-      if (point.y < minY) {
-        minY = point.y;
-      }
-      if (point.y > maxY) {
-        maxY = point.y;
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
-
   static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {
     if (points.length >= 2) {
       return points;
@@ -856,9 +705,6 @@ class ArrowGeometryDescriptor {
   double? _endInset;
   double? _startDirectionOffset;
   double? _endDirectionOffset;
-  double? _shaftLength;
-  DrawRect? _pathBounds;
-  _CurvedPathAnalysis? _curvedAnalysis;
   _CurvedPathAnalysis? _insetCurvedAnalysis;
 
   List<Offset> get localPoints =>
@@ -963,55 +809,6 @@ class ArrowGeometryDescriptor {
     return converted;
   }
 
-  double get shaftLength {
-    final cached = _shaftLength;
-    if (cached != null) {
-      return cached;
-    }
-    final points = localPoints;
-    if (data.arrowType == ArrowType.curved && points.length > 2) {
-      final analysis = _resolveCurvedAnalysis(points, inset: false);
-      _shaftLength = analysis.totalLength;
-      return analysis.totalLength;
-    }
-    final length = ArrowGeometry._calculatePolylineLength(points);
-    _shaftLength = length;
-    return length;
-  }
-
-  DrawRect get pathBounds {
-    final cached = _pathBounds;
-    if (cached != null) {
-      return cached;
-    }
-    final points = worldPoints;
-    if (data.arrowType != ArrowType.curved || points.length < 3) {
-      final bounds = _boundsFromOffsets(points);
-      _pathBounds = bounds;
-      return bounds;
-    }
-
-    var minX = points.first.dx;
-    var maxX = points.first.dx;
-    var minY = points.first.dy;
-    var maxY = points.first.dy;
-
-    for (var i = 0; i < points.length - 1; i++) {
-      final segment = ArrowGeometry._buildCubicSegment(points, i);
-      ArrowGeometry._expandBoundsForCubic(
-        segment: segment,
-        minX: (value) => minX = math.min(minX, value),
-        maxX: (value) => maxX = math.max(maxX, value),
-        minY: (value) => minY = math.min(minY, value),
-        maxY: (value) => maxY = math.max(maxY, value),
-      );
-    }
-
-    final bounds = DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-    _pathBounds = bounds;
-    return bounds;
-  }
-
   Offset? _resolveDirection({required bool fromStart}) {
     final points = insetPoints;
     if (points.length < 2) {
@@ -1023,7 +820,7 @@ class ArrowGeometryDescriptor {
           ? (startDirectionOffset - startInset)
           : (endDirectionOffset - endInset);
       final effectiveOffset = math.max(0, directionOffset).toDouble();
-      final analysis = _resolveCurvedAnalysis(points, inset: true);
+      final analysis = _resolveInsetCurvedAnalysis(points);
       final direction = fromStart
           ? analysis.directionFromStart(effectiveOffset)
           : analysis.directionFromEnd(effectiveOffset);
@@ -1039,39 +836,8 @@ class ArrowGeometryDescriptor {
     return ArrowGeometry._normalize(vector);
   }
 
-  _CurvedPathAnalysis _resolveCurvedAnalysis(
-    List<Offset> points, {
-    required bool inset,
-  }) {
-    if (inset) {
-      return _insetCurvedAnalysis ??= _CurvedPathAnalysis(points);
-    }
-    return _curvedAnalysis ??= _CurvedPathAnalysis(points);
-  }
-
-  DrawRect _boundsFromOffsets(List<Offset> points) {
-    var minX = points.first.dx;
-    var maxX = points.first.dx;
-    var minY = points.first.dy;
-    var maxY = points.first.dy;
-
-    for (final point in points.skip(1)) {
-      if (point.dx < minX) {
-        minX = point.dx;
-      }
-      if (point.dx > maxX) {
-        maxX = point.dx;
-      }
-      if (point.dy < minY) {
-        minY = point.dy;
-      }
-      if (point.dy > maxY) {
-        maxY = point.dy;
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
+  _CurvedPathAnalysis _resolveInsetCurvedAnalysis(List<Offset> points) =>
+      _insetCurvedAnalysis ??= _CurvedPathAnalysis(points);
 }
 
 class _CurvedPathAnalysis {
