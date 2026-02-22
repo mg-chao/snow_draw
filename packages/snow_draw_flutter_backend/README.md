@@ -8,7 +8,6 @@ Flutter rendering backend and canvas UI layer for Snow Draw.
 - Scene primitive execution for core-generated render scenes.
 - Flutter text layout and rendering caches.
 - Shader-based effects and backend-specific visual caches.
-- Visual metadata (`ElementVisualDefinition`) such as tool icons.
 
 ## Dependency Direction
 

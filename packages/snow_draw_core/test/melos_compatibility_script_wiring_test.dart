@@ -27,9 +27,7 @@ void main() {
       'packages/snow_draw_core/test/scene_encoder_slice_d_test.dart',
       'dart run melos run check:backend-compatibility-core-import-boundary',
       'dart run melos run check:backend-compatibility-backend-import-boundary',
-      'flutter test packages/snow_draw_flutter_backend/test/built_in_element_visuals_test.dart',
-      'packages/snow_draw_flutter_backend/test/built_in_element_visual_icons_compatibility_test.dart',
-      'packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
+      'flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
       'packages/snow_draw_flutter_backend/test/built_in_scene_encoder_routing_test.dart',
       'packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart',
     ];

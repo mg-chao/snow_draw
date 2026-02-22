@@ -2,7 +2,6 @@ import 'dart:io';
 
 const _backendTestRootPath = 'packages/snow_draw_flutter_backend/test';
 const _compatibilityBasenames = <String>{
-  'built_in_element_visuals_test.dart',
   'built_in_scene_encoder_routing_test.dart',
   'coordinate_service_offset_extensions_test.dart',
 };

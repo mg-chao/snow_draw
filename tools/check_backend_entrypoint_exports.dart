@@ -13,9 +13,6 @@ const _allowedExports = <String>{
   'services/text/flutter_text_rendering_cache_invalidation.dart',
   'ui/canvas/draw_canvas.dart',
   'ui/canvas/plugin_draw_canvas.dart',
-  'visual/built_in_element_visuals.dart',
-  'visual/element_visual_definition.dart',
-  'visual/element_visual_registry.dart',
 };
 
 final _exportPattern = RegExp(r"""^export\s+['"](.+)['"];$""");

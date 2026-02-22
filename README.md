@@ -53,7 +53,7 @@ Boundary checks are enforced with Melos scripts:
 - `dart run melos run check:architecture`
 - `dart run melos run check:compatibility-contracts`
 
-`check:compatibility-contracts` runs focused schema/type/visual compatibility
+`check:compatibility-contracts` runs focused schema/type compatibility
 tests to protect persisted data and backend binding contracts.
 
 See `docs/architecture/render_backend_split.md` for detailed contracts and

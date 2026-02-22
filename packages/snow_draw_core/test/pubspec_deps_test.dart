@@ -7,8 +7,6 @@ import 'package:collection/collection.dart';
 import 'package:test/test.dart';
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
-// Internal package imports that exercise the dependency graph:
-import 'package:snow_draw_core/draw/services/services.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
 void main() {
@@ -46,12 +44,6 @@ void main() {
       expect(cache.get('b'), 2);
       expect(cache.get('c'), 3);
       expect(cache.get('a'), isNull);
-    });
-
-    test('services barrel exports are accessible', () {
-      // Verify the barrel file compiles and key types are available.
-      expect(CoordinateService, isNotNull);
-      expect(ElementIndexService, isNotNull);
     });
   });
 }

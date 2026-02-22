@@ -18,7 +18,6 @@ rendering backends.
 - `packages/snow_draw_flutter_backend`
   - Scene primitive renderer for Flutter canvas.
   - Text metrics implementation backed by Flutter paragraph/painter APIs.
-  - Backend visual registry and icon metadata.
   - Canvas widgets, painters, shader/caching infrastructure.
 - `apps/snow_draw`
   - Product UI composition and toolbar/store adapters.
@@ -116,8 +115,6 @@ This verifies:
 - fallback text metrics behavior and DTO invariants in pure Dart core
 - `DrawContext` text metrics injection/preservation behavior
 - scene encoder slice contracts for built-in elements (A-D)
-- backend visual registration coverage for built-in core elements
-- backend built-in icon mapping compatibility
 - backend package entrypoint export contract for app boundary usage
 - backend entrypoint `flutterTextMetricsService` export behavior
 - backend coordinate adapter (`DrawPoint` <-> `Offset`) invertibility
@@ -132,6 +129,6 @@ This verifies:
 3. Implement:
    - scene primitive renderer for `RenderScene`
    - `TextMetricsService` adapter
-   - backend-specific visual registry and UI widgets
+   - backend-specific UI widgets
 4. Keep app imports routed through the selected backend package entrypoint.
 5. Add boundary guards equivalent to Flutter backend guard coverage.

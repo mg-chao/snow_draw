@@ -16,20 +16,6 @@ void main() {
       expect(service.worldPointToScreenOffset(world), const Offset(10, 20));
     });
 
-    test('exposes backend visual registry with built-in visuals', () {
-      final coreRegistry = DefaultElementRegistry();
-      registerBuiltInElements(coreRegistry);
-
-      final visualRegistry = createDefaultElementVisualRegistry();
-      for (final typeId in coreRegistry.registeredTypeIds) {
-        expect(
-          visualRegistry.supportsTypeValue(typeId.value),
-          isTrue,
-          reason: 'Missing built-in visual for ${typeId.value}',
-        );
-      }
-    });
-
     test(
       'exports Flutter text metrics service used by app context injection',
       () {

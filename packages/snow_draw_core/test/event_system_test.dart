@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:test/test.dart';
-import 'package:logger/logger.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -10,7 +9,6 @@ import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/events/error_events.dart';
 import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/events/event_payload_freezer.dart';
-import 'package:snow_draw_core/draw/events/log_events.dart';
 import 'package:snow_draw_core/draw/events/state_events.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
@@ -232,26 +230,6 @@ void main() {
       },
     );
 
-    test('GeneralLogEvent keeps an immutable snapshot of data', () {
-      final data = <String, dynamic>{'step': 'init'};
-      final event = GeneralLogEvent(
-        level: Level.info,
-        module: 'Pipeline',
-        message: 'Initialized',
-        timestamp: DateTime(2026),
-        data: data,
-      );
-
-      data['step'] = 'mutated';
-      final frozenData = event.data!;
-
-      expect(frozenData['step'], equals('init'));
-      expect(
-        () => frozenData['extra'] = true,
-        throwsA(isA<UnsupportedError>()),
-      );
-    });
-
     test('ValidationFailedEvent deeply freezes nested details', () {
       final nested = <String, dynamic>{
         'path': <String>['root'],
@@ -282,33 +260,6 @@ void main() {
       expect(() => frozenFlags.add('x'), throwsA(isA<UnsupportedError>()));
     });
 
-    test('GeneralLogEvent deeply freezes nested data payloads', () {
-      final nested = <String, dynamic>{
-        'steps': <String>['init'],
-        'context': <String, dynamic>{'phase': 'boot'},
-      };
-      final event = GeneralLogEvent(
-        level: Level.info,
-        module: 'Pipeline',
-        message: 'Initialized',
-        timestamp: DateTime(2026),
-        data: {'payload': nested},
-      );
-
-      (nested['steps'] as List<String>).add('mutated');
-      (nested['context'] as Map<String, dynamic>)['phase'] = 'mutated';
-
-      final payload = event.data!['payload'] as Map<Object?, Object?>;
-      final frozenSteps = payload['steps']! as List<Object?>;
-      final frozenContext = payload['context']! as Map<Object?, Object?>;
-
-      expect(frozenSteps, equals(['init']));
-      expect(frozenContext['phase'], equals('boot'));
-
-      expect(() => frozenSteps.add('x'), throwsA(isA<UnsupportedError>()));
-      expect(() => frozenContext['next'] = 1, throwsA(isA<UnsupportedError>()));
-    });
-
     test('ValidationFailedEvent rejects cyclic details payloads', () {
       final details = <String, dynamic>{};
       details['self'] = details;
@@ -318,22 +269,6 @@ void main() {
           action: 'UpdateElementsStyle',
           reason: 'invalid',
           details: details,
-        ),
-        throwsArgumentError,
-      );
-    });
-
-    test('GeneralLogEvent rejects cyclic data payloads', () {
-      final data = <String, dynamic>{};
-      data['self'] = data;
-
-      expect(
-        () => GeneralLogEvent(
-          level: Level.info,
-          module: 'Pipeline',
-          message: 'Initialized',
-          timestamp: DateTime(2026),
-          data: data,
         ),
         throwsArgumentError,
       );
