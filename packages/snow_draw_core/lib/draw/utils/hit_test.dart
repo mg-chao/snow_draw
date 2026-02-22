@@ -9,12 +9,12 @@ import '../elements/types/serial_number/serial_number_data.dart';
 import '../elements/types/text/text_data.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
-import '../models/edit_enums.dart';
 import '../models/element_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/element_style.dart';
+import '../types/resize_mode.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
 const _hitTestCacheSize = 4;

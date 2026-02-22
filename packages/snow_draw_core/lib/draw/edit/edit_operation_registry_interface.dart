@@ -1,8 +1,8 @@
 import '../types/edit_operation_id.dart';
-import 'core/edit_operation_base.dart';
+import 'core/edit_operation.dart';
 
 abstract interface class EditOperationRegistry {
-  EditOperationBase? getOperation(EditOperationId id);
-  Iterable<EditOperationBase> get allOperations;
+  EditOperation? getOperation(EditOperationId id);
+  Iterable<EditOperation> get allOperations;
   Iterable<EditOperationId> get allOperationIds;
 }

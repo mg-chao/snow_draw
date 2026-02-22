@@ -1,6 +1,6 @@
-import '../../../models/edit_enums.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../../types/resize_mode.dart';
 
 /// Returns the opposite anchor point for a given resize handle [mode].
 ///

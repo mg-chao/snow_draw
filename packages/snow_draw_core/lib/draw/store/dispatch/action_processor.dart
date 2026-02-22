@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
+import '../../config/config_manager.dart';
 import '../../core/dependency_interfaces.dart';
 import '../../edit/core/edit_cancel_reason.dart';
 import '../../edit/core/edit_event_factory.dart';
@@ -17,7 +18,6 @@ import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../reducers/interaction/interaction_state_machine.dart';
-import '../config_manager.dart';
 import '../history_manager.dart';
 import '../listener_registry.dart';
 import '../middleware/middleware_context.dart';

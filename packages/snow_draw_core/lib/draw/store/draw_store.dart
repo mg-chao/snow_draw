@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../actions/draw_actions.dart';
+import '../config/config_manager.dart';
 import '../config/draw_config.dart';
 import '../core/callbacks.dart';
 import '../core/draw_context.dart';
@@ -9,7 +10,6 @@ import '../edit/core/edit_session_service.dart';
 import '../events/event_bus.dart';
 import '../models/draw_state.dart';
 import '../models/edit_session_id.dart';
-import 'config_manager.dart';
 import 'dispatch/action_processor.dart';
 import 'draw_store_interface.dart';
 import 'history_manager.dart';

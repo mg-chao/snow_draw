@@ -1,7 +1,7 @@
 import '../../core/coordinates/overlay_space.dart';
-import '../../models/edit_enums.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
+import '../../types/resize_mode.dart';
 
 /// Coordinate transform helpers used by resize calculations.
 class EditTransformContext {
