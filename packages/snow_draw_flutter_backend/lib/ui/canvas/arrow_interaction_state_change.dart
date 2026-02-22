@@ -10,67 +10,19 @@ import 'interaction_state_change_common.dart';
 bool isArrowInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return switch ((previousInteraction, nextInteraction)) {
-    (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      _isArrowCreatingMutationOnly(
-        previous: previousCreating,
-        next: nextCreating,
-      ),
-    (final EditingState previousEditing, final EditingState nextEditing) =>
-      _isArrowEditingMutationOnly(
-        previous: previousEditing,
-        next: nextEditing,
-        document: next.domain.document,
-      ),
-    _ => false,
-  };
-}
-
-bool _isArrowCreatingMutationOnly({
-  required CreatingState previous,
-  required CreatingState next,
-}) {
-  if (previous.elementData is! ArrowData || next.elementData is! ArrowData) {
-    return false;
-  }
-  if (!isSameCreationSession(previous, next)) {
-    return false;
-  }
-
-  return didCreatingInteractionPreviewChange(previous, next);
-}
-
-bool _isArrowEditingMutationOnly({
-  required EditingState previous,
-  required EditingState next,
-  required DocumentState document,
-}) {
-  if (!isSameEditSession(previous, next)) {
-    return false;
-  }
-  if (!_isArrowEditContext(context: next.context, document: document)) {
-    return false;
-  }
-
-  return didEditingInteractionPreviewChange(previous, next);
-}
+}) => isTypedInteractionMutationOnly(
+  previous: previous,
+  next: next,
+  supportsCreating: (interaction) => interaction.elementData is ArrowData,
+  supportsEditing: (interaction, document) =>
+      _isArrowEditContext(context: interaction.context, document: document),
+);
 
 bool _isArrowEditContext({
   required EditContext context,
   required DocumentState document,
-}) {
-  final selectedIds = context.selectedIdsAtStart;
-  if (selectedIds.isEmpty) {
-    return false;
-  }
-  return selectedIds.every(
-    (elementId) => document.getElementById(elementId)?.data is ArrowData,
-  );
-}
+}) => selectionMatchesElements(
+  context: context,
+  document: document,
+  predicate: (element) => element.data is ArrowData,
+);

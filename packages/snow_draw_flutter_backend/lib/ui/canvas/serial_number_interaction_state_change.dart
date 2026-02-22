@@ -10,56 +10,13 @@ import 'serial_number_interaction_classifier.dart';
 bool isSerialNumberInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return switch ((previousInteraction, nextInteraction)) {
-    (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      _isSerialNumberCreatingMutationOnly(
-        previous: previousCreating,
-        next: nextCreating,
-      ),
-    (final EditingState previousEditing, final EditingState nextEditing) =>
-      _isSerialNumberEditingMutationOnly(
-        previous: previousEditing,
-        next: nextEditing,
-        document: next.domain.document,
-      ),
-    _ => false,
-  };
-}
-
-bool _isSerialNumberCreatingMutationOnly({
-  required CreatingState previous,
-  required CreatingState next,
-}) {
-  if (!SerialNumberInteractionClassifier.isSerialNumberCreation(previous) ||
-      !SerialNumberInteractionClassifier.isSerialNumberCreation(next) ||
-      !isSameCreationSession(previous, next)) {
-    return false;
-  }
-  return didCreatingInteractionPreviewChange(previous, next);
-}
-
-bool _isSerialNumberEditingMutationOnly({
-  required EditingState previous,
-  required EditingState next,
-  required DocumentState document,
-}) {
-  if (!isSameEditSession(previous, next) ||
-      !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-        interaction: previous,
+}) => isTypedInteractionMutationOnly(
+  previous: previous,
+  next: next,
+  supportsCreating: SerialNumberInteractionClassifier.isSerialNumberCreation,
+  supportsEditing: (interaction, document) =>
+      SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
+        interaction: interaction,
         document: document,
-      ) ||
-      !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-        interaction: next,
-        document: document,
-      )) {
-    return false;
-  }
-  return didEditingInteractionPreviewChange(previous, next);
-}
+      ),
+);

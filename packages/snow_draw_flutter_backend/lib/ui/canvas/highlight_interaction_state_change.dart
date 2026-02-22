@@ -10,62 +10,19 @@ import 'interaction_state_change_common.dart';
 bool isHighlightInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return switch ((previousInteraction, nextInteraction)) {
-    (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      _isHighlightCreatingMutationOnly(
-        previous: previousCreating,
-        next: nextCreating,
-      ),
-    (final EditingState previousEditing, final EditingState nextEditing) =>
-      _isHighlightEditingMutationOnly(
-        previous: previousEditing,
-        next: nextEditing,
-        document: next.domain.document,
-      ),
-    _ => false,
-  };
-}
-
-bool _isHighlightCreatingMutationOnly({
-  required CreatingState previous,
-  required CreatingState next,
-}) {
-  if (previous.elementData is! HighlightData ||
-      next.elementData is! HighlightData ||
-      !isSameCreationSession(previous, next)) {
-    return false;
-  }
-  return didCreatingInteractionPreviewChange(previous, next);
-}
-
-bool _isHighlightEditingMutationOnly({
-  required EditingState previous,
-  required EditingState next,
-  required DocumentState document,
-}) {
-  if (!isSameEditSession(previous, next) ||
-      !_isHighlightEditContext(context: next.context, document: document)) {
-    return false;
-  }
-  return didEditingInteractionPreviewChange(previous, next);
-}
+}) => isTypedInteractionMutationOnly(
+  previous: previous,
+  next: next,
+  supportsCreating: (interaction) => interaction.elementData is HighlightData,
+  supportsEditing: (interaction, document) =>
+      _isHighlightEditContext(context: interaction.context, document: document),
+);
 
 bool _isHighlightEditContext({
   required EditContext context,
   required DocumentState document,
-}) {
-  final selectedIds = context.selectedIdsAtStart;
-  if (selectedIds.isEmpty) {
-    return false;
-  }
-  return selectedIds.every(
-    (elementId) => document.getElementById(elementId)?.data is HighlightData,
-  );
-}
+}) => selectionMatchesElements(
+  context: context,
+  document: document,
+  predicate: (element) => element.data is HighlightData,
+);

@@ -15,28 +15,15 @@ import 'interaction_state_change_common.dart';
 bool isLightweightLineInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return switch ((previousInteraction, nextInteraction)) {
-    (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      _isLightweightLineCreatingMutationOnly(
-        previous: previousCreating,
-        next: nextCreating,
-      ),
-    (final EditingState previousEditing, final EditingState nextEditing) =>
-      _isLightweightLineEditingMutationOnly(
-        previous: previousEditing,
-        next: nextEditing,
-        document: next.domain.document,
-      ),
-    _ => false,
-  };
-}
+}) => isTypedInteractionMutationOnly(
+  previous: previous,
+  next: next,
+  supportsCreating: (interaction) => interaction.elementData is LineData,
+  supportsEditing: (interaction, document) => _isLightweightLineContext(
+    context: interaction.context,
+    document: document,
+  ),
+);
 
 /// Returns true when [interaction] is an editing session limited to
 /// lightweight line-compatible element types.
@@ -60,45 +47,14 @@ bool isLightweightLineEditContext({
   required DocumentState document,
 }) => _isLightweightLineContext(context: context, document: document);
 
-bool _isLightweightLineCreatingMutationOnly({
-  required CreatingState previous,
-  required CreatingState next,
-}) {
-  if (previous.elementData is! LineData ||
-      next.elementData is! LineData ||
-      !isSameCreationSession(previous, next)) {
-    return false;
-  }
-  return didCreatingInteractionPreviewChange(previous, next);
-}
-
-bool _isLightweightLineEditingMutationOnly({
-  required EditingState previous,
-  required EditingState next,
-  required DocumentState document,
-}) {
-  if (!isSameEditSession(previous, next) ||
-      !_isLightweightLineContext(
-        context: previous.context,
-        document: document,
-      )) {
-    return false;
-  }
-
-  return didEditingInteractionPreviewChange(previous, next);
-}
-
 bool _isLightweightLineContext({
   required EditContext context,
   required DocumentState document,
-}) {
-  final selectedIds = context.selectedIdsAtStart;
-  if (selectedIds.isEmpty) {
-    return false;
-  }
-
-  return selectedIds.every((elementId) {
-    final data = document.getElementById(elementId)?.data;
+}) => selectionMatchesElements(
+  context: context,
+  document: document,
+  predicate: (element) {
+    final data = element.data;
     return data is LineData || data is FreeDrawData;
-  });
-}
+  },
+);

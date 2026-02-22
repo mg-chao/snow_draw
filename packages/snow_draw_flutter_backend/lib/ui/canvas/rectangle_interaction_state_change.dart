@@ -18,62 +18,25 @@ import 'interaction_state_change_common.dart';
 bool isRectangleInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return switch ((previousInteraction, nextInteraction)) {
-    (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      _isRectangleCreatingMutationOnly(
-        previous: previousCreating,
-        next: nextCreating,
-      ),
-    (final EditingState previousEditing, final EditingState nextEditing) =>
-      _isRectangleEditingMutationOnly(
-        previous: previousEditing,
-        next: nextEditing,
-        document: next.domain.document,
-      ),
-    _ => false,
-  };
-}
-
-bool _isRectangleCreatingMutationOnly({
-  required CreatingState previous,
-  required CreatingState next,
-}) {
-  if (previous.elementData is! RectangleData ||
-      next.elementData is! RectangleData ||
-      !isSameCreationSession(previous, next)) {
-    return false;
-  }
-  return didCreatingInteractionPreviewChange(previous, next);
-}
-
-bool _isRectangleEditingMutationOnly({
-  required EditingState previous,
-  required EditingState next,
-  required DocumentState document,
-}) {
-  if (!isSameEditSession(previous, next) ||
-      !_isRectangleEditContext(context: next.context, document: document)) {
-    return false;
-  }
-  return didEditingInteractionPreviewChange(previous, next);
-}
+}) => isTypedInteractionMutationOnly(
+  previous: previous,
+  next: next,
+  supportsCreating: (interaction) => interaction.elementData is RectangleData,
+  supportsEditing: (interaction, document) =>
+      _isRectangleEditContext(context: interaction.context, document: document),
+);
 
 bool _isRectangleEditContext({
   required EditContext context,
   required DocumentState document,
 }) {
   final selectedIds = context.selectedIdsAtStart;
-  if (selectedIds.isEmpty || document.hasArrowBoundToAny(selectedIds)) {
+  if (document.hasArrowBoundToAny(selectedIds)) {
     return false;
   }
-  return selectedIds.every(
-    (elementId) => document.getElementById(elementId)?.data is RectangleData,
+  return selectionMatchesElements(
+    context: context,
+    document: document,
+    predicate: (element) => element.data is RectangleData,
   );
 }
