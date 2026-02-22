@@ -17,11 +17,6 @@ class SelectionCalculator {
         .toList();
   }
 
-  static DrawRect? computeSelectionBounds(DrawState state) {
-    final selected = getSelectedElements(state);
-    return computeSelectionBoundsForElements(selected);
-  }
-
   static DrawRect? computeSelectionBoundsForElements(
     List<ElementState> selected,
   ) {
@@ -38,40 +33,6 @@ class SelectionCalculator {
       bounds = _expandBounds(bounds, computeElementWorldAabb(selected[i]));
     }
     return bounds;
-  }
-
-  static DrawRect? computeOverlayBounds(DrawState state) {
-    final selected = getSelectedElements(state);
-    return computeOverlayBoundsForSelection(
-      selectedElements: selected,
-      selectionOverlay: state.application.selectionOverlay,
-    );
-  }
-
-  static double? computeOverlayRotation(DrawState state) {
-    final selected = getSelectedElements(state);
-    return computeOverlayRotationForSelection(
-      selectedElements: selected,
-      selectionOverlay: state.application.selectionOverlay,
-    );
-  }
-
-  static DrawPoint? computeOverlayCenter(DrawState state) {
-    final selected = getSelectedElements(state);
-    return computeOverlayCenterForSelection(
-      selectedElements: selected,
-      selectionOverlay: state.application.selectionOverlay,
-    );
-  }
-
-  static double? getSelectionRotation(DrawState state) {
-    final selected = getSelectedElements(state);
-    return getSelectionRotationForElements(selected);
-  }
-
-  static DrawPoint? getSelectionCenter(DrawState state) {
-    final selected = getSelectedElements(state);
-    return getSelectionCenterForElements(selected);
   }
 
   static DrawRect? computeOverlayBoundsForSelection({

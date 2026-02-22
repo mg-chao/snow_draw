@@ -5,6 +5,7 @@ import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_layout.dart';
+import 'package:snow_draw_core/draw/elements/types/text/text_layout_constants.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';

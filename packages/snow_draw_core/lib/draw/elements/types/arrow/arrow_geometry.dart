@@ -571,7 +571,6 @@ class ArrowGeometryDescriptor {
   double? _endInset;
   double? _startDirectionOffset;
   double? _endDirectionOffset;
-  _CurvedPathAnalysis? _insetCurvedAnalysis;
 
   List<DrawPoint> get localDrawPoints =>
       _localDrawPoints ??= ArrowGeometry.resolveLocalPoints(
@@ -619,42 +618,22 @@ class ArrowGeometryDescriptor {
   }
 
   DrawPoint? get startDirectionPoint =>
-      _startDirectionPoint ??= _resolveDirection(fromStart: true);
+      _startDirectionPoint ??= ArrowGeometry.resolveStartDirection(
+        localDrawPoints,
+        data.arrowType,
+        startInset: startInset,
+        endInset: endInset,
+        directionOffset: startDirectionOffset,
+      );
 
   DrawPoint? get endDirectionPoint =>
-      _endDirectionPoint ??= _resolveDirection(fromStart: false);
-
-  DrawPoint? _resolveDirection({required bool fromStart}) {
-    final points = insetDrawPoints;
-    if (points.length < 2) {
-      return null;
-    }
-
-    if (data.arrowType == ArrowType.curved && points.length > 2) {
-      final directionOffset = fromStart
-          ? (startDirectionOffset - startInset)
-          : (endDirectionOffset - endInset);
-      final effectiveOffset = math.max(0, directionOffset).toDouble();
-      final analysis = _resolveInsetCurvedAnalysis(points);
-      final direction = fromStart
-          ? analysis.directionFromStart(effectiveOffset)
-          : analysis.directionFromEnd(effectiveOffset);
-      if (direction == null) {
-        return null;
-      }
-      return fromStart
-          ? DrawPoint(x: -direction.x, y: -direction.y)
-          : direction;
-    }
-
-    final vector = fromStart
-        ? points.first - points[1]
-        : points.last - points[points.length - 2];
-    return ArrowGeometry._normalize(vector);
-  }
-
-  _CurvedPathAnalysis _resolveInsetCurvedAnalysis(List<DrawPoint> points) =>
-      _insetCurvedAnalysis ??= _CurvedPathAnalysis(points);
+      _endDirectionPoint ??= ArrowGeometry.resolveEndDirection(
+        localDrawPoints,
+        data.arrowType,
+        startInset: startInset,
+        endInset: endInset,
+        directionOffset: endDirectionOffset,
+      );
 }
 
 class _CurvedPathAnalysis {

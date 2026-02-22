@@ -5,7 +5,6 @@ import 'package:meta/meta.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/element_style.dart';
 import 'text_data.dart';
-import 'text_layout_constants.dart';
 
 /// Lightweight text size snapshot in logical pixels.
 @immutable
