@@ -75,6 +75,32 @@ void main() {
     });
   });
 
+  group('buildDashPatternPath', () {
+    test('returns base path when pattern has no valid segments', () {
+      final base = Path()
+        ..moveTo(0, 0)
+        ..lineTo(100, 0);
+      final dashed = buildDashPatternPath(base, const [0, -1, double.nan]);
+      final dashedMetrics = dashed.computeMetrics().toList();
+      final baseMetrics = base.computeMetrics().toList();
+      expect(dashedMetrics.length, baseMetrics.length);
+      expect(
+        dashedMetrics.first.length,
+        closeTo(baseMetrics.first.length, 0.1),
+      );
+    });
+
+    test('supports odd-length dash patterns', () {
+      final base = Path()
+        ..moveTo(0, 0)
+        ..lineTo(100, 0);
+      final dashed = buildDashPatternPath(base, const [10, 4, 2]);
+      final metrics = dashed.computeMetrics().toList();
+      expect(metrics, isNotEmpty);
+      expect(metrics.length, greaterThan(1));
+    });
+  });
+
   group('buildDottedPath', () {
     test('returns empty path for empty input', () {
       final result = buildDottedPath(Path(), 5, 1);

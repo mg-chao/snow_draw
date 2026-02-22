@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
+import '../patterns/stroke_pattern_utils.dart';
+
 /// Paints backend-agnostic [RenderScene] primitives to a Flutter [Canvas].
 class ScenePrimitiveRenderer {
   const ScenePrimitiveRenderer();
@@ -25,6 +27,10 @@ class ScenePrimitiveRenderer {
     required RenderScene scene,
     Locale? locale,
   }) {
+    final cullRect = _resolveSceneCullRect(scene);
+    if (cullRect != null && _isSceneOutsideClipBounds(canvas, cullRect)) {
+      return;
+    }
     for (final primitive in scene.primitives) {
       _renderPrimitive(canvas: canvas, primitive: primitive, locale: locale);
     }
@@ -72,12 +78,7 @@ class ScenePrimitiveRenderer {
       canvas.drawPath(path, paint);
       return;
     }
-    _drawDashedPath(
-      canvas: canvas,
-      path: path,
-      paint: paint,
-      dashPattern: dashPattern,
-    );
+    canvas.drawPath(buildDashPatternPath(path, dashPattern), paint);
   }
 
   void _renderPathFill(Canvas canvas, RenderPathFillPrimitive primitive) {
@@ -317,35 +318,6 @@ class ScenePrimitiveRenderer {
   Rect _toRect(DrawRect rect) =>
       Rect.fromLTWH(rect.minX, rect.minY, rect.width, rect.height);
 
-  void _drawDashedPath({
-    required Canvas canvas,
-    required Path path,
-    required Paint paint,
-    required List<double> dashPattern,
-  }) {
-    final normalized = dashPattern.where((value) => value > 0).toList();
-    if (normalized.isEmpty) {
-      canvas.drawPath(path, paint);
-      return;
-    }
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      var patternIndex = 0;
-      var drawSegment = true;
-      while (distance < metric.length) {
-        final segmentLength = normalized[patternIndex % normalized.length];
-        final end = math.min(distance + segmentLength, metric.length);
-        if (drawSegment) {
-          final segment = metric.extractPath(distance, end);
-          canvas.drawPath(segment, paint);
-        }
-        distance = end;
-        patternIndex += 1;
-        drawSegment = !drawSegment;
-      }
-    }
-  }
-
   void _drawHatchLines({
     required Canvas canvas,
     required Rect bounds,
@@ -450,5 +422,68 @@ class ScenePrimitiveRenderer {
       return null;
     }
     return trimmed;
+  }
+
+  Rect? _resolveSceneCullRect(RenderScene scene) {
+    final bounds = scene.cullRect;
+    if (bounds == null) {
+      return null;
+    }
+    final outset = _resolveSceneOutset(scene);
+    final resolvedOutset = outset.isFinite && outset > 0 ? outset : 0.0;
+    final rect = _toRect(bounds);
+    return Rect.fromLTRB(
+      rect.left - resolvedOutset,
+      rect.top - resolvedOutset,
+      rect.right + resolvedOutset,
+      rect.bottom + resolvedOutset,
+    );
+  }
+
+  bool _isSceneOutsideClipBounds(Canvas canvas, Rect cullRect) {
+    final clipBounds = canvas.getLocalClipBounds();
+    if (!clipBounds.isFinite) {
+      return false;
+    }
+    return !clipBounds.overlaps(cullRect);
+  }
+
+  double _resolveSceneOutset(RenderScene scene) {
+    var maxOutset = 0.0;
+    for (final primitive in scene.primitives) {
+      final primitiveOutset = _resolvePrimitiveOutset(primitive);
+      if (primitiveOutset > maxOutset) {
+        maxOutset = primitiveOutset;
+      }
+    }
+    return maxOutset;
+  }
+
+  double _resolvePrimitiveOutset(RenderPrimitive primitive) {
+    switch (primitive) {
+      case RenderPathStrokePrimitive():
+        return primitive.strokeWidth / 2;
+      case RenderTextRunPrimitive():
+        return primitive.strokeWidth > 0 ? primitive.strokeWidth / 2 : 0;
+      case RenderClipRectPrimitive():
+        return _resolveSceneOutset(primitive.child);
+      case RenderTransformPrimitive():
+        final childOutset = _resolveSceneOutset(primitive.child);
+        final maxScale = math.max(
+          primitive.scaleX.abs(),
+          primitive.scaleY.abs(),
+        );
+        if (!maxScale.isFinite || maxScale <= 0) {
+          return childOutset;
+        }
+        return childOutset * maxScale;
+      case RenderFilterGroupPrimitive():
+        return _resolveSceneOutset(primitive.child);
+      case RenderPathFillPrimitive():
+      case RenderHatchPathFillPrimitive():
+      case RenderImageHandlePrimitive():
+      case RenderPictureHandlePrimitive():
+        return 0;
+    }
   }
 }

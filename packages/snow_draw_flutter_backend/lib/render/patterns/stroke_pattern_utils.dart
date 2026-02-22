@@ -63,14 +63,35 @@ Paint buildLineFillPaint({
 Path buildDashedPath(Path basePath, double dashLength, double gapLength) {
   _requirePositive(dashLength, name: 'dashLength');
   _requireNonNegative(gapLength, name: 'gapLength');
+  return buildDashPatternPath(basePath, <double>[dashLength, gapLength]);
+}
+
+/// Builds a dashed version of [basePath] from an alternating draw-gap pattern.
+///
+/// Values less than or equal to zero are ignored.
+Path buildDashPatternPath(Path basePath, List<double> dashPattern) {
+  final normalizedPattern = dashPattern
+      .where((value) => value.isFinite && value > 0)
+      .toList(growable: false);
+  if (normalizedPattern.isEmpty) {
+    return Path()..addPath(basePath, Offset.zero);
+  }
 
   final dashed = Path();
   for (final metric in basePath.computeMetrics()) {
     var distance = 0.0;
+    var patternIndex = 0;
+    var drawSegment = true;
     while (distance < metric.length) {
-      final next = math.min(distance + dashLength, metric.length);
-      dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-      distance = next + gapLength;
+      final segmentLength =
+          normalizedPattern[patternIndex % normalizedPattern.length];
+      final next = math.min(distance + segmentLength, metric.length);
+      if (drawSegment) {
+        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
+      }
+      distance = next;
+      patternIndex += 1;
+      drawSegment = !drawSegment;
     }
   }
   return dashed;

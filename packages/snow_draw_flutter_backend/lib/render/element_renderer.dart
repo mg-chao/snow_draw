@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/painting.dart';
@@ -6,6 +5,7 @@ import 'package:meta/meta.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../extensions/draw_color_extensions.dart';
+import 'patterns/stroke_pattern_utils.dart';
 import 'scene/scene_primitive_renderer.dart';
 
 final ModuleLogger _renderFallbackLog = LogService.fallback.render;
@@ -32,6 +32,7 @@ class ElementRenderer {
   static const _selectionGapLength = 4.0;
   static const _sceneRenderer = ScenePrimitiveRenderer();
   static final Set<String> _reportedFallbackWarnings = <String>{};
+  static const _maxFallbackWarningCacheEntries = 256;
 
   double _effectiveScale(double scaleFactor) =>
       scaleFactor == 0 ? 1.0 : scaleFactor;
@@ -91,17 +92,7 @@ class ElementRenderer {
     Paint paint, {
     required double dashLength,
     required double gapLength,
-  }) {
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        final segment = metric.extractPath(distance, next);
-        canvas.drawPath(segment, paint);
-        distance = next + gapLength;
-      }
-    }
-  }
+  }) => canvas.drawPath(buildDashedPath(path, dashLength, gapLength), paint);
 
   /// Renders a single element.
   void renderElement({
@@ -189,9 +180,13 @@ class ElementRenderer {
     required String key,
     Map<String, dynamic>? data,
   }) {
-    if (!_reportedFallbackWarnings.add(key)) {
+    if (_reportedFallbackWarnings.contains(key)) {
       return;
     }
+    if (_reportedFallbackWarnings.length >= _maxFallbackWarningCacheEntries) {
+      _reportedFallbackWarnings.remove(_reportedFallbackWarnings.first);
+    }
+    _reportedFallbackWarnings.add(key);
     _renderFallbackLog.warning(message, data);
   }
 
@@ -202,6 +197,10 @@ class ElementRenderer {
 
   @visibleForTesting
   static int get fallbackWarningCount => _reportedFallbackWarnings.length;
+
+  @visibleForTesting
+  static int get maxFallbackWarningCacheEntries =>
+      _maxFallbackWarningCacheEntries;
 
   /// Renders the selection overlay (outline + resize handles).
   void renderSelection({

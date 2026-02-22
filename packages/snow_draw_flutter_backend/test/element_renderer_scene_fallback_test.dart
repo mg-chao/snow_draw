@@ -5,11 +5,16 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 
 void main() {
+  late LogConfig previousLogConfig;
+
   setUp(() {
+    previousLogConfig = LogService.fallback.config;
+    LogService.fallback.updateConfig(LogConfig.silent);
     ElementRenderer.clearFallbackWarningCache();
   });
 
   tearDown(() {
+    LogService.fallback.updateConfig(previousLogConfig);
     ElementRenderer.clearFallbackWarningCache();
   });
 
@@ -62,6 +67,31 @@ void main() {
 
     expect(ElementRenderer.fallbackWarningCount, 1);
   });
+
+  test('caps fallback warning cache size', () {
+    final elementRegistry = DefaultElementRegistry();
+    final totalUnknownElements =
+        ElementRenderer.maxFallbackWarningCacheEntries + 1;
+
+    for (var index = 0; index < totalUnknownElements; index += 1) {
+      _renderElement(
+        elementRegistry: elementRegistry,
+        element: ElementState(
+          id: 'unknown-$index',
+          rect: const DrawRect(maxX: 40, maxY: 40),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: _UnknownSceneTestData('unknown_scene_test_$index'),
+        ),
+      );
+    }
+
+    expect(
+      ElementRenderer.fallbackWarningCount,
+      ElementRenderer.maxFallbackWarningCacheEntries,
+    );
+  });
 }
 
 DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>
@@ -103,10 +133,11 @@ DefaultElementRegistry _buildElementRegistryWithThrowingEncoder() =>
 void _renderElement({
   required DefaultElementRegistry elementRegistry,
   TextMetricsService? textMetricsService,
+  ElementState? element,
 }) {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
-  const element = ElementState(
+  const fallbackElement = ElementState(
     id: 'scene-test-element',
     rect: DrawRect(maxX: 40, maxY: 40),
     rotation: 0,
@@ -117,7 +148,7 @@ void _renderElement({
 
   elementRenderer.renderElement(
     canvas: canvas,
-    element: element,
+    element: element ?? fallbackElement,
     scaleFactor: 1,
     elementRegistry: elementRegistry,
     textMetricsService: textMetricsService,
@@ -140,6 +171,19 @@ class _SceneTestData extends ElementData {
 
   @override
   Map<String, dynamic> toJson() => const {'typeId': 'scene_test_data'};
+}
+
+class _UnknownSceneTestData extends ElementData {
+  const _UnknownSceneTestData(this._typeIdValue);
+
+  final String _typeIdValue;
+
+  @override
+  ElementTypeId<ElementData> get typeId =>
+      ElementTypeId<ElementData>(_typeIdValue);
+
+  @override
+  Map<String, dynamic> toJson() => <String, dynamic>{'typeId': _typeIdValue};
 }
 
 class _NoopHitTester implements ElementHitTester {
