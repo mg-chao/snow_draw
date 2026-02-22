@@ -14,15 +14,6 @@ List<Offset> resolveFreeDrawLocalPoints({
   ];
 }
 
-/// Resolves per-point pressure values from normalized points.
-///
-/// Returns a list parallel to [points] with pressure in 0..1.
-/// Points without pressure data get a default of 0.5.
-List<double> resolveFreeDrawPressures({required List<DrawPoint> points}) => [
-  for (final point in points)
-    point.hasPressure ? point.pressure.clamp(0.0, 1.0) : 0.5,
-];
-
 /// Builds a smooth center-line path using Catmull-Rom splines.
 ///
 /// Uses virtual phantom points at the endpoints so the curve
@@ -64,28 +55,6 @@ Path buildFreeDrawSmoothPath(List<Offset> points) {
 
   _addOpenCatmullRomSegments(path, smoothed);
   return path;
-}
-
-/// Incrementally extends a smooth path with new points.
-///
-/// Returns `null` if the inputs are too short or if a full rebuild
-/// is needed (caller should fall back to [buildFreeDrawSmoothPath]).
-Path? buildFreeDrawSmoothPathIncremental({
-  required List<Offset> allPoints,
-  required Path basePath,
-  required int basePointCount,
-}) {
-  if (allPoints.length < 2 ||
-      allPoints.first == allPoints.last ||
-      basePointCount < 3 ||
-      basePointCount > allPoints.length) {
-    return null;
-  }
-
-  if (allPoints.length == basePointCount) {
-    return Path()..addPath(basePath, Offset.zero);
-  }
-  return buildFreeDrawSmoothPath(allPoints);
 }
 
 /// Appends open (non-closed) Catmull-Rom cubic segments for all

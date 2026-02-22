@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_path_utils.dart';
 
@@ -59,42 +57,6 @@ void main() {
       final metrics = path.computeMetrics().toList();
       expect(metrics, isNotEmpty);
       expect(metrics.first.length, greaterThan(0));
-    });
-  });
-
-  group('buildFreeDrawSmoothPathIncremental', () {
-    test('returns null for fewer than 2 points', () {
-      final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: [const Offset(10, 10)],
-        basePath: Path(),
-        basePointCount: 0,
-      );
-      expect(result, isNull);
-    });
-
-    test('returns null for closed path', () {
-      final points = [Offset.zero, const Offset(50, 50), Offset.zero];
-      final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: points,
-        basePath: Path(),
-        basePointCount: 2,
-      );
-      expect(result, isNull);
-    });
-
-    test('returns null when base is too short', () {
-      final points = [
-        Offset.zero,
-        const Offset(50, 50),
-        const Offset(100, 0),
-        const Offset(150, 50),
-      ];
-      final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: points,
-        basePath: Path(),
-        basePointCount: 2,
-      );
-      expect(result, isNull);
     });
   });
 

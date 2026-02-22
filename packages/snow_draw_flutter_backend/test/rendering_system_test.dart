@@ -229,112 +229,6 @@ void main() {
   });
 
   group('FreeDrawVisualEntry', () {
-    test('getCachedPicture returns null when no picture cached', () {
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: Path(),
-        strokePath: null,
-      );
-      expect(entry.getCachedPicture(1), isNull);
-    });
-
-    test('getCachedPicture returns picture for matching opacity', () {
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: Path(),
-        strokePath: null,
-      );
-      final recorder = PictureRecorder();
-      Canvas(recorder);
-      final picture = recorder.endRecording();
-      entry.setCachedPicture(picture, 1);
-      expect(entry.getCachedPicture(1), isNotNull);
-      expect(entry.getCachedPicture(0.5), isNull);
-      entry.dispose();
-    });
-
-    test('shouldRecordPicture defers recording until second stable frame', () {
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: Path(),
-        strokePath: null,
-      );
-
-      expect(entry.shouldRecordPicture(1), isFalse);
-      expect(entry.shouldRecordPicture(1), isTrue);
-      expect(entry.shouldRecordPicture(0.5), isFalse);
-      expect(entry.shouldRecordPicture(0.5), isTrue);
-      entry.dispose();
-    });
-
-    test('setCachedPicture disposes previous picture', () {
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: Path(),
-        strokePath: null,
-      );
-      final recorder1 = PictureRecorder();
-      Canvas(recorder1);
-      final picture1 = recorder1.endRecording();
-      entry.setCachedPicture(picture1, 1);
-
-      final recorder2 = PictureRecorder();
-      Canvas(recorder2);
-      final picture2 = recorder2.endRecording();
-      entry.setCachedPicture(picture2, 1);
-
-      // The entry should hold picture2 now.
-      expect(entry.getCachedPicture(1), same(picture2));
-      entry.dispose();
-    });
-
-    test('getOrBuildFlattened caches result', () {
-      final path = Path()
-        ..moveTo(0, 0)
-        ..lineTo(50, 50);
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: path,
-        strokePath: null,
-      );
-      final flat1 = entry.getOrBuildFlattened(2);
-      final flat2 = entry.getOrBuildFlattened(2);
-      expect(identical(flat1, flat2), isTrue);
-    });
-
-    test('getOrBuildClosedFillPath caches result', () {
-      final path = Path()
-        ..moveTo(0, 0)
-        ..lineTo(50, 50)
-        ..lineTo(50, 0);
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 3,
-        path: path,
-        strokePath: null,
-      );
-      final closed1 = entry.getOrBuildClosedFillPath();
-      final closed2 = entry.getOrBuildClosedFillPath();
-      expect(identical(closed1, closed2), isTrue);
-    });
-
     test('matches returns true for identical data and dimensions', () {
       const data = FreeDrawData();
       final entry = FreeDrawVisualEntry(
@@ -343,7 +237,6 @@ void main() {
         height: 100,
         pointCount: 2,
         path: Path(),
-        strokePath: null,
       );
       expect(entry.matches(data, 100, 100), isTrue);
     });
@@ -356,7 +249,6 @@ void main() {
         height: 100,
         pointCount: 2,
         path: Path(),
-        strokePath: null,
       );
       expect(entry.matches(data, 200, 100), isFalse);
     });
@@ -401,38 +293,6 @@ void main() {
     });
   });
 
-  group('buildFreeDrawSmoothPathIncremental', () {
-    test('returns null for too few points', () {
-      final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: [Offset.zero],
-        basePath: Path(),
-        basePointCount: 0,
-      );
-      expect(result, isNull);
-    });
-
-    test('returns path when extending existing path', () {
-      final points = [
-        Offset.zero,
-        const Offset(25, 25),
-        const Offset(50, 50),
-        const Offset(75, 25),
-      ];
-      final basePath = buildFreeDrawSmoothPath(points.sublist(0, 3));
-      final result = buildFreeDrawSmoothPathIncremental(
-        allPoints: points,
-        basePath: basePath,
-        basePointCount: 3,
-      );
-      // May return null if incremental build isn't possible,
-      // but should not throw.
-      if (result != null) {
-        final metrics = result.computeMetrics().toList();
-        expect(metrics, isNotEmpty);
-      }
-    });
-  });
-
   group('resolveFreeDrawLocalPoints', () {
     test('returns empty for empty points', () {
       final result = resolveFreeDrawLocalPoints(
@@ -455,31 +315,6 @@ void main() {
     });
   });
 
-  group('resolveFreeDrawPressures', () {
-    test('returns empty for empty points', () {
-      final result = resolveFreeDrawPressures(points: const []);
-      expect(result, isEmpty);
-    });
-
-    test('returns 0.5 for all when no pressure data', () {
-      final result = resolveFreeDrawPressures(
-        points: const [DrawPoint.zero, DrawPoint(x: 1, y: 1)],
-      );
-      expect(result, [0.5, 0.5]);
-    });
-
-    test('returns actual pressure when available', () {
-      final result = resolveFreeDrawPressures(
-        points: const [
-          DrawPoint(x: 0, y: 0, pressure: 0.8),
-          DrawPoint(x: 1, y: 1),
-        ],
-      );
-      expect(result[0], closeTo(0.8, 0.01));
-      expect(result[1], 0.5);
-    });
-  });
-
   group('LineShaderKey', () {
     test('quantizes values', () {
       final key = LineShaderKey(spacing: 5.123, lineWidth: 2.789, angle: 0.5);
@@ -499,48 +334,6 @@ void main() {
       final a = LineShaderKey(spacing: 5, lineWidth: 2, angle: 0);
       final b = LineShaderKey(spacing: 5, lineWidth: 3, angle: 0);
       expect(a, isNot(equals(b)));
-    });
-  });
-
-  group('flattenPath precision', () {
-    test('short path does not over-allocate', () {
-      // A short straight line should produce a small number of
-      // points, not be clamped to an arbitrary minimum.
-      final path = Path()
-        ..moveTo(0, 0)
-        ..lineTo(10, 0);
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 100,
-        height: 100,
-        pointCount: 2,
-        path: path,
-        strokePath: null,
-      );
-      final flattened = entry.getOrBuildFlattened(2);
-      // With step = max(2, 2*2) = 4, a 10px line should produce
-      // ~3-4 points, not 512.
-      expect(flattened.length, lessThan(10));
-      expect(flattened.length, greaterThanOrEqualTo(2));
-    });
-
-    test('long complex path produces enough points', () {
-      // A longer path should produce proportionally more points.
-      final path = Path()..moveTo(0, 0);
-      for (var i = 1; i <= 100; i++) {
-        path.lineTo(i * 10.0, i.isEven ? 0 : 50);
-      }
-      final entry = FreeDrawVisualEntry(
-        data: const FreeDrawData(),
-        width: 1000,
-        height: 50,
-        pointCount: 101,
-        path: path,
-        strokePath: null,
-      );
-      final flattened = entry.getOrBuildFlattened(2);
-      // Should have a reasonable number of points for hit testing.
-      expect(flattened.length, greaterThan(50));
     });
   });
 }

@@ -60,31 +60,6 @@ bool isLightweightLineEditContext({
   required DocumentState document,
 }) => _isLightweightLineContext(context: context, document: document);
 
-/// Returns true when only an in-progress lightweight line edit changed.
-///
-/// Prefer [isLightweightLineInteractionMutationOnly] for create+edit flows.
-bool isLightweightLineEditMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) {
-  if (!isInteractionMutationOnly(previous: previous, next: next)) {
-    return false;
-  }
-
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  if (previousInteraction is! EditingState ||
-      nextInteraction is! EditingState) {
-    return false;
-  }
-
-  return _isLightweightLineEditingMutationOnly(
-    previous: previousInteraction,
-    next: nextInteraction,
-    document: next.domain.document,
-  );
-}
-
 bool _isLightweightLineCreatingMutationOnly({
   required CreatingState previous,
   required CreatingState next,
