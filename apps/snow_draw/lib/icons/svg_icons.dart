@@ -2,44 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-class CrosshairIcon extends StatelessWidget {
-  const CrosshairIcon({super.key, this.size = 18, this.color});
-
-  final double size;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) =>
-      _SvgIcon(svg: _crosshairSvg, size: size, color: color);
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties
-      ..add(DoubleProperty('size', size))
-      ..add(ColorProperty('color', color));
-  }
-}
-
-class DashedLineIcon extends StatelessWidget {
-  const DashedLineIcon({super.key, this.size = 18, this.color});
-
-  final double size;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) =>
-      _SvgIcon(svg: _dashedLineSvg, size: size, color: color);
-
-  @override
-  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
-    super.debugFillProperties(properties);
-    properties
-      ..add(DoubleProperty('size', size))
-      ..add(ColorProperty('color', color));
-  }
-}
-
 class InlineSvgIcon extends StatelessWidget {
   const InlineSvgIcon({
     required this.svg,
@@ -160,11 +122,6 @@ class _SvgIcon extends StatelessWidget {
     );
   }
 }
-
-const _crosshairSvg =
-    '''<svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M800 64A160 160 0 0 1 960 224v576a160 160 0 0 1-160 160h-576A160 160 0 0 1 64 800v-576A160 160 0 0 1 224 64zM304 765.248l-121.344 121.408c12.544 6.016 26.56 9.344 41.344 9.344h210.752L304 765.248z m416 0L589.184 896H800c14.784 0 28.8-3.328 41.344-9.344l-121.344-121.408zM512 557.248L349.248 720 512 882.752l162.752-162.752L512 557.248z m384 31.936l-130.752 130.816 121.408 121.344a95.36 95.36 0 0 0 8.96-32.128L896 800V589.184zM128 589.248V800c0 14.784 3.328 28.8 9.344 41.344l121.408-121.344L128 589.248z m592-240L557.248 512l162.752 162.752L882.752 512 720 349.248z m-416 0L141.248 512l162.752 162.752L466.752 512 304 349.248zM512 141.248L349.248 304 512 466.752l162.752-162.752L512 141.248z m374.656 41.408L765.248 304 896 434.752V224c0-14.784-3.328-28.8-9.344-41.344z m-749.312 0A95.616 95.616 0 0 0 128 224v210.688L258.752 304zM434.688 128H224c-14.784 0-28.8 3.328-41.344 9.344L304 258.752 434.688 128zM800 128H589.248l130.752 130.752 121.344-121.408a95.36 95.36 0 0 0-32.128-8.96L800 128z"></path></svg>''';
-const _dashedLineSvg =
-    '''<svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M263.8848 563.2H51.2V460.8h212.6848v102.4z m354.4576 0H405.6576V460.8h212.6848v102.4zM972.8 563.2h-212.6848V460.8H972.8v102.4z"></path></svg>''';
 
 const strokeWidthSmallSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 20 20" class="" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.167 10h11.666" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"></path></svg>''';

@@ -19,17 +19,3 @@ class StaticEditConfigProvider implements EditConfigProvider {
   /// Use the default configuration.
   static const defaults = StaticEditConfigProvider(EditConfig.defaults);
 }
-
-/// Mutable configuration provider.
-///
-/// Supports runtime configuration changes.
-class MutableEditConfigProvider implements EditConfigProvider {
-  MutableEditConfigProvider([EditConfig? initialConfig])
-    : editConfig = initialConfig ?? EditConfig.defaults;
-
-  @override
-  EditConfig editConfig;
-
-  void update(EditConfig Function(EditConfig) updater) =>
-      editConfig = updater(editConfig);
-}
