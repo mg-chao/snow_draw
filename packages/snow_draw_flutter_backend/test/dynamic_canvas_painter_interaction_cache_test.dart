@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
@@ -548,6 +548,7 @@ class _CountingSceneEncoder<T extends ElementData>
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     _counter.increment();
     return const RenderScene(

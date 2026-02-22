@@ -69,6 +69,7 @@ class StaticCanvasRenderKey {
     required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    this.textMetricsService = defaultTextMetricsService,
     this.locale,
   });
 
@@ -118,6 +119,9 @@ class StaticCanvasRenderKey {
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
+  /// Text metrics service used while encoding text-based scenes.
+  final TextMetricsService textMetricsService;
+
   /// Whether runtime render diagnostics logging is enabled.
   final bool performanceMonitoringEnabled;
 
@@ -142,6 +146,7 @@ class StaticCanvasRenderKey {
           other.watermarkLayer == watermarkLayer &&
           other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
+          identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
 
@@ -161,6 +166,7 @@ class StaticCanvasRenderKey {
     watermarkLayer,
     watermarkConfig,
     elementRegistry,
+    identityHashCode(textMetricsService),
     performanceMonitoringEnabled,
     locale,
   );
@@ -209,6 +215,7 @@ class DynamicCanvasRenderKey {
     required this.watermarkConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    this.textMetricsService = defaultTextMetricsService,
     this.preferFastFilterFallback = false,
     this.previewElementsRevision,
     this.dynamicPreviewElementIds,
@@ -322,6 +329,9 @@ class DynamicCanvasRenderKey {
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
+  /// Text metrics service used while encoding text-based scenes.
+  final TextMetricsService textMetricsService;
+
   /// Whether runtime render diagnostics logging is enabled.
   final bool performanceMonitoringEnabled;
 
@@ -365,6 +375,7 @@ class DynamicCanvasRenderKey {
           other.watermarkLayer == watermarkLayer &&
           other.watermarkConfig == watermarkConfig &&
           other.elementRegistry == elementRegistry &&
+          identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale;
 
@@ -399,6 +410,7 @@ class DynamicCanvasRenderKey {
     watermarkLayer,
     watermarkConfig,
     elementRegistry,
+    identityHashCode(textMetricsService),
     performanceMonitoringEnabled,
     locale,
   ]);

@@ -24,6 +24,7 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
     assert(
@@ -64,11 +65,13 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
 
+    final resolvedTextMetricsService =
+        textMetricsService ?? sceneTextMetricsService;
     final layout = layoutSceneText(
       data: data,
       width: rect.width,
       localeTag: localeTag,
-      textMetricsService: sceneTextMetricsService,
+      textMetricsService: resolvedTextMetricsService,
     );
     final localOrigin = DrawPoint(
       x: -rect.width / 2,

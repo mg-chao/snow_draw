@@ -117,6 +117,7 @@ class DynamicCanvasPainter extends CustomPainter {
           element: previewElement,
           scaleFactor: scale,
           elementRegistry: renderKey.elementRegistry,
+          textMetricsService: renderKey.textMetricsService,
           locale: renderKey.locale,
         );
       }
@@ -1274,6 +1275,7 @@ class DynamicCanvasPainter extends CustomPainter {
       element: element,
       scaleFactor: scale,
       elementRegistry: renderKey.elementRegistry,
+      textMetricsService: renderKey.textMetricsService,
       locale: renderKey.locale,
     );
     if (sceneContext.shouldPaintSerialConnectors) {

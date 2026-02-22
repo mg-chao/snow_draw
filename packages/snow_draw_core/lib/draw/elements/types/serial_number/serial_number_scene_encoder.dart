@@ -29,6 +29,7 @@ final class SerialNumberSceneEncoder
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
     assert(
@@ -99,11 +100,13 @@ final class SerialNumberSceneEncoder
       );
     }
     if (shouldRenderContent) {
+      final resolvedTextMetricsService =
+          textMetricsService ?? sceneTextMetricsService;
       final textLayout = layoutSerialNumberTextForScene(
         data: data,
         colorArgb: contentColorArgb,
         localeTag: localeTag,
-        textMetricsService: sceneTextMetricsService,
+        textMetricsService: resolvedTextMetricsService,
       );
       final paintScale = textLayout.paintScale;
       if (paintScale > 0 && paintScale.isFinite) {

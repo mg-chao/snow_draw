@@ -50,6 +50,12 @@ class DrawPoint {
   DrawPoint operator -(DrawPoint other) =>
       DrawPoint(x: x - other.x, y: y - other.y);
 
+  DrawPoint operator *(double scalar) =>
+      DrawPoint(x: x * scalar, y: y * scalar);
+
+  DrawPoint operator /(double scalar) =>
+      DrawPoint(x: x / scalar, y: y / scalar);
+
   DrawPoint operator -() => DrawPoint(x: -x, y: -y);
 
   /// Whether this point carries valid pressure data.

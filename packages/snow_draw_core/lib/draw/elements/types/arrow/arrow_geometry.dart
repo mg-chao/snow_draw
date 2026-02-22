@@ -723,11 +723,3 @@ class _CurvedPathAnalysis {
     return null;
   }
 }
-
-extension on DrawPoint {
-  DrawPoint operator *(double scalar) =>
-      DrawPoint(x: x * scalar, y: y * scalar);
-
-  DrawPoint operator /(double scalar) =>
-      DrawPoint(x: x / scalar, y: y / scalar);
-}

@@ -2866,6 +2866,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     watermarkLayer: scene.watermarkLayer,
     watermarkConfig: scene.watermarkConfig,
     elementRegistry: widget.store.context.elementRegistry,
+    textMetricsService: widget.store.context.textMetricsService,
     performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
     locale: locale,
   );
@@ -2981,6 +2982,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     watermarkLayer: watermarkLayer,
     watermarkConfig: watermarkConfig,
     elementRegistry: widget.store.context.elementRegistry,
+    textMetricsService: widget.store.context.textMetricsService,
     performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
     locale: locale,
   );

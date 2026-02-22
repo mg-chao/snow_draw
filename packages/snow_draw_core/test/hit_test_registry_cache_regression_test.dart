@@ -12,6 +12,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart';
@@ -110,5 +111,6 @@ class _NoopSceneEncoder implements ElementSceneEncoder<_TestElementData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) => const RenderScene(primitives: <RenderPrimitive>[]);
 }

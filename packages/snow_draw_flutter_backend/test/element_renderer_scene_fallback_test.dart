@@ -7,11 +7,16 @@ import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 void main() {
   test('renders scene primitives when scene encoder is available', () {
     final counters = _RenderCounters();
+    const textMetricsService = _TestTextMetricsService();
     final elementRegistry = _buildElementRegistry(counters);
 
-    _renderElement(elementRegistry: elementRegistry);
+    _renderElement(
+      elementRegistry: elementRegistry,
+      textMetricsService: textMetricsService,
+    );
 
     expect(counters.sceneEncodes, 1);
+    expect(counters.lastTextMetricsService, same(textMetricsService));
   });
 
   test('uses unknown-element fallback when scene encoding is unsupported', () {
@@ -78,7 +83,10 @@ DefaultElementRegistry _buildElementRegistryWithThrowingEncoder() =>
       ),
     );
 
-void _renderElement({required DefaultElementRegistry elementRegistry}) {
+void _renderElement({
+  required DefaultElementRegistry elementRegistry,
+  TextMetricsService? textMetricsService,
+}) {
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
   const element = ElementState(
@@ -95,12 +103,14 @@ void _renderElement({required DefaultElementRegistry elementRegistry}) {
     element: element,
     scaleFactor: 1,
     elementRegistry: elementRegistry,
+    textMetricsService: textMetricsService,
   );
   recorder.endRecording().dispose();
 }
 
 class _RenderCounters {
   var sceneEncodes = 0;
+  TextMetricsService? lastTextMetricsService;
 }
 
 class _SceneTestData extends ElementData {
@@ -139,8 +149,10 @@ class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     _counters.sceneEncodes += 1;
+    _counters.lastTextMetricsService = textMetricsService;
     return const RenderScene(
       primitives: <RenderPrimitive>[
         RenderPathFillPrimitive(
@@ -165,6 +177,7 @@ class _UnsupportedSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) => throw const SceneEncodingNotSupported('test-only unsupported scene');
 }
 
@@ -176,5 +189,21 @@ class _ThrowingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) => throw StateError('test-only failing scene encoder');
+}
+
+class _TestTextMetricsService implements TextMetricsService {
+  const _TestTextMetricsService();
+
+  @override
+  TextMetrics measure(TextLayoutRequest request) => const TextMetrics(
+    width: 1,
+    height: 1,
+    lineHeight: 1,
+    lines: <TextLineMetrics>[TextLineMetrics(width: 1, height: 1)],
+  );
+
+  @override
+  void clearCaches() {}
 }

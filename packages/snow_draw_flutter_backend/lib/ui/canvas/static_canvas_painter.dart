@@ -121,6 +121,7 @@ class StaticCanvasPainter extends CustomPainter {
           element: element,
           scaleFactor: scale,
           elementRegistry: renderKey.elementRegistry,
+          textMetricsService: renderKey.textMetricsService,
           locale: renderKey.locale,
         );
         if (shouldPaintSerialConnectors) {

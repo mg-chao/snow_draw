@@ -1,5 +1,6 @@
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -21,6 +22,7 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
     assert(
@@ -381,12 +383,4 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     }
     return vector / length;
   }
-}
-
-extension on DrawPoint {
-  DrawPoint operator *(double scalar) =>
-      DrawPoint(x: x * scalar, y: y * scalar);
-
-  DrawPoint operator /(double scalar) =>
-      DrawPoint(x: x / scalar, y: y / scalar);
 }

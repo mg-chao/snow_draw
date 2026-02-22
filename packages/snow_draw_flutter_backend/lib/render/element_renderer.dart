@@ -107,6 +107,7 @@ class ElementRenderer {
     required ElementState element,
     required double scaleFactor,
     required ElementRegistry elementRegistry,
+    TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
     final sceneResult = _renderSceneIfAvailable(
@@ -114,6 +115,7 @@ class ElementRenderer {
       element: element,
       scaleFactor: scaleFactor,
       elementRegistry: elementRegistry,
+      textMetricsService: textMetricsService,
       locale: locale,
     );
     switch (sceneResult) {
@@ -140,6 +142,7 @@ class ElementRenderer {
     required ElementState element,
     required double scaleFactor,
     required ElementRegistry elementRegistry,
+    TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
     final definition = elementRegistry.getDefinitionByValue(
@@ -153,6 +156,7 @@ class ElementRenderer {
         element: element,
         scaleFactor: scaleFactor,
         localeTag: locale?.toLanguageTag(),
+        textMetricsService: textMetricsService,
       );
       _sceneRenderer.renderScene(canvas: canvas, scene: scene, locale: locale);
       return _SceneRenderResult.rendered;

@@ -1,5 +1,6 @@
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../core/element_scene_encoder.dart';
 import 'filter_data.dart';
 
@@ -17,6 +18,7 @@ final class FilterSceneEncoder implements ElementSceneEncoder<FilterData> {
     required ElementState element,
     required double scaleFactor,
     String? localeTag,
+    TextMetricsService? textMetricsService,
   }) {
     assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
     assert(
