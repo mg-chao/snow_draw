@@ -7,7 +7,7 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
@@ -16,7 +16,7 @@ import 'serial_number_layout.dart';
 ///
 /// Supports all current serial-number fill/stroke styles.
 final class SerialNumberSceneEncoder
-    implements ElementSceneEncoder<SerialNumberData> {
+    extends TypedElementSceneEncoder<SerialNumberData> {
   /// Creates a serial-number scene encoder.
   const SerialNumberSceneEncoder();
 
@@ -25,26 +25,13 @@ final class SerialNumberSceneEncoder
   static const double _lineFillAngle = -math.pi / 4;
 
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required SerialNumberData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! SerialNumberData) {
-      throw StateError(
-        'SerialNumberSceneEncoder can only encode SerialNumberData (got '
-        '${data.runtimeType})',
-      );
-    }
-
     final fillColorArgb = applyElementOpacityToArgb(
       argb: data.fillColor.toARGB32(),
       elementOpacity: element.opacity,
@@ -56,14 +43,14 @@ final class SerialNumberSceneEncoder
     final shouldFill = isArgbVisible(fillColorArgb);
     final shouldRenderContent = isArgbVisible(contentColorArgb);
     if (!shouldFill && !shouldRenderContent) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
     final strokeWidth = resolveSerialNumberStrokeWidth(data: data);
     final shouldStroke = shouldRenderContent && strokeWidth > 0;
 
     final diameter = math.min(element.rect.width, element.rect.height);
     if (diameter <= 0 || !diameter.isFinite) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
     final radius = diameter / 2;
     final circlePath = _buildCirclePath(radius: radius);
@@ -81,9 +68,7 @@ final class SerialNumberSceneEncoder
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
           angleRadians: _lineFillAngle,
-          pattern: data.fillStyle == FillStyle.crossLine
-              ? RenderHatchPattern.crossLine
-              : RenderHatchPattern.line,
+          pattern: resolveHatchPattern(data.fillStyle),
         );
       }
     }
@@ -135,13 +120,10 @@ final class SerialNumberSceneEncoder
       }
     }
 
-    final sceneBuilder = SceneBuilder()
-      ..addTransform(
-        child: localScene.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return sceneBuilder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localScene.build(),
+    );
   }
 
   static DrawRect _localClipBounds(double radius) =>

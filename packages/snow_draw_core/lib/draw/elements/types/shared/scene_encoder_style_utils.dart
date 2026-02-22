@@ -70,3 +70,9 @@ DrawRect resolveCenteredLocalClipBounds(DrawRect rect) => DrawRect(
     lineToSpacingRatio: lineToSpacingRatio,
   );
 }
+
+/// Resolves render hatch pattern for [fillStyle].
+RenderHatchPattern resolveHatchPattern(FillStyle fillStyle) =>
+    fillStyle == FillStyle.crossLine
+    ? RenderHatchPattern.crossLine
+    : RenderHatchPattern.line;

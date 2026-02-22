@@ -4,39 +4,26 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'highlight_data.dart';
 
 /// Encodes highlight elements into backend-agnostic scene primitives.
 final class HighlightSceneEncoder
-    implements ElementSceneEncoder<HighlightData> {
+    extends TypedElementSceneEncoder<HighlightData> {
   /// Creates a highlight scene encoder.
   const HighlightSceneEncoder();
 
   static const _kappa = 0.5522847498307936;
 
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required HighlightData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! HighlightData) {
-      throw StateError(
-        'HighlightSceneEncoder can only encode HighlightData (got '
-        '${data.runtimeType})',
-      );
-    }
-
     final fillColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
@@ -48,7 +35,7 @@ final class HighlightSceneEncoder
     final shouldFill = isArgbVisible(fillColorArgb);
     final shouldStroke = isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!shouldFill && !shouldStroke) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final shapePath = _buildShapePath(rect: element.rect, data: data);
@@ -69,13 +56,10 @@ final class HighlightSceneEncoder
       );
     }
 
-    final builder = SceneBuilder()
-      ..addTransform(
-        child: localScene.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return builder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localScene.build(),
+    );
   }
 
   static RenderPath _buildShapePath({

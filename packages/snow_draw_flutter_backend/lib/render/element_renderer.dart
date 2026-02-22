@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/painting.dart';
+import 'package:meta/meta.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../extensions/draw_color_extensions.dart';
@@ -30,6 +31,7 @@ class ElementRenderer {
   static const _selectionDashLength = 6.0;
   static const _selectionGapLength = 4.0;
   static const _sceneRenderer = ScenePrimitiveRenderer();
+  static final Set<String> _reportedFallbackWarnings = <String>{};
 
   double _effectiveScale(double scaleFactor) =>
       scaleFactor == 0 ? 1.0 : scaleFactor;
@@ -122,10 +124,11 @@ class ElementRenderer {
       case _SceneRenderResult.rendered:
         return;
       case _SceneRenderResult.missingDefinition:
-        _renderFallbackLog.warning(
+        _logFallbackWarningOnce(
           'Unknown element type "${element.typeId}", '
           'using unknown-element fallback',
-          {'typeId': element.typeId.value},
+          key: 'missing:${element.typeId.value}',
+          data: {'typeId': element.typeId.value},
         );
       case _SceneRenderResult.unsupported:
         // Unsupported reason/details are logged by _renderSceneIfAvailable.
@@ -161,15 +164,17 @@ class ElementRenderer {
       _sceneRenderer.renderScene(canvas: canvas, scene: scene, locale: locale);
       return _SceneRenderResult.rendered;
     } on SceneEncodingNotSupported catch (signal) {
-      _renderFallbackLog.warning(
+      _logFallbackWarningOnce(
         'Scene encoding not supported, using unknown-element fallback',
-        {'typeId': element.typeId.value, 'reason': signal.reason},
+        key: 'unsupported:${element.typeId.value}:${signal.reason}',
+        data: {'typeId': element.typeId.value, 'reason': signal.reason},
       );
       return _SceneRenderResult.unsupported;
     } on Object catch (error, stackTrace) {
-      _renderFallbackLog.warning(
+      _logFallbackWarningOnce(
         'Scene renderer failed, using unknown-element fallback',
-        {
+        key: 'failed:${element.typeId.value}:${error.runtimeType}',
+        data: {
           'typeId': element.typeId.value,
           'error': error,
           'stackTrace': stackTrace,
@@ -178,6 +183,25 @@ class ElementRenderer {
       return _SceneRenderResult.failed;
     }
   }
+
+  void _logFallbackWarningOnce(
+    String message, {
+    required String key,
+    Map<String, dynamic>? data,
+  }) {
+    if (!_reportedFallbackWarnings.add(key)) {
+      return;
+    }
+    _renderFallbackLog.warning(message, data);
+  }
+
+  @visibleForTesting
+  static void clearFallbackWarningCache() {
+    _reportedFallbackWarnings.clear();
+  }
+
+  @visibleForTesting
+  static int get fallbackWarningCount => _reportedFallbackWarnings.length;
 
   /// Renders the selection overlay (outline + resize handles).
   void renderSelection({

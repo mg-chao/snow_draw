@@ -7,36 +7,24 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'free_draw_data.dart';
 
 /// Encodes free-draw elements into backend-agnostic scene primitives.
-final class FreeDrawSceneEncoder implements ElementSceneEncoder<FreeDrawData> {
+final class FreeDrawSceneEncoder
+    extends TypedElementSceneEncoder<FreeDrawData> {
   /// Creates a free-draw scene encoder.
   const FreeDrawSceneEncoder();
   static const double _lineFillAngle = -math.pi / 4;
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required FreeDrawData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! FreeDrawData) {
-      throw StateError(
-        'FreeDrawSceneEncoder can only encode FreeDrawData '
-        '(got ${data.runtimeType})',
-      );
-    }
-
     final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
@@ -55,12 +43,12 @@ final class FreeDrawSceneEncoder implements ElementSceneEncoder<FreeDrawData> {
         data.points.length > 2;
 
     if (!strokeVisible && !shouldFill) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final points = _resolveCenterLocalPoints(rect: element.rect, data: data);
     if (points.length < 2) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final path = _buildSmoothPath(points);
@@ -78,9 +66,7 @@ final class FreeDrawSceneEncoder implements ElementSceneEncoder<FreeDrawData> {
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
           angleRadians: _lineFillAngle,
-          pattern: data.fillStyle == FillStyle.crossLine
-              ? RenderHatchPattern.crossLine
-              : RenderHatchPattern.line,
+          pattern: resolveHatchPattern(data.fillStyle),
         );
       }
     }
@@ -98,13 +84,10 @@ final class FreeDrawSceneEncoder implements ElementSceneEncoder<FreeDrawData> {
       );
     }
 
-    final builder = SceneBuilder()
-      ..addTransform(
-        child: localScene.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return builder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localScene.build(),
+    );
   }
 
   static List<DrawPoint> _resolveCenterLocalPoints({

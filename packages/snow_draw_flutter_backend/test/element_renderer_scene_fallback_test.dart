@@ -5,6 +5,14 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/element_renderer.dart';
 
 void main() {
+  setUp(() {
+    ElementRenderer.clearFallbackWarningCache();
+  });
+
+  tearDown(() {
+    ElementRenderer.clearFallbackWarningCache();
+  });
+
   test('renders scene primitives when scene encoder is available', () {
     final counters = _RenderCounters();
     const textMetricsService = _TestTextMetricsService();
@@ -44,6 +52,15 @@ void main() {
       () => _renderElement(elementRegistry: elementRegistry),
       returnsNormally,
     );
+  });
+
+  test('deduplicates repeated unsupported-scene fallback warnings', () {
+    final elementRegistry = _buildElementRegistryWithUnsupportedEncoder();
+
+    _renderElement(elementRegistry: elementRegistry);
+    _renderElement(elementRegistry: elementRegistry);
+
+    expect(ElementRenderer.fallbackWarningCount, 1);
   });
 }
 

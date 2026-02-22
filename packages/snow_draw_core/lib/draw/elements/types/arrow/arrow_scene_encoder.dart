@@ -4,39 +4,27 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/hit_test_geometry.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 
 /// Encodes arrow elements into backend-agnostic scene primitives.
-final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
+final class ArrowSceneEncoder extends TypedElementSceneEncoder<ArrowData> {
   /// Creates an arrow scene encoder.
   const ArrowSceneEncoder();
 
   static const _kappa = 0.5522847498307936;
 
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required ArrowData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! ArrowData) {
-      throw StateError(
-        'ArrowSceneEncoder can only encode ArrowData (got ${data.runtimeType})',
-      );
-    }
-
     final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
@@ -44,7 +32,7 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     final strokeVisible =
         isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!strokeVisible) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final geometry = ArrowGeometryDescriptor(data: data, rect: element.rect);
@@ -53,7 +41,7 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
       rect: element.rect,
     );
     if (insetPoints.length < 2) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final shaftPath = _buildShaftPath(
@@ -89,13 +77,10 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
       );
     }
 
-    final builder = SceneBuilder()
-      ..addTransform(
-        child: localScene.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return builder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localScene.build(),
+    );
   }
 
   static List<DrawPoint> _toCenterLocalPoints({

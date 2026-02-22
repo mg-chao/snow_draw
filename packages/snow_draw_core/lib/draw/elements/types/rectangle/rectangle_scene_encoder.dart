@@ -6,39 +6,26 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'rectangle_data.dart';
 
 /// Encodes rectangle elements into backend-agnostic scene primitives.
 final class RectangleSceneEncoder
-    implements ElementSceneEncoder<RectangleData> {
+    extends TypedElementSceneEncoder<RectangleData> {
   /// Creates a rectangle scene encoder.
   const RectangleSceneEncoder();
 
   static const _kappa = 0.5522847498307936;
   static const double _lineFillAngle = -math.pi / 4;
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required RectangleData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! RectangleData) {
-      throw StateError(
-        'RectangleSceneEncoder can only encode RectangleData (got '
-        '${data.runtimeType})',
-      );
-    }
-
     final fillColorArgb = applyElementOpacityToArgb(
       argb: data.fillColor.toARGB32(),
       elementOpacity: element.opacity,
@@ -51,7 +38,7 @@ final class RectangleSceneEncoder
     final strokeVisible =
         isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!fillVisible && !strokeVisible) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final path = _buildRoundedRectPath(element.rect, data.cornerRadius);
@@ -68,9 +55,7 @@ final class RectangleSceneEncoder
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
           angleRadians: _lineFillAngle,
-          pattern: data.fillStyle == FillStyle.crossLine
-              ? RenderHatchPattern.crossLine
-              : RenderHatchPattern.line,
+          pattern: resolveHatchPattern(data.fillStyle),
         );
       }
     }
@@ -87,13 +72,10 @@ final class RectangleSceneEncoder
       );
     }
 
-    final sceneBuilder = SceneBuilder()
-      ..addTransform(
-        child: localBuilder.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return sceneBuilder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localBuilder.build(),
+    );
   }
 
   static RenderPath _buildRoundedRectPath(DrawRect rect, double cornerRadius) {

@@ -6,13 +6,13 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/hit_test_geometry.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'line_data.dart';
 
 /// Encodes line elements into backend-agnostic scene primitives.
-final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
+final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
   /// Creates a line scene encoder.
   const LineSceneEncoder();
   static const double _lineFillAngle = -math.pi / 4;
@@ -22,25 +22,13 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
   ];
 
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required LineData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! LineData) {
-      throw StateError(
-        'LineSceneEncoder can only encode LineData (got ${data.runtimeType})',
-      );
-    }
-
     final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
@@ -53,7 +41,7 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
         isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     final fillVisible = isArgbVisible(fillColorArgb) && _isClosed(data);
     if (!strokeVisible && !fillVisible) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final path = _buildPath(element.rect, data);
@@ -71,9 +59,7 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
           angleRadians: _lineFillAngle,
-          pattern: data.fillStyle == FillStyle.crossLine
-              ? RenderHatchPattern.crossLine
-              : RenderHatchPattern.line,
+          pattern: resolveHatchPattern(data.fillStyle),
         );
       }
     }
@@ -91,13 +77,10 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
       );
     }
 
-    final sceneBuilder = SceneBuilder()
-      ..addTransform(
-        child: localBuilder.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return sceneBuilder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localBuilder.build(),
+    );
   }
 
   static bool _isClosed(LineData data) =>

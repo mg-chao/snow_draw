@@ -5,7 +5,7 @@ import '../../../render/scene/render_scene.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
-import '../../core/element_scene_encoder.dart';
+import '../../core/typed_element_scene_encoder.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
@@ -13,32 +13,20 @@ import 'text_layout.dart';
 /// Encodes text elements into backend-agnostic scene primitives.
 ///
 /// Supports fill/stroke text runs and all text background fill styles.
-final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
+final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
   /// Creates a text scene encoder.
   const TextSceneEncoder();
   static const _kappa = 0.5522847498307936;
   static const double _lineFillAngle = -math.pi / 4;
 
   @override
-  RenderScene encodeScene({
+  RenderScene encodeTypedScene({
     required ElementState element,
+    required TextData data,
     required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
-    assert(
-      localeTag == null || localeTag.isNotEmpty,
-      'localeTag must be null or non-empty.',
-    );
-
-    final data = element.data;
-    if (data is! TextData) {
-      throw StateError(
-        'TextSceneEncoder can only encode TextData (got ${data.runtimeType})',
-      );
-    }
-
     final textColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
@@ -57,12 +45,12 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
         isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     final hasTextFill = isArgbVisible(textColorArgb);
     if (!hasTextFill && !hasBackground && !hasTextStroke) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final rect = element.rect;
     if (rect.width <= 0 || rect.height <= 0 || data.fontSize <= 0) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
+      return emptyRenderScene;
     }
 
     final resolvedTextMetricsService =
@@ -108,9 +96,7 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
             lineWidth: hatch.lineWidth,
             spacing: hatch.spacing,
             angleRadians: _lineFillAngle,
-            pattern: data.fillStyle == FillStyle.crossLine
-                ? RenderHatchPattern.crossLine
-                : RenderHatchPattern.line,
+            pattern: resolveHatchPattern(data.fillStyle),
           );
         }
       }
@@ -129,13 +115,10 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       );
     }
 
-    final builder = SceneBuilder()
-      ..addTransform(
-        child: localScene.build(),
-        translate: element.center,
-        rotation: element.rotation,
-      );
-    return builder.build(cullRect: element.rect);
+    return composeElementScene(
+      element: element,
+      localScene: localScene.build(),
+    );
   }
 
   static double _resolveVerticalOffset({
