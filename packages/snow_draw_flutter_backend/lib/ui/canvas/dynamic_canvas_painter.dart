@@ -11,7 +11,7 @@ import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
 import '../../services/text/flutter_text_layout.dart';
 import 'binding_highlight_style.dart';
-import 'filter_scene_compositor.dart';
+import 'filter_pipeline/filter_segment_renderer.dart';
 import 'free_draw_creation_preview_cache.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
@@ -1015,7 +1015,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final filterCacheContext = sceneContext.shouldPaintSerialConnectors
         ? null
         : _buildFilterCacheContext(scale: scale);
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: effectiveElements,
       paintElement: paintElement,
@@ -1033,7 +1033,7 @@ class DynamicCanvasPainter extends CustomPainter {
       ),
     );
     if (renderKey.performanceMonitoringEnabled) {
-      final diagnostics = filterSceneCompositor.lastDiagnostics;
+      final diagnostics = filterSegmentRenderer.lastDiagnostics;
       if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
         _dynamicCanvasFallbackLog.warning('Heavy dynamic filter frame', {
           'pictureRecorders': diagnostics.pictureRecorders,

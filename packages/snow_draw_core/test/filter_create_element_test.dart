@@ -10,7 +10,11 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_reducer.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
-import 'package:snow_draw_core/utils/id_generator.dart';
+
+String Function() _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
+  var counter = startFrom;
+  return () => '$prefix-${counter++}';
+}
 
 void main() {
   test('create element uses filter defaults', () {
@@ -26,7 +30,7 @@ void main() {
         ),
       ),
       elementRegistry: registry,
-      idGenerator: SequentialIdGenerator().call,
+      idGenerator: _testIdGenerator(),
     );
 
     final next = const CreateElementReducer().reduce(

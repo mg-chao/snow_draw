@@ -13,6 +13,11 @@ import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_r
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
 
+IdGenerator _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
+  var counter = startFrom;
+  return () => '$prefix-${counter++}';
+}
+
 class _Deps implements CreateElementReducerDeps {
   _Deps({
     required this.config,
@@ -39,7 +44,7 @@ void main() {
     final deps = _Deps(
       config: DrawConfig(),
       elementRegistry: registry,
-      idGenerator: SequentialIdGenerator().call,
+      idGenerator: _testIdGenerator(),
     );
     const reducer = CreateElementReducer();
 

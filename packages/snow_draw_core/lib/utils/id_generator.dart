@@ -24,14 +24,3 @@ class RandomStringIdGenerator {
     ),
   );
 }
-
-/// Predictable ID generator (useful for tests).
-class SequentialIdGenerator {
-  SequentialIdGenerator({String prefix = 'id', int startFrom = 1})
-    : _prefix = prefix,
-      _counter = startFrom;
-  final String _prefix;
-  int _counter;
-
-  String call() => '$_prefix-${_counter++}';
-}

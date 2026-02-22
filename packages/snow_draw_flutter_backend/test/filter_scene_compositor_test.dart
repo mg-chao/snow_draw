@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_scene_compositor.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_renderer.dart';
 
 void _paintElementRect(Canvas canvas, ElementState element, Color color) {
   canvas.drawRect(
@@ -21,7 +21,7 @@ void main() {
     var paintCount = 0;
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: const [
         ElementState(
@@ -72,7 +72,7 @@ void main() {
 
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: const [base, filter],
       paintElement: (sceneCanvas, element) {
@@ -110,7 +110,7 @@ void main() {
 
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: const [base, grayscale, inversion],
       paintElement: (sceneCanvas, element) {
@@ -123,7 +123,7 @@ void main() {
   test('compositor exposes diagnostics from segmented renderer', () {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: const [
         ElementState(
@@ -140,7 +140,7 @@ void main() {
       },
     );
 
-    final diagnostics = filterSceneCompositor.lastDiagnostics;
+    final diagnostics = filterSegmentRenderer.lastDiagnostics;
     expect(diagnostics.filterPasses, 0);
     expect(diagnostics.batchCount, 0);
     recorder.endRecording();

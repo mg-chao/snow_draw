@@ -219,14 +219,6 @@ class InteractionSceneCache {
   int _quantizeScale(double scaleFactor) => (scaleFactor * 1000).round();
 }
 
-/// Backward-compatible alias.
-typedef HighlightSceneElementPainter = SceneElementPainter;
-
-/// Backward-compatible alias.
-class HighlightInteractionSceneCache extends InteractionSceneCache {
-  HighlightInteractionSceneCache({super.maxEntries = 24});
-}
-
 @immutable
 class _CachedSegment {
   const _CachedSegment({

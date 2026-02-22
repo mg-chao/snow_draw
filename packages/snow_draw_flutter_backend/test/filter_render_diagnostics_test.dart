@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_scene_compositor.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_renderer.dart';
 
 void main() {
   test('diagnostics are bounded by batches and filters', () {
@@ -48,7 +48,7 @@ void main() {
     final canvas = Canvas(recorder);
     final fillPaint = Paint()..color = const Color(0xFF2266AA);
 
-    filterSceneCompositor.paintElements(
+    filterSegmentRenderer.paint(
       canvas: canvas,
       elements: elements,
       paintElement: (sceneCanvas, element) {
@@ -68,7 +68,7 @@ void main() {
       },
     );
 
-    final diagnostics = filterSceneCompositor.lastDiagnostics;
+    final diagnostics = filterSegmentRenderer.lastDiagnostics;
     expect(diagnostics.filterPasses, 3);
     expect(diagnostics.batchCount, 1);
     expect(diagnostics.saveLayers, 3);

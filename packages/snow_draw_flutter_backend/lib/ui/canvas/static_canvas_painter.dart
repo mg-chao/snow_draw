@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import '../../extensions/draw_color_extensions.dart';
 import '../../render/element_renderer.dart';
-import 'filter_scene_compositor.dart';
+import 'filter_pipeline/filter_segment_renderer.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_visibility.dart';
@@ -141,7 +141,7 @@ class StaticCanvasPainter extends CustomPainter {
         final filterCacheContext = shouldPaintSerialConnectors
             ? null
             : _buildFilterCacheContext(scale: scale);
-        filterSceneCompositor.paintElements(
+        filterSegmentRenderer.paint(
           canvas: canvas,
           elements: effectiveElements,
           cacheContext: filterCacheContext,
@@ -154,7 +154,7 @@ class StaticCanvasPainter extends CustomPainter {
           paintElement: paintElement,
         );
         if (renderKey.performanceMonitoringEnabled) {
-          final diagnostics = filterSceneCompositor.lastDiagnostics;
+          final diagnostics = filterSegmentRenderer.lastDiagnostics;
           if (diagnostics.pictureRecorders > 12 ||
               diagnostics.filterPasses > 6) {
             _staticCanvasFallbackLog.warning('Heavy static filter frame', {

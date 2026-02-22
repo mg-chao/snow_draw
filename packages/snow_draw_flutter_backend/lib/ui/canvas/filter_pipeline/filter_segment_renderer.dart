@@ -1883,6 +1883,9 @@ class FilterSegmentRenderer {
   }
 }
 
+/// Shared filter segment renderer used across static/dynamic canvas layers.
+final filterSegmentRenderer = FilterSegmentRenderer();
+
 enum _FilterCoverageTier { compact, large, huge }
 
 @immutable

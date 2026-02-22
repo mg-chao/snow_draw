@@ -1,4 +1,4 @@
-﻿import 'dart:ui' as ui;
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
@@ -10,7 +10,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('reuses static segments across highlight edit frames', () {
-    final cache = HighlightInteractionSceneCache();
+    final cache = InteractionSceneCache();
     final firstFrame = _buildScene(
       dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
@@ -41,7 +41,7 @@ void main() {
   });
 
   test('reuses full scene picture when no dynamic element is present', () {
-    final cache = HighlightInteractionSceneCache();
+    final cache = InteractionSceneCache();
     final elements = _buildScene(
       dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
@@ -70,7 +70,7 @@ void main() {
   });
 
   test('invalidates cached segments when text cache revision changes', () {
-    final cache = HighlightInteractionSceneCache();
+    final cache = InteractionSceneCache();
     final elements = _buildScene(
       dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
@@ -100,7 +100,7 @@ void main() {
   test(
     'invalidates full-scene cache when segment element instances change',
     () {
-      final cache = HighlightInteractionSceneCache();
+      final cache = InteractionSceneCache();
       final firstFrame = _buildScene(
         dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
       );
@@ -136,7 +136,7 @@ void main() {
   );
 
   test('rebuilds segment layout when dynamic ids change', () {
-    final cache = HighlightInteractionSceneCache();
+    final cache = InteractionSceneCache();
     final elements = _buildScene(
       dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
@@ -192,7 +192,7 @@ List<ElementState> _buildScene({required DrawRect dynamicRect}) => [
 ];
 
 int _paintFrame({
-  required HighlightInteractionSceneCache cache,
+  required InteractionSceneCache cache,
   required List<ElementState> elements,
   required Set<String> dynamicElementIds,
   required int documentVersion,

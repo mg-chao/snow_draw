@@ -24,7 +24,7 @@ void main() {
     });
 
     test('rbush package is usable', () {
-      // Spatial indexing used by ElementIndexService.
+      // Spatial indexing used by hit-testing caches.
       // Just verify the type is accessible.
       expect(RBushBase, isNotNull);
     });
