@@ -32,6 +32,7 @@ void main() {
 DrawContext createAppContext() {
   final registry = DefaultElementRegistry();
   registerBuiltInElements(registry);
+  configureSceneTextMetricsService(flutterTextMetricsService);
   final logConfig = LogConfig.production.copyWith(
     enabled: true,
     colorOutput: !kReleaseMode,
