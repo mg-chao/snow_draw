@@ -21,7 +21,6 @@ final class ArrowSceneEncoder extends TypedElementSceneEncoder<ArrowData> {
   RenderScene encodeTypedScene({
     required ElementState element,
     required ArrowData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

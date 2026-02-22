@@ -27,7 +27,6 @@ final class SerialNumberSceneEncoder
   RenderScene encodeTypedScene({
     required ElementState element,
     required SerialNumberData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

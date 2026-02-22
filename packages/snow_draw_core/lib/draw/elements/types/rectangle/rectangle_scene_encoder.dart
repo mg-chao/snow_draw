@@ -17,7 +17,6 @@ final class RectangleSceneEncoder
   RenderScene encodeTypedScene({
     required ElementState element,
     required RectangleData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

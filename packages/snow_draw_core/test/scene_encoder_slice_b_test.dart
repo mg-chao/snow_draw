@@ -26,7 +26,7 @@ void main() {
           data: ArrowData(strokeStyle: StrokeStyle.dashed),
         );
 
-        final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+        final scene = encoder.encodeScene(element: element);
         final transformed = scene.primitives.single as RenderTransformPrimitive;
         final localPrimitives = transformed.child.primitives;
 
@@ -58,7 +58,7 @@ void main() {
         ),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       final transformed = scene.primitives.single as RenderTransformPrimitive;
       final localPrimitives = transformed.child.primitives;
 
@@ -89,7 +89,7 @@ void main() {
         ),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       final transformed = scene.primitives.single as RenderTransformPrimitive;
       final localPrimitives = transformed.child.primitives;
 
@@ -118,7 +118,7 @@ void main() {
         ),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       final transformed = scene.primitives.single as RenderTransformPrimitive;
       final localPrimitives = transformed.child.primitives;
 
@@ -148,7 +148,7 @@ void main() {
         ),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       final transformed = scene.primitives.single as RenderTransformPrimitive;
       final localPrimitives = transformed.child.primitives;
       final hatch = localPrimitives

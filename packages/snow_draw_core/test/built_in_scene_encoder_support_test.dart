@@ -25,7 +25,6 @@ void main() {
       expect(
         () => definition.sceneEncoder.encodeScene(
           element: element,
-          scaleFactor: 1,
           localeTag: 'en-US',
         ),
         returnsNormally,

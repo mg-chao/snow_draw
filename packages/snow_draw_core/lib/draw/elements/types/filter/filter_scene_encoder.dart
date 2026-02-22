@@ -17,7 +17,6 @@ final class FilterSceneEncoder extends TypedElementSceneEncoder<FilterData> {
   RenderScene encodeTypedScene({
     required ElementState element,
     required FilterData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) => emptyRenderScene;

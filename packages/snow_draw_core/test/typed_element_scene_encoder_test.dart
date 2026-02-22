@@ -15,7 +15,7 @@ void main() {
       data: _TestData(colorArgb: 0xFF123456),
     );
 
-    final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+    final scene = encoder.encodeScene(element: element);
 
     final cullRect = scene.cullRect;
     expect(cullRect, isNotNull);
@@ -41,7 +41,7 @@ void main() {
       data: _TestData(colorArgb: 0xFF123456),
     );
 
-    final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+    final scene = encoder.encodeScene(element: element);
 
     expect(scene.cullRect, element.rect);
   });
@@ -56,10 +56,7 @@ void main() {
       data: _OtherData(),
     );
 
-    expect(
-      () => encoder.encodeScene(element: element, scaleFactor: 1),
-      throwsStateError,
-    );
+    expect(() => encoder.encodeScene(element: element), throwsStateError);
   });
 }
 
@@ -70,7 +67,6 @@ final class _TestSceneEncoder extends TypedElementSceneEncoder<_TestData> {
   RenderScene encodeTypedScene({
     required ElementState element,
     required _TestData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

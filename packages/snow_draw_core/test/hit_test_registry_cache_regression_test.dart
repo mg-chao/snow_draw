@@ -109,7 +109,6 @@ class _NoopSceneEncoder implements ElementSceneEncoder<_TestElementData> {
   @override
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) => const RenderScene(primitives: <RenderPrimitive>[]);

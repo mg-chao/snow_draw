@@ -546,7 +546,6 @@ class _CountingSceneEncoder<T extends ElementData>
   @override
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

@@ -25,11 +25,10 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
   @override
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    _validateEncodeArguments(scaleFactor: scaleFactor, localeTag: localeTag);
+    _validateEncodeArguments(localeTag: localeTag);
     final data = element.data;
     if (data is! T) {
       throw StateError(
@@ -39,7 +38,6 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
     return encodeTypedScene(
       element: element,
       data: data,
-      scaleFactor: scaleFactor,
       localeTag: localeTag,
       textMetricsService: textMetricsService,
     );
@@ -49,7 +47,6 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
   RenderScene encodeTypedScene({
     required ElementState element,
     required T data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   });
@@ -73,11 +70,7 @@ abstract base class TypedElementSceneEncoder<T extends ElementData>
   @protected
   RenderScene get emptyRenderScene => emptyScene;
 
-  static void _validateEncodeArguments({
-    required double scaleFactor,
-    required String? localeTag,
-  }) {
-    assert(scaleFactor.isFinite, 'scaleFactor must be finite.');
+  static void _validateEncodeArguments({required String? localeTag}) {
     assert(
       localeTag == null || localeTag.isNotEmpty,
       'localeTag must be null or non-empty.',

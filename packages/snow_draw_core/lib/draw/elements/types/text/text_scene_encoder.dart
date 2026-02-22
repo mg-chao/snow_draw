@@ -20,7 +20,6 @@ final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
   RenderScene encodeTypedScene({
     required ElementState element,
     required TextData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

@@ -23,7 +23,6 @@ final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
   RenderScene encodeTypedScene({
     required ElementState element,
     required LineData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

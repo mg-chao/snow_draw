@@ -19,7 +19,6 @@ final class HighlightSceneEncoder
   RenderScene encodeTypedScene({
     required ElementState element,
     required HighlightData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

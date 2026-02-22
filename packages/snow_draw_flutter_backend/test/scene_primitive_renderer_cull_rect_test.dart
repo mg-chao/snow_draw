@@ -30,7 +30,7 @@ void main() {
 
   test('cull rect keeps thick stroke visible near viewport edge', () async {
     const scene = RenderScene(
-      cullRect: DrawRect(minX: -1, minY: 0, maxX: -1, maxY: 8),
+      cullRect: DrawRect(minX: -1, maxX: -1, maxY: 8),
       primitives: <RenderPrimitive>[
         RenderPathStrokePrimitive(
           path: RenderPath(<RenderPathCommand>[
@@ -62,7 +62,7 @@ Future<_Rgba> _renderAndReadPixel({
 
   final image = recorder.endRecording().toImageSync(8, 8);
   try {
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final byteData = await image.toByteData();
     expect(byteData, isNotNull);
     return _readRgbaPixel(byteData!, x: x, y: y, width: 8);
   } finally {

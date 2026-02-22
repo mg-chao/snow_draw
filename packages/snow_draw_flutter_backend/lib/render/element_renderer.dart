@@ -29,7 +29,7 @@ class ElementRenderer {
   static const _selectionDashLength = 6.0;
   static const _selectionGapLength = 4.0;
   static const _sceneRenderer = ScenePrimitiveRenderer();
-  static final Set<String> _reportedFallbackWarnings = <String>{};
+  static final _reportedFallbackWarnings = <String>{};
   static const _maxFallbackWarningCacheEntries = 256;
 
   double _effectiveScale(double scaleFactor) =>
@@ -104,7 +104,6 @@ class ElementRenderer {
     final rendered = _renderSceneIfAvailable(
       canvas: canvas,
       element: element,
-      scaleFactor: scaleFactor,
       elementRegistry: elementRegistry,
       textMetricsService: textMetricsService,
       locale: locale,
@@ -118,7 +117,6 @@ class ElementRenderer {
   bool _renderSceneIfAvailable({
     required Canvas canvas,
     required ElementState element,
-    required double scaleFactor,
     required ElementRegistry elementRegistry,
     TextMetricsService? textMetricsService,
     Locale? locale,
@@ -138,7 +136,6 @@ class ElementRenderer {
     try {
       final scene = definition.sceneEncoder.encodeScene(
         element: element,
-        scaleFactor: scaleFactor,
         localeTag: locale?.toLanguageTag(),
         textMetricsService: textMetricsService,
       );

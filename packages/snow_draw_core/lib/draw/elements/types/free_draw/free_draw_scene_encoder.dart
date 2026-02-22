@@ -20,7 +20,6 @@ final class FreeDrawSceneEncoder
   RenderScene encodeTypedScene({
     required ElementState element,
     required FreeDrawData data,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {

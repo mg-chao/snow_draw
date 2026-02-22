@@ -28,7 +28,7 @@ void main() {
         ),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       final transformed = scene.primitives.single as RenderTransformPrimitive;
       final localPrimitives = transformed.child.primitives;
 
@@ -56,7 +56,7 @@ void main() {
         data: FilterData(),
       );
 
-      final scene = encoder.encodeScene(element: element, scaleFactor: 1);
+      final scene = encoder.encodeScene(element: element);
       expect(scene.primitives, isEmpty);
     });
   });

@@ -10,7 +10,6 @@ abstract interface class ElementSceneEncoder<T extends ElementData> {
   /// [localeTag] uses BCP-47 language tag format when provided.
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   });

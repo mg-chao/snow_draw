@@ -187,7 +187,6 @@ class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
   @override
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
@@ -215,7 +214,6 @@ class _ThrowingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
   @override
   RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) => throw StateError('test-only failing scene encoder');
