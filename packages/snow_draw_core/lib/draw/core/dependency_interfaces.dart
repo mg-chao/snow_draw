@@ -47,7 +47,11 @@ abstract class HasTextMetricsService {
 
 /// Reducer-specific dependency interfaces.
 abstract class CreateElementReducerDeps
-    implements HasConfig, HasElementRegistry, HasIdGenerator {}
+    implements
+        HasConfig,
+        HasElementRegistry,
+        HasIdGenerator,
+        HasTextMetricsService {}
 
 abstract class TextEditReducerDeps
     implements HasConfig, HasIdGenerator, HasTextMetricsService {}

@@ -88,6 +88,7 @@ class CreateElementReducer {
     final startResult = strategy.start(
       data: data,
       startPosition: startPosition,
+      textMetricsService: context.textMetricsService,
     );
     final nextZIndex = resolveNextZIndex(state.domain.document.elements);
 
@@ -215,6 +216,7 @@ class CreateElementReducer {
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     return _applyCreationUpdate(state, interaction, updateResult);
   }
@@ -245,6 +247,7 @@ class CreateElementReducer {
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     return _applyCreationUpdate(state, interaction, updateResult);
   }
@@ -265,6 +268,7 @@ class CreateElementReducer {
     final finishResult = strategy.finish(
       config: context.config,
       creatingState: interaction,
+      textMetricsService: context.textMetricsService,
     );
     if (!finishResult.shouldCommit) {
       return _cancelCreateElement(state);
@@ -323,6 +327,7 @@ class CreateElementReducer {
       creatingState: interaction,
       position: action.position,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     if (updateResult == null) {
       return state;

@@ -8,6 +8,7 @@ import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../services/grid_snap_service.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -42,6 +43,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   CreationUpdateResult start({
     required ElementData data,
     required DrawPoint startPosition,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (data is! FreeDrawData) {
       return CreationUpdateResult(
@@ -82,6 +84,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final elementData = creatingState.elementData;
     if (elementData is! FreeDrawData) {
@@ -200,6 +203,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (positions.isEmpty) {
       return CreationUpdateResult(
@@ -219,6 +223,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        textMetricsService: textMetricsService,
       );
     }
 
@@ -232,6 +237,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        textMetricsService: textMetricsService,
       );
     }
 
@@ -317,6 +323,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   CreationFinishResult finish({
     required DrawConfig config,
     required CreatingState creatingState,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final data = creatingState.elementData;
     if (data is! FreeDrawData) {

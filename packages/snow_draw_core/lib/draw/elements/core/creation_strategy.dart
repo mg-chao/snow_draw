@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
@@ -45,6 +46,7 @@ abstract class CreationStrategy {
   CreationUpdateResult start({
     required ElementData data,
     required DrawPoint startPosition,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   });
 
   CreationUpdateResult update({
@@ -55,6 +57,7 @@ abstract class CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   });
 
   /// Applies a batch of pointer positions to the current creation session.
@@ -70,6 +73,7 @@ abstract class CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (positions.isEmpty) {
       return CreationUpdateResult(
@@ -90,6 +94,7 @@ abstract class CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        textMetricsService: textMetricsService,
       );
 
       final baseElement = working.element;
@@ -119,11 +124,13 @@ abstract class CreationStrategy {
     required CreatingState creatingState,
     required DrawPoint position,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) => null;
 
   CreationFinishResult finish({
     required DrawConfig config,
     required CreatingState creatingState,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   });
 }
 

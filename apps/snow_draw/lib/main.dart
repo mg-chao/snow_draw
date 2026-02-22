@@ -37,7 +37,6 @@ DrawContext createAppContext() {
     colorOutput: !kReleaseMode,
     emojiOutput: !kReleaseMode,
   );
-  configureSceneTextMetricsService(flutterTextMetricsService);
 
   return DrawContext.withDefaults(
     elementRegistry: registry,

@@ -4,6 +4,8 @@ import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
+import 'flutter_text_layout.dart';
+
 const _serialNumberTextHeightBehavior = TextHeightBehavior();
 const TextScaler _serialNumberTextScaler = TextScaler.noScaling;
 const _serialNumberPaddingFactor = 0.26;
@@ -182,7 +184,7 @@ SerialNumberTextLayout layoutSerialNumberTextForScene({
 }) => layoutSerialNumberText(
   data: data,
   colorOverride: Color(colorArgb),
-  locale: _resolveLocaleTag(localeTag),
+  locale: resolveTextLocale(localeTag),
 );
 
 /// Resolves the visual center of the laid-out serial-number glyphs.
@@ -337,51 +339,6 @@ String? _sanitizeFontFamily(String? fontFamily) {
     return null;
   }
   return trimmed;
-}
-
-Locale? _resolveLocaleTag(String? localeTag) {
-  if (localeTag == null || localeTag.isEmpty) {
-    return null;
-  }
-  final parts = localeTag
-      .split(RegExp('[-_]'))
-      .where((part) => part.isNotEmpty)
-      .toList(growable: false);
-  if (parts.isEmpty) {
-    return null;
-  }
-
-  final languageCode = parts.first.toLowerCase();
-  if (!RegExp(r'^[a-z]{2,8}$').hasMatch(languageCode)) {
-    return null;
-  }
-
-  String? scriptCode;
-  String? countryCode;
-  for (final part in parts.skip(1)) {
-    if (scriptCode == null && part.length == 4) {
-      final normalizedScript =
-          '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}';
-      if (!RegExp(r'^[A-Z][a-z]{3}$').hasMatch(normalizedScript)) {
-        return null;
-      }
-      scriptCode = normalizedScript;
-      continue;
-    }
-    if (countryCode == null && (part.length == 2 || part.length == 3)) {
-      final normalizedCountry = part.toUpperCase();
-      if (!RegExp(r'^[A-Z]{2}$|^\d{3}$').hasMatch(normalizedCountry)) {
-        return null;
-      }
-      countryCode = normalizedCountry;
-    }
-  }
-
-  return Locale.fromSubtags(
-    languageCode: languageCode,
-    scriptCode: scriptCode,
-    countryCode: countryCode,
-  );
 }
 
 Rect? _resolveVisualBounds(TextPainter painter) {

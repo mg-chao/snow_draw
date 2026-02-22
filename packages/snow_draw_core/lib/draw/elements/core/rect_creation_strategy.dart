@@ -7,6 +7,7 @@ import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
@@ -26,6 +27,7 @@ class RectCreationStrategy extends CreationStrategy {
   CreationUpdateResult start({
     required ElementData data,
     required DrawPoint startPosition,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) => CreationUpdateResult(
     data: data,
     rect: DrawRect.fromPoint(startPosition),
@@ -41,6 +43,7 @@ class RectCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final snapToGrid = snappingMode == SnappingMode.grid;
     final gridSize = config.grid.size;
@@ -113,6 +116,7 @@ class RectCreationStrategy extends CreationStrategy {
   CreationFinishResult finish({
     required DrawConfig config,
     required CreatingState creatingState,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final rect = creatingState.currentRect;
     final minSize = config.element.minCreateSize;
