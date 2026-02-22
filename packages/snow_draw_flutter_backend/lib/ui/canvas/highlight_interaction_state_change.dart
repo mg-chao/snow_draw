@@ -1,5 +1,7 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 
+import 'interaction_state_change_common.dart';
+
 /// Returns true when only an in-progress highlight interaction changed.
 ///
 /// This fast path intentionally excludes document/view/selection updates so
@@ -9,38 +11,26 @@ bool isHighlightInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
+  if (!isInteractionMutationOnly(previous: previous, next: next)) {
     return false;
   }
 
-  final previousApplication = previous.application;
-  final nextApplication = next.application;
-  if (previousApplication.view != nextApplication.view ||
-      previousApplication.selectionOverlay !=
-          nextApplication.selectionOverlay) {
-    return false;
-  }
-
-  final previousInteraction = previousApplication.interaction;
-  final nextInteraction = nextApplication.interaction;
-
-  if (previousInteraction is CreatingState &&
-      nextInteraction is CreatingState) {
-    return _isHighlightCreatingMutationOnly(
-      previous: previousInteraction,
-      next: nextInteraction,
-    );
-  }
-
-  if (previousInteraction is EditingState && nextInteraction is EditingState) {
-    return _isHighlightEditingMutationOnly(
-      previous: previousInteraction,
-      next: nextInteraction,
-      document: next.domain.document,
-    );
-  }
-
-  return false;
+  final previousInteraction = previous.application.interaction;
+  final nextInteraction = next.application.interaction;
+  return switch ((previousInteraction, nextInteraction)) {
+    (final CreatingState previousCreating, final CreatingState nextCreating) =>
+      _isHighlightCreatingMutationOnly(
+        previous: previousCreating,
+        next: nextCreating,
+      ),
+    (final EditingState previousEditing, final EditingState nextEditing) =>
+      _isHighlightEditingMutationOnly(
+        previous: previousEditing,
+        next: nextEditing,
+        document: next.domain.document,
+      ),
+    _ => false,
+  };
 }
 
 bool _isHighlightCreatingMutationOnly({
@@ -49,43 +39,23 @@ bool _isHighlightCreatingMutationOnly({
 }) {
   if (previous.elementData is! HighlightData ||
       next.elementData is! HighlightData ||
-      !_isSameHighlightCreationSession(previous, next)) {
+      !isSameCreationSession(previous, next)) {
     return false;
   }
-  return previous.currentRect != next.currentRect ||
-      previous.creationMode != next.creationMode ||
-      previous.elementData != next.elementData ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
+  return didCreatingInteractionPreviewChange(previous, next);
 }
-
-bool _isSameHighlightCreationSession(
-  CreatingState previous,
-  CreatingState next,
-) =>
-    previous.elementId == next.elementId &&
-    previous.elementRect == next.elementRect &&
-    previous.elementRotation == next.elementRotation &&
-    previous.elementOpacity == next.elementOpacity &&
-    previous.elementZIndex == next.elementZIndex &&
-    previous.startPosition == next.startPosition;
 
 bool _isHighlightEditingMutationOnly({
   required EditingState previous,
   required EditingState next,
   required DocumentState document,
 }) {
-  if (!_isSameEditSession(previous, next) ||
+  if (!isSameEditSession(previous, next) ||
       !_isHighlightEditContext(context: next.context, document: document)) {
     return false;
   }
-  return previous.currentTransform != next.currentTransform ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
+  return didEditingInteractionPreviewChange(previous, next);
 }
-
-bool _isSameEditSession(EditingState previous, EditingState next) =>
-    previous.operationId == next.operationId &&
-    previous.sessionId == next.sessionId &&
-    identical(previous.context, next.context);
 
 bool _isHighlightEditContext({
   required EditContext context,
@@ -98,19 +68,4 @@ bool _isHighlightEditContext({
   return selectedIds.every(
     (elementId) => document.getElementById(elementId)?.data is HighlightData,
   );
-}
-
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
 }

@@ -1,5 +1,7 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 
+import 'interaction_state_change_common.dart';
+
 /// Returns true when only an in-progress lightweight line interaction changed.
 ///
 /// Lightweight line edits are edit sessions where every selected element is
@@ -14,7 +16,7 @@ bool isLightweightLineInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (!_isInteractionMutationOnly(previous: previous, next: next)) {
+  if (!isInteractionMutationOnly(previous: previous, next: next)) {
     return false;
   }
 
@@ -65,7 +67,7 @@ bool isLightweightLineEditMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (!_isInteractionMutationOnly(previous: previous, next: next)) {
+  if (!isInteractionMutationOnly(previous: previous, next: next)) {
     return false;
   }
 
@@ -83,54 +85,24 @@ bool isLightweightLineEditMutationOnly({
   );
 }
 
-bool _isInteractionMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) {
-  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
-    return false;
-  }
-
-  final previousApplication = previous.application;
-  final nextApplication = next.application;
-  return previousApplication.view == nextApplication.view &&
-      previousApplication.selectionOverlay == nextApplication.selectionOverlay;
-}
-
-bool _isSameEditSession(EditingState previous, EditingState next) =>
-    previous.operationId == next.operationId &&
-    previous.sessionId == next.sessionId &&
-    identical(previous.context, next.context);
-
 bool _isLightweightLineCreatingMutationOnly({
   required CreatingState previous,
   required CreatingState next,
 }) {
   if (previous.elementData is! LineData ||
       next.elementData is! LineData ||
-      !_isSameLineCreationSession(previous, next)) {
+      !isSameCreationSession(previous, next)) {
     return false;
   }
-  return previous.currentRect != next.currentRect ||
-      previous.creationMode != next.creationMode ||
-      previous.elementData != next.elementData ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
+  return didCreatingInteractionPreviewChange(previous, next);
 }
-
-bool _isSameLineCreationSession(CreatingState previous, CreatingState next) =>
-    previous.elementId == next.elementId &&
-    previous.elementRect == next.elementRect &&
-    previous.elementRotation == next.elementRotation &&
-    previous.elementOpacity == next.elementOpacity &&
-    previous.elementZIndex == next.elementZIndex &&
-    previous.startPosition == next.startPosition;
 
 bool _isLightweightLineEditingMutationOnly({
   required EditingState previous,
   required EditingState next,
   required DocumentState document,
 }) {
-  if (!_isSameEditSession(previous, next) ||
+  if (!isSameEditSession(previous, next) ||
       !_isLightweightLineContext(
         context: previous.context,
         document: document,
@@ -138,8 +110,7 @@ bool _isLightweightLineEditingMutationOnly({
     return false;
   }
 
-  return previous.currentTransform != next.currentTransform ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
+  return didEditingInteractionPreviewChange(previous, next);
 }
 
 bool _isLightweightLineContext({
@@ -155,19 +126,4 @@ bool _isLightweightLineContext({
     final data = document.getElementById(elementId)?.data;
     return data is LineData || data is FreeDrawData;
   });
-}
-
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
 }

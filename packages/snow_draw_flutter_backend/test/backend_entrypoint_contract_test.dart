@@ -55,5 +55,53 @@ void main() {
         expect(customContext.elementRegistry.registeredTypeIds, isEmpty);
       },
     );
+
+    test(
+      'allows custom read-only registries when built-in registration is off',
+      () {
+        const readOnlyRegistry = _ReadOnlyElementRegistry();
+        final context = createFlutterDrawContext(
+          elementRegistry: readOnlyRegistry,
+          registerBuiltInElementDefinitions: false,
+        );
+
+        expect(context.elementRegistry, same(readOnlyRegistry));
+      },
+    );
+
+    test(
+      'fails fast for custom registries when built-in registration is on',
+      () {
+        expect(
+          () => createFlutterDrawContext(
+            elementRegistry: const _ReadOnlyElementRegistry(),
+          ),
+          throwsA(isA<ArgumentError>()),
+        );
+      },
+    );
   });
+}
+
+class _ReadOnlyElementRegistry implements ElementRegistry {
+  const _ReadOnlyElementRegistry();
+
+  @override
+  ElementDefinition<T>? getDefinition<T extends ElementData>(
+    ElementTypeId<T> typeId,
+  ) => null;
+
+  @override
+  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
+      null;
+
+  @override
+  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
+      const <ElementTypeId<ElementData>>[];
+
+  @override
+  bool supports<T extends ElementData>(ElementTypeId<T> typeId) => false;
+
+  @override
+  bool supportsTypeValue(String typeValue) => false;
 }

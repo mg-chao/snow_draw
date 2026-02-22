@@ -1,4 +1,6 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
+
+import 'interaction_state_change_common.dart';
 import 'serial_number_interaction_classifier.dart';
 
 /// Returns true when only an in-progress serial-number interaction changed.
@@ -9,7 +11,7 @@ bool isSerialNumberInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (!_isInteractionMutationOnly(previous: previous, next: next)) {
+  if (!isInteractionMutationOnly(previous: previous, next: next)) {
     return false;
   }
 
@@ -31,52 +33,24 @@ bool isSerialNumberInteractionMutationOnly({
   };
 }
 
-bool _isInteractionMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) {
-  if (identical(previous, next) || !identical(previous.domain, next.domain)) {
-    return false;
-  }
-
-  final previousApplication = previous.application;
-  final nextApplication = next.application;
-  return previousApplication.view == nextApplication.view &&
-      previousApplication.selectionOverlay == nextApplication.selectionOverlay;
-}
-
 bool _isSerialNumberCreatingMutationOnly({
   required CreatingState previous,
   required CreatingState next,
 }) {
   if (!SerialNumberInteractionClassifier.isSerialNumberCreation(previous) ||
       !SerialNumberInteractionClassifier.isSerialNumberCreation(next) ||
-      !_isSameSerialNumberCreationSession(previous, next)) {
+      !isSameCreationSession(previous, next)) {
     return false;
   }
-  return previous.currentRect != next.currentRect ||
-      previous.creationMode != next.creationMode ||
-      previous.elementData != next.elementData ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
+  return didCreatingInteractionPreviewChange(previous, next);
 }
-
-bool _isSameSerialNumberCreationSession(
-  CreatingState previous,
-  CreatingState next,
-) =>
-    previous.elementId == next.elementId &&
-    previous.elementRect == next.elementRect &&
-    previous.elementRotation == next.elementRotation &&
-    previous.elementOpacity == next.elementOpacity &&
-    previous.elementZIndex == next.elementZIndex &&
-    previous.startPosition == next.startPosition;
 
 bool _isSerialNumberEditingMutationOnly({
   required EditingState previous,
   required EditingState next,
   required DocumentState document,
 }) {
-  if (!_isSameSerialNumberEditSession(previous, next) ||
+  if (!isSameEditSession(previous, next) ||
       !SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
         interaction: previous,
         document: document,
@@ -87,26 +61,5 @@ bool _isSerialNumberEditingMutationOnly({
       )) {
     return false;
   }
-  return previous.currentTransform != next.currentTransform ||
-      !_listEquals(previous.snapGuides, next.snapGuides);
-}
-
-bool _isSameSerialNumberEditSession(EditingState previous, EditingState next) =>
-    previous.operationId == next.operationId &&
-    previous.sessionId == next.sessionId &&
-    identical(previous.context, next.context);
-
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
+  return didEditingInteractionPreviewChange(previous, next);
 }

@@ -7,8 +7,11 @@ import '../services/text/flutter_text_metrics_service.dart';
 /// By default this registers built-in element definitions and wires the
 /// Flutter text metrics service so core reducers and scene encoders use
 /// consistent layout behavior with the backend renderer.
+///
+/// Pass a custom [ElementRegistry] when consumers need full control over
+/// registration. Built-in auto-registration requires [DefaultElementRegistry].
 DrawContext createFlutterDrawContext({
-  DefaultElementRegistry? elementRegistry,
+  ElementRegistry? elementRegistry,
   IdGenerator? idGenerator,
   DrawConfig? config,
   LogService? logService,
@@ -16,6 +19,14 @@ DrawContext createFlutterDrawContext({
 }) {
   final registry = elementRegistry ?? DefaultElementRegistry();
   if (registerBuiltInElementDefinitions) {
+    if (registry is! DefaultElementRegistry) {
+      throw ArgumentError.value(
+        elementRegistry,
+        'elementRegistry',
+        'registerBuiltInElementDefinitions=true requires '
+            'DefaultElementRegistry',
+      );
+    }
     registerBuiltInElements(registry);
   }
 
