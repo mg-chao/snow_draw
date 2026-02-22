@@ -4,6 +4,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_scene_encoder.dart';
+import '../shared/scene_encoder_style_utils.dart';
 import 'highlight_data.dart';
 
 /// Encodes highlight elements into backend-agnostic scene primitives.
@@ -34,16 +35,16 @@ final class HighlightSceneEncoder
       );
     }
 
-    final fillColorArgb = _applyElementOpacity(
+    final fillColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final strokeColorArgb = _applyElementOpacity(
+    final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.strokeColor.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final shouldFill = _alphaOf(fillColorArgb) > 0;
-    final shouldStroke = _alphaOf(strokeColorArgb) > 0 && data.strokeWidth > 0;
+    final shouldFill = isArgbVisible(fillColorArgb);
+    final shouldStroke = isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!shouldFill && !shouldStroke) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
@@ -73,19 +74,6 @@ final class HighlightSceneEncoder
         rotation: element.rotation,
       );
     return builder.build(cullRect: element.rect);
-  }
-
-  static int _alphaOf(int argb) => (argb >>> 24) & 0xFF;
-
-  static int _applyElementOpacity({
-    required int argb,
-    required double elementOpacity,
-  }) {
-    final baseAlpha = (argb >>> 24) & 0xFF;
-    final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
-        .round()
-        .clamp(0, 255);
-    return (scaledAlpha << 24) | (argb & 0x00FFFFFF);
   }
 
   static RenderPath _buildShapePath({

@@ -4,9 +4,9 @@ import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
-import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_scene_encoder.dart';
+import '../shared/scene_encoder_style_utils.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
 
@@ -18,7 +18,6 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
   const TextSceneEncoder();
   static const _kappa = 0.5522847498307936;
   static const double _lineFillAngle = -math.pi / 4;
-  static const _lineToSpacingRatio = 4.0;
 
   @override
   RenderScene encodeScene({
@@ -39,22 +38,23 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       );
     }
 
-    final textColorArgb = _applyElementOpacity(
+    final textColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final backgroundColorArgb = _applyElementOpacity(
+    final backgroundColorArgb = applyElementOpacityToArgb(
       argb: data.fillColor.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final strokeColorArgb = _applyElementOpacity(
+    final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.strokeColor.toARGB32(),
       elementOpacity: element.opacity,
     );
 
-    final hasBackground = _alphaOf(backgroundColorArgb) > 0;
-    final hasTextStroke = _alphaOf(strokeColorArgb) > 0 && data.strokeWidth > 0;
-    final hasTextFill = _alphaOf(textColorArgb) > 0;
+    final hasBackground = isArgbVisible(backgroundColorArgb);
+    final hasTextStroke =
+        isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
+    final hasTextFill = isArgbVisible(textColorArgb);
     if (!hasTextFill && !hasBackground && !hasTextStroke) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
@@ -97,10 +97,10 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
             colorArgb: backgroundColorArgb,
           );
         } else {
-          final hatch = _resolveTextHatchStyle(fontSize: data.fontSize);
+          final hatch = resolveFontHatchStyle(fontSize: data.fontSize);
           localScene.addHatchPathFill(
             path: backgroundPath,
-            clipBounds: _localClipBounds(rect),
+            clipBounds: resolveCenteredLocalClipBounds(rect),
             colorArgb: backgroundColorArgb,
             lineWidth: hatch.lineWidth,
             spacing: hatch.spacing,
@@ -133,19 +133,6 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
         rotation: element.rotation,
       );
     return builder.build(cullRect: element.rect);
-  }
-
-  static int _alphaOf(int argb) => (argb >>> 24) & 0xFF;
-
-  static int _applyElementOpacity({
-    required int argb,
-    required double elementOpacity,
-  }) {
-    final baseAlpha = (argb >>> 24) & 0xFF;
-    final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
-        .round()
-        .clamp(0, 255);
-    return (scaledAlpha << 24) | (argb & 0x00FFFFFF);
   }
 
   static double _resolveVerticalOffset({
@@ -238,22 +225,6 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       return maxRadius;
     }
     return cornerRadius;
-  }
-
-  static DrawRect _localClipBounds(DrawRect rect) => DrawRect(
-    minX: -rect.width / 2,
-    minY: -rect.height / 2,
-    maxX: rect.width / 2,
-    maxY: rect.height / 2,
-  );
-
-  static ({double lineWidth, double spacing}) _resolveTextHatchStyle({
-    required double fontSize,
-  }) {
-    final equivalentStrokeWidth = fontSize / 42;
-    final lineWidth = (1 + (equivalentStrokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    final spacing = (lineWidth * _lineToSpacingRatio).clamp(3.0, 18.0);
-    return (lineWidth: lineWidth, spacing: spacing);
   }
 
   static List<RenderPathCommand> _rectPathCommands({

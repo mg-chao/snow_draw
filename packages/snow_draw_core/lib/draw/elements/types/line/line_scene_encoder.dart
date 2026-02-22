@@ -6,6 +6,8 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_scene_encoder.dart';
+import '../shared/hit_test_geometry.dart';
+import '../shared/scene_encoder_style_utils.dart';
 import 'line_data.dart';
 
 /// Encodes line elements into backend-agnostic scene primitives.
@@ -13,8 +15,6 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
   /// Creates a line scene encoder.
   const LineSceneEncoder();
   static const double _lineFillAngle = -math.pi / 4;
-  static const _lineToSpacingRatio = 4.0;
-
   static const _defaultPoints = <DrawPoint>[
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
@@ -39,16 +39,17 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
       );
     }
 
-    final strokeColorArgb = _applyElementOpacity(
+    final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final fillColorArgb = _applyElementOpacity(
+    final fillColorArgb = applyElementOpacityToArgb(
       argb: data.fillColor.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final strokeVisible = _alphaOf(strokeColorArgb) > 0 && data.strokeWidth > 0;
-    final fillVisible = _alphaOf(fillColorArgb) > 0 && _isClosed(data);
+    final strokeVisible =
+        isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
+    final fillVisible = isArgbVisible(fillColorArgb) && _isClosed(data);
     if (!strokeVisible && !fillVisible) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
@@ -60,10 +61,10 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
       if (data.fillStyle == FillStyle.solid) {
         localBuilder.addPathFill(path: closedPath, colorArgb: fillColorArgb);
       } else {
-        final hatch = _resolveHatchStyle(strokeWidth: data.strokeWidth);
+        final hatch = resolveStrokeHatchStyle(strokeWidth: data.strokeWidth);
         localBuilder.addHatchPathFill(
           path: closedPath,
-          clipBounds: _localClipBounds(element.rect),
+          clipBounds: resolveCenteredLocalClipBounds(element.rect),
           colorArgb: fillColorArgb,
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
@@ -81,7 +82,7 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
         strokeWidth: data.strokeWidth,
         strokeCap: RenderStrokeCap.round,
         strokeJoin: RenderStrokeJoin.round,
-        dashPattern: _dashPatternFor(
+        dashPattern: resolveStrokeDashPattern(
           strokeStyle: data.strokeStyle,
           strokeWidth: data.strokeWidth,
         ),
@@ -97,33 +98,8 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
     return sceneBuilder.build(cullRect: element.rect);
   }
 
-  static int _alphaOf(int argb) => (argb >>> 24) & 0xFF;
-
-  static int _applyElementOpacity({
-    required int argb,
-    required double elementOpacity,
-  }) {
-    final baseAlpha = (argb >>> 24) & 0xFF;
-    final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
-        .round()
-        .clamp(0, 255);
-    return (scaledAlpha << 24) | (argb & 0x00FFFFFF);
-  }
-
   static bool _isClosed(LineData data) =>
       data.points.length > 2 && data.points.first == data.points.last;
-
-  static List<double>? _dashPatternFor({
-    required StrokeStyle strokeStyle,
-    required double strokeWidth,
-  }) => switch (strokeStyle) {
-    StrokeStyle.solid => null,
-    StrokeStyle.dashed => <double>[strokeWidth * 2.0, strokeWidth * 2.0 * 1.2],
-    StrokeStyle.dotted => <double>[
-      (strokeWidth * 0.01).clamp(0.01, double.infinity),
-      (strokeWidth * 2.0).clamp(0.01, double.infinity),
-    ],
-  };
 
   static RenderPath _buildPath(DrawRect rect, LineData data) {
     final points = _resolveCenterLocalPoints(rect: rect, data: data);
@@ -134,7 +110,7 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
     final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
     if (data.arrowType == ArrowType.curved && points.length > 2) {
       for (var index = 0; index < points.length - 1; index += 1) {
-        final segment = _buildCubicSegment(points, index);
+        final segment = buildCatmullRomCubicSegment(points, index);
         commands.add(
           RenderCubicTo(
             control1: segment.control1,
@@ -179,51 +155,4 @@ final class LineSceneEncoder implements ElementSceneEncoder<LineData> {
         )
         .toList(growable: false);
   }
-
-  static _CubicSegment _buildCubicSegment(List<DrawPoint> points, int index) {
-    final p0 = index == 0 ? points[index] : points[index - 1];
-    final p1 = points[index];
-    final p2 = points[index + 1];
-    final p3 = index + 2 < points.length
-        ? points[index + 2]
-        : points[index + 1];
-
-    const tension = 1.0;
-    final control1 = DrawPoint(
-      x: p1.x + (p2.x - p0.x) * (tension / 6),
-      y: p1.y + (p2.y - p0.y) * (tension / 6),
-    );
-    final control2 = DrawPoint(
-      x: p2.x - (p3.x - p1.x) * (tension / 6),
-      y: p2.y - (p3.y - p1.y) * (tension / 6),
-    );
-    return _CubicSegment(control1: control1, control2: control2, end: p2);
-  }
-
-  static DrawRect _localClipBounds(DrawRect rect) => DrawRect(
-    minX: -rect.width / 2,
-    minY: -rect.height / 2,
-    maxX: rect.width / 2,
-    maxY: rect.height / 2,
-  );
-
-  static ({double lineWidth, double spacing}) _resolveHatchStyle({
-    required double strokeWidth,
-  }) {
-    final lineWidth = (1 + (strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    final spacing = (lineWidth * _lineToSpacingRatio).clamp(3.0, 18.0);
-    return (lineWidth: lineWidth, spacing: spacing);
-  }
-}
-
-final class _CubicSegment {
-  const _CubicSegment({
-    required this.control1,
-    required this.control2,
-    required this.end,
-  });
-
-  final DrawPoint control1;
-  final DrawPoint control2;
-  final DrawPoint end;
 }

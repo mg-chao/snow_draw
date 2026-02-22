@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
 import '../../../types/draw_point.dart';
@@ -7,7 +5,9 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_scene_encoder.dart';
 import '../shared/hit_test_geometry.dart';
+import '../shared/scene_encoder_style_utils.dart';
 import 'arrow_data.dart';
+import 'arrow_geometry.dart';
 
 /// Encodes arrow elements into backend-agnostic scene primitives.
 final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
@@ -35,26 +35,20 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
       );
     }
 
-    final strokeColorArgb = _applyElementOpacity(
+    final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final strokeVisible = _alphaOf(strokeColorArgb) > 0 && data.strokeWidth > 0;
+    final strokeVisible =
+        isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!strokeVisible) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
 
-    final basePoints = _resolveCenterLocalPoints(
+    final geometry = ArrowGeometryDescriptor(data: data, rect: element.rect);
+    final insetPoints = _toCenterLocalPoints(
+      points: geometry.insetDrawPoints,
       rect: element.rect,
-      data: data,
-    );
-    if (basePoints.length < 2) {
-      return const RenderScene(primitives: <RenderPrimitive>[]);
-    }
-    final insetPoints = _applyInsets(
-      points: basePoints,
-      startInset: _arrowheadInset(data.startArrowhead, data.strokeWidth),
-      endInset: _arrowheadInset(data.endArrowhead, data.strokeWidth),
     );
     if (insetPoints.length < 2) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
@@ -66,7 +60,8 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     );
     final arrowheadPath = _buildArrowheadsPath(
       points: insetPoints,
-      arrowType: data.arrowType,
+      startDirection: geometry.startDirectionPoint,
+      endDirection: geometry.endDirectionPoint,
       data: data,
     );
 
@@ -77,7 +72,7 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
         strokeWidth: data.strokeWidth,
         strokeCap: RenderStrokeCap.round,
         strokeJoin: RenderStrokeJoin.round,
-        dashPattern: _dashPatternFor(
+        dashPattern: resolveStrokeDashPattern(
           strokeStyle: data.strokeStyle,
           strokeWidth: data.strokeWidth,
         ),
@@ -101,45 +96,14 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     return builder.build(cullRect: element.rect);
   }
 
-  static int _alphaOf(int argb) => (argb >>> 24) & 0xFF;
-
-  static int _applyElementOpacity({
-    required int argb,
-    required double elementOpacity,
-  }) {
-    final baseAlpha = (argb >>> 24) & 0xFF;
-    final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
-        .round()
-        .clamp(0, 255);
-    return (scaledAlpha << 24) | (argb & 0x00FFFFFF);
-  }
-
-  static List<double>? _dashPatternFor({
-    required StrokeStyle strokeStyle,
-    required double strokeWidth,
-  }) => switch (strokeStyle) {
-    StrokeStyle.solid => null,
-    StrokeStyle.dashed => <double>[strokeWidth * 2, strokeWidth * 2 * 1.2],
-    StrokeStyle.dotted => <double>[
-      math.max(0.01, strokeWidth * 0.01),
-      math.max(strokeWidth * 2, strokeWidth * 0.01),
-    ],
-  };
-
-  static List<DrawPoint> _resolveCenterLocalPoints({
+  static List<DrawPoint> _toCenterLocalPoints({
+    required List<DrawPoint> points,
     required DrawRect rect,
-    required ArrowData data,
   }) {
-    final width = rect.width;
-    final height = rect.height;
-    final center = rect.center;
-    return data.points
-        .map(
-          (point) => DrawPoint(
-            x: rect.minX + point.x * width - center.x,
-            y: rect.minY + point.y * height - center.y,
-          ),
-        )
+    final offsetX = rect.width / 2;
+    final offsetY = rect.height / 2;
+    return points
+        .map((point) => DrawPoint(x: point.x - offsetX, y: point.y - offsetY))
         .toList(growable: false);
   }
 
@@ -184,17 +148,14 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
 
   static RenderPath _buildArrowheadsPath({
     required List<DrawPoint> points,
-    required ArrowType arrowType,
+    required DrawPoint? startDirection,
+    required DrawPoint? endDirection,
     required ArrowData data,
   }) {
     if (points.length < 2) {
       return const RenderPath(<RenderPathCommand>[]);
     }
     final commands = <RenderPathCommand>[];
-    final startDirection = _resolveStartDirection(
-      points: points,
-      arrowType: arrowType,
-    );
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       commands.addAll(
         _arrowheadCommands(
@@ -205,10 +166,6 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
         ),
       );
     }
-    final endDirection = _resolveEndDirection(
-      points: points,
-      arrowType: arrowType,
-    );
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
       commands.addAll(
         _arrowheadCommands(
@@ -220,44 +177,6 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
       );
     }
     return RenderPath(commands);
-  }
-
-  static DrawPoint? _resolveStartDirection({
-    required List<DrawPoint> points,
-    required ArrowType arrowType,
-  }) {
-    if (points.length < 2) {
-      return null;
-    }
-    if (arrowType == ArrowType.curved && points.length > 2) {
-      final segment = buildCatmullRomCubicSegment(points, 0);
-      return _normalize(
-        DrawPoint(
-          x: segment.control1.x - segment.start.x,
-          y: segment.control1.y - segment.start.y,
-        ),
-      );
-    }
-    return _normalize(points.first - points[1]);
-  }
-
-  static DrawPoint? _resolveEndDirection({
-    required List<DrawPoint> points,
-    required ArrowType arrowType,
-  }) {
-    if (points.length < 2) {
-      return null;
-    }
-    if (arrowType == ArrowType.curved && points.length > 2) {
-      final segment = buildCatmullRomCubicSegment(points, points.length - 2);
-      return _normalize(
-        DrawPoint(
-          x: segment.end.x - segment.control2.x,
-          y: segment.end.y - segment.control2.y,
-        ),
-      );
-    }
-    return _normalize(points.last - points[points.length - 2]);
   }
 
   static List<RenderPathCommand> _arrowheadCommands({
@@ -453,94 +372,6 @@ final class ArrowSceneEncoder implements ElementSceneEncoder<ArrowData> {
     final left = tip + perp * half;
     final right = tip - perp * half;
     return <RenderPathCommand>[RenderMoveTo(left), RenderLineTo(right)];
-  }
-
-  static double _arrowheadInset(ArrowheadStyle style, double strokeWidth) {
-    if (strokeWidth <= 0) {
-      return 0;
-    }
-    final length = strokeWidth * 4 + 12;
-    switch (style) {
-      case ArrowheadStyle.circle:
-      case ArrowheadStyle.square:
-        return length * 0.6;
-      case ArrowheadStyle.triangle:
-      case ArrowheadStyle.diamond:
-        return length;
-      case ArrowheadStyle.none:
-      case ArrowheadStyle.standard:
-      case ArrowheadStyle.verticalLine:
-      case ArrowheadStyle.invertedTriangle:
-        return 0;
-    }
-  }
-
-  static List<DrawPoint> _applyInsets({
-    required List<DrawPoint> points,
-    required double startInset,
-    required double endInset,
-  }) {
-    if (points.length < 2 || (startInset <= 0 && endInset <= 0)) {
-      return points;
-    }
-
-    var adjusted = points;
-    if (startInset > 0) {
-      adjusted = _insetFromStart(adjusted, startInset);
-      if (adjusted.length < 2) {
-        return adjusted;
-      }
-    }
-    if (endInset > 0) {
-      adjusted = _insetFromEnd(adjusted, endInset);
-    }
-    return adjusted;
-  }
-
-  static List<DrawPoint> _insetFromStart(List<DrawPoint> points, double inset) {
-    if (points.length < 2 || inset <= 0) {
-      return points;
-    }
-
-    var remainingInset = inset;
-    for (var index = 0; index < points.length - 1; index += 1) {
-      final segment = points[index + 1] - points[index];
-      final segmentLength = segment.distance(DrawPoint.zero);
-      if (segmentLength <= 0) {
-        continue;
-      }
-      if (remainingInset < segmentLength) {
-        final unit = segment / segmentLength;
-        final newStart = points[index] + unit * remainingInset;
-        return <DrawPoint>[newStart, ...points.sublist(index + 1)];
-      }
-      remainingInset -= segmentLength;
-    }
-
-    return <DrawPoint>[points.last];
-  }
-
-  static List<DrawPoint> _insetFromEnd(List<DrawPoint> points, double inset) {
-    if (points.length < 2 || inset <= 0) {
-      return points;
-    }
-
-    var remainingInset = inset;
-    for (var index = points.length - 1; index > 0; index -= 1) {
-      final segment = points[index - 1] - points[index];
-      final segmentLength = segment.distance(DrawPoint.zero);
-      if (segmentLength <= 0) {
-        continue;
-      }
-      if (remainingInset < segmentLength) {
-        final unit = segment / segmentLength;
-        final newEnd = points[index] + unit * remainingInset;
-        return <DrawPoint>[...points.sublist(0, index), newEnd];
-      }
-      remainingInset -= segmentLength;
-    }
-
-    return <DrawPoint>[points.first];
   }
 
   static DrawPoint? _normalize(DrawPoint vector) {

@@ -6,6 +6,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_scene_encoder.dart';
+import '../shared/scene_encoder_style_utils.dart';
 import 'rectangle_data.dart';
 
 /// Encodes rectangle elements into backend-agnostic scene primitives.
@@ -16,8 +17,6 @@ final class RectangleSceneEncoder
 
   static const _kappa = 0.5522847498307936;
   static const double _lineFillAngle = -math.pi / 4;
-  static const _lineToSpacingRatio = 4.0;
-
   @override
   RenderScene encodeScene({
     required ElementState element,
@@ -38,16 +37,17 @@ final class RectangleSceneEncoder
       );
     }
 
-    final fillColorArgb = _applyElementOpacity(
+    final fillColorArgb = applyElementOpacityToArgb(
       argb: data.fillColor.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final strokeColorArgb = _applyElementOpacity(
+    final strokeColorArgb = applyElementOpacityToArgb(
       argb: data.color.toARGB32(),
       elementOpacity: element.opacity,
     );
-    final fillVisible = _alphaOf(fillColorArgb) > 0;
-    final strokeVisible = _alphaOf(strokeColorArgb) > 0 && data.strokeWidth > 0;
+    final fillVisible = isArgbVisible(fillColorArgb);
+    final strokeVisible =
+        isArgbVisible(strokeColorArgb) && data.strokeWidth > 0;
     if (!fillVisible && !strokeVisible) {
       return const RenderScene(primitives: <RenderPrimitive>[]);
     }
@@ -58,10 +58,10 @@ final class RectangleSceneEncoder
       if (data.fillStyle == FillStyle.solid) {
         localBuilder.addPathFill(path: path, colorArgb: fillColorArgb);
       } else {
-        final hatch = _resolveHatchStyle(strokeWidth: data.strokeWidth);
+        final hatch = resolveStrokeHatchStyle(strokeWidth: data.strokeWidth);
         localBuilder.addHatchPathFill(
           path: path,
-          clipBounds: _localClipBounds(element.rect),
+          clipBounds: resolveCenteredLocalClipBounds(element.rect),
           colorArgb: fillColorArgb,
           lineWidth: hatch.lineWidth,
           spacing: hatch.spacing,
@@ -77,8 +77,8 @@ final class RectangleSceneEncoder
         path: path,
         colorArgb: strokeColorArgb,
         strokeWidth: data.strokeWidth,
-        strokeCap: _strokeCapFor(data.strokeStyle),
-        dashPattern: _dashPatternFor(
+        strokeCap: resolveStrokeCap(data.strokeStyle),
+        dashPattern: resolveStrokeDashPattern(
           strokeStyle: data.strokeStyle,
           strokeWidth: data.strokeWidth,
         ),
@@ -92,51 +92,6 @@ final class RectangleSceneEncoder
         rotation: element.rotation,
       );
     return sceneBuilder.build(cullRect: element.rect);
-  }
-
-  static int _alphaOf(int argb) => (argb >>> 24) & 0xFF;
-
-  static int _applyElementOpacity({
-    required int argb,
-    required double elementOpacity,
-  }) {
-    final baseAlpha = (argb >>> 24) & 0xFF;
-    final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
-        .round()
-        .clamp(0, 255);
-    return (scaledAlpha << 24) | (argb & 0x00FFFFFF);
-  }
-
-  static List<double>? _dashPatternFor({
-    required StrokeStyle strokeStyle,
-    required double strokeWidth,
-  }) => switch (strokeStyle) {
-    StrokeStyle.solid => null,
-    StrokeStyle.dashed => <double>[strokeWidth * 2.0, strokeWidth * 2.0 * 1.2],
-    StrokeStyle.dotted => <double>[
-      (strokeWidth * 0.01).clamp(0.01, double.infinity),
-      (strokeWidth * 2.0).clamp(0.01, double.infinity),
-    ],
-  };
-
-  static RenderStrokeCap _strokeCapFor(StrokeStyle strokeStyle) =>
-      strokeStyle == StrokeStyle.solid
-      ? RenderStrokeCap.butt
-      : RenderStrokeCap.round;
-
-  static DrawRect _localClipBounds(DrawRect rect) => DrawRect(
-    minX: -rect.width / 2,
-    minY: -rect.height / 2,
-    maxX: rect.width / 2,
-    maxY: rect.height / 2,
-  );
-
-  static ({double lineWidth, double spacing}) _resolveHatchStyle({
-    required double strokeWidth,
-  }) {
-    final lineWidth = (1 + (strokeWidth - 1) * 0.6).clamp(0.5, 3.0);
-    final spacing = (lineWidth * _lineToSpacingRatio).clamp(3.0, 18.0);
-    return (lineWidth: lineWidth, spacing: spacing);
   }
 
   static RenderPath _buildRoundedRectPath(DrawRect rect, double cornerRadius) {
