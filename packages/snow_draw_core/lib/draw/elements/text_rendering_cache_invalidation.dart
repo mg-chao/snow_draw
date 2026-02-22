@@ -1,5 +1,5 @@
 import '../core/value_listenable.dart';
-import '../services/text/text_metrics_service.dart';
+import 'types/text/text_layout.dart';
 
 final _textRenderingCacheRevision = ValueNotifier<int>(0);
 final _registeredInvalidators = <TextRenderingCacheInvalidator>{};
@@ -36,10 +36,7 @@ void unregisterTextRenderingCacheInvalidator(
 /// Call this after runtime font registration completes to avoid stale
 /// fallback-glyph paragraphs being reused.
 void invalidateTextRenderingCaches() {
-  defaultTextMetricsService.clearCaches();
-  if (!identical(sceneTextMetricsService, defaultTextMetricsService)) {
-    sceneTextMetricsService.clearCaches();
-  }
+  clearTextLayoutCaches();
   for (final invalidator in _registeredInvalidators) {
     invalidator();
   }
