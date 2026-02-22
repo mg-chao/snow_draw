@@ -33,11 +33,11 @@ void main() {
       final localPrimitives = transformed.child.primitives;
 
       expect(localPrimitives, hasLength(2));
-      expect(localPrimitives.first, isA<RenderFilterGroupPrimitive>());
+      expect(localPrimitives.first, isA<RenderBlendMultiplyGroupPrimitive>());
       expect(localPrimitives.last, isA<RenderPathStrokePrimitive>());
 
-      final fillGroup = localPrimitives.first as RenderFilterGroupPrimitive;
-      expect(fillGroup.filter, isA<RenderBlendMultiplyFilter>());
+      final fillGroup =
+          localPrimitives.first as RenderBlendMultiplyGroupPrimitive;
       expect(fillGroup.child.primitives, hasLength(1));
       expect(fillGroup.child.primitives.single, isA<RenderPathFillPrimitive>());
     });

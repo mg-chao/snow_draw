@@ -49,7 +49,6 @@ export 'draw/models/view_state.dart';
 export 'draw/input/input_event.dart';
 export 'draw/input/plugin_system.dart';
 export 'draw/render/scene/render_scene.dart';
-export 'draw/render/scene/scene_encoding_not_supported.dart';
 export 'draw/services/coordinate_service.dart';
 export 'draw/services/draw_state_view_builder.dart';
 export 'draw/services/log/log_config.dart';

@@ -53,8 +53,8 @@ class ScenePrimitiveRenderer {
         _renderClipRect(canvas, primitive, locale: locale);
       case RenderTransformPrimitive():
         _renderTransform(canvas, primitive, locale: locale);
-      case RenderFilterGroupPrimitive():
-        _renderFilterGroup(canvas, primitive, locale: locale);
+      case RenderBlendMultiplyGroupPrimitive():
+        _renderBlendMultiplyGroup(canvas, primitive, locale: locale);
     }
   }
 
@@ -201,25 +201,14 @@ class ScenePrimitiveRenderer {
     canvas.restore();
   }
 
-  void _renderFilterGroup(
+  void _renderBlendMultiplyGroup(
     Canvas canvas,
-    RenderFilterGroupPrimitive primitive, {
+    RenderBlendMultiplyGroupPrimitive primitive, {
     Locale? locale,
   }) {
-    switch (primitive.filter) {
-      case RenderOpacityFilter(:final opacity):
-        final alpha = (opacity.clamp(0, 1) * 255).round();
-        canvas.saveLayer(
-          null,
-          Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
-        );
-        renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-        canvas.restore();
-      case RenderBlendMultiplyFilter():
-        canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
-        renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-        canvas.restore();
-    }
+    canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
+    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
+    canvas.restore();
   }
 
   Path? _toFlutterPath(RenderPath path) {
@@ -395,7 +384,7 @@ class ScenePrimitiveRenderer {
           return childOutset;
         }
         return childOutset * maxScale;
-      case RenderFilterGroupPrimitive():
+      case RenderBlendMultiplyGroupPrimitive():
         return _resolveSceneOutset(primitive.child);
       case RenderPathFillPrimitive():
       case RenderHatchPathFillPrimitive():

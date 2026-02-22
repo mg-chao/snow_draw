@@ -52,7 +52,6 @@ const _allowedExports = <String>{
   'draw/models/selection_state.dart',
   'draw/models/view_state.dart',
   'draw/render/scene/render_scene.dart',
-  'draw/render/scene/scene_encoding_not_supported.dart',
   'draw/services/coordinate_service.dart',
   'draw/services/draw_state_view_builder.dart',
   'draw/services/log/log_config.dart',

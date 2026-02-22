@@ -43,7 +43,7 @@ final class HighlightSceneEncoder
     if (shouldFill) {
       final fillChild = SceneBuilder()
         ..addPathFill(path: shapePath, colorArgb: fillColorArgb);
-      localScene.addBlendMultiplyFilterGroup(child: fillChild.build());
+      localScene.addBlendMultiplyGroup(child: fillChild.build());
     }
     if (shouldStroke) {
       localScene.addPathStroke(

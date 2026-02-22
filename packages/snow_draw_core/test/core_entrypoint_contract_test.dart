@@ -72,10 +72,6 @@ void main() {
       final invalidator = () {};
       registerTextRenderingCacheInvalidator(invalidator);
       unregisterTextRenderingCacheInvalidator(invalidator);
-      expect(
-        const SceneEncodingNotSupported('missing-encoder').reason,
-        'missing-encoder',
-      );
       expect(cache.get('a'), 1);
       await eventBus.dispose();
     });

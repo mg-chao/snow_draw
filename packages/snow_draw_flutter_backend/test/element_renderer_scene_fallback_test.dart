@@ -32,15 +32,6 @@ void main() {
     expect(counters.lastTextMetricsService, same(textMetricsService));
   });
 
-  test('uses unknown-element fallback when scene encoding is unsupported', () {
-    final elementRegistry = _buildElementRegistryWithUnsupportedEncoder();
-
-    expect(
-      () => _renderElement(elementRegistry: elementRegistry),
-      returnsNormally,
-    );
-  });
-
   test('uses unknown-element fallback when scene encoding throws', () {
     final elementRegistry = _buildElementRegistryWithThrowingEncoder();
 
@@ -59,8 +50,8 @@ void main() {
     );
   });
 
-  test('deduplicates repeated unsupported-scene fallback warnings', () {
-    final elementRegistry = _buildElementRegistryWithUnsupportedEncoder();
+  test('deduplicates repeated scene-render failure fallback warnings', () {
+    final elementRegistry = _buildElementRegistryWithThrowingEncoder();
 
     _renderElement(elementRegistry: elementRegistry);
     _renderElement(elementRegistry: elementRegistry);
@@ -103,18 +94,6 @@ DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>
         createDefaultData: _SceneTestData.new,
         fromJson: (_) => const _SceneTestData(),
         sceneEncoder: _CountingSceneEncoder(counters),
-      ),
-    );
-
-DefaultElementRegistry _buildElementRegistryWithUnsupportedEncoder() =>
-    DefaultElementRegistry()..register<_SceneTestData>(
-      ElementDefinition<_SceneTestData>(
-        typeId: _SceneTestData.typeIdToken,
-        displayName: 'scene-test',
-        hitTester: const _NoopHitTester(),
-        createDefaultData: _SceneTestData.new,
-        fromJson: (_) => const _SceneTestData(),
-        sceneEncoder: const _UnsupportedSceneEncoder(),
       ),
     );
 
@@ -228,18 +207,6 @@ class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
       ],
     );
   }
-}
-
-class _UnsupportedSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
-  const _UnsupportedSceneEncoder();
-
-  @override
-  RenderScene encodeScene({
-    required ElementState element,
-    required double scaleFactor,
-    String? localeTag,
-    TextMetricsService? textMetricsService,
-  }) => throw const SceneEncodingNotSupported('test-only unsupported scene');
 }
 
 class _ThrowingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
