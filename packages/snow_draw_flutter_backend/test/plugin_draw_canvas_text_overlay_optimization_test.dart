@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
@@ -191,6 +191,82 @@ void main() {
       expect(editing.draftData.text, 'a');
     },
   );
+
+  testWidgets(
+    'text draft geometry uses context text metrics service for preview rect',
+    (tester) async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      const metricsService = _DeterministicTextMetricsService();
+      final context = DrawContext.withDefaults(
+        elementRegistry: registry,
+        textMetricsService: metricsService,
+      );
+      const initialData = TextData(text: 'seed', autoResize: true);
+      const initialRect = DrawRect(minX: 20, minY: 16, maxX: 140, maxY: 64);
+      const editedText = 'metrics-service';
+      final store = DefaultDrawStore(
+        context: context,
+        initialState: DrawState(
+          domain: DomainState(
+            document: DocumentState(
+              elements: const [
+                ElementState(
+                  id: 'text-1',
+                  rect: initialRect,
+                  rotation: 0,
+                  opacity: 1,
+                  zIndex: 0,
+                  data: initialData,
+                ),
+              ],
+            ),
+            selection: const SelectionState(selectedIds: {'text-1'}),
+          ),
+          application: const ApplicationState(
+            view: ViewState(),
+            interaction: TextEditingState(
+              elementId: 'text-1',
+              draftData: initialData,
+              rect: initialRect,
+              isNew: false,
+              opacity: 1,
+              rotation: 0,
+            ),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PluginDrawCanvas(size: const Size(320, 240), store: store),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      textField.controller!.text = editedText;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<TextEditingState>());
+      final editing = interaction as TextEditingState;
+      expect(editing.draftData.text, editedText);
+
+      final expectedRect = resolveTextEditingRect(
+        origin: DrawPoint(x: initialRect.minX, y: initialRect.minY),
+        currentRect: initialRect,
+        data: const TextData(text: editedText, autoResize: true),
+        textMetricsService: metricsService,
+        allowShrinkHeight: true,
+      );
+      expect(editing.rect, expectedRect);
+    },
+  );
 }
 
 DefaultDrawStore _createStoreWithTextEditing(TextData textData) {
@@ -263,4 +339,47 @@ StaticCanvasRenderKey _staticRenderKey(WidgetTester tester) {
     }
   }
   throw StateError('StaticCanvasPainter not found');
+}
+
+final class _DeterministicTextMetricsService implements TextMetricsService {
+  const _DeterministicTextMetricsService();
+
+  static const _lineHeight = 28.0;
+
+  @override
+  TextMetrics measure(TextLayoutRequest request) {
+    final textLines = request.data.text.isEmpty
+        ? const ['']
+        : request.data.text.split('\n');
+    final lines = <TextLineMetrics>[];
+    var maxWidth = 0.0;
+    for (final line in textLines) {
+      final lineWidth = 70 + line.length * 13;
+      final constrainedLineWidth =
+          request.maxWidth.isFinite && lineWidth > request.maxWidth
+          ? request.maxWidth
+          : lineWidth.toDouble();
+      if (constrainedLineWidth > maxWidth) {
+        maxWidth = constrainedLineWidth;
+      }
+      lines.add(
+        TextLineMetrics(width: constrainedLineWidth, height: _lineHeight),
+      );
+    }
+
+    final minWidth = request.minWidth;
+    if (minWidth != null && minWidth.isFinite && maxWidth < minWidth) {
+      maxWidth = minWidth;
+    }
+
+    return TextMetrics(
+      width: maxWidth,
+      height: _lineHeight * lines.length,
+      lineHeight: _lineHeight,
+      lines: List<TextLineMetrics>.unmodifiable(lines),
+    );
+  }
+
+  @override
+  void clearCaches() {}
 }

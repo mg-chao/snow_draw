@@ -3702,6 +3702,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       origin: DrawPoint(x: interaction.rect.minX, y: interaction.rect.minY),
       currentRect: interaction.rect,
       data: nextData,
+      textMetricsService: widget.store.context.textMetricsService,
       allowShrinkHeight: true,
       localeTag: locale?.toLanguageTag(),
     );
