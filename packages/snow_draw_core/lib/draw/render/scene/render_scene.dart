@@ -293,42 +293,6 @@ class RenderFilterGroupPrimitive extends RenderPrimitive {
   final RenderScene child;
 }
 
-/// Placeholder image-handle primitive.
-@immutable
-class RenderImageHandlePrimitive extends RenderPrimitive {
-  /// Creates an image-handle primitive.
-  const RenderImageHandlePrimitive({
-    required this.handleId,
-    required this.destinationRect,
-    this.opacity = 1,
-  });
-
-  /// Backend-owned image handle id.
-  final String handleId;
-
-  /// Destination rect for placement.
-  final DrawRect destinationRect;
-
-  /// Opacity multiplier.
-  final double opacity;
-}
-
-/// Placeholder picture-handle primitive.
-@immutable
-class RenderPictureHandlePrimitive extends RenderPrimitive {
-  /// Creates a picture-handle primitive.
-  const RenderPictureHandlePrimitive({
-    required this.handleId,
-    this.opacity = 1,
-  });
-
-  /// Backend-owned picture handle id.
-  final String handleId;
-
-  /// Opacity multiplier.
-  final double opacity;
-}
-
 /// Mutable builder for [RenderScene].
 class SceneBuilder {
   final List<RenderPrimitive> _primitives = <RenderPrimitive>[];
@@ -450,28 +414,6 @@ class SceneBuilder {
         child: child,
         parameters: parameters,
       ),
-    );
-  }
-
-  /// Adds an image-handle primitive.
-  void addImageHandle({
-    required String handleId,
-    required DrawRect destinationRect,
-    double opacity = 1,
-  }) {
-    _primitives.add(
-      RenderImageHandlePrimitive(
-        handleId: handleId,
-        destinationRect: destinationRect,
-        opacity: opacity,
-      ),
-    );
-  }
-
-  /// Adds a picture-handle primitive.
-  void addPictureHandle({required String handleId, double opacity = 1}) {
-    _primitives.add(
-      RenderPictureHandlePrimitive(handleId: handleId, opacity: opacity),
     );
   }
 

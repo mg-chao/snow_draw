@@ -55,10 +55,6 @@ class ScenePrimitiveRenderer {
         _renderTransform(canvas, primitive, locale: locale);
       case RenderFilterGroupPrimitive():
         _renderFilterGroup(canvas, primitive, locale: locale);
-      case RenderImageHandlePrimitive():
-        _renderImagePlaceholder(canvas, primitive);
-      case RenderPictureHandlePrimitive():
-        _renderPicturePlaceholder(canvas, primitive);
     }
   }
 
@@ -228,28 +224,6 @@ class ScenePrimitiveRenderer {
       return;
     }
     renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-  }
-
-  void _renderImagePlaceholder(
-    Canvas canvas,
-    RenderImageHandlePrimitive primitive,
-  ) {
-    final rect = _toRect(primitive.destinationRect);
-    final stroke = _strokePaint
-      ..color = const Color(0x55FF00FF)
-      ..strokeWidth = 1;
-    canvas
-      ..drawRect(rect, stroke)
-      ..drawLine(rect.topLeft, rect.bottomRight, stroke)
-      ..drawLine(rect.topRight, rect.bottomLeft, stroke);
-  }
-
-  void _renderPicturePlaceholder(
-    Canvas canvas,
-    RenderPictureHandlePrimitive primitive,
-  ) {
-    final paint = _fillPaint..color = const Color(0x22000000);
-    canvas.drawCircle(Offset.zero, 2, paint);
   }
 
   Path? _toFlutterPath(RenderPath path) {
@@ -429,8 +403,6 @@ class ScenePrimitiveRenderer {
         return _resolveSceneOutset(primitive.child);
       case RenderPathFillPrimitive():
       case RenderHatchPathFillPrimitive():
-      case RenderImageHandlePrimitive():
-      case RenderPictureHandlePrimitive():
         return 0;
     }
   }

@@ -93,9 +93,6 @@ class TextLayoutMetrics {
 /// Clears any backend-provided text measurement caches.
 void clearTextLayoutCaches() {
   defaultTextMetricsService.clearCaches();
-  if (!identical(sceneTextMetricsService, defaultTextMetricsService)) {
-    sceneTextMetricsService.clearCaches();
-  }
 }
 
 /// Resolves horizontal background padding from line height.

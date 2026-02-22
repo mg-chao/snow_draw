@@ -53,13 +53,11 @@ final class TextSceneEncoder extends TypedElementSceneEncoder<TextData> {
       return emptyRenderScene;
     }
 
-    final resolvedTextMetricsService =
-        textMetricsService ?? sceneTextMetricsService;
     final layout = layoutSceneText(
       data: data,
       width: rect.width,
       localeTag: localeTag,
-      textMetricsService: resolvedTextMetricsService,
+      textMetricsService: textMetricsService ?? defaultTextMetricsService,
     );
     final localOrigin = DrawPoint(
       x: -rect.width / 2,
