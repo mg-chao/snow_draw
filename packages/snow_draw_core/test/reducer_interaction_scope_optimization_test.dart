@@ -1,6 +1,4 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
@@ -17,6 +15,7 @@ import 'package:snow_draw_core/draw/reducers/interaction/selection/pending_state
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('Reducer interaction scoping', () {
@@ -87,11 +86,7 @@ void main() {
       () {
         final state = DrawState();
 
-        final next = cameraReducer(
-          state,
-          const MoveCamera(dx: 0, dy: 0),
-          const _NoopCameraReducerDeps(),
-        );
+        final next = cameraReducer(state, const MoveCamera(dx: 0, dy: 0));
 
         expect(next, same(state));
       },
@@ -199,8 +194,4 @@ DrawState _stateWithBoxSelecting() {
       ),
     ),
   );
-}
-
-class _NoopCameraReducerDeps implements CameraReducerDeps {
-  const _NoopCameraReducerDeps();
 }
