@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../../services/text/flutter_text_layout.dart';
-import '../element_type_renderer.dart';
 import '../patterns/stroke_pattern_utils.dart';
 
-class TextRenderer extends ElementTypeRenderer {
+class TextRenderer {
   const TextRenderer();
 
   static const double _lineFillAngle = -math.pi / 4;
@@ -32,7 +31,6 @@ class TextRenderer extends ElementTypeRenderer {
     _backgroundPathCache.clear();
   }
 
-  @override
   void render({
     required Canvas canvas,
     required ElementState element,

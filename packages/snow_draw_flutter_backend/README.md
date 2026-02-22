@@ -20,5 +20,5 @@ App code should import this package through
 
 ## Notes
 
-Legacy namespace files under `lib/render/legacy/` are compatibility shims only.
-Architecture guard scripts enforce shim-only behavior.
+Legacy renderer namespaces are removed. New backend render behavior must route
+through scene primitives and `ElementRenderer`.

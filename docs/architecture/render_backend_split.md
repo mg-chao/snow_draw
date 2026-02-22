@@ -68,8 +68,9 @@ rendering backends.
 
 ### Legacy namespace policy
 
-- Files in backend `lib/render/legacy/*` are re-export shims only.
-- Shims must be explicitly `@Deprecated`.
+- Backend source must not import or export `lib/render/legacy/*`.
+- New backend logic should use scene primitives instead of reviving
+  type-specific legacy renderers.
 
 ## Guard Scripts
 

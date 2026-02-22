@@ -74,7 +74,7 @@ melos:
       run: dart run tools/check_workspace_backend_deep_import_boundary.dart
 
     check:backend-legacy:
-      description: Enforce shim-only legacy namespace and block internal legacy imports.
+      description: Block backend legacy namespace imports and source files.
       run: dart run tools/check_backend_legacy_namespace.dart
 
     check:backend-app-import-boundary:
