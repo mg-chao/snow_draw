@@ -42,11 +42,6 @@ final class ValueNotifier<T> implements ValueListenable<T> {
     _listeners.remove(listener);
   }
 
-  /// Removes all listeners.
-  void clearListeners() {
-    _listeners.clear();
-  }
-
   void _notifyListeners() {
     final snapshot = List<VoidCallback>.of(_listeners);
     for (final listener in snapshot) {

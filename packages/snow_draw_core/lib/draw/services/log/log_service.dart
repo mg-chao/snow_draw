@@ -17,7 +17,7 @@ bool _resolveReleaseMode() {
 /// Unified logging management that supports:
 /// - Modular logs (by functional area)
 /// - Configurable log levels
-/// - Multiple output targets (console, memory, streams, and so on)
+/// - Multiple output targets (console, memory, and custom handlers)
 /// - Integration with DrawContext
 ///
 /// Usage example:

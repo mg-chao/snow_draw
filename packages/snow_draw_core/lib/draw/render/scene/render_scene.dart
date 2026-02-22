@@ -56,19 +56,6 @@ class RenderLineTo extends RenderPathCommand {
   final DrawPoint point;
 }
 
-/// Draw a quadratic bezier curve.
-@immutable
-class RenderQuadraticTo extends RenderPathCommand {
-  /// Creates a quadratic curve command.
-  const RenderQuadraticTo({required this.control, required this.end});
-
-  /// Control point.
-  final DrawPoint control;
-
-  /// End point.
-  final DrawPoint end;
-}
-
 /// Draw a cubic bezier curve.
 @immutable
 class RenderCubicTo extends RenderPathCommand {
@@ -242,19 +229,6 @@ class RenderTextRunPrimitive extends RenderPrimitive {
   final double maxWidth;
 }
 
-/// Clip-rect group primitive.
-@immutable
-class RenderClipRectPrimitive extends RenderPrimitive {
-  /// Creates a clip-rect group.
-  const RenderClipRectPrimitive({required this.clipRect, required this.child});
-
-  /// Clipping rect.
-  final DrawRect clipRect;
-
-  /// Child scene clipped by [clipRect].
-  final RenderScene child;
-}
-
 /// Transform group primitive.
 @immutable
 class RenderTransformPrimitive extends RenderPrimitive {
@@ -366,11 +340,6 @@ class SceneBuilder {
         maxWidth: maxWidth,
       ),
     );
-  }
-
-  /// Adds a clip-rect group primitive.
-  void addClipRect({required DrawRect clipRect, required RenderScene child}) {
-    _primitives.add(RenderClipRectPrimitive(clipRect: clipRect, child: child));
   }
 
   /// Adds a transform group primitive.

@@ -49,8 +49,6 @@ class ScenePrimitiveRenderer {
         _renderHatchPathFill(canvas, primitive);
       case RenderTextRunPrimitive():
         _renderTextRun(canvas, primitive, locale: locale);
-      case RenderClipRectPrimitive():
-        _renderClipRect(canvas, primitive, locale: locale);
       case RenderTransformPrimitive():
         _renderTransform(canvas, primitive, locale: locale);
       case RenderBlendMultiplyGroupPrimitive():
@@ -173,18 +171,6 @@ class ScenePrimitiveRenderer {
     canvas.drawParagraph(fillLayout.paragraph, textOffset);
   }
 
-  void _renderClipRect(
-    Canvas canvas,
-    RenderClipRectPrimitive primitive, {
-    Locale? locale,
-  }) {
-    canvas
-      ..save()
-      ..clipRect(_toRect(primitive.clipRect));
-    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
-    canvas.restore();
-  }
-
   void _renderTransform(
     Canvas canvas,
     RenderTransformPrimitive primitive, {
@@ -222,13 +208,6 @@ class ScenePrimitiveRenderer {
           resolved.moveTo(command.point.x, command.point.y);
         case RenderLineTo():
           resolved.lineTo(command.point.x, command.point.y);
-        case RenderQuadraticTo():
-          resolved.quadraticBezierTo(
-            command.control.x,
-            command.control.y,
-            command.end.x,
-            command.end.y,
-          );
         case RenderCubicTo():
           resolved.cubicTo(
             command.control1.x,
@@ -372,8 +351,6 @@ class ScenePrimitiveRenderer {
         return primitive.strokeWidth / 2;
       case RenderTextRunPrimitive():
         return primitive.strokeWidth > 0 ? primitive.strokeWidth / 2 : 0;
-      case RenderClipRectPrimitive():
-        return _resolveSceneOutset(primitive.child);
       case RenderTransformPrimitive():
         final childOutset = _resolveSceneOutset(primitive.child);
         final maxScale = math.max(

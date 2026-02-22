@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:logger/logger.dart';
 
 /// Log record interface.
@@ -125,67 +123,5 @@ class MemoryLogCollector implements LogOutputHandler {
   @override
   void close() {
     // The in-memory collector needs no special close handling.
-  }
-}
-
-/// Log stream output.
-///
-/// Publishes logs as a stream for UI display or other subscribers.
-class StreamLogOutput implements LogOutputHandler {
-  final _controller = StreamController<LogRecord>.broadcast();
-
-  /// Log stream.
-  Stream<LogRecord> get stream => _controller.stream;
-
-  @override
-  void output(LogRecord record) {
-    if (!_controller.isClosed) {
-      _controller.add(record);
-    }
-  }
-
-  @override
-  void outputBatch(List<LogRecord> records) {
-    for (final record in records) {
-      output(record);
-    }
-  }
-
-  @override
-  void close() {
-    unawaited(_controller.close());
-  }
-}
-
-/// Composite log output.
-///
-/// Sends logs to multiple output handlers.
-class CompositeLogOutput implements LogOutputHandler {
-  CompositeLogOutput(this.handlers);
-  final List<LogOutputHandler> handlers;
-
-  @override
-  void output(LogRecord record) {
-    _forEachHandler((handler) => handler.output(record));
-  }
-
-  @override
-  void outputBatch(List<LogRecord> records) {
-    _forEachHandler((handler) => handler.outputBatch(records));
-  }
-
-  @override
-  void close() {
-    _forEachHandler((handler) => handler.close());
-  }
-
-  void _forEachHandler(void Function(LogOutputHandler handler) action) {
-    for (final handler in handlers) {
-      try {
-        action(handler);
-      } on Object catch (_) {
-        // Ignore one handler error to keep others working.
-      }
-    }
   }
 }
