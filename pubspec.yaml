@@ -45,7 +45,7 @@ melos:
     lint:
       description: Run all static analysis checks and auto-fix.
       run: |
-        dart run melos exec -- flutter analyze
+        dart run melos run analyze
         dart run melos exec -- dart format .
         dart run melos exec -- dart fix --apply
 

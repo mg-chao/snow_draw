@@ -19,6 +19,7 @@ class ScenePrimitiveRenderer {
   static final _textStrokePaint = Paint()
     ..style = PaintingStyle.stroke
     ..isAntiAlias = true;
+  static final _multiplyLayerPaint = Paint()..blendMode = BlendMode.multiply;
   static const _unboundedTextLayoutWidth = 1000000.0;
 
   void renderScene({
@@ -192,7 +193,11 @@ class ScenePrimitiveRenderer {
     RenderBlendMultiplyGroupPrimitive primitive, {
     Locale? locale,
   }) {
-    canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
+    final layerBounds = _resolveSceneCullRect(primitive.child);
+    if (layerBounds != null && _isSceneOutsideClipBounds(canvas, layerBounds)) {
+      return;
+    }
+    canvas.saveLayer(layerBounds, _multiplyLayerPaint);
     renderScene(canvas: canvas, scene: primitive.child, locale: locale);
     canvas.restore();
   }

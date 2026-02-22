@@ -47,6 +47,43 @@ void main() {
     expect(pixel.g, lessThanOrEqualTo(2));
     expect(pixel.b, lessThanOrEqualTo(2));
   });
+
+  test('blend_multiply filter group skips offscreen cull rects', () async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder)
+      ..clipRect(const ui.Rect.fromLTWH(0, 0, 4, 4));
+
+    const scene = RenderScene(
+      primitives: <RenderPrimitive>[
+        RenderBlendMultiplyGroupPrimitive(
+          child: RenderScene(
+            cullRect: DrawRect(minX: 100, minY: 100, maxX: 120, maxY: 120),
+            primitives: <RenderPrimitive>[
+              RenderPathFillPrimitive(
+                path: RenderPath(<RenderPathCommand>[
+                  RenderMoveTo(DrawPoint.zero),
+                  RenderLineTo(DrawPoint(x: 4, y: 0)),
+                  RenderLineTo(DrawPoint(x: 4, y: 4)),
+                  RenderLineTo(DrawPoint(x: 0, y: 4)),
+                  RenderClosePath(),
+                ]),
+                colorArgb: 0xFFFF0000,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    const ScenePrimitiveRenderer().renderScene(canvas: canvas, scene: scene);
+
+    final image = recorder.endRecording().toImageSync(4, 4);
+    addTearDown(image.dispose);
+    final byteData = await image.toByteData();
+    expect(byteData, isNotNull);
+    final pixel = _readRgbaPixel(byteData!, x: 2, y: 2, width: 4);
+    expect(pixel.a, 0);
+  });
 }
 
 _Rgba _readRgbaPixel(

@@ -40,6 +40,10 @@ void main() {
           localPrimitives.first as RenderBlendMultiplyGroupPrimitive;
       expect(fillGroup.child.primitives, hasLength(1));
       expect(fillGroup.child.primitives.single, isA<RenderPathFillPrimitive>());
+      expect(
+        fillGroup.child.cullRect,
+        const DrawRect(minX: -100, minY: -50, maxX: 100, maxY: 50),
+      );
     });
   });
 
