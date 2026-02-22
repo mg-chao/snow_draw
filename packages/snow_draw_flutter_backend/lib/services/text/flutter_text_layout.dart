@@ -8,12 +8,6 @@ const _fallbackText = ' ';
 const _fontMetricsProbeText = 'Mg';
 const textLayoutHeightBehavior = TextHeightBehavior();
 const TextScaler textLayoutTextScaler = TextScaler.noScaling;
-const textCursorWidth = 1.2;
-const textCaretGap = 1.0;
-const double textCaretMargin = textCursorWidth + textCaretGap;
-const _textLayoutHorizontalPaddingFactor = 0.01;
-const _textBackgroundHorizontalPaddingFactor = 0.32;
-const _textBackgroundVerticalPaddingFactor = 0.1;
 
 /// Lightweight background box snapshot in local text coordinates.
 @immutable
@@ -148,30 +142,6 @@ void clearTextLayoutCaches() {
 
 StrutStyle resolveTextStrutStyle(TextStyle style) =>
     StrutStyle.fromTextStyle(style, forceStrutHeight: true);
-
-double resolveTextBackgroundHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * _textBackgroundHorizontalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
-
-double resolveTextBackgroundVerticalPadding(double lineHeight) {
-  final padding = lineHeight * _textBackgroundVerticalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
-
-double resolveTextLayoutHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * _textLayoutHorizontalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
 
 TextStyle buildTextStyle({
   required TextData data,

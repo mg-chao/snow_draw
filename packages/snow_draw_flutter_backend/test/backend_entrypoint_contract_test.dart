@@ -34,5 +34,26 @@ void main() {
         expect(metrics.lines, isNotEmpty);
       },
     );
+
+    test(
+      'exports Flutter draw context factory with built-in element defaults',
+      () {
+        final context = createFlutterDrawContext();
+
+        expect(context.textMetricsService, same(flutterTextMetricsService));
+        expect(
+          context.elementRegistry.supports(RectangleData.typeIdToken),
+          isTrue,
+        );
+        expect(context.elementRegistry.supports(TextData.typeIdToken), isTrue);
+
+        final customRegistry = DefaultElementRegistry();
+        final customContext = createFlutterDrawContext(
+          elementRegistry: customRegistry,
+          registerBuiltInElementDefinitions: false,
+        );
+        expect(customContext.elementRegistry.registeredTypeIds, isEmpty);
+      },
+    );
   });
 }

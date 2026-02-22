@@ -36,6 +36,7 @@ const _allowedExports = <String>{
   'draw/elements/types/serial_number/serial_number_data.dart',
   'draw/elements/types/text/text_data.dart',
   'draw/elements/types/text/text_editing_geometry.dart',
+  'draw/elements/types/text/text_layout_constants.dart',
   'draw/events/error_events.dart',
   'draw/events/event_bus.dart',
   'draw/events/state_events.dart',

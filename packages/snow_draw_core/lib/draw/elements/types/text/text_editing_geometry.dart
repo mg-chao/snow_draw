@@ -6,6 +6,7 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import 'text_data.dart';
+import 'text_layout_constants.dart';
 
 /// Geometry resolved for an in-progress text draft.
 ///
@@ -171,7 +172,7 @@ TextEditingGeometry _buildTextEditingGeometry({
 );
 
 double _resolveContentWidth(TextMetrics layout) {
-  final horizontalPadding = _resolveTextLayoutHorizontalPadding(
+  final horizontalPadding = resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
   );
   return layout.width + horizontalPadding * 2;
@@ -179,11 +180,3 @@ double _resolveContentWidth(TextMetrics layout) {
 
 double _resolveContentHeight(TextMetrics layout) =>
     math.max(layout.height, layout.lineHeight);
-
-double _resolveTextLayoutHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * 0.01;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}

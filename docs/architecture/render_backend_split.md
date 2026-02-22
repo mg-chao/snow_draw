@@ -18,6 +18,7 @@ rendering backends.
 - `packages/snow_draw_flutter_backend`
   - Scene primitive renderer for Flutter canvas.
   - Text metrics implementation backed by Flutter paragraph/painter APIs.
+  - `createFlutterDrawContext` factory for backend-specific context wiring.
   - Canvas widgets, painters, shader/caching infrastructure.
 - `apps/snow_draw`
   - Product UI composition and toolbar/store adapters.
@@ -36,6 +37,8 @@ rendering backends.
 
 - Core text geometry calls `TextMetricsService`.
 - Backends provide concrete implementations and inject via `DrawContext`.
+- Shared text layout constants live in core (`text_layout_constants.dart`) so
+  editor geometry and backend overlays stay numerically aligned.
 
 ### Color
 

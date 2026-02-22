@@ -30,19 +30,15 @@ void main() {
 }
 
 DrawContext createAppContext() {
-  final registry = DefaultElementRegistry();
-  registerBuiltInElements(registry);
   final logConfig = LogConfig.production.copyWith(
     enabled: true,
     colorOutput: !kReleaseMode,
     emojiOutput: !kReleaseMode,
   );
 
-  return DrawContext.withDefaults(
-    elementRegistry: registry,
+  return createFlutterDrawContext(
     idGenerator: RandomStringIdGenerator().call,
     logService: LogService(config: logConfig),
-    textMetricsService: flutterTextMetricsService,
   );
 }
 

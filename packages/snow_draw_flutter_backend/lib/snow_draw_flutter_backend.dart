@@ -1,3 +1,4 @@
+export 'context/flutter_draw_context.dart';
 export 'extensions/coordinate_service_offset_extensions.dart';
 export 'extensions/draw_color_extensions.dart';
 export 'render/element_renderer.dart';

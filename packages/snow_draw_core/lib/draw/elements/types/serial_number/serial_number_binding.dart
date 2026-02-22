@@ -9,6 +9,7 @@ import '../../../types/draw_rect.dart';
 import '../../../utils/selection_calculator.dart';
 import '../arrow/arrow_binding.dart';
 import '../text/text_data.dart';
+import '../text/text_layout_constants.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
 
@@ -40,7 +41,7 @@ DrawRect resolveSerialNumberBoundTextRect({
   final layout = textMetricsService.measure(
     TextLayoutRequest(data: textData, maxWidth: double.infinity),
   );
-  final horizontalPadding = _resolveTextLayoutHorizontalPadding(
+  final horizontalPadding = resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
   );
   final width = layout.width + horizontalPadding * 2;
@@ -59,14 +60,6 @@ DrawRect resolveSerialNumberBoundTextRect({
     maxX: minX + width,
     maxY: minY + height,
   );
-}
-
-double _resolveTextLayoutHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * 0.01;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
 }
 
 SerialNumberTextConnection? resolveSerialNumberTextConnection({

@@ -8,6 +8,7 @@ import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'text_data.dart';
 import 'text_layout.dart';
+import 'text_layout_constants.dart';
 
 /// Encodes text elements into backend-agnostic scene primitives.
 ///

@@ -2,6 +2,7 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import 'text_data.dart';
+import 'text_layout_constants.dart';
 
 DrawRect clampTextRectToLayout({
   required DrawRect rect,
@@ -14,7 +15,7 @@ DrawRect clampTextRectToLayout({
   final baseLayout = textMetricsService.measure(
     TextLayoutRequest(data: data, maxWidth: rect.width),
   );
-  final horizontalPadding = _resolveTextLayoutHorizontalPadding(
+  final horizontalPadding = resolveTextLayoutHorizontalPadding(
     baseLayout.lineHeight,
   );
   final minWidth =
@@ -214,12 +215,4 @@ double _resolveHeight({
     ),
   );
   return resolveTextLayoutHeight(layout);
-}
-
-double _resolveTextLayoutHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * 0.01;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
 }

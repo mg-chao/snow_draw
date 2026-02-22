@@ -5,6 +5,7 @@ const _backendEntrypointPath =
 const _backendLibRootPath = 'packages/snow_draw_flutter_backend/lib';
 
 const _allowedExports = <String>{
+  'context/flutter_draw_context.dart',
   'extensions/coordinate_service_offset_extensions.dart',
   'extensions/draw_color_extensions.dart',
   'render/element_renderer.dart',

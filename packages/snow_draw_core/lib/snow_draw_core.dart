@@ -33,6 +33,7 @@ export 'draw/elements/types/serial_number/serial_number_data.dart';
 export 'draw/elements/types/serial_number/serial_number_binding.dart';
 export 'draw/elements/types/text/text_data.dart';
 export 'draw/elements/types/text/text_editing_geometry.dart';
+export 'draw/elements/types/text/text_layout_constants.dart';
 export 'draw/events/error_events.dart';
 export 'draw/events/event_bus.dart';
 export 'draw/events/state_events.dart';
