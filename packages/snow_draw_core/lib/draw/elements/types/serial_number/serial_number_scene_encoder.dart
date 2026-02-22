@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../../../config/draw_config.dart';
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -102,6 +103,7 @@ final class SerialNumberSceneEncoder
         data: data,
         colorArgb: contentColorArgb,
         localeTag: localeTag,
+        textMetricsService: sceneTextMetricsService,
       );
       final paintScale = textLayout.paintScale;
       if (paintScale > 0 && paintScale.isFinite) {

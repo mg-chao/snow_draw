@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import '../../../models/element_state.dart';
 import '../../../render/scene/render_scene.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -67,6 +68,7 @@ final class TextSceneEncoder implements ElementSceneEncoder<TextData> {
       data: data,
       width: rect.width,
       localeTag: localeTag,
+      textMetricsService: sceneTextMetricsService,
     );
     final localOrigin = DrawPoint(
       x: -rect.width / 2,

@@ -200,3 +200,24 @@ final class FallbackTextMetricsService implements TextMetricsService {
 /// Shared default text metrics service used by core reducers.
 const TextMetricsService defaultTextMetricsService =
     FallbackTextMetricsService();
+
+TextMetricsService _sceneTextMetricsService = defaultTextMetricsService;
+
+/// Shared text metrics service used by scene encoders.
+///
+/// Defaults to [defaultTextMetricsService]. Integrations can override this
+/// to keep scene text placement aligned with runtime renderer metrics.
+TextMetricsService get sceneTextMetricsService => _sceneTextMetricsService;
+
+/// Configures [sceneTextMetricsService].
+///
+/// Use this when the runtime renderer has a more accurate metrics service
+/// than the pure-Dart fallback.
+void configureSceneTextMetricsService(TextMetricsService textMetricsService) {
+  _sceneTextMetricsService = textMetricsService;
+}
+
+/// Resets [sceneTextMetricsService] back to the default fallback service.
+void resetSceneTextMetricsService() {
+  _sceneTextMetricsService = defaultTextMetricsService;
+}

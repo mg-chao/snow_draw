@@ -154,7 +154,7 @@ class ElementRenderer {
         scaleFactor: scaleFactor,
         localeTag: locale?.toLanguageTag(),
       );
-      _sceneRenderer.renderScene(canvas: canvas, scene: scene);
+      _sceneRenderer.renderScene(canvas: canvas, scene: scene, locale: locale);
       return _SceneRenderResult.rendered;
     } on SceneEncodingNotSupported catch (signal) {
       _renderFallbackLog.warning(

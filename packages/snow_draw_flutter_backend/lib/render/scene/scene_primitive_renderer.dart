@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
@@ -17,17 +18,22 @@ class ScenePrimitiveRenderer {
     ..style = PaintingStyle.stroke
     ..isAntiAlias = true;
   static const _textHeightBehavior = TextHeightBehavior();
-  static const TextScaler _textScaler = TextScaler.noScaling;
+  static const _unboundedTextLayoutWidth = 1000000.0;
 
-  void renderScene({required Canvas canvas, required RenderScene scene}) {
+  void renderScene({
+    required Canvas canvas,
+    required RenderScene scene,
+    Locale? locale,
+  }) {
     for (final primitive in scene.primitives) {
-      _renderPrimitive(canvas: canvas, primitive: primitive);
+      _renderPrimitive(canvas: canvas, primitive: primitive, locale: locale);
     }
   }
 
   void _renderPrimitive({
     required Canvas canvas,
     required RenderPrimitive primitive,
+    Locale? locale,
   }) {
     switch (primitive) {
       case RenderPathStrokePrimitive():
@@ -37,13 +43,13 @@ class ScenePrimitiveRenderer {
       case RenderHatchPathFillPrimitive():
         _renderHatchPathFill(canvas, primitive);
       case RenderTextRunPrimitive():
-        _renderTextRun(canvas, primitive);
+        _renderTextRun(canvas, primitive, locale: locale);
       case RenderClipRectPrimitive():
-        _renderClipRect(canvas, primitive);
+        _renderClipRect(canvas, primitive, locale: locale);
       case RenderTransformPrimitive():
-        _renderTransform(canvas, primitive);
+        _renderTransform(canvas, primitive, locale: locale);
       case RenderFilterGroupPrimitive():
-        _renderFilterGroup(canvas, primitive);
+        _renderFilterGroup(canvas, primitive, locale: locale);
       case RenderImageHandlePrimitive():
         _renderImagePlaceholder(canvas, primitive);
       case RenderPictureHandlePrimitive():
@@ -128,64 +134,61 @@ class ScenePrimitiveRenderer {
     canvas.restore();
   }
 
-  void _renderTextRun(Canvas canvas, RenderTextRunPrimitive primitive) {
+  void _renderTextRun(
+    Canvas canvas,
+    RenderTextRunPrimitive primitive, {
+    Locale? locale,
+  }) {
+    final text = primitive.text.isEmpty ? ' ' : primitive.text;
+    final fontFamily = _sanitizeFontFamily(primitive.fontFamily);
+    final maxWidth = _resolveTextLayoutWidth(primitive.maxWidth);
     final textOffset = Offset(primitive.origin.x, primitive.origin.y);
     final strokeColorArgb = primitive.strokeColorArgb;
     if (strokeColorArgb != null && primitive.strokeWidth > 0) {
       final strokePaint = _textStrokePaint
         ..strokeWidth = primitive.strokeWidth
         ..color = Color(strokeColorArgb);
-      final strokeTextStyle = TextStyle(
+      final strokeParagraph = _buildTextParagraph(
+        text: text,
         fontSize: primitive.fontSize,
-        fontFamily: primitive.fontFamily,
-        textBaseline: TextBaseline.alphabetic,
+        fontFamily: fontFamily,
+        align: primitive.align,
+        maxWidth: maxWidth,
+        locale: locale,
         foreground: strokePaint,
       );
-      TextPainter(
-          textDirection: TextDirection.ltr,
-          textAlign: _toTextAlign(primitive.align),
-          textHeightBehavior: _textHeightBehavior,
-          textScaler: _textScaler,
-          strutStyle: StrutStyle.fromTextStyle(
-            strokeTextStyle,
-            forceStrutHeight: true,
-          ),
-          text: TextSpan(text: primitive.text, style: strokeTextStyle),
-        )
-        ..layout(maxWidth: primitive.maxWidth)
-        ..paint(canvas, textOffset);
+      canvas.drawParagraph(strokeParagraph, textOffset);
     }
 
-    final fillTextStyle = TextStyle(
-      color: Color(primitive.colorArgb),
+    final fillParagraph = _buildTextParagraph(
+      text: text,
       fontSize: primitive.fontSize,
-      fontFamily: primitive.fontFamily,
-      textBaseline: TextBaseline.alphabetic,
+      fontFamily: fontFamily,
+      align: primitive.align,
+      maxWidth: maxWidth,
+      locale: locale,
+      color: Color(primitive.colorArgb),
     );
-    TextPainter(
-        textDirection: TextDirection.ltr,
-        textAlign: _toTextAlign(primitive.align),
-        textHeightBehavior: _textHeightBehavior,
-        textScaler: _textScaler,
-        strutStyle: StrutStyle.fromTextStyle(
-          fillTextStyle,
-          forceStrutHeight: true,
-        ),
-        text: TextSpan(text: primitive.text, style: fillTextStyle),
-      )
-      ..layout(maxWidth: primitive.maxWidth)
-      ..paint(canvas, textOffset);
+    canvas.drawParagraph(fillParagraph, textOffset);
   }
 
-  void _renderClipRect(Canvas canvas, RenderClipRectPrimitive primitive) {
+  void _renderClipRect(
+    Canvas canvas,
+    RenderClipRectPrimitive primitive, {
+    Locale? locale,
+  }) {
     canvas
       ..save()
       ..clipRect(_toRect(primitive.clipRect));
-    renderScene(canvas: canvas, scene: primitive.child);
+    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
     canvas.restore();
   }
 
-  void _renderTransform(Canvas canvas, RenderTransformPrimitive primitive) {
+  void _renderTransform(
+    Canvas canvas,
+    RenderTransformPrimitive primitive, {
+    Locale? locale,
+  }) {
     canvas
       ..save()
       ..translate(primitive.translate.x, primitive.translate.y);
@@ -193,11 +196,15 @@ class ScenePrimitiveRenderer {
       canvas.rotate(primitive.rotation);
     }
     canvas.scale(primitive.scaleX, primitive.scaleY);
-    renderScene(canvas: canvas, scene: primitive.child);
+    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
     canvas.restore();
   }
 
-  void _renderFilterGroup(Canvas canvas, RenderFilterGroupPrimitive primitive) {
+  void _renderFilterGroup(
+    Canvas canvas,
+    RenderFilterGroupPrimitive primitive, {
+    Locale? locale,
+  }) {
     final opacity = primitive.parameters['opacity'];
     if (primitive.filterType == 'opacity' && opacity != null) {
       final alpha = (opacity.clamp(0, 1) * 255).round();
@@ -205,17 +212,17 @@ class ScenePrimitiveRenderer {
         null,
         Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
       );
-      renderScene(canvas: canvas, scene: primitive.child);
+      renderScene(canvas: canvas, scene: primitive.child, locale: locale);
       canvas.restore();
       return;
     }
     if (primitive.filterType == 'blend_multiply') {
       canvas.saveLayer(null, Paint()..blendMode = BlendMode.multiply);
-      renderScene(canvas: canvas, scene: primitive.child);
+      renderScene(canvas: canvas, scene: primitive.child, locale: locale);
       canvas.restore();
       return;
     }
-    renderScene(canvas: canvas, scene: primitive.child);
+    renderScene(canvas: canvas, scene: primitive.child, locale: locale);
   }
 
   void _renderImagePlaceholder(
@@ -377,5 +384,71 @@ class ScenePrimitiveRenderer {
       );
       canvas.drawLine(start, end, paint);
     }
+  }
+
+  ui.Paragraph _buildTextParagraph({
+    required String text,
+    required double fontSize,
+    required String? fontFamily,
+    required RenderTextAlign align,
+    required double maxWidth,
+    Locale? locale,
+    Color? color,
+    Paint? foreground,
+  }) {
+    final paragraphStyle = ui.ParagraphStyle(
+      textAlign: _toTextAlign(align),
+      textDirection: ui.TextDirection.ltr,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textHeightBehavior: _textHeightBehavior,
+      strutStyle: ui.StrutStyle(
+        fontFamily: fontFamily,
+        fontSize: fontSize,
+        forceStrutHeight: true,
+      ),
+      locale: locale,
+    );
+
+    final textStyle = foreground != null
+        ? ui.TextStyle(
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            foreground: foreground,
+            locale: locale,
+            textBaseline: ui.TextBaseline.alphabetic,
+          )
+        : ui.TextStyle(
+            color: color,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            locale: locale,
+            textBaseline: ui.TextBaseline.alphabetic,
+          );
+
+    final builder = ui.ParagraphBuilder(paragraphStyle)
+      ..pushStyle(textStyle)
+      ..addText(text)
+      ..pop();
+
+    return builder.build()..layout(ui.ParagraphConstraints(width: maxWidth));
+  }
+
+  double _resolveTextLayoutWidth(double maxWidth) {
+    if (maxWidth.isFinite && maxWidth > 0) {
+      return maxWidth;
+    }
+    if (maxWidth == 0 || maxWidth.isNaN) {
+      return 1.0;
+    }
+    return _unboundedTextLayoutWidth;
+  }
+
+  String? _sanitizeFontFamily(String? fontFamily) {
+    final trimmed = fontFamily?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 }

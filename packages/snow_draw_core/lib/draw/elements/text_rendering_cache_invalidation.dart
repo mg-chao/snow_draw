@@ -37,6 +37,9 @@ void unregisterTextRenderingCacheInvalidator(
 /// fallback-glyph paragraphs being reused.
 void invalidateTextRenderingCaches() {
   defaultTextMetricsService.clearCaches();
+  if (!identical(sceneTextMetricsService, defaultTextMetricsService)) {
+    sceneTextMetricsService.clearCaches();
+  }
   for (final invalidator in _registeredInvalidators) {
     invalidator();
   }

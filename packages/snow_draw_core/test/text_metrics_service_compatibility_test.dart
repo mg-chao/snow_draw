@@ -9,6 +9,17 @@ void main() {
     expect(defaultTextMetricsService, isA<FallbackTextMetricsService>());
   });
 
+  test('scene text metrics service supports override and reset', () {
+    final override = _TestMetricsService();
+    addTearDown(resetSceneTextMetricsService);
+
+    configureSceneTextMetricsService(override);
+    expect(sceneTextMetricsService, same(override));
+
+    resetSceneTextMetricsService();
+    expect(sceneTextMetricsService, same(defaultTextMetricsService));
+  });
+
   test('fallback service sanitizes non-positive max width requests', () {
     final zeroWidth = service.measure(
       const TextLayoutRequest(
@@ -73,4 +84,17 @@ void main() {
       }
     },
   );
+}
+
+final class _TestMetricsService implements TextMetricsService {
+  @override
+  TextMetrics measure(TextLayoutRequest request) => const TextMetrics(
+    width: 1,
+    height: 1,
+    lineHeight: 1,
+    lines: <TextLineMetrics>[TextLineMetrics(width: 1, height: 1)],
+  );
+
+  @override
+  void clearCaches() {}
 }
