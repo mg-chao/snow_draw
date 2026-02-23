@@ -13,6 +13,8 @@ import '../../utils/arrow_binding_highlight.dart';
 import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/selection_calculator.dart';
 import '../rect_intersection.dart';
+import '../planning/highlight_mask_visibility.dart';
+import '../planning/watermark_visibility.dart';
 import 'frame_render_plan.dart';
 import 'render_tasks.dart';
 
@@ -31,9 +33,7 @@ class FrameRenderTransientState {
     this.canvasConfig,
     this.gridConfig,
     this.highlightMaskConfig,
-    this.isHighlightMaskVisible = false,
     this.watermarkConfig,
-    this.isWatermarkVisible = false,
     this.boxSelectionBounds,
     this.previewElementsById = const <String, ElementState>{},
   });
@@ -50,9 +50,7 @@ class FrameRenderTransientState {
   final CanvasConfig? canvasConfig;
   final GridConfig? gridConfig;
   final HighlightMaskConfig? highlightMaskConfig;
-  final bool isHighlightMaskVisible;
   final WatermarkConfig? watermarkConfig;
-  final bool isWatermarkVisible;
   final DrawRect? boxSelectionBounds;
   final Map<String, ElementState> previewElementsById;
 }
@@ -126,8 +124,10 @@ class FrameRenderPlanBuilder {
 
     final highlightMaskConfig = transientState.highlightMaskConfig;
     if (highlightMaskConfig != null &&
-        transientState.isHighlightMaskVisible &&
-        view.highlightMaskScene.hasHighlights) {
+        isHighlightMaskVisible(
+          hasHighlights: view.highlightMaskScene.hasHighlights,
+          config: highlightMaskConfig,
+        )) {
       tasks.add(
         HighlightMaskRenderTask(
           config: highlightMaskConfig,
@@ -137,7 +137,7 @@ class FrameRenderPlanBuilder {
     }
 
     final watermarkConfig = transientState.watermarkConfig;
-    if (watermarkConfig != null && transientState.isWatermarkVisible) {
+    if (watermarkConfig != null && isWatermarkVisible(watermarkConfig)) {
       tasks.add(WatermarkRenderTask(config: watermarkConfig));
     }
 

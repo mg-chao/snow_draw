@@ -2186,30 +2186,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
-    final isHighlightMaskVisible = _isHighlightMaskVisible(
-      stateView: stateView,
-      config: highlightMask,
-    );
-    final watermarkVisible = isWatermarkVisible(watermark);
 
     return _CanvasSceneSnapshot(
       previewElements: previewElements,
       creatingSnapshot: creatingSnapshot,
-      isHighlightMaskVisible: isHighlightMaskVisible,
       highlightMaskConfig: highlightMask,
-      isWatermarkVisible: watermarkVisible,
       watermarkConfig: watermark,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
   }
-
-  bool _isHighlightMaskVisible({
-    required DrawStateView stateView,
-    required HighlightMaskConfig config,
-  }) => isHighlightMaskVisible(
-    hasHighlights: stateView.highlightMaskScene.hasHighlights,
-    config: config,
-  );
 
   SceneCanvasRenderKey _buildCanvasRenderKey({
     required DrawStateView stateView,
@@ -2224,9 +2209,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     creatingElement: scene.creatingSnapshot,
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
     previewElementsById: scene.previewElements,
-    isHighlightMaskVisible: scene.isHighlightMaskVisible,
     highlightMaskConfig: scene.highlightMaskConfig,
-    isWatermarkVisible: scene.isWatermarkVisible,
     watermarkConfig: scene.watermarkConfig,
     locale: locale,
   );
@@ -2238,9 +2221,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required CreatingElementSnapshot? creatingElement,
     required int textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
-    required bool isHighlightMaskVisible,
     required HighlightMaskConfig highlightMaskConfig,
-    required bool isWatermarkVisible,
     required WatermarkConfig watermarkConfig,
     required Locale? locale,
   }) {
@@ -2273,9 +2254,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         canvasConfig: canvasConfig,
         gridConfig: gridConfig,
         highlightMaskConfig: highlightMaskConfig,
-        isHighlightMaskVisible: isHighlightMaskVisible,
         watermarkConfig: watermarkConfig,
-        isWatermarkVisible: isWatermarkVisible,
         boxSelectionBounds: boxSelectionBounds,
         previewElementsById: previewElementsById,
       ),
@@ -3347,18 +3326,14 @@ class _CanvasSceneSnapshot {
   const _CanvasSceneSnapshot({
     required this.previewElements,
     required this.creatingSnapshot,
-    required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
-    required this.isWatermarkVisible,
     required this.watermarkConfig,
     required this.textRenderingCacheRevision,
   });
 
   final Map<String, ElementState> previewElements;
   final CreatingElementSnapshot? creatingSnapshot;
-  final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;
-  final bool isWatermarkVisible;
   final WatermarkConfig watermarkConfig;
   final int textRenderingCacheRevision;
 }
