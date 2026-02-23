@@ -2240,6 +2240,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       view: stateView,
       elementRegistry: elementRegistry,
       scaleFactor: scaleFactor,
+      includeElementRenderTasks: false,
       localeTag: locale?.toLanguageTag(),
       transientState: FrameRenderTransientState(
         hoveredElementId: _hoveredSelectionElementId,

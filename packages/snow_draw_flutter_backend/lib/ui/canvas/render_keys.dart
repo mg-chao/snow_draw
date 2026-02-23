@@ -59,8 +59,7 @@ class SceneCanvasRenderKey {
     this.locale,
   }) : previewElementsById = previewElementsById.isEmpty
            ? const <String, ElementState>{}
-           : Map<String, ElementState>.unmodifiable(previewElementsById),
-       plannedElementTasksById = _buildPlannedElementTasksById(framePlan);
+           : Map<String, ElementState>.unmodifiable(previewElementsById);
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
@@ -89,12 +88,6 @@ class SceneCanvasRenderKey {
   /// Core-generated frame render plan snapshot for this key.
   final FrameRenderPlan framePlan;
 
-  /// Core-planned element tasks indexed by element id.
-  ///
-  /// Computed once when the key is created so painters can avoid rebuilding
-  /// this map on every frame.
-  final Map<String, List<RenderTask>> plannedElementTasksById;
-
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -119,26 +112,4 @@ class SceneCanvasRenderKey {
     locale,
     framePlan,
   ]);
-}
-
-Map<String, List<RenderTask>> _buildPlannedElementTasksById(
-  FrameRenderPlan framePlan,
-) {
-  if (framePlan.tasks.isEmpty) {
-    return const <String, List<RenderTask>>{};
-  }
-
-  final tasksById = <String, List<RenderTask>>{};
-  for (final task in framePlan.tasks) {
-    if (task case ElementRenderTask(:final element)) {
-      (tasksById[element.id] ??= <RenderTask>[]).add(task);
-    }
-  }
-  if (tasksById.isEmpty) {
-    return const <String, List<RenderTask>>{};
-  }
-  return <String, List<RenderTask>>{
-    for (final entry in tasksById.entries)
-      entry.key: List<RenderTask>.unmodifiable(entry.value),
-  };
 }

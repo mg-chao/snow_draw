@@ -66,6 +66,7 @@ class FrameRenderPlanBuilder {
     required DrawStateView view,
     required ElementRegistry elementRegistry,
     required double scaleFactor,
+    bool includeElementRenderTasks = true,
     String? localeTag,
     FrameRenderTransientState transientState =
         const FrameRenderTransientState(),
@@ -126,16 +127,18 @@ class FrameRenderPlanBuilder {
       );
     }
 
-    appendElementTasks([
-      for (final element in view.elements) resolveEffectiveElement(element),
-    ]);
+    if (includeElementRenderTasks) {
+      appendElementTasks([
+        for (final element in view.elements) resolveEffectiveElement(element),
+      ]);
 
-    if (previewElementsById.isNotEmpty) {
-      final previewOnlyElements = _resolvePreviewOnlyElements(
-        previewElementsById: previewElementsById,
-        document: document,
-      );
-      appendElementTasks(previewOnlyElements);
+      if (previewElementsById.isNotEmpty) {
+        final previewOnlyElements = _resolvePreviewOnlyElements(
+          previewElementsById: previewElementsById,
+          document: document,
+        );
+        appendElementTasks(previewOnlyElements);
+      }
     }
 
     final highlightMaskConfig = transientState.highlightMaskConfig;

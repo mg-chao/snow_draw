@@ -10,7 +10,6 @@ import '../../render/arrow/arrow_visual_cache.dart';
 import '../../render/element_renderer.dart';
 import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
-import '../../render/tasks/flutter_render_task_executor.dart';
 import '../../services/text/flutter_text_layout.dart';
 import 'binding_highlight_style.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
@@ -936,7 +935,6 @@ class SceneCanvasPainter extends CustomPainter {
       shouldPaintSerialConnectors: sceneAnalysis.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       volatileElementIds: interactionVolatileElementIds,
-      plannedElementTasksById: renderKey.plannedElementTasksById,
     );
   }
 
@@ -1001,25 +999,14 @@ class SceneCanvasPainter extends CustomPainter {
     required double scale,
     required _SceneRenderContext sceneContext,
   }) {
-    final plannedTasks = sceneContext.plannedElementTasksById[element.id];
-    if (plannedTasks != null && plannedTasks.isNotEmpty) {
-      flutterRenderTaskExecutor.executeTasks(
-        canvas: canvas,
-        tasks: plannedTasks,
-        elementRegistry: renderKey.elementRegistry,
-        textMetricsService: renderKey.textMetricsService,
-        locale: renderKey.locale,
-      );
-    } else {
-      elementRenderer.renderElement(
-        canvas: canvas,
-        element: element,
-        scaleFactor: scale,
-        elementRegistry: renderKey.elementRegistry,
-        textMetricsService: renderKey.textMetricsService,
-        locale: renderKey.locale,
-      );
-    }
+    elementRenderer.renderElement(
+      canvas: canvas,
+      element: element,
+      scaleFactor: scale,
+      elementRegistry: renderKey.elementRegistry,
+      textMetricsService: renderKey.textMetricsService,
+      locale: renderKey.locale,
+    );
     if (sceneContext.shouldPaintSerialConnectors) {
       drawSerialNumberConnectorsForText(
         canvas: canvas,
@@ -2220,14 +2207,12 @@ class _SceneRenderContext {
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.volatileElementIds,
-    required this.plannedElementTasksById,
   });
 
   final bool hasFilterElement;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> volatileElementIds;
-  final Map<String, List<RenderTask>> plannedElementTasksById;
 }
 
 class _SceneRenderAnalysis {

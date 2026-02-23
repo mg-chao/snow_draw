@@ -117,5 +117,46 @@ void main() {
         expect(plan.scaleFactor, 1.0, reason: 'Expected fallback for $scale');
       }
     });
+
+    test(
+      'can skip element render tasks while keeping non-element render tasks',
+      () {
+        final registry = DefaultElementRegistry();
+        registerBuiltInElements(registry);
+
+        final view = DrawStateView.fromState(
+          DrawState(
+            domain: DomainState(
+              document: DocumentState(
+                elements: const [
+                  ElementState(
+                    id: 'line-1',
+                    rect: DrawRect(maxX: 80, maxY: 40),
+                    rotation: 0,
+                    opacity: 1,
+                    zIndex: 0,
+                    data: LineData(),
+                  ),
+                ],
+              ),
+            ),
+            application: const ApplicationState(view: ViewState()),
+          ),
+        );
+
+        final plan = builder.build(
+          view: view,
+          elementRegistry: registry,
+          scaleFactor: 1,
+          includeElementRenderTasks: false,
+          transientState: const FrameRenderTransientState(
+            canvasConfig: CanvasConfig(),
+          ),
+        );
+
+        expect(plan.tasks.whereType<ElementRenderTask>().isEmpty, isTrue);
+        expect(plan.tasks.whereType<BackgroundRenderTask>().length, 1);
+      },
+    );
   });
 }
