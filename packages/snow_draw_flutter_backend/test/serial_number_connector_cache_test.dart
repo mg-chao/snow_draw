@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connection_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connector_cache.dart';
@@ -71,7 +71,7 @@ void main() {
     expect(identical(affectedAfter, affectedBefore), isFalse);
   });
 
-  test('marks only affected text connectors as dynamic', () {
+  test('marks only affected text connectors as volatile', () {
     const textA = ElementState(
       id: 'text-a',
       rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
@@ -128,12 +128,12 @@ void main() {
       ),
     );
 
-    expect(snapshot.dynamicTextElementIds, {'text-a'});
+    expect(snapshot.volatileTextElementIds, {'text-a'});
     expect(snapshot.connectorsByTextId.keys, {'text-a', 'text-b'});
   });
 
   test(
-    'ignores value-equal preview elements for dynamic connector tracking',
+    'ignores value-equal preview elements for volatile connector tracking',
     () {
       const text = ElementState(
         id: 'text',
@@ -163,7 +163,7 @@ void main() {
         ),
       );
 
-      expect(snapshot.dynamicTextElementIds, isEmpty);
+      expect(snapshot.volatileTextElementIds, isEmpty);
       expect(snapshot.connectorsByTextId.keys, {'text'});
     },
   );
@@ -345,7 +345,7 @@ void main() {
         snapGuides: const [],
       ),
     );
-    expect(snapshot.dynamicTextElementIds, {'text'});
+    expect(snapshot.volatileTextElementIds, {'text'});
   });
 
   test('includes preview-only serial bindings', () {

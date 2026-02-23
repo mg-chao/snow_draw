@@ -18,7 +18,7 @@ class SerialNumberConnectorCache {
   static final instance = SerialNumberConnectorCache._();
   static const _emptySnapshot = SerialNumberConnectorSnapshot(
     connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
-    dynamicTextElementIds: <String>{},
+    volatileTextElementIds: <String>{},
   );
 
   var _cachedDocumentVersion = -1;
@@ -70,13 +70,13 @@ class SerialNumberConnectorCache {
       return _emptySnapshot;
     }
 
-    // Determine which connectors need recomputation and dynamic redraw.
+    // Determine which connectors need recomputation and volatile redraw.
     final affectedSerialIds = _resolveAffectedSerialIds(
       document: document,
       previewElementsById: effectivePreviewElements,
     );
 
-    final dynamicTextElementIds = _resolveDynamicConnectorTextIds(
+    final volatileTextElementIds = _resolveVolatileConnectorTextIds(
       affectedSerialIds: affectedSerialIds,
       document: document,
       previewElementsById: effectivePreviewElements,
@@ -90,7 +90,7 @@ class SerialNumberConnectorCache {
       affectedSerialIds: affectedSerialIds,
       candidateSerialIds: candidateSerialIds,
       visibleTextIds: visibleTextIds,
-      dynamicTextElementIds: dynamicTextElementIds,
+      volatileTextElementIds: volatileTextElementIds,
     );
   }
 
@@ -173,7 +173,7 @@ class SerialNumberConnectorCache {
     required Set<String> affectedSerialIds,
     required Set<String> candidateSerialIds,
     required Set<String> visibleTextIds,
-    required Set<String> dynamicTextElementIds,
+    required Set<String> volatileTextElementIds,
   }) {
     final result = <String, List<SerialNumberTextConnector>>{};
 
@@ -237,22 +237,22 @@ class SerialNumberConnectorCache {
     }
 
     if (result.isEmpty) {
-      if (dynamicTextElementIds.isEmpty) {
+      if (volatileTextElementIds.isEmpty) {
         return _emptySnapshot;
       }
       return SerialNumberConnectorSnapshot(
         connectorsByTextId: const <String, List<SerialNumberTextConnector>>{},
-        dynamicTextElementIds: dynamicTextElementIds,
+        volatileTextElementIds: volatileTextElementIds,
       );
     }
 
     return SerialNumberConnectorSnapshot(
       connectorsByTextId: result,
-      dynamicTextElementIds: dynamicTextElementIds,
+      volatileTextElementIds: volatileTextElementIds,
     );
   }
 
-  Set<String> _resolveDynamicConnectorTextIds({
+  Set<String> _resolveVolatileConnectorTextIds({
     required Set<String> affectedSerialIds,
     required DocumentState document,
     required Map<String, ElementState> previewElementsById,
@@ -262,13 +262,13 @@ class SerialNumberConnectorCache {
       return const <String>{};
     }
 
-    final dynamicTextIds = <String>{};
+    final volatileTextIds = <String>{};
 
     for (final serialId in affectedSerialIds) {
       final previousTextId =
           _connectorCache[serialId]?.textId ?? _bindingIndex[serialId];
       if (previousTextId != null && visibleTextIds.contains(previousTextId)) {
-        dynamicTextIds.add(previousTextId);
+        volatileTextIds.add(previousTextId);
       }
 
       final effectiveSerial =
@@ -283,13 +283,13 @@ class SerialNumberConnectorCache {
           !visibleTextIds.contains(textId)) {
         continue;
       }
-      dynamicTextIds.add(textId);
+      volatileTextIds.add(textId);
     }
 
-    if (dynamicTextIds.isEmpty) {
+    if (volatileTextIds.isEmpty) {
       return const <String>{};
     }
-    return dynamicTextIds;
+    return volatileTextIds;
   }
 
   Set<String> _normalizeVisibleTextIds({

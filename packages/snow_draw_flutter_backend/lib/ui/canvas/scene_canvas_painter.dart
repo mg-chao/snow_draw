@@ -909,32 +909,32 @@ class SceneCanvasPainter extends CustomPainter {
       previewElements,
     );
     final creatingFilterId = _resolveCreatingFilterId();
-    final staticContext = _resolveSceneRenderContextStaticData(
+    final sceneAnalysis = _resolveSceneRenderAnalysis(
       document: document,
       elements: elements,
       previewElementsById: previewElements,
     );
 
-    final serialConnectorSnapshot = staticContext.shouldPaintSerialConnectors
+    final serialConnectorSnapshot = sceneAnalysis.shouldPaintSerialConnectors
         ? resolveSerialNumberConnectorSnapshot(
             stateView,
             previewElementsById: previewElements,
-            visibleTextElementIds: staticContext.visibleTextIds,
+            visibleTextElementIds: sceneAnalysis.visibleTextIds,
           )
         : const SerialNumberConnectorSnapshot(
             connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
-            dynamicTextElementIds: <String>{},
+            volatileTextElementIds: <String>{},
           );
     final interactionVolatileElementIds = _resolveVolatileElementIds(
       volatilePreviewIds: volatilePreviewIds,
       creatingFilterId: creatingFilterId,
-      serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
+      serialConnectorTextIds: serialConnectorSnapshot.volatileTextElementIds,
     );
     final plannedElementTasksById = _resolvePlannedElementTasksById();
 
     return _SceneRenderContext(
-      hasFilterElement: staticContext.hasFilterElement,
-      shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
+      hasFilterElement: sceneAnalysis.hasFilterElement,
+      shouldPaintSerialConnectors: sceneAnalysis.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       volatileElementIds: interactionVolatileElementIds,
       plannedElementTasksById: plannedElementTasksById,
@@ -962,7 +962,7 @@ class SceneCanvasPainter extends CustomPainter {
     };
   }
 
-  _SceneRenderContextStaticData _resolveSceneRenderContextStaticData({
+  _SceneRenderAnalysis _resolveSceneRenderAnalysis({
     required DocumentState document,
     required List<ElementState> elements,
     required Map<String, ElementState> previewElementsById,
@@ -998,12 +998,12 @@ class SceneCanvasPainter extends CustomPainter {
           visibleTextIds: visibleTextIds,
         );
 
-    final staticData = _SceneRenderContextStaticData(
+    final analysis = _SceneRenderAnalysis(
       hasFilterElement: hasFilterElement,
       visibleTextIds: visibleTextIds,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
     );
-    return staticData;
+    return analysis;
   }
 
   bool _hasSerialPreviewElements(
@@ -2252,8 +2252,8 @@ class _SceneRenderContext {
   final Map<String, List<RenderTask>> plannedElementTasksById;
 }
 
-class _SceneRenderContextStaticData {
-  _SceneRenderContextStaticData({
+class _SceneRenderAnalysis {
+  _SceneRenderAnalysis({
     required this.hasFilterElement,
     required Set<String> visibleTextIds,
     required this.shouldPaintSerialConnectors,

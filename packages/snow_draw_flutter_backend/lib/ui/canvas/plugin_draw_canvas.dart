@@ -511,7 +511,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final canvasScene = _resolveCanvasSceneSnapshot(stateView);
+    final canvasInputs = _resolveCanvasRenderInputs(stateView);
     final eraserCursorOverlay = _buildEraserCursorOverlay();
 
     // Build a single render key for the unified canvas painter.
@@ -519,7 +519,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       stateView: stateView,
       selectionConfig: selectionConfig,
       scaleFactor: scaleFactor,
-      scene: canvasScene,
+      inputs: canvasInputs,
       locale: locale,
     );
     _setCanvasSnapshot(stateView: stateView, renderKey: canvasRenderKey);
@@ -2174,11 +2174,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return nextView;
   }
 
-  _CanvasSceneSnapshot _resolveCanvasSceneSnapshot(DrawStateView stateView) {
-    final promoteEraserPreviewToCanvasScene =
+  _CanvasRenderInputs _resolveCanvasRenderInputs(DrawStateView stateView) {
+    final promoteEraserPreviewToRenderInputs =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    final previewElements = promoteEraserPreviewToCanvasScene
+    final previewElements = promoteEraserPreviewToRenderInputs
         ? _resolveEraserPreviewElements(stateView)
         : _previewElementsForCanvas(stateView);
 
@@ -2187,7 +2187,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final highlightMask = globalElements.highlightMask;
     final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
 
-    return _CanvasSceneSnapshot(
+    return _CanvasRenderInputs(
       previewElements: previewElements,
       creatingSnapshot: creatingSnapshot,
       highlightMaskConfig: highlightMask,
@@ -2200,17 +2200,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawStateView stateView,
     required SelectionConfig selectionConfig,
     required double scaleFactor,
-    required _CanvasSceneSnapshot scene,
+    required _CanvasRenderInputs inputs,
     required Locale? locale,
   }) => _createCanvasRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
     scaleFactor: scaleFactor,
-    creatingElement: scene.creatingSnapshot,
-    textRenderingCacheRevision: scene.textRenderingCacheRevision,
-    previewElementsById: scene.previewElements,
-    highlightMaskConfig: scene.highlightMaskConfig,
-    watermarkConfig: scene.watermarkConfig,
+    creatingElement: inputs.creatingSnapshot,
+    textRenderingCacheRevision: inputs.textRenderingCacheRevision,
+    previewElementsById: inputs.previewElements,
+    highlightMaskConfig: inputs.highlightMaskConfig,
+    watermarkConfig: inputs.watermarkConfig,
     locale: locale,
   );
 
@@ -2274,12 +2274,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasSceneSnapshot(stateView);
+    final inputs = _resolveCanvasRenderInputs(stateView);
     final renderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: _effectiveScaleFactor(),
-      scene: scene,
+      inputs: inputs,
       locale: null,
     );
     return _CanvasSnapshot(stateView: stateView, renderKey: renderKey);
@@ -2310,14 +2310,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasSceneSnapshot(stateView);
+    final inputs = _resolveCanvasRenderInputs(stateView);
     final scaleFactor = _effectiveScaleFactor();
     final locale = _resolveCanvasLocale();
     final canvasRenderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: scaleFactor,
-      scene: scene,
+      inputs: inputs,
       locale: locale,
     );
     _setCanvasSnapshot(
@@ -3321,8 +3321,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 }
 
 @immutable
-class _CanvasSceneSnapshot {
-  const _CanvasSceneSnapshot({
+class _CanvasRenderInputs {
+  const _CanvasRenderInputs({
     required this.previewElements,
     required this.creatingSnapshot,
     required this.highlightMaskConfig,
