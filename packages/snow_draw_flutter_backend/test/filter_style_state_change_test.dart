@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/filter_style_state_change.dart';
 
@@ -16,7 +16,7 @@ void main() {
         previous: previous,
         next: next,
       );
-      expect(mutation?.changedFilterElementIds, {'filter'});
+      expect(mutation, {'filter'});
     });
 
     test('returns changed ids for filter opacity changes', () {
@@ -27,7 +27,7 @@ void main() {
         previous: previous,
         next: next,
       );
-      expect(mutation?.changedFilterElementIds, {'filter'});
+      expect(mutation, {'filter'});
     });
 
     test('returns null when a non-filter element changes', () {

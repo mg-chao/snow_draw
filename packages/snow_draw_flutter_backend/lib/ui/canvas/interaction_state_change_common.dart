@@ -35,12 +35,12 @@ bool isTypedInteractionMutationOnly({
   final document = next.domain.document;
   return switch ((previousInteraction, nextInteraction)) {
     (final CreatingState previousCreating, final CreatingState nextCreating) =>
-      isSameCreationSession(previousCreating, nextCreating) &&
+      _isSameCreationSession(previousCreating, nextCreating) &&
           supportsCreating(previousCreating) &&
           supportsCreating(nextCreating) &&
           didCreatingInteractionPreviewChange(previousCreating, nextCreating),
     (final EditingState previousEditing, final EditingState nextEditing) =>
-      isSameEditSession(previousEditing, nextEditing) &&
+      _isSameEditSession(previousEditing, nextEditing) &&
           supportsEditing(previousEditing, document) &&
           supportsEditing(nextEditing, document) &&
           didEditingInteractionPreviewChange(previousEditing, nextEditing),
@@ -49,7 +49,7 @@ bool isTypedInteractionMutationOnly({
 }
 
 /// Returns true when [previous] and [next] belong to the same create session.
-bool isSameCreationSession(CreatingState previous, CreatingState next) =>
+bool _isSameCreationSession(CreatingState previous, CreatingState next) =>
     previous.elementId == next.elementId &&
     previous.elementRect == next.elementRect &&
     previous.elementRotation == next.elementRotation &&
@@ -58,7 +58,7 @@ bool isSameCreationSession(CreatingState previous, CreatingState next) =>
     previous.startPosition == next.startPosition;
 
 /// Returns true when [previous] and [next] belong to the same edit session.
-bool isSameEditSession(EditingState previous, EditingState next) =>
+bool _isSameEditSession(EditingState previous, EditingState next) =>
     previous.operationId == next.operationId &&
     previous.sessionId == next.sessionId &&
     identical(previous.context, next.context);

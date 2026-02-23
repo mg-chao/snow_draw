@@ -1,18 +1,4 @@
-import 'package:meta/meta.dart';
-
 import 'package:snow_draw_core/snow_draw_core.dart';
-
-/// Diff result for a filter-style-only document mutation.
-@immutable
-class FilterStyleMutation {
-  FilterStyleMutation({required Set<String> changedFilterElementIds})
-    : changedFilterElementIds = Set<String>.unmodifiable(
-        changedFilterElementIds,
-      );
-
-  /// Filter element ids whose style changed in the mutation.
-  final Set<String> changedFilterElementIds;
-}
 
 /// Returns a filter-style-only mutation diff between [previous] and [next].
 ///
@@ -21,7 +7,7 @@ class FilterStyleMutation {
 /// - document topology (element order/count) is unchanged,
 /// - and every changed element is a filter element whose style changed
 ///   (filter payload and/or opacity) without geometry or z-order changes.
-FilterStyleMutation? resolveFilterStyleMutation({
+Set<String>? resolveFilterStyleMutation({
   required DrawState previous,
   required DrawState next,
 }) {
@@ -72,9 +58,10 @@ FilterStyleMutation? resolveFilterStyleMutation({
     changedFilterElementIds.add(nextElement.id);
   }
 
-  return changedFilterElementIds.isEmpty
-      ? null
-      : FilterStyleMutation(changedFilterElementIds: changedFilterElementIds);
+  if (changedFilterElementIds.isEmpty) {
+    return null;
+  }
+  return Set<String>.unmodifiable(changedFilterElementIds);
 }
 
 bool _isFilterStyleOnlyElementChange({

@@ -39,7 +39,7 @@ double distanceSquaredToSegment(DrawPoint p, DrawPoint a, DrawPoint b) {
 }
 
 /// Returns squared distance from [point] to the infinite line through [a]-[b].
-double distanceSquaredToLine(DrawPoint point, DrawPoint a, DrawPoint b) {
+double _distanceSquaredToLine(DrawPoint point, DrawPoint a, DrawPoint b) {
   final dx = b.x - a.x;
   final dy = b.y - a.y;
   final lenSq = dx * dx + dy * dy;
@@ -98,7 +98,7 @@ DrawPoint subtractScaledDrawPoint(
 ) => DrawPoint(x: a.x - direction.x * scale, y: a.y - direction.y * scale);
 
 /// Returns the midpoint of [a] and [b].
-DrawPoint midpointDrawPoint(DrawPoint a, DrawPoint b) =>
+DrawPoint _midpointDrawPoint(DrawPoint a, DrawPoint b) =>
     DrawPoint(x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5);
 
 /// Returns normalized [value], or null when it has zero length.
@@ -217,12 +217,12 @@ void _flattenCubicSegment({
 }
 
 bool _isCubicFlatEnough(CubicDrawSegment segment, double toleranceSq) {
-  final dist1 = distanceSquaredToLine(
+  final dist1 = _distanceSquaredToLine(
     segment.control1,
     segment.start,
     segment.end,
   );
-  final dist2 = distanceSquaredToLine(
+  final dist2 = _distanceSquaredToLine(
     segment.control2,
     segment.start,
     segment.end,
@@ -233,12 +233,12 @@ bool _isCubicFlatEnough(CubicDrawSegment segment, double toleranceSq) {
 ({CubicDrawSegment left, CubicDrawSegment right}) _splitCubicSegment(
   CubicDrawSegment segment,
 ) {
-  final p01 = midpointDrawPoint(segment.start, segment.control1);
-  final p12 = midpointDrawPoint(segment.control1, segment.control2);
-  final p23 = midpointDrawPoint(segment.control2, segment.end);
-  final p012 = midpointDrawPoint(p01, p12);
-  final p123 = midpointDrawPoint(p12, p23);
-  final p0123 = midpointDrawPoint(p012, p123);
+  final p01 = _midpointDrawPoint(segment.start, segment.control1);
+  final p12 = _midpointDrawPoint(segment.control1, segment.control2);
+  final p23 = _midpointDrawPoint(segment.control2, segment.end);
+  final p012 = _midpointDrawPoint(p01, p12);
+  final p123 = _midpointDrawPoint(p12, p23);
+  final p0123 = _midpointDrawPoint(p012, p123);
 
   return (
     left: CubicDrawSegment(

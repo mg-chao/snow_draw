@@ -8,14 +8,14 @@ import '../../../types/element_style.dart';
 const double defaultHatchAngleRadians = -math.pi / 4;
 
 /// Returns the alpha channel for packed ARGB32 color values.
-int alphaChannelOfArgb(int argb) => (argb >>> 24) & 0xFF;
+int _alphaChannelOfArgb(int argb) => (argb >>> 24) & 0xFF;
 
 /// Applies [elementOpacity] to a packed ARGB32 color.
 int applyElementOpacityToArgb({
   required int argb,
   required double elementOpacity,
 }) {
-  final baseAlpha = alphaChannelOfArgb(argb);
+  final baseAlpha = _alphaChannelOfArgb(argb);
   final scaledAlpha = (baseAlpha * elementOpacity.clamp(0.0, 1.0))
       .round()
       .clamp(0, 255);
@@ -23,7 +23,7 @@ int applyElementOpacityToArgb({
 }
 
 /// Returns whether a packed ARGB32 color has non-zero opacity.
-bool isArgbVisible(int argb) => alphaChannelOfArgb(argb) > 0;
+bool isArgbVisible(int argb) => _alphaChannelOfArgb(argb) > 0;
 
 /// Resolves stroke dash pattern for [strokeStyle].
 List<double>? resolveStrokeDashPattern({

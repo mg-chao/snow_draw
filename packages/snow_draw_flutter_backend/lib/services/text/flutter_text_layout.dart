@@ -9,22 +9,6 @@ const _fontMetricsProbeText = 'Mg';
 const textLayoutHeightBehavior = TextHeightBehavior();
 const TextScaler textLayoutTextScaler = TextScaler.noScaling;
 
-/// Lightweight background box snapshot in local text coordinates.
-@immutable
-class FlutterTextRangeBox {
-  const FlutterTextRangeBox({
-    required this.left,
-    required this.top,
-    required this.right,
-    required this.bottom,
-  });
-
-  final double left;
-  final double top;
-  final double right;
-  final double bottom;
-}
-
 /// Lightweight layout result using `dart:ui.Paragraph` directly.
 ///
 /// Avoids the overhead of `TextPainter` for callers that only need
@@ -217,32 +201,6 @@ FlutterTextLayoutMetrics layoutSceneText({
   widthBasis: TextWidthBasis.parent,
   locale: resolveTextLocale(localeTag),
 );
-
-/// Resolves paragraph boxes for a text range as plain geometry values.
-List<FlutterTextRangeBox> resolveTextRangeBoxes({
-  required FlutterTextLayoutMetrics layout,
-  required int start,
-  required int end,
-}) {
-  if (end <= start) {
-    return const <FlutterTextRangeBox>[];
-  }
-  final boxes = layout.paragraph.getBoxesForRange(
-    start,
-    end,
-    boxHeightStyle: ui.BoxHeightStyle.strut,
-  );
-  return boxes
-      .map(
-        (box) => FlutterTextRangeBox(
-          left: box.left,
-          top: box.top,
-          right: box.right,
-          bottom: box.bottom,
-        ),
-      )
-      .toList(growable: false);
-}
 
 // ---------------------------------------------------------------------------
 // layoutText - fast path using dart:ui.Paragraph directly

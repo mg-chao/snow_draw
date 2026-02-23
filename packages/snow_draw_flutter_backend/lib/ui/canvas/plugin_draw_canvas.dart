@@ -1226,7 +1226,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _shouldFrameCoalescePointerMove() {
     final state = widget.store.state;
     final interaction = state.application.interaction;
-    return PointerMoveDispatchPolicy.resolvePlan(
+    return PointerMoveDispatchPolicy.shouldCoalesce(
       interaction: interaction,
       currentToolTypeId: widget.currentToolTypeId,
       isShiftPressed: _isShiftPressed,
@@ -1235,16 +1235,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             interaction: interaction,
             document: state.domain.document,
           ),
-    ).shouldCoalesce;
+    );
   }
 
   bool _shouldBatchFreeDrawMoves() {
     final interaction = widget.store.state.application.interaction;
-    return PointerMoveDispatchPolicy.resolvePlan(
+    return PointerMoveDispatchPolicy.shouldBatchFreeDrawSamples(
       interaction: interaction,
       currentToolTypeId: widget.currentToolTypeId,
       isShiftPressed: _isShiftPressed,
-    ).shouldBatchSamples;
+    );
   }
 
   PointerMoveInputEvent _mergeCoalescedPointerMoveEvents(
@@ -4157,15 +4157,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     if (previousState != null) {
-      final filterStyleMutation = resolveFilterStyleMutation(
+      final changedFilterElementIds = resolveFilterStyleMutation(
         previous: previousState,
         next: state,
       );
-      if (filterStyleMutation != null) {
+      if (changedFilterElementIds != null) {
         _refreshPointerVisualsForState(state);
         _refreshDynamicLayerSnapshotForFilterStyleMutation(
           state,
-          changedFilterElementIds: filterStyleMutation.changedFilterElementIds,
+          changedFilterElementIds: changedFilterElementIds,
         );
         return;
       }
