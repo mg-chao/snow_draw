@@ -2,9 +2,34 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+String _readWorkspacePubspec() {
+  const candidatePaths = <String>[
+    'pubspec.yaml',
+    '../../pubspec.yaml',
+    '../pubspec.yaml',
+  ];
+
+  for (final path in candidatePaths) {
+    final file = File(path);
+    if (!file.existsSync()) {
+      continue;
+    }
+    final content = file.readAsStringSync();
+    final isWorkspacePubspec =
+        content.contains('melos:') && content.contains('scripts:');
+    if (isWorkspacePubspec) {
+      return content;
+    }
+  }
+
+  throw StateError(
+    'Unable to locate workspace pubspec.yaml from ${Directory.current.path}.',
+  );
+}
+
 void main() {
   test('melos compatibility script runs required contract tests in order', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final pubspec = _readWorkspacePubspec();
 
     const orderedCommands = <String>[
       'check:compatibility-contracts:',
