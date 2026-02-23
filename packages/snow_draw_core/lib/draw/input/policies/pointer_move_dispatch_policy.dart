@@ -1,4 +1,7 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import '../../elements/core/element_data.dart';
+import '../../elements/core/element_type_id.dart';
+import '../../elements/types/free_draw/free_draw_data.dart';
+import '../../models/interaction_state.dart';
 
 /// Policy object for pointer-move dispatch behavior on the canvas.
 ///

@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import '../../config/draw_config.dart';
 
 /// Whether [config] produces visible watermark pixels.
 bool isWatermarkVisible(WatermarkConfig config) {

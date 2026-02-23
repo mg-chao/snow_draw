@@ -232,21 +232,15 @@ class DocumentState {
     }
   }
 
-  List<ElementState> _collectElements(Iterable<SpatialIndexEntry> entries) {
-    final result = <ElementState>[];
-    _visitEntries(entries, (element) {
-      result.add(element);
-      return true;
-    });
-    return result;
-  }
+  List<ElementState> _collectElements(Iterable<SpatialIndexEntry> entries) => [
+    for (final entry in entries) _elementForEntry(entry),
+  ];
 
   Set<String> _buildBoundTextIds() {
     final ids = <String>{};
     for (final element in elements) {
-      final data = element.data;
-      if (data is SerialNumberData && data.textElementId != null) {
-        ids.add(data.textElementId!);
+      if (element.data case SerialNumberData(:final textElementId?)) {
+        ids.add(textElementId);
       }
     }
     return ids;
@@ -259,39 +253,28 @@ class DocumentState {
       if (data is! ArrowLikeData) {
         continue;
       }
-      final startTargetId = data.startBinding?.elementId;
-      if (startTargetId != null) {
-        ids.add(startTargetId);
-      }
-      final endTargetId = data.endBinding?.elementId;
-      if (endTargetId != null) {
-        ids.add(endTargetId);
-      }
+      _addBoundTargetId(ids, data.startBinding?.elementId);
+      _addBoundTargetId(ids, data.endBinding?.elementId);
     }
     return ids;
   }
 
-  List<ElementState> _buildArrowBindableElements() {
-    final bindable = <ElementState>[];
-    for (final element in elements) {
-      if (element.opacity <= 0) {
-        continue;
-      }
-      if (ArrowBindingUtils.isBindableTarget(element)) {
-        bindable.add(element);
-      }
-    }
-    return bindable;
-  }
+  List<ElementState> _buildArrowBindableElements() => [
+    for (final element in elements)
+      if (element.opacity > 0 && ArrowBindingUtils.isBindableTarget(element))
+        element,
+  ];
 
-  List<ElementState> _buildHighlightElements() {
-    final highlights = <ElementState>[];
-    for (final element in elements) {
-      if (element.data is HighlightData) {
-        highlights.add(element);
-      }
+  List<ElementState> _buildHighlightElements() => [
+    for (final element in elements)
+      if (element.data is HighlightData) element,
+  ];
+
+  void _addBoundTargetId(Set<String> ids, String? targetId) {
+    if (targetId == null) {
+      return;
     }
-    return highlights;
+    ids.add(targetId);
   }
 
   DocumentState copyWith({

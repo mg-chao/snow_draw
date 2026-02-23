@@ -150,13 +150,17 @@ class DrawStateViewBuilder {
       return EffectiveSelection.none;
     }
 
-    final selectedElements = <ElementState>[
-      for (final id in selection.selectedIds)
-        if (id == previewElement.id)
-          previewElement
-        else
-          ?state.domain.document.getElementById(id),
-    ];
+    final selectedElements = <ElementState>[];
+    for (final id in selection.selectedIds) {
+      if (id == previewElement.id) {
+        selectedElements.add(previewElement);
+        continue;
+      }
+      final selectedElement = state.domain.document.getElementById(id);
+      if (selectedElement != null) {
+        selectedElements.add(selectedElement);
+      }
+    }
 
     if (selectedElements.isEmpty) {
       return EffectiveSelection.none;

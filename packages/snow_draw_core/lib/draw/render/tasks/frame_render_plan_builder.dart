@@ -328,26 +328,21 @@ class FrameRenderPlanBuilder {
       final element = view.state.domain.document.getElementById(
         context.elementId,
       );
-      if (element == null) {
-        return highlightElementIds.toList(growable: false);
+      if (element != null) {
+        final effectiveElement =
+            transientState.previewElementsById[element.id] ??
+            view.effectiveElement(element);
+        final data = effectiveElement.data;
+        if (data is ArrowLikeData) {
+          final binding = resolveArrowPointEditHighlightBinding(
+            context: context,
+            data: data,
+            transform: interaction.currentTransform,
+          );
+          _addHighlightElementId(highlightElementIds, binding?.elementId);
+        }
       }
-
-      final effectiveElement =
-          transientState.previewElementsById[element.id] ??
-          view.effectiveElement(element);
-      final data = effectiveElement.data;
-      if (data is ArrowLikeData) {
-        final binding = resolveArrowPointEditHighlightBinding(
-          context: context,
-          data: data,
-          transform: interaction.currentTransform,
-        );
-        _addHighlightElementId(highlightElementIds, binding?.elementId);
-      }
-      return highlightElementIds.toList(growable: false);
-    }
-
-    if (interaction is CreatingState && interaction.isPointCreation) {
+    } else if (interaction is CreatingState && interaction.isPointCreation) {
       final data = interaction.element.data;
       if (data is ArrowLikeData) {
         _addHighlightElementId(

@@ -175,44 +175,44 @@ class DrawStateView {
 
   HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
     final document = state.domain.document;
+    final previewElementsById = _previewElementsById;
     final creatingHighlight = _resolveCreatingHighlightElement();
     final creatingHighlightId = creatingHighlight?.id;
+    if (creatingHighlight == null && previewElementsById.isEmpty) {
+      if (document.highlightElements.isEmpty) {
+        return HighlightMaskSceneSnapshot.empty;
+      }
+      return HighlightMaskSceneSnapshot(elements: document.highlightElements);
+    }
+
     final highlights = <ElementState>[];
-    var includesCreatingHighlight = false;
+    final includedIds = <String>{};
 
     for (final element in document.highlightElements) {
-      final preview = _previewElementsById[element.id];
+      final preview = previewElementsById[element.id];
       final isCreatingReplacement =
           creatingHighlightId != null && element.id == creatingHighlightId;
       final effective = isCreatingReplacement
           ? creatingHighlight!
           : preview ?? element;
-      if (effective.data is! HighlightData) {
+      if (effective.data is! HighlightData || !includedIds.add(effective.id)) {
         continue;
       }
-
-      if (isCreatingReplacement) {
-        includesCreatingHighlight = true;
-      }
-
       highlights.add(effective);
     }
 
-    for (final preview in _previewElementsById.values) {
-      if (preview.data is! HighlightData) {
-        continue;
-      }
-      if (creatingHighlightId != null && preview.id == creatingHighlightId) {
-        continue;
-      }
-      final persisted = document.getElementById(preview.id);
-      if (persisted?.data is HighlightData) {
+    for (final preview in previewElementsById.values) {
+      if (preview.data is! HighlightData ||
+          preview.id == creatingHighlightId ||
+          includedIds.contains(preview.id) ||
+          document.getElementById(preview.id)?.data is HighlightData) {
         continue;
       }
       highlights.add(preview);
+      includedIds.add(preview.id);
     }
 
-    if (creatingHighlight != null && !includesCreatingHighlight) {
+    if (creatingHighlight != null && includedIds.add(creatingHighlight.id)) {
       highlights.add(creatingHighlight);
     }
 
