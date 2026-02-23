@@ -19,7 +19,7 @@ bool isLightweightLineInteractionMutationOnly({
   previous: previous,
   next: next,
   supportsCreating: (interaction) => interaction.elementData is LineData,
-  supportsEditing: (interaction, document) => _isLightweightLineContext(
+  supportsEditing: (interaction, document) => isLightweightLineEditContext(
     context: interaction.context,
     document: document,
   ),
@@ -43,11 +43,6 @@ bool isLightweightLineEditingInteraction({
 /// Returns true when [context] selects only lightweight line-compatible
 /// element types in [document].
 bool isLightweightLineEditContext({
-  required EditContext context,
-  required DocumentState document,
-}) => _isLightweightLineContext(context: context, document: document);
-
-bool _isLightweightLineContext({
   required EditContext context,
   required DocumentState document,
 }) => selectionMatchesElements(

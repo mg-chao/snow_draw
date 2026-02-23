@@ -38,12 +38,12 @@ bool isTypedInteractionMutationOnly({
       _isSameCreationSession(previousCreating, nextCreating) &&
           supportsCreating(previousCreating) &&
           supportsCreating(nextCreating) &&
-          didCreatingInteractionPreviewChange(previousCreating, nextCreating),
+          _didCreatingInteractionPreviewChange(previousCreating, nextCreating),
     (final EditingState previousEditing, final EditingState nextEditing) =>
       _isSameEditSession(previousEditing, nextEditing) &&
           supportsEditing(previousEditing, document) &&
           supportsEditing(nextEditing, document) &&
-          didEditingInteractionPreviewChange(previousEditing, nextEditing),
+          _didEditingInteractionPreviewChange(previousEditing, nextEditing),
     _ => false,
   };
 }
@@ -63,26 +63,24 @@ bool _isSameEditSession(EditingState previous, EditingState next) =>
     previous.sessionId == next.sessionId &&
     identical(previous.context, next.context);
 
-/// Returns true when create-preview fields changed between two interactions.
-bool didCreatingInteractionPreviewChange(
+bool _didCreatingInteractionPreviewChange(
   CreatingState previous,
   CreatingState next,
 ) =>
     previous.currentRect != next.currentRect ||
     previous.creationMode != next.creationMode ||
     previous.elementData != next.elementData ||
-    !listItemsEqual(previous.snapGuides, next.snapGuides);
+    !_listItemsEqual(previous.snapGuides, next.snapGuides);
 
-/// Returns true when edit-preview fields changed between two interactions.
-bool didEditingInteractionPreviewChange(
+bool _didEditingInteractionPreviewChange(
   EditingState previous,
   EditingState next,
 ) =>
     previous.currentTransform != next.currentTransform ||
-    !listItemsEqual(previous.snapGuides, next.snapGuides);
+    !_listItemsEqual(previous.snapGuides, next.snapGuides);
 
 /// Lightweight list equality helper that avoids extra package dependencies.
-bool listItemsEqual<T>(List<T> first, List<T> second) {
+bool _listItemsEqual<T>(List<T> first, List<T> second) {
   if (identical(first, second)) {
     return true;
   }

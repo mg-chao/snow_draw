@@ -5,7 +5,6 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
-import '../shared/hit_test_geometry.dart';
 import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'line_data.dart';

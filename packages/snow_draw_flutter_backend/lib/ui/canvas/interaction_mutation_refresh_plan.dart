@@ -23,39 +23,24 @@ InteractionMutationRefreshPlan? resolveInteractionMutationRefreshPlan({
   )) {
     return InteractionMutationRefreshPlan.lightweightLineDynamicOnly;
   }
-  if (_isArrowInteractionMutationOnly(previous: previous, next: next) ||
-      _isSerialNumberInteractionMutationOnly(previous: previous, next: next) ||
+  if (_isElementInteractionMutationOnly<ArrowData>(
+        previous: previous,
+        next: next,
+      ) ||
+      _isElementInteractionMutationOnly<FilterData>(
+        previous: previous,
+        next: next,
+      ) ||
+      _isElementInteractionMutationOnly<HighlightData>(
+        previous: previous,
+        next: next,
+      ) ||
       _isRectangleInteractionMutationOnly(previous: previous, next: next) ||
-      _isHighlightInteractionMutationOnly(previous: previous, next: next) ||
-      _isFilterInteractionMutationOnly(previous: previous, next: next)) {
+      _isSerialNumberInteractionMutationOnly(previous: previous, next: next)) {
     return InteractionMutationRefreshPlan.dynamicOnly;
   }
   return null;
 }
-
-bool _isArrowInteractionMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) => _isElementInteractionMutationOnly<ArrowData>(
-  previous: previous,
-  next: next,
-);
-
-bool _isFilterInteractionMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) => _isElementInteractionMutationOnly<FilterData>(
-  previous: previous,
-  next: next,
-);
-
-bool _isHighlightInteractionMutationOnly({
-  required DrawState previous,
-  required DrawState next,
-}) => _isElementInteractionMutationOnly<HighlightData>(
-  previous: previous,
-  next: next,
-);
 
 bool _isRectangleInteractionMutationOnly({
   required DrawState previous,
