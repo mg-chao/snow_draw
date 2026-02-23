@@ -58,7 +58,6 @@ class GridConfig {
 
   static const double minSize = ConfigDefaults.gridMinSize;
   static const double maxSize = ConfigDefaults.gridMaxSize;
-  static const List<double> presetSizes = ConfigDefaults.gridSizePresets;
 
   GridConfig copyWith({
     bool? enabled,

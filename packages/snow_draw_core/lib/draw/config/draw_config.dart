@@ -165,7 +165,6 @@ abstract class ConfigDefaults {
   static const gridSize = 20.0;
   static const gridMinSize = 5.0;
   static const gridMaxSize = 100.0;
-  static const gridSizePresets = [10.0, 20.0, 40.0, 80.0];
   static const gridLineColor = DrawColor(0xFFBDBDBD);
   static const gridLineOpacity = 0.45;
   static const gridMajorLineOpacity = 0.7;

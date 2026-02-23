@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/interaction_mutation_refresh_plan.dart';
 
@@ -30,7 +30,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.serialNumber);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves lightweight line creation as dynamic-only', () {
@@ -67,7 +66,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.lightweightLine);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves rectangle creation as dynamic-only', () {
@@ -96,7 +94,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.rectangle);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves highlight creation as dynamic-only', () {
@@ -125,7 +122,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.highlight);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves filter creation as dynamic-only', () {
@@ -154,7 +150,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.filter);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves filter edit as dynamic-only and defers pointer refresh', () {
@@ -195,7 +190,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.filter);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
       expect(plan.shouldRefreshPointerVisuals(hasActivePointer: true), isFalse);
       expect(plan.shouldRefreshPointerVisuals(hasActivePointer: false), isTrue);
     });
@@ -226,7 +220,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.arrow);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
     });
 
     test('resolves arrow edit as dynamic-only and defers pointer refresh', () {
@@ -267,7 +260,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.kind, InteractionMutationKind.arrow);
-      expect(plan.refreshMode, InteractionMutationRefreshMode.dynamicOnly);
       expect(plan.shouldRefreshPointerVisuals(hasActivePointer: true), isFalse);
       expect(plan.shouldRefreshPointerVisuals(hasActivePointer: false), isTrue);
     });

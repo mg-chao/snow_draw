@@ -1,12 +1,5 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 
-/// Predicate for supported creation interactions in mutation fast paths.
-typedef CreatingInteractionPredicate = bool Function(CreatingState interaction);
-
-/// Predicate for supported editing interactions in mutation fast paths.
-typedef EditingInteractionPredicate =
-    bool Function(EditingState interaction, DocumentState document);
-
 /// Returns true when only application interaction state changed.
 ///
 /// This guard requires domain state identity to remain stable so callers can
@@ -29,8 +22,9 @@ bool isInteractionMutationOnly({
 bool isTypedInteractionMutationOnly({
   required DrawState previous,
   required DrawState next,
-  required CreatingInteractionPredicate supportsCreating,
-  required EditingInteractionPredicate supportsEditing,
+  required bool Function(CreatingState interaction) supportsCreating,
+  required bool Function(EditingState interaction, DocumentState document)
+  supportsEditing,
 }) {
   if (!isInteractionMutationOnly(previous: previous, next: next)) {
     return false;

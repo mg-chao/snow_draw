@@ -3169,7 +3169,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   /// Reuses dynamic-scene split metadata for interaction-only updates.
   ///
   /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
-  /// `dynamicOnly` refresh plans while the document topology remains stable.
+  /// dynamic-layer updates while the document topology remains stable.
   /// Rebuilding full split metadata on every pointer frame is redundant, so
   /// this fast path reuses the previous dynamic render key and only resolves
   /// the latest preview subset.
@@ -3178,9 +3178,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawState previousState,
     required InteractionMutationRefreshPlan plan,
   }) {
-    if (plan.refreshMode != InteractionMutationRefreshMode.dynamicOnly ||
-        !identical(previousState.domain, state.domain) ||
-        !mounted) {
+    if (!identical(previousState.domain, state.domain) || !mounted) {
       return false;
     }
 
@@ -4189,23 +4187,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _refreshCursorAndClearHoverForState(state);
     }
 
-    switch (plan.refreshMode) {
-      case InteractionMutationRefreshMode.dynamicOnly:
-        if (_tryRefreshCachedInteractionDynamicLayerSnapshot(
-          state,
-          previousState: previousState,
-          plan: plan,
-        )) {
-          return;
-        }
-        _refreshDynamicLayerSnapshot(
-          state,
-          assumeChanged: true,
-          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-        );
-      case InteractionMutationRefreshMode.canvasLayers:
-        _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
+    if (_tryRefreshCachedInteractionDynamicLayerSnapshot(
+      state,
+      previousState: previousState,
+      plan: plan,
+    )) {
+      return;
     }
+    _refreshDynamicLayerSnapshot(
+      state,
+      assumeChanged: true,
+      forcedPreviewElementsRevision: ++_interactionPreviewRevision,
+    );
   }
 
   void _handleConfigChange(DrawConfig _) {
