@@ -87,8 +87,8 @@ final class FreeDrawData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: _resolveColor(update.color, color),
-    fillColor: _resolveColor(update.fillColor, fillColor),
+    color: update.color,
+    fillColor: update.fillColor,
     fillStyle: update.fillStyle ?? fillStyle,
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
@@ -163,7 +163,4 @@ final class FreeDrawData extends ElementData
     strokeWidth,
     strokeStyle,
   );
-
-  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
-      next ?? fallback;
 }

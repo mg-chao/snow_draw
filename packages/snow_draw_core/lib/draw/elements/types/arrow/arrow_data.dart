@@ -9,8 +9,10 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 import 'arrow_binding.dart';
 import 'arrow_like_data.dart';
+import 'arrow_like_data_codec.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
 @immutable
@@ -39,36 +41,41 @@ final class ArrowData extends ElementData
   });
 
   factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
-    points: _decodePoints(json['points']),
+    points: ArrowLikeDataCodec.decodePoints(
+      json['points'],
+      fallback: _defaultPoints,
+    ),
     color: DrawColor(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: _decodeEnum(
+    strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
       fallback: ConfigDefaults.defaultStrokeStyle,
     ),
-    arrowType: _decodeEnum(
+    arrowType: ElementDataCodec.decodeEnumByName(
       values: ArrowType.values,
       raw: json['arrowType'],
       fallback: ConfigDefaults.defaultArrowType,
     ),
-    startArrowhead: _decodeEnum(
+    startArrowhead: ElementDataCodec.decodeEnumByName(
       values: ArrowheadStyle.values,
       raw: json['startArrowhead'],
       fallback: ConfigDefaults.defaultStartArrowhead,
     ),
-    endArrowhead: _decodeEnum(
+    endArrowhead: ElementDataCodec.decodeEnumByName(
       values: ArrowheadStyle.values,
       raw: json['endArrowhead'],
       fallback: ConfigDefaults.defaultEndArrowhead,
     ),
-    startBinding: _decodeBinding(json['startBinding']),
-    endBinding: _decodeBinding(json['endBinding']),
-    fixedSegments: _decodeFixedSegments(json['fixedSegments']),
+    startBinding: ArrowLikeDataCodec.decodeBinding(json['startBinding']),
+    endBinding: ArrowLikeDataCodec.decodeBinding(json['endBinding']),
+    fixedSegments: ArrowLikeDataCodec.decodeFixedSegments(
+      json['fixedSegments'],
+    ),
     startIsSpecial: json['startIsSpecial'] as bool?,
     endIsSpecial: json['endIsSpecial'] as bool?,
   );
@@ -133,7 +140,9 @@ final class ArrowData extends ElementData
         : endBinding as ArrowBinding?,
     fixedSegments: identical(fixedSegments, _unset)
         ? this.fixedSegments
-        : _normalizeFixedSegments(fixedSegments as List<ElbowFixedSegment>?),
+        : ArrowLikeDataCodec.normalizeFixedSegments(
+            fixedSegments as List<ElbowFixedSegment>?,
+          ),
     startIsSpecial: identical(startIsSpecial, _unset)
         ? this.startIsSpecial
         : startIsSpecial as bool?,
@@ -154,7 +163,7 @@ final class ArrowData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: _resolveColor(update.color, color),
+    color: update.color,
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
     arrowType: update.arrowType ?? arrowType,
@@ -178,41 +187,6 @@ final class ArrowData extends ElementData
     'startIsSpecial': startIsSpecial,
     'endIsSpecial': endIsSpecial,
   };
-
-  static List<DrawPoint> _decodePoints(Object? rawPoints) {
-    final points = <DrawPoint>[];
-    if (rawPoints is List) {
-      for (final entry in rawPoints) {
-        if (entry is Map) {
-          final x = (entry['x'] as num?)?.toDouble();
-          final y = (entry['y'] as num?)?.toDouble();
-          if (x != null && y != null) {
-            points.add(DrawPoint(x: x, y: y));
-          }
-        }
-      }
-    }
-
-    if (points.length < 2) {
-      return _defaultPoints;
-    }
-
-    return List<DrawPoint>.unmodifiable(points);
-  }
-
-  static T _decodeEnum<T extends Enum>({
-    required List<T> values,
-    required Object? raw,
-    required T fallback,
-  }) {
-    if (raw is! String) {
-      return fallback;
-    }
-    return values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => fallback,
-    );
-  }
 
   @override
   bool operator ==(Object other) =>
@@ -246,62 +220,4 @@ final class ArrowData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
-
-  static ArrowBinding? _decodeBinding(Object? raw) {
-    final map = _asJsonMap(raw);
-    if (map == null) {
-      return null;
-    }
-    return ArrowBinding.fromJson(map);
-  }
-
-  static List<ElbowFixedSegment>? _decodeFixedSegments(Object? raw) {
-    if (raw is! List) {
-      return null;
-    }
-    final segments = <ElbowFixedSegment>[];
-    for (final entry in raw) {
-      final map = _asJsonMap(entry);
-      if (map == null) {
-        continue;
-      }
-      try {
-        segments.add(ElbowFixedSegment.fromJson(map));
-      } on FormatException {
-        // Skip invalid segment entries.
-      }
-    }
-    return _normalizeFixedSegments(segments);
-  }
-
-  static List<ElbowFixedSegment>? _normalizeFixedSegments(
-    List<ElbowFixedSegment>? segments,
-  ) {
-    if (segments == null || segments.isEmpty) {
-      return null;
-    }
-    return List<ElbowFixedSegment>.unmodifiable(segments);
-  }
-
-  static Map<String, dynamic>? _asJsonMap(Object? raw) {
-    if (raw is Map<String, dynamic>) {
-      return raw;
-    }
-    if (raw is! Map) {
-      return null;
-    }
-
-    final map = <String, dynamic>{};
-    for (final entry in raw.entries) {
-      final key = entry.key;
-      if (key is! String) {
-        return null;
-      }
-      map[key] = entry.value;
-    }
-    return map;
-  }
-
-  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
-      next ?? fallback;
 }

@@ -7,6 +7,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class TextData extends ElementData
@@ -37,12 +38,12 @@ final class TextData extends ElementData
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultTextFontSize,
     fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
-    horizontalAlign: _decodeEnum(
+    horizontalAlign: ElementDataCodec.decodeEnumByName(
       values: TextHorizontalAlign.values,
       raw: json['horizontalAlign'],
       fallback: ConfigDefaults.defaultTextHorizontalAlign,
     ),
-    verticalAlign: _decodeEnum(
+    verticalAlign: ElementDataCodec.decodeEnumByName(
       values: TextVerticalAlign.values,
       raw: json['verticalAlign'],
       fallback: ConfigDefaults.defaultTextVerticalAlign,
@@ -50,7 +51,7 @@ final class TextData extends ElementData
     fillColor: DrawColor(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
-    fillStyle: _decodeEnum(
+    fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
       fallback: ConfigDefaults.defaultFillStyle,
@@ -131,14 +132,14 @@ final class TextData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: _resolveColor(update.color),
+    color: update.color,
     fontSize: update.fontSize,
     fontFamily: update.fontFamily ?? _fontFamilyUnset,
     horizontalAlign: update.textAlign,
     verticalAlign: update.verticalAlign,
-    fillColor: _resolveColor(update.fillColor),
+    fillColor: update.fillColor,
     fillStyle: update.fillStyle,
-    strokeColor: _resolveColor(update.textStrokeColor),
+    strokeColor: update.textStrokeColor,
     strokeWidth: update.textStrokeWidth,
     cornerRadius: update.cornerRadius,
   );
@@ -210,20 +211,4 @@ final class TextData extends ElementData
     }
     return trimmed;
   }
-
-  static T _decodeEnum<T extends Enum>({
-    required List<T> values,
-    required Object? raw,
-    required T fallback,
-  }) {
-    if (raw is! String) {
-      return fallback;
-    }
-    return values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => fallback,
-    );
-  }
-
-  static DrawColor? _resolveColor(DrawColor? color) => color;
 }

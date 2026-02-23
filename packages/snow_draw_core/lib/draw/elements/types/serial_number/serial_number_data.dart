@@ -113,8 +113,8 @@ final class SerialNumberData extends ElementData
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     number: update.serialNumber,
-    color: _resolveColor(update.color),
-    fillColor: _resolveColor(update.fillColor),
+    color: update.color,
+    fillColor: update.fillColor,
     fillStyle: update.fillStyle,
     fontSize: update.fontSize,
     fontFamily: update.fontFamily ?? _fontFamilyUnset,
@@ -176,5 +176,3 @@ String? _normalizeOptionalString(String? raw) {
   }
   return trimmed;
 }
-
-DrawColor? _resolveColor(DrawColor? color) => color;

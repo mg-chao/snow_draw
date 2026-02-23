@@ -67,8 +67,8 @@ final class HighlightData extends ElementData
 
   @override
   HighlightData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: _resolveColor(update.color, color),
-    strokeColor: _resolveColor(update.textStrokeColor, strokeColor),
+    color: update.color,
+    strokeColor: update.textStrokeColor,
     strokeWidth: update.textStrokeWidth ?? strokeWidth,
     shape: update.highlightShape ?? shape,
   );
@@ -92,7 +92,4 @@ final class HighlightData extends ElementData
 
   @override
   int get hashCode => Object.hash(shape, color, strokeColor, strokeWidth);
-
-  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
-      next ?? fallback;
 }

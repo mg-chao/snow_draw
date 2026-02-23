@@ -7,6 +7,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class RectangleData extends ElementData
@@ -37,12 +38,12 @@ final class RectangleData extends ElementData
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: _decodeEnum(
+    strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
       fallback: ConfigDefaults.defaultStrokeStyle,
     ),
-    fillStyle: _decodeEnum(
+    fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
       fallback: ConfigDefaults.defaultFillStyle,
@@ -88,8 +89,8 @@ final class RectangleData extends ElementData
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     cornerRadius: update.cornerRadius ?? cornerRadius,
-    fillColor: _resolveColor(update.fillColor, fillColor),
-    color: _resolveColor(update.color, color),
+    fillColor: update.fillColor,
+    color: update.color,
     strokeWidth: update.strokeWidth ?? strokeWidth,
     strokeStyle: update.strokeStyle ?? strokeStyle,
     fillStyle: update.fillStyle ?? fillStyle,
@@ -126,21 +127,4 @@ final class RectangleData extends ElementData
     strokeStyle,
     fillStyle,
   );
-
-  static T _decodeEnum<T extends Enum>({
-    required List<T> values,
-    required Object? raw,
-    required T fallback,
-  }) {
-    if (raw is! String) {
-      return fallback;
-    }
-    return values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => fallback,
-    );
-  }
-
-  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
-      next ?? fallback;
 }

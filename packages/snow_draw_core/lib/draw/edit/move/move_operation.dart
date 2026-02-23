@@ -8,7 +8,6 @@ import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
 import '../../types/draw_point.dart';
-import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
@@ -74,10 +73,9 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     final referenceElementAabbs = ObjectSnapService.buildReferenceAabbs(
       referenceElements,
     );
-    final snapBounds = _resolveSnapBounds(
-      selectedElements: targetElements,
-      fallback: data.startBounds,
-    );
+    final snapBounds =
+        SelectionCalculator.computeSelectionBoundsForElements(targetElements) ??
+        data.startBounds;
 
     return MoveEditContext(
       startPosition: position,
@@ -226,38 +224,4 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     current,
     newBounds: result.multiSelectBounds!,
   );
-
-  DrawRect _resolveSnapBounds({
-    required List<ElementState> selectedElements,
-    required DrawRect fallback,
-  }) {
-    if (selectedElements.isEmpty) {
-      return fallback;
-    }
-
-    final firstAabb = SelectionCalculator.computeElementWorldAabb(
-      selectedElements.first,
-    );
-    var minX = firstAabb.minX;
-    var minY = firstAabb.minY;
-    var maxX = firstAabb.maxX;
-    var maxY = firstAabb.maxY;
-    for (final element in selectedElements.skip(1)) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      if (aabb.minX < minX) {
-        minX = aabb.minX;
-      }
-      if (aabb.minY < minY) {
-        minY = aabb.minY;
-      }
-      if (aabb.maxX > maxX) {
-        maxX = aabb.maxX;
-      }
-      if (aabb.maxY > maxY) {
-        maxY = aabb.maxY;
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
 }
