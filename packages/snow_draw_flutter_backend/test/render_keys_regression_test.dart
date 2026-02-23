@@ -3,14 +3,14 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
 void main() {
-  group('DynamicCanvasRenderKey', () {
+  group('SceneCanvasRenderKey', () {
     test('delete indicator visibility participates in equality', () {
       final registry = DefaultElementRegistry();
-      final hidden = _buildDynamicRenderKey(
+      final hidden = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
       );
-      final visible = _buildDynamicRenderKey(
+      final visible = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: true,
       );
@@ -21,12 +21,12 @@ void main() {
 
     test('creating element revision participates in equality', () {
       final registry = DefaultElementRegistry();
-      final first = _buildDynamicRenderKey(
+      final first = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         creatingElement: _creatingElementSnapshot(revision: 1),
       );
-      final second = _buildDynamicRenderKey(
+      final second = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         creatingElement: _creatingElementSnapshot(revision: 2),
@@ -39,7 +39,7 @@ void main() {
     test('preview revision participates with map-identity fast path', () {
       final registry = DefaultElementRegistry();
       final sharedPreviewMap = <String, ElementState>{};
-      final first = _buildDynamicRenderKey(
+      final first = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         previewElementsById: sharedPreviewMap,
@@ -53,7 +53,7 @@ void main() {
         zIndex: 0,
         data: FreeDrawData(),
       );
-      final second = _buildDynamicRenderKey(
+      final second = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         previewElementsById: sharedPreviewMap,
@@ -66,13 +66,13 @@ void main() {
 
     test('preview revision requires identical preview map identity', () {
       final registry = DefaultElementRegistry();
-      final first = _buildDynamicRenderKey(
+      final first = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         previewElementsById: <String, ElementState>{},
         previewElementsRevision: 9,
       );
-      final second = _buildDynamicRenderKey(
+      final second = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         previewElementsById: <String, ElementState>{},
@@ -82,16 +82,16 @@ void main() {
       expect(first, isNot(second));
     });
 
-    test('dynamic preview hint does not affect equality', () {
+    test('volatile preview hint does not affect equality', () {
       final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
+      final baseline = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
       );
-      final hinted = _buildDynamicRenderKey(
+      final hinted = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
-        dynamicPreviewElementIds: {'line-1'},
+        volatilePreviewElementIds: {'line-1'},
       );
 
       expect(baseline, hinted);
@@ -100,11 +100,11 @@ void main() {
 
     test('watermark config participates in equality', () {
       final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
+      final baseline = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
       );
-      final changedWatermark = _buildDynamicRenderKey(
+      final changedWatermark = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
         watermarkConfig: const WatermarkConfig(text: 'CONFIDENTIAL'),
@@ -116,15 +116,15 @@ void main() {
   });
 }
 
-DynamicCanvasRenderKey _buildDynamicRenderKey({
+SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
   int? previewElementsRevision,
-  Set<String>? dynamicPreviewElementIds,
+  Set<String>? volatilePreviewElementIds,
   WatermarkConfig? watermarkConfig,
-}) => DynamicCanvasRenderKey(
+}) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
   boxSelectionBounds: null,
@@ -141,7 +141,7 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   camera: CameraState.initial,
   previewElementsById: previewElementsById,
   previewElementsRevision: previewElementsRevision,
-  dynamicPreviewElementIds: dynamicPreviewElementIds,
+  volatilePreviewElementIds: volatilePreviewElementIds,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),

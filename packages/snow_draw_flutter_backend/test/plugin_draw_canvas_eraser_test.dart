@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 
 void main() {
@@ -50,9 +50,9 @@ void main() {
         await mouse.down(const Offset(170, 120));
         await tester.pump();
 
-        final dynamicPainter = _dynamicPainter(tester);
+        final scenePainter = _scenePainter(tester);
         final previewElement =
-            dynamicPainter.renderKey.previewElementsById[elementId];
+            scenePainter.renderKey.previewElementsById[elementId];
         expect(previewElement, isNotNull);
         expect(previewElement!.opacity, closeTo(0.3, 0.0001));
 
@@ -202,15 +202,9 @@ void main() {
         await mouse.moveTo(const Offset(230, 90));
         await tester.pump();
 
-        final dynamicPainter = _dynamicPainter(tester);
-        expect(
-          dynamicPainter.renderKey.previewElementsById[firstId],
-          isNotNull,
-        );
-        expect(
-          dynamicPainter.renderKey.previewElementsById[secondId],
-          isNotNull,
-        );
+        final scenePainter = _scenePainter(tester);
+        expect(scenePainter.renderKey.previewElementsById[firstId], isNotNull);
+        expect(scenePainter.renderKey.previewElementsById[secondId], isNotNull);
 
         await mouse.up();
         await tester.pump();
@@ -311,16 +305,16 @@ Future<String> _createRectangle(
   return elementId;
 }
 
-DynamicCanvasPainter _dynamicPainter(WidgetTester tester) {
+SceneCanvasPainter _scenePainter(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }
 
 MouseCursor _canvasCursor(WidgetTester tester) {

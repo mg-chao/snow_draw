@@ -2,7 +2,7 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Queries visible document elements in z-order without preview replacements.
 ///
-/// This is the base scene query used by both static and dynamic painters.
+/// This is the base scene query used by the single scene painter.
 List<ElementState> resolveBaseVisibleElementScene({
   required DocumentState document,
   required DrawRect viewportRect,

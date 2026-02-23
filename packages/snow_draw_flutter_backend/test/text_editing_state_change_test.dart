@@ -126,7 +126,7 @@ void main() {
     });
   });
 
-  group('shouldRefreshDynamicLayerForTextEditingDraftMutation', () {
+  group('shouldRefreshCanvasForTextEditingDraftMutation', () {
     test('returns true when existing text rect changes', () {
       final base = DrawState();
       final previous = _stateWithTextInteraction(
@@ -154,7 +154,7 @@ void main() {
       );
 
       expect(
-        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+        shouldRefreshCanvasForTextEditingDraftMutation(
           previous: previous,
           next: next,
         ),
@@ -189,7 +189,7 @@ void main() {
       );
 
       expect(
-        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+        shouldRefreshCanvasForTextEditingDraftMutation(
           previous: previous,
           next: next,
         ),
@@ -224,7 +224,7 @@ void main() {
       );
 
       expect(
-        shouldRefreshDynamicLayerForTextEditingDraftMutation(
+        shouldRefreshCanvasForTextEditingDraftMutation(
           previous: previous,
           next: next,
         ),

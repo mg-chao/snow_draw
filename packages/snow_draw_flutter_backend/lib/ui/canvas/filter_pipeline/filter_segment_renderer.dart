@@ -244,7 +244,7 @@ class FilterSegmentRenderer {
     required SceneElementPainter paintElement,
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
-    Set<String> dynamicElementIds = const <String>{},
+    Set<String> volatileElementIds = const <String>{},
     FilterRenderHints renderHints = const FilterRenderHints(),
   }) {
     _diagnostics.beginFrame();
@@ -255,11 +255,11 @@ class FilterSegmentRenderer {
     final runtimePolicy = _resolveRuntimePolicy(renderHints);
 
     final baseSegments = _segmentBuilder.build(elements);
-    final segments = dynamicElementIds.isEmpty
+    final segments = volatileElementIds.isEmpty
         ? baseSegments
-        : _expandMergedSegmentsForDynamicElements(
+        : _expandMergedSegmentsForVolatileElements(
             baseSegments,
-            dynamicElementIds: dynamicElementIds,
+            volatileElementIds: volatileElementIds,
           );
     if (segments.isEmpty) {
       _diagnostics.endFrame();
@@ -286,14 +286,14 @@ class FilterSegmentRenderer {
     // between consecutive batches.
     final pending = <_ScenePictureRef>[];
     var startSegmentIndex = 0;
-    final firstDynamicSegmentIndex = _findFirstDynamicSegmentIndex(
+    final firstVolatileSegmentIndex = _findFirstVolatileSegmentIndex(
       segments,
-      dynamicElementIds: dynamicElementIds,
+      volatileElementIds: volatileElementIds,
     );
-    if (cacheContext != null && firstDynamicSegmentIndex > 0) {
+    if (cacheContext != null && firstVolatileSegmentIndex > 0) {
       final prefixScene = _resolveCachedPrefixScene(
         segments: segments,
-        endSegmentIndex: firstDynamicSegmentIndex,
+        endSegmentIndex: firstVolatileSegmentIndex,
         paintElement: paintElement,
         cacheContext: cacheContext,
         visibleBounds: visibleBounds,
@@ -301,7 +301,7 @@ class FilterSegmentRenderer {
       );
       if (prefixScene != null) {
         pending.add(prefixScene);
-        startSegmentIndex = firstDynamicSegmentIndex;
+        startSegmentIndex = firstVolatileSegmentIndex;
       }
     }
 
@@ -323,7 +323,7 @@ class FilterSegmentRenderer {
             idFingerprint: segment.idFingerprint,
             identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
-            dynamicElementIds: dynamicElementIds,
+            volatileElementIds: volatileElementIds,
           ),
         );
         continue;
@@ -346,7 +346,9 @@ class FilterSegmentRenderer {
             filterElement: segment.filterElement,
             data: segment.filterData,
             visibleBounds: visibleBounds,
-            useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+            useClipCache: !volatileElementIds.contains(
+              segment.filterElement.id,
+            ),
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -357,7 +359,7 @@ class FilterSegmentRenderer {
           filterElement: segment.filterElement,
           data: segment.filterData,
           visibleBounds: visibleBounds,
-          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+          useClipCache: !volatileElementIds.contains(segment.filterElement.id),
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -376,7 +378,7 @@ class FilterSegmentRenderer {
             scene: scene.picture,
             merged: segment,
             visibleBounds: visibleBounds,
-            dynamicElementIds: dynamicElementIds,
+            volatileElementIds: volatileElementIds,
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -386,7 +388,7 @@ class FilterSegmentRenderer {
           scene: scene.picture,
           merged: segment,
           visibleBounds: visibleBounds,
-          dynamicElementIds: dynamicElementIds,
+          volatileElementIds: volatileElementIds,
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -402,11 +404,11 @@ class FilterSegmentRenderer {
     _diagnostics.endFrame();
   }
 
-  List<RenderSegment> _expandMergedSegmentsForDynamicElements(
+  List<RenderSegment> _expandMergedSegmentsForVolatileElements(
     List<RenderSegment> segments, {
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
-    if (segments.isEmpty || dynamicElementIds.isEmpty) {
+    if (segments.isEmpty || volatileElementIds.isEmpty) {
       return segments;
     }
 
@@ -420,9 +422,9 @@ class FilterSegmentRenderer {
         continue;
       }
 
-      final groups = _splitMergedSegmentByDynamicMembership(
+      final groups = _splitMergedSegmentByVolatileMembership(
         segment,
-        dynamicElementIds: dynamicElementIds,
+        volatileElementIds: volatileElementIds,
       );
       if (groups.length == 1 && identical(groups.first, segment)) {
         if (expanded != null) {
@@ -441,30 +443,30 @@ class FilterSegmentRenderer {
     return expanded ?? segments;
   }
 
-  List<RenderSegment> _splitMergedSegmentByDynamicMembership(
+  List<RenderSegment> _splitMergedSegmentByVolatileMembership(
     MergedFilterSegment segment, {
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
     final filters = segment.filters;
-    var hasDynamicFilter = false;
+    var hasVolatileFilter = false;
     var hasStaticFilter = false;
     for (final filter in filters) {
-      if (dynamicElementIds.contains(filter.filterElement.id)) {
-        hasDynamicFilter = true;
+      if (volatileElementIds.contains(filter.filterElement.id)) {
+        hasVolatileFilter = true;
       } else {
         hasStaticFilter = true;
       }
-      if (hasDynamicFilter && hasStaticFilter) {
+      if (hasVolatileFilter && hasStaticFilter) {
         break;
       }
     }
-    if (!hasDynamicFilter || !hasStaticFilter) {
+    if (!hasVolatileFilter || !hasStaticFilter) {
       return <RenderSegment>[segment];
     }
 
     final split = <RenderSegment>[];
     final run = <FilterSegment>[];
-    bool? currentIsDynamic;
+    bool? currentIsVolatile;
 
     void flushRun() {
       if (run.isEmpty) {
@@ -481,11 +483,11 @@ class FilterSegmentRenderer {
     }
 
     for (final filter in filters) {
-      final isDynamic = dynamicElementIds.contains(filter.filterElement.id);
-      if (currentIsDynamic != null && currentIsDynamic != isDynamic) {
+      final isVolatile = volatileElementIds.contains(filter.filterElement.id);
+      if (currentIsVolatile != null && currentIsVolatile != isVolatile) {
         flushRun();
       }
-      currentIsDynamic = isDynamic;
+      currentIsVolatile = isVolatile;
       run.add(filter);
     }
     flushRun();
@@ -502,17 +504,17 @@ class FilterSegmentRenderer {
     return -1;
   }
 
-  int _findFirstDynamicSegmentIndex(
+  int _findFirstVolatileSegmentIndex(
     List<RenderSegment> segments, {
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
-    if (segments.isEmpty || dynamicElementIds.isEmpty) {
+    if (segments.isEmpty || volatileElementIds.isEmpty) {
       return -1;
     }
     for (var index = 0; index < segments.length; index++) {
-      if (_segmentContainsDynamicElement(
+      if (_segmentContainsVolatileElement(
         segments[index],
-        dynamicElementIds: dynamicElementIds,
+        volatileElementIds: volatileElementIds,
       )) {
         return index;
       }
@@ -520,22 +522,22 @@ class FilterSegmentRenderer {
     return -1;
   }
 
-  bool _segmentContainsDynamicElement(
+  bool _segmentContainsVolatileElement(
     RenderSegment segment, {
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
-    if (dynamicElementIds.isEmpty) {
+    if (volatileElementIds.isEmpty) {
       return false;
     }
     return switch (segment) {
       ElementBatchSegment(:final elements) => elements.any(
-        (element) => dynamicElementIds.contains(element.id),
+        (element) => volatileElementIds.contains(element.id),
       ),
-      FilterSegment(:final filterElement) => dynamicElementIds.contains(
+      FilterSegment(:final filterElement) => volatileElementIds.contains(
         filterElement.id,
       ),
       MergedFilterSegment(:final filters) => filters.any(
-        (filter) => dynamicElementIds.contains(filter.filterElement.id),
+        (filter) => volatileElementIds.contains(filter.filterElement.id),
       ),
     };
   }
@@ -589,7 +591,7 @@ class FilterSegmentRenderer {
       paintElement: paintElement,
       cacheContext: cacheContext,
       visibleBounds: visibleBounds,
-      dynamicElementIds: const <String>{},
+      volatileElementIds: const <String>{},
       runtimePolicy: runtimePolicy,
     );
     final cachedEntry = _CachedPicture(picture: picture)..retain();
@@ -607,7 +609,7 @@ class FilterSegmentRenderer {
     required SceneElementPainter paintElement,
     required FilterRenderCacheContext? cacheContext,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     if (startSegmentIndex >= endSegmentIndex) {
@@ -633,7 +635,7 @@ class FilterSegmentRenderer {
             idFingerprint: segment.idFingerprint,
             identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
-            dynamicElementIds: dynamicElementIds,
+            volatileElementIds: volatileElementIds,
           ),
         );
         continue;
@@ -654,7 +656,7 @@ class FilterSegmentRenderer {
           filterElement: segment.filterElement,
           data: segment.filterData,
           visibleBounds: visibleBounds,
-          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
+          useClipCache: !volatileElementIds.contains(segment.filterElement.id),
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -671,7 +673,7 @@ class FilterSegmentRenderer {
           scene: scene.picture,
           merged: segment,
           visibleBounds: visibleBounds,
-          dynamicElementIds: dynamicElementIds,
+          volatileElementIds: volatileElementIds,
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -764,11 +766,11 @@ class FilterSegmentRenderer {
     required int? idFingerprint,
     required int? identityFingerprint,
     required FilterRenderCacheContext? cacheContext,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
     final canUseCache =
         cacheContext != null &&
-        _isBatchCacheEligible(elements, dynamicElementIds);
+        _isBatchCacheEligible(elements, volatileElementIds);
     if (canUseCache) {
       final cacheKey = _BatchPictureCacheKey(
         contextSignature: _BatchPictureContextSignature.fromContext(
@@ -843,13 +845,13 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      dynamicElementIds: dynamicElementIds,
+      volatileElementIds: volatileElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -924,13 +926,13 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      dynamicElementIds: dynamicElementIds,
+      volatileElementIds: volatileElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -970,7 +972,7 @@ class FilterSegmentRenderer {
   List<_PreparedFilterPass> _prepareMergedFilterPasses({
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = <_PreparedFilterPass>[];
@@ -979,7 +981,7 @@ class FilterSegmentRenderer {
         filterElement: filter.filterElement,
         data: filter.filterData,
         visibleBounds: visibleBounds,
-        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
+        useClipCache: !volatileElementIds.contains(filter.filterElement.id),
         runtimePolicy: runtimePolicy,
       );
       if (pass != null) {
@@ -1733,16 +1735,16 @@ class FilterSegmentRenderer {
 
   bool _isBatchCacheEligible(
     List<ElementState> elements,
-    Set<String> dynamicElementIds,
+    Set<String> volatileElementIds,
   ) {
     if (elements.isEmpty) {
       return false;
     }
-    if (dynamicElementIds.isEmpty) {
+    if (volatileElementIds.isEmpty) {
       return true;
     }
     for (final element in elements) {
-      if (dynamicElementIds.contains(element.id)) {
+      if (volatileElementIds.contains(element.id)) {
         return false;
       }
     }
@@ -1875,7 +1877,7 @@ class FilterSegmentRenderer {
   }
 }
 
-/// Shared filter segment renderer used across static/dynamic canvas layers.
+/// Shared filter segment renderer for the single scene canvas pipeline.
 final filterSegmentRenderer = FilterSegmentRenderer();
 
 enum _FilterCoverageTier { compact, large, huge }

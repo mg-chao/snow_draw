@@ -35,7 +35,7 @@ class FilterRenderDiagnostics {
   /// Number of cacheable element batches that missed cache reuse.
   final int batchCacheMisses;
 
-  /// Number of cached prefix scenes reused by dynamic filter frames.
+  /// Number of cached prefix scenes reused by volatile-filter frames.
   final int prefixSceneCacheHits;
 
   /// Number of prefix-scene cache lookups that required re-recording.

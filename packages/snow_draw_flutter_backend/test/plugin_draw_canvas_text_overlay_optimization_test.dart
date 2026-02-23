@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
@@ -58,16 +58,16 @@ void main() {
       );
       await tester.pump();
 
-      final dynamicBefore = _dynamicRenderKey(tester);
+      final keyBefore = _canvasRenderKey(tester);
 
       await store.dispatch(
         const UpdateTextEdit(text: 'hello world', rect: rect),
       );
       await tester.pump();
 
-      final dynamicAfter = _dynamicRenderKey(tester);
+      final keyAfter = _canvasRenderKey(tester);
 
-      expect(dynamicAfter, same(dynamicBefore));
+      expect(keyAfter, same(keyBefore));
     },
   );
 
@@ -313,16 +313,16 @@ bool _hasEditingOverlayPainter(WidgetTester tester) {
   return false;
 }
 
-DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
+SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter.renderKey;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }
 
 final class _DeterministicTextMetricsService implements TextMetricsService {

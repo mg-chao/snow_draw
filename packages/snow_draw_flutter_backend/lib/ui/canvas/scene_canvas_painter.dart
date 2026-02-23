@@ -23,19 +23,16 @@ import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 import 'watermark_painter.dart';
 
-final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
+final ModuleLogger _sceneCanvasFallbackLog = LogService.fallback.render;
 
-/// Dynamic canvas painter.
+/// Scene canvas painter.
 ///
 /// Renders the full document scene and interaction overlays.
 ///
 /// The single-canvas architecture routes all draw content through this painter.
 @immutable
-class DynamicCanvasPainter extends CustomPainter {
-  const DynamicCanvasPainter({
-    required this.renderKey,
-    required this.stateView,
-  });
+class SceneCanvasPainter extends CustomPainter {
+  const SceneCanvasPainter({required this.renderKey, required this.stateView});
 
   static const _directSolidPreviewPointThreshold = 32;
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
@@ -70,7 +67,7 @@ class DynamicCanvasPainter extends CustomPainter {
   static var _majorGridPointBuffer = Float32List(0);
 
   /// Render key for precise repaint decisions.
-  final DynamicCanvasRenderKey renderKey;
+  final SceneCanvasRenderKey renderKey;
 
   /// Precomputed effective state view (needed for paint).
   final DrawStateView stateView;
@@ -161,7 +158,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final creatingElement = renderKey.creatingElement;
 
     // Draw elements at or above the selected element to preserve z-order.
-    _drawDynamicElements(
+    _drawSceneElements(
       canvas: canvas,
       scale: scale,
       viewportRect: viewportRect,
@@ -194,7 +191,7 @@ class DynamicCanvasPainter extends CustomPainter {
     final plannedHighlightMaskTask =
         _firstPlannedTask<HighlightMaskRenderTask>();
     if (plannedHighlightMaskTask != null) {
-      _paintDynamicHighlightMask(
+      _paintHighlightMask(
         canvas: canvas,
         task: plannedHighlightMaskTask,
         viewportRect: viewportRect,
@@ -204,7 +201,7 @@ class DynamicCanvasPainter extends CustomPainter {
     } else if (renderKey.isHighlightMaskVisible) {
       final legacyHighlightMaskTask = _buildLegacyHighlightMaskTask();
       if (legacyHighlightMaskTask != null) {
-        _paintDynamicHighlightMask(
+        _paintHighlightMask(
           canvas: canvas,
           task: legacyHighlightMaskTask,
           viewportRect: viewportRect,
@@ -941,7 +938,7 @@ class DynamicCanvasPainter extends CustomPainter {
     }
   }
 
-  void _paintDynamicHighlightMask({
+  void _paintHighlightMask({
     required Canvas canvas,
     required HighlightMaskRenderTask task,
     required DrawRect viewportRect,
@@ -1033,7 +1030,7 @@ class DynamicCanvasPainter extends CustomPainter {
     return Set<String>.unmodifiable(ids);
   }
 
-  void _drawDynamicElements({
+  void _drawSceneElements({
     required Canvas canvas,
     required double scale,
     required DrawRect viewportRect,
@@ -1141,7 +1138,7 @@ class DynamicCanvasPainter extends CustomPainter {
     _interactionSceneCache.paint(
       canvas: canvas,
       elements: baseVisibleElements,
-      dynamicElementIds: sceneContext.dynamicElementIds,
+      volatileElementIds: sceneContext.volatileElementIds,
       documentVersion: renderKey.documentVersion,
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
       scaleFactor: scale,
@@ -1208,12 +1205,12 @@ class DynamicCanvasPainter extends CustomPainter {
     if (_canUseInteractionSceneCache(
       hasFilterElement: sceneContext.hasFilterElement,
       effectiveElements: effectiveElements,
-      dynamicElementIds: sceneContext.dynamicElementIds,
+      volatileElementIds: sceneContext.volatileElementIds,
     )) {
       _interactionSceneCache.paint(
         canvas: canvas,
         elements: effectiveElements,
-        dynamicElementIds: sceneContext.dynamicElementIds,
+        volatileElementIds: sceneContext.volatileElementIds,
         documentVersion: renderKey.documentVersion,
         textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
         scaleFactor: scale,
@@ -1246,7 +1243,7 @@ class DynamicCanvasPainter extends CustomPainter {
         viewportRect.width,
         viewportRect.height,
       ),
-      dynamicElementIds: sceneContext.dynamicElementIds,
+      volatileElementIds: sceneContext.volatileElementIds,
       renderHints: FilterRenderHints(
         interactionPreview: sceneContext.useAggressiveCpuFallback,
         aggressiveCpuFallback: sceneContext.useAggressiveCpuFallback,
@@ -1255,7 +1252,7 @@ class DynamicCanvasPainter extends CustomPainter {
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSegmentRenderer.lastDiagnostics;
       if (diagnostics.pictureRecorders > 12 || diagnostics.filterPasses > 6) {
-        _dynamicCanvasFallbackLog.warning('Heavy dynamic filter frame', {
+        _sceneCanvasFallbackLog.warning('Heavy interactive filter frame', {
           'pictureRecorders': diagnostics.pictureRecorders,
           'saveLayers': diagnostics.saveLayers,
           'filterPasses': diagnostics.filterPasses,
@@ -1274,7 +1271,9 @@ class DynamicCanvasPainter extends CustomPainter {
   }) {
     final document = stateView.state.domain.document;
     final previewElements = renderKey.previewElementsById;
-    final dynamicPreviewIds = _resolveDynamicPreviewElementIds(previewElements);
+    final volatilePreviewIds = _resolveVolatilePreviewElementIds(
+      previewElements,
+    );
     final creatingFilterId = _resolveCreatingFilterId();
     final previewTopologyHint = renderKey.previewElementsRevision == null
         ? _PreviewTopologyHint.general
@@ -1296,13 +1295,13 @@ class DynamicCanvasPainter extends CustomPainter {
             connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
             dynamicTextElementIds: <String>{},
           );
-    final interactionDynamicElementIds = _resolveDynamicElementIds(
-      dynamicPreviewIds: dynamicPreviewIds,
+    final interactionVolatileElementIds = _resolveVolatileElementIds(
+      volatilePreviewIds: volatilePreviewIds,
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
     final hasInteractiveFilterElement = _hasSharedElementId(
-      interactionDynamicElementIds,
+      interactionVolatileElementIds,
       staticContext.filterElementIds,
     );
     // Keep drag previews visually consistent with settled frames. Reserve
@@ -1317,7 +1316,7 @@ class DynamicCanvasPainter extends CustomPainter {
       useAggressiveCpuFallback: useAggressiveCpuFallback,
       shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
-      dynamicElementIds: interactionDynamicElementIds,
+      volatileElementIds: interactionVolatileElementIds,
       plannedElementTasksById: plannedElementTasksById,
     );
   }
@@ -1555,7 +1554,7 @@ class DynamicCanvasPainter extends CustomPainter {
   bool _canUseInteractionSceneCache({
     required bool hasFilterElement,
     required List<ElementState> effectiveElements,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
     if (hasFilterElement) {
       return false;
@@ -1569,17 +1568,17 @@ class DynamicCanvasPainter extends CustomPainter {
       return false;
     }
 
-    if (dynamicElementIds.isEmpty) {
+    if (volatileElementIds.isEmpty) {
       return true;
     }
 
-    var visibleDynamicCount = 0;
+    var visibleVolatileCount = 0;
     for (final element in effectiveElements) {
-      if (!dynamicElementIds.contains(element.id)) {
+      if (!volatileElementIds.contains(element.id)) {
         continue;
       }
-      visibleDynamicCount += 1;
-      if (visibleDynamicCount >= effectiveElements.length) {
+      visibleVolatileCount += 1;
+      if (visibleVolatileCount >= effectiveElements.length) {
         return false;
       }
     }
@@ -1619,23 +1618,23 @@ class DynamicCanvasPainter extends CustomPainter {
     return true;
   }
 
-  Set<String> _resolveDynamicElementIds({
-    required Set<String> dynamicPreviewIds,
+  Set<String> _resolveVolatileElementIds({
+    required Set<String> volatilePreviewIds,
     String? creatingFilterId,
     Iterable<String> serialConnectorTextIds = const <String>{},
   }) {
-    if (dynamicPreviewIds.isEmpty &&
+    if (volatilePreviewIds.isEmpty &&
         creatingFilterId == null &&
         serialConnectorTextIds.isEmpty) {
       return const <String>{};
     }
 
-    final dynamicElementIds = <String>{}..addAll(dynamicPreviewIds);
+    final volatileElementIds = <String>{}..addAll(volatilePreviewIds);
     if (creatingFilterId != null) {
-      dynamicElementIds.add(creatingFilterId);
+      volatileElementIds.add(creatingFilterId);
     }
-    dynamicElementIds.addAll(serialConnectorTextIds);
-    return dynamicElementIds;
+    volatileElementIds.addAll(serialConnectorTextIds);
+    return volatileElementIds;
   }
 
   bool _hasSharedElementId(Set<String> candidateIds, Set<String> filterIds) {
@@ -1650,10 +1649,10 @@ class DynamicCanvasPainter extends CustomPainter {
     return false;
   }
 
-  Set<String> _resolveDynamicPreviewElementIds(
+  Set<String> _resolveVolatilePreviewElementIds(
     Map<String, ElementState> previewElementsById,
   ) {
-    final override = renderKey.dynamicPreviewElementIds;
+    final override = renderKey.volatilePreviewElementIds;
     if (override != null) {
       return override;
     }
@@ -1662,14 +1661,14 @@ class DynamicCanvasPainter extends CustomPainter {
     }
 
     final document = stateView.state.domain.document;
-    final dynamicIds = <String>{};
+    final volatileIds = <String>{};
     for (final entry in previewElementsById.entries) {
       final persisted = document.getElementById(entry.key);
       if (persisted == null || !identical(persisted, entry.value)) {
-        dynamicIds.add(entry.key);
+        volatileIds.add(entry.key);
       }
     }
-    return dynamicIds;
+    return volatileIds;
   }
 
   String? _resolveCreatingFilterId() {
@@ -2855,13 +2854,13 @@ class DynamicCanvasPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant DynamicCanvasPainter oldDelegate) =>
+  bool shouldRepaint(covariant SceneCanvasPainter oldDelegate) =>
       oldDelegate.renderKey != renderKey;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is DynamicCanvasPainter && other.renderKey == renderKey;
+      other is SceneCanvasPainter && other.renderKey == renderKey;
 
   @override
   int get hashCode => renderKey.hashCode;
@@ -2968,7 +2967,7 @@ class _SceneRenderContext {
     required this.useAggressiveCpuFallback,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
-    required this.dynamicElementIds,
+    required this.volatileElementIds,
     required this.plannedElementTasksById,
   });
 
@@ -2977,7 +2976,7 @@ class _SceneRenderContext {
   final bool useAggressiveCpuFallback;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
-  final Set<String> dynamicElementIds;
+  final Set<String> volatileElementIds;
   final Map<String, List<RenderTask>> plannedElementTasksById;
 }
 

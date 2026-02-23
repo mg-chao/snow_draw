@@ -13,7 +13,7 @@ typedef SceneElementPainter =
 /// Interactive create/edit flows only mutate a small subset of elements while
 /// most of the visible scene stays unchanged. This cache records stable
 /// segments into [Picture] objects and replays them across frames so only
-/// dynamic elements are repainted.
+/// volatile elements are repainted.
 class InteractionSceneCache {
   InteractionSceneCache({int maxEntries = 24})
     : _segmentCache = LruCache<int, _CachedSegment>(
@@ -32,12 +32,12 @@ class InteractionSceneCache {
 
   /// Paints [elements] in z-order, reusing cached pictures for static ranges.
   ///
-  /// [dynamicElementIds] identifies elements that can change every frame
+  /// [volatileElementIds] identifies elements that can change every frame
   /// (typically preview highlights). Those elements are always repainted.
   void paint({
     required Canvas canvas,
     required List<ElementState> elements,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
     required int documentVersion,
     required int textRenderingCacheRevision,
     required double scaleFactor,
@@ -50,11 +50,11 @@ class InteractionSceneCache {
 
     final layout = _resolveSegmentLayout(
       elements: elements,
-      dynamicElementIds: dynamicElementIds,
+      volatileElementIds: volatileElementIds,
     );
     final localeTag = locale?.toLanguageTag() ?? '';
     final scaleKey = _quantizeScale(scaleFactor);
-    for (var i = 0; i < layout.dynamicIndices.length; i++) {
+    for (var i = 0; i < layout.volatileIndices.length; i++) {
       final staticRange = layout.staticRanges[i];
       _drawStaticSegment(
         canvas: canvas,
@@ -66,8 +66,8 @@ class InteractionSceneCache {
         localeTag: localeTag,
         paintElement: paintElement,
       );
-      final dynamicIndex = layout.dynamicIndices[i];
-      paintElement(canvas, elements[dynamicIndex]);
+      final volatileIndex = layout.volatileIndices[i];
+      paintElement(canvas, elements[volatileIndex]);
     }
 
     _drawStaticSegment(
@@ -137,23 +137,23 @@ class InteractionSceneCache {
 
   _SegmentLayout _resolveSegmentLayout({
     required List<ElementState> elements,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) {
     final cached = _layoutCacheEntry;
     if (cached != null &&
         cached.matches(
           elements: elements,
-          dynamicElementIds: dynamicElementIds,
+          volatileElementIds: volatileElementIds,
         )) {
       return cached.layout;
     }
 
-    final dynamicIndices = <int>[];
+    final volatileIndices = <int>[];
     final staticRanges = <_StaticSegmentRange>[];
     var segmentStart = 0;
 
     for (var index = 0; index < elements.length; index++) {
-      if (!dynamicElementIds.contains(elements[index].id)) {
+      if (!volatileElementIds.contains(elements[index].id)) {
         continue;
       }
       staticRanges.add(
@@ -163,7 +163,7 @@ class InteractionSceneCache {
           fingerprint: _segmentFingerprint(elements, segmentStart, index),
         ),
       );
-      dynamicIndices.add(index);
+      volatileIndices.add(index);
       segmentStart = index + 1;
     }
 
@@ -180,12 +180,12 @@ class InteractionSceneCache {
     );
 
     final layout = _SegmentLayout(
-      dynamicIndices: List<int>.unmodifiable(dynamicIndices),
+      volatileIndices: List<int>.unmodifiable(volatileIndices),
       staticRanges: List<_StaticSegmentRange>.unmodifiable(staticRanges),
     );
     _layoutCacheEntry = _SegmentLayoutCacheEntry(
       elements: elements,
-      dynamicElementIds: Set<String>.unmodifiable(dynamicElementIds),
+      volatileElementIds: Set<String>.unmodifiable(volatileElementIds),
       layout: layout,
     );
     return layout;
@@ -279,30 +279,30 @@ class _StaticSegmentRange {
 
 class _SegmentLayout {
   const _SegmentLayout({
-    required this.dynamicIndices,
+    required this.volatileIndices,
     required this.staticRanges,
   });
 
-  final List<int> dynamicIndices;
+  final List<int> volatileIndices;
   final List<_StaticSegmentRange> staticRanges;
 }
 
 class _SegmentLayoutCacheEntry {
   const _SegmentLayoutCacheEntry({
     required this.elements,
-    required this.dynamicElementIds,
+    required this.volatileElementIds,
     required this.layout,
   });
 
   final List<ElementState> elements;
-  final Set<String> dynamicElementIds;
+  final Set<String> volatileElementIds;
   final _SegmentLayout layout;
 
   bool matches({
     required List<ElementState> elements,
-    required Set<String> dynamicElementIds,
+    required Set<String> volatileElementIds,
   }) =>
       identical(this.elements, elements) &&
-      this.dynamicElementIds.length == dynamicElementIds.length &&
-      this.dynamicElementIds.containsAll(dynamicElementIds);
+      this.volatileElementIds.length == volatileElementIds.length &&
+      this.volatileElementIds.containsAll(volatileElementIds);
 }

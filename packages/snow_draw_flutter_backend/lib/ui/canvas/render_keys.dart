@@ -41,9 +41,9 @@ class CreatingElementSnapshot {
   int get hashCode => Object.hash(element, currentRect, creationRevision);
 }
 
-/// Render key for dynamic canvas.
+/// Render key for the single scene canvas.
 ///
-/// Captures exactly what affects the dynamic canvas rendering:
+/// Captures exactly what affects scene-canvas rendering:
 /// - Creating element state
 /// - Effective selection (bounds, center, rotation)
 /// - Box selection bounds
@@ -53,8 +53,8 @@ class CreatingElementSnapshot {
 /// - Preview state for interaction cache invalidation
 /// - Camera state (position/zoom), selection/box selection config, scale factor
 @immutable
-class DynamicCanvasRenderKey {
-  const DynamicCanvasRenderKey({
+class SceneCanvasRenderKey {
+  const SceneCanvasRenderKey({
     required this.creatingElement,
     required this.effectiveSelection,
     required this.boxSelectionBounds,
@@ -85,7 +85,7 @@ class DynamicCanvasRenderKey {
     this.textMetricsService = defaultTextMetricsService,
     this.preferFastFilterFallback = false,
     this.previewElementsRevision,
-    this.dynamicPreviewElementIds,
+    this.volatilePreviewElementIds,
     this.locale,
     this.framePlan = FrameRenderPlan.empty,
   });
@@ -123,7 +123,7 @@ class DynamicCanvasRenderKey {
   /// Revision for text rendering cache invalidation.
   ///
   /// Incremented when runtime font loading clears paragraph/layout caches so
-  /// dynamic overlays repaint with updated glyph shaping.
+  /// canvas overlays repaint with updated glyph shaping.
   final int textRenderingCacheRevision;
 
   /// Camera state for viewport.
@@ -138,11 +138,12 @@ class DynamicCanvasRenderKey {
   /// plus this revision instead of deep map comparisons.
   final int? previewElementsRevision;
 
-  /// Optional dynamic-preview override used by interaction scene caching.
+  /// Optional volatile-preview override used by interaction scene caching.
   ///
-  /// When set, dynamic-layer caching treats only these preview ids as volatile.
+  /// When set, interaction-scene caching treats only these preview ids as
+  /// volatile.
   /// This is a performance hint and does not change final visual output.
-  final Set<String>? dynamicPreviewElementIds;
+  final Set<String>? volatilePreviewElementIds;
 
   /// Whether filter rendering should prioritize responsiveness this frame.
   ///
@@ -198,7 +199,7 @@ class DynamicCanvasRenderKey {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is DynamicCanvasRenderKey &&
+      other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
           other.effectiveSelection == effectiveSelection &&
           other.boxSelectionBounds == boxSelectionBounds &&
@@ -264,7 +265,7 @@ class DynamicCanvasRenderKey {
     locale,
   ]);
 
-  bool _previewMapsEqual(DynamicCanvasRenderKey other) {
+  bool _previewMapsEqual(SceneCanvasRenderKey other) {
     if (previewElementsRevision != other.previewElementsRevision) {
       return false;
     }

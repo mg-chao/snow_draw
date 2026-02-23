@@ -18,7 +18,7 @@ typedef HighlightMaskSceneRenderer =
 ///
 /// While creating or editing highlights, only a small subset of highlights
 /// changes per frame. This cache records a picture for the static subset and
-/// reuses it across frames so the dynamic painter only recomputes moving
+/// reuses it across frames so the scene painter only recomputes moving
 /// highlight holes.
 class HighlightMaskStaticSceneCache {
   HighlightMaskStaticSceneCache({HighlightMaskSceneRenderer? renderMask})

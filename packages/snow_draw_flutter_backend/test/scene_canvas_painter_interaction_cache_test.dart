@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
 void main() {
@@ -476,12 +476,12 @@ DefaultElementRegistry _buildRegistryWithHighlightSupport(
     ),
   );
 
-DynamicCanvasRenderKey _buildRenderKey({
+SceneCanvasRenderKey _buildRenderKey({
   required DrawState state,
   required DefaultElementRegistry registry,
   required Map<String, ElementState> previewElementsById,
   CreatingElementSnapshot? creatingElement,
-}) => DynamicCanvasRenderKey(
+}) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
   effectiveSelection: EffectiveSelection.none,
   boxSelectionBounds: null,
@@ -513,9 +513,9 @@ DynamicCanvasRenderKey _buildRenderKey({
 
 void _paintFrame({
   required DrawStateView stateView,
-  required DynamicCanvasRenderKey renderKey,
+  required SceneCanvasRenderKey renderKey,
 }) {
-  final painter = DynamicCanvasPainter(
+  final painter = SceneCanvasPainter(
     renderKey: renderKey,
     stateView: stateView,
   );

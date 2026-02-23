@@ -13,7 +13,7 @@ import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
-import 'dynamic_canvas_painter.dart';
+import 'scene_canvas_painter.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
@@ -192,7 +192,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _eraserPreviewCacheRevision = 0;
   var _interactionPreviewRevision = 0;
   var _filterStyleQualityRestoreRevision = 0;
-  var _transientDynamicFilterElementIds = const <String>{};
+  var _transientVolatileFilterElementIds = const <String>{};
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -522,14 +522,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final eraserCursorOverlay = _buildEraserCursorOverlay();
 
     // Build a single render key for the unified canvas painter.
-    final dynamicRenderKey = _buildDynamicRenderKey(
+    final canvasRenderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: selectionConfig,
       scaleFactor: scaleFactor,
       scene: canvasScene,
       locale: locale,
     );
-    _setCanvasSnapshot(stateView: stateView, renderKey: dynamicRenderKey);
+    _setCanvasSnapshot(stateView: stateView, renderKey: canvasRenderKey);
 
     final paintStack = Listener(
       onPointerDown: _handlePointerDown,
@@ -543,7 +543,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             child: ValueListenableBuilder<_CanvasSnapshot>(
               valueListenable: _canvasSnapshotNotifier,
               builder: (context, snapshot, _) => CustomPaint(
-                painter: DynamicCanvasPainter(
+                painter: SceneCanvasPainter(
                   renderKey: snapshot.renderKey,
                   stateView: snapshot.stateView,
                 ),
@@ -618,7 +618,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return element.copyWith(opacity: 0);
   }
 
-  Map<String, ElementState> _resolveEraserDynamicPreviewElements(
+  Map<String, ElementState> _resolveEraserPreviewElements(
     DrawStateView stateView,
   ) {
     final pending = _pendingErasePreviewElementsById;
@@ -654,7 +654,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _eraserVolatilePreviewElementIds = <String>{};
   }
 
-  Set<String> _resolveDynamicPreviewElementIdsForScene(
+  Set<String> _resolveVolatilePreviewElementIdsForScene(
     DrawStateView stateView,
     Map<String, ElementState> previewElementsById,
   ) {
@@ -662,20 +662,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return const <String>{};
     }
     final document = stateView.state.domain.document;
-    final dynamicIds = <String>{};
+    final volatileIds = <String>{};
     for (final entry in previewElementsById.entries) {
       final persisted = document.getElementById(entry.key);
       if (persisted == null || !identical(persisted, entry.value)) {
-        dynamicIds.add(entry.key);
+        volatileIds.add(entry.key);
       }
     }
-    if (dynamicIds.isEmpty) {
+    if (volatileIds.isEmpty) {
       return const <String>{};
     }
-    return Set<String>.unmodifiable(dynamicIds);
+    return Set<String>.unmodifiable(volatileIds);
   }
 
-  Set<String>? _mergeDynamicPreviewElementIds(
+  Set<String>? _mergeVolatilePreviewElementIds(
     Set<String>? baseIds,
     Set<String> transientIds,
   ) {
@@ -1193,7 +1193,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted || (!hasPendingPreview && !hadPendingPreview)) {
       return;
     }
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
     _resetEraserVolatilePreviewElementIds();
   }
 
@@ -2203,7 +2203,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleWatermarkPreviewChange() {
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
   }
 
   WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
@@ -2238,27 +2238,27 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final promoteEraserPreviewToCanvasScene =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    late final Map<String, ElementState> dynamicPreviewElements;
-    late final int? dynamicPreviewElementsRevision;
-    late final Set<String>? dynamicPreviewElementIds;
+    late final Map<String, ElementState> previewElements;
+    late final int? previewElementsRevision;
+    late final Set<String>? volatilePreviewElementIds;
     if (promoteEraserPreviewToCanvasScene) {
-      dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
-      dynamicPreviewElementsRevision = _eraserPreviewCacheRevision;
-      dynamicPreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
+      previewElements = _resolveEraserPreviewElements(stateView);
+      previewElementsRevision = _eraserPreviewCacheRevision;
+      volatilePreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
     } else {
-      dynamicPreviewElements = _previewElementsForCanvas(stateView);
-      dynamicPreviewElementsRevision = null;
-      dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
+      previewElements = _previewElementsForCanvas(stateView);
+      previewElementsRevision = null;
+      volatilePreviewElementIds = _resolveVolatilePreviewElementIdsForScene(
         stateView,
-        dynamicPreviewElements,
+        previewElements,
       );
     }
-    final mergedDynamicPreviewElementIds = _mergeDynamicPreviewElementIds(
-      dynamicPreviewElementIds,
-      _transientDynamicFilterElementIds,
+    final mergedVolatilePreviewElementIds = _mergeVolatilePreviewElementIds(
+      volatilePreviewElementIds,
+      _transientVolatileFilterElementIds,
     );
     final preferFastFilterFallback =
-        _transientDynamicFilterElementIds.isNotEmpty;
+        _transientVolatileFilterElementIds.isNotEmpty;
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final globalElements = stateView.globalElements;
@@ -2271,9 +2271,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final watermarkVisible = isWatermarkVisible(watermark);
 
     return _CanvasSceneSnapshot(
-      dynamicPreviewElements: dynamicPreviewElements,
-      dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
-      dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
+      previewElements: previewElements,
+      previewElementsRevision: previewElementsRevision,
+      volatilePreviewElementIds: mergedVolatilePreviewElementIds,
       creatingSnapshot: creatingSnapshot,
       isHighlightMaskVisible: isHighlightMaskVisible,
       highlightMaskConfig: highlightMask,
@@ -2295,23 +2295,23 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
-  DynamicCanvasRenderKey _buildDynamicRenderKey({
+  SceneCanvasRenderKey _buildCanvasRenderKey({
     required DrawStateView stateView,
     required SelectionConfig selectionConfig,
     required double scaleFactor,
     required _CanvasSceneSnapshot scene,
     required Locale? locale,
     int? previewElementsRevisionOverride,
-  }) => _createDynamicRenderKey(
+  }) => _createCanvasRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
     scaleFactor: scaleFactor,
     creatingElement: scene.creatingSnapshot,
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
-    previewElementsById: scene.dynamicPreviewElements,
+    previewElementsById: scene.previewElements,
     previewElementsRevision:
-        previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
-    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
+        previewElementsRevisionOverride ?? scene.previewElementsRevision,
+    volatilePreviewElementIds: scene.volatilePreviewElementIds,
     preferFastFilterFallback: scene.preferFastFilterFallback,
     isHighlightMaskVisible: scene.isHighlightMaskVisible,
     highlightMaskConfig: scene.highlightMaskConfig,
@@ -2320,7 +2320,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     locale: locale,
   );
 
-  DynamicCanvasRenderKey _createDynamicRenderKey({
+  SceneCanvasRenderKey _createCanvasRenderKey({
     required DrawStateView stateView,
     required SelectionConfig selectionConfig,
     required double scaleFactor,
@@ -2334,7 +2334,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required WatermarkConfig watermarkConfig,
     required Locale? locale,
     int? previewElementsRevision,
-    Set<String>? dynamicPreviewElementIds,
+    Set<String>? volatilePreviewElementIds,
   }) {
     final boxSelectionBounds = _extractBoxSelectionBounds(stateView);
     final activeArrowHandle = _resolveActiveArrowHandle(stateView);
@@ -2373,7 +2373,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       ),
     );
 
-    return DynamicCanvasRenderKey(
+    return SceneCanvasRenderKey(
       creatingElement: creatingElement,
       effectiveSelection: stateView.effectiveSelection,
       boxSelectionBounds: boxSelectionBounds,
@@ -2390,7 +2390,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       camera: stateView.state.application.view.camera,
       previewElementsById: previewElementsById,
       previewElementsRevision: previewElementsRevision,
-      dynamicPreviewElementIds: dynamicPreviewElementIds,
+      volatilePreviewElementIds: volatilePreviewElementIds,
       preferFastFilterFallback: preferFastFilterFallback,
       scaleFactor: scaleFactor,
       selectionConfig: selectionConfig,
@@ -2413,7 +2413,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
     final stateView = _buildStateView(state);
     final scene = _resolveCanvasSceneSnapshot(stateView);
-    final renderKey = _buildDynamicRenderKey(
+    final renderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: _effectiveScaleFactor(),
@@ -2425,7 +2425,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _setCanvasSnapshot({
     required DrawStateView stateView,
-    required DynamicCanvasRenderKey renderKey,
+    required SceneCanvasRenderKey renderKey,
     bool assumeChanged = false,
   }) {
     final nextSnapshot = _CanvasSnapshot(
@@ -2442,9 +2442,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       Localizations.maybeLocaleOf(context) ??
       _canvasSnapshotNotifier.value.renderKey.locale;
 
-  void _refreshCanvasSnapshots(
+  void _refreshCanvasSnapshot(
     DrawState state, {
-    bool assumeCanvasChanged = false,
+    bool assumeChanged = false,
     int? forcedPreviewElementsRevision,
   }) {
     if (!mounted) {
@@ -2455,7 +2455,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final scene = _resolveCanvasSceneSnapshot(stateView);
     final scaleFactor = _effectiveScaleFactor();
     final locale = _resolveCanvasLocale();
-    final dynamicRenderKey = _buildDynamicRenderKey(
+    final canvasRenderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: scaleFactor,
@@ -2465,20 +2465,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
     _setCanvasSnapshot(
       stateView: stateView,
-      renderKey: dynamicRenderKey,
-      assumeChanged: assumeCanvasChanged,
+      renderKey: canvasRenderKey,
+      assumeChanged: assumeChanged,
     );
   }
-
-  void _refreshCanvasSnapshot(
-    DrawState state, {
-    bool assumeChanged = false,
-    int? forcedPreviewElementsRevision,
-  }) => _refreshCanvasSnapshots(
-    state,
-    assumeCanvasChanged: assumeChanged,
-    forcedPreviewElementsRevision: forcedPreviewElementsRevision,
-  );
 
   void _refreshCanvasSnapshotForFilterStyleMutation(
     DrawState state, {
@@ -2492,7 +2482,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
       return;
     }
-    _transientDynamicFilterElementIds = Set<String>.unmodifiable(
+    _transientVolatileFilterElementIds = Set<String>.unmodifiable(
       changedFilterElementIds,
     );
     try {
@@ -2502,7 +2492,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         forcedPreviewElementsRevision: ++_interactionPreviewRevision,
       );
     } finally {
-      _transientDynamicFilterElementIds = const <String>{};
+      _transientVolatileFilterElementIds = const <String>{};
     }
     _scheduleFilterStyleQualityRestore(state);
   }
@@ -3429,7 +3419,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     // [ValueListenableBuilder].
     if (previousState != null &&
         isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
-      if (shouldRefreshDynamicLayerForTextEditingDraftMutation(
+      if (shouldRefreshCanvasForTextEditingDraftMutation(
         previous: previousState,
         next: state,
       )) {
@@ -3457,7 +3447,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
     }
     _refreshPointerVisualsForState(state);
-    _refreshCanvasSnapshots(state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(state, assumeChanged: true);
   }
 
   void _handleConfigChange(DrawConfig _) {
@@ -3469,7 +3459,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _cachedInputSelectionScale = null;
 
     _refreshPointerVisualsForState(widget.store.state);
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
   }
 
   void _handleTextRenderingCacheInvalidation() {
@@ -3479,7 +3469,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _clearEditingTextLayoutCache();
     _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
   }
 
   void _handleSystemFontsChange() {
@@ -3555,9 +3545,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 @immutable
 class _CanvasSceneSnapshot {
   const _CanvasSceneSnapshot({
-    required this.dynamicPreviewElements,
-    required this.dynamicPreviewElementsRevision,
-    required this.dynamicPreviewElementIds,
+    required this.previewElements,
+    required this.previewElementsRevision,
+    required this.volatilePreviewElementIds,
     required this.creatingSnapshot,
     required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
@@ -3567,9 +3557,9 @@ class _CanvasSceneSnapshot {
     required this.textRenderingCacheRevision,
   });
 
-  final Map<String, ElementState> dynamicPreviewElements;
-  final int? dynamicPreviewElementsRevision;
-  final Set<String>? dynamicPreviewElementIds;
+  final Map<String, ElementState> previewElements;
+  final int? previewElementsRevision;
+  final Set<String>? volatilePreviewElementIds;
   final CreatingElementSnapshot? creatingSnapshot;
   final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;
@@ -3584,7 +3574,7 @@ class _CanvasSnapshot {
   const _CanvasSnapshot({required this.stateView, required this.renderKey});
 
   final DrawStateView stateView;
-  final DynamicCanvasRenderKey renderKey;
+  final SceneCanvasRenderKey renderKey;
 
   @override
   bool operator ==(Object other) =>

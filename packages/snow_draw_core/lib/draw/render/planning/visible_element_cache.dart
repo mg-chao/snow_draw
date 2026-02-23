@@ -1,7 +1,7 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'visible_element_resolver.dart';
 
-/// Caches the latest base visible scene query for dynamic painter frames.
+/// Caches the latest base visible scene query for scene-painter frames.
 ///
 /// Highlight/filter edit flows can invalidate interaction previews every frame
 /// while document geometry and viewport stay unchanged. Reusing the latest

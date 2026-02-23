@@ -12,13 +12,13 @@ void main() {
   test('reuses static segments across highlight edit frames', () {
     final cache = InteractionSceneCache();
     final firstFrame = _buildScene(
-      dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+      volatileRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
     expect(
       _paintFrame(
         cache: cache,
         elements: firstFrame,
-        dynamicElementIds: const {'dynamic'},
+        volatileElementIds: const {'volatile'},
         documentVersion: 10,
         textRenderingCacheRevision: 0,
       ),
@@ -26,13 +26,13 @@ void main() {
     );
 
     final secondFrame = _buildScene(
-      dynamicRect: const DrawRect(minX: 120, minY: 40, maxX: 150, maxY: 80),
+      volatileRect: const DrawRect(minX: 120, minY: 40, maxX: 150, maxY: 80),
     );
     expect(
       _paintFrame(
         cache: cache,
         elements: secondFrame,
-        dynamicElementIds: const {'dynamic'},
+        volatileElementIds: const {'volatile'},
         documentVersion: 10,
         textRenderingCacheRevision: 0,
       ),
@@ -40,17 +40,17 @@ void main() {
     );
   });
 
-  test('reuses full scene picture when no dynamic element is present', () {
+  test('reuses full scene picture when no volatile element is present', () {
     final cache = InteractionSceneCache();
     final elements = _buildScene(
-      dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+      volatileRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
 
     expect(
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const <String>{},
+        volatileElementIds: const <String>{},
         documentVersion: 20,
         textRenderingCacheRevision: 0,
       ),
@@ -61,7 +61,7 @@ void main() {
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const <String>{},
+        volatileElementIds: const <String>{},
         documentVersion: 20,
         textRenderingCacheRevision: 0,
       ),
@@ -72,13 +72,13 @@ void main() {
   test('invalidates cached segments when text cache revision changes', () {
     final cache = InteractionSceneCache();
     final elements = _buildScene(
-      dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+      volatileRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
     expect(
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const <String>{},
+        volatileElementIds: const <String>{},
         documentVersion: 30,
         textRenderingCacheRevision: 1,
       ),
@@ -89,7 +89,7 @@ void main() {
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const <String>{},
+        volatileElementIds: const <String>{},
         documentVersion: 30,
         textRenderingCacheRevision: 2,
       ),
@@ -102,13 +102,13 @@ void main() {
     () {
       final cache = InteractionSceneCache();
       final firstFrame = _buildScene(
-        dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+        volatileRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
       );
       expect(
         _paintFrame(
           cache: cache,
           elements: firstFrame,
-          dynamicElementIds: const <String>{},
+          volatileElementIds: const <String>{},
           documentVersion: 40,
           textRenderingCacheRevision: 0,
         ),
@@ -126,7 +126,7 @@ void main() {
         _paintFrame(
           cache: cache,
           elements: secondFrame,
-          dynamicElementIds: const <String>{},
+          volatileElementIds: const <String>{},
           documentVersion: 40,
           textRenderingCacheRevision: 0,
         ),
@@ -135,16 +135,16 @@ void main() {
     },
   );
 
-  test('rebuilds segment layout when dynamic ids change', () {
+  test('rebuilds segment layout when volatile ids change', () {
     final cache = InteractionSceneCache();
     final elements = _buildScene(
-      dynamicRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
+      volatileRect: const DrawRect(minX: 20, maxX: 30, maxY: 10),
     );
     expect(
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const {'dynamic'},
+        volatileElementIds: const {'volatile'},
         documentVersion: 50,
         textRenderingCacheRevision: 0,
       ),
@@ -155,7 +155,7 @@ void main() {
       _paintFrame(
         cache: cache,
         elements: elements,
-        dynamicElementIds: const {'static_2'},
+        volatileElementIds: const {'static_2'},
         documentVersion: 50,
         textRenderingCacheRevision: 0,
       ),
@@ -164,7 +164,7 @@ void main() {
   });
 }
 
-List<ElementState> _buildScene({required DrawRect dynamicRect}) => [
+List<ElementState> _buildScene({required DrawRect volatileRect}) => [
   const ElementState(
     id: 'static_1',
     rect: DrawRect(maxX: 10, maxY: 10),
@@ -174,8 +174,8 @@ List<ElementState> _buildScene({required DrawRect dynamicRect}) => [
     data: RectangleData(),
   ),
   ElementState(
-    id: 'dynamic',
-    rect: dynamicRect,
+    id: 'volatile',
+    rect: volatileRect,
     rotation: 0,
     opacity: 1,
     zIndex: 1,
@@ -194,7 +194,7 @@ List<ElementState> _buildScene({required DrawRect dynamicRect}) => [
 int _paintFrame({
   required InteractionSceneCache cache,
   required List<ElementState> elements,
-  required Set<String> dynamicElementIds,
+  required Set<String> volatileElementIds,
   required int documentVersion,
   required int textRenderingCacheRevision,
 }) {
@@ -203,7 +203,7 @@ int _paintFrame({
     cache.paint(
       canvas: canvas,
       elements: elements,
-      dynamicElementIds: dynamicElementIds,
+      volatileElementIds: volatileElementIds,
       documentVersion: documentVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       scaleFactor: 1,

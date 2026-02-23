@@ -27,13 +27,13 @@ bool isTextEditingDraftMutationOnly({
       previousInteraction.rect != nextInteraction.rect;
 }
 
-/// Returns true when a text draft mutation should refresh dynamic canvas state.
+/// Returns true when a text draft mutation should refresh scene-canvas state.
 ///
 /// Text glyphs are rendered by a dedicated editor overlay, but selection
 /// outlines and serial-number connectors depend on preview rect changes in the
-/// dynamic painter. Refresh is limited to existing text edits whose rect
+/// scene painter. Refresh is limited to existing text edits whose rect
 /// changed to preserve the text-draft fast path for all other cases.
-bool shouldRefreshDynamicLayerForTextEditingDraftMutation({
+bool shouldRefreshCanvasForTextEditingDraftMutation({
   required DrawState previous,
   required DrawState next,
 }) {

@@ -1,8 +1,8 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
@@ -33,7 +33,7 @@ void main() {
       );
 
       await _hoverAt(tester, const Offset(170, 120));
-      expect(_dynamicRenderKey(tester).hoveredElementId, isNotNull);
+      expect(_canvasRenderKey(tester).hoveredElementId, isNotNull);
     });
 
     testWidgets('watermark mode suppresses hover selection preview', (
@@ -47,7 +47,7 @@ void main() {
       );
 
       await _hoverAt(tester, const Offset(170, 120));
-      expect(_dynamicRenderKey(tester).hoveredElementId, isNull);
+      expect(_canvasRenderKey(tester).hoveredElementId, isNull);
     });
 
     testWidgets('switching to watermark mode uses basic canvas cursor', (
@@ -117,16 +117,16 @@ Future<void> _hoverAt(WidgetTester tester, Offset position) async {
   await tester.pump();
 }
 
-DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
+SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter.renderKey;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }
 
 MouseCursor _canvasCursor(WidgetTester tester) {
