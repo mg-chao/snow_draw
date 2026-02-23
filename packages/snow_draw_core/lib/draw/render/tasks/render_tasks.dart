@@ -16,6 +16,7 @@ import '../../types/draw_color.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/list_equality.dart';
 
 /// Base type for backend-executable render tasks.
 sealed class RenderTask {
@@ -449,19 +450,6 @@ final class WatermarkRenderTask extends RenderTask {
   int get hashCode => config.hashCode;
 }
 
-bool _listEquals<T>(List<T> a, List<T> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
-}
+bool _listEquals<T>(List<T> a, List<T> b) => listEquals(a, b);
 
 int _listHash<T>(List<T> values) => Object.hashAll(values);

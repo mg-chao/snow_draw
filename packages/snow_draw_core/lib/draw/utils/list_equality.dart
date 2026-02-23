@@ -1,6 +1,5 @@
 import '../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../types/draw_point.dart';
-import '../types/edit_transform.dart' show ArrowPointTransform;
 
 /// Shared list-equality helpers used across element data classes and
 /// edit operations.
@@ -8,59 +7,8 @@ import '../types/edit_transform.dart' show ArrowPointTransform;
 /// These replace the many private `_pointsEqual` / `_fixedSegmentsEqual`
 /// copies that were scattered throughout the codebase.
 
-/// Element-wise equality for [DrawPoint] lists.
-bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) =>
-    _listEquals(a, b, (left, right) => left == right);
-
-/// Element-wise equality for nullable [ElbowFixedSegment] lists.
-///
-/// Uses strict `!=` comparison (index + start + end), matching the
-/// semantics used by data-class `==` operators.
-bool fixedSegmentListEquals(
-  List<ElbowFixedSegment>? a,
-  List<ElbowFixedSegment>? b,
-) => _nullableListEquals(a, b, (left, right) => left == right);
-
-/// Whether segment [a] is horizontal based on its endpoints.
-bool segmentIsHorizontal(DrawPoint a, DrawPoint b) =>
-    (a.y - b.y).abs() <= (a.x - b.x).abs();
-
-/// Structural equality for [ElbowFixedSegment] lists used by
-/// [ArrowPointTransform] - compares index and axis orientation
-/// rather than exact start/end positions.
-bool fixedSegmentStructureEquals(
-  List<ElbowFixedSegment>? a,
-  List<ElbowFixedSegment>? b,
-) => _nullableListEquals(a, b, _fixedSegmentStructureItemEquals);
-
-/// Structural equality with axis-value tolerance, used by the arrow
-/// point operation to detect meaningful segment changes.
-bool fixedSegmentStructureEqualsWithTolerance(
-  List<ElbowFixedSegment>? a,
-  List<ElbowFixedSegment>? b, {
-  double tolerance = 1.0,
-}) {
-  assert(tolerance >= 0, 'tolerance must be non-negative.');
-  return _nullableListEquals(
-    a,
-    b,
-    (left, right) =>
-        _fixedSegmentStructureItemEquals(left, right, tolerance: tolerance),
-  );
-}
-
-bool _nullableListEquals<T>(
-  List<T>? a,
-  List<T>? b,
-  bool Function(T left, T right) elementEquals,
-) {
-  if (a == null || b == null) {
-    return a == b;
-  }
-  return _listEquals(a, b, elementEquals);
-}
-
-bool _listEquals<T>(
+/// Element-wise equality for lists using [elementEquals].
+bool listEqualsBy<T>(
   List<T> a,
   List<T> b,
   bool Function(T left, T right) elementEquals,
@@ -77,6 +25,66 @@ bool _listEquals<T>(
     }
   }
   return true;
+}
+
+/// Element-wise equality for lists using `==` comparison.
+bool listEquals<T>(List<T> a, List<T> b) =>
+    listEqualsBy(a, b, (left, right) => left == right);
+
+/// Nullable variant of [listEqualsBy].
+bool nullableListEqualsBy<T>(
+  List<T>? a,
+  List<T>? b,
+  bool Function(T left, T right) elementEquals,
+) {
+  if (a == null || b == null) {
+    return a == b;
+  }
+  return listEqualsBy(a, b, elementEquals);
+}
+
+/// Nullable variant of [listEquals].
+bool nullableListEquals<T>(List<T>? a, List<T>? b) =>
+    nullableListEqualsBy(a, b, (left, right) => left == right);
+
+/// Element-wise equality for [DrawPoint] lists.
+bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) => listEquals(a, b);
+
+/// Element-wise equality for nullable [ElbowFixedSegment] lists.
+///
+/// Uses strict `!=` comparison (index + start + end), matching the
+/// semantics used by data-class `==` operators.
+bool fixedSegmentListEquals(
+  List<ElbowFixedSegment>? a,
+  List<ElbowFixedSegment>? b,
+) => nullableListEquals(a, b);
+
+/// Whether segment [a] is horizontal based on its endpoints.
+bool segmentIsHorizontal(DrawPoint a, DrawPoint b) =>
+    (a.y - b.y).abs() <= (a.x - b.x).abs();
+
+/// Structural equality for [ElbowFixedSegment] lists used by
+/// arrow point transforms - compares index and axis orientation
+/// rather than exact start/end positions.
+bool fixedSegmentStructureEquals(
+  List<ElbowFixedSegment>? a,
+  List<ElbowFixedSegment>? b,
+) => nullableListEqualsBy(a, b, _fixedSegmentStructureItemEquals);
+
+/// Structural equality with axis-value tolerance, used by the arrow
+/// point operation to detect meaningful segment changes.
+bool fixedSegmentStructureEqualsWithTolerance(
+  List<ElbowFixedSegment>? a,
+  List<ElbowFixedSegment>? b, {
+  double tolerance = 1.0,
+}) {
+  assert(tolerance >= 0, 'tolerance must be non-negative.');
+  return nullableListEqualsBy(
+    a,
+    b,
+    (left, right) =>
+        _fixedSegmentStructureItemEquals(left, right, tolerance: tolerance),
+  );
 }
 
 bool _fixedSegmentStructureItemEquals(

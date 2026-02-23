@@ -10,6 +10,7 @@ import '../types/edit_context.dart';
 import '../types/edit_operation_id.dart';
 import '../types/edit_transform.dart';
 import '../types/snap_guides.dart';
+import '../utils/list_equality.dart';
 import 'edit_session_id.dart';
 import 'element_state.dart';
 
@@ -205,7 +206,7 @@ class PointCreationMode extends CreationMode {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is PointCreationMode &&
-          _listEquals(other.fixedPoints, fixedPoints) &&
+          pointListEquals(other.fixedPoints, fixedPoints) &&
           other.currentPoint == currentPoint;
 
   @override
@@ -215,21 +216,6 @@ class PointCreationMode extends CreationMode {
   String toString() =>
       'PointCreationMode(fixedPoints: ${fixedPoints.length}, '
       'currentPoint: $currentPoint)';
-
-  static bool _listEquals<T>(List<T> a, List<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }
 
 // ============================================================================

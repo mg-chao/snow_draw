@@ -356,7 +356,7 @@ final class CompositeTransform extends EditTransform {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CompositeTransform && _listEquals(other.transforms, transforms);
+      other is CompositeTransform && listEquals(other.transforms, transforms);
 
   @override
   int get hashCode => Object.hashAll(transforms);
@@ -378,19 +378,4 @@ DrawRect _boundingRect(DrawPoint a, DrawPoint b, DrawPoint c, DrawPoint d) {
   final maxX = math.max(math.max(a.x, b.x), math.max(c.x, d.x));
   final maxY = math.max(math.max(a.y, b.y), math.max(c.y, d.y));
   return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
-
-bool _listEquals(List<EditTransform> a, List<EditTransform> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var i = 0; i < a.length; i++) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
 }

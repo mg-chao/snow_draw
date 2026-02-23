@@ -239,7 +239,7 @@ class DrawStateView {
           other.state == state &&
           _mapsEqual(other._previewElementsById, _previewElementsById) &&
           other._effectiveSelection == _effectiveSelection &&
-          _listEquals(other.snapGuides, snapGuides);
+          snapGuideListEquals(other.snapGuides, snapGuides);
 
   @override
   int get hashCode => Object.hash(
@@ -258,18 +258,6 @@ class DrawStateView {
     }
     for (final key in a.keys) {
       if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _listEquals(List<SnapGuide> a, List<SnapGuide> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
         return false;
       }
     }

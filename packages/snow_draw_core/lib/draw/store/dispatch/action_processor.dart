@@ -10,12 +10,12 @@ import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
+import '../../elements/types/serial_number/serial_number_sequence.dart';
 import '../../events/edit_events.dart';
 import '../../events/error_events.dart';
 import '../../events/event_bus.dart';
 import '../../events/state_events.dart';
 import '../../models/draw_state.dart';
-import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../reducers/interaction/interaction_state_machine.dart';
 import '../history_manager.dart';
@@ -359,7 +359,7 @@ class ActionProcessor {
       return;
     }
 
-    final nextSerialFromDocument = _resolveNextSerialFromDocument(nextElements);
+    final nextSerialFromDocument = resolveNextSerialNumber(nextElements);
     if (nextSerialFromDocument == null) {
       return;
     }
@@ -377,24 +377,6 @@ class ActionProcessor {
     _services.configManager.update(
       currentConfig.copyWith(serialNumberStyle: nextSerialStyle),
     );
-  }
-
-  int? _resolveNextSerialFromDocument(List<ElementState> elements) {
-    int? maxNumber;
-    for (final element in elements) {
-      final data = element.data;
-      if (data is! SerialNumberData) {
-        continue;
-      }
-      final candidate = data.number;
-      if (maxNumber == null || candidate > maxNumber) {
-        maxNumber = candidate;
-      }
-    }
-    if (maxNumber == null) {
-      return null;
-    }
-    return maxNumber + 1;
   }
 
   void _reportError(
@@ -433,60 +415,55 @@ class ActionProcessor {
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
-    if (prevInteraction is! EditingState && nextInteraction is EditingState) {
-      _services.eventBus.emitLazy(
-        () => EditSessionStartedEvent(
-          sessionId: nextInteraction.sessionId,
-          operationId: nextInteraction.operationId,
-        ),
-      );
-      return;
-    }
-
-    if (prevInteraction is EditingState && nextInteraction is EditingState) {
-      if (prevInteraction.sessionId == nextInteraction.sessionId) {
+    switch ((prevInteraction, nextInteraction)) {
+      case (final EditingState previous, final EditingState next)
+          when previous.sessionId == next.sessionId:
         _services.eventBus.emitLazy(
           () => EditSessionUpdatedEvent(
-            sessionId: nextInteraction.sessionId,
-            operationId: nextInteraction.operationId,
+            sessionId: next.sessionId,
+            operationId: next.operationId,
           ),
         );
-        return;
-      }
-
-      _services.eventBus.emitLazy(
-        () => EditSessionCancelledEvent(
-          sessionId: prevInteraction.sessionId,
-          operationId: prevInteraction.operationId,
-          reason: EditCancelReason.newEditStarted,
-        ),
-      );
-      _services.eventBus.emitLazy(
-        () => EditSessionStartedEvent(
-          sessionId: nextInteraction.sessionId,
-          operationId: nextInteraction.operationId,
-        ),
-      );
-      return;
-    }
-
-    if (prevInteraction is EditingState && nextInteraction is! EditingState) {
-      if (action is FinishEdit) {
-        _services.eventBus.emitLazy(
-          () => EditSessionFinishedEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-          ),
-        );
-      } else {
+      case (final EditingState previous, final EditingState next):
         _services.eventBus.emitLazy(
           () => EditSessionCancelledEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-            reason: _resolveCancelReason(action),
+            sessionId: previous.sessionId,
+            operationId: previous.operationId,
+            reason: EditCancelReason.newEditStarted,
           ),
         );
-      }
+        _services.eventBus.emitLazy(
+          () => EditSessionStartedEvent(
+            sessionId: next.sessionId,
+            operationId: next.operationId,
+          ),
+        );
+      case (final EditingState previous, _):
+        if (action is FinishEdit) {
+          _services.eventBus.emitLazy(
+            () => EditSessionFinishedEvent(
+              sessionId: previous.sessionId,
+              operationId: previous.operationId,
+            ),
+          );
+        } else {
+          _services.eventBus.emitLazy(
+            () => EditSessionCancelledEvent(
+              sessionId: previous.sessionId,
+              operationId: previous.operationId,
+              reason: _resolveCancelReason(action),
+            ),
+          );
+        }
+      case (_, final EditingState next):
+        _services.eventBus.emitLazy(
+          () => EditSessionStartedEvent(
+            sessionId: next.sessionId,
+            operationId: next.operationId,
+          ),
+        );
+      default:
+        break;
     }
   }
 

@@ -194,7 +194,7 @@ class EditSessionService {
 
     final transformUnchanged =
         updated.transform == editingState.currentTransform;
-    final guidesUnchanged = _snapGuideListsEqual(
+    final guidesUnchanged = snapGuideListEquals(
       updated.snapGuides,
       editingState.snapGuides,
     );
@@ -351,20 +351,5 @@ class EditSessionService {
         operationId: editingState.operationId,
       );
     }
-  }
-
-  bool _snapGuideListsEqual(List<SnapGuide> a, List<SnapGuide> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var index = 0; index < a.length; index++) {
-      if (a[index] != b[index]) {
-        return false;
-      }
-    }
-    return true;
   }
 }

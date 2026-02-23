@@ -16,12 +16,14 @@ import '../../../elements/types/highlight/highlight_data.dart';
 import '../../../elements/types/line/line_data.dart';
 import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
+import '../../../elements/types/serial_number/serial_number_sequence.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../services/grid_snap_service.dart';
 import '../../../types/draw_rect.dart';
+import '../../../types/snap_guides.dart';
 import '../../../utils/snapping_mode.dart';
 import '../../core/reducer_utils.dart';
 
@@ -165,29 +167,16 @@ class CreateElementReducer {
     DrawState state,
     ElementStyleConfig defaults,
   ) {
-    final maxExisting = _resolveMaxExistingSerialNumber(
+    final nextSerialFromDocument = resolveNextSerialNumber(
       state.domain.document.elements,
     );
-    if (maxExisting == null) {
+    if (nextSerialFromDocument == null) {
       return defaults;
     }
-    final nextSerialFromDocument = maxExisting + 1;
     if (defaults.serialNumber >= nextSerialFromDocument) {
       return defaults;
     }
     return defaults.copyWith(serialNumber: nextSerialFromDocument);
-  }
-
-  int? _resolveMaxExistingSerialNumber(List<ElementState> elements) {
-    int? maxNumber;
-    for (final element in elements) {
-      if (element.data case SerialNumberData(:final number)) {
-        if (maxNumber == null || number > maxNumber) {
-          maxNumber = number;
-        }
-      }
-    }
-    return maxNumber;
   }
 
   DrawState _updateCreatingElement(
@@ -380,20 +369,5 @@ class CreateElementReducer {
       interaction.elementData == updateResult.data &&
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
-      _listEquals(interaction.snapGuides, updateResult.snapGuides);
-}
-
-bool _listEquals<T>(List<T> left, List<T> right) {
-  if (identical(left, right)) {
-    return true;
-  }
-  if (left.length != right.length) {
-    return false;
-  }
-  for (var i = 0; i < left.length; i++) {
-    if (left[i] != right[i]) {
-      return false;
-    }
-  }
-  return true;
+      snapGuideListEquals(interaction.snapGuides, updateResult.snapGuides);
 }
