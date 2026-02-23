@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_bounds.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
@@ -72,4 +74,79 @@ void main() {
       expect(clamped.minY, rect.minY);
     },
   );
+
+  test(
+    'clampTextRectToLayout honors scoped text metrics service by default',
+    () {
+      const data = TextData(text: '中文中文中文中文', fontSize: 20);
+      const rect = DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 24);
+      const startRect = rect;
+      const anchor = DrawPoint(x: 0, y: 0);
+
+      final fallbackClamped = clampTextRectToLayout(
+        rect: rect,
+        startRect: startRect,
+        anchor: anchor,
+        data: data,
+      );
+      final scopedClamped = runWithScopedTextMetricsService(
+        textMetricsService: const _WideGlyphTextMetricsService(),
+        action: () => clampTextRectToLayout(
+          rect: rect,
+          startRect: startRect,
+          anchor: anchor,
+          data: data,
+        ),
+      );
+
+      expect(scopedClamped.height, greaterThan(fallbackClamped.height));
+    },
+  );
+}
+
+final class _WideGlyphTextMetricsService implements TextMetricsService {
+  const _WideGlyphTextMetricsService();
+
+  @override
+  TextMetrics measure(TextLayoutRequest request) {
+    final fontSize =
+        request.data.fontSize <= 0 || !request.data.fontSize.isFinite
+        ? 14.0
+        : request.data.fontSize;
+    final text = request.data.text.isEmpty ? ' ' : request.data.text;
+    final maxWidth = request.maxWidth <= 0 || !request.maxWidth.isFinite
+        ? 1.0
+        : request.maxWidth;
+    final lineHeight = fontSize * 1.2;
+    final glyphWidth = fontSize;
+
+    final lines = <TextLineMetrics>[];
+    for (final logicalLine in text.split('\n')) {
+      final graphemeCount = math.max(1, logicalLine.runes.length);
+      final rawWidth = graphemeCount * glyphWidth;
+      final wraps = math.max(1, (rawWidth / maxWidth).ceil());
+      for (var i = 0; i < wraps; i++) {
+        final remaining = rawWidth - (maxWidth * i);
+        final lineWidth = i == wraps - 1 ? math.max(1.0, remaining) : maxWidth;
+        lines.add(TextLineMetrics(width: lineWidth, height: lineHeight));
+      }
+    }
+
+    var width = 0.0;
+    for (final line in lines) {
+      if (line.width > width) {
+        width = line.width;
+      }
+    }
+
+    return TextMetrics(
+      width: width,
+      height: lineHeight * lines.length,
+      lineHeight: lineHeight,
+      lines: List<TextLineMetrics>.unmodifiable(lines),
+    );
+  }
+
+  @override
+  void clearCaches() {}
 }

@@ -5,6 +5,7 @@ import '../../models/draw_state.dart';
 import '../../models/edit_session_id.dart';
 import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/snap_guides.dart';
@@ -23,20 +24,24 @@ class EditSessionService {
   EditSessionService({
     required this.editOperations,
     required this.configProvider,
+    this.textMetricsService = defaultTextMetricsService,
     LogService? logService,
   }) : _log = logService?.edit;
 
   factory EditSessionService.fromRegistry(
     EditOperationRegistry registry, {
     required DrawConfig Function() configProvider,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
     LogService? logService,
   }) => EditSessionService(
     editOperations: registry,
     configProvider: configProvider,
+    textMetricsService: textMetricsService,
     logService: logService,
   );
   final EditOperationRegistry editOperations;
   final DrawConfig Function() configProvider;
+  final TextMetricsService textMetricsService;
   final ModuleLogger? _log;
 
   // Session API.
@@ -175,13 +180,16 @@ class EditSessionService {
     required EditModifiers modifiers,
   }) {
     _log?.trace('Edit session updated', {'operationId': operation.id});
-    final updated = operation.update(
-      state: state,
-      context: editingState.context,
-      transform: editingState.currentTransform,
-      currentPosition: currentPosition,
-      modifiers: modifiers,
-      config: configProvider(),
+    final updated = runWithScopedTextMetricsService(
+      textMetricsService: textMetricsService,
+      action: () => operation.update(
+        state: state,
+        context: editingState.context,
+        transform: editingState.currentTransform,
+        currentPosition: currentPosition,
+        modifiers: modifiers,
+        config: configProvider(),
+      ),
     );
 
     final transformUnchanged =
@@ -219,10 +227,13 @@ class EditSessionService {
   }) {
     _log?.info('Edit session finished', {'operationId': operation.id});
     return (
-      state: operation.finish(
-        state: state,
-        context: editingState.context,
-        transform: editingState.currentTransform,
+      state: runWithScopedTextMetricsService(
+        textMetricsService: textMetricsService,
+        action: () => operation.finish(
+          state: state,
+          context: editingState.context,
+          transform: editingState.currentTransform,
+        ),
       ),
       failureReason: null,
       operationId: editingState.operationId,
@@ -254,15 +265,21 @@ class EditSessionService {
       'operationId': operationId,
       'params': params.runtimeType.toString(),
     });
-    final context = operation.createContext(
-      state: state,
-      position: position,
-      params: params,
+    final context = runWithScopedTextMetricsService(
+      textMetricsService: textMetricsService,
+      action: () => operation.createContext(
+        state: state,
+        position: position,
+        params: params,
+      ),
     );
-    final transform = operation.initialTransform(
-      state: state,
-      context: context,
-      startPosition: position,
+    final transform = runWithScopedTextMetricsService(
+      textMetricsService: textMetricsService,
+      action: () => operation.initialTransform(
+        state: state,
+        context: context,
+        startPosition: position,
+      ),
     );
     return EditingState(
       operationId: operationId,

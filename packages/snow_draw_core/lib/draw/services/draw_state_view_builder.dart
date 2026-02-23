@@ -6,6 +6,7 @@ import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/element_state.dart';
 import '../models/interaction_state.dart';
+import 'text/text_metrics_service.dart';
 import '../utils/selection_calculator.dart';
 import 'selection_data_computer.dart';
 import 'selection_geometry_resolver.dart';
@@ -23,15 +24,18 @@ class DrawStateViewBuilder {
 
   const DrawStateViewBuilder({
     required this.editOperations,
+    this.textMetricsService = defaultTextMetricsService,
     EditPreviewEngine? previewEngine,
   }) : _previewEngine = previewEngine ?? _sharedPreviewEngine;
   final EditOperationRegistry editOperations;
+  final TextMetricsService textMetricsService;
   final EditPreviewEngine _previewEngine;
 
   DrawStateView build(DrawState state) {
     final cached = _stateViewCache[state];
     if (cached != null &&
         identical(cached.editOperations, editOperations) &&
+        identical(cached.textMetricsService, textMetricsService) &&
         identical(cached.previewEngine, _previewEngine)) {
       return cached.view;
     }
@@ -39,6 +43,7 @@ class DrawStateViewBuilder {
     final nextView = _buildUncached(state);
     _stateViewCache[state] = _DrawStateViewCacheEntry(
       editOperations: editOperations,
+      textMetricsService: textMetricsService,
       previewEngine: _previewEngine,
       view: nextView,
     );
@@ -62,6 +67,7 @@ class DrawStateViewBuilder {
     final preview = _previewEngine.build(
       state: state,
       editOperations: editOperations,
+      textMetricsService: textMetricsService,
     );
     final selectionPreview = preview.selectionPreview;
     final hasPreview =
@@ -191,11 +197,13 @@ class DrawStateViewBuilder {
 class _DrawStateViewCacheEntry {
   const _DrawStateViewCacheEntry({
     required this.editOperations,
+    required this.textMetricsService,
     required this.previewEngine,
     required this.view,
   });
 
   final EditOperationRegistry editOperations;
+  final TextMetricsService textMetricsService;
   final EditPreviewEngine previewEngine;
   final DrawStateView view;
 }

@@ -55,6 +55,7 @@ class CreatePlugin extends DrawInputPlugin {
     await super.onLoad(context);
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: drawContext.editOperations,
+      textMetricsService: drawContext.textMetricsService,
     );
   }
 
