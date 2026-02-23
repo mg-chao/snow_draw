@@ -11,21 +11,16 @@ import 'filter_render_diagnostics.dart';
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
 
-/// Scope identifier used to isolate cached filter-scene batches.
-enum FilterRenderCacheDomain { canvas }
-
 /// Stable paint-context key used for cross-frame batch picture reuse.
 @immutable
 class FilterRenderCacheContext {
   const FilterRenderCacheContext({
-    required this.domain,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
   });
 
-  final FilterRenderCacheDomain domain;
   final int documentVersion;
   final int textRenderingCacheRevision;
   final int scaleKey;
@@ -35,7 +30,6 @@ class FilterRenderCacheContext {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is FilterRenderCacheContext &&
-          other.domain == domain &&
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
@@ -43,7 +37,6 @@ class FilterRenderCacheContext {
 
   @override
   int get hashCode => Object.hash(
-    domain,
     documentVersion,
     textRenderingCacheRevision,
     scaleKey,
@@ -2216,7 +2209,6 @@ class _ScenePictureRef {
 @immutable
 class _BatchPictureContextSignature {
   const _BatchPictureContextSignature({
-    required this.domain,
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
@@ -2225,13 +2217,11 @@ class _BatchPictureContextSignature {
   factory _BatchPictureContextSignature.fromContext(
     FilterRenderCacheContext context,
   ) => _BatchPictureContextSignature(
-    domain: context.domain,
     textRenderingCacheRevision: context.textRenderingCacheRevision,
     scaleKey: context.scaleKey,
     localeTag: context.localeTag,
   );
 
-  final FilterRenderCacheDomain domain;
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
@@ -2240,14 +2230,13 @@ class _BatchPictureContextSignature {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _BatchPictureContextSignature &&
-          other.domain == domain &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
           other.localeTag == localeTag;
 
   @override
   int get hashCode =>
-      Object.hash(domain, textRenderingCacheRevision, scaleKey, localeTag);
+      Object.hash(textRenderingCacheRevision, scaleKey, localeTag);
 }
 
 @immutable

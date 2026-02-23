@@ -374,7 +374,6 @@ void main() {
         data: RectangleData(),
       );
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
         documentVersion: 42,
         textRenderingCacheRevision: 7,
         scaleKey: 1000,
@@ -440,7 +439,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
         documentVersion: 87,
         textRenderingCacheRevision: 5,
         scaleKey: 1000,
@@ -505,7 +503,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
         documentVersion: 410,
         textRenderingCacheRevision: 9,
         scaleKey: 1000,
@@ -585,7 +582,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
         documentVersion: 411,
         textRenderingCacheRevision: 9,
         scaleKey: 1000,
@@ -666,7 +662,6 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 902,
       textRenderingCacheRevision: 4,
       scaleKey: 1000,
@@ -743,7 +738,6 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 932,
       textRenderingCacheRevision: 4,
       scaleKey: 1000,
@@ -820,14 +814,12 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContextV1 = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 101,
       textRenderingCacheRevision: 5,
       scaleKey: 1000,
       localeTag: 'en-US',
     );
     const cacheContextV2 = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 102,
       textRenderingCacheRevision: 5,
       scaleKey: 1000,
@@ -894,7 +886,6 @@ void main() {
     const batchCount = 128;
     const baseColor = Color(0xFF223344);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 11,
       textRenderingCacheRevision: 3,
       scaleKey: 1000,
@@ -1047,7 +1038,6 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
       documentVersion: 3,
       textRenderingCacheRevision: 1,
       scaleKey: 1000,
@@ -1105,7 +1095,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
         documentVersion: 8,
         textRenderingCacheRevision: 2,
         scaleKey: 1000,
