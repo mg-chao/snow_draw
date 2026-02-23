@@ -4,7 +4,7 @@ Flutter rendering backend and canvas UI layer for Snow Draw.
 
 ## Responsibilities
 
-- `CustomPainter` canvas rendering and layer composition.
+- Single-canvas `CustomPainter` scene rendering and compositing.
 - Render task execution for core-generated frame plans/tasks.
 - Flutter text layout and rendering caches.
 - Shader-based effects and backend-specific visual caches.

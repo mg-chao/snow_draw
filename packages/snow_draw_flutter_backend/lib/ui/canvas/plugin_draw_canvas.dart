@@ -2288,15 +2288,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _setCanvasSnapshot({
     required DrawStateView stateView,
     required SceneCanvasRenderKey renderKey,
-    bool assumeChanged = false,
   }) {
+    final currentSnapshot = _canvasSnapshotNotifier.value;
+    if (currentSnapshot.renderKey == renderKey &&
+        identical(currentSnapshot.stateView, stateView)) {
+      return;
+    }
+
     final nextSnapshot = _CanvasSnapshot(
       stateView: stateView,
       renderKey: renderKey,
     );
-    if (!assumeChanged && _canvasSnapshotNotifier.value == nextSnapshot) {
-      return;
-    }
     _canvasSnapshotNotifier.value = nextSnapshot;
   }
 
@@ -2304,7 +2306,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       Localizations.maybeLocaleOf(context) ??
       _canvasSnapshotNotifier.value.renderKey.locale;
 
-  void _refreshCanvasSnapshot(DrawState state, {bool assumeChanged = false}) {
+  void _refreshCanvasSnapshot(DrawState state) {
     if (!mounted) {
       return;
     }
@@ -2320,11 +2322,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       inputs: inputs,
       locale: locale,
     );
-    _setCanvasSnapshot(
-      stateView: stateView,
-      renderKey: canvasRenderKey,
-      assumeChanged: assumeChanged,
-    );
+    _setCanvasSnapshot(stateView: stateView, renderKey: canvasRenderKey);
   }
 
   Widget _buildTextEditorOverlay({
@@ -3347,10 +3345,12 @@ class _CanvasSnapshot {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _CanvasSnapshot && other.renderKey == renderKey;
+      other is _CanvasSnapshot &&
+          identical(other.stateView, stateView) &&
+          other.renderKey == renderKey;
 
   @override
-  int get hashCode => renderKey.hashCode;
+  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
 }
 
 @immutable
