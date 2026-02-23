@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' hide TextLayoutMetrics;
+import 'package:flutter/services.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
@@ -170,9 +170,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _suppressTextControllerChange = false;
   var _initialSelectionApplied = false;
   var _textFocusScheduled = false;
-  TextLayoutMetrics? _editingTextLayout;
+  FlutterTextLayoutMetrics? _editingTextLayout;
   _EditingLayoutIdentity? _editingTextLayoutKey;
-  PainterTextLayoutMetrics? _editingPainterLayout;
+  FlutterPainterTextLayoutMetrics? _editingPainterLayout;
   _EditingLayoutIdentity? _editingPainterLayoutKey;
   TextSelection? _lastVerticalSelection;
   double? _verticalCaretX;
@@ -3533,7 +3533,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _isSameTextValue(String left, String right) =>
       identical(left, right) || left == right;
 
-  TextLayoutMetrics _resolveEditingTextLayout({
+  FlutterTextLayoutMetrics _resolveEditingTextLayout({
     required TextData data,
     required double layoutWidth,
     required Locale? locale,
@@ -3606,7 +3606,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return overlay.toInteractionState();
   }
 
-  PainterTextLayoutMetrics? _resolveEditingPainterLayout() {
+  FlutterPainterTextLayoutMetrics? _resolveEditingPainterLayout() {
     final interaction = _resolveVisibleTextEditingInteraction(
       widget.store.state,
     );
@@ -3998,7 +3998,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _applyInitialSelection({
     required TextEditingState interaction,
     required DrawRect rect,
-    required TextLayoutMetrics layout,
+    required FlutterTextLayoutMetrics layout,
     required double verticalOffset,
   }) {
     if (_initialSelectionApplied) {
@@ -4460,7 +4460,7 @@ class _EditingTextOverlayPainter extends CustomPainter {
   final String elementId;
   final TextData data;
   final double opacity;
-  final TextLayoutMetrics layout;
+  final FlutterTextLayoutMetrics layout;
   final int cacheRevision;
   final Locale? locale;
 
@@ -4539,7 +4539,7 @@ class _TextDraftGeometry {
 
   final TextData data;
   final DrawRect rect;
-  final TextLayoutMetrics layout;
+  final FlutterTextLayoutMetrics layout;
 }
 
 @immutable

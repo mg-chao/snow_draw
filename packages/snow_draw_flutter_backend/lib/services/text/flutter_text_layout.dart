@@ -11,8 +11,8 @@ const TextScaler textLayoutTextScaler = TextScaler.noScaling;
 
 /// Lightweight background box snapshot in local text coordinates.
 @immutable
-class TextRangeBox {
-  const TextRangeBox({
+class FlutterTextRangeBox {
+  const FlutterTextRangeBox({
     required this.left,
     required this.top,
     required this.right,
@@ -33,8 +33,8 @@ class TextRangeBox {
 ///
 /// [lineMetrics] is computed lazily to keep the hot render/layout path cheap.
 @immutable
-class TextLayoutMetrics {
-  TextLayoutMetrics({
+class FlutterTextLayoutMetrics {
+  FlutterTextLayoutMetrics({
     required this.paragraph,
     required this.size,
     required this.lineHeight,
@@ -60,12 +60,13 @@ class TextLayoutMetrics {
   final double unscaledAscent;
   final double leading;
 
-  /// Wraps this result in a [TextPainter]-backed [PainterTextLayoutMetrics].
+  /// Wraps this result in a [TextPainter]-backed
+  /// [FlutterPainterTextLayoutMetrics].
   ///
   /// Only call this when you need `TextPainter` APIs such as
   /// `getPositionForOffset` or `getBoxesForSelection`. The painter
   /// is created lazily and cached.
-  PainterTextLayoutMetrics toPainterMetrics({
+  FlutterPainterTextLayoutMetrics toPainterMetrics({
     required TextData data,
     required double maxWidth,
     double? minWidth,
@@ -85,11 +86,11 @@ class TextLayoutMetrics {
 /// Extended layout result that includes a [TextPainter].
 ///
 /// Use only when `TextPainter`-specific APIs are needed (cursor
-/// positioning, selection boxes, etc.). Prefer [TextLayoutMetrics]
+/// positioning, selection boxes, etc.). Prefer [FlutterTextLayoutMetrics]
 /// for all other cases.
 @immutable
-class PainterTextLayoutMetrics extends TextLayoutMetrics {
-  PainterTextLayoutMetrics({
+class FlutterPainterTextLayoutMetrics extends FlutterTextLayoutMetrics {
+  FlutterPainterTextLayoutMetrics({
     required this.painter,
     required super.paragraph,
     required super.size,
@@ -111,7 +112,7 @@ class PainterTextLayoutMetrics extends TextLayoutMetrics {
 // ---------------------------------------------------------------------------
 
 /// Primary layout cache keyed on text + font + width.
-final _paragraphCache = LruCache<_LayoutCacheKey, TextLayoutMetrics>(
+final _paragraphCache = LruCache<_LayoutCacheKey, FlutterTextLayoutMetrics>(
   maxEntries: 256,
 );
 
@@ -122,9 +123,8 @@ final _fontMetricsCache = LruCache<_FontMetricsCacheKey, _FontMetrics>(
 );
 
 /// Painter cache for the rare paths that need `TextPainter`.
-final _painterCache = LruCache<_PainterCacheKey, PainterTextLayoutMetrics>(
-  maxEntries: 64,
-);
+final _painterCache =
+    LruCache<_PainterCacheKey, FlutterPainterTextLayoutMetrics>(maxEntries: 64);
 
 /// Clears all text layout caches.
 ///
@@ -206,7 +206,7 @@ Locale? resolveTextLocale(String? localeTag) {
 }
 
 /// Scene-focused text layout helper with fixed-width paragraph behavior.
-TextLayoutMetrics layoutSceneText({
+FlutterTextLayoutMetrics layoutSceneText({
   required TextData data,
   required double width,
   String? localeTag,
@@ -219,13 +219,13 @@ TextLayoutMetrics layoutSceneText({
 );
 
 /// Resolves paragraph boxes for a text range as plain geometry values.
-List<TextRangeBox> resolveTextRangeBoxes({
-  required TextLayoutMetrics layout,
+List<FlutterTextRangeBox> resolveTextRangeBoxes({
+  required FlutterTextLayoutMetrics layout,
   required int start,
   required int end,
 }) {
   if (end <= start) {
-    return const <TextRangeBox>[];
+    return const <FlutterTextRangeBox>[];
   }
   final boxes = layout.paragraph.getBoxesForRange(
     start,
@@ -234,7 +234,7 @@ List<TextRangeBox> resolveTextRangeBoxes({
   );
   return boxes
       .map(
-        (box) => TextRangeBox(
+        (box) => FlutterTextRangeBox(
           left: box.left,
           top: box.top,
           right: box.right,
@@ -248,12 +248,12 @@ List<TextRangeBox> resolveTextRangeBoxes({
 // layoutText - fast path using dart:ui.Paragraph directly
 // ---------------------------------------------------------------------------
 
-/// Lays out text and returns lightweight [TextLayoutMetrics].
+/// Lays out text and returns lightweight [FlutterTextLayoutMetrics].
 ///
 /// This is the hot path used by renderers, bounds calculations, and
 /// reducers. It bypasses `TextPainter` entirely and works with
 /// `dart:ui.ParagraphBuilder` for lower overhead.
-TextLayoutMetrics layoutText({
+FlutterTextLayoutMetrics layoutText({
   required TextData data,
   required double maxWidth,
   double? minWidth,
@@ -313,7 +313,7 @@ TextLayoutMetrics layoutText({
       () => _measureFontMetrics(style: resolvedStyle, locale: locale),
     );
 
-    return TextLayoutMetrics(
+    return FlutterTextLayoutMetrics(
       paragraph: paragraph,
       size: Size(paragraph.longestLine, paragraph.height),
       lineHeight: fontMetrics.lineHeight,
@@ -331,12 +331,12 @@ TextLayoutMetrics layoutText({
 // layoutTextWithPainter - slow path for cursor / selection queries
 // ---------------------------------------------------------------------------
 
-/// Lays out text and returns [PainterTextLayoutMetrics] with a
+/// Lays out text and returns [FlutterPainterTextLayoutMetrics] with a
 /// [TextPainter].
 ///
 /// Use only when you need `TextPainter`-specific APIs such as
 /// `getPositionForOffset` or `getBoxesForSelection`.
-PainterTextLayoutMetrics layoutTextWithPainter({
+FlutterPainterTextLayoutMetrics layoutTextWithPainter({
   required TextData data,
   required double maxWidth,
   double? minWidth,
@@ -392,7 +392,7 @@ PainterTextLayoutMetrics layoutTextWithPainter({
       locale: locale,
     );
 
-    return PainterTextLayoutMetrics(
+    return FlutterPainterTextLayoutMetrics(
       painter: painter,
       paragraph: fastLayout.paragraph,
       size: painter.size,

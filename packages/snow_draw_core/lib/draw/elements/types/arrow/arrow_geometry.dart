@@ -195,7 +195,7 @@ class ArrowGeometry {
       return 0;
     }
 
-    final length = _resolveArrowheadLength(strokeWidth);
+    final length = resolveArrowheadLength(strokeWidth);
 
     return switch (style) {
       ArrowheadStyle.circle => length * 0.6,
@@ -217,7 +217,7 @@ class ArrowGeometry {
       return 0;
     }
 
-    final length = _resolveArrowheadLength(strokeWidth);
+    final length = resolveArrowheadLength(strokeWidth);
 
     return switch (style) {
       ArrowheadStyle.circle => length * 0.6,
@@ -231,7 +231,11 @@ class ArrowGeometry {
     };
   }
 
-  static double _resolveArrowheadLength(double strokeWidth) =>
+  /// Resolves canonical arrowhead length from [strokeWidth].
+  ///
+  /// Keep this formula stable so hit-testing, scene encoding, and backend
+  /// painters remain visually aligned.
+  static double resolveArrowheadLength(double strokeWidth) =>
       strokeWidth * 4 + 12.0;
 
   static DrawRect calculatePathBounds({

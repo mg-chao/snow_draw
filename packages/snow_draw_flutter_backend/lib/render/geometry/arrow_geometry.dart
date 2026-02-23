@@ -49,7 +49,7 @@ class FlutterArrowGeometry {
       return Path();
     }
 
-    final length = _resolveArrowheadLength(strokeWidth);
+    final length = ArrowGeometry.resolveArrowheadLength(strokeWidth);
     final width = length * 0.6;
     final perp = Offset(-normalizedDirection.dy, normalizedDirection.dx);
 
@@ -215,9 +215,6 @@ class FlutterArrowGeometry {
       ..moveTo(left.dx, left.dy)
       ..lineTo(right.dx, right.dy);
   }
-
-  static double _resolveArrowheadLength(double strokeWidth) =>
-      strokeWidth * 4 + 12.0;
 
   static Offset? _normalize(Offset value) {
     final length = value.distance;

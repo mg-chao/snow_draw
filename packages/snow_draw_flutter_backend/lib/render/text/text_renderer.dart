@@ -53,7 +53,7 @@ class TextRenderer {
     required ElementState element,
     required double scaleFactor,
     Locale? locale,
-    TextLayoutMetrics? precomputedLayout,
+    FlutterTextLayoutMetrics? precomputedLayout,
     bool renderFill = true,
   }) {
     final data = element.data;
@@ -224,7 +224,7 @@ class TextRenderer {
     required TextData data,
     required String text,
     required double textOpacity,
-    required TextLayoutMetrics layout,
+    required FlutterTextLayoutMetrics layout,
     required Locale? locale,
     required double maxWidth,
   }) {
