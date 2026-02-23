@@ -930,36 +930,14 @@ class SceneCanvasPainter extends CustomPainter {
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.volatileTextElementIds,
     );
-    final plannedElementTasksById = _resolvePlannedElementTasksById();
 
     return _SceneRenderContext(
       hasFilterElement: sceneAnalysis.hasFilterElement,
       shouldPaintSerialConnectors: sceneAnalysis.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       volatileElementIds: interactionVolatileElementIds,
-      plannedElementTasksById: plannedElementTasksById,
+      plannedElementTasksById: renderKey.plannedElementTasksById,
     );
-  }
-
-  Map<String, List<RenderTask>> _resolvePlannedElementTasksById() {
-    final frameTasks = renderKey.framePlan.tasks;
-    if (frameTasks.isEmpty) {
-      return const <String, List<RenderTask>>{};
-    }
-
-    final tasksById = <String, List<RenderTask>>{};
-    for (final task in frameTasks) {
-      if (task case ElementRenderTask(:final element)) {
-        (tasksById[element.id] ??= <RenderTask>[]).add(task);
-      }
-    }
-    if (tasksById.isEmpty) {
-      return const <String, List<RenderTask>>{};
-    }
-    return <String, List<RenderTask>>{
-      for (final entry in tasksById.entries)
-        entry.key: List<RenderTask>.unmodifiable(entry.value),
-    };
   }
 
   _SceneRenderAnalysis _resolveSceneRenderAnalysis({

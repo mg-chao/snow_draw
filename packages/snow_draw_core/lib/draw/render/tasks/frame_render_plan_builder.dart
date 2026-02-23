@@ -12,9 +12,9 @@ import '../../types/element_style.dart';
 import '../../utils/arrow_binding_highlight.dart';
 import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/selection_calculator.dart';
-import '../rect_intersection.dart';
 import '../planning/highlight_mask_visibility.dart';
 import '../planning/watermark_visibility.dart';
+import '../rect_intersection.dart';
 import 'frame_render_plan.dart';
 import 'render_tasks.dart';
 
@@ -120,6 +120,40 @@ class FrameRenderPlanBuilder {
           localeTag: localeTag,
         ),
       );
+    }
+
+    if (previewElementsById.isNotEmpty) {
+      final previewOnlyElements = <ElementState>[];
+      final document = view.state.domain.document;
+      for (final entry in previewElementsById.entries) {
+        if (document.getElementById(entry.key) != null) {
+          continue;
+        }
+        previewOnlyElements.add(entry.value);
+      }
+      if (previewOnlyElements.isNotEmpty) {
+        previewOnlyElements.sort((a, b) {
+          final zIndexComparison = a.zIndex.compareTo(b.zIndex);
+          if (zIndexComparison != 0) {
+            return zIndexComparison;
+          }
+          return a.id.compareTo(b.id);
+        });
+        for (final previewElement in previewOnlyElements) {
+          final definition = elementRegistry.getDefinitionByValue(
+            previewElement.typeId.value,
+          );
+          if (definition == null) {
+            continue;
+          }
+          tasks.addAll(
+            definition.taskEncoder.encodeTasks(
+              element: previewElement,
+              localeTag: localeTag,
+            ),
+          );
+        }
+      }
     }
 
     final highlightMaskConfig = transientState.highlightMaskConfig;
