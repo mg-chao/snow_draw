@@ -50,7 +50,7 @@ class CreatingElementSnapshot {
 /// - Selected/hovered element IDs (for selection outlines)
 /// - Arrow handle interaction state (including delete indicator visibility)
 /// - Document version (for selection outline refresh)
-/// - Preview state for interaction cache invalidation
+/// - Preview element map
 /// - Camera state (position/zoom), selection/box selection config, scale factor
 @immutable
 class SceneCanvasRenderKey {
@@ -84,8 +84,6 @@ class SceneCanvasRenderKey {
     required this.performanceMonitoringEnabled,
     this.textMetricsService = defaultTextMetricsService,
     this.preferFastFilterFallback = false,
-    this.previewElementsRevision,
-    this.volatilePreviewElementIds,
     this.locale,
     this.framePlan = FrameRenderPlan.empty,
   });
@@ -131,19 +129,6 @@ class SceneCanvasRenderKey {
 
   /// Preview elements during editing.
   final Map<String, ElementState> previewElementsById;
-
-  /// Optional monotonically increasing preview-map revision.
-  ///
-  /// When provided, equality and hashing use `[previewElementsById]` identity
-  /// plus this revision instead of deep map comparisons.
-  final int? previewElementsRevision;
-
-  /// Optional volatile-preview override used by interaction scene caching.
-  ///
-  /// When set, interaction-scene caching treats only these preview ids as
-  /// volatile.
-  /// This is a performance hint and does not change final visual output.
-  final Set<String>? volatilePreviewElementIds;
 
   /// Whether filter rendering should prioritize responsiveness this frame.
   ///
@@ -214,7 +199,7 @@ class SceneCanvasRenderKey {
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
-          _previewMapsEqual(other) &&
+          mapEquals(other.previewElementsById, previewElementsById) &&
           other.preferFastFilterFallback == preferFastFilterFallback &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
@@ -247,7 +232,7 @@ class SceneCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     camera,
-    _previewMapHash(),
+    _mapHash(previewElementsById),
     preferFastFilterFallback,
     scaleFactor,
     selectionConfig,
@@ -264,22 +249,4 @@ class SceneCanvasRenderKey {
     performanceMonitoringEnabled,
     locale,
   ]);
-
-  bool _previewMapsEqual(SceneCanvasRenderKey other) {
-    if (previewElementsRevision != other.previewElementsRevision) {
-      return false;
-    }
-    if (previewElementsRevision != null) {
-      return identical(other.previewElementsById, previewElementsById);
-    }
-    return mapEquals(other.previewElementsById, previewElementsById);
-  }
-
-  int _previewMapHash() {
-    final revision = previewElementsRevision;
-    if (revision != null) {
-      return Object.hash(identityHashCode(previewElementsById), revision);
-    }
-    return _mapHash(previewElementsById);
-  }
 }

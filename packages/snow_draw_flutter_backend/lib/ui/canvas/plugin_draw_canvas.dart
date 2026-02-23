@@ -13,13 +13,13 @@ import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
-import 'scene_canvas_painter.dart';
 import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
+import 'scene_canvas_painter.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -188,11 +188,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
-  var _eraserVolatilePreviewElementIds = <String>{};
   var _eraserPreviewCacheRevision = 0;
-  var _interactionPreviewRevision = 0;
   var _filterStyleQualityRestoreRevision = 0;
-  var _transientVolatileFilterElementIds = const <String>{};
+  var _preferFastFilterFallback = false;
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -638,55 +636,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _mergedEraserPreviewRevision = _eraserPreviewCacheRevision;
     return _mergedEraserPreviewElements =
         Map<String, ElementState>.unmodifiable(merged);
-  }
-
-  Set<String> _snapshotEraserVolatilePreviewElementIds() {
-    if (_eraserVolatilePreviewElementIds.isEmpty) {
-      return const <String>{};
-    }
-    return _eraserVolatilePreviewElementIds;
-  }
-
-  void _resetEraserVolatilePreviewElementIds() {
-    if (_eraserVolatilePreviewElementIds.isEmpty) {
-      return;
-    }
-    _eraserVolatilePreviewElementIds = <String>{};
-  }
-
-  Set<String> _resolveVolatilePreviewElementIdsForScene(
-    DrawStateView stateView,
-    Map<String, ElementState> previewElementsById,
-  ) {
-    if (previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-    final document = stateView.state.domain.document;
-    final volatileIds = <String>{};
-    for (final entry in previewElementsById.entries) {
-      final persisted = document.getElementById(entry.key);
-      if (persisted == null || !identical(persisted, entry.value)) {
-        volatileIds.add(entry.key);
-      }
-    }
-    if (volatileIds.isEmpty) {
-      return const <String>{};
-    }
-    return Set<String>.unmodifiable(volatileIds);
-  }
-
-  Set<String>? _mergeVolatilePreviewElementIds(
-    Set<String>? baseIds,
-    Set<String> transientIds,
-  ) {
-    if (transientIds.isEmpty) {
-      return baseIds;
-    }
-    if (baseIds == null || baseIds.isEmpty) {
-      return Set<String>.unmodifiable(transientIds);
-    }
-    final merged = <String>{...baseIds, ...transientIds};
-    return Set<String>.unmodifiable(merged);
   }
 
   void _invalidateEraserPreviewSnapshots() {
@@ -1194,7 +1143,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return;
     }
     _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
-    _resetEraserVolatilePreviewElementIds();
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -1218,7 +1166,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pendingErasePreviewElementsById[element.id] = element.copyWith(
       opacity: previewOpacity,
     );
-    _eraserVolatilePreviewElementIds.add(element.id);
     _invalidateEraserPreviewSnapshots();
     return true;
   }
@@ -1229,7 +1176,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
-    _resetEraserVolatilePreviewElementIds();
     _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
@@ -1252,7 +1198,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
     _pendingErasePreviewElementsById.clear();
-    _resetEraserVolatilePreviewElementIds();
     if (!hadPendingPreview) {
       return;
     }
@@ -2238,27 +2183,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final promoteEraserPreviewToCanvasScene =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    late final Map<String, ElementState> previewElements;
-    late final int? previewElementsRevision;
-    late final Set<String>? volatilePreviewElementIds;
-    if (promoteEraserPreviewToCanvasScene) {
-      previewElements = _resolveEraserPreviewElements(stateView);
-      previewElementsRevision = _eraserPreviewCacheRevision;
-      volatilePreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
-    } else {
-      previewElements = _previewElementsForCanvas(stateView);
-      previewElementsRevision = null;
-      volatilePreviewElementIds = _resolveVolatilePreviewElementIdsForScene(
-        stateView,
-        previewElements,
-      );
-    }
-    final mergedVolatilePreviewElementIds = _mergeVolatilePreviewElementIds(
-      volatilePreviewElementIds,
-      _transientVolatileFilterElementIds,
-    );
-    final preferFastFilterFallback =
-        _transientVolatileFilterElementIds.isNotEmpty;
+    final previewElements = promoteEraserPreviewToCanvasScene
+        ? _resolveEraserPreviewElements(stateView)
+        : _previewElementsForCanvas(stateView);
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final globalElements = stateView.globalElements;
@@ -2272,14 +2199,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     return _CanvasSceneSnapshot(
       previewElements: previewElements,
-      previewElementsRevision: previewElementsRevision,
-      volatilePreviewElementIds: mergedVolatilePreviewElementIds,
       creatingSnapshot: creatingSnapshot,
       isHighlightMaskVisible: isHighlightMaskVisible,
       highlightMaskConfig: highlightMask,
       isWatermarkVisible: watermarkVisible,
       watermarkConfig: watermark,
-      preferFastFilterFallback: preferFastFilterFallback,
+      preferFastFilterFallback: _preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
   }
@@ -2301,7 +2226,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required double scaleFactor,
     required _CanvasSceneSnapshot scene,
     required Locale? locale,
-    int? previewElementsRevisionOverride,
   }) => _createCanvasRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
@@ -2309,9 +2233,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     creatingElement: scene.creatingSnapshot,
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
     previewElementsById: scene.previewElements,
-    previewElementsRevision:
-        previewElementsRevisionOverride ?? scene.previewElementsRevision,
-    volatilePreviewElementIds: scene.volatilePreviewElementIds,
     preferFastFilterFallback: scene.preferFastFilterFallback,
     isHighlightMaskVisible: scene.isHighlightMaskVisible,
     highlightMaskConfig: scene.highlightMaskConfig,
@@ -2333,8 +2254,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required bool isWatermarkVisible,
     required WatermarkConfig watermarkConfig,
     required Locale? locale,
-    int? previewElementsRevision,
-    Set<String>? volatilePreviewElementIds,
   }) {
     final boxSelectionBounds = _extractBoxSelectionBounds(stateView);
     final activeArrowHandle = _resolveActiveArrowHandle(stateView);
@@ -2389,8 +2308,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       textRenderingCacheRevision: textRenderingCacheRevision,
       camera: stateView.state.application.view.camera,
       previewElementsById: previewElementsById,
-      previewElementsRevision: previewElementsRevision,
-      volatilePreviewElementIds: volatilePreviewElementIds,
       preferFastFilterFallback: preferFastFilterFallback,
       scaleFactor: scaleFactor,
       selectionConfig: selectionConfig,
@@ -2442,11 +2359,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       Localizations.maybeLocaleOf(context) ??
       _canvasSnapshotNotifier.value.renderKey.locale;
 
-  void _refreshCanvasSnapshot(
-    DrawState state, {
-    bool assumeChanged = false,
-    int? forcedPreviewElementsRevision,
-  }) {
+  void _refreshCanvasSnapshot(DrawState state, {bool assumeChanged = false}) {
     if (!mounted) {
       return;
     }
@@ -2461,7 +2374,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       scaleFactor: scaleFactor,
       scene: scene,
       locale: locale,
-      previewElementsRevisionOverride: forcedPreviewElementsRevision,
     );
     _setCanvasSnapshot(
       stateView: stateView,
@@ -2474,27 +2386,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawState state, {
     required Set<String> changedFilterElementIds,
   }) {
-    if (changedFilterElementIds.isEmpty) {
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
-      return;
-    }
-    _transientVolatileFilterElementIds = Set<String>.unmodifiable(
-      changedFilterElementIds,
-    );
+    final enableFastFallback = changedFilterElementIds.isNotEmpty;
+    _preferFastFilterFallback = enableFastFallback;
     try {
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
+      _refreshCanvasSnapshot(state, assumeChanged: true);
     } finally {
-      _transientVolatileFilterElementIds = const <String>{};
+      _preferFastFilterFallback = false;
     }
-    _scheduleFilterStyleQualityRestore(state);
+    if (enableFastFallback) {
+      _scheduleFilterStyleQualityRestore(state);
+    }
   }
 
   void _scheduleFilterStyleQualityRestore(DrawState state) {
@@ -2505,11 +2406,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           !identical(_lastObservedState, state)) {
         return;
       }
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
+      _refreshCanvasSnapshot(state, assumeChanged: true);
     });
   }
 
@@ -3423,11 +3320,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         previous: previousState,
         next: state,
       )) {
-        _refreshCanvasSnapshot(
-          state,
-          assumeChanged: true,
-          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-        );
+        _refreshCanvasSnapshot(state, assumeChanged: true);
       }
       return;
     }
@@ -3546,8 +3439,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 class _CanvasSceneSnapshot {
   const _CanvasSceneSnapshot({
     required this.previewElements,
-    required this.previewElementsRevision,
-    required this.volatilePreviewElementIds,
     required this.creatingSnapshot,
     required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
@@ -3558,8 +3449,6 @@ class _CanvasSceneSnapshot {
   });
 
   final Map<String, ElementState> previewElements;
-  final int? previewElementsRevision;
-  final Set<String>? volatilePreviewElementIds;
   final CreatingElementSnapshot? creatingSnapshot;
   final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;

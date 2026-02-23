@@ -16,7 +16,6 @@ import 'binding_highlight_style.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
 import 'free_draw_creation_preview_cache.dart';
 import 'grid_shader_painter.dart';
-import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_static_scene_cache.dart';
 import 'render_keys.dart';
@@ -36,8 +35,6 @@ class SceneCanvasPainter extends CustomPainter {
 
   static const _directSolidPreviewPointThreshold = 32;
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
-  static final _interactionSceneCache = InteractionSceneCache();
-  static final _visibleSceneCache = VisibleElementSceneCache();
   static final _highlightMaskStaticSceneCache = HighlightMaskStaticSceneCache();
   static final _freeDrawPreviewCache = FreeDrawCreationPreviewCache();
   static final _freeDrawStrokePaint = Paint()
@@ -1036,33 +1033,15 @@ class SceneCanvasPainter extends CustomPainter {
     required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
   }) {
-    final state = stateView.state;
-    final document = state.domain.document;
-    final baseVisibleElements = _visibleSceneCache.resolve(
-      document: document,
-      viewportRect: viewportRect,
-    );
+    final document = stateView.state.domain.document;
     final excludedElementId =
         creatingElement != null &&
             document.getElementById(creatingElement.element.id) != null
         ? creatingElement.element.id
         : null;
-    if (_tryPaintPreviewFastPath(
-      canvas: canvas,
-      scale: scale,
-      viewportRect: viewportRect,
-      creatingElement: creatingElement,
-      excludedElementId: excludedElementId,
-      baseVisibleElements: baseVisibleElements,
-      document: document,
-    )) {
-      return;
-    }
-
     var effectiveElements = resolveVisibleElementScene(
       document: document,
       viewportRect: viewportRect,
-      baseVisibleElements: baseVisibleElements,
       previewElementsById: renderKey.previewElementsById,
       excludedElementId: excludedElementId,
     );
@@ -1081,103 +1060,6 @@ class SceneCanvasPainter extends CustomPainter {
       viewportRect: viewportRect,
       effectiveElements: effectiveElements,
     );
-  }
-
-  bool _tryPaintPreviewFastPath({
-    required Canvas canvas,
-    required double scale,
-    required DrawRect viewportRect,
-    required CreatingElementSnapshot? creatingElement,
-    required String? excludedElementId,
-    required List<ElementState> baseVisibleElements,
-    required DocumentState document,
-  }) {
-    final previewElements = renderKey.previewElementsById;
-    if (previewElements.isEmpty || excludedElementId != null) {
-      return false;
-    }
-
-    final creatingData = creatingElement?.element.data;
-    if (creatingData is FilterData) {
-      return false;
-    }
-
-    if (!_canUsePreviewFastPath(
-      baseVisibleElements: baseVisibleElements,
-      viewportRect: viewportRect,
-      document: document,
-    )) {
-      return false;
-    }
-
-    final sceneContext = _resolveSceneRenderContext(
-      elements: baseVisibleElements,
-    );
-    if (sceneContext.hasFilterElement) {
-      return false;
-    }
-
-    void paintElement(Canvas sceneCanvas, ElementState element) {
-      final effective = previewElements[element.id] ?? element;
-      if (!identical(effective, element)) {
-        final previewAabb = SelectionCalculator.computeElementWorldAabb(
-          effective,
-        );
-        if (!_rectsIntersect(previewAabb, viewportRect)) {
-          return;
-        }
-      }
-      _paintSceneElement(
-        canvas: sceneCanvas,
-        element: effective,
-        scale: scale,
-        sceneContext: sceneContext,
-      );
-    }
-
-    _interactionSceneCache.paint(
-      canvas: canvas,
-      elements: baseVisibleElements,
-      volatileElementIds: sceneContext.volatileElementIds,
-      documentVersion: renderKey.documentVersion,
-      textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
-      scaleFactor: scale,
-      locale: renderKey.locale,
-      paintElement: paintElement,
-    );
-    return true;
-  }
-
-  bool _canUsePreviewFastPath({
-    required List<ElementState> baseVisibleElements,
-    required DrawRect viewportRect,
-    required DocumentState document,
-  }) {
-    final previewElements = renderKey.previewElementsById;
-    if (previewElements.isEmpty) {
-      return true;
-    }
-
-    for (final preview in previewElements.values) {
-      if (document.getElementById(preview.id) == null) {
-        return false;
-      }
-      var isVisibleInBase = false;
-      for (final element in baseVisibleElements) {
-        if (element.id == preview.id) {
-          isVisibleInBase = true;
-          break;
-        }
-      }
-      if (isVisibleInBase) {
-        continue;
-      }
-      final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
-      if (_rectsIntersect(previewAabb, viewportRect)) {
-        return false;
-      }
-    }
-    return true;
   }
 
   void _paintElementScene({
@@ -1201,24 +1083,6 @@ class SceneCanvasPainter extends CustomPainter {
           scale: scale,
           sceneContext: sceneContext,
         );
-
-    if (_canUseInteractionSceneCache(
-      hasFilterElement: sceneContext.hasFilterElement,
-      effectiveElements: effectiveElements,
-      volatileElementIds: sceneContext.volatileElementIds,
-    )) {
-      _interactionSceneCache.paint(
-        canvas: canvas,
-        elements: effectiveElements,
-        volatileElementIds: sceneContext.volatileElementIds,
-        documentVersion: renderKey.documentVersion,
-        textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
-        scaleFactor: scale,
-        locale: renderKey.locale,
-        paintElement: paintElement,
-      );
-      return;
-    }
 
     if (!sceneContext.hasFilterElement) {
       _paintElementsDirectly(
@@ -1275,14 +1139,10 @@ class SceneCanvasPainter extends CustomPainter {
       previewElements,
     );
     final creatingFilterId = _resolveCreatingFilterId();
-    final previewTopologyHint = renderKey.previewElementsRevision == null
-        ? _PreviewTopologyHint.general
-        : _PreviewTopologyHint.stableDocumentBacked;
     final staticContext = _resolveSceneRenderContextStaticData(
       document: document,
       elements: elements,
       previewElementsById: previewElements,
-      previewTopologyHint: previewTopologyHint,
     );
 
     final serialConnectorSnapshot = staticContext.shouldPaintSerialConnectors
@@ -1300,10 +1160,6 @@ class SceneCanvasPainter extends CustomPainter {
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
-    final hasInteractiveFilterElement = _hasSharedElementId(
-      interactionVolatileElementIds,
-      staticContext.filterElementIds,
-    );
     // Keep drag previews visually consistent with settled frames. Reserve
     // fast fallback for explicit high-frequency style mutations only.
     final useAggressiveCpuFallback =
@@ -1312,7 +1168,6 @@ class SceneCanvasPainter extends CustomPainter {
 
     return _SceneRenderContext(
       hasFilterElement: staticContext.hasFilterElement,
-      hasInteractiveFilterElement: hasInteractiveFilterElement,
       useAggressiveCpuFallback: useAggressiveCpuFallback,
       shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
@@ -1346,7 +1201,6 @@ class SceneCanvasPainter extends CustomPainter {
     required DocumentState document,
     required List<ElementState> elements,
     required Map<String, ElementState> previewElementsById,
-    required _PreviewTopologyHint previewTopologyHint,
   }) {
     // Eraser preview mode only applies document-backed opacity overrides.
     // Once the visible element list is stable, static scene metadata stays
@@ -1357,7 +1211,6 @@ class SceneCanvasPainter extends CustomPainter {
           document: document,
           elements: elements,
           previewElementsById: previewElementsById,
-          previewTopologyHint: previewTopologyHint,
         )) {
       return cached.staticData;
     }
@@ -1366,29 +1219,18 @@ class SceneCanvasPainter extends CustomPainter {
         cached != null &&
         identical(cached.document, document) &&
         identical(cached.elements, elements);
-    final canReuseGeneralPreviewStaticData =
-        canReuseElementSignature &&
-        cached.previewTopologyHint == previewTopologyHint &&
-        previewTopologyHint == _PreviewTopologyHint.general &&
-        cached.serialPreviewSignature.count == 0 &&
-        !_containsSerialPreviewElements(previewElementsById);
-    if (canReuseGeneralPreviewStaticData) {
-      return cached.staticData;
-    }
 
     final elementSignature = canReuseElementSignature
         ? cached.elementSignature
         : _buildSceneElementStructureSignature(elements);
-    final serialPreviewSignature =
-        previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked
-        ? _SerialPreviewSignature.empty
-        : _buildSerialPreviewSignature(previewElementsById);
+    final serialPreviewSignature = _buildSerialPreviewSignature(
+      previewElementsById,
+    );
     if (cached != null &&
         cached.matchesBySignature(
           document: document,
           elementSignature: elementSignature,
           serialPreviewSignature: serialPreviewSignature,
-          previewTopologyHint: previewTopologyHint,
         )) {
       return cached.staticData;
     }
@@ -1396,14 +1238,10 @@ class SceneCanvasPainter extends CustomPainter {
     final canHaveSerialConnectors =
         document.boundTextIds.isNotEmpty || serialPreviewSignature.count > 0;
     var hasFilterElement = false;
-    final filterElementIds = <String>{};
     final visibleTextIds = <String>{};
     for (final element in elements) {
       if (!hasFilterElement && element.data is FilterData) {
         hasFilterElement = true;
-      }
-      if (element.data is FilterData) {
-        filterElementIds.add(element.id);
       }
       if (canHaveSerialConnectors &&
           element.opacity > 0 &&
@@ -1429,7 +1267,6 @@ class SceneCanvasPainter extends CustomPainter {
 
     final staticData = _SceneRenderContextStaticData(
       hasFilterElement: hasFilterElement,
-      filterElementIds: filterElementIds,
       visibleTextIds: visibleTextIds,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
     );
@@ -1437,26 +1274,11 @@ class SceneCanvasPainter extends CustomPainter {
       document: document,
       elements: elements,
       previewElementsById: previewElementsById,
-      previewTopologyHint: previewTopologyHint,
       elementSignature: elementSignature,
       serialPreviewSignature: serialPreviewSignature,
       staticData: staticData,
     );
     return staticData;
-  }
-
-  bool _containsSerialPreviewElements(
-    Map<String, ElementState> previewElementsById,
-  ) {
-    if (previewElementsById.isEmpty) {
-      return false;
-    }
-    for (final preview in previewElementsById.values) {
-      if (preview.data is SerialNumberData) {
-        return true;
-      }
-    }
-    return false;
   }
 
   _SceneElementStructureSignature _buildSceneElementStructureSignature(
@@ -1551,41 +1373,6 @@ class SceneCanvasPainter extends CustomPainter {
     );
   }
 
-  bool _canUseInteractionSceneCache({
-    required bool hasFilterElement,
-    required List<ElementState> effectiveElements,
-    required Set<String> volatileElementIds,
-  }) {
-    if (hasFilterElement) {
-      return false;
-    }
-
-    if (_isHighlightPreviewCacheEligible()) {
-      return true;
-    }
-
-    if (effectiveElements.length < 2) {
-      return false;
-    }
-
-    if (volatileElementIds.isEmpty) {
-      return true;
-    }
-
-    var visibleVolatileCount = 0;
-    for (final element in effectiveElements) {
-      if (!volatileElementIds.contains(element.id)) {
-        continue;
-      }
-      visibleVolatileCount += 1;
-      if (visibleVolatileCount >= effectiveElements.length) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   void _paintElementsDirectly({
     required Canvas canvas,
     required List<ElementState> elements,
@@ -1595,27 +1382,6 @@ class SceneCanvasPainter extends CustomPainter {
     for (final element in elements) {
       paintElement(canvas, element);
     }
-  }
-
-  bool _isHighlightPreviewCacheEligible() {
-    final previewElements = renderKey.previewElementsById;
-    final creatingElement = renderKey.creatingElement;
-    if (previewElements.isEmpty) {
-      return creatingElement != null &&
-          creatingElement.element.data is HighlightData;
-    }
-
-    final document = stateView.state.domain.document;
-    for (final preview in previewElements.values) {
-      if (preview.data is! HighlightData) {
-        return false;
-      }
-      final persisted = document.getElementById(preview.id);
-      if (persisted != null && persisted.data is! HighlightData) {
-        return false;
-      }
-    }
-    return true;
   }
 
   Set<String> _resolveVolatileElementIds({
@@ -1637,25 +1403,9 @@ class SceneCanvasPainter extends CustomPainter {
     return volatileElementIds;
   }
 
-  bool _hasSharedElementId(Set<String> candidateIds, Set<String> filterIds) {
-    if (candidateIds.isEmpty || filterIds.isEmpty) {
-      return false;
-    }
-    for (final id in candidateIds) {
-      if (filterIds.contains(id)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   Set<String> _resolveVolatilePreviewElementIds(
     Map<String, ElementState> previewElementsById,
   ) {
-    final override = renderKey.volatilePreviewElementIds;
-    if (override != null) {
-      return override;
-    }
     if (previewElementsById.isEmpty) {
       return const <String>{};
     }
@@ -1703,12 +1453,6 @@ class SceneCanvasPainter extends CustomPainter {
       visibleTextIds.add(editingTextId);
     }
   }
-
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
 
   void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
     if (renderKey.selectedIds.length != 1) {
@@ -2958,12 +2702,9 @@ class _ArrowBindingHighlight {
   final String elementId;
 }
 
-enum _PreviewTopologyHint { general, stableDocumentBacked }
-
 class _SceneRenderContext {
   const _SceneRenderContext({
     required this.hasFilterElement,
-    required this.hasInteractiveFilterElement,
     required this.useAggressiveCpuFallback,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
@@ -2972,7 +2713,6 @@ class _SceneRenderContext {
   });
 
   final bool hasFilterElement;
-  final bool hasInteractiveFilterElement;
   final bool useAggressiveCpuFallback;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
@@ -2983,14 +2723,11 @@ class _SceneRenderContext {
 class _SceneRenderContextStaticData {
   _SceneRenderContextStaticData({
     required this.hasFilterElement,
-    required Set<String> filterElementIds,
     required Set<String> visibleTextIds,
     required this.shouldPaintSerialConnectors,
-  }) : filterElementIds = Set<String>.unmodifiable(filterElementIds),
-       visibleTextIds = Set<String>.unmodifiable(visibleTextIds);
+  }) : visibleTextIds = Set<String>.unmodifiable(visibleTextIds);
 
   final bool hasFilterElement;
-  final Set<String> filterElementIds;
   final Set<String> visibleTextIds;
   final bool shouldPaintSerialConnectors;
 }
@@ -3000,7 +2737,6 @@ class _SceneRenderContextCacheEntry {
     required this.document,
     required this.elements,
     required this.previewElementsById,
-    required this.previewTopologyHint,
     required this.elementSignature,
     required this.serialPreviewSignature,
     required this.staticData,
@@ -3009,7 +2745,6 @@ class _SceneRenderContextCacheEntry {
   final DocumentState document;
   final List<ElementState> elements;
   final Map<String, ElementState> previewElementsById;
-  final _PreviewTopologyHint previewTopologyHint;
   final _SceneElementStructureSignature elementSignature;
   final _SerialPreviewSignature serialPreviewSignature;
   final _SceneRenderContextStaticData staticData;
@@ -3018,22 +2753,17 @@ class _SceneRenderContextCacheEntry {
     required DocumentState document,
     required List<ElementState> elements,
     required Map<String, ElementState> previewElementsById,
-    required _PreviewTopologyHint previewTopologyHint,
   }) =>
       identical(this.document, document) &&
       identical(this.elements, elements) &&
-      this.previewTopologyHint == previewTopologyHint &&
-      (previewTopologyHint == _PreviewTopologyHint.stableDocumentBacked ||
-          identical(this.previewElementsById, previewElementsById));
+      identical(this.previewElementsById, previewElementsById);
 
   bool matchesBySignature({
     required DocumentState document,
     required _SceneElementStructureSignature elementSignature,
     required _SerialPreviewSignature serialPreviewSignature,
-    required _PreviewTopologyHint previewTopologyHint,
   }) =>
       identical(this.document, document) &&
-      this.previewTopologyHint == previewTopologyHint &&
       this.elementSignature == elementSignature &&
       this.serialPreviewSignature == serialPreviewSignature;
 }

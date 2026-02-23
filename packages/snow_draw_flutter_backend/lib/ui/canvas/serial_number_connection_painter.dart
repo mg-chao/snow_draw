@@ -38,7 +38,7 @@ class SerialNumberConnectorSnapshot {
 /// Resolves serial-number connector data using the global cache.
 ///
 /// This is the preferred method for rendering as it exposes both the
-/// connector payload and the minimal dynamic text set for interaction caching.
+/// connector payload and the minimal dynamic text set for frame rendering.
 SerialNumberConnectorSnapshot resolveSerialNumberConnectorSnapshot(
   DrawStateView stateView, {
   Map<String, ElementState>? previewElementsById,
@@ -51,8 +51,8 @@ SerialNumberConnectorSnapshot resolveSerialNumberConnectorSnapshot(
 
 /// Resolves only the serial-number connector map.
 ///
-/// Prefer [resolveSerialNumberConnectorSnapshot] when interaction-scene
-/// caching decisions need the dynamic connector text ids.
+/// Prefer [resolveSerialNumberConnectorSnapshot] when dynamic-render decisions
+/// need the connector text ids that can change in this frame.
 SerialNumberConnectorMap resolveSerialNumberConnectorMap(
   DrawStateView stateView, {
   Map<String, ElementState>? previewElementsById,

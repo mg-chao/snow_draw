@@ -36,66 +36,29 @@ void main() {
       expect(first.hashCode, isNot(second.hashCode));
     });
 
-    test('preview revision participates with map-identity fast path', () {
-      final registry = DefaultElementRegistry();
-      final sharedPreviewMap = <String, ElementState>{};
-      final first = _buildCanvasRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: sharedPreviewMap,
-        previewElementsRevision: 1,
-      );
-      sharedPreviewMap['preview-1'] = const ElementState(
-        id: 'preview-1',
-        rect: DrawRect(maxX: 20, maxY: 20),
-        rotation: 0,
-        opacity: 0.5,
-        zIndex: 0,
-        data: FreeDrawData(),
-      );
-      final second = _buildCanvasRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: sharedPreviewMap,
-        previewElementsRevision: 2,
-      );
-
-      expect(first, isNot(second));
-      expect(first.hashCode, isNot(second.hashCode));
-    });
-
-    test('preview revision requires identical preview map identity', () {
-      final registry = DefaultElementRegistry();
-      final first = _buildCanvasRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: <String, ElementState>{},
-        previewElementsRevision: 9,
-      );
-      final second = _buildCanvasRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: <String, ElementState>{},
-        previewElementsRevision: 9,
-      );
-
-      expect(first, isNot(second));
-    });
-
-    test('volatile preview hint does not affect equality', () {
+    test('preview map content participates in equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
       );
-      final hinted = _buildCanvasRenderKey(
+      final withPreview = _buildCanvasRenderKey(
         registry: registry,
         arrowDeleteIndicatorVisible: false,
-        volatilePreviewElementIds: {'line-1'},
+        previewElementsById: const {
+          'line-1': ElementState(
+            id: 'line-1',
+            rect: DrawRect(maxX: 20, maxY: 20),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: LineData(),
+          ),
+        },
       );
 
-      expect(baseline, hinted);
-      expect(baseline.hashCode, hinted.hashCode);
+      expect(baseline, isNot(withPreview));
+      expect(baseline.hashCode, isNot(withPreview.hashCode));
     });
 
     test('watermark config participates in equality', () {
@@ -121,8 +84,6 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
-  int? previewElementsRevision,
-  Set<String>? volatilePreviewElementIds,
   WatermarkConfig? watermarkConfig,
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
@@ -140,8 +101,6 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   textRenderingCacheRevision: 0,
   camera: CameraState.initial,
   previewElementsById: previewElementsById,
-  previewElementsRevision: previewElementsRevision,
-  volatilePreviewElementIds: volatilePreviewElementIds,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),
