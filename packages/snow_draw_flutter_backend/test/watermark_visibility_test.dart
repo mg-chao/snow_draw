@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/watermark_visibility.dart';
 
 void main() {
   test('isWatermarkVisible returns false for whitespace-only text', () {

@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/visible_element_scene_cache.dart';
 
 void main() {
   test('reuses last query for identical document and viewport', () {

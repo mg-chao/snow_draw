@@ -17,23 +17,13 @@ import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
 import 'dynamic_canvas_painter.dart';
-import 'dynamic_scene_optimization.dart';
-import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
-import 'filter_style_state_change.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
-import 'highlight_mask_visibility.dart';
 import 'interaction_dynamic_scene_cache.dart';
-import 'interaction_mutation_refresh_plan.dart';
-import 'lightweight_line_edit_state_change.dart';
-import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
-import 'serial_number_interaction_classifier.dart';
-import 'text_editing_state_change.dart';
-import 'watermark_visibility.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -2584,7 +2574,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         canvasConfig: canvasConfig,
         gridConfig: gridConfig,
         highlightMaskConfig: highlightMaskConfig,
+        isHighlightMaskVisible: isHighlightMaskVisible,
         watermarkConfig: watermarkConfig,
+        isWatermarkVisible: isWatermarkVisible,
         boxSelectionBounds: boxSelectionBounds,
         previewElementsById: previewElementsById,
       ),

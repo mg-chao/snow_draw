@@ -202,12 +202,14 @@ final class ArrowPointOverlayRenderTask extends RenderTask {
     required this.handles,
     required this.selectionConfig,
     this.activeHandle,
+    this.hoveredHandle,
     this.deleteIndicatorVisible = false,
   });
 
   final List<ArrowPointHandle> handles;
   final SelectionConfig selectionConfig;
   final ArrowPointHandle? activeHandle;
+  final ArrowPointHandle? hoveredHandle;
   final bool deleteIndicatorVisible;
 }
 

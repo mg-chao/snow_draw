@@ -7,8 +7,6 @@ import 'package:meta/meta.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import '../../canvas/filter_shader_manager.dart';
 import 'filter_render_diagnostics.dart';
-import 'filter_segment.dart';
-import 'filter_segment_builder.dart';
 
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);

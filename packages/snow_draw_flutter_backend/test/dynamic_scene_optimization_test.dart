@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_scene_optimization.dart';
 
 void main() {
   group('resolveDynamicSceneOptimizationPlan', () {

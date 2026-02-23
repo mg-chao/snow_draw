@@ -3,8 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_builder.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_renderer.dart';
 
 void main() {
