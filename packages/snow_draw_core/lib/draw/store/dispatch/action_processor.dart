@@ -17,7 +17,6 @@ import '../../events/event_bus.dart';
 import '../../events/state_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
-import '../../reducers/interaction/interaction_state_machine.dart';
 import '../history_manager.dart';
 import '../listener_registry.dart';
 import '../middleware/middleware_context.dart';
@@ -39,7 +38,6 @@ class ActionProcessorServices {
     required this.includeSelectionInHistory,
     required this.eventBus,
     required this.publishEditEvents,
-    required this.enableInteractionMutationFastPath,
   });
   final InteractionReducerDeps drawContext;
   final StateManager stateManager;
@@ -53,7 +51,6 @@ class ActionProcessorServices {
   final bool includeSelectionInHistory;
   final EventBus eventBus;
   final void Function(List<EditSessionEvent> events) publishEditEvents;
-  final bool enableInteractionMutationFastPath;
 }
 
 class ActionProcessor {
@@ -62,8 +59,6 @@ class ActionProcessor {
     required MiddlewarePipeline pipeline,
   }) : _services = services,
        _pipeline = pipeline,
-       _enableInteractionMutationFastPath =
-           services.enableInteractionMutationFastPath,
        _lastCanUndo = services.historyManager.canUndo,
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
@@ -71,7 +66,6 @@ class ActionProcessor {
   final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
-  final bool _enableInteractionMutationFastPath;
 
   var _isProcessing = false;
   var _isDisposed = false;
@@ -155,11 +149,6 @@ class ActionProcessor {
     }
 
     await _runWithFrozenConfig(() async {
-      if (_shouldUseInteractionMutationFastPath(action)) {
-        _processInteractionMutationFastPath(action);
-        return;
-      }
-
       await _processThroughPipeline(action);
     });
   }
@@ -193,43 +182,6 @@ class ActionProcessor {
     }
 
     _commit(initialContext: initialContext, finalContext: finalContext);
-  }
-
-  bool _shouldUseInteractionMutationFastPath(DrawAction action) {
-    if (!_enableInteractionMutationFastPath) {
-      return false;
-    }
-    return action is UpdateEdit ||
-        action is UpdateCreatingElement ||
-        action is UpdateCreatingElementBatch;
-  }
-
-  void _processInteractionMutationFastPath(DrawAction action) {
-    try {
-      final previousState = _services.stateManager.current;
-      final transition = interactionStateMachine.reduce(
-        state: previousState,
-        action: action,
-        context: _services.drawContext,
-        editSessionService: _services.editSessionService,
-        sessionIdGenerator: _services.sessionIdGenerator,
-      );
-      _applyTransitionEffects(
-        previousState: previousState,
-        nextState: transition.nextState,
-        action: action,
-        events: transition.events,
-        hasStateChanged: !identical(previousState, transition.nextState),
-      );
-    } on Object catch (error, stackTrace) {
-      _reportDispatchError(
-        action: action,
-        source: 'FastInteractionMutationPath',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      _rethrowIfCritical(action, error, stackTrace);
-    }
   }
 
   Future<void> _runWithFrozenConfig(FutureOr<void> Function() action) async {

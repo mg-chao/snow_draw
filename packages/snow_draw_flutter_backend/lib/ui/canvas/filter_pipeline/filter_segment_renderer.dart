@@ -37,28 +37,6 @@ class FilterRenderCacheContext {
       Object.hash(textRenderingCacheRevision, scaleKey, localeTag);
 }
 
-/// Runtime hints for adaptive filter rendering.
-///
-/// Interaction previews can opt into lower-cost approximations to sustain
-/// frame rate on backends that do not support shader-based filters.
-@immutable
-class FilterRenderHints {
-  const FilterRenderHints({
-    this.interactionPreview = false,
-    this.aggressiveCpuFallback = false,
-  });
-
-  /// Whether this frame is a high-frequency interaction preview.
-  final bool interactionPreview;
-
-  /// Whether CPU-backed filters should prioritize frame rate over fidelity.
-  ///
-  /// This is intended for sustained interactions (for example dragging a
-  /// filter-strength slider on backends without shader support) where keeping
-  /// input latency low is more important than precise filter output.
-  final bool aggressiveCpuFallback;
-}
-
 /// Factory interface for creating filter kernels.
 ///
 /// This indirection keeps [FilterSegmentRenderer] decoupled from the singleton
@@ -130,32 +108,14 @@ class FilterSegmentRenderer {
   static const _clipInfoCacheLimit = 512;
   static const _batchPictureCacheLimit = 96;
   static const _maxViewportOutset = 72.0;
-  static const _interactiveViewportOutset = 48.0;
-  static const _aggressiveViewportOutset = 36.0;
-  static const _interactiveGaussianMinSigma = 0.35;
-  static const _interactiveGaussianMaxSigma = 7.5;
-  static const _aggressiveGaussianMaxSigma = 5.5;
   static const _interactiveMosaicMinSigma = 1.5;
   static const _interactiveMosaicMaxSigma = 9.0;
-  static const _aggressiveMosaicMaxSigma = 6.5;
   static const _fullQualitySigmaQuantization = 0.125;
-  static const _interactiveSigmaQuantization = 0.25;
-  static const _aggressiveSigmaQuantization = 0.5;
   static const _fullQualityMosaicQuantization = 0.25;
-  static const _interactiveMosaicQuantization = 0.5;
-  static const _aggressiveMosaicQuantization = 1.0;
   static const _fullQualityOffsetQuantization = 0.25;
-  static const _interactiveOffsetQuantization = 0.5;
-  static const _aggressiveOffsetQuantization = 1.0;
   static const _fullQualityBlurDownsampleFactor = 1.0;
-  static const _interactiveBlurDownsampleFactor = 0.75;
-  static const _aggressiveBlurDownsampleFactor = 0.55;
   static const _fullQualityBlurPixelBudget = 1073741824.0;
-  static const _interactiveBlurPixelBudget = 420000;
-  static const _aggressiveBlurPixelBudget = 240000;
   static const _fullQualityColorMatrixPixelBudget = 1073741824.0;
-  static const _interactiveColorMatrixPixelBudget = 640000;
-  static const _aggressiveColorMatrixPixelBudget = 360000;
   static const _largeFilterCoverageThreshold = 0.35;
   static const _hugeFilterCoverageThreshold = 0.72;
   static const _largeCoverageViewportOutsetScale = 0.8;
@@ -225,14 +185,13 @@ class FilterSegmentRenderer {
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
     Set<String> volatileElementIds = const <String>{},
-    FilterRenderHints renderHints = const FilterRenderHints(),
   }) {
     _diagnostics.beginFrame();
     if (elements.isEmpty) {
       _diagnostics.endFrame();
       return;
     }
-    final runtimePolicy = _resolveRuntimePolicy(renderHints);
+    final runtimePolicy = _resolveRuntimePolicy();
 
     final baseSegments = _segmentBuilder.build(elements);
     final segments = volatileElementIds.isEmpty
@@ -1336,88 +1295,36 @@ class FilterSegmentRenderer {
     }
   }
 
-  _FilterRuntimePolicy _resolveRuntimePolicy(FilterRenderHints renderHints) {
-    final preferFastCpuFallback =
-        renderHints.interactionPreview || renderHints.aggressiveCpuFallback;
-    final aggressiveCpuFallback =
-        preferFastCpuFallback && renderHints.aggressiveCpuFallback;
-    final sigmaQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveSigmaQuantization
-        : preferFastCpuFallback
-        ? _interactiveSigmaQuantization
-        : _fullQualitySigmaQuantization;
-    final mosaicQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveMosaicQuantization
-        : preferFastCpuFallback
-        ? _interactiveMosaicQuantization
-        : _fullQualityMosaicQuantization;
-    final offsetQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveOffsetQuantization
-        : preferFastCpuFallback
-        ? _interactiveOffsetQuantization
-        : _fullQualityOffsetQuantization;
-    final gaussianMaxSigma = aggressiveCpuFallback
-        ? _aggressiveGaussianMaxSigma
-        : preferFastCpuFallback
-        ? _interactiveGaussianMaxSigma
-        : 12.0;
-    final mosaicMaxSigma = aggressiveCpuFallback
-        ? _aggressiveMosaicMaxSigma
-        : _interactiveMosaicMaxSigma;
-    final maxViewportOutset = aggressiveCpuFallback
-        ? _aggressiveViewportOutset
-        : preferFastCpuFallback
-        ? _interactiveViewportOutset
-        : _maxViewportOutset;
-    final blurDownsampleFactor = aggressiveCpuFallback
-        ? _aggressiveBlurDownsampleFactor
-        : preferFastCpuFallback
-        ? _interactiveBlurDownsampleFactor
-        : _fullQualityBlurDownsampleFactor;
-    final blurPixelBudget = aggressiveCpuFallback
-        ? _aggressiveBlurPixelBudget.toDouble()
-        : preferFastCpuFallback
-        ? _interactiveBlurPixelBudget.toDouble()
-        : _fullQualityBlurPixelBudget;
-    final colorMatrixPixelBudget = aggressiveCpuFallback
-        ? _aggressiveColorMatrixPixelBudget.toDouble()
-        : preferFastCpuFallback
-        ? _interactiveColorMatrixPixelBudget.toDouble()
-        : _fullQualityColorMatrixPixelBudget;
-
-    return _FilterRuntimePolicy(
-      preferFastCpuFallback: preferFastCpuFallback,
-      aggressiveCpuFallback: aggressiveCpuFallback,
-      canUseMosaicShader: _kernelFactory.canUseMosaicShader,
-      gaussianMinSigma: preferFastCpuFallback
-          ? _interactiveGaussianMinSigma
-          : 0.5,
-      gaussianMaxSigma: gaussianMaxSigma,
-      mosaicPreviewMinSigma: _interactiveMosaicMinSigma,
-      mosaicPreviewMaxSigma: mosaicMaxSigma,
-      maxViewportOutset: maxViewportOutset,
-      sigmaQuantizationStep: sigmaQuantizationStep,
-      mosaicSizeQuantizationStep: mosaicQuantizationStep,
-      mosaicOffsetQuantizationStep: offsetQuantizationStep,
-      blurDownsampleFactor: blurDownsampleFactor,
-      blurPixelBudget: blurPixelBudget,
-      colorMatrixPixelBudget: colorMatrixPixelBudget,
-      largeCoverageThreshold: _largeFilterCoverageThreshold,
-      hugeCoverageThreshold: _hugeFilterCoverageThreshold,
-      largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
-      hugeCoverageViewportOutsetScale: _hugeCoverageViewportOutsetScale,
-      largeCoverageSigmaScale: _largeCoverageSigmaScale,
-      hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
-      largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
-      hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
-      largeCoveragePixelBudgetScale: _largeCoveragePixelBudgetScale,
-      hugeCoveragePixelBudgetScale: _hugeCoveragePixelBudgetScale,
-      largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
-      hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
-      largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
-      hugeCoverageQuantizationScale: _hugeCoverageQuantizationScale,
-    );
-  }
+  _FilterRuntimePolicy _resolveRuntimePolicy() => _FilterRuntimePolicy(
+    preferFastCpuFallback: false,
+    aggressiveCpuFallback: false,
+    canUseMosaicShader: _kernelFactory.canUseMosaicShader,
+    gaussianMinSigma: 0.5,
+    gaussianMaxSigma: 12,
+    mosaicPreviewMinSigma: _interactiveMosaicMinSigma,
+    mosaicPreviewMaxSigma: _interactiveMosaicMaxSigma,
+    maxViewportOutset: _maxViewportOutset,
+    sigmaQuantizationStep: _fullQualitySigmaQuantization,
+    mosaicSizeQuantizationStep: _fullQualityMosaicQuantization,
+    mosaicOffsetQuantizationStep: _fullQualityOffsetQuantization,
+    blurDownsampleFactor: _fullQualityBlurDownsampleFactor,
+    blurPixelBudget: _fullQualityBlurPixelBudget,
+    colorMatrixPixelBudget: _fullQualityColorMatrixPixelBudget,
+    largeCoverageThreshold: _largeFilterCoverageThreshold,
+    hugeCoverageThreshold: _hugeFilterCoverageThreshold,
+    largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
+    hugeCoverageViewportOutsetScale: _hugeCoverageViewportOutsetScale,
+    largeCoverageSigmaScale: _largeCoverageSigmaScale,
+    hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
+    largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
+    hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
+    largeCoveragePixelBudgetScale: _largeCoveragePixelBudgetScale,
+    hugeCoveragePixelBudgetScale: _hugeCoveragePixelBudgetScale,
+    largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
+    hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
+    largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
+    hugeCoverageQuantizationScale: _hugeCoverageQuantizationScale,
+  );
 
   _ClipInfo _resolveClipInfo(ElementState element, {required bool useCache}) {
     if (!useCache) {
