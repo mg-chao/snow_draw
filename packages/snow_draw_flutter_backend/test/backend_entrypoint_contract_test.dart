@@ -94,6 +94,18 @@ void main() {
       );
       expect(context.elementRegistry.supports(TextData.typeIdToken), isTrue);
     });
+
+    test('forwards custom text metrics service and event bus overrides', () {
+      const customTextMetrics = _StubTextMetricsService();
+      final customEventBus = EventBus();
+      final context = createFlutterDrawContext(
+        textMetricsService: customTextMetrics,
+        eventBus: customEventBus,
+      );
+
+      expect(context.textMetricsService, same(customTextMetrics));
+      expect(context.eventBus, same(customEventBus));
+    });
   });
 }
 
@@ -123,7 +135,7 @@ class _ReadOnlyElementRegistry implements ElementRegistry {
 class _MutableElementRegistryProxy implements MutableElementRegistry {
   _MutableElementRegistryProxy();
 
-  final DefaultElementRegistry _delegate = DefaultElementRegistry();
+  final _delegate = DefaultElementRegistry();
 
   @override
   ElementDefinition<T>? getDefinition<T extends ElementData>(
@@ -150,4 +162,19 @@ class _MutableElementRegistryProxy implements MutableElementRegistry {
   @override
   bool supportsTypeValue(String typeValue) =>
       _delegate.supportsTypeValue(typeValue);
+}
+
+class _StubTextMetricsService implements TextMetricsService {
+  const _StubTextMetricsService();
+
+  @override
+  TextMetrics measure(TextLayoutRequest request) => const TextMetrics(
+    width: 1,
+    height: 1,
+    lineHeight: 1,
+    lines: <TextLineMetrics>[TextLineMetrics(width: 1, height: 1)],
+  );
+
+  @override
+  void clearCaches() {}
 }

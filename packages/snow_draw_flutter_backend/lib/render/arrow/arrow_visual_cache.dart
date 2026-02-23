@@ -1,10 +1,10 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../geometry/arrow_geometry.dart';
+import '../patterns/stroke_pattern_utils.dart';
 
 class ArrowVisualCacheEntry {
   ArrowVisualCacheEntry({
@@ -94,21 +94,12 @@ class ArrowVisualCache {
         case StrokeStyle.dashed:
           final dashLength = data.strokeWidth * 2.0;
           final gapLength = dashLength * 1.2;
-          final metrics = shaftPath.computeMetrics().toList(growable: false);
-          final dashedShaft = _buildDashedPath(
-            metrics: metrics,
-            dashLength: dashLength,
-            gapLength: gapLength,
-          );
+          final dashedShaft = buildDashedPath(shaftPath, dashLength, gapLength);
           combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
         case StrokeStyle.dotted:
           final dotSpacing = data.strokeWidth * 2.0;
           dotRadius = data.strokeWidth * 0.5;
-          final metrics = shaftPath.computeMetrics().toList(growable: false);
-          dotPositions = _buildDotPositions(
-            metrics: metrics,
-            dotSpacing: dotSpacing,
-          );
+          dotPositions = buildDotPositions(shaftPath, dotSpacing);
       }
     }
 
@@ -166,64 +157,6 @@ class ArrowVisualCache {
       combined.addPath(arrowhead, Offset.zero);
     }
     return combined;
-  }
-
-  Path _buildDashedPath({
-    required List<PathMetric> metrics,
-    required double dashLength,
-    required double gapLength,
-  }) {
-    final dashed = Path();
-    for (final metric in metrics) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = math.min(distance + dashLength, metric.length);
-        dashed.addPath(metric.extractPath(distance, next), Offset.zero);
-        distance = next + gapLength;
-      }
-    }
-    return dashed;
-  }
-
-  /// Builds a [Float32List] of dot center positions along the path.
-  ///
-  /// Returns (x, y) pairs suitable for [Canvas.drawRawPoints], which
-  /// batches all dots into a single GPU draw call. This replaces the
-  /// previous approach of adding individual ovals to a [Path], which
-  /// required Impeller to tessellate each oval separately.
-  Float32List _buildDotPositions({
-    required List<PathMetric> metrics,
-    required double dotSpacing,
-  }) {
-    // Count dots first to pre-allocate the Float32List.
-    var dotCount = 0;
-    for (final metric in metrics) {
-      if (metric.length <= 0) {
-        continue;
-      }
-      // Number of dots: floor(length / spacing) + 1 for the start.
-      dotCount += (metric.length / dotSpacing).floor() + 1;
-    }
-
-    final positions = Float32List(dotCount * 2);
-    var idx = 0;
-    for (final metric in metrics) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent != null) {
-          positions[idx++] = tangent.position.dx;
-          positions[idx++] = tangent.position.dy;
-        }
-        distance += dotSpacing;
-      }
-    }
-
-    // Trim if we over-estimated (e.g. getTangentForOffset returned null).
-    if (idx < positions.length) {
-      return Float32List.sublistView(positions, 0, idx);
-    }
-    return positions;
   }
 }
 

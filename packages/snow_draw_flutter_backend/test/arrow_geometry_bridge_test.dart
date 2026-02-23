@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
@@ -29,7 +27,7 @@ void main() {
     });
 
     test('descriptor exposes core inset and direction outputs', () {
-      const rect = DrawRect(minX: 0, minY: 0, maxX: 200, maxY: 120);
+      const rect = DrawRect(maxX: 200, maxY: 120);
       const data = ArrowData(
         points: <DrawPoint>[
           DrawPoint(x: 0.05, y: 0.10),

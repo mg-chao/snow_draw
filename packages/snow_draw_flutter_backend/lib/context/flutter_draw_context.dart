@@ -11,11 +11,16 @@ import '../services/text/flutter_text_metrics_service.dart';
 /// Pass a custom [ElementRegistry] when consumers need full control over
 /// registration. Built-in auto-registration requires
 /// [MutableElementRegistry].
+///
+/// [textMetricsService] and [eventBus] can be overridden for tests or hosts
+/// that need custom instrumentation.
 DrawContext createFlutterDrawContext({
   ElementRegistry? elementRegistry,
   IdGenerator? idGenerator,
   DrawConfig? config,
   LogService? logService,
+  TextMetricsService? textMetricsService,
+  EventBus? eventBus,
   bool registerBuiltInElementDefinitions = true,
 }) {
   final registry = resolveElementRegistry(
@@ -28,6 +33,7 @@ DrawContext createFlutterDrawContext({
     idGenerator: idGenerator,
     config: config,
     logService: logService,
-    textMetricsService: flutterTextMetricsService,
+    textMetricsService: textMetricsService ?? flutterTextMetricsService,
+    eventBus: eventBus,
   );
 }
