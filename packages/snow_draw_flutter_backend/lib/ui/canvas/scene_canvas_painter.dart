@@ -1054,7 +1054,6 @@ class SceneCanvasPainter extends CustomPainter {
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
     final localeTag = renderKey.locale?.toLanguageTag() ?? '';
     return FilterRenderCacheContext(
-      documentVersion: renderKey.documentVersion,
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
       scaleKey: (scale * 1000).round(),
       localeTag: localeTag,

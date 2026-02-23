@@ -2262,7 +2262,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     return SceneCanvasRenderKey(
       creatingElement: creatingElement,
-      documentVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
       elementRegistry: elementRegistry,

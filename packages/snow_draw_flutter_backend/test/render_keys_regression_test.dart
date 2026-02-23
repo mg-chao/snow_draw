@@ -124,7 +124,6 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   Map<String, ElementState> previewElementsById = const {},
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
-  documentVersion: 1,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,
   elementRegistry: registry,

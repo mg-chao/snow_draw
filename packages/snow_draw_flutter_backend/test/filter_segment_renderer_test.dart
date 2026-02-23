@@ -374,7 +374,6 @@ void main() {
         data: RectangleData(),
       );
       const cacheContext = FilterRenderCacheContext(
-        documentVersion: 42,
         textRenderingCacheRevision: 7,
         scaleKey: 1000,
         localeTag: 'en-US',
@@ -432,7 +431,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        documentVersion: 87,
         textRenderingCacheRevision: 5,
         scaleKey: 1000,
         localeTag: 'en-US',
@@ -489,22 +487,23 @@ void main() {
     },
   );
 
-  test('batch cache survives document-version changes '
+  test('batch cache survives context recreation '
       'when batch elements are stable', () {
     final renderer = FilterSegmentRenderer();
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContextV1 = FilterRenderCacheContext(
-      documentVersion: 101,
       textRenderingCacheRevision: 5,
       scaleKey: 1000,
       localeTag: 'en-US',
     );
-    const cacheContextV2 = FilterRenderCacheContext(
-      documentVersion: 102,
-      textRenderingCacheRevision: 5,
-      scaleKey: 1000,
-      localeTag: 'en-US',
+    final cacheRevision = cacheContextV1.textRenderingCacheRevision;
+    final scaleKey = cacheContextV1.scaleKey;
+    final localeTag = cacheContextV1.localeTag;
+    final cacheContextV2 = FilterRenderCacheContext(
+      textRenderingCacheRevision: cacheRevision,
+      scaleKey: scaleKey,
+      localeTag: localeTag,
     );
     const baseElement = ElementState(
       id: 'base',
@@ -560,7 +559,6 @@ void main() {
     const batchCount = 128;
     const baseColor = Color(0xFF223344);
     const cacheContext = FilterRenderCacheContext(
-      documentVersion: 11,
       textRenderingCacheRevision: 3,
       scaleKey: 1000,
       localeTag: 'en-US',
@@ -712,7 +710,6 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContext = FilterRenderCacheContext(
-      documentVersion: 3,
       textRenderingCacheRevision: 1,
       scaleKey: 1000,
       localeTag: 'en-US',
@@ -769,7 +766,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        documentVersion: 8,
         textRenderingCacheRevision: 2,
         scaleKey: 1000,
         localeTag: 'en-US',

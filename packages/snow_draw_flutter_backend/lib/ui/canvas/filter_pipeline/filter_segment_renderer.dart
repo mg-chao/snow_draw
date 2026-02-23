@@ -15,13 +15,11 @@ typedef SceneElementPainter =
 @immutable
 class FilterRenderCacheContext {
   const FilterRenderCacheContext({
-    required this.documentVersion,
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
   });
 
-  final int documentVersion;
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
@@ -30,18 +28,13 @@ class FilterRenderCacheContext {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is FilterRenderCacheContext &&
-          other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
           other.localeTag == localeTag;
 
   @override
-  int get hashCode => Object.hash(
-    documentVersion,
-    textRenderingCacheRevision,
-    scaleKey,
-    localeTag,
-  );
+  int get hashCode =>
+      Object.hash(textRenderingCacheRevision, scaleKey, localeTag);
 }
 
 /// Runtime hints for adaptive filter rendering.
@@ -1939,8 +1932,8 @@ class _BatchPictureCacheKey {
     required this.elementCount,
   });
 
-  /// Signature intentionally excludes document version so stable non-filter
-  /// batches survive filter-only document updates (for example strength drags).
+  /// Signature intentionally tracks only paint-relevant context so stable
+  /// non-filter batches survive unrelated cache-context recreation.
   final _BatchPictureContextSignature contextSignature;
 
   /// Stable-id fingerprint for the batch element order.
