@@ -91,13 +91,6 @@ const _textEditReducer = TextEditReducer();
 
 const interactionStateMachine = InteractionStateMachine();
 
-@immutable
-class HistoryAvailability {
-  const HistoryAvailability({this.canUndo = true, this.canRedo = true});
-  final bool canUndo;
-  final bool canRedo;
-}
-
 DrawAction? _resolveEditIntentAction(
   DrawAction action,
   EditIntentResolverDeps context,

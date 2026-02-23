@@ -1,7 +1,9 @@
 import '../../../actions/draw_actions.dart';
 import '../../../actions/history_policy.dart';
+import '../../../elements/types/arrow/arrow_binding.dart';
 import '../../../elements/types/arrow/arrow_like_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
+import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
 import '../../../models/element_state.dart';
@@ -273,27 +275,26 @@ class HistoryMiddleware extends MiddlewareBase {
         _ => null,
       };
 
-  HistoryMetadata _metadataFromFinishTextEdit(
+  HistoryMetadata? _metadataFromFinishTextEdit(
     DispatchContext context,
     FinishTextEdit action,
   ) {
-    final resolved = _resolveFinishTextEditPayload(context, action);
-    final trimmed = resolved.text.trim();
-    final isDelete = trimmed.isEmpty && !resolved.isNew;
-    final isCreate = resolved.isNew;
-
-    return HistoryMetadata(
-      description: isDelete
-          ? 'Delete text'
-          : isCreate
-          ? 'Create text'
-          : 'Edit text',
-      recordType: isDelete
-          ? HistoryRecordType.delete
-          : isCreate
-          ? HistoryRecordType.create
-          : HistoryRecordType.edit,
-    );
+    final outcome = _resolveFinishTextEditOutcome(context, action);
+    return switch (outcome.kind) {
+      _FinishTextEditOutcomeKind.delete => HistoryMetadata(
+        description: 'Delete text',
+        recordType: HistoryRecordType.delete,
+      ),
+      _FinishTextEditOutcomeKind.create => HistoryMetadata(
+        description: 'Create text',
+        recordType: HistoryRecordType.create,
+      ),
+      _FinishTextEditOutcomeKind.edit => HistoryMetadata(
+        description: 'Edit text',
+        recordType: HistoryRecordType.edit,
+      ),
+      _FinishTextEditOutcomeKind.noop => null,
+    };
   }
 
   ({String elementId, bool isNew, String text}) _resolveFinishTextEditPayload(
@@ -313,6 +314,29 @@ class HistoryMiddleware extends MiddlewareBase {
       elementId: action.elementId,
       isNew: action.isNew,
       text: action.text,
+    );
+  }
+
+  ({String elementId, _FinishTextEditOutcomeKind kind})
+  _resolveFinishTextEditOutcome(
+    DispatchContext context,
+    FinishTextEdit action,
+  ) {
+    final payload = _resolveFinishTextEditPayload(context, action);
+    final hasText = payload.text.trim().isNotEmpty;
+    if (!hasText) {
+      return (
+        elementId: payload.elementId,
+        kind: payload.isNew
+            ? _FinishTextEditOutcomeKind.noop
+            : _FinishTextEditOutcomeKind.delete,
+      );
+    }
+    return (
+      elementId: payload.elementId,
+      kind: payload.isNew
+          ? _FinishTextEditOutcomeKind.create
+          : _FinishTextEditOutcomeKind.edit,
     );
   }
 
@@ -428,17 +452,20 @@ class HistoryMiddleware extends MiddlewareBase {
     );
   }
 
-  HistoryChangeSet _buildDeleteElementsChangeSet({
+  HistoryChangeSet? _buildDeleteElementsChangeSet({
     required DispatchContext context,
     required DeleteElements action,
     required bool selectionChanged,
   }) {
+    final document = context.initialState.domain.document;
     final beforeElements = context.initialState.domain.document.elements;
-    final removedIds = action.elementIds.toSet();
-    _expandDeleteIdsForBoundSerialText(
+    final removedIds = expandSerialNumberBoundTextIds(
       elements: beforeElements,
-      removedIds: removedIds,
+      seedIds: action.elementIds.where(document.elementMap.containsKey),
     );
+    if (removedIds.isEmpty) {
+      return selectionChanged ? HistoryChangeSet(selectionChanged: true) : null;
+    }
     final modifiedIds = <String>{};
     for (final element in beforeElements) {
       if (removedIds.contains(element.id)) {
@@ -483,36 +510,28 @@ class HistoryMiddleware extends MiddlewareBase {
     required FinishTextEdit action,
     required bool selectionChanged,
   }) {
-    final resolved = _resolveFinishTextEditPayload(context, action);
-    final trimmed = resolved.text.trim();
-    if (trimmed.isEmpty) {
-      if (resolved.isNew) {
-        return null;
-      }
-      final modifiedIds = _dependentIdsBoundToDeletedText(
-        elements: context.initialState.domain.document.elements,
-        textElementId: resolved.elementId,
-      );
-      return HistoryChangeSet(
-        modifiedIds: modifiedIds,
-        removedIds: {resolved.elementId},
+    final outcome = _resolveFinishTextEditOutcome(context, action);
+    return switch (outcome.kind) {
+      _FinishTextEditOutcomeKind.delete => HistoryChangeSet(
+        modifiedIds: _dependentIdsBoundToDeletedText(
+          elements: context.initialState.domain.document.elements,
+          textElementId: outcome.elementId,
+        ),
+        removedIds: {outcome.elementId},
         orderChanged: true,
         selectionChanged: selectionChanged,
-      );
-    }
-
-    if (resolved.isNew) {
-      return HistoryChangeSet(
-        addedIds: {resolved.elementId},
+      ),
+      _FinishTextEditOutcomeKind.create => HistoryChangeSet(
+        addedIds: {outcome.elementId},
         orderChanged: true,
         selectionChanged: selectionChanged,
-      );
-    }
-
-    return HistoryChangeSet(
-      modifiedIds: {resolved.elementId},
-      selectionChanged: selectionChanged,
-    );
+      ),
+      _FinishTextEditOutcomeKind.edit => HistoryChangeSet(
+        modifiedIds: {outcome.elementId},
+        selectionChanged: selectionChanged,
+      ),
+      _FinishTextEditOutcomeKind.noop => null,
+    };
   }
 
   HistoryChangeSet? _buildDuplicateElementsChangeSet({
@@ -595,32 +614,6 @@ class HistoryMiddleware extends MiddlewareBase {
     };
   }
 
-  void _expandDeleteIdsForBoundSerialText({
-    required Iterable<ElementState> elements,
-    required Set<String> removedIds,
-  }) {
-    var changed = true;
-    while (changed) {
-      changed = false;
-      for (final element in elements) {
-        if (!removedIds.contains(element.id)) {
-          continue;
-        }
-        final data = element.data;
-        if (data is! SerialNumberData) {
-          continue;
-        }
-        final boundId = data.textElementId;
-        if (boundId == null) {
-          continue;
-        }
-        if (removedIds.add(boundId)) {
-          changed = true;
-        }
-      }
-    }
-  }
-
   bool _isArrowBoundToAny({
     required Object data,
     required Set<String> targetIds,
@@ -628,10 +621,11 @@ class HistoryMiddleware extends MiddlewareBase {
     if (data is! ArrowLikeData) {
       return false;
     }
-    final startTarget = data.startBinding?.elementId;
-    final endTarget = data.endBinding?.elementId;
-    return (startTarget != null && targetIds.contains(startTarget)) ||
-        (endTarget != null && targetIds.contains(endTarget));
+    return ArrowBindingUtils.isBoundToAnyTargets(
+      startBinding: data.startBinding,
+      endBinding: data.endBinding,
+      targetIds: targetIds,
+    );
   }
 
   Set<String> _dependentIdsBoundToDeletedText({
@@ -653,3 +647,5 @@ class HistoryMiddleware extends MiddlewareBase {
     return ids;
   }
 }
+
+enum _FinishTextEditOutcomeKind { create, edit, delete, noop }

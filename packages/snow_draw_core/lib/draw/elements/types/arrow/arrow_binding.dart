@@ -106,6 +106,23 @@ class ArrowBindingUtils {
         data is SerialNumberData;
   }
 
+  /// Returns whether either endpoint binding targets any id in [targetIds].
+  static bool isBoundToAnyTargets({
+    required ArrowBinding? startBinding,
+    required ArrowBinding? endBinding,
+    required Set<String> targetIds,
+  }) {
+    if (targetIds.isEmpty) {
+      return false;
+    }
+    final startTargetId = startBinding?.elementId;
+    if (startTargetId != null && targetIds.contains(startTargetId)) {
+      return true;
+    }
+    final endTargetId = endBinding?.elementId;
+    return endTargetId != null && targetIds.contains(endTargetId);
+  }
+
   static double resolveBindingGap({required ElementState target}) =>
       _resolveBindingGap(target);
 

@@ -1,11 +1,10 @@
-import 'dart:collection';
-
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
+import '../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -18,7 +17,7 @@ DrawState handleDeleteElements(
   ElementReducerDeps _,
 ) {
   final document = state.domain.document;
-  final deleteIds = _expandIdsForBoundSerialText(
+  final deleteIds = expandSerialNumberBoundTextIds(
     elements: document.elements,
     seedIds: action.elementIds.where(document.elementMap.containsKey),
   );
@@ -44,34 +43,6 @@ DrawState handleDeleteElements(
   return applySelectionChange(next, newSelectedIds);
 }
 
-Set<String> _expandIdsForBoundSerialText({
-  required Iterable<ElementState> elements,
-  required Iterable<String> seedIds,
-}) {
-  final serialBindings = <String, String>{};
-  for (final element in elements) {
-    final data = element.data;
-    if (data is SerialNumberData && data.textElementId != null) {
-      serialBindings[element.id] = data.textElementId!;
-    }
-  }
-
-  final expandedIds = {...seedIds};
-  final pending = ListQueue<String>.from(expandedIds);
-  while (pending.isNotEmpty) {
-    final id = pending.removeFirst();
-    final boundId = serialBindings[id];
-    if (boundId == null) {
-      continue;
-    }
-    if (expandedIds.add(boundId)) {
-      pending.add(boundId);
-    }
-  }
-
-  return expandedIds;
-}
-
 ElementState _applyDeleteElementUpdates({
   required ElementState element,
   required Set<String> deleteIds,
@@ -91,13 +62,17 @@ ElementState _applyDeleteElementUpdates({
 
   final startBinding = data.startBinding;
   final endBinding = data.endBinding;
+  if (!ArrowBindingUtils.isBoundToAnyTargets(
+    startBinding: startBinding,
+    endBinding: endBinding,
+    targetIds: deleteIds,
+  )) {
+    return element;
+  }
   final clearStart =
       startBinding != null && deleteIds.contains(startBinding.elementId);
   final clearEnd =
       endBinding != null && deleteIds.contains(endBinding.elementId);
-  if (!clearStart && !clearEnd) {
-    return element;
-  }
 
   return element.copyWith(
     data: data.copyWith(
@@ -127,7 +102,7 @@ DrawState handleDuplicateElements(
   final document = state.domain.document;
   final index = document.elementMap;
   final selectedIds = action.elementIds.toSet();
-  final idsToDuplicate = _expandIdsForBoundSerialText(
+  final idsToDuplicate = expandSerialNumberBoundTextIds(
     elements: document.elements,
     seedIds: selectedIds.where(index.containsKey),
   );

@@ -6,7 +6,6 @@ import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
-import '../../reducers/interaction/interaction_state_machine.dart';
 import '../history_manager.dart';
 import '../snapshot_builder.dart';
 
@@ -131,11 +130,6 @@ class DispatchContext {
     stackTrace: stackTrace ?? this.stackTrace,
     errorSource: errorSource ?? this.errorSource,
     traceId: traceId ?? this.traceId,
-  );
-
-  HistoryAvailability get historyAvailability => HistoryAvailability(
-    canUndo: historyManager.canUndo,
-    canRedo: historyManager.canRedo,
   );
 
   bool get hasError => error != null;

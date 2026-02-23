@@ -183,14 +183,14 @@ ValidationResult _validateZoomCamera(DrawAction action, DispatchContext _) {
 }
 
 ValidationResult _validateUndo(DrawAction action, DispatchContext context) {
-  if (!context.historyAvailability.canUndo) {
+  if (!context.historyManager.canUndo) {
     return const ValidationResult.invalid('Cannot undo: history is empty');
   }
   return const ValidationResult.valid();
 }
 
 ValidationResult _validateRedo(DrawAction action, DispatchContext context) {
-  if (!context.historyAvailability.canRedo) {
+  if (!context.historyManager.canRedo) {
     return const ValidationResult.invalid('Cannot redo: no future history');
   }
   return const ValidationResult.valid();
