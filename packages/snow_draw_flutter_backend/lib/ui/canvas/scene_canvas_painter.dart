@@ -86,22 +86,17 @@ class SceneCanvasPainter extends CustomPainter {
     return tasks;
   }
 
-  GridConfig _resolveGridConfig(GridRenderTask? task) {
-    if (task == null) {
-      return renderKey.gridConfig;
-    }
-    return GridConfig(
-      enabled: task.enabled,
-      size: task.size,
-      lineColor: task.lineColor,
-      lineOpacity: task.lineOpacity,
-      majorLineOpacity: task.majorLineOpacity,
-      lineWidth: task.lineWidth,
-      majorLineEvery: task.majorLineEvery,
-      minScreenSpacing: task.minScreenSpacing,
-      minRenderSpacing: task.minRenderSpacing,
-    );
-  }
+  GridConfig _gridConfigFromTask(GridRenderTask task) => GridConfig(
+    enabled: task.enabled,
+    size: task.size,
+    lineColor: task.lineColor,
+    lineOpacity: task.lineOpacity,
+    majorLineOpacity: task.majorLineOpacity,
+    lineWidth: task.lineWidth,
+    majorLineEvery: task.majorLineEvery,
+    minScreenSpacing: task.minScreenSpacing,
+    minRenderSpacing: task.minRenderSpacing,
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -114,8 +109,10 @@ class SceneCanvasPainter extends CustomPainter {
     final plannedBackgroundTask = _firstPlannedTask<BackgroundRenderTask>();
     final plannedGridTask = _firstPlannedTask<GridRenderTask>();
     final effectiveBackgroundColor =
-        plannedBackgroundTask?.color ?? renderKey.canvasConfig.backgroundColor;
-    final effectiveGridConfig = _resolveGridConfig(plannedGridTask);
+        plannedBackgroundTask?.color ?? ConfigDefaults.backgroundColor;
+    final effectiveGridConfig = plannedGridTask == null
+        ? const GridConfig(enabled: false)
+        : _gridConfigFromTask(plannedGridTask);
     _drawBackground(canvas, size, effectiveBackgroundColor);
     final viewportRect = DrawRect(
       minX: -camera.position.x / scale,
@@ -183,8 +180,7 @@ class SceneCanvasPainter extends CustomPainter {
     }
 
     final plannedWatermarkTask = _firstPlannedTask<WatermarkRenderTask>();
-    final watermarkConfig = plannedWatermarkTask?.config;
-    if (watermarkConfig != null || renderKey.isWatermarkVisible) {
+    if (plannedWatermarkTask != null) {
       canvas
         ..save()
         ..scale(1 / scale, 1 / scale)
@@ -192,7 +188,7 @@ class SceneCanvasPainter extends CustomPainter {
       paintWatermark(
         canvas: canvas,
         viewportSize: size,
-        config: watermarkConfig ?? renderKey.watermarkConfig,
+        config: plannedWatermarkTask.config,
       );
       canvas.restore();
     }
@@ -205,142 +201,27 @@ class SceneCanvasPainter extends CustomPainter {
         config: plannedSnapGuidesTask.snapConfig,
         scale: scale,
       );
-    } else {
-      final snapGuides = renderKey.snapGuides;
-      if (snapGuides.isNotEmpty && renderKey.snapConfig.showGuides) {
-        _drawSnapGuides(
-          canvas: canvas,
-          guides: snapGuides,
-          config: renderKey.snapConfig,
-          scale: scale,
-        );
-      }
     }
 
     final plannedHoverTasks = _plannedTasks<HoverOutlineRenderTask>();
-    if (plannedHoverTasks.isNotEmpty) {
-      for (final task in plannedHoverTasks) {
-        _drawHoverOutlineFromTask(canvas: canvas, task: task, scale: scale);
-      }
-    } else {
-      // Draw hover outline when selection is possible.
-      final hoveredElementId = renderKey.hoveredElementId;
-      if (hoveredElementId != null &&
-          !renderKey.selectedIds.contains(hoveredElementId)) {
-        final hoveredElement = state.domain.document.getElementById(
-          hoveredElementId,
-        );
-        if (hoveredElement != null) {
-          _drawHoverOutlineFromTask(
-            canvas: canvas,
-            task: HoverOutlineRenderTask(
-              element: stateView.effectiveElement(hoveredElement),
-              config: renderKey.hoverSelectionConfig,
-            ),
-            scale: scale,
-          );
-        }
-      }
+    for (final task in plannedHoverTasks) {
+      _drawHoverOutlineFromTask(canvas: canvas, task: task, scale: scale);
     }
 
     final plannedSelectionOutlineTasks =
         _plannedTasks<SelectionOutlineRenderTask>();
     final plannedSelectionControlsTask =
         _firstPlannedTask<SelectionControlsRenderTask>();
-    if (plannedSelectionOutlineTasks.isNotEmpty ||
-        plannedSelectionControlsTask != null) {
-      for (final task in plannedSelectionOutlineTasks) {
-        _drawSelectionOutlineFromTask(canvas: canvas, task: task, scale: scale);
-      }
-      final controlsTask = plannedSelectionControlsTask;
-      if (controlsTask != null) {
-        _drawSelectionControlsFromTask(
-          canvas: canvas,
-          task: controlsTask,
-          scale: scale,
-        );
-      }
-    } else {
-      // Draw selection overlay.
-      final effectiveSelection = renderKey.effectiveSelection;
-      if (effectiveSelection.hasSelection) {
-        final bounds = effectiveSelection.bounds;
-        if (bounds != null) {
-          final rotationCenter = effectiveSelection.center ?? bounds.center;
-
-          // Multi-select renders per-element outlines before shared controls.
-          final selectedIds = renderKey.selectedIds;
-          if (selectedIds.length > 1) {
-            for (final element in stateView.selectedElements) {
-              final effectiveElement = stateView.effectiveElement(element);
-              elementRenderer.renderSelectionOutline(
-                canvas: canvas,
-                bounds: effectiveElement.rect,
-                scaleFactor: scale,
-                config: renderKey.selectionConfig,
-                rotation: effectiveElement.rotation,
-                rotationCenter: effectiveElement.center,
-                dashed: false,
-              );
-            }
-          }
-
-          final firstSelectedData = stateView.selectedElements.isNotEmpty
-              ? stateView.selectedElements.first.data
-              : null;
-          final isSingleTwoPointArrow =
-              selectedIds.length == 1 &&
-              firstSelectedData is ArrowLikeData &&
-              firstSelectedData.points.length == 2;
-          final isSingleElbowArrow =
-              selectedIds.length == 1 &&
-              firstSelectedData is ArrowLikeData &&
-              firstSelectedData.arrowType == ArrowType.elbow;
-          final cornerHandleOffset =
-              selectedIds.length == 1 && firstSelectedData is ArrowLikeData
-              ? 8.0
-              : 0.0;
-
-          if (!isSingleTwoPointArrow) {
-            elementRenderer.renderSelection(
-              canvas: canvas,
-              bounds: bounds,
-              scaleFactor: scale,
-              config: renderKey.selectionConfig,
-              rotation: effectiveSelection.rotation,
-              rotationCenter: rotationCenter,
-              dashed: selectedIds.length > 1,
-              cornerHandleOffset: cornerHandleOffset,
-            );
-            if (!isSingleElbowArrow) {
-              elementRenderer.renderRotationHandle(
-                canvas: canvas,
-                bounds: bounds,
-                scaleFactor: scale,
-                config: renderKey.selectionConfig,
-                rotation: effectiveSelection.rotation,
-                rotationCenter: rotationCenter,
-              );
-            }
-          }
-        }
-      }
-
-      if (renderKey.selectedIds.length == 1) {
-        final selectedId = renderKey.selectedIds.first;
-        final element = state.domain.document.getElementById(selectedId);
-        if (element?.data is TextData) {
-          final effectiveElement = stateView.effectiveElement(element!);
-          elementRenderer.renderSelectionOutline(
-            canvas: canvas,
-            bounds: effectiveElement.rect,
-            scaleFactor: scale,
-            config: renderKey.hoverSelectionConfig,
-            rotation: effectiveElement.rotation,
-            rotationCenter: effectiveElement.center,
-          );
-        }
-      }
+    for (final task in plannedSelectionOutlineTasks) {
+      _drawSelectionOutlineFromTask(canvas: canvas, task: task, scale: scale);
+    }
+    final controlsTask = plannedSelectionControlsTask;
+    if (controlsTask != null) {
+      _drawSelectionControlsFromTask(
+        canvas: canvas,
+        task: controlsTask,
+        scale: scale,
+      );
     }
 
     _drawArrowBindingHighlight(canvas: canvas, scale: scale);
@@ -353,8 +234,6 @@ class SceneCanvasPainter extends CustomPainter {
         task: plannedArrowOverlayTask,
         scale: scale,
       );
-    } else {
-      _drawArrowPointOverlay(canvas: canvas, scale: scale);
     }
 
     final plannedBoxSelectionTask = _firstPlannedTask<BoxSelectionRenderTask>();
@@ -370,17 +249,6 @@ class SceneCanvasPainter extends CustomPainter {
         scale,
         plannedBoxSelectionTask.config,
       );
-    } else {
-      final boxSelectionBounds = renderKey.boxSelectionBounds;
-      if (boxSelectionBounds != null) {
-        _drawBoxSelectionPreview(canvas, boxSelectionBounds, scale);
-        _drawBoxSelection(
-          canvas,
-          boxSelectionBounds,
-          scale,
-          renderKey.boxSelectionConfig,
-        );
-      }
     }
 
     canvas.restore();
@@ -1351,48 +1219,6 @@ class SceneCanvasPainter extends CustomPainter {
     if (persistedElement?.data is TextData) {
       visibleTextIds.add(editingTextId);
     }
-  }
-
-  void _drawArrowPointOverlay({required Canvas canvas, required double scale}) {
-    if (renderKey.selectedIds.length != 1) {
-      return;
-    }
-    final selectedId = renderKey.selectedIds.first;
-    final element = stateView.state.domain.document.getElementById(selectedId);
-    if (element == null || element.data is! ArrowLikeData) {
-      return;
-    }
-
-    final effectiveElement = stateView.effectiveElement(element);
-    final selectionConfig = renderKey.selectionConfig;
-    final handleTolerance = selectionConfig.interaction.handleTolerance / scale;
-    final loopThreshold = handleTolerance * 1.5;
-    final baseHandleSize = selectionConfig.render.controlPointSize / scale;
-    final handleSize = baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
-    final overlay = ArrowPointUtils.buildOverlay(
-      element: effectiveElement,
-      loopThreshold: loopThreshold,
-      handleSize: handleSize,
-    );
-    if (overlay.turningPoints.isEmpty &&
-        overlay.addablePoints.isEmpty &&
-        overlay.loopPoints.isEmpty) {
-      return;
-    }
-    _drawArrowPointHandles(
-      canvas: canvas,
-      element: effectiveElement,
-      handles: <ArrowPointHandle>[
-        ...overlay.addablePoints,
-        ...overlay.turningPoints,
-        ...overlay.loopPoints,
-      ],
-      selectionConfig: selectionConfig,
-      activeHandle: renderKey.activeArrowHandle,
-      hoveredHandle: renderKey.hoveredArrowHandle,
-      deleteIndicatorVisible: renderKey.arrowDeleteIndicatorVisible,
-      scale: scale,
-    );
   }
 
   void _drawArrowBindingHighlight({
@@ -2444,42 +2270,6 @@ class SceneCanvasPainter extends CustomPainter {
         rotationCenter: element.center,
         dashed: false,
       );
-    }
-  }
-
-  /// Draw preview borders for elements that would be selected.
-  void _drawBoxSelectionPreview(Canvas canvas, DrawRect bounds, double scale) {
-    final state = stateView.state;
-    final document = state.domain.document;
-    final candidates = document.getElementsInRect(bounds);
-
-    for (final element in candidates) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      // Show preview for elements that overlap the selection bounds.
-      if (bounds.minX <= aabb.maxX &&
-          bounds.maxX >= aabb.minX &&
-          bounds.minY <= aabb.maxY &&
-          bounds.maxY >= aabb.minY) {
-        // Draw preview border using same style as multi-select outlines
-        final effectiveElement = stateView.effectiveElement(element);
-        if (effectiveElement.data is FreeDrawData) {
-          _drawFreeDrawSelectionPreview(
-            canvas: canvas,
-            element: effectiveElement,
-            scale: scale,
-          );
-        } else {
-          elementRenderer.renderSelectionOutline(
-            canvas: canvas,
-            bounds: effectiveElement.rect,
-            scaleFactor: scale,
-            config: renderKey.selectionConfig,
-            rotation: effectiveElement.rotation,
-            rotationCenter: effectiveElement.center,
-            dashed: false,
-          );
-        }
-      }
     }
   }
 

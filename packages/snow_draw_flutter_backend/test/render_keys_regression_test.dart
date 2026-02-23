@@ -113,6 +113,7 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   watermarkConfig: watermarkConfig ?? const WatermarkConfig(),
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
+  framePlan: FrameRenderPlan.empty,
 );
 
 CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>

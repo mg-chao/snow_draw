@@ -43,15 +43,11 @@ class CreatingElementSnapshot {
 
 /// Render key for the single scene canvas.
 ///
-/// Captures exactly what affects scene-canvas rendering:
-/// - Creating element state
-/// - Effective selection (bounds, center, rotation)
-/// - Box selection bounds
-/// - Selected/hovered element IDs (for selection outlines)
-/// - Arrow handle interaction state (including delete indicator visibility)
-/// - Document version (for selection outline refresh)
-/// - Preview element map
-/// - Camera state (position/zoom), selection/box selection config, scale factor
+/// [framePlan] is the authoritative paint input for the single-canvas path.
+///
+/// The remaining fields are retained for repaint-key stability and
+/// backend-only render concerns (for example filter cache context and
+/// interaction diagnostics) that are not encoded directly in core tasks.
 @immutable
 class SceneCanvasRenderKey {
   const SceneCanvasRenderKey({
@@ -82,10 +78,10 @@ class SceneCanvasRenderKey {
     required this.gridConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
+    required this.framePlan,
     this.textMetricsService = defaultTextMetricsService,
     this.preferFastFilterFallback = false,
     this.locale,
-    this.framePlan = FrameRenderPlan.empty,
   });
 
   /// Snapshot of element being created, or null if not creating.
