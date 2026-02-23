@@ -48,21 +48,23 @@ class CreatingElementSnapshot {
 /// into core render tasks.
 @immutable
 class SceneCanvasRenderKey {
-  const SceneCanvasRenderKey({
+  SceneCanvasRenderKey({
     required this.creatingElement,
     required this.hoveredBindingElementId,
     required this.hoveredArrowHandle,
     required this.selectionConfig,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
-    required this.previewElementsById,
+    required Map<String, ElementState> previewElementsById,
     required this.preferFastFilterFallback,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     required this.framePlan,
     this.textMetricsService = defaultTextMetricsService,
     this.locale,
-  });
+  }) : previewElementsById = previewElementsById.isEmpty
+           ? const <String, ElementState>{}
+           : Map<String, ElementState>.unmodifiable(previewElementsById);
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;

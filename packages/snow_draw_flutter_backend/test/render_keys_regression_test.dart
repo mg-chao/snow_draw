@@ -61,6 +61,43 @@ void main() {
       expect(baseline.hashCode, isNot(withPreview.hashCode));
     });
 
+    test('captures preview map snapshot to avoid mutable-key regressions', () {
+      final registry = DefaultElementRegistry();
+      final mutablePreview = <String, ElementState>{
+        'line-1': const ElementState(
+          id: 'line-1',
+          rect: DrawRect(maxX: 20, maxY: 20),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: LineData(),
+        ),
+      };
+
+      final firstKey = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        previewElementsById: mutablePreview,
+      );
+      mutablePreview['line-2'] = const ElementState(
+        id: 'line-2',
+        rect: DrawRect(maxX: 24, maxY: 24),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: LineData(),
+      );
+      final secondKey = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        previewElementsById: mutablePreview,
+      );
+
+      expect(firstKey.previewElementsById.containsKey('line-2'), isFalse);
+      expect(firstKey, isNot(secondKey));
+      expect(firstKey.hashCode, isNot(secondKey.hashCode));
+    });
+
     test('watermark task differences participate in equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
