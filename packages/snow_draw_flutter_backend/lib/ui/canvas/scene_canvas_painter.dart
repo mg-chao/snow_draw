@@ -47,7 +47,6 @@ class SceneCanvasPainter extends CustomPainter {
   static final _freeDrawPointPaint = Paint()
     ..style = PaintingStyle.fill
     ..isAntiAlias = true;
-  static _SceneRenderContextCacheEntry? _sceneRenderContextCache;
   static final _arrowOverlayPaints = _ArrowOverlayPaints();
   static final _arrowHoverStrokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -970,41 +969,9 @@ class SceneCanvasPainter extends CustomPainter {
     required List<ElementState> elements,
     required Map<String, ElementState> previewElementsById,
   }) {
-    // Eraser preview mode only applies document-backed opacity overrides.
-    // Once the visible element list is stable, cached scene-context metadata
-    // stays valid across frames even as the preview override map grows.
-    final cached = _sceneRenderContextCache;
-    if (cached != null &&
-        cached.matchesFast(
-          document: document,
-          elements: elements,
-          previewElementsById: previewElementsById,
-        )) {
-      return cached.staticData;
-    }
-
-    final canReuseElementSignature =
-        cached != null &&
-        identical(cached.document, document) &&
-        identical(cached.elements, elements);
-
-    final elementSignature = canReuseElementSignature
-        ? cached.elementSignature
-        : _buildSceneElementStructureSignature(elements);
-    final serialPreviewSignature = _buildSerialPreviewSignature(
-      previewElementsById,
-    );
-    if (cached != null &&
-        cached.matchesBySignature(
-          document: document,
-          elementSignature: elementSignature,
-          serialPreviewSignature: serialPreviewSignature,
-        )) {
-      return cached.staticData;
-    }
-
     final canHaveSerialConnectors =
-        document.boundTextIds.isNotEmpty || serialPreviewSignature.count > 0;
+        document.boundTextIds.isNotEmpty ||
+        _hasSerialPreviewElements(previewElementsById);
     var hasFilterElement = false;
     final visibleTextIds = <String>{};
     for (final element in elements) {
@@ -1038,62 +1005,18 @@ class SceneCanvasPainter extends CustomPainter {
       visibleTextIds: visibleTextIds,
       shouldPaintSerialConnectors: shouldPaintSerialConnectors,
     );
-    _sceneRenderContextCache = _SceneRenderContextCacheEntry(
-      document: document,
-      elements: elements,
-      previewElementsById: previewElementsById,
-      elementSignature: elementSignature,
-      serialPreviewSignature: serialPreviewSignature,
-      staticData: staticData,
-    );
     return staticData;
   }
 
-  _SceneElementStructureSignature _buildSceneElementStructureSignature(
-    List<ElementState> elements,
-  ) {
-    var hash = 0;
-    var filterCount = 0;
-    var visibleTextCount = 0;
-    for (final element in elements) {
-      final data = element.data;
-      final isFilter = data is FilterData;
-      final isVisibleText = data is TextData && element.opacity > 0;
-      if (isFilter) {
-        filterCount += 1;
-      }
-      if (isVisibleText) {
-        visibleTextCount += 1;
-      }
-      final flags = (isFilter ? 1 : 0) | (isVisibleText ? 2 : 0);
-      hash ^= Object.hash(element.id, flags);
-    }
-    return _SceneElementStructureSignature(
-      hash: hash,
-      elementCount: elements.length,
-      filterCount: filterCount,
-      visibleTextCount: visibleTextCount,
-    );
-  }
-
-  _SerialPreviewSignature _buildSerialPreviewSignature(
+  bool _hasSerialPreviewElements(
     Map<String, ElementState> previewElementsById,
   ) {
-    if (previewElementsById.isEmpty) {
-      return _SerialPreviewSignature.empty;
-    }
-
-    var hash = 0;
-    var count = 0;
-    for (final entry in previewElementsById.entries) {
-      final data = entry.value.data;
-      if (data is! SerialNumberData) {
-        continue;
+    for (final preview in previewElementsById.values) {
+      if (preview.data is SerialNumberData) {
+        return true;
       }
-      hash ^= Object.hash(entry.key, data.textElementId ?? '');
-      count += 1;
     }
-    return _SerialPreviewSignature(hash: hash, count: count);
+    return false;
   }
 
   void _paintSceneElement({
@@ -2342,88 +2265,4 @@ class _SceneRenderContextStaticData {
   final bool hasFilterElement;
   final Set<String> visibleTextIds;
   final bool shouldPaintSerialConnectors;
-}
-
-class _SceneRenderContextCacheEntry {
-  _SceneRenderContextCacheEntry({
-    required this.document,
-    required this.elements,
-    required this.previewElementsById,
-    required this.elementSignature,
-    required this.serialPreviewSignature,
-    required this.staticData,
-  });
-
-  final DocumentState document;
-  final List<ElementState> elements;
-  final Map<String, ElementState> previewElementsById;
-  final _SceneElementStructureSignature elementSignature;
-  final _SerialPreviewSignature serialPreviewSignature;
-  final _SceneRenderContextStaticData staticData;
-
-  bool matchesFast({
-    required DocumentState document,
-    required List<ElementState> elements,
-    required Map<String, ElementState> previewElementsById,
-  }) =>
-      identical(this.document, document) &&
-      identical(this.elements, elements) &&
-      identical(this.previewElementsById, previewElementsById);
-
-  bool matchesBySignature({
-    required DocumentState document,
-    required _SceneElementStructureSignature elementSignature,
-    required _SerialPreviewSignature serialPreviewSignature,
-  }) =>
-      identical(this.document, document) &&
-      this.elementSignature == elementSignature &&
-      this.serialPreviewSignature == serialPreviewSignature;
-}
-
-@immutable
-class _SceneElementStructureSignature {
-  const _SceneElementStructureSignature({
-    required this.hash,
-    required this.elementCount,
-    required this.filterCount,
-    required this.visibleTextCount,
-  });
-
-  final int hash;
-  final int elementCount;
-  final int filterCount;
-  final int visibleTextCount;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _SceneElementStructureSignature &&
-          other.hash == hash &&
-          other.elementCount == elementCount &&
-          other.filterCount == filterCount &&
-          other.visibleTextCount == visibleTextCount;
-
-  @override
-  int get hashCode =>
-      Object.hash(hash, elementCount, filterCount, visibleTextCount);
-}
-
-@immutable
-class _SerialPreviewSignature {
-  const _SerialPreviewSignature({required this.hash, required this.count});
-
-  static const empty = _SerialPreviewSignature(hash: 0, count: 0);
-
-  final int hash;
-  final int count;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _SerialPreviewSignature &&
-          other.hash == hash &&
-          other.count == count;
-
-  @override
-  int get hashCode => Object.hash(hash, count);
 }
