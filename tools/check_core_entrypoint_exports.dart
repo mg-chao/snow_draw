@@ -23,6 +23,7 @@ const _allowedExports = <String>{
   'draw/elements/types/arrow/arrow_data.dart',
   'draw/elements/types/arrow/arrow_binding.dart',
   'draw/elements/types/arrow/arrow_binding_target_cache.dart',
+  'draw/elements/types/arrow/arrow_geometry.dart',
   'draw/elements/types/arrow/arrow_like_data.dart',
   'draw/elements/types/arrow/arrow_points.dart',
   'draw/elements/types/filter/filter_data.dart',

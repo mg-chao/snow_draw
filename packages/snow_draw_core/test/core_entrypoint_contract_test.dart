@@ -21,6 +21,13 @@ void main() {
     test('exports element registry APIs and built-in registration', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
+      final normalizedArrowPoints = ArrowGeometry.normalizePoints(
+        worldPoints: const <DrawPoint>[
+          DrawPoint(x: 10, y: 10),
+          DrawPoint(x: 20, y: 30),
+        ],
+        rect: const DrawRect(minX: 10, minY: 10, maxX: 20, maxY: 30),
+      );
       const arrow = ArrowData(strokeStyle: StrokeStyle.dotted);
       const interaction = IdleState();
       const intentAction = EditIntentAction(
@@ -31,6 +38,7 @@ void main() {
       expect(registry.registeredTypeIds, isNotEmpty);
       expect(registry, isA<ElementRegistry>());
       expect(arrow.strokeStyle, StrokeStyle.dotted);
+      expect(normalizedArrowPoints.length, 2);
       expect(interaction, isA<InteractionState>());
       expect(intentAction.intent, isA<EditIntent>());
     });

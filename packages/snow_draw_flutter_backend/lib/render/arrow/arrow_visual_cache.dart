@@ -22,7 +22,7 @@ class ArrowVisualCacheEntry {
   final ArrowLikeData data;
   final double width;
   final double height;
-  final ArrowGeometryDescriptor geometry;
+  final FlutterArrowGeometryDescriptor geometry;
   final Path shaftPath;
   final List<Path> arrowheadPaths;
   final Path? combinedStrokePath;
@@ -75,8 +75,8 @@ class ArrowVisualCache {
     required ArrowLikeData data,
   }) {
     final rect = element.rect;
-    final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
-    final shaftPath = ArrowGeometry.buildShaftPathFromResolvedPoints(
+    final geometry = FlutterArrowGeometryDescriptor(data: data, rect: rect);
+    final shaftPath = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
       points: geometry.insetPoints,
       arrowType: data.arrowType,
     );
@@ -125,7 +125,7 @@ class ArrowVisualCache {
     );
   }
 
-  List<Path> _buildArrowheadPaths(ArrowGeometryDescriptor geometry) {
+  List<Path> _buildArrowheadPaths(FlutterArrowGeometryDescriptor geometry) {
     final points = geometry.localPoints;
     final data = geometry.data;
     if (data.strokeWidth <= 0) {
@@ -136,7 +136,7 @@ class ArrowVisualCache {
     final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
       paths.add(
-        ArrowGeometry.buildArrowheadPath(
+        FlutterArrowGeometry.buildArrowheadPath(
           tip: points.first,
           direction: startDirection,
           style: data.startArrowhead,
@@ -148,7 +148,7 @@ class ArrowVisualCache {
     final endDirection = geometry.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
       paths.add(
-        ArrowGeometry.buildArrowheadPath(
+        FlutterArrowGeometry.buildArrowheadPath(
           tip: points.last,
           direction: endDirection,
           style: data.endArrowhead,

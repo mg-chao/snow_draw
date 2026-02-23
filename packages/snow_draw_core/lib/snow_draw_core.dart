@@ -20,6 +20,7 @@ export 'draw/elements/registration.dart';
 export 'draw/elements/types/arrow/arrow_data.dart';
 export 'draw/elements/types/arrow/arrow_binding.dart';
 export 'draw/elements/types/arrow/arrow_like_data.dart';
+export 'draw/elements/types/arrow/arrow_geometry.dart';
 export 'draw/elements/types/arrow/arrow_points.dart';
 export 'draw/elements/types/arrow/arrow_binding_target_cache.dart';
 export 'draw/elements/types/filter/filter_data.dart';

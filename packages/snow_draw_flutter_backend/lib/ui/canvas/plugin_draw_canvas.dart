@@ -2230,7 +2230,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (data.arrowType != ArrowType.elbow) {
       return null;
     }
-    final points = ArrowGeometry.resolveWorldPoints(
+    final points = FlutterArrowGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );

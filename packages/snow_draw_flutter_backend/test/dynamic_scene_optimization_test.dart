@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_scene_optimization.dart';
@@ -689,7 +689,7 @@ ElementState _polylineElement({
   required ElementData Function(List<DrawPoint>) dataBuilder,
 }) {
   final rect = _boundsForPoints(points);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = FlutterArrowGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -729,7 +729,7 @@ DrawRect _boundsForPoints(List<DrawPoint> points) {
 List<DrawPoint> _resolveWorldPoints({
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
-}) => ArrowGeometry.resolveWorldPoints(
+}) => FlutterArrowGeometry.resolveWorldPoints(
   rect: rect,
   normalizedPoints: normalizedPoints,
 ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList(growable: false);
