@@ -2291,9 +2291,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     return SceneCanvasRenderKey(
       creatingElement: creatingElement,
-      hoveredBindingElementId: _hoveredBindingElementId,
-      hoveredArrowHandle: _hoveredArrowHandle,
-      selectionConfig: selectionConfig,
       documentVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,

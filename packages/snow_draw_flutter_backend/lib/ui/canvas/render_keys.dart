@@ -50,9 +50,6 @@ class CreatingElementSnapshot {
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
-    required this.hoveredBindingElementId,
-    required this.hoveredArrowHandle,
-    required this.selectionConfig,
     required this.documentVersion,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
@@ -69,20 +66,13 @@ class SceneCanvasRenderKey {
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
 
-  /// Hover binding information for arrow-binding highlights.
-  final String? hoveredBindingElementId;
-  final ArrowPointHandle? hoveredArrowHandle;
-
-  /// Selection config used by backend-only overlay rendering.
-  final SelectionConfig selectionConfig;
-
   /// Document version for detecting element geometry changes.
   final int documentVersion;
 
   /// Revision for text rendering cache invalidation.
   ///
   /// Incremented when runtime font loading clears paragraph/layout caches so
-  /// canvas overlays repaint with updated glyph shaping.
+  /// scene-dependent caches repaint with updated glyph shaping.
   final int textRenderingCacheRevision;
 
   /// Preview elements during editing.
@@ -114,9 +104,6 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
-          other.hoveredBindingElementId == hoveredBindingElementId &&
-          other.hoveredArrowHandle == hoveredArrowHandle &&
-          other.selectionConfig == selectionConfig &&
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
@@ -130,9 +117,6 @@ class SceneCanvasRenderKey {
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
-    hoveredBindingElementId,
-    hoveredArrowHandle,
-    selectionConfig,
     documentVersion,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),

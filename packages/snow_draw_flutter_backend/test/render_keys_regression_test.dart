@@ -124,9 +124,6 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   Map<String, ElementState> previewElementsById = const {},
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
-  hoveredBindingElementId: null,
-  hoveredArrowHandle: null,
-  selectionConfig: const SelectionConfig(),
   documentVersion: 1,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,

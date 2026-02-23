@@ -316,6 +316,28 @@ final class ArrowPointOverlayRenderTask extends RenderTask {
   );
 }
 
+/// Arrow-binding highlight task.
+@immutable
+final class ArrowBindingHighlightRenderTask extends RenderTask {
+  const ArrowBindingHighlightRenderTask({
+    required this.elementIds,
+    required this.strokeColor,
+  });
+
+  final List<String> elementIds;
+  final DrawColor strokeColor;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArrowBindingHighlightRenderTask &&
+          _listEquals(other.elementIds, elementIds) &&
+          other.strokeColor == strokeColor;
+
+  @override
+  int get hashCode => Object.hash(_listHash(elementIds), strokeColor);
+}
+
 /// Hover-outline task.
 @immutable
 final class HoverOutlineRenderTask extends RenderTask {
@@ -366,11 +388,13 @@ final class BoxSelectionRenderTask extends RenderTask {
   const BoxSelectionRenderTask({
     required this.bounds,
     required this.config,
+    required this.selectionConfig,
     this.previewElements = const <ElementState>[],
   });
 
   final DrawRect bounds;
   final BoxSelectionConfig config;
+  final SelectionConfig selectionConfig;
   final List<ElementState> previewElements;
 
   @override
@@ -379,10 +403,12 @@ final class BoxSelectionRenderTask extends RenderTask {
       other is BoxSelectionRenderTask &&
           other.bounds == bounds &&
           other.config == config &&
+          other.selectionConfig == selectionConfig &&
           _listEquals(other.previewElements, previewElements);
 
   @override
-  int get hashCode => Object.hash(bounds, config, _listHash(previewElements));
+  int get hashCode =>
+      Object.hash(bounds, config, selectionConfig, _listHash(previewElements));
 }
 
 /// Highlight-mask overlay task.

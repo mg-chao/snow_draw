@@ -60,6 +60,25 @@ void main() {
       expect(first.hashCode, second.hashCode);
       expect(first, isNot(equals(changedIndicator)));
     });
+
+    test('arrow-binding highlight tasks compare payloads by value', () {
+      const first = ArrowBindingHighlightRenderTask(
+        elementIds: <String>['rect-1', 'text-2'],
+        strokeColor: DrawColor(0xFF1576FE),
+      );
+      const second = ArrowBindingHighlightRenderTask(
+        elementIds: <String>['rect-1', 'text-2'],
+        strokeColor: DrawColor(0xFF1576FE),
+      );
+      const changedColor = ArrowBindingHighlightRenderTask(
+        elementIds: <String>['rect-1', 'text-2'],
+        strokeColor: DrawColor(0xFF000000),
+      );
+
+      expect(first, equals(second));
+      expect(first.hashCode, second.hashCode);
+      expect(first, isNot(equals(changedColor)));
+    });
   });
 
   group('FrameRenderPlan value semantics', () {

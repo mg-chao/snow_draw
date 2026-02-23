@@ -1,12 +1,16 @@
 import '../../config/draw_config.dart';
+import '../../edit/arrow/arrow_point_operation.dart';
 import '../../elements/core/element_registry_interface.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';
+import '../../models/interaction_state.dart';
 import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
+import '../../utils/arrow_binding_highlight.dart';
+import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/selection_calculator.dart';
 import 'frame_render_plan.dart';
 import 'render_tasks.dart';
@@ -256,6 +260,21 @@ class FrameRenderPlanBuilder {
       }
     }
 
+    if (selectionConfig != null) {
+      final highlightElementIds = _resolveArrowBindingHighlightElementIds(
+        view: view,
+        transientState: transientState,
+      );
+      if (highlightElementIds.isNotEmpty) {
+        tasks.add(
+          ArrowBindingHighlightRenderTask(
+            elementIds: List<String>.unmodifiable(highlightElementIds),
+            strokeColor: selectionConfig.render.strokeColor,
+          ),
+        );
+      }
+    }
+
     if (selectedIds.length == 1 && hoverSelectionConfig != null) {
       final selectedId = selectedIds.first;
       final selected = view.state.domain.document.getElementById(selectedId);
@@ -278,7 +297,9 @@ class FrameRenderPlanBuilder {
 
     final boxSelectionBounds = transientState.boxSelectionBounds;
     final boxSelectionConfig = transientState.boxSelectionConfig;
-    if (boxSelectionBounds != null && boxSelectionConfig != null) {
+    if (boxSelectionBounds != null &&
+        boxSelectionConfig != null &&
+        selectionConfig != null) {
       final previewElements = <ElementState>[];
       for (final candidate in view.state.domain.document.getElementsInRect(
         boxSelectionBounds,
@@ -295,6 +316,7 @@ class FrameRenderPlanBuilder {
         BoxSelectionRenderTask(
           bounds: boxSelectionBounds,
           config: boxSelectionConfig,
+          selectionConfig: selectionConfig,
           previewElements: List<ElementState>.unmodifiable(previewElements),
         ),
       );
@@ -306,6 +328,66 @@ class FrameRenderPlanBuilder {
       scaleFactor: effectiveScale,
       localeTag: localeTag,
     );
+  }
+
+  List<String> _resolveArrowBindingHighlightElementIds({
+    required DrawStateView view,
+    required FrameRenderTransientState transientState,
+  }) {
+    final highlightElementIds = <String>{};
+    _addHighlightElementId(
+      highlightElementIds,
+      resolveHoverBindingHighlightId(
+        hoveredBindingElementId: transientState.hoveredBindingElementId,
+        hoveredArrowHandle: transientState.hoveredArrowHandle,
+      ),
+    );
+
+    final interaction = view.state.application.interaction;
+    if (interaction is EditingState &&
+        interaction.context is ArrowPointEditContext) {
+      final context = interaction.context as ArrowPointEditContext;
+      final element = view.state.domain.document.getElementById(
+        context.elementId,
+      );
+      if (element == null) {
+        return highlightElementIds.toList(growable: false);
+      }
+
+      final effectiveElement =
+          transientState.previewElementsById[element.id] ??
+          view.effectiveElement(element);
+      final data = effectiveElement.data;
+      if (data is ArrowLikeData) {
+        final binding = resolveArrowPointEditHighlightBinding(
+          context: context,
+          data: data,
+          transform: interaction.currentTransform,
+        );
+        _addHighlightElementId(highlightElementIds, binding?.elementId);
+      }
+      return highlightElementIds.toList(growable: false);
+    }
+
+    if (interaction is CreatingState && interaction.isPointCreation) {
+      final data = interaction.element.data;
+      if (data is ArrowLikeData) {
+        _addHighlightElementId(
+          highlightElementIds,
+          data.startBinding?.elementId,
+        );
+        _addHighlightElementId(highlightElementIds, data.endBinding?.elementId);
+      }
+    }
+
+    return highlightElementIds.toList(growable: false);
+  }
+
+  void _addHighlightElementId(Set<String> target, String? elementId) {
+    if (elementId == null || elementId.isEmpty) {
+      return;
+    }
+    target.add(elementId);
   }
 
   bool _rectsIntersect(DrawRect a, DrawRect b) =>

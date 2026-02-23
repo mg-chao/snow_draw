@@ -225,7 +225,15 @@ class SceneCanvasPainter extends CustomPainter {
       );
     }
 
-    _drawArrowBindingHighlight(canvas: canvas, scale: scale);
+    final plannedArrowBindingHighlightTask =
+        _firstPlannedTask<ArrowBindingHighlightRenderTask>();
+    if (plannedArrowBindingHighlightTask != null) {
+      _drawArrowBindingHighlight(
+        canvas: canvas,
+        scale: scale,
+        task: plannedArrowBindingHighlightTask,
+      );
+    }
 
     final plannedArrowOverlayTask =
         _firstPlannedTask<ArrowPointOverlayRenderTask>();
@@ -242,6 +250,7 @@ class SceneCanvasPainter extends CustomPainter {
       _drawBoxSelectionPreviewElements(
         canvas: canvas,
         elements: plannedBoxSelectionTask.previewElements,
+        selectionConfig: plannedBoxSelectionTask.selectionConfig,
         scale: scale,
       );
       _drawBoxSelection(
@@ -1225,19 +1234,16 @@ class SceneCanvasPainter extends CustomPainter {
   void _drawArrowBindingHighlight({
     required Canvas canvas,
     required double scale,
+    required ArrowBindingHighlightRenderTask task,
   }) {
-    final highlights = _resolveArrowBindingHighlights();
-    if (highlights.isEmpty) {
+    if (task.elementIds.isEmpty) {
       return;
     }
-    final strokeColor = renderKey.selectionConfig.render.strokeColor
-        .toFlutterColor();
+    final strokeColor = task.strokeColor.toFlutterColor();
     final paint = createBindingHighlightPaint(color: strokeColor, scale: scale);
 
-    for (final highlight in highlights) {
-      final element = stateView.state.domain.document.getElementById(
-        highlight.elementId,
-      );
+    for (final elementId in task.elementIds) {
+      final element = stateView.state.domain.document.getElementById(elementId);
       if (element == null) {
         continue;
       }
@@ -1863,75 +1869,6 @@ class SceneCanvasPainter extends CustomPainter {
   Offset _localOffset(DrawRect rect, DrawPoint point) =>
       Offset(point.x - rect.minX, point.y - rect.minY);
 
-  List<_ArrowBindingHighlight> _resolveArrowBindingHighlights() {
-    final highlights = <_ArrowBindingHighlight>[];
-    final hoveredBindingElementId = resolveHoverBindingHighlightId(
-      hoveredBindingElementId: renderKey.hoveredBindingElementId,
-      hoveredArrowHandle: renderKey.hoveredArrowHandle,
-    );
-    if (hoveredBindingElementId != null) {
-      highlights.add(
-        _ArrowBindingHighlight(elementId: hoveredBindingElementId),
-      );
-    }
-
-    final interaction = stateView.state.application.interaction;
-    if (interaction is EditingState &&
-        interaction.context is ArrowPointEditContext) {
-      final context = interaction.context as ArrowPointEditContext;
-      final element = stateView.state.domain.document.getElementById(
-        context.elementId,
-      );
-      if (element != null && element.data is ArrowLikeData) {
-        final effectiveElement = stateView.effectiveElement(element);
-        final data = effectiveElement.data as ArrowLikeData;
-        final binding = resolveArrowPointEditHighlightBinding(
-          context: context,
-          data: data,
-          transform: interaction.currentTransform,
-        );
-        final highlight = _highlightFromBinding(binding);
-        if (highlight != null) {
-          highlights.add(highlight);
-        }
-      }
-    } else if (interaction is CreatingState && interaction.isPointCreation) {
-      final element = interaction.element;
-      final data = element.data;
-      if (data is ArrowLikeData) {
-        final endHighlight = _highlightFromBinding(data.endBinding);
-        if (endHighlight != null) {
-          highlights.add(endHighlight);
-        }
-        final startHighlight = _highlightFromBinding(data.startBinding);
-        if (startHighlight != null) {
-          highlights.add(startHighlight);
-        }
-      }
-    }
-
-    return _dedupeArrowBindingHighlights(highlights);
-  }
-
-  List<_ArrowBindingHighlight> _dedupeArrowBindingHighlights(
-    List<_ArrowBindingHighlight> highlights,
-  ) {
-    if (highlights.isEmpty) {
-      return const <_ArrowBindingHighlight>[];
-    }
-    final unique = <String, _ArrowBindingHighlight>{
-      for (final highlight in highlights) highlight.elementId: highlight,
-    };
-    return unique.values.toList(growable: false);
-  }
-
-  _ArrowBindingHighlight? _highlightFromBinding(ArrowBinding? binding) {
-    if (binding == null) {
-      return null;
-    }
-    return _ArrowBindingHighlight(elementId: binding.elementId);
-  }
-
   /// Draw box-selection overlay.
   void _drawBoxSelection(
     Canvas canvas,
@@ -2247,6 +2184,7 @@ class SceneCanvasPainter extends CustomPainter {
   void _drawBoxSelectionPreviewElements({
     required Canvas canvas,
     required List<ElementState> elements,
+    required SelectionConfig selectionConfig,
     required double scale,
   }) {
     if (elements.isEmpty) {
@@ -2258,6 +2196,7 @@ class SceneCanvasPainter extends CustomPainter {
         _drawFreeDrawSelectionPreview(
           canvas: canvas,
           element: element,
+          selectionConfig: selectionConfig,
           scale: scale,
         );
         continue;
@@ -2266,7 +2205,7 @@ class SceneCanvasPainter extends CustomPainter {
         canvas: canvas,
         bounds: element.rect,
         scaleFactor: scale,
-        config: renderKey.selectionConfig,
+        config: selectionConfig,
         rotation: element.rotation,
         rotationCenter: element.center,
         dashed: false,
@@ -2277,13 +2216,14 @@ class SceneCanvasPainter extends CustomPainter {
   void _drawFreeDrawSelectionPreview({
     required Canvas canvas,
     required ElementState element,
+    required SelectionConfig selectionConfig,
     required double scale,
   }) {
     _drawFreeDrawOutline(
       canvas: canvas,
       element: element,
       scale: scale,
-      color: renderKey.selectionConfig.render.strokeColor.toFlutterColor(),
+      color: selectionConfig.render.strokeColor.toFlutterColor(),
     );
   }
 
@@ -2384,12 +2324,6 @@ class _ArrowOverlayPaints {
       ..color = highlightStrokeColor;
     deleteStroke.strokeWidth = strokeWidth * 1.4;
   }
-}
-
-class _ArrowBindingHighlight {
-  const _ArrowBindingHighlight({required this.elementId});
-
-  final String elementId;
 }
 
 class _SceneRenderContext {
