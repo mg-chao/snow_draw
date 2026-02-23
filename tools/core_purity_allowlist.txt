@@ -1,8 +1,0 @@
-﻿# Baseline allowlist for core package Flutter/UI imports.
-# Format: path:line:dependency
-# Dependency is one of:
-# - dart:ui
-# - package:flutter
-# - package:snow_draw_flutter_backend
-# - package:snow_draw
-# Keep this file in sync with tools/check_core_import_purity.dart.
