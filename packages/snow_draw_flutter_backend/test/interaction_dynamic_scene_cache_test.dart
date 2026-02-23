@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/interaction_dynamic_scene_cache.dart';
@@ -208,6 +208,8 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
     selectionConfig: config.selection,
     boxSelectionConfig: config.boxSelection,
     snapConfig: config.snap,
+    canvasConfig: config.canvas,
+    gridConfig: config.grid,
     highlightMaskLayer: highlightMaskLayer,
     highlightMaskConfig: const HighlightMaskConfig(),
     watermarkLayer: watermarkLayer,

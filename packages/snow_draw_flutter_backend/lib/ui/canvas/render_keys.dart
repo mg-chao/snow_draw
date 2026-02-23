@@ -213,6 +213,8 @@ class DynamicCanvasRenderKey {
     required this.highlightMaskConfig,
     required this.watermarkLayer,
     required this.watermarkConfig,
+    required this.canvasConfig,
+    required this.gridConfig,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     this.textMetricsService = defaultTextMetricsService,
@@ -326,6 +328,12 @@ class DynamicCanvasRenderKey {
   /// Watermark configuration.
   final WatermarkConfig watermarkConfig;
 
+  /// Canvas configuration.
+  final CanvasConfig canvasConfig;
+
+  /// Grid configuration.
+  final GridConfig gridConfig;
+
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -374,6 +382,8 @@ class DynamicCanvasRenderKey {
           other.highlightMaskConfig == highlightMaskConfig &&
           other.watermarkLayer == watermarkLayer &&
           other.watermarkConfig == watermarkConfig &&
+          other.canvasConfig == canvasConfig &&
+          other.gridConfig == gridConfig &&
           other.elementRegistry == elementRegistry &&
           identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
@@ -409,6 +419,8 @@ class DynamicCanvasRenderKey {
     highlightMaskConfig,
     watermarkLayer,
     watermarkConfig,
+    canvasConfig,
+    gridConfig,
     elementRegistry,
     identityHashCode(textMetricsService),
     performanceMonitoringEnabled,

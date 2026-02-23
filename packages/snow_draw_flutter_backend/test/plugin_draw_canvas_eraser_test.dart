@@ -1,10 +1,9 @@
-﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/static_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,8 +50,6 @@ void main() {
         await mouse.down(const Offset(170, 120));
         await tester.pump();
 
-        final staticPainter = _staticPainter(tester);
-        expect(staticPainter.renderKey.skipBaseElementScene, isTrue);
         final dynamicPainter = _dynamicPainter(tester);
         expect(dynamicPainter.renderKey.dynamicLayerStartIndex, 0);
         final previewElement =
@@ -174,7 +171,7 @@ void main() {
     );
 
     testWidgets(
-      'keeps static layer stable while previewing additional erased elements',
+      'tracks additional erased elements in the unified canvas layer',
       (tester) async {
         final firstId = await _createRectangle(
           store,
@@ -203,16 +200,8 @@ void main() {
         await mouse.down(const Offset(50, 90));
         await tester.pump();
 
-        final staticPainterBeforeMove = _staticPainter(tester);
-
         await mouse.moveTo(const Offset(230, 90));
         await tester.pump();
-
-        final staticPainterAfterMove = _staticPainter(tester);
-        expect(
-          identical(staticPainterBeforeMove, staticPainterAfterMove),
-          isTrue,
-        );
 
         final dynamicPainter = _dynamicPainter(tester);
         expect(
@@ -321,18 +310,6 @@ Future<String> _createRectangle(
   }
   await store.dispatch(const ClearSelection());
   return elementId;
-}
-
-StaticCanvasPainter _staticPainter(WidgetTester tester) {
-  for (final paint in tester.widgetList<CustomPaint>(
-    find.byType(CustomPaint),
-  )) {
-    final painter = paint.painter;
-    if (painter is StaticCanvasPainter) {
-      return painter;
-    }
-  }
-  throw StateError('StaticCanvasPainter not found');
 }
 
 DynamicCanvasPainter _dynamicPainter(WidgetTester tester) {

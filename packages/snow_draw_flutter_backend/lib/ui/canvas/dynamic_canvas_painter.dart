@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import '../../services/text/flutter_text_layout.dart';
 import 'binding_highlight_style.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
 import 'free_draw_creation_preview_cache.dart';
+import 'grid_shader_painter.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_static_scene_cache.dart';
@@ -29,8 +31,9 @@ final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
 /// Dynamic canvas painter.
 ///
-/// Renders top-layer elements and interaction overlays.
-/// This layer updates frequently during user interaction.
+/// Renders the full document scene and interaction overlays.
+///
+/// The single-canvas architecture routes all draw content through this painter.
 @immutable
 class DynamicCanvasPainter extends CustomPainter {
   const DynamicCanvasPainter({
@@ -63,6 +66,12 @@ class DynamicCanvasPainter extends CustomPainter {
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round
     ..isAntiAlias = true;
+  static Paint? _cachedBackgroundPaint;
+  static Color? _cachedBackgroundColor;
+  static final _minorGridPaint = Paint()..style = PaintingStyle.stroke;
+  static final _majorGridPaint = Paint()..style = PaintingStyle.stroke;
+  static var _minorGridPointBuffer = Float32List(0);
+  static var _majorGridPointBuffer = Float32List(0);
 
   /// Render key for precise repaint decisions.
   final DynamicCanvasRenderKey renderKey;
@@ -78,17 +87,25 @@ class DynamicCanvasPainter extends CustomPainter {
     }
     final camera = renderKey.camera;
     final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
+    _drawBackground(canvas, size);
     final viewportRect = DrawRect(
       minX: -camera.position.x / scale,
       minY: -camera.position.y / scale,
       maxX: (size.width - camera.position.x) / scale,
       maxY: (size.height - camera.position.y) / scale,
     );
+    final shouldPaintGrid = _shouldPaintGrid(scale);
+    final shaderUsed =
+        shouldPaintGrid && _drawGridWithShader(canvas, size, scale);
 
     canvas
       ..save()
       ..translate(camera.position.x, camera.position.y)
       ..scale(scale, scale);
+
+    if (shouldPaintGrid && !shaderUsed) {
+      _drawGridFallback(canvas, viewportRect, scale);
+    }
 
     final creatingElement = renderKey.creatingElement;
 
@@ -100,7 +117,7 @@ class DynamicCanvasPainter extends CustomPainter {
       creatingElement: creatingElement,
     );
 
-    // Draw creating element preview above the static layer.
+    // Draw creating element preview above the current scene content.
     if (creatingElement != null &&
         creatingElement.element.data is! FilterData) {
       final renderedWithLowLatencyPath = _renderFreeDrawCreatingPreview(
@@ -298,6 +315,295 @@ class DynamicCanvasPainter extends CustomPainter {
 
     canvas.restore();
   }
+
+  void _drawBackground(Canvas canvas, Size size) {
+    final color = renderKey.canvasConfig.backgroundColor.toFlutterColor();
+    final paint = _resolveBackgroundPaint(color);
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  static Paint _resolveBackgroundPaint(Color color) {
+    if (_cachedBackgroundPaint != null && _cachedBackgroundColor == color) {
+      return _cachedBackgroundPaint!;
+    }
+    _cachedBackgroundPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+    _cachedBackgroundColor = color;
+    return _cachedBackgroundPaint!;
+  }
+
+  bool _shouldPaintGrid(double scale) {
+    final config = renderKey.gridConfig;
+    final baseSize = config.size;
+    if (!config.enabled || baseSize <= 0 || scale <= 0) {
+      return false;
+    }
+    return baseSize * scale >= config.minRenderSpacing;
+  }
+
+  bool _drawGridWithShader(Canvas canvas, Size size, double scale) {
+    final config = renderKey.gridConfig;
+    final shaderManager = GridShaderManager.instance;
+    if (!shaderManager.isReady) {
+      return false;
+    }
+
+    final minorOpacityRatio = _resolveMinorOpacityRatio(
+      baseSize: config.size,
+      scale: scale,
+      minScreenSpacing: config.minScreenSpacing,
+    );
+    final majorEveryFactor = _resolveMajorEveryFactor(
+      baseSize: config.size,
+      majorEvery: config.majorLineEvery,
+      scale: scale,
+      minSpacing: config.minScreenSpacing,
+    );
+
+    return shaderManager.paintGrid(
+      canvas: canvas,
+      size: size,
+      cameraPosition: Offset(
+        renderKey.camera.position.x,
+        renderKey.camera.position.y,
+      ),
+      scale: scale,
+      config: config,
+      minorOpacityRatio: minorOpacityRatio,
+      majorEveryFactor: majorEveryFactor,
+    );
+  }
+
+  void _drawGridFallback(Canvas canvas, DrawRect viewportRect, double scale) {
+    final config = renderKey.gridConfig;
+    final baseSize = config.size;
+    final minorStrokeWidth = config.lineWidth / scale;
+    final majorStrokeWidth = minorStrokeWidth * 1.5;
+    final screenSpacing = baseSize * scale;
+    final showMinorLines = screenSpacing >= config.minScreenSpacing;
+    final minorOpacityRatio = _resolveMinorOpacityRatio(
+      baseSize: baseSize,
+      scale: scale,
+      minScreenSpacing: config.minScreenSpacing,
+    );
+    final majorEveryFactor = _resolveMajorEveryFactor(
+      baseSize: baseSize,
+      majorEvery: config.majorLineEvery,
+      scale: scale,
+      minSpacing: config.minScreenSpacing,
+    );
+    final majorStep = baseSize * majorEveryFactor;
+
+    final minorColor = config.lineColor
+        .withValues(alpha: config.lineOpacity * minorOpacityRatio * 0.5)
+        .toFlutterColor();
+    final majorColor = config.lineColor
+        .withValues(alpha: config.majorLineOpacity)
+        .toFlutterColor();
+    final minorPaint = _minorGridPaint
+      ..strokeWidth = minorStrokeWidth
+      ..color = minorColor;
+    final majorPaint = _majorGridPaint
+      ..strokeWidth = majorStrokeWidth
+      ..color = majorColor;
+
+    if (showMinorLines) {
+      final step = baseSize;
+      final startXIndex = (viewportRect.minX / step).floor();
+      final endXIndex = (viewportRect.maxX / step).ceil();
+      final startYIndex = (viewportRect.minY / step).floor();
+      final endYIndex = (viewportRect.maxY / step).ceil();
+
+      final verticalLineCount = endXIndex - startXIndex + 1;
+      final horizontalLineCount = endYIndex - startYIndex + 1;
+
+      var majorVerticalCount = 0;
+      var majorHorizontalCount = 0;
+      for (var ix = startXIndex; ix <= endXIndex; ix++) {
+        if (_isMajorLine(ix, majorEveryFactor)) {
+          majorVerticalCount++;
+        }
+      }
+      for (var iy = startYIndex; iy <= endYIndex; iy++) {
+        if (_isMajorLine(iy, majorEveryFactor)) {
+          majorHorizontalCount++;
+        }
+      }
+      final minorVerticalCount = verticalLineCount - majorVerticalCount;
+      final minorHorizontalCount = horizontalLineCount - majorHorizontalCount;
+
+      final majorPointCount = (majorVerticalCount + majorHorizontalCount) * 4;
+      final minorPointCount = (minorVerticalCount + minorHorizontalCount) * 4;
+      _majorGridPointBuffer = _ensurePointBuffer(
+        _majorGridPointBuffer,
+        majorPointCount,
+      );
+      _minorGridPointBuffer = _ensurePointBuffer(
+        _minorGridPointBuffer,
+        minorPointCount,
+      );
+      final majorPoints = _majorGridPointBuffer;
+      final minorPoints = _minorGridPointBuffer;
+
+      var majorIdx = 0;
+      var minorIdx = 0;
+
+      for (var ix = startXIndex; ix <= endXIndex; ix++) {
+        final x = ix * step;
+        if (_isMajorLine(ix, majorEveryFactor)) {
+          majorPoints[majorIdx++] = x;
+          majorPoints[majorIdx++] = viewportRect.minY;
+          majorPoints[majorIdx++] = x;
+          majorPoints[majorIdx++] = viewportRect.maxY;
+        } else {
+          minorPoints[minorIdx++] = x;
+          minorPoints[minorIdx++] = viewportRect.minY;
+          minorPoints[minorIdx++] = x;
+          minorPoints[minorIdx++] = viewportRect.maxY;
+        }
+      }
+
+      for (var iy = startYIndex; iy <= endYIndex; iy++) {
+        final y = iy * step;
+        if (_isMajorLine(iy, majorEveryFactor)) {
+          majorPoints[majorIdx++] = viewportRect.minX;
+          majorPoints[majorIdx++] = y;
+          majorPoints[majorIdx++] = viewportRect.maxX;
+          majorPoints[majorIdx++] = y;
+        } else {
+          minorPoints[minorIdx++] = viewportRect.minX;
+          minorPoints[minorIdx++] = y;
+          minorPoints[minorIdx++] = viewportRect.maxX;
+          minorPoints[minorIdx++] = y;
+        }
+      }
+
+      if (minorIdx > 0) {
+        canvas.drawRawPoints(
+          PointMode.lines,
+          _slicePointBuffer(minorPoints, minorIdx),
+          minorPaint,
+        );
+      }
+      if (majorIdx > 0) {
+        canvas.drawRawPoints(
+          PointMode.lines,
+          _slicePointBuffer(majorPoints, majorIdx),
+          majorPaint,
+        );
+      }
+      return;
+    }
+
+    final startXIndex = (viewportRect.minX / majorStep).floor();
+    final endXIndex = (viewportRect.maxX / majorStep).ceil();
+    final startYIndex = (viewportRect.minY / majorStep).floor();
+    final endYIndex = (viewportRect.maxY / majorStep).ceil();
+
+    final verticalCount = endXIndex - startXIndex + 1;
+    final horizontalCount = endYIndex - startYIndex + 1;
+    final majorPointCount = (verticalCount + horizontalCount) * 4;
+    _majorGridPointBuffer = _ensurePointBuffer(
+      _majorGridPointBuffer,
+      majorPointCount,
+    );
+    final majorPoints = _majorGridPointBuffer;
+
+    var idx = 0;
+
+    for (var ix = startXIndex; ix <= endXIndex; ix++) {
+      final x = ix * majorStep;
+      majorPoints[idx++] = x;
+      majorPoints[idx++] = viewportRect.minY;
+      majorPoints[idx++] = x;
+      majorPoints[idx++] = viewportRect.maxY;
+    }
+
+    for (var iy = startYIndex; iy <= endYIndex; iy++) {
+      final y = iy * majorStep;
+      majorPoints[idx++] = viewportRect.minX;
+      majorPoints[idx++] = y;
+      majorPoints[idx++] = viewportRect.maxX;
+      majorPoints[idx++] = y;
+    }
+
+    if (idx > 0) {
+      canvas.drawRawPoints(
+        PointMode.lines,
+        _slicePointBuffer(majorPoints, idx),
+        majorPaint,
+      );
+    }
+  }
+
+  int _resolveMajorEveryFactor({
+    required double baseSize,
+    required int majorEvery,
+    required double scale,
+    required double minSpacing,
+  }) {
+    final normalizedMajorEvery = majorEvery < 1 ? 1 : majorEvery;
+    if (normalizedMajorEvery == 1) {
+      return 1;
+    }
+    if (baseSize <= 0 || scale <= 0 || minSpacing <= 0) {
+      return normalizedMajorEvery;
+    }
+
+    var factor = normalizedMajorEvery;
+    var step = baseSize * factor;
+    while (step * scale < minSpacing) {
+      factor *= normalizedMajorEvery;
+      step = baseSize * factor;
+    }
+    return factor;
+  }
+
+  double _resolveMinorOpacityRatio({
+    required double baseSize,
+    required double scale,
+    required double minScreenSpacing,
+  }) {
+    if (scale <= 0 || baseSize <= 0 || minScreenSpacing <= 0) {
+      return 0;
+    }
+    final spacingAtScale = baseSize * scale;
+    final startSpacing = baseSize;
+    if (spacingAtScale >= startSpacing) {
+      return 1;
+    }
+    if (startSpacing <= minScreenSpacing) {
+      return 0;
+    }
+    final t =
+        (spacingAtScale - minScreenSpacing) / (startSpacing - minScreenSpacing);
+    return _smoothStep(t.clamp(0.0, 1.0));
+  }
+
+  double _smoothStep(double t) => t * t * (3 - 2 * t);
+
+  Float32List _ensurePointBuffer(Float32List current, int requiredLength) {
+    if (requiredLength <= current.length) {
+      return current;
+    }
+
+    var nextLength = current.isEmpty ? 128 : current.length;
+    while (nextLength < requiredLength) {
+      nextLength *= 2;
+    }
+    return Float32List(nextLength);
+  }
+
+  Float32List _slicePointBuffer(Float32List buffer, int usedLength) {
+    if (usedLength == buffer.length) {
+      return buffer;
+    }
+    return Float32List.sublistView(buffer, 0, usedLength);
+  }
+
+  bool _isMajorLine(int index, int majorEvery) =>
+      majorEvery > 0 && index % majorEvery == 0;
 
   bool _isFreeDrawCreationInteraction(InteractionState interaction) =>
       interaction is CreatingState && interaction.elementData is FreeDrawData;

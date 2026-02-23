@@ -507,6 +507,8 @@ DynamicCanvasRenderKey _buildRenderKey({
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),
   snapConfig: const SnapConfig(),
+  canvasConfig: const CanvasConfig(),
+  gridConfig: const GridConfig(),
   highlightMaskLayer: HighlightMaskLayer.none,
   highlightMaskConfig: const HighlightMaskConfig(),
   watermarkLayer: WatermarkLayer.none,
