@@ -256,14 +256,10 @@ final class HighlightMaskRenderTask extends RenderTask {
   const HighlightMaskRenderTask({
     required this.config,
     required this.highlights,
-    required this.staticHighlights,
-    required this.dynamicHighlights,
   });
 
   final HighlightMaskConfig config;
   final List<ElementState> highlights;
-  final List<ElementState> staticHighlights;
-  final List<ElementState> dynamicHighlights;
 }
 
 /// Watermark overlay task.

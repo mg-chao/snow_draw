@@ -50,57 +50,19 @@ class EffectiveSelection {
 /// transient elements next, then the in-progress creating element last.
 @immutable
 class HighlightMaskSceneSnapshot {
-  HighlightMaskSceneSnapshot({
-    required List<ElementState> elements,
-    required List<ElementState> staticElements,
-    required List<ElementState> dynamicElements,
-  }) : _elements = List<ElementState>.unmodifiable(elements),
-       _staticElements = List<ElementState>.unmodifiable(staticElements),
-       _dynamicElements = List<ElementState>.unmodifiable(dynamicElements);
+  HighlightMaskSceneSnapshot({required List<ElementState> elements})
+    : _elements = List<ElementState>.unmodifiable(elements);
 
   final List<ElementState> _elements;
-  final List<ElementState> _staticElements;
-  final List<ElementState> _dynamicElements;
 
   /// Highlight elements in the order expected by highlight mask compositing.
   List<ElementState> get elements => _elements;
 
-  /// Stable highlights that do not change on every interaction frame.
-  List<ElementState> get staticElements => _staticElements;
-
-  /// Highlights whose geometry/style can change on the current frame.
-  List<ElementState> get dynamicElements => _dynamicElements;
-
   /// Whether at least one highlight is present in this snapshot.
   bool get hasHighlights => _elements.isNotEmpty;
 
-  /// Whether any highlight is dynamic for the active interaction.
-  bool get hasDynamicHighlights => _dynamicElements.isNotEmpty;
-
   /// Reusable empty snapshot.
-  static final empty = HighlightMaskSceneSnapshot(
-    elements: const [],
-    staticElements: const [],
-    dynamicElements: const [],
-  );
-}
-
-/// Lightweight metadata for highlight-mask routing decisions.
-///
-/// This summary mirrors [HighlightMaskSceneSnapshot] flags in a compact shape
-/// so call sites can consume only the booleans they need.
-@immutable
-class HighlightMaskSceneSummary {
-  const HighlightMaskSceneSummary({
-    required this.hasHighlights,
-    required this.hasDynamicHighlights,
-  });
-
-  /// Whether at least one highlight is present in the effective scene.
-  final bool hasHighlights;
-
-  /// Whether at least one highlight can change this frame.
-  final bool hasDynamicHighlights;
+  static final empty = HighlightMaskSceneSnapshot(elements: const []);
 }
 
 /// A unified "effective state" view for rendering and hit-testing.
@@ -169,15 +131,6 @@ class DrawStateView {
   late final HighlightMaskSceneSnapshot highlightMaskScene =
       _buildHighlightMaskScene();
 
-  /// Lightweight highlight-scene metadata.
-  ///
-  /// This is derived from [highlightMaskScene] so callers can make routing
-  /// decisions without re-checking scene lists.
-  late final highlightMaskSceneSummary = HighlightMaskSceneSummary(
-    hasHighlights: highlightMaskScene.hasHighlights,
-    hasDynamicHighlights: highlightMaskScene.hasDynamicHighlights,
-  );
-
   /// Map of element IDs to their preview states.
   Map<String, ElementState> get previewElementsById => _previewElementsById;
 
@@ -225,8 +178,6 @@ class DrawStateView {
     final creatingHighlight = _resolveCreatingHighlightElement();
     final creatingHighlightId = creatingHighlight?.id;
     final highlights = <ElementState>[];
-    final staticHighlights = <ElementState>[];
-    final dynamicHighlights = <ElementState>[];
     var includesCreatingHighlight = false;
 
     for (final element in document.highlightElements) {
@@ -245,13 +196,6 @@ class DrawStateView {
       }
 
       highlights.add(effective);
-      final isDynamic =
-          isCreatingReplacement || (preview != null && preview != element);
-      if (isDynamic) {
-        dynamicHighlights.add(effective);
-      } else {
-        staticHighlights.add(effective);
-      }
     }
 
     for (final preview in _previewElementsById.values) {
@@ -266,23 +210,17 @@ class DrawStateView {
         continue;
       }
       highlights.add(preview);
-      dynamicHighlights.add(preview);
     }
 
     if (creatingHighlight != null && !includesCreatingHighlight) {
       highlights.add(creatingHighlight);
-      dynamicHighlights.add(creatingHighlight);
     }
 
     if (highlights.isEmpty) {
       return HighlightMaskSceneSnapshot.empty;
     }
 
-    return HighlightMaskSceneSnapshot(
-      elements: highlights,
-      staticElements: staticHighlights,
-      dynamicElements: dynamicHighlights,
-    );
+    return HighlightMaskSceneSnapshot(elements: highlights);
   }
 
   ElementState? _resolveCreatingHighlightElement() {

@@ -30,8 +30,8 @@ class SerialNumberConnectorSnapshot {
 
   /// Text ids whose connector visuals can change for this frame.
   ///
-  /// Dynamic scene caching should treat these text elements as dynamic so
-  /// connector removals and geometry updates are reflected immediately.
+  /// Frame-level connector caching should treat these text elements as volatile
+  /// so connector removals and geometry updates are reflected immediately.
   final Set<String> dynamicTextElementIds;
 }
 

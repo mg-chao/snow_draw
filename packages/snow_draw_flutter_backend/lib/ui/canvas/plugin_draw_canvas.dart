@@ -2212,13 +2212,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _isHighlightMaskVisible({
     required DrawStateView stateView,
     required HighlightMaskConfig config,
-  }) {
-    final summary = stateView.highlightMaskSceneSummary;
-    return isHighlightMaskVisible(
-      hasHighlights: summary.hasHighlights,
-      config: config,
-    );
-  }
+  }) => isHighlightMaskVisible(
+    hasHighlights: stateView.highlightMaskScene.hasHighlights,
+    config: config,
+  );
 
   SceneCanvasRenderKey _buildCanvasRenderKey({
     required DrawStateView stateView,

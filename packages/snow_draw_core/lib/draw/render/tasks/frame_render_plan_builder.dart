@@ -5,8 +5,8 @@ import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';
-import '../../types/element_style.dart';
 import '../../types/draw_rect.dart';
+import '../../types/element_style.dart';
 import '../../utils/selection_calculator.dart';
 import 'frame_render_plan.dart';
 import 'render_tasks.dart';
@@ -117,8 +117,6 @@ class FrameRenderPlanBuilder {
         HighlightMaskRenderTask(
           config: highlightMaskConfig,
           highlights: view.highlightMaskScene.elements,
-          staticHighlights: view.highlightMaskScene.staticElements,
-          dynamicHighlights: view.highlightMaskScene.dynamicElements,
         ),
       );
     }

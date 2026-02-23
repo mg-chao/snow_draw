@@ -17,7 +17,6 @@ import 'filter_pipeline/filter_segment_renderer.dart';
 import 'free_draw_creation_preview_cache.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_painter.dart';
-import 'highlight_mask_static_scene_cache.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 import 'watermark_painter.dart';
@@ -35,7 +34,6 @@ class SceneCanvasPainter extends CustomPainter {
 
   static const _directSolidPreviewPointThreshold = 32;
   static final _gapLabelPainter = TextPainter(textDirection: TextDirection.ltr);
-  static final _highlightMaskStaticSceneCache = HighlightMaskStaticSceneCache();
   static final _freeDrawPreviewCache = FreeDrawCreationPreviewCache();
   static final _freeDrawStrokePaint = Paint()
     ..style = PaintingStyle.stroke
@@ -102,19 +100,6 @@ class SceneCanvasPainter extends CustomPainter {
       majorLineEvery: task.majorLineEvery,
       minScreenSpacing: task.minScreenSpacing,
       minRenderSpacing: task.minRenderSpacing,
-    );
-  }
-
-  HighlightMaskRenderTask? _buildLegacyHighlightMaskTask() {
-    final scene = stateView.highlightMaskScene;
-    if (!scene.hasHighlights) {
-      return null;
-    }
-    return HighlightMaskRenderTask(
-      config: renderKey.highlightMaskConfig,
-      highlights: scene.elements,
-      staticHighlights: scene.staticElements,
-      dynamicHighlights: scene.dynamicElements,
     );
   }
 
@@ -195,21 +180,6 @@ class SceneCanvasPainter extends CustomPainter {
         scale: scale,
         cameraPosition: Offset(camera.position.x, camera.position.y),
       );
-    } else if (renderKey.isHighlightMaskVisible) {
-      final legacyHighlightMaskTask = _buildLegacyHighlightMaskTask();
-      if (legacyHighlightMaskTask != null) {
-        _paintHighlightMask(
-          canvas: canvas,
-          task: legacyHighlightMaskTask,
-          viewportRect: viewportRect,
-          scale: scale,
-          cameraPosition: Offset(camera.position.x, camera.position.y),
-        );
-      } else {
-        _highlightMaskStaticSceneCache.clear();
-      }
-    } else {
-      _highlightMaskStaticSceneCache.clear();
     }
 
     final plannedWatermarkTask = _firstPlannedTask<WatermarkRenderTask>();
@@ -946,85 +916,14 @@ class SceneCanvasPainter extends CustomPainter {
       return;
     }
 
-    final highlights = task.highlights;
-    final staticHighlights = task.staticHighlights;
-    final dynamicHighlights = task.dynamicHighlights;
-    final maskConfig = task.config;
-
-    // Dynamic highlight edits should use the same whole-mask composition path
-    // as settled frames. The static-mask + modulate-hole optimization can
-    // alter overlay content and produce inconsistent highlight colors.
-    if (dynamicHighlights.isNotEmpty) {
-      _highlightMaskStaticSceneCache.clear();
-      paintHighlightMask(
-        canvas: canvas,
-        highlights: highlights,
-        viewportRect: viewportRect,
-        maskConfig: maskConfig,
-        scaleFactor: scale,
-        cameraPosition: cameraPosition,
-      );
-      return;
-    }
-
-    final document = stateView.state.domain.document;
-    final excludedDocumentHighlightIds = _resolveExcludedDocumentHighlightIds(
-      document: document,
-      dynamicHighlights: dynamicHighlights,
-      previewElementsById: renderKey.previewElementsById,
-    );
-    final paintedStatic = _highlightMaskStaticSceneCache.paint(
-      canvas: canvas,
-      document: document,
-      staticHighlights: staticHighlights,
-      excludedDocumentHighlightIds: excludedDocumentHighlightIds,
-      viewportRect: viewportRect,
-      maskConfig: maskConfig,
-      scaleFactor: scale,
-      cameraPosition: cameraPosition,
-    );
-    if (paintedStatic) {
-      return;
-    }
     paintHighlightMask(
       canvas: canvas,
-      highlights: highlights,
+      highlights: task.highlights,
       viewportRect: viewportRect,
-      maskConfig: maskConfig,
+      maskConfig: task.config,
       scaleFactor: scale,
       cameraPosition: cameraPosition,
     );
-  }
-
-  Set<String> _resolveExcludedDocumentHighlightIds({
-    required DocumentState document,
-    required List<ElementState> dynamicHighlights,
-    required Map<String, ElementState> previewElementsById,
-  }) {
-    if (dynamicHighlights.isEmpty && previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-
-    final ids = <String>{};
-    for (final highlight in dynamicHighlights) {
-      final persisted = document.getElementById(highlight.id);
-      if (persisted?.data is HighlightData) {
-        ids.add(highlight.id);
-      }
-    }
-    if (previewElementsById.isNotEmpty) {
-      for (final entry in previewElementsById.entries) {
-        final persisted = document.getElementById(entry.key);
-        if (persisted?.data is HighlightData &&
-            entry.value.data is! HighlightData) {
-          ids.add(entry.key);
-        }
-      }
-    }
-    if (ids.isEmpty) {
-      return const <String>{};
-    }
-    return Set<String>.unmodifiable(ids);
   }
 
   void _drawSceneElements({
@@ -1203,8 +1102,8 @@ class SceneCanvasPainter extends CustomPainter {
     required Map<String, ElementState> previewElementsById,
   }) {
     // Eraser preview mode only applies document-backed opacity overrides.
-    // Once the visible element list is stable, static scene metadata stays
-    // valid across frames even as the preview override map grows.
+    // Once the visible element list is stable, cached scene-context metadata
+    // stays valid across frames even as the preview override map grows.
     final cached = _sceneRenderContextCache;
     if (cached != null &&
         cached.matchesFast(

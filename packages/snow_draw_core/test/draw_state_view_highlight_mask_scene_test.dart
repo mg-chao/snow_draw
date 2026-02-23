@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
@@ -7,6 +6,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('collects document highlights in document order', () {
@@ -30,8 +30,6 @@ void main() {
 
     expect(_ids(view.highlightMaskScene.elements), ['h1', 'h2']);
     expect(view.highlightMaskScene.hasHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test('applies preview override precedence over document elements', () {
@@ -46,8 +44,6 @@ void main() {
 
     expect(view.highlightMaskScene.elements, isEmpty);
     expect(view.highlightMaskScene.hasHighlights, isFalse);
-    expect(view.highlightMaskSceneSummary.hasHighlights, isFalse);
-    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
   });
 
   test(
@@ -66,10 +62,7 @@ void main() {
       );
 
       expect(_ids(view.highlightMaskScene.elements), ['h1', 'h_preview']);
-      expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
-      expect(_ids(view.highlightMaskScene.dynamicElements), ['h_preview']);
-      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
+      expect(view.highlightMaskScene.hasHighlights, isTrue);
     },
   );
 
@@ -90,11 +83,7 @@ void main() {
 
     expect(_ids(highlights), ['h1', 'creating']);
     expect(highlights.last.rect, creatingRect);
-    expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
-    expect(_ids(view.highlightMaskScene.dynamicElements), ['creating']);
-    expect(view.highlightMaskScene.hasDynamicHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
+    expect(view.highlightMaskScene.hasHighlights, isTrue);
   });
 
   test(
@@ -130,8 +119,7 @@ void main() {
         hasLength(1),
       );
       expect(highlights.last.rect, currentRect);
-      expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-      expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
+      expect(view.highlightMaskScene.hasHighlights, isTrue);
     },
   );
 
@@ -148,12 +136,10 @@ void main() {
 
     final view = DrawStateView.fromState(state);
     expect(_ids(view.highlightMaskScene.elements), ['h1']);
-    expect(view.highlightMaskScene.dynamicElements, isEmpty);
-    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isFalse);
+    expect(view.highlightMaskScene.hasHighlights, isTrue);
   });
 
-  test('marks edited highlight previews as dynamic', () {
+  test('keeps edited highlight previews in document order', () {
     final h1 = _highlight(id: 'h1');
     final h2 = _highlight(
       id: 'h2',
@@ -170,10 +156,9 @@ void main() {
       previewElementsById: {h2.id: movedH2},
     );
 
-    expect(_ids(view.highlightMaskScene.staticElements), ['h1']);
-    expect(_ids(view.highlightMaskScene.dynamicElements), ['h2']);
-    expect(view.highlightMaskSceneSummary.hasHighlights, isTrue);
-    expect(view.highlightMaskSceneSummary.hasDynamicHighlights, isTrue);
+    expect(_ids(view.highlightMaskScene.elements), ['h1', 'h2']);
+    expect(view.highlightMaskScene.elements.last.rect, movedH2.rect);
+    expect(view.highlightMaskScene.hasHighlights, isTrue);
   });
 }
 
