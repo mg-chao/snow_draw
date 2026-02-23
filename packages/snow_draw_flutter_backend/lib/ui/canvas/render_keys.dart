@@ -43,9 +43,11 @@ class CreatingElementSnapshot {
 
 /// Render key for the single scene canvas.
 ///
-/// [framePlan] is the authoritative paint input for the single-canvas path.
-/// Remaining fields cover backend-only concerns that are not encoded directly
-/// into core render tasks.
+/// [framePlan] is the authoritative source for non-element paint tasks in the
+/// single-canvas path (background, overlays, guides, etc.).
+///
+/// Element scene pixels are resolved from [DrawStateView] and preview snapshots
+/// in the backend painter, so backend-only fields remain part of this key.
 @immutable
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({

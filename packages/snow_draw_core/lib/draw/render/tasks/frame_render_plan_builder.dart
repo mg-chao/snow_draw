@@ -1,10 +1,8 @@
 import '../../config/draw_config.dart';
 import '../../edit/arrow/arrow_point_operation.dart';
-import '../../elements/core/element_registry_interface.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/text/text_data.dart';
-import '../../models/document_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
@@ -64,9 +62,7 @@ class FrameRenderPlanBuilder {
   /// Builds a frame plan for the current state.
   FrameRenderPlan build({
     required DrawStateView view,
-    required ElementRegistry elementRegistry,
     required double scaleFactor,
-    bool includeElementRenderTasks = true,
     String? localeTag,
     FrameRenderTransientState transientState =
         const FrameRenderTransientState(),
@@ -86,23 +82,6 @@ class FrameRenderPlanBuilder {
         return null;
       }
       return resolveEffectiveElement(element);
-    }
-
-    void appendElementTasks(Iterable<ElementState> elements) {
-      for (final element in elements) {
-        final definition = elementRegistry.getDefinitionByValue(
-          element.typeId.value,
-        );
-        if (definition == null) {
-          continue;
-        }
-        tasks.addAll(
-          definition.taskEncoder.encodeTasks(
-            element: element,
-            localeTag: localeTag,
-          ),
-        );
-      }
     }
 
     final canvasConfig = transientState.canvasConfig;
@@ -125,20 +104,6 @@ class FrameRenderPlanBuilder {
           minRenderSpacing: gridConfig.minRenderSpacing,
         ),
       );
-    }
-
-    if (includeElementRenderTasks) {
-      appendElementTasks([
-        for (final element in view.elements) resolveEffectiveElement(element),
-      ]);
-
-      if (previewElementsById.isNotEmpty) {
-        final previewOnlyElements = _resolvePreviewOnlyElements(
-          previewElementsById: previewElementsById,
-          document: document,
-        );
-        appendElementTasks(previewOnlyElements);
-      }
     }
 
     final highlightMaskConfig = transientState.highlightMaskConfig;
@@ -332,17 +297,6 @@ class FrameRenderPlanBuilder {
     );
   }
 
-  List<ElementState> _resolvePreviewOnlyElements({
-    required Map<String, ElementState> previewElementsById,
-    required DocumentState document,
-  }) {
-    final previewOnlyElements = <ElementState>[
-      for (final entry in previewElementsById.entries)
-        if (document.getElementById(entry.key) == null) entry.value,
-    ];
-    return previewOnlyElements..sort(_compareElementZOrder);
-  }
-
   ArrowLikeData? _resolveSingleSelectedArrowData({
     required int selectedCount,
     required List<ElementState> selectedElements,
@@ -352,14 +306,6 @@ class FrameRenderPlanBuilder {
     }
     final data = selectedElements.first.data;
     return data is ArrowLikeData ? data : null;
-  }
-
-  int _compareElementZOrder(ElementState a, ElementState b) {
-    final zIndexComparison = a.zIndex.compareTo(b.zIndex);
-    if (zIndexComparison != 0) {
-      return zIndexComparison;
-    }
-    return a.id.compareTo(b.id);
   }
 
   List<String> _resolveArrowBindingHighlightElementIds({

@@ -2238,9 +2238,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final elementRegistry = widget.store.context.elementRegistry;
     final framePlan = _frameRenderPlanBuilder.build(
       view: stateView,
-      elementRegistry: elementRegistry,
       scaleFactor: scaleFactor,
-      includeElementRenderTasks: false,
       localeTag: locale?.toLanguageTag(),
       transientState: FrameRenderTransientState(
         hoveredElementId: _hoveredSelectionElementId,
