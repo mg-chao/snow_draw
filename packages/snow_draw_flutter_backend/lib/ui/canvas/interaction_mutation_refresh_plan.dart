@@ -1,66 +1,15 @@
-import 'package:meta/meta.dart';
-
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'interaction_state_change_common.dart';
 import 'lightweight_line_edit_state_change.dart';
 import 'serial_number_interaction_classifier.dart';
 
-/// Interaction category resolved for a fast-path mutation.
-enum InteractionMutationKind {
-  /// Serial-number create/edit interaction.
-  serialNumber,
-
-  /// Lightweight line create/edit interaction.
-  lightweightLine,
-
-  /// Rectangle create/edit interaction.
-  rectangle,
-
-  /// Highlight create/edit interaction.
-  highlight,
-
-  /// Filter create/edit interaction.
-  filter,
-
-  /// Arrow create/edit interaction.
-  arrow,
-}
-
 /// Canvas refresh plan for interaction-only mutations.
-@immutable
-class InteractionMutationRefreshPlan {
-  const InteractionMutationRefreshPlan({required this.kind});
+enum InteractionMutationRefreshPlan {
+  /// Generic interaction fast-path; dynamic layer refresh is sufficient.
+  dynamicOnly,
 
-  /// Category of interaction the plan applies to.
-  final InteractionMutationKind kind;
-
-  /// Returns `true` when cursor/hover visuals should be recomputed now.
-  bool shouldRefreshPointerVisuals({required bool hasActivePointer}) =>
-      !hasActivePointer;
-
-  static const serialNumber = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.serialNumber,
-  );
-
-  static const lightweightLine = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.lightweightLine,
-  );
-
-  static const rectangle = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.rectangle,
-  );
-
-  static const highlight = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.highlight,
-  );
-
-  static const filter = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.filter,
-  );
-
-  static const arrow = InteractionMutationRefreshPlan(
-    kind: InteractionMutationKind.arrow,
-  );
+  /// Lightweight-line specific fast-path with tighter preview-id tracking.
+  lightweightLineDynamicOnly,
 }
 
 /// Resolves fast-path refresh behavior for interaction-only state mutations.
@@ -68,26 +17,18 @@ InteractionMutationRefreshPlan? resolveInteractionMutationRefreshPlan({
   required DrawState previous,
   required DrawState next,
 }) {
-  if (_isArrowInteractionMutationOnly(previous: previous, next: next)) {
-    return InteractionMutationRefreshPlan.arrow;
-  }
-  if (_isSerialNumberInteractionMutationOnly(previous: previous, next: next)) {
-    return InteractionMutationRefreshPlan.serialNumber;
-  }
   if (isLightweightLineInteractionMutationOnly(
     previous: previous,
     next: next,
   )) {
-    return InteractionMutationRefreshPlan.lightweightLine;
+    return InteractionMutationRefreshPlan.lightweightLineDynamicOnly;
   }
-  if (_isRectangleInteractionMutationOnly(previous: previous, next: next)) {
-    return InteractionMutationRefreshPlan.rectangle;
-  }
-  if (_isHighlightInteractionMutationOnly(previous: previous, next: next)) {
-    return InteractionMutationRefreshPlan.highlight;
-  }
-  if (_isFilterInteractionMutationOnly(previous: previous, next: next)) {
-    return InteractionMutationRefreshPlan.filter;
+  if (_isArrowInteractionMutationOnly(previous: previous, next: next) ||
+      _isSerialNumberInteractionMutationOnly(previous: previous, next: next) ||
+      _isRectangleInteractionMutationOnly(previous: previous, next: next) ||
+      _isHighlightInteractionMutationOnly(previous: previous, next: next) ||
+      _isFilterInteractionMutationOnly(previous: previous, next: next)) {
+    return InteractionMutationRefreshPlan.dynamicOnly;
   }
   return null;
 }

@@ -866,7 +866,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required Map<String, ElementState> previewElementsById,
     required InteractionMutationRefreshPlan plan,
   }) {
-    if (plan.kind != InteractionMutationKind.lightweightLine) {
+    if (plan != InteractionMutationRefreshPlan.lightweightLineDynamicOnly) {
       return _resolveDynamicPreviewElementIdsForScene(
         stateView,
         previewElementsById,
@@ -3191,7 +3191,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final previewElementsRevision =
-        plan.kind == InteractionMutationKind.lightweightLine
+        plan == InteractionMutationRefreshPlan.lightweightLineDynamicOnly
         ? ++_lightweightLinePreviewRevision
         : ++_interactionPreviewRevision;
     final scene = resolveInteractionDynamicSceneFromCachedKey(
@@ -4179,9 +4179,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawState previousState,
     required InteractionMutationRefreshPlan plan,
   }) {
-    if (plan.shouldRefreshPointerVisuals(
-      hasActivePointer: _activePointerIds.isNotEmpty,
-    )) {
+    if (_activePointerIds.isEmpty) {
       _refreshPointerVisualsForState(state);
     } else {
       _refreshCursorAndClearHoverForState(state);
