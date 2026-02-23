@@ -62,7 +62,6 @@ export 'draw/render/planning/filter_segments.dart';
 export 'draw/render/planning/filter_style_state_change.dart';
 export 'draw/render/planning/highlight_mask_visibility.dart';
 export 'draw/render/planning/serial_number_interaction_classifier.dart';
-export 'draw/render/planning/text_editing_state_change.dart';
 export 'draw/render/planning/visible_element_resolver.dart';
 export 'draw/render/planning/watermark_visibility.dart';
 export 'draw/render/tasks/frame_render_plan.dart';

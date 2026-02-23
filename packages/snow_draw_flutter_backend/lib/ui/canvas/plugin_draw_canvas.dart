@@ -3310,20 +3310,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _lastObservedState = state;
 
     _syncTextEditingOverlayState(state);
-    // Keystrokes in text editing mutate only the draft payload and trigger
-    // very high-frequency state updates. Skip cursor hit-testing work and
-    // canvas tree rebuilds; the dedicated text overlay updates itself via
-    // [ValueListenableBuilder].
-    if (previousState != null &&
-        isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
-      if (shouldRefreshCanvasForTextEditingDraftMutation(
-        previous: previousState,
-        next: state,
-      )) {
-        _refreshCanvasSnapshot(state, assumeChanged: true);
-      }
-      return;
-    }
 
     if (previousState != null) {
       final changedFilterElementIds = resolveFilterStyleMutation(
