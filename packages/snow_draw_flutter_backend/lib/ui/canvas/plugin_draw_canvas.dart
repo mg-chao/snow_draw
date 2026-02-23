@@ -189,8 +189,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
   var _eraserPreviewCacheRevision = 0;
-  var _filterStyleQualityRestoreRevision = 0;
-  var _preferFastFilterFallback = false;
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
   var _mergedEraserPreviewElements = const <String, ElementState>{};
@@ -208,7 +206,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
   late final EraserStrokeProcessor _eraserStrokeProcessor;
-  DrawState? _lastObservedState;
   DrawState? _cachedState;
   DrawStateView? _cachedStateView;
   SelectionConfig? _cachedInputSelectionConfigSource;
@@ -359,7 +356,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       editOperations: widget.store.context.editOperations,
       textMetricsService: widget.store.context.textMetricsService,
     );
-    _lastObservedState = initialState;
     _syncTextEditingOverlayState(initialState);
     widget.watermarkPreviewListenable?.addListener(
       _handleWatermarkPreviewChange,
@@ -418,7 +414,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cancelPendingTextDraftSyncDispatch();
         _lastTextDraftSyncAt = null;
         _textDraftDispatcher.reset();
-        _lastObservedState = widget.store.state;
         _cachedState = null;
         _cachedStateView = null;
         _cachedInputSelectionConfigSource = null;
@@ -2204,7 +2199,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       highlightMaskConfig: highlightMask,
       isWatermarkVisible: watermarkVisible,
       watermarkConfig: watermark,
-      preferFastFilterFallback: _preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
   }
@@ -2230,7 +2224,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     creatingElement: scene.creatingSnapshot,
     textRenderingCacheRevision: scene.textRenderingCacheRevision,
     previewElementsById: scene.previewElements,
-    preferFastFilterFallback: scene.preferFastFilterFallback,
     isHighlightMaskVisible: scene.isHighlightMaskVisible,
     highlightMaskConfig: scene.highlightMaskConfig,
     isWatermarkVisible: scene.isWatermarkVisible,
@@ -2245,7 +2238,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required CreatingElementSnapshot? creatingElement,
     required int textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
-    required bool preferFastFilterFallback,
     required bool isHighlightMaskVisible,
     required HighlightMaskConfig highlightMaskConfig,
     required bool isWatermarkVisible,
@@ -2294,7 +2286,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       documentVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
-      preferFastFilterFallback: preferFastFilterFallback,
       elementRegistry: elementRegistry,
       textMetricsService: widget.store.context.textMetricsService,
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
@@ -2356,34 +2347,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       renderKey: canvasRenderKey,
       assumeChanged: assumeChanged,
     );
-  }
-
-  void _refreshCanvasSnapshotForFilterStyleMutation(
-    DrawState state, {
-    required Set<String> changedFilterElementIds,
-  }) {
-    final enableFastFallback = changedFilterElementIds.isNotEmpty;
-    _preferFastFilterFallback = enableFastFallback;
-    try {
-      _refreshCanvasSnapshot(state, assumeChanged: true);
-    } finally {
-      _preferFastFilterFallback = false;
-    }
-    if (enableFastFallback) {
-      _scheduleFilterStyleQualityRestore(state);
-    }
-  }
-
-  void _scheduleFilterStyleQualityRestore(DrawState state) {
-    final revision = ++_filterStyleQualityRestoreRevision;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          revision != _filterStyleQualityRestoreRevision ||
-          !identical(_lastObservedState, state)) {
-        return;
-      }
-      _refreshCanvasSnapshot(state, assumeChanged: true);
-    });
   }
 
   Widget _buildTextEditorOverlay({
@@ -3282,25 +3245,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleStateChange(DrawState state) {
-    final previousState = _lastObservedState;
-    _lastObservedState = state;
-
     _syncTextEditingOverlayState(state);
-
-    if (previousState != null) {
-      final changedFilterElementIds = resolveFilterStyleMutation(
-        previous: previousState,
-        next: state,
-      );
-      if (changedFilterElementIds != null) {
-        _refreshPointerVisualsForState(state);
-        _refreshCanvasSnapshotForFilterStyleMutation(
-          state,
-          changedFilterElementIds: changedFilterElementIds,
-        );
-        return;
-      }
-    }
     _refreshPointerVisualsForState(state);
     _refreshCanvasSnapshot(state, assumeChanged: true);
   }
@@ -3406,7 +3351,6 @@ class _CanvasSceneSnapshot {
     required this.highlightMaskConfig,
     required this.isWatermarkVisible,
     required this.watermarkConfig,
-    required this.preferFastFilterFallback,
     required this.textRenderingCacheRevision,
   });
 
@@ -3416,7 +3360,6 @@ class _CanvasSceneSnapshot {
   final HighlightMaskConfig highlightMaskConfig;
   final bool isWatermarkVisible;
   final WatermarkConfig watermarkConfig;
-  final bool preferFastFilterFallback;
   final int textRenderingCacheRevision;
 }
 

@@ -59,7 +59,6 @@ export 'draw/input/policies/tool_change_reset_policy.dart';
 export 'draw/input/plugin_system.dart';
 export 'draw/render/planning/filter_segment_builder.dart';
 export 'draw/render/planning/filter_segments.dart';
-export 'draw/render/planning/filter_style_state_change.dart';
 export 'draw/render/planning/highlight_mask_visibility.dart';
 export 'draw/render/planning/serial_number_interaction_classifier.dart';
 export 'draw/render/planning/visible_element_resolver.dart';

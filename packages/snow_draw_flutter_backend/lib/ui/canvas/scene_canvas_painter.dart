@@ -885,10 +885,6 @@ class SceneCanvasPainter extends CustomPainter {
         viewportRect.height,
       ),
       volatileElementIds: sceneContext.volatileElementIds,
-      renderHints: FilterRenderHints(
-        interactionPreview: sceneContext.useAggressiveCpuFallback,
-        aggressiveCpuFallback: sceneContext.useAggressiveCpuFallback,
-      ),
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSegmentRenderer.lastDiagnostics;
@@ -937,15 +933,10 @@ class SceneCanvasPainter extends CustomPainter {
       creatingFilterId: creatingFilterId,
       serialConnectorTextIds: serialConnectorSnapshot.dynamicTextElementIds,
     );
-    // Keep drag previews visually consistent with settled frames. Reserve
-    // fast fallback for explicit high-frequency style mutations only.
-    final useAggressiveCpuFallback =
-        renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
     final plannedElementTasksById = _resolvePlannedElementTasksById();
 
     return _SceneRenderContext(
       hasFilterElement: staticContext.hasFilterElement,
-      useAggressiveCpuFallback: useAggressiveCpuFallback,
       shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       volatileElementIds: interactionVolatileElementIds,
@@ -2329,7 +2320,6 @@ class _ArrowOverlayPaints {
 class _SceneRenderContext {
   const _SceneRenderContext({
     required this.hasFilterElement,
-    required this.useAggressiveCpuFallback,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.volatileElementIds,
@@ -2337,7 +2327,6 @@ class _SceneRenderContext {
   });
 
   final bool hasFilterElement;
-  final bool useAggressiveCpuFallback;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> volatileElementIds;

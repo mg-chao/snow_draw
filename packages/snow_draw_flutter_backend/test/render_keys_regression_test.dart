@@ -127,7 +127,6 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   documentVersion: 1,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,
-  preferFastFilterFallback: false,
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
   framePlan: framePlan,

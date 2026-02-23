@@ -53,7 +53,6 @@ class SceneCanvasRenderKey {
     required this.documentVersion,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
-    required this.preferFastFilterFallback,
     required this.elementRegistry,
     required this.performanceMonitoringEnabled,
     required this.framePlan,
@@ -78,12 +77,6 @@ class SceneCanvasRenderKey {
   /// Preview elements during editing.
   final Map<String, ElementState> previewElementsById;
 
-  /// Whether filter rendering should prioritize responsiveness this frame.
-  ///
-  /// This hint is used for high-frequency filter style drags where full
-  /// fidelity often falls back to CPU rendering and hurts input latency.
-  final bool preferFastFilterFallback;
-
   /// Element registry for rendering.
   final ElementRegistry elementRegistry;
 
@@ -107,7 +100,6 @@ class SceneCanvasRenderKey {
           other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
-          other.preferFastFilterFallback == preferFastFilterFallback &&
           other.elementRegistry == elementRegistry &&
           identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
@@ -120,7 +112,6 @@ class SceneCanvasRenderKey {
     documentVersion,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
-    preferFastFilterFallback,
     elementRegistry,
     identityHashCode(textMetricsService),
     performanceMonitoringEnabled,
