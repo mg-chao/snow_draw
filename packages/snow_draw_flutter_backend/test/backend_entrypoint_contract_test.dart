@@ -80,6 +80,20 @@ void main() {
         );
       },
     );
+
+    test('registers built-ins for custom mutable registries', () {
+      final mutableRegistry = _MutableElementRegistryProxy();
+      final context = createFlutterDrawContext(
+        elementRegistry: mutableRegistry,
+      );
+
+      expect(context.elementRegistry, same(mutableRegistry));
+      expect(
+        context.elementRegistry.supports(RectangleData.typeIdToken),
+        isTrue,
+      );
+      expect(context.elementRegistry.supports(TextData.typeIdToken), isTrue);
+    });
   });
 }
 
@@ -104,4 +118,36 @@ class _ReadOnlyElementRegistry implements ElementRegistry {
 
   @override
   bool supportsTypeValue(String typeValue) => false;
+}
+
+class _MutableElementRegistryProxy implements MutableElementRegistry {
+  _MutableElementRegistryProxy();
+
+  final DefaultElementRegistry _delegate = DefaultElementRegistry();
+
+  @override
+  ElementDefinition<T>? getDefinition<T extends ElementData>(
+    ElementTypeId<T> typeId,
+  ) => _delegate.getDefinition(typeId);
+
+  @override
+  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
+      _delegate.getDefinitionByValue(typeValue);
+
+  @override
+  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
+      _delegate.registeredTypeIds;
+
+  @override
+  void register<T extends ElementData>(ElementDefinition<T> definition) {
+    _delegate.register(definition);
+  }
+
+  @override
+  bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
+      _delegate.supports(typeId);
+
+  @override
+  bool supportsTypeValue(String typeValue) =>
+      _delegate.supportsTypeValue(typeValue);
 }

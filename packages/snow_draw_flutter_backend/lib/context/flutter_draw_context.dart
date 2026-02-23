@@ -9,7 +9,8 @@ import '../services/text/flutter_text_metrics_service.dart';
 /// consistent layout behavior with the backend renderer.
 ///
 /// Pass a custom [ElementRegistry] when consumers need full control over
-/// registration. Built-in auto-registration requires [DefaultElementRegistry].
+/// registration. Built-in auto-registration requires
+/// [MutableElementRegistry].
 DrawContext createFlutterDrawContext({
   ElementRegistry? elementRegistry,
   IdGenerator? idGenerator,
@@ -17,18 +18,10 @@ DrawContext createFlutterDrawContext({
   LogService? logService,
   bool registerBuiltInElementDefinitions = true,
 }) {
-  final registry = elementRegistry ?? DefaultElementRegistry();
-  if (registerBuiltInElementDefinitions) {
-    if (registry is! DefaultElementRegistry) {
-      throw ArgumentError.value(
-        elementRegistry,
-        'elementRegistry',
-        'registerBuiltInElementDefinitions=true requires '
-            'DefaultElementRegistry',
-      );
-    }
-    registerBuiltInElements(registry);
-  }
+  final registry = resolveElementRegistry(
+    elementRegistry: elementRegistry,
+    registerBuiltInElementDefinitions: registerBuiltInElementDefinitions,
+  );
 
   return DrawContext.withDefaults(
     elementRegistry: registry,

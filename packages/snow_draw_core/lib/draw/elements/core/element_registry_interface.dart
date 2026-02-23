@@ -16,3 +16,9 @@ abstract interface class ElementRegistry {
 
   Iterable<ElementTypeId<ElementData>> get registeredTypeIds;
 }
+
+/// Mutable registry contract used by built-in registration helpers.
+abstract interface class MutableElementRegistry implements ElementRegistry {
+  /// Registers [definition] and fails when its type id is already present.
+  void register<T extends ElementData>(ElementDefinition<T> definition);
+}
