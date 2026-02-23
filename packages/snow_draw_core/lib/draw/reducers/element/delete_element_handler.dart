@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
+import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../events/error_events.dart';
@@ -16,17 +17,13 @@ DrawState handleDeleteElements(
   ElementReducerDeps _,
 ) {
   final document = state.domain.document;
-  final deleteIds = action.elementIds
-      .where(document.elementMap.containsKey)
-      .toSet();
+  final deleteIds = _expandIdsForBoundSerialText(
+    elements: document.elements,
+    seedIds: action.elementIds.where(document.elementMap.containsKey),
+  );
   if (deleteIds.isEmpty) {
     return state;
   }
-
-  _expandDeleteIdsForBoundSerialText(
-    elements: document.elements,
-    deleteIds: deleteIds,
-  );
 
   final newElements = <ElementState>[];
   for (final element in document.elements) {
@@ -52,9 +49,9 @@ DrawState handleDeleteElements(
   return applySelectionChange(next, newSelectedIds);
 }
 
-void _expandDeleteIdsForBoundSerialText({
+Set<String> _expandIdsForBoundSerialText({
   required Iterable<ElementState> elements,
-  required Set<String> deleteIds,
+  required Iterable<String> seedIds,
 }) {
   final serialBindings = <String, String>{};
   for (final element in elements) {
@@ -64,17 +61,20 @@ void _expandDeleteIdsForBoundSerialText({
     }
   }
 
-  final pending = ListQueue<String>.from(deleteIds);
+  final expandedIds = {...seedIds};
+  final pending = ListQueue<String>.from(expandedIds);
   while (pending.isNotEmpty) {
     final id = pending.removeFirst();
     final boundId = serialBindings[id];
     if (boundId == null) {
       continue;
     }
-    if (deleteIds.add(boundId)) {
+    if (expandedIds.add(boundId)) {
       pending.add(boundId);
     }
   }
+
+  return expandedIds;
 }
 
 ElementState _applyDeleteElementUpdates({
@@ -120,51 +120,39 @@ DrawState handleDuplicateElements(
   ElementReducerDeps context,
 ) {
   if (action.elementIds.isEmpty) {
-    context.log.store.warning('Duplicate failed: empty selection', {
-      'action': action.runtimeType.toString(),
-    });
-    context.eventBus?.emitLazy(
-      () => ValidationFailedEvent(
-        action: action.runtimeType.toString(),
-        reason: 'No element ids provided',
-      ),
+    return _reportDuplicateValidationFailure(
+      state: state,
+      action: action,
+      context: context,
+      logMessage: 'Duplicate failed: empty selection',
+      reason: 'No element ids provided',
     );
-    return state;
   }
 
-  final index = state.domain.document.elementMap;
+  final document = state.domain.document;
+  final index = document.elementMap;
   final selectedIds = action.elementIds.toSet();
-  final idsToDuplicate = <String>{...selectedIds};
-  for (final id in selectedIds) {
-    final element = index[id];
-    final data = element?.data;
-    if (data is SerialNumberData) {
-      final boundId = data.textElementId;
-      if (boundId != null && index[boundId] != null) {
-        idsToDuplicate.add(boundId);
-      }
-    }
-  }
+  final idsToDuplicate = _expandIdsForBoundSerialText(
+    elements: document.elements,
+    seedIds: selectedIds.where(index.containsKey),
+  );
 
   final elementsToDuplicate = <ElementState>[];
-  for (final element in state.domain.document.elements) {
+  for (final element in document.elements) {
     if (idsToDuplicate.contains(element.id)) {
       elementsToDuplicate.add(element);
     }
   }
   if (elementsToDuplicate.isEmpty) {
-    context.log.store.warning('Duplicate failed: no elements found', {
-      'action': action.runtimeType.toString(),
-      'elementIds': action.elementIds.join(','),
-    });
-    context.eventBus?.emitLazy(
-      () => ValidationFailedEvent(
-        action: action.runtimeType.toString(),
-        reason: 'No valid elements to duplicate',
-        details: {'elementIds': action.elementIds.toList()},
-      ),
+    return _reportDuplicateValidationFailure(
+      state: state,
+      action: action,
+      context: context,
+      logMessage: 'Duplicate failed: no elements found',
+      reason: 'No valid elements to duplicate',
+      details: {'elementIds': action.elementIds.toList()},
+      logDetails: {'elementIds': action.elementIds.join(',')},
     );
-    return state;
   }
 
   final idMap = <String, String>{};
@@ -203,13 +191,35 @@ DrawState handleDuplicateElements(
     }
   }
 
-  final mergedElements = [...state.domain.document.elements, ...newElements];
+  final mergedElements = [...document.elements, ...newElements];
   final next = state.copyWith(
     domain: state.domain.copyWith(
-      document: state.domain.document.copyWith(elements: mergedElements),
+      document: document.copyWith(elements: mergedElements),
     ),
   );
   return applySelectionChange(next, newSelectedIds);
+}
+
+DrawState _reportDuplicateValidationFailure({
+  required DrawState state,
+  required DuplicateElements action,
+  required ElementReducerDeps context,
+  required String logMessage,
+  required String reason,
+  Map<String, dynamic>? details,
+  Map<String, dynamic>? logDetails,
+}) {
+  final actionName = action.runtimeType.toString();
+  final metadata = {'action': actionName, ...?logDetails};
+  context.log.store.warning(logMessage, metadata);
+  context.eventBus?.emitLazy(
+    () => ValidationFailedEvent(
+      action: actionName,
+      reason: reason,
+      details: details ?? const <String, dynamic>{},
+    ),
+  );
+  return state;
 }
 
 /// Remaps arrow/line binding element IDs to their duplicated counterparts.
@@ -226,17 +236,8 @@ ArrowLikeData _remapArrowBindings(
     return data;
   }
 
-  final mappedStartId = startBinding == null
-      ? null
-      : idMap[startBinding.elementId];
-  final mappedEndId = endBinding == null ? null : idMap[endBinding.elementId];
-
-  final mappedStart = startBinding == null || mappedStartId == null
-      ? null
-      : startBinding.copyWith(elementId: mappedStartId);
-  final mappedEnd = endBinding == null || mappedEndId == null
-      ? null
-      : endBinding.copyWith(elementId: mappedEndId);
+  final mappedStart = _remapBinding(startBinding, idMap);
+  final mappedEnd = _remapBinding(endBinding, idMap);
 
   final clearStartSpecial = startBinding != null && mappedStart == null;
   final clearEndSpecial = endBinding != null && mappedEnd == null;
@@ -247,4 +248,12 @@ ArrowLikeData _remapArrowBindings(
     startIsSpecial: clearStartSpecial ? null : data.startIsSpecial,
     endIsSpecial: clearEndSpecial ? null : data.endIsSpecial,
   );
+}
+
+ArrowBinding? _remapBinding(ArrowBinding? binding, Map<String, String> idMap) {
+  if (binding == null) {
+    return null;
+  }
+  final targetId = idMap[binding.elementId];
+  return targetId == null ? null : binding.copyWith(elementId: targetId);
 }

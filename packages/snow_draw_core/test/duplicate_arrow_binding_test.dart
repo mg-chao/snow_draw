@@ -335,6 +335,65 @@ void main() {
       expect(data.textElementId, duplicatedText!.id);
     });
 
+    test('serial duplication expands transitive serial-to-text bindings', () {
+      const serialRoot = ElementState(
+        id: 'serial-root',
+        rect: DrawRect(maxX: 30, maxY: 30),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: SerialNumberData(textElementId: 'serial-child'),
+      );
+      const serialChild = ElementState(
+        id: 'serial-child',
+        rect: DrawRect(minX: 40, maxX: 70, maxY: 30),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: SerialNumberData(number: 2, textElementId: 'text-leaf'),
+      );
+      const textLeaf = ElementState(
+        id: 'text-leaf',
+        rect: DrawRect(minY: 40, maxX: 50, maxY: 70),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: TextData(text: 'leaf'),
+      );
+      final state = _stateWith([serialRoot, serialChild, textLeaf]);
+
+      final result = handleDuplicateElements(
+        state,
+        DuplicateElements(elementIds: ['serial-root']),
+        deps,
+      );
+
+      final duplicatedRoot = _findDuplicated(
+        result,
+        originalId: 'serial-root',
+        state: state,
+      );
+      final duplicatedChild = _findDuplicated(
+        result,
+        originalId: 'serial-child',
+        state: state,
+      );
+      final duplicatedLeaf = _findDuplicated(
+        result,
+        originalId: 'text-leaf',
+        state: state,
+      );
+
+      expect(duplicatedRoot, isNotNull);
+      expect(duplicatedChild, isNotNull);
+      expect(duplicatedLeaf, isNotNull);
+
+      final rootData = duplicatedRoot!.data as SerialNumberData;
+      final childData = duplicatedChild!.data as SerialNumberData;
+      expect(rootData.textElementId, duplicatedChild.id);
+      expect(childData.textElementId, duplicatedLeaf!.id);
+    });
+
     test('arrow with no bindings is duplicated unchanged', () {
       const arrow = ElementState(
         id: 'arrow-1',

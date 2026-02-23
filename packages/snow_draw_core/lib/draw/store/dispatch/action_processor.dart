@@ -209,29 +209,12 @@ class ActionProcessor {
         editSessionService: _services.editSessionService,
         sessionIdGenerator: _services.sessionIdGenerator,
       );
-      final nextState = transition.nextState;
-      final stateChanged = !identical(previousState, nextState);
-
-      if (stateChanged) {
-        _services.stateManager.update(nextState);
-        if (!_services.isBatching()) {
-          _services.listenerRegistry.notify(previousState, nextState);
-        }
-      }
-
-      final events = transition.events;
-      if (events.isNotEmpty) {
-        _services.publishEditEvents(events);
-      }
-
-      _emitEditSessionEvents(
+      _applyTransitionEffects(
         previousState: previousState,
-        nextState: nextState,
+        nextState: transition.nextState,
         action: action,
-      );
-      _emitStateChangeEvents(
-        previousState: previousState,
-        nextState: nextState,
+        events: transition.events,
+        hasStateChanged: !identical(previousState, transition.nextState),
       );
     } on Object catch (error, stackTrace) {
       _services.drawContext.log.store
@@ -307,37 +290,45 @@ class ActionProcessor {
     required DispatchContext initialContext,
     required DispatchContext finalContext,
   }) {
-    if (finalContext.hasStateChanged) {
-      _services.stateManager.update(finalContext.currentState);
-
-      if (!_services.isBatching()) {
-        _services.listenerRegistry.notify(
-          initialContext.initialState,
-          finalContext.currentState,
-        );
-      }
-    }
-
     _maybeIncrementSerialNumberDefaults(
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
       action: initialContext.action,
     );
 
-    if (finalContext.events.isNotEmpty) {
-      _services.publishEditEvents(finalContext.events);
-    }
-
-    _emitEditSessionEvents(
+    _applyTransitionEffects(
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
       action: initialContext.action,
+      events: finalContext.events,
+      hasStateChanged: finalContext.hasStateChanged,
     );
+  }
 
-    _emitStateChangeEvents(
-      previousState: initialContext.initialState,
-      nextState: finalContext.currentState,
+  void _applyTransitionEffects({
+    required DrawState previousState,
+    required DrawState nextState,
+    required DrawAction action,
+    required bool hasStateChanged,
+    required List<EditSessionEvent> events,
+  }) {
+    if (hasStateChanged) {
+      _services.stateManager.update(nextState);
+      if (!_services.isBatching()) {
+        _services.listenerRegistry.notify(previousState, nextState);
+      }
+    }
+
+    if (events.isNotEmpty) {
+      _services.publishEditEvents(events);
+    }
+
+    _emitEditSessionEvents(
+      previousState: previousState,
+      nextState: nextState,
+      action: action,
     );
+    _emitStateChangeEvents(previousState: previousState, nextState: nextState);
   }
 
   void _maybeIncrementSerialNumberDefaults({
