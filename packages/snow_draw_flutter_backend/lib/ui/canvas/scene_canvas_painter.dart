@@ -895,8 +895,6 @@ class SceneCanvasPainter extends CustomPainter {
           'batchCount': diagnostics.batchCount,
           'batchCacheHits': diagnostics.batchCacheHits,
           'batchCacheMisses': diagnostics.batchCacheMisses,
-          'prefixSceneCacheHits': diagnostics.prefixSceneCacheHits,
-          'prefixSceneCacheMisses': diagnostics.prefixSceneCacheMisses,
         });
       }
     }

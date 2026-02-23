@@ -1,4 +1,5 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import '../../elements/types/filter/filter_data.dart';
+import '../../models/element_state.dart';
 import 'filter_segments.dart';
 
 /// Builds render segments from z-ordered elements.
@@ -57,14 +58,7 @@ class FilterSegmentBuilder {
       }
 
       flushBatch();
-      segments.add(
-        FilterSegment(
-          filterElement: element,
-          filterData: data,
-          idFingerprint: _elementIdFingerprint(element),
-          identityFingerprint: _elementIdentityFingerprint(element),
-        ),
-      );
+      segments.add(FilterSegment(filterElement: element, filterData: data));
     }
 
     flushBatch();
@@ -88,23 +82,9 @@ class FilterSegmentBuilder {
       if (pendingFilters.length == 1) {
         merged.add(pendingFilters.first);
       } else {
-        var idFingerprint = _idFingerprintSeed;
-        var identityFingerprint = _identityFingerprintSeed;
-        for (final filter in pendingFilters) {
-          idFingerprint = _appendFingerprint(
-            idFingerprint,
-            filter.idFingerprint!,
-          );
-          identityFingerprint = _appendFingerprint(
-            identityFingerprint,
-            filter.identityFingerprint!,
-          );
-        }
         merged.add(
           MergedFilterSegment(
             filters: List<FilterSegment>.unmodifiable(pendingFilters),
-            idFingerprint: idFingerprint,
-            identityFingerprint: identityFingerprint,
           ),
         );
       }
@@ -127,12 +107,6 @@ class FilterSegmentBuilder {
     flushFilters();
     return merged;
   }
-
-  int _elementIdFingerprint(ElementState element) =>
-      _appendFingerprint(_idFingerprintSeed, element.id.hashCode);
-
-  int _elementIdentityFingerprint(ElementState element) =>
-      _appendFingerprint(_identityFingerprintSeed, identityHashCode(element));
 
   int _appendFingerprint(int current, int value) =>
       _hashMask & ((current * 31) + value);

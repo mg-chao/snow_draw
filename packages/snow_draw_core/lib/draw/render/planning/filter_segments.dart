@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import '../../elements/types/filter/filter_data.dart';
+import '../../models/element_state.dart';
 
 /// A render segment in the filter pipeline.
 sealed class RenderSegment {
@@ -35,24 +36,13 @@ final class ElementBatchSegment extends RenderSegment {
 /// A filter element segment.
 @immutable
 final class FilterSegment extends RenderSegment {
-  const FilterSegment({
-    required this.filterElement,
-    required this.filterData,
-    this.idFingerprint,
-    this.identityFingerprint,
-  });
+  const FilterSegment({required this.filterElement, required this.filterData});
 
   /// Filter element in z-order.
   final ElementState filterElement;
 
   /// Filter data payload.
   final FilterData filterData;
-
-  /// Optional stable-id fingerprint for this filter element.
-  final int? idFingerprint;
-
-  /// Optional identity fingerprint for this filter element.
-  final int? identityFingerprint;
 }
 
 /// A group of adjacent same-type filter elements merged into one pass.
@@ -61,18 +51,8 @@ final class FilterSegment extends RenderSegment {
 /// share the same filter type.
 @immutable
 final class MergedFilterSegment extends RenderSegment {
-  const MergedFilterSegment({
-    required this.filters,
-    this.idFingerprint,
-    this.identityFingerprint,
-  });
+  const MergedFilterSegment({required this.filters});
 
   /// Individual filter entries, all sharing the same filter type.
   final List<FilterSegment> filters;
-
-  /// Optional aggregated stable-id fingerprint for [filters].
-  final int? idFingerprint;
-
-  /// Optional aggregated identity fingerprint for [filters].
-  final int? identityFingerprint;
 }
