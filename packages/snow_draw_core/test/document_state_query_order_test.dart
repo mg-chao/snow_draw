@@ -85,17 +85,6 @@ void main() {
     expect(identical(leftHit, rightHit), isFalse);
   });
 
-  test('queryElementsInRectOrdered respects min and max bounds', () {
-    final document = _stackedRectangleDocument(['e0', 'e1', 'e2']);
-
-    final result = document.queryElementsInRectOrdered(
-      const DrawRect(minX: 1, minY: 1, maxX: 5, maxY: 5),
-      minOrderIndex: 1,
-      maxOrderIndex: 1,
-    );
-    expect(_elementIds(result), ['e1']);
-  });
-
   test('boundTextIds exposes an immutable view', () {
     final document = _document([
       _serialNumberElement(id: 'serial', textElementId: 'text'),

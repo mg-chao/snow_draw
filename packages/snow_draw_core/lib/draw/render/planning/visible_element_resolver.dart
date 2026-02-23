@@ -1,39 +1,13 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 
-/// Queries visible document elements in z-order without preview replacements.
-///
-/// This is the base scene query used by the single scene painter.
-List<ElementState> resolveBaseVisibleElementScene({
-  required DocumentState document,
-  required DrawRect viewportRect,
-  int? minOrderIndex,
-  int? maxOrderIndex,
-}) => document.queryElementsInRectOrdered(
-  viewportRect,
-  minOrderIndex: minOrderIndex,
-  maxOrderIndex: maxOrderIndex,
-);
-
 /// Builds a z-ordered list of visible elements with preview replacements.
-///
-/// Callers can pass [baseVisibleElements] to reuse a cached viewport query.
 List<ElementState> resolveVisibleElementScene({
   required DocumentState document,
   required DrawRect viewportRect,
   required Map<String, ElementState> previewElementsById,
-  List<ElementState>? baseVisibleElements,
-  int? minOrderIndex,
-  int? maxOrderIndex,
   String? excludedElementId,
 }) {
-  final visibleElements =
-      baseVisibleElements ??
-      resolveBaseVisibleElementScene(
-        document: document,
-        viewportRect: viewportRect,
-        minOrderIndex: minOrderIndex,
-        maxOrderIndex: maxOrderIndex,
-      );
+  final visibleElements = document.queryElementsInRectOrdered(viewportRect);
 
   if (previewElementsById.isEmpty && excludedElementId == null) {
     return visibleElements;
@@ -64,12 +38,6 @@ List<ElementState> resolveVisibleElementScene({
     final previewId = preview.id;
     if (previewId == excludedElementId ||
         effectiveById.containsKey(previewId)) {
-      continue;
-    }
-
-    final orderIndex = _resolveOrderIndex(document: document, element: preview);
-    if ((minOrderIndex != null && orderIndex < minOrderIndex) ||
-        (maxOrderIndex != null && orderIndex > maxOrderIndex)) {
       continue;
     }
 
