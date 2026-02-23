@@ -37,11 +37,12 @@ class EditComputePipeline {
     }
 
     final document = state.domain.document;
-    final hasArrowLikeUpdate = _hasArrowLikeUpdate(updatedById);
+    final changeKind = _resolveChangeKind(updatedById);
     if (!_shouldRunArrowBindingPipeline(
       document: document,
-      updatedById: updatedById,
-      hasArrowLikeUpdate: hasArrowLikeUpdate,
+      updatedIds: updatedById.keys,
+      hasArrowLikeUpdate: changeKind.hasArrowLikeUpdate,
+      hasBindableTargetUpdate: changeKind.hasBindableTargetUpdate,
     )) {
       return EditComputedResult(
         updatedElements: Map<String, ElementState>.unmodifiable(updatedById),
@@ -52,7 +53,7 @@ class EditComputePipeline {
 
     final merged = Map<String, ElementState>.of(updatedById);
 
-    if (hasArrowLikeUpdate) {
+    if (changeKind.hasArrowLikeUpdate) {
       merged.addAll(
         unbindArrowLikeElements(
           transformedElements: merged,
@@ -83,38 +84,39 @@ class EditComputePipeline {
 
   static bool _shouldRunArrowBindingPipeline({
     required DocumentState document,
-    required Map<String, ElementState> updatedById,
+    required Iterable<String> updatedIds,
     required bool hasArrowLikeUpdate,
+    required bool hasBindableTargetUpdate,
   }) {
     if (hasArrowLikeUpdate) {
       return true;
     }
 
-    if (!_hasBindableTargetUpdate(updatedById)) {
+    if (!hasBindableTargetUpdate) {
       return false;
     }
 
-    return document.hasArrowBoundToAny(updatedById.keys);
+    return document.hasArrowBoundToAny(updatedIds);
   }
 
-  static bool _hasArrowLikeUpdate(Map<String, ElementState> updatedById) {
+  static ({bool hasArrowLikeUpdate, bool hasBindableTargetUpdate})
+  _resolveChangeKind(Map<String, ElementState> updatedById) {
+    var hasArrowLikeUpdate = false;
+    var hasBindableTargetUpdate = false;
     for (final element in updatedById.values) {
       if (element.data is ArrowLikeData) {
-        return true;
+        hasArrowLikeUpdate = true;
+      } else if (ArrowBindingUtils.isBindableTarget(element)) {
+        hasBindableTargetUpdate = true;
       }
-    }
-    return false;
-  }
 
-  static bool _hasBindableTargetUpdate(Map<String, ElementState> updatedById) {
-    for (final element in updatedById.values) {
-      if (element.data is ArrowLikeData) {
-        continue;
-      }
-      if (ArrowBindingUtils.isBindableTarget(element)) {
-        return true;
+      if (hasArrowLikeUpdate && hasBindableTargetUpdate) {
+        break;
       }
     }
-    return false;
+    return (
+      hasArrowLikeUpdate: hasArrowLikeUpdate,
+      hasBindableTargetUpdate: hasBindableTargetUpdate,
+    );
   }
 }

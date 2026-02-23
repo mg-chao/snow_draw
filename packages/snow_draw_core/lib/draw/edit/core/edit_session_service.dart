@@ -156,6 +156,12 @@ class EditSessionService {
     required EditOperationId operationId,
   }) => (state: state, failureReason: null, operationId: operationId);
 
+  T _runWithTextMetrics<T>(T Function() action) =>
+      runWithScopedTextMetricsService(
+        textMetricsService: textMetricsService,
+        action: action,
+      );
+
   EditErrorHandlerConfig _toErrorConfig(EditUpdateFailurePolicy policy) =>
       switch (policy) {
         EditUpdateFailurePolicy.toIdle => EditErrorHandlerConfig.toIdle,
@@ -178,11 +184,9 @@ class EditSessionService {
       params: params,
       sessionId: sessionId,
     );
-
+    final nextApplication = state.application.copyWith(interaction: session);
     return _successOutcome(
-      state: state.copyWith(
-        application: state.application.copyWith(interaction: session),
-      ),
+      state: state.copyWith(application: nextApplication),
       operationId: operationId,
     );
   }
@@ -195,9 +199,8 @@ class EditSessionService {
     required EditModifiers modifiers,
   }) {
     _log?.trace('Edit session updated', {'operationId': operation.id});
-    final updated = runWithScopedTextMetricsService(
-      textMetricsService: textMetricsService,
-      action: () => operation.update(
+    final updated = _runWithTextMetrics(
+      () => operation.update(
         state: state,
         context: editingState.context,
         transform: editingState.currentTransform,
@@ -240,9 +243,8 @@ class EditSessionService {
   }) {
     _log?.info('Edit session finished', {'operationId': operation.id});
     return _successOutcome(
-      state: runWithScopedTextMetricsService(
-        textMetricsService: textMetricsService,
-        action: () => operation.finish(
+      state: _runWithTextMetrics(
+        () => operation.finish(
           state: state,
           context: editingState.context,
           transform: editingState.currentTransform,
@@ -276,22 +278,19 @@ class EditSessionService {
       'operationId': operationId,
       'params': params.runtimeType.toString(),
     });
-    final sessionData = runWithScopedTextMetricsService(
-      textMetricsService: textMetricsService,
-      action: () {
-        final context = operation.createContext(
-          state: state,
-          position: position,
-          params: params,
-        );
-        final transform = operation.initialTransform(
-          state: state,
-          context: context,
-          startPosition: position,
-        );
-        return (context: context, transform: transform);
-      },
-    );
+    final sessionData = _runWithTextMetrics(() {
+      final context = operation.createContext(
+        state: state,
+        position: position,
+        params: params,
+      );
+      final transform = operation.initialTransform(
+        state: state,
+        context: context,
+        startPosition: position,
+      );
+      return (context: context, transform: transform);
+    });
     return EditingState(
       operationId: operationId,
       sessionId: sessionId,
@@ -343,24 +342,35 @@ class EditSessionService {
   }) {
     final context = editingState.context;
 
-    if (context.selectionVersion !=
-        currentState.domain.selection.selectionVersion) {
-      throw EditVersionConflictError(
-        conflictType: 'selection',
-        expectedVersion: context.selectionVersion,
-        actualVersion: currentState.domain.selection.selectionVersion,
-        operationId: editingState.operationId,
-      );
+    _throwVersionConflictIfMismatch(
+      conflictType: 'selection',
+      expectedVersion: context.selectionVersion,
+      actualVersion: currentState.domain.selection.selectionVersion,
+      operationId: editingState.operationId,
+    );
+    _throwVersionConflictIfMismatch(
+      conflictType: 'elements',
+      expectedVersion: context.elementsVersion,
+      actualVersion: currentState.domain.document.elementsVersion,
+      operationId: editingState.operationId,
+    );
+  }
+
+  void _throwVersionConflictIfMismatch({
+    required String conflictType,
+    required int expectedVersion,
+    required int actualVersion,
+    required EditOperationId operationId,
+  }) {
+    if (expectedVersion == actualVersion) {
+      return;
     }
 
-    if (context.elementsVersion !=
-        currentState.domain.document.elementsVersion) {
-      throw EditVersionConflictError(
-        conflictType: 'elements',
-        expectedVersion: context.elementsVersion,
-        actualVersion: currentState.domain.document.elementsVersion,
-        operationId: editingState.operationId,
-      );
-    }
+    throw EditVersionConflictError(
+      conflictType: conflictType,
+      expectedVersion: expectedVersion,
+      actualVersion: actualVersion,
+      operationId: operationId,
+    );
   }
 }

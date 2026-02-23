@@ -154,38 +154,45 @@ class ActionProcessor {
       return;
     }
 
-    if (_shouldUseInteractionMutationFastPath(action)) {
-      await _runWithFrozenConfig(
-        () => _processInteractionMutationFastPath(action),
-      );
-      return;
-    }
-
     await _runWithFrozenConfig(() async {
-      final initialContext = DispatchContext.initial(
-        action: action,
-        state: _services.stateManager.current,
-        drawContext: _services.drawContext,
-        historyManager: _services.historyManager,
-        snapshotBuilder: _services.snapshotBuilder,
-        editSessionService: _services.editSessionService,
-        sessionIdGenerator: _services.sessionIdGenerator,
-        isBatching: _services.isBatching(),
-        includeSelectionInHistory: _services.includeSelectionInHistory,
-      );
-
-      final finalContext = await _executePipeline(initialContext);
-      if (finalContext.hasError) {
-        final error =
-            finalContext.error ?? StateError('Dispatch error without detail');
-        final stackTrace = finalContext.stackTrace ?? StackTrace.current;
-        _reportError(action, error, stackTrace, finalContext);
-        _rethrowIfCritical(action, error, stackTrace);
+      if (_shouldUseInteractionMutationFastPath(action)) {
+        _processInteractionMutationFastPath(action);
         return;
       }
 
-      _commit(initialContext: initialContext, finalContext: finalContext);
+      await _processThroughPipeline(action);
     });
+  }
+
+  Future<void> _processThroughPipeline(DrawAction action) async {
+    final initialContext = DispatchContext.initial(
+      action: action,
+      state: _services.stateManager.current,
+      drawContext: _services.drawContext,
+      historyManager: _services.historyManager,
+      snapshotBuilder: _services.snapshotBuilder,
+      editSessionService: _services.editSessionService,
+      sessionIdGenerator: _services.sessionIdGenerator,
+      isBatching: _services.isBatching(),
+      includeSelectionInHistory: _services.includeSelectionInHistory,
+    );
+
+    final finalContext = await _executePipeline(initialContext);
+    if (finalContext.hasError) {
+      final error = finalContext.error ?? StateError('Dispatch failed');
+      final stackTrace = finalContext.stackTrace ?? StackTrace.current;
+      _reportDispatchError(
+        action: action,
+        source: finalContext.errorSource ?? 'unknown',
+        traceId: finalContext.traceId,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _rethrowIfCritical(action, error, stackTrace);
+      return;
+    }
+
+    _commit(initialContext: initialContext, finalContext: finalContext);
   }
 
   bool _shouldUseInteractionMutationFastPath(DrawAction action) {
@@ -215,8 +222,9 @@ class ActionProcessor {
         hasStateChanged: !identical(previousState, transition.nextState),
       );
     } on Object catch (error, stackTrace) {
-      _reportFastPathError(
+      _reportDispatchError(
         action: action,
+        source: 'FastInteractionMutationPath',
         error: error,
         stackTrace: stackTrace,
       );
@@ -365,54 +373,48 @@ class ActionProcessor {
     );
   }
 
-  void _reportError(
-    DrawAction action,
-    Object error,
-    StackTrace stackTrace,
-    DispatchContext context,
-  ) {
-    final source = context.errorSource ?? 'unknown';
-    final traceId = context.traceId;
-
-    _services.drawContext.log.store
-        .error('Dispatch failed', error, stackTrace, {
-          'action': action.runtimeType.toString(),
-          'criticality': action.criticality.toString(),
-          'source': source,
-          'traceId': traceId,
-        });
+  void _reportDispatchError({
+    required DrawAction action,
+    required String source,
+    required Object error,
+    required StackTrace stackTrace,
+    String? traceId,
+  }) {
+    _services.drawContext.log.store.error(
+      'Dispatch failed',
+      error,
+      stackTrace,
+      {
+        'action': action.runtimeType.toString(),
+        'criticality': action.criticality.toString(),
+        'source': source,
+        ...?(traceId == null ? null : {'traceId': traceId}),
+      },
+    );
 
     _services.eventBus.emitLazy(
       () => ErrorEvent(
-        message:
-            'Dispatch ${action.runtimeType} failed '
-            '(traceId: $traceId, source: $source)',
+        message: _buildErrorMessage(
+          action: action,
+          source: source,
+          traceId: traceId,
+        ),
         error: error,
         stackTrace: stackTrace,
       ),
     );
   }
 
-  void _reportFastPathError({
+  String _buildErrorMessage({
     required DrawAction action,
-    required Object error,
-    required StackTrace stackTrace,
+    required String source,
+    String? traceId,
   }) {
-    _services.drawContext.log.store
-        .error('Dispatch failed', error, stackTrace, {
-          'action': action.runtimeType.toString(),
-          'criticality': action.criticality.toString(),
-          'source': 'FastInteractionMutationPath',
-        });
-    _services.eventBus.emitLazy(
-      () => ErrorEvent(
-        message:
-            'Dispatch ${action.runtimeType} failed '
-            '(source: FastInteractionMutationPath)',
-        error: error,
-        stackTrace: stackTrace,
-      ),
-    );
+    if (traceId == null || traceId.isEmpty) {
+      return 'Dispatch ${action.runtimeType} failed (source: $source)';
+    }
+    return 'Dispatch ${action.runtimeType} failed '
+        '(traceId: $traceId, source: $source)';
   }
 
   void _emitEditSessionEvents({
