@@ -1,11 +1,13 @@
-import '../../models/draw_state.dart';
+import '../../elements/core/element_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/free_draw/free_draw_data.dart';
 import '../../elements/types/line/line_data.dart';
 import '../../elements/types/rectangle/rectangle_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_data.dart';
-import '../../elements/core/element_data.dart';
+import '../../models/draw_state.dart';
+
+const _stepEpsilon = 0.01;
 
 /// Returns the next stepped value based on [currentValue] and direction.
 double resolveNextSteppedValue(
@@ -17,21 +19,16 @@ double resolveNextSteppedValue(
     return currentValue;
   }
 
-  if (decrease) {
-    for (var i = steps.length - 1; i >= 0; i -= 1) {
-      if (steps[i] < currentValue - 0.01) {
-        return steps[i];
-      }
-    }
-    return steps.first;
-  }
-
-  for (var i = 0; i < steps.length; i += 1) {
-    if (steps[i] > currentValue + 0.01) {
-      return steps[i];
+  final candidates = decrease ? steps.reversed : steps;
+  final threshold = decrease
+      ? currentValue - _stepEpsilon
+      : currentValue + _stepEpsilon;
+  for (final step in candidates) {
+    if (decrease ? step < threshold : step > threshold) {
+      return step;
     }
   }
-  return steps.last;
+  return decrease ? steps.first : steps.last;
 }
 
 /// Resolves the average selected metric computed by [metricResolver].
@@ -66,44 +63,46 @@ double? resolveAverageSelectedMetric(
 }
 
 double? resolveAverageSelectedRectangleStrokeWidth(DrawState state) =>
-    resolveAverageSelectedMetric(state, (data) {
-      if (data is RectangleData) {
-        return data.strokeWidth;
-      }
-      return null;
-    });
+    _resolveAverageSelectedMetricForType<RectangleData>(
+      state,
+      (data) => data.strokeWidth,
+    );
 
 double? resolveAverageSelectedArrowStrokeWidth(DrawState state) =>
-    resolveAverageSelectedMetric(state, (data) {
-      if (data is ArrowData) {
-        return data.strokeWidth;
-      }
-      return null;
-    });
+    _resolveAverageSelectedMetricForType<ArrowData>(
+      state,
+      (data) => data.strokeWidth,
+    );
 
 double? resolveAverageSelectedLineStrokeWidth(DrawState state) =>
-    resolveAverageSelectedMetric(state, (data) {
-      if (data is LineData) {
-        return data.strokeWidth;
-      }
-      return null;
-    });
+    _resolveAverageSelectedMetricForType<LineData>(
+      state,
+      (data) => data.strokeWidth,
+    );
 
 double? resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) =>
-    resolveAverageSelectedMetric(state, (data) {
-      if (data is FreeDrawData) {
-        return data.strokeWidth;
-      }
-      return null;
-    });
+    _resolveAverageSelectedMetricForType<FreeDrawData>(
+      state,
+      (data) => data.strokeWidth,
+    );
 
 double? resolveAverageSelectedFontSize(DrawState state) =>
-    resolveAverageSelectedMetric(state, (data) {
-      if (data is TextData) {
-        return data.fontSize;
-      }
-      if (data is SerialNumberData) {
-        return data.fontSize;
-      }
-      return null;
-    });
+    resolveAverageSelectedMetric(state, _resolveFontSizeMetric);
+
+double? _resolveAverageSelectedMetricForType<T extends ElementData>(
+  DrawState state,
+  double Function(T data) metricResolver,
+) => resolveAverageSelectedMetric(state, (data) {
+  if (data is! T) {
+    return null;
+  }
+  return metricResolver(data);
+});
+
+double? _resolveFontSizeMetric(ElementData data) {
+  if (data
+      case TextData(:final fontSize) || SerialNumberData(:final fontSize)) {
+    return fontSize;
+  }
+  return null;
+}

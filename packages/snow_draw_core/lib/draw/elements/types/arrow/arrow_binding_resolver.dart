@@ -4,6 +4,7 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
+import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/combined_element_lookup.dart';
 import 'arrow_binding.dart';
@@ -268,6 +269,13 @@ class _ArrowBindingEntry {
   int get hashCode => Object.hash(startId, endId);
 }
 
+typedef _ArrowGeometryUpdate = ({
+  DrawRect rect,
+  List<DrawPoint> normalizedPoints,
+});
+
+typedef _EndpointUpdateResult = ({bool changed, bool updated});
+
 ElementState? _applyBindings({
   required ElementState element,
   required ArrowLikeData data,
@@ -282,8 +290,9 @@ ElementState? _applyBindings({
     return null;
   }
 
+  final hasEndpointUpdateRequest = updateStart || updateEnd;
   final syncBothEnds =
-      (updateStart || updateEnd) &&
+      hasEndpointUpdateRequest &&
       data.startBinding != null &&
       data.endBinding != null;
   final shouldUpdateStart = updateStart || syncBothEnds;
@@ -303,44 +312,33 @@ ElementState? _applyBindings({
     final startReference = space.toWorld(localPoints[1]);
     final endReference = space.toWorld(localPoints[localPoints.length - 2]);
 
-    final startBinding = data.startBinding;
-    if (shouldUpdateStart && startBinding != null) {
-      final nextLocal = _resolveBoundLocalPoint(
-        binding: startBinding,
-        lookup: lookup,
-        space: space,
-        isElbow: isElbow,
-        hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-        referencePoint: startReference,
-      );
-      if (nextLocal != null) {
-        if (nextLocal != localPoints[0]) {
-          localPoints[0] = nextLocal;
-          changed = true;
-        }
-        startUpdated = true;
-      }
-    }
+    final startResult = _applyBoundEndpoint(
+      binding: data.startBinding,
+      shouldUpdate: shouldUpdateStart,
+      pointIndex: 0,
+      referencePoint: startReference,
+      lookup: lookup,
+      space: space,
+      isElbow: isElbow,
+      hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+      localPoints: localPoints,
+    );
+    startUpdated = startUpdated || startResult.updated;
+    changed = changed || startResult.changed;
 
-    final endBinding = data.endBinding;
-    if (shouldUpdateEnd && endBinding != null) {
-      final endIndex = localPoints.length - 1;
-      final nextLocal = _resolveBoundLocalPoint(
-        binding: endBinding,
-        lookup: lookup,
-        space: space,
-        isElbow: isElbow,
-        hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-        referencePoint: endReference,
-      );
-      if (nextLocal != null) {
-        if (nextLocal != localPoints[endIndex]) {
-          localPoints[endIndex] = nextLocal;
-          changed = true;
-        }
-        endUpdated = true;
-      }
-    }
+    final endResult = _applyBoundEndpoint(
+      binding: data.endBinding,
+      shouldUpdate: shouldUpdateEnd,
+      pointIndex: localPoints.length - 1,
+      referencePoint: endReference,
+      lookup: lookup,
+      space: space,
+      isElbow: isElbow,
+      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+      localPoints: localPoints,
+    );
+    endUpdated = endUpdated || endResult.updated;
+    changed = changed || endResult.changed;
 
     if (!changed) {
       break;
@@ -352,61 +350,131 @@ ElementState? _applyBindings({
   }
 
   if (data.arrowType == ArrowType.elbow && data is ArrowData) {
-    final updated = computeElbowEdit(
+    return _applyElbowBindingResult(
       element: element,
       data: data,
       lookup: lookup,
-      localPointsOverride: localPoints,
-      fixedSegmentsOverride: data.fixedSegments,
-      startBindingOverride: data.startBinding,
-      endBindingOverride: data.endBinding,
+      localPoints: localPoints,
     );
-    final result = computeArrowRectAndPoints(
-      localPoints: updated.localPoints,
-      oldRect: rect,
-      rotation: element.rotation,
-      arrowType: data.arrowType,
-    );
-    final transformedFixedSegments = transformFixedSegments(
-      segments: updated.fixedSegments,
-      oldRect: rect,
-      newRect: result.rect,
-      rotation: element.rotation,
-    );
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: result.localPoints,
-      rect: result.rect,
-    );
-    final updatedData = data.copyWith(
-      points: normalized,
-      fixedSegments: transformedFixedSegments,
-      startIsSpecial: updated.startIsSpecial,
-      endIsSpecial: updated.endIsSpecial,
-    );
-    if (updatedData == data && result.rect == rect) {
-      return null;
-    }
-    return element.copyWith(rect: result.rect, data: updatedData);
   }
 
-  final result = computeArrowRectAndPoints(
+  final geometry = _resolveArrowGeometry(
+    element: element,
     localPoints: localPoints,
-    oldRect: rect,
-    rotation: element.rotation,
     arrowType: data.arrowType,
   );
-
-  final normalized = ArrowGeometry.normalizePoints(
-    worldPoints: result.localPoints,
-    rect: result.rect,
+  final updatedData = data.copyWith(points: geometry.normalizedPoints);
+  return _buildUpdatedElementOrNull(
+    element: element,
+    previousData: data,
+    nextData: updatedData,
+    nextRect: geometry.rect,
   );
+}
 
-  final updatedData = data.copyWith(points: normalized);
-  if (updatedData == data && result.rect == rect) {
-    return null;
+_EndpointUpdateResult _applyBoundEndpoint({
+  required ArrowBinding? binding,
+  required bool shouldUpdate,
+  required int pointIndex,
+  required DrawPoint referencePoint,
+  required CombinedElementLookup lookup,
+  required ElementSpace space,
+  required bool isElbow,
+  required bool hasArrowhead,
+  required List<DrawPoint> localPoints,
+}) {
+  if (!shouldUpdate || binding == null) {
+    return (changed: false, updated: false);
+  }
+  final nextLocal = _resolveBoundLocalPoint(
+    binding: binding,
+    lookup: lookup,
+    space: space,
+    isElbow: isElbow,
+    hasArrowhead: hasArrowhead,
+    referencePoint: referencePoint,
+  );
+  if (nextLocal == null) {
+    return (changed: false, updated: false);
   }
 
-  return element.copyWith(rect: result.rect, data: updatedData);
+  final changed = nextLocal != localPoints[pointIndex];
+  if (changed) {
+    localPoints[pointIndex] = nextLocal;
+  }
+  return (changed: changed, updated: true);
+}
+
+ElementState? _applyElbowBindingResult({
+  required ElementState element,
+  required ArrowData data,
+  required CombinedElementLookup lookup,
+  required List<DrawPoint> localPoints,
+}) {
+  final updated = computeElbowEdit(
+    element: element,
+    data: data,
+    lookup: lookup,
+    localPointsOverride: localPoints,
+    fixedSegmentsOverride: data.fixedSegments,
+    startBindingOverride: data.startBinding,
+    endBindingOverride: data.endBinding,
+  );
+  final geometry = _resolveArrowGeometry(
+    element: element,
+    localPoints: updated.localPoints,
+    arrowType: data.arrowType,
+  );
+  final transformedFixedSegments = transformFixedSegments(
+    segments: updated.fixedSegments,
+    oldRect: element.rect,
+    newRect: geometry.rect,
+    rotation: element.rotation,
+  );
+  final updatedData = data.copyWith(
+    points: geometry.normalizedPoints,
+    fixedSegments: transformedFixedSegments,
+    startIsSpecial: updated.startIsSpecial,
+    endIsSpecial: updated.endIsSpecial,
+  );
+  return _buildUpdatedElementOrNull(
+    element: element,
+    previousData: data,
+    nextData: updatedData,
+    nextRect: geometry.rect,
+  );
+}
+
+_ArrowGeometryUpdate _resolveArrowGeometry({
+  required ElementState element,
+  required List<DrawPoint> localPoints,
+  required ArrowType arrowType,
+}) {
+  final result = computeArrowRectAndPoints(
+    localPoints: localPoints,
+    oldRect: element.rect,
+    rotation: element.rotation,
+    arrowType: arrowType,
+  );
+  return (
+    rect: result.rect,
+    normalizedPoints: ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    ),
+  );
+}
+
+ElementState? _buildUpdatedElementOrNull({
+  required ElementState element,
+  required ArrowLikeData previousData,
+  required ArrowLikeData nextData,
+  required DrawRect nextRect,
+}) {
+  if (nextData == previousData && nextRect == element.rect) {
+    return null;
+  }
+  return element.copyWith(rect: nextRect, data: nextData);
 }
 
 DrawPoint? _resolveBoundLocalPoint({
