@@ -85,29 +85,10 @@ final class LineSceneEncoder extends TypedElementSceneEncoder<LineData> {
 
   static RenderPath _buildPath(DrawRect rect, LineData data) {
     final points = _resolveCenterLocalPoints(rect: rect, data: data);
-    if (points.length < 2) {
-      return const RenderPath(<RenderPathCommand>[]);
+    if (data.arrowType == ArrowType.curved) {
+      return buildCatmullRomRenderPath(points);
     }
-
-    final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
-    if (data.arrowType == ArrowType.curved && points.length > 2) {
-      for (var index = 0; index < points.length - 1; index += 1) {
-        final segment = buildCatmullRomCubicSegment(points, index);
-        commands.add(
-          RenderCubicTo(
-            control1: segment.control1,
-            control2: segment.control2,
-            end: segment.end,
-          ),
-        );
-      }
-      return RenderPath(commands);
-    }
-
-    for (final point in points.skip(1)) {
-      commands.add(RenderLineTo(point));
-    }
-    return RenderPath(commands);
+    return buildPolylineRenderPath(points);
   }
 
   static List<DrawPoint> _resolveCenterLocalPoints({

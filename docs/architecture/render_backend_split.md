@@ -22,7 +22,8 @@ rendering backends.
   - Canvas widgets, painters, shader/caching infrastructure.
 - `apps/snow_draw`
   - Product UI composition and toolbar/store adapters.
-  - Imports backend through package entrypoint only.
+  - Imports backend through the app-local `lib/render_backend.dart` gateway.
+  - The gateway re-exports the selected backend package entrypoint.
   - Prefer importing shared core APIs via `package:snow_draw_core/snow_draw_core.dart`.
 
 ## Core -> Backend Contract

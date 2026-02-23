@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 import 'grid_toolbar_adapter.dart';
 import 'l10n/app_localizations.dart';
 import 'property_initialization.dart';
+import 'render_backend.dart';
 import 'snap_toolbar_adapter.dart';
 import 'tool_controller.dart';
 import 'toolbar_adapter.dart';

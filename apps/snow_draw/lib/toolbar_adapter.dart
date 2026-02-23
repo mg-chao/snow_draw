@@ -4,9 +4,9 @@ import 'dart:ui' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 import 'config_update_queue.dart';
+import 'render_backend.dart';
 import 'style_toolbar_state.dart';
 import 'system_fonts.dart';
 import 'tool_controller.dart';

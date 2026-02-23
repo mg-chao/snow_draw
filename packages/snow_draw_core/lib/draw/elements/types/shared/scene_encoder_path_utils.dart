@@ -1,6 +1,7 @@
 import '../../../render/scene/render_scene.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import 'hit_test_geometry.dart';
 
 /// Cubic-bezier control-point ratio used to approximate circular arcs.
 const circularArcControlPointRatio = 0.5522847498307936;
@@ -14,6 +15,39 @@ RenderPath closeRenderPathIfNeeded(RenderPath path) {
     ...path.commands,
     const RenderClosePath(),
   ]);
+}
+
+/// Builds a polyline path from [points].
+RenderPath buildPolylineRenderPath(List<DrawPoint> points) {
+  if (points.length < 2) {
+    return const RenderPath(<RenderPathCommand>[]);
+  }
+  final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
+  for (final point in points.skip(1)) {
+    commands.add(RenderLineTo(point));
+  }
+  return RenderPath(commands);
+}
+
+/// Builds a Catmull-Rom interpolated cubic path from [points].
+///
+/// Falls back to a polyline when fewer than three points are available.
+RenderPath buildCatmullRomRenderPath(List<DrawPoint> points) {
+  if (points.length < 3) {
+    return buildPolylineRenderPath(points);
+  }
+  final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
+  for (var index = 0; index < points.length - 1; index += 1) {
+    final segment = buildCatmullRomCubicSegment(points, index);
+    commands.add(
+      RenderCubicTo(
+        control1: segment.control1,
+        control2: segment.control2,
+        end: segment.end,
+      ),
+    );
+  }
+  return RenderPath(commands);
 }
 
 /// Clamps rounded-rectangle corner radius to valid bounds.

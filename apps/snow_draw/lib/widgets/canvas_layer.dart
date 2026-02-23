@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
+import '../render_backend.dart';
 import '../tool_controller.dart';
 
 class CanvasLayer extends StatelessWidget {

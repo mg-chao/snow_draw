@@ -42,6 +42,52 @@ void main() {
     });
   });
 
+  group('buildPolylineRenderPath', () {
+    test('returns empty path when there are fewer than two points', () {
+      final path = buildPolylineRenderPath(const <DrawPoint>[DrawPoint.zero]);
+      expect(path.commands, isEmpty);
+    });
+
+    test('builds move and line commands for all points', () {
+      final path = buildPolylineRenderPath(const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 10, y: 0),
+        DrawPoint(x: 10, y: 5),
+      ]);
+
+      expect(path.commands, hasLength(3));
+      expect(path.commands[0], isA<RenderMoveTo>());
+      expect(path.commands[1], isA<RenderLineTo>());
+      expect(path.commands[2], isA<RenderLineTo>());
+    });
+  });
+
+  group('buildCatmullRomRenderPath', () {
+    test('falls back to polyline path when fewer than three points', () {
+      final path = buildCatmullRomRenderPath(const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 10, y: 0),
+      ]);
+
+      expect(path.commands, hasLength(2));
+      expect(path.commands[0], isA<RenderMoveTo>());
+      expect(path.commands[1], isA<RenderLineTo>());
+    });
+
+    test('builds cubic commands for multi-point curves', () {
+      final path = buildCatmullRomRenderPath(const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 10, y: 0),
+        DrawPoint(x: 20, y: 10),
+      ]);
+
+      expect(path.commands, hasLength(3));
+      expect(path.commands[0], isA<RenderMoveTo>());
+      expect(path.commands[1], isA<RenderCubicTo>());
+      expect(path.commands[2], isA<RenderCubicTo>());
+    });
+  });
+
   test(
     'buildCenteredRoundedRectPath reuses rectangle commands for zero radius',
     () {

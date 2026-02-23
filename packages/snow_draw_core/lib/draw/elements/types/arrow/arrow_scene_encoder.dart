@@ -5,7 +5,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../core/typed_element_scene_encoder.dart';
-import '../shared/hit_test_geometry.dart';
+import '../shared/scene_encoder_path_utils.dart';
 import '../shared/scene_encoder_style_utils.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
@@ -96,41 +96,9 @@ final class ArrowSceneEncoder extends TypedElementSceneEncoder<ArrowData> {
   static RenderPath _buildShaftPath({
     required List<DrawPoint> points,
     required ArrowType arrowType,
-  }) {
-    if (arrowType == ArrowType.curved && points.length > 2) {
-      return _curvedPath(points);
-    }
-    return _polylinePath(points);
-  }
-
-  static RenderPath _polylinePath(List<DrawPoint> points) {
-    if (points.isEmpty) {
-      return const RenderPath(<RenderPathCommand>[]);
-    }
-    final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
-    for (final point in points.skip(1)) {
-      commands.add(RenderLineTo(point));
-    }
-    return RenderPath(commands);
-  }
-
-  static RenderPath _curvedPath(List<DrawPoint> points) {
-    if (points.length < 2) {
-      return const RenderPath(<RenderPathCommand>[]);
-    }
-    final commands = <RenderPathCommand>[RenderMoveTo(points.first)];
-    for (var index = 0; index < points.length - 1; index += 1) {
-      final segment = buildCatmullRomCubicSegment(points, index);
-      commands.add(
-        RenderCubicTo(
-          control1: segment.control1,
-          control2: segment.control2,
-          end: segment.end,
-        ),
-      );
-    }
-    return RenderPath(commands);
-  }
+  }) => arrowType == ArrowType.curved
+      ? buildCatmullRomRenderPath(points)
+      : buildPolylineRenderPath(points);
 
   static RenderPath _buildArrowheadsPath({
     required List<DrawPoint> points,

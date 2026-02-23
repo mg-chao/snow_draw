@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 import 'property_descriptor.dart';
 import 'property_ids.dart';
 import 'property_utils.dart';
+import 'render_backend.dart';
 import 'style_toolbar_state.dart';
 
 class _PropertySource<T> {
