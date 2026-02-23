@@ -18,7 +18,7 @@ void main() {
     ElementRenderer.clearFallbackWarningCache();
   });
 
-  test('renders scene primitives when scene encoder is available', () {
+  test('renders tasks when a task encoder is available', () {
     final counters = _RenderCounters();
     const textMetricsService = _TestTextMetricsService();
     final elementRegistry = _buildElementRegistry(counters);
@@ -28,11 +28,11 @@ void main() {
       textMetricsService: textMetricsService,
     );
 
-    expect(counters.sceneEncodes, 1);
+    expect(counters.taskEncodes, 1);
     expect(counters.lastTextMetricsService, same(textMetricsService));
   });
 
-  test('uses unknown-element fallback when scene encoding throws', () {
+  test('uses unknown-element fallback when task encoding throws', () {
     final elementRegistry = _buildElementRegistryWithThrowingEncoder();
 
     expect(
@@ -50,7 +50,7 @@ void main() {
     );
   });
 
-  test('deduplicates repeated scene-render failure fallback warnings', () {
+  test('deduplicates repeated task-render failure fallback warnings', () {
     final elementRegistry = _buildElementRegistryWithThrowingEncoder();
 
     _renderElement(elementRegistry: elementRegistry);
@@ -73,7 +73,7 @@ void main() {
           rotation: 0,
           opacity: 1,
           zIndex: 0,
-          data: _UnknownSceneTestData('unknown_scene_test_$index'),
+          data: _UnknownTaskTestData('unknown_task_test_$index'),
         ),
       );
     }
@@ -86,26 +86,26 @@ void main() {
 }
 
 DefaultElementRegistry _buildElementRegistry(_RenderCounters counters) =>
-    DefaultElementRegistry()..register<_SceneTestData>(
-      ElementDefinition<_SceneTestData>(
-        typeId: _SceneTestData.typeIdToken,
-        displayName: 'scene-test',
+    DefaultElementRegistry()..register<_TaskTestData>(
+      ElementDefinition<_TaskTestData>(
+        typeId: _TaskTestData.typeIdToken,
+        displayName: 'task-test',
         hitTester: const _NoopHitTester(),
-        createDefaultData: _SceneTestData.new,
-        fromJson: (_) => const _SceneTestData(),
-        sceneEncoder: _CountingSceneEncoder(counters),
+        createDefaultData: _TaskTestData.new,
+        fromJson: (_) => const _TaskTestData(),
+        taskEncoder: _CountingTaskEncoder(counters),
       ),
     );
 
 DefaultElementRegistry _buildElementRegistryWithThrowingEncoder() =>
-    DefaultElementRegistry()..register<_SceneTestData>(
-      ElementDefinition<_SceneTestData>(
-        typeId: _SceneTestData.typeIdToken,
-        displayName: 'scene-test',
+    DefaultElementRegistry()..register<_TaskTestData>(
+      ElementDefinition<_TaskTestData>(
+        typeId: _TaskTestData.typeIdToken,
+        displayName: 'task-test',
         hitTester: const _NoopHitTester(),
-        createDefaultData: _SceneTestData.new,
-        fromJson: (_) => const _SceneTestData(),
-        sceneEncoder: const _ThrowingSceneEncoder(),
+        createDefaultData: _TaskTestData.new,
+        fromJson: (_) => const _TaskTestData(),
+        taskEncoder: const _ThrowingTaskEncoder(),
       ),
     );
 
@@ -117,12 +117,12 @@ void _renderElement({
   final recorder = ui.PictureRecorder();
   final canvas = ui.Canvas(recorder);
   const fallbackElement = ElementState(
-    id: 'scene-test-element',
+    id: 'task-test-element',
     rect: DrawRect(maxX: 40, maxY: 40),
     rotation: 0,
     opacity: 1,
     zIndex: 0,
-    data: _SceneTestData(),
+    data: _TaskTestData(),
   );
 
   elementRenderer.renderElement(
@@ -136,24 +136,24 @@ void _renderElement({
 }
 
 class _RenderCounters {
-  var sceneEncodes = 0;
+  var taskEncodes = 0;
   TextMetricsService? lastTextMetricsService;
 }
 
-class _SceneTestData extends ElementData {
-  const _SceneTestData();
+class _TaskTestData extends ElementData {
+  const _TaskTestData();
 
-  static const typeIdToken = ElementTypeId<_SceneTestData>('scene_test_data');
-
-  @override
-  ElementTypeId<_SceneTestData> get typeId => typeIdToken;
+  static const typeIdToken = ElementTypeId<_TaskTestData>('task_test_data');
 
   @override
-  Map<String, dynamic> toJson() => const {'typeId': 'scene_test_data'};
+  ElementTypeId<_TaskTestData> get typeId => typeIdToken;
+
+  @override
+  Map<String, dynamic> toJson() => const {'typeId': 'task_test_data'};
 }
 
-class _UnknownSceneTestData extends ElementData {
-  const _UnknownSceneTestData(this._typeIdValue);
+class _UnknownTaskTestData extends ElementData {
+  const _UnknownTaskTestData(this._typeIdValue);
 
   final String _typeIdValue;
 
@@ -179,44 +179,41 @@ class _NoopHitTester implements ElementHitTester {
   }) => false;
 }
 
-class _CountingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
-  _CountingSceneEncoder(this._counters);
+class _CountingTaskEncoder implements ElementRenderTaskEncoder<_TaskTestData> {
+  _CountingTaskEncoder(this._counters);
 
   final _RenderCounters _counters;
 
   @override
-  RenderScene encodeScene({
+  List<RenderTask> encodeTasks({
     required ElementState element,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
-    _counters.sceneEncodes += 1;
+    _counters.taskEncodes += 1;
     _counters.lastTextMetricsService = textMetricsService;
-    return const RenderScene(
-      primitives: <RenderPrimitive>[
-        RenderPathFillPrimitive(
-          path: RenderPath(<RenderPathCommand>[
-            RenderMoveTo(DrawPoint.zero),
-            RenderLineTo(DrawPoint(x: 10, y: 0)),
-            RenderLineTo(DrawPoint(x: 10, y: 10)),
-            RenderClosePath(),
-          ]),
-          colorArgb: 0xFF1576FE,
+    return <RenderTask>[
+      RectangleRenderTask(
+        element: element,
+        data: const RectangleData(
+          color: DrawColor(0xFF1576FE),
+          fillColor: DrawColor(0x221576FE),
         ),
-      ],
-    );
+        localeTag: localeTag,
+      ),
+    ];
   }
 }
 
-class _ThrowingSceneEncoder implements ElementSceneEncoder<_SceneTestData> {
-  const _ThrowingSceneEncoder();
+class _ThrowingTaskEncoder implements ElementRenderTaskEncoder<_TaskTestData> {
+  const _ThrowingTaskEncoder();
 
   @override
-  RenderScene encodeScene({
+  List<RenderTask> encodeTasks({
     required ElementState element,
     String? localeTag,
     TextMetricsService? textMetricsService,
-  }) => throw StateError('test-only failing scene encoder');
+  }) => throw StateError('test-only failing task encoder');
 }
 
 class _TestTextMetricsService implements TextMetricsService {

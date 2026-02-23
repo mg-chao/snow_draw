@@ -2,7 +2,7 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('built-in scene encoders support default element payloads', () {
+  test('built-in task encoders support default element payloads', () {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
 
@@ -22,13 +22,14 @@ void main() {
         data: definition!.createDefaultData(),
       );
 
+      final tasks = definition.taskEncoder.encodeTasks(
+        element: element,
+        localeTag: 'en-US',
+      );
       expect(
-        () => definition.sceneEncoder.encodeScene(
-          element: element,
-          localeTag: 'en-US',
-        ),
-        returnsNormally,
-        reason: 'Expected scene encoder support for type "$typeId".',
+        tasks,
+        isNotEmpty,
+        reason: 'Expected task encoder support for type "$typeId".',
       );
     }
   });

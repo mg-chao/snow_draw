@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_core.dart'
+    hide resolveInteractionDynamicSceneFromCachedKey;
 import 'package:snow_draw_flutter_backend/ui/canvas/interaction_dynamic_scene_cache.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 

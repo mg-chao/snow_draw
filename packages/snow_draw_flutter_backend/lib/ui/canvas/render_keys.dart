@@ -89,6 +89,7 @@ class DynamicCanvasRenderKey {
     this.previewElementsRevision,
     this.dynamicPreviewElementIds,
     this.locale,
+    this.framePlan = FrameRenderPlan.empty,
   });
 
   /// Snapshot of element being created, or null if not creating.
@@ -206,6 +207,9 @@ class DynamicCanvasRenderKey {
 
   /// Locale used for text layout/rendering.
   final Locale? locale;
+
+  /// Core-generated frame render plan snapshot for this key.
+  final FrameRenderPlan framePlan;
 
   @override
   bool operator ==(Object other) =>

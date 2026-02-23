@@ -1,6 +1,6 @@
-import 'package:meta/meta.dart';
-
+import 'package:snow_draw_core/snow_draw_core.dart' as core;
 import 'package:snow_draw_core/snow_draw_core.dart';
+
 import 'render_keys.dart';
 
 /// Resolves preview elements for the unified canvas scene.
@@ -21,49 +21,11 @@ typedef DynamicPreviewElementIdsResolver =
       Map<String, ElementState> previewElementsById,
     );
 
-/// Cached dynamic-scene payload derived from a previous dynamic render key.
-///
-/// Interaction-only updates (for example rectangle drag updates) often mutate
-/// only preview geometry while document topology remains stable. In those
-/// cases we can reuse optimization and overlay visibility metadata from the
-/// previous render key and rebuild only the preview subset for the new state.
-@immutable
-class InteractionDynamicSceneSnapshot {
-  InteractionDynamicSceneSnapshot({
-    required Map<String, ElementState> previewElementsById,
-    required Set<String> dynamicPreviewElementIds,
-    required Set<String> optimizedDynamicElementIds,
-    required this.optimizedSceneHasPotentialOccluders,
-    required this.isHighlightMaskVisible,
-    required this.highlightMaskConfig,
-    required this.isWatermarkVisible,
-    required this.watermarkConfig,
-  }) : previewElementsById = Map<String, ElementState>.unmodifiable(
-         previewElementsById,
-       ),
-       dynamicPreviewElementIds = Set<String>.unmodifiable(
-         dynamicPreviewElementIds,
-       ),
-       optimizedDynamicElementIds = Set<String>.unmodifiable(
-         optimizedDynamicElementIds,
-       );
+/// Backward-compatible alias for core interaction dynamic snapshots.
+typedef InteractionDynamicSceneSnapshot = core.InteractionDynamicSceneSnapshot;
 
-  final Map<String, ElementState> previewElementsById;
-  final Set<String> dynamicPreviewElementIds;
-  final Set<String> optimizedDynamicElementIds;
-  final bool optimizedSceneHasPotentialOccluders;
-  final bool isHighlightMaskVisible;
-  final HighlightMaskConfig highlightMaskConfig;
-  final bool isWatermarkVisible;
-  final WatermarkConfig watermarkConfig;
-}
-
-/// Resolves the dynamic-scene payload for interaction-only updates by reusing
-/// metadata from [previousRenderKey].
-///
-/// This avoids recomputing dynamic-scene optimization plans and highlight-mask
-/// visibility checks for every pointer frame while still rebuilding preview
-/// elements for the latest state.
+/// Adapter that keeps the previous backend function signature while routing
+/// implementation ownership to core.
 InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
   required DrawStateView stateView,
   required DynamicCanvasRenderKey previousRenderKey,
@@ -71,25 +33,20 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
   required DynamicPreviewByOptimizedIdsResolver resolvePreviewByOptimizedIds,
   required DynamicPreviewElementIdsResolver resolveDynamicPreviewElementIds,
 }) {
-  final optimizedDynamicElementIds =
-      previousRenderKey.optimizedDynamicElementIds;
-  final hasOptimizedDynamicElements = optimizedDynamicElementIds.isNotEmpty;
-  final previewElementsById = hasOptimizedDynamicElements
-      ? resolvePreviewByOptimizedIds(stateView, optimizedDynamicElementIds)
-      : resolvePreviewElements(stateView);
-  return InteractionDynamicSceneSnapshot(
-    previewElementsById: previewElementsById,
-    dynamicPreviewElementIds: resolveDynamicPreviewElementIds(
-      stateView,
-      previewElementsById,
-    ),
-    optimizedDynamicElementIds: optimizedDynamicElementIds,
+  final metadata = CachedInteractionDynamicMetadata(
+    optimizedDynamicElementIds: previousRenderKey.optimizedDynamicElementIds,
     optimizedSceneHasPotentialOccluders:
-        hasOptimizedDynamicElements &&
         previousRenderKey.optimizedSceneHasPotentialOccluders,
     isHighlightMaskVisible: previousRenderKey.isHighlightMaskVisible,
     highlightMaskConfig: previousRenderKey.highlightMaskConfig,
     isWatermarkVisible: previousRenderKey.isWatermarkVisible,
     watermarkConfig: previousRenderKey.watermarkConfig,
+  );
+  return core.resolveInteractionDynamicSceneFromCachedKey(
+    stateView: stateView,
+    cachedMetadata: metadata,
+    resolvePreviewElements: resolvePreviewElements,
+    resolvePreviewByOptimizedIds: resolvePreviewByOptimizedIds,
+    resolveDynamicPreviewElementIds: resolveDynamicPreviewElementIds,
   );
 }

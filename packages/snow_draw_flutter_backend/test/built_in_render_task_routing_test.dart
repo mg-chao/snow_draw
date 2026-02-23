@@ -5,7 +5,7 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart';
 
 void main() {
-  test('renders rectangle scene with dotted stroke and hatch fill', () {
+  test('renders rectangle task with dotted stroke and hatch fill', () {
     expect(
       () => _render(
         const ElementState(
@@ -26,7 +26,7 @@ void main() {
     );
   });
 
-  test('renders line scene with dotted stroke and hatch fill', () {
+  test('renders line task with dotted stroke and hatch fill', () {
     expect(
       () => _render(
         const ElementState(
@@ -50,7 +50,7 @@ void main() {
     );
   });
 
-  test('renders arrow scene for curved dotted arrows', () {
+  test('renders arrow task for curved dotted arrows', () {
     expect(
       () => _render(
         const ElementState(
@@ -69,7 +69,7 @@ void main() {
     );
   });
 
-  test('renders free-draw scene with dotted stroke and hatch fill', () {
+  test('renders free-draw task with dotted stroke and hatch fill', () {
     expect(
       () => _render(
         const ElementState(
@@ -95,7 +95,7 @@ void main() {
     );
   });
 
-  test('renders highlight scene', () {
+  test('renders highlight task', () {
     expect(
       () => _render(
         const ElementState(
@@ -115,7 +115,7 @@ void main() {
     );
   });
 
-  test('renders filter scene without throwing', () {
+  test('renders filter task without throwing', () {
     expect(
       () => _render(
         const ElementState(
@@ -131,7 +131,7 @@ void main() {
     );
   });
 
-  test('renders text scene with stroke and hatch fill', () {
+  test('renders text task with stroke and hatch fill', () {
     expect(
       () => _render(
         const ElementState(
@@ -153,7 +153,7 @@ void main() {
     );
   });
 
-  test('renders serial-number scene with dotted stroke and hatch fill', () {
+  test('renders serial-number task with dotted stroke and hatch fill', () {
     expect(
       () => _render(
         const ElementState(

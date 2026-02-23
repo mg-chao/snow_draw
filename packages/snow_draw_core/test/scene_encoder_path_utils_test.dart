@@ -1,4 +1,5 @@
 import 'package:snow_draw_core/draw/elements/types/shared/scene_encoder_path_utils.dart';
+import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:test/test.dart';
 

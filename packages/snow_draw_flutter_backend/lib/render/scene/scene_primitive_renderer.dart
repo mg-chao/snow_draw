@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
+import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../../services/text/flutter_text_layout.dart';

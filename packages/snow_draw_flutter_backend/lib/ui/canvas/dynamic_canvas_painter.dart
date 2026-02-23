@@ -10,6 +10,7 @@ import '../../render/arrow/arrow_visual_cache.dart';
 import '../../render/element_renderer.dart';
 import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
+import '../../render/tasks/flutter_render_task_executor.dart';
 import '../../services/text/flutter_text_layout.dart';
 import 'binding_highlight_style.dart';
 import 'filter_pipeline/filter_segment_renderer.dart';
@@ -1340,6 +1341,7 @@ class DynamicCanvasPainter extends CustomPainter {
     // fast fallback for explicit high-frequency style mutations only.
     final useAggressiveCpuFallback =
         renderKey.preferFastFilterFallback && staticContext.hasFilterElement;
+    final plannedElementTasksById = _resolvePlannedElementTasksById();
 
     return _SceneRenderContext(
       hasFilterElement: staticContext.hasFilterElement,
@@ -1348,7 +1350,29 @@ class DynamicCanvasPainter extends CustomPainter {
       shouldPaintSerialConnectors: staticContext.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       dynamicElementIds: interactionDynamicElementIds,
+      plannedElementTasksById: plannedElementTasksById,
     );
+  }
+
+  Map<String, List<RenderTask>> _resolvePlannedElementTasksById() {
+    final frameTasks = renderKey.framePlan.tasks;
+    if (frameTasks.isEmpty) {
+      return const <String, List<RenderTask>>{};
+    }
+
+    final tasksById = <String, List<RenderTask>>{};
+    for (final task in frameTasks) {
+      if (task case ElementRenderTask(:final element)) {
+        (tasksById[element.id] ??= <RenderTask>[]).add(task);
+      }
+    }
+    if (tasksById.isEmpty) {
+      return const <String, List<RenderTask>>{};
+    }
+    return <String, List<RenderTask>>{
+      for (final entry in tasksById.entries)
+        entry.key: List<RenderTask>.unmodifiable(entry.value),
+    };
   }
 
   _SceneRenderContextStaticData _resolveSceneRenderContextStaticData({
@@ -1521,14 +1545,25 @@ class DynamicCanvasPainter extends CustomPainter {
     required double scale,
     required _SceneRenderContext sceneContext,
   }) {
-    elementRenderer.renderElement(
-      canvas: canvas,
-      element: element,
-      scaleFactor: scale,
-      elementRegistry: renderKey.elementRegistry,
-      textMetricsService: renderKey.textMetricsService,
-      locale: renderKey.locale,
-    );
+    final plannedTasks = sceneContext.plannedElementTasksById[element.id];
+    if (plannedTasks != null && plannedTasks.isNotEmpty) {
+      flutterRenderTaskExecutor.executeTasks(
+        canvas: canvas,
+        tasks: plannedTasks,
+        elementRegistry: renderKey.elementRegistry,
+        textMetricsService: renderKey.textMetricsService,
+        locale: renderKey.locale,
+      );
+    } else {
+      elementRenderer.renderElement(
+        canvas: canvas,
+        element: element,
+        scaleFactor: scale,
+        elementRegistry: renderKey.elementRegistry,
+        textMetricsService: renderKey.textMetricsService,
+        locale: renderKey.locale,
+      );
+    }
     if (sceneContext.shouldPaintSerialConnectors) {
       drawSerialNumberConnectorsForText(
         canvas: canvas,
@@ -2765,6 +2800,7 @@ class _SceneRenderContext {
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.dynamicElementIds,
+    required this.plannedElementTasksById,
   });
 
   final bool hasFilterElement;
@@ -2773,6 +2809,7 @@ class _SceneRenderContext {
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> dynamicElementIds;
+  final Map<String, List<RenderTask>> plannedElementTasksById;
 }
 
 class _SceneRenderContextStaticData {

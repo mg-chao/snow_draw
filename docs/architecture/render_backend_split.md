@@ -8,15 +8,16 @@ rendering backends.
 - Keep engine/domain logic portable and testable in pure Dart.
 - Support swappable rendering backends without changing reducers/models.
 - Preserve strict compatibility for persisted schema and action contracts.
+- Keep render semantics core-owned and backend execution-only.
 
 ## Package Split
 
 - `packages/snow_draw_core`
   - Domain state/actions/reducers/history/input.
-  - Element definitions, creation, hit-testing, scene encoding.
+  - Element definitions, creation, hit-testing, render-task planning.
   - Backend-neutral value types and service interfaces.
 - `packages/snow_draw_flutter_backend`
-  - Scene primitive renderer for Flutter canvas.
+  - Flutter canvas execution adapter for core render tasks.
   - Text metrics implementation backed by Flutter paragraph/painter APIs.
   - `createFlutterDrawContext` factory for backend-specific context wiring.
   - Canvas widgets, painters, shader/caching infrastructure.
@@ -24,15 +25,17 @@ rendering backends.
   - Product UI composition and toolbar/store adapters.
   - Imports backend through the app-local `lib/render_backend.dart` gateway.
   - The gateway re-exports the selected backend package entrypoint.
-  - Prefer importing shared core APIs via `package:snow_draw_core/snow_draw_core.dart`.
+  - Prefer importing shared core APIs via
+    `package:snow_draw_core/snow_draw_core.dart`.
 
 ## Core -> Backend Contract
 
-### Scene pipeline
+### Task pipeline
 
-- Core element definitions may provide `ElementSceneEncoder<T>`.
-- Encoders emit `RenderScene` containing `RenderPrimitive` entries.
-- Backend executes primitives to paint the final frame.
+- Core element definitions provide `ElementRenderTaskEncoder<T>`.
+- Core `FrameRenderPlanBuilder` produces ordered `RenderTask` plans for each
+  frame (elements, overlays, and frame-level tasks).
+- Backend executes tasks and maps them to Flutter painting primitives.
 
 ### Text metrics
 
@@ -64,16 +67,24 @@ rendering backends.
 - App imports/exports backend APIs only through
   `package:snow_draw_flutter_backend/snow_draw_flutter_backend.dart`.
 - Deep backend path imports from app are disallowed by guard scripts.
-- For core APIs, prefer `package:snow_draw_core/snow_draw_core.dart` over
-  deep package paths when the entrypoint exposes the needed symbols.
+- For core APIs, prefer `package:snow_draw_core/snow_draw_core.dart` over deep
+  package paths when the entrypoint exposes the needed symbols.
 - App deep core path imports are disallowed by guard scripts in both
   `apps/snow_draw/lib` and `apps/snow_draw/test`.
+
+### Task ownership
+
+- Core owns render semantics and render-planning decisions.
+- Backend must not perform semantic planning from `ElementDefinition` or
+  `ElementState`; it executes precomputed `RenderTask` plans.
+- Backend optimizations (caches/shaders) are allowed only when they do not
+  alter task semantics or visual output.
 
 ### Legacy namespace policy
 
 - Backend source must not import or export `lib/render/legacy/*`.
-- New backend logic should use scene primitives instead of reviving
-  type-specific legacy renderers.
+- New backend logic should consume core render tasks instead of reviving
+  scene-primitive planning paths.
 
 ## Guard Scripts
 
@@ -112,7 +123,7 @@ This verifies:
 - built-in element JSON roundtrip compatibility
 - built-in element default JSON snapshot compatibility
 - built-in element type id token stability
-- built-in core scene encoder coverage in element registry
+- built-in core render-task encoder coverage in element registry
 - draw config default primitive contract stability
 - action payload immutability contract for collection-backed actions
 - `DrawColor` ARGB32 channel/update behavior stability
@@ -123,15 +134,16 @@ This verifies:
 - backend entrypoint `flutterTextMetricsService` export behavior
 - backend coordinate adapter (`DrawPoint` <-> `Offset`) invertibility
 - backend compatibility test core-import boundary via core package entrypoint
-- backend compatibility test backend-import boundary via backend package entrypoint
-- built-in scene encoder routing coverage through backend scene rendering
+- backend compatibility test backend-import boundary via backend package
+  entrypoint
+- built-in render-task routing coverage through backend task execution
 
 ## Adding a New Rendering Backend
 
 1. Create a new package (for example `snow_draw_skia_backend`).
 2. Depend on `snow_draw_core` only.
 3. Implement:
-   - scene primitive renderer for `RenderScene`
+   - render task executor for core `RenderTask`/`FrameRenderPlan` contracts
    - `TextMetricsService` adapter
    - backend-specific UI widgets
 4. Keep app imports routed through the selected backend package entrypoint.

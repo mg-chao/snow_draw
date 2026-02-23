@@ -14,7 +14,7 @@ void main() {
       'dart test packages/snow_draw_core/test/element_default_json_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_registry_characterization_test.dart',
-      'dart test packages/snow_draw_core/test/built_in_scene_encoder_support_test.dart',
+      'dart test packages/snow_draw_core/test/built_in_render_task_support_test.dart',
       'dart test packages/snow_draw_core/test/draw_config_defaults_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/action_payload_immutability_test.dart',
       'dart test packages/snow_draw_core/test/action_type_name_compatibility_test.dart',
@@ -28,7 +28,7 @@ void main() {
       'dart run melos run check:backend-compatibility-core-import-boundary',
       'dart run melos run check:backend-compatibility-backend-import-boundary',
       'flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
-      'packages/snow_draw_flutter_backend/test/built_in_scene_encoder_routing_test.dart',
+      'packages/snow_draw_flutter_backend/test/built_in_render_task_routing_test.dart',
       'packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart',
     ];
 

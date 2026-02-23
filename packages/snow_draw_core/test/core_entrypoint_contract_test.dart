@@ -43,7 +43,7 @@ void main() {
       expect(intentAction.intent, isA<EditIntent>());
     });
 
-    test('exports coordinate and scene contracts', () {
+    test('exports coordinate and render-task contracts', () {
       const service = CoordinateService(
         camera: CameraState(position: DrawPoint(x: 10, y: 20), zoom: 1),
         scaleFactor: 2,
@@ -54,8 +54,12 @@ void main() {
         const DrawPoint(x: 2, y: 2),
       );
 
-      const scene = RenderScene(primitives: <RenderPrimitive>[]);
-      expect(scene.primitives, isEmpty);
+      const plan = FrameRenderPlan(
+        tasks: <RenderTask>[BackgroundRenderTask(color: DrawColor(0xFFFFFFFF))],
+        camera: CameraState.initial,
+        scaleFactor: 1,
+      );
+      expect(plan.tasks, hasLength(1));
     });
 
     test('exports app-facing state, event, and cache contracts', () async {

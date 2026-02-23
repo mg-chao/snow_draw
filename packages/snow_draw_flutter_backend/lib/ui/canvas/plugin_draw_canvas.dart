@@ -4,7 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_core.dart'
+    hide
+        InteractionDynamicSceneSnapshot,
+        resolveInteractionDynamicSceneFromCachedKey;
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
@@ -158,6 +161,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateChange.view,
     DrawStateChange.interaction,
   };
+  static const _frameRenderPlanBuilder = FrameRenderPlanBuilder();
 
   VoidCallback? _stateUnsubscribe;
   StreamSubscription<DrawConfig>? _configSubscription;
@@ -1410,10 +1414,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final config = widget.store.config;
 
     // Determine base stroke width from selected elements or config
-    final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
-    final lineAverage = _resolveAverageSelectedLineStrokeWidth(state);
-    final freeDrawAverage = _resolveAverageSelectedFreeDrawStrokeWidth(state);
-    final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
+    final arrowAverage = resolveAverageSelectedArrowStrokeWidth(state);
+    final lineAverage = resolveAverageSelectedLineStrokeWidth(state);
+    final freeDrawAverage = resolveAverageSelectedFreeDrawStrokeWidth(state);
+    final rectangleAverage = resolveAverageSelectedRectangleStrokeWidth(state);
     final base =
         arrowAverage ??
         lineAverage ??
@@ -1422,10 +1426,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         config.arrowStyle.strokeWidth;
 
     // Find next stepped value
-    final next = _findNextSteppedValue(
+    final next = resolveNextSteppedValue(
       base,
       _strokeWidthSteps,
-      delta > 0, // scrolling up decreases value
+      decrease: delta > 0, // scrolling up decreases value
     );
 
     if (_doubleEquals(next, base)) {
@@ -1489,16 +1493,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final toolTypeId = widget.currentToolTypeId;
     final base =
         _resolveEditingFontSize(state) ??
-        _resolveAverageSelectedFontSize(state) ??
+        resolveAverageSelectedFontSize(state) ??
         (toolTypeId == SerialNumberData.typeIdToken
             ? config.serialNumberStyle.fontSize
             : config.textStyle.fontSize);
 
     // Find next stepped value
-    final next = _findNextSteppedValue(
+    final next = resolveNextSteppedValue(
       base,
       _fontSizeSteps,
-      delta > 0, // scrolling up decreases value
+      decrease: delta > 0, // scrolling up decreases value
     );
 
     if (_doubleEquals(next, base)) {
@@ -1548,116 +1552,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     return null;
   }
-
-  /// Finds the next stepped value based on current value and scroll direction.
-  ///
-  /// [currentValue] - The current value
-  /// [steps] - List of stepped values (must be sorted in ascending order)
-  /// [decrease] - true to find previous step, false to find next step
-  ///
-  /// Returns the next stepped value, or the current value if at the edge.
-  double _findNextSteppedValue(
-    double currentValue,
-    List<double> steps,
-    bool decrease,
-  ) {
-    if (steps.isEmpty) {
-      return currentValue;
-    }
-
-    if (decrease) {
-      // Find the largest step that is less than current value
-      for (var i = steps.length - 1; i >= 0; i--) {
-        if (steps[i] < currentValue - 0.01) {
-          return steps[i];
-        }
-      }
-      // Already at or below minimum, return first step
-      return steps.first;
-    } else {
-      // Find the smallest step that is greater than current value
-      for (var i = 0; i < steps.length; i++) {
-        if (steps[i] > currentValue + 0.01) {
-          return steps[i];
-        }
-      }
-      // Already at or above maximum, return last step
-      return steps.last;
-    }
-  }
-
-  double? _resolveAverageSelectedMetric(
-    DrawState state,
-    double? Function(ElementData data) metricResolver,
-  ) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-
-    final document = state.domain.document;
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final data = document.getElementById(id)?.data;
-      if (data == null) {
-        continue;
-      }
-      final metric = metricResolver(data);
-      if (metric == null) {
-        continue;
-      }
-      total += metric;
-      count += 1;
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
-
-  double? _resolveAverageSelectedStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is RectangleData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is ArrowData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedLineStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is LineData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is FreeDrawData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedFontSize(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is TextData) {
-          return data.fontSize;
-        }
-        if (data is SerialNumberData) {
-          return data.fontSize;
-        }
-        return null;
-      });
 
   List<String> _resolveSelectionIds(
     DrawState state,
@@ -1874,7 +1768,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       config: config,
       ctrlPressed: _currentModifiers.control,
     );
-    if (!_shouldPreviewArrowBinding(
+    if (!shouldPreviewArrowBinding(
       snapConfig: config.snap,
       snappingMode: snappingMode,
     )) {
@@ -1894,7 +1788,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
       bindingDistance,
     );
-    final targets = _resolveBindingTargets(state, position, searchDistance);
+    final targets = resolveArrowBindingTargets(
+      state: state,
+      position: position,
+      distance: searchDistance,
+    );
     if (targets.isEmpty) {
       return null;
     }
@@ -1916,40 +1814,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     return candidate.binding.elementId;
-  }
-
-  bool _shouldPreviewArrowBinding({
-    required SnapConfig snapConfig,
-    required SnappingMode snappingMode,
-  }) {
-    if (!snapConfig.enableArrowBinding) {
-      return false;
-    }
-    if (snappingMode == SnappingMode.grid) {
-      return false;
-    }
-    if (snapConfig.enabled && snappingMode == SnappingMode.none) {
-      return false;
-    }
-    return true;
-  }
-
-  List<ElementState> _resolveBindingTargets(
-    DrawState state,
-    DrawPoint position,
-    double distance,
-  ) {
-    final document = state.domain.document;
-    final targets = <ElementState>[];
-    document.visitElementsAtPointTopDown(position, distance, (element) {
-      if (element.opacity <= 0 ||
-          !ArrowBindingUtils.isBindableTarget(element)) {
-        return true;
-      }
-      targets.add(element);
-      return true;
-    });
-    return targets;
   }
 
   ArrowPointHandle? _resolveArrowPointHandleForPosition({
@@ -2111,20 +1975,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return cachedConfig;
     }
 
-    final interaction = selectionConfig.interaction;
-    final render = selectionConfig.render;
-    final scaled = selectionConfig.copyWith(
-      render: render.copyWith(
-        strokeWidth: render.strokeWidth / effectiveScale,
-        cornerRadius: render.cornerRadius / effectiveScale,
-        controlPointSize: render.controlPointSize / effectiveScale,
-      ),
-      padding: selectionConfig.padding / effectiveScale,
-      rotateHandleOffset: selectionConfig.rotateHandleOffset / effectiveScale,
-      interaction: interaction.copyWith(
-        handleTolerance: interaction.handleTolerance / effectiveScale,
-        dragThreshold: interaction.dragThreshold / effectiveScale,
-      ),
+    final scaled = scaleSelectionConfigForInput(
+      selectionConfig: selectionConfig,
+      scaleFactor: effectiveScale,
     );
     _cachedInputSelectionConfigSource = selectionConfig;
     _cachedInputSelectionConfig = scaled;
@@ -2701,42 +2554,80 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required Locale? locale,
     int? previewElementsRevision,
     Set<String>? dynamicPreviewElementIds,
-  }) => DynamicCanvasRenderKey(
-    creatingElement: creatingElement,
-    effectiveSelection: stateView.effectiveSelection,
-    boxSelectionBounds: _extractBoxSelectionBounds(stateView),
-    selectedIds: stateView.selectedIds,
-    hoveredElementId: _hoveredSelectionElementId,
-    hoveredBindingElementId: _hoveredBindingElementId,
-    hoveredArrowHandle: _hoveredArrowHandle,
-    activeArrowHandle: _resolveActiveArrowHandle(stateView),
-    arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
-    hoverSelectionConfig: _resolveHoverSelectionConfig(),
-    snapGuides: stateView.snapGuides,
-    documentVersion: stateView.state.domain.document.elementsVersion,
-    textRenderingCacheRevision: textRenderingCacheRevision,
-    camera: stateView.state.application.view.camera,
-    previewElementsById: previewElementsById,
-    previewElementsRevision: previewElementsRevision,
-    dynamicPreviewElementIds: dynamicPreviewElementIds,
-    optimizedDynamicElementIds: optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-    preferFastFilterFallback: preferFastFilterFallback,
-    scaleFactor: scaleFactor,
-    selectionConfig: selectionConfig,
-    boxSelectionConfig: widget.store.config.boxSelection,
-    snapConfig: widget.store.config.snap,
-    canvasConfig: widget.store.config.canvas,
-    gridConfig: widget.store.config.grid,
-    isHighlightMaskVisible: isHighlightMaskVisible,
-    highlightMaskConfig: highlightMaskConfig,
-    isWatermarkVisible: isWatermarkVisible,
-    watermarkConfig: watermarkConfig,
-    elementRegistry: widget.store.context.elementRegistry,
-    textMetricsService: widget.store.context.textMetricsService,
-    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
-    locale: locale,
-  );
+  }) {
+    final boxSelectionBounds = _extractBoxSelectionBounds(stateView);
+    final activeArrowHandle = _resolveActiveArrowHandle(stateView);
+    final arrowDeleteIndicatorVisible = _isArrowDeleteIndicatorVisible(
+      stateView,
+    );
+    final hoverSelectionConfig = _resolveHoverSelectionConfig();
+    final boxSelectionConfig = widget.store.config.boxSelection;
+    final snapConfig = widget.store.config.snap;
+    final canvasConfig = widget.store.config.canvas;
+    final gridConfig = widget.store.config.grid;
+    final elementRegistry = widget.store.context.elementRegistry;
+    final framePlan = _frameRenderPlanBuilder.build(
+      view: stateView,
+      elementRegistry: elementRegistry,
+      scaleFactor: scaleFactor,
+      localeTag: locale?.toLanguageTag(),
+      transientState: FrameRenderTransientState(
+        hoveredElementId: _hoveredSelectionElementId,
+        hoveredBindingElementId: _hoveredBindingElementId,
+        hoveredArrowHandle: _hoveredArrowHandle,
+        activeArrowHandle: activeArrowHandle,
+        arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
+        selectionConfig: selectionConfig,
+        hoverSelectionConfig: hoverSelectionConfig,
+        boxSelectionConfig: boxSelectionConfig,
+        snapConfig: snapConfig,
+        canvasConfig: canvasConfig,
+        gridConfig: gridConfig,
+        highlightMaskConfig: highlightMaskConfig,
+        watermarkConfig: watermarkConfig,
+        boxSelectionBounds: boxSelectionBounds,
+        previewElementsById: previewElementsById,
+      ),
+    );
+
+    return DynamicCanvasRenderKey(
+      creatingElement: creatingElement,
+      effectiveSelection: stateView.effectiveSelection,
+      boxSelectionBounds: boxSelectionBounds,
+      selectedIds: stateView.selectedIds,
+      hoveredElementId: _hoveredSelectionElementId,
+      hoveredBindingElementId: _hoveredBindingElementId,
+      hoveredArrowHandle: _hoveredArrowHandle,
+      activeArrowHandle: activeArrowHandle,
+      arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
+      hoverSelectionConfig: hoverSelectionConfig,
+      snapGuides: stateView.snapGuides,
+      documentVersion: stateView.state.domain.document.elementsVersion,
+      textRenderingCacheRevision: textRenderingCacheRevision,
+      camera: stateView.state.application.view.camera,
+      previewElementsById: previewElementsById,
+      previewElementsRevision: previewElementsRevision,
+      dynamicPreviewElementIds: dynamicPreviewElementIds,
+      optimizedDynamicElementIds: optimizedDynamicElementIds,
+      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+      preferFastFilterFallback: preferFastFilterFallback,
+      scaleFactor: scaleFactor,
+      selectionConfig: selectionConfig,
+      boxSelectionConfig: boxSelectionConfig,
+      snapConfig: snapConfig,
+      canvasConfig: canvasConfig,
+      gridConfig: gridConfig,
+      isHighlightMaskVisible: isHighlightMaskVisible,
+      highlightMaskConfig: highlightMaskConfig,
+      isWatermarkVisible: isWatermarkVisible,
+      watermarkConfig: watermarkConfig,
+      elementRegistry: elementRegistry,
+      textMetricsService: widget.store.context.textMetricsService,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      locale: locale,
+      framePlan: framePlan,
+    );
+  }
 
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
     final stateView = _buildStateView(state);
@@ -3967,25 +3858,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pointerMoveDispatcher.reset();
     await _flushPendingTextDraftSync();
     final interaction = widget.store.state.application.interaction;
-    if (interaction is TextEditingState) {
-      await widget.store.dispatch(
-        FinishTextEdit(
-          elementId: interaction.elementId,
-          text: interaction.draftData.text,
-          isNew: interaction.isNew,
-        ),
-      );
-    } else if (interaction is CreatingState) {
-      await widget.store.dispatch(const CancelCreateElement());
-    } else if (interaction is EditingState) {
-      await widget.store.dispatch(const CancelEdit());
-    } else if (interaction is BoxSelectingState) {
-      await widget.store.dispatch(const CancelBoxSelect());
-    } else if (interaction is DragPendingState) {
-      await widget.store.dispatch(const ClearDragPending());
+    final actions = resolveToolChangeResetActions(
+      interaction: interaction,
+      includeClearSelection: true,
+    );
+    for (final action in actions) {
+      await widget.store.dispatch(action);
     }
-
-    await widget.store.dispatch(const ClearSelection());
   }
 }
 

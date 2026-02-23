@@ -2,14 +2,14 @@ import '../../core/element_definition.dart';
 import '../../core/rect_creation_strategy.dart';
 import 'filter_data.dart';
 import 'filter_hit_tester.dart';
-import 'filter_scene_encoder.dart';
+import 'filter_task_encoder.dart';
 
-const filterDefinition = ElementDefinition<FilterData>(
+final filterDefinition = ElementDefinition<FilterData>(
   typeId: FilterData.typeIdToken,
   displayName: 'Filter',
-  hitTester: FilterHitTester(),
+  hitTester: const FilterHitTester(),
   createDefaultData: FilterData.new,
   fromJson: FilterData.fromJson,
-  creationStrategy: RectCreationStrategy(),
-  sceneEncoder: FilterSceneEncoder(),
+  creationStrategy: const RectCreationStrategy(),
+  taskEncoder: const FilterTaskEncoder(),
 );

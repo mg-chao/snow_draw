@@ -434,7 +434,7 @@ DefaultElementRegistry _buildRegistry(_RenderCounter counter) =>
         hitTester: const _CacheHitTester(),
         createDefaultData: _CacheTestData.new,
         fromJson: (_) => const _CacheTestData(),
-        sceneEncoder: _CountingSceneEncoder<_CacheTestData>(counter),
+        taskEncoder: _CountingTaskEncoder<_CacheTestData>(counter),
       ),
     );
 
@@ -448,7 +448,7 @@ DefaultElementRegistry _buildRegistryWithSerialSupport(
       hitTester: const _CacheHitTester(),
       createDefaultData: TextData.new,
       fromJson: TextData.fromJson,
-      sceneEncoder: _CountingSceneEncoder<TextData>(counter),
+      taskEncoder: _CountingTaskEncoder<TextData>(counter),
     ),
   )
   ..register<SerialNumberData>(
@@ -458,7 +458,7 @@ DefaultElementRegistry _buildRegistryWithSerialSupport(
       hitTester: const _CacheHitTester(),
       createDefaultData: SerialNumberData.new,
       fromJson: SerialNumberData.fromJson,
-      sceneEncoder: _CountingSceneEncoder<SerialNumberData>(counter),
+      taskEncoder: _CountingTaskEncoder<SerialNumberData>(counter),
     ),
   );
 
@@ -472,7 +472,7 @@ DefaultElementRegistry _buildRegistryWithHighlightSupport(
       hitTester: const _CacheHitTester(),
       createDefaultData: HighlightData.new,
       fromJson: HighlightData.fromJson,
-      sceneEncoder: _CountingSceneEncoder<HighlightData>(counter),
+      taskEncoder: _CountingTaskEncoder<HighlightData>(counter),
     ),
   );
 
@@ -535,32 +535,29 @@ class _RenderCounter {
   void reset() => count = 0;
 }
 
-class _CountingSceneEncoder<T extends ElementData>
-    implements ElementSceneEncoder<T> {
-  _CountingSceneEncoder(this._counter);
+class _CountingTaskEncoder<T extends ElementData>
+    implements ElementRenderTaskEncoder<T> {
+  _CountingTaskEncoder(this._counter);
 
   final _RenderCounter _counter;
 
   @override
-  RenderScene encodeScene({
+  List<RenderTask> encodeTasks({
     required ElementState element,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
     _counter.increment();
-    return const RenderScene(
-      primitives: <RenderPrimitive>[
-        RenderPathFillPrimitive(
-          path: RenderPath(<RenderPathCommand>[
-            RenderMoveTo(DrawPoint.zero),
-            RenderLineTo(DrawPoint(x: 1, y: 0)),
-            RenderLineTo(DrawPoint(x: 1, y: 1)),
-            RenderClosePath(),
-          ]),
-          colorArgb: 0xFF1576FE,
+    return <RenderTask>[
+      RectangleRenderTask(
+        element: element,
+        data: const RectangleData(
+          color: DrawColor(0xFF1576FE),
+          fillColor: DrawColor(0x221576FE),
         ),
-      ],
-    );
+        localeTag: localeTag,
+      ),
+    ];
   }
 }
 
