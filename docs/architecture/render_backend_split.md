@@ -129,7 +129,7 @@ This verifies:
 - `DrawColor` ARGB32 channel/update behavior stability
 - fallback text metrics behavior and DTO invariants in pure Dart core
 - `DrawContext` text metrics injection/preservation behavior
-- scene encoder slice contracts for built-in elements (A-D)
+- built-in render-task contracts for core encoders and backend routing
 - backend package entrypoint export contract for app boundary usage
 - backend entrypoint `flutterTextMetricsService` export behavior
 - backend coordinate adapter (`DrawPoint` <-> `Offset`) invertibility
