@@ -1137,7 +1137,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted || (!hasPendingPreview && !hadPendingPreview)) {
       return;
     }
-    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -2143,7 +2143,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleWatermarkPreviewChange() {
-    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
@@ -3225,7 +3225,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   void _handleStateChange(DrawState state) {
     _syncTextEditingOverlayState(state);
     _refreshPointerVisualsForState(state);
-    _refreshCanvasSnapshot(state, assumeChanged: true);
+    _refreshCanvasSnapshot(state);
   }
 
   void _handleConfigChange(DrawConfig _) {
@@ -3237,7 +3237,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _cachedInputSelectionScale = null;
 
     _refreshPointerVisualsForState(widget.store.state);
-    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   void _handleTextRenderingCacheInvalidation() {
@@ -3247,7 +3247,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _clearEditingTextLayoutCache();
     _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
-    _refreshCanvasSnapshot(widget.store.state, assumeChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   void _handleSystemFontsChange() {
@@ -3347,12 +3347,10 @@ class _CanvasSnapshot {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _CanvasSnapshot &&
-          identical(other.stateView, stateView) &&
-          other.renderKey == renderKey;
+      other is _CanvasSnapshot && other.renderKey == renderKey;
 
   @override
-  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
+  int get hashCode => renderKey.hashCode;
 }
 
 @immutable
