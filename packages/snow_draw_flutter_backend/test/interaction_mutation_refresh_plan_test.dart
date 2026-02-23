@@ -264,6 +264,95 @@ void main() {
       expect(plan.shouldRefreshPointerVisuals(hasActivePointer: false), isTrue);
     });
 
+    test(
+      'returns null for rectangle edit when rectangle drives arrow bindings',
+      () {
+        final boundArrow = _arrowElement.copyWith(
+          data: const ArrowData(
+            startBinding: ArrowBinding(
+              elementId: 'rectangle',
+              anchor: DrawPoint(x: 0.5, y: 0.5),
+            ),
+          ),
+        );
+        final base = _baseState(
+          elements: [_rectangleElement, boundArrow],
+          selectedIds: const {'rectangle'},
+        );
+        const context = _TestEditContext(
+          startPosition: DrawPoint(x: 30, y: 30),
+          startBounds: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 70),
+          selectedIdsAtStart: {'rectangle'},
+          selectionVersion: 1,
+          elementsVersion: 1,
+        );
+        final previous = _withInteraction(
+          base,
+          const EditingState(
+            operationId: EditOperationIds.move,
+            sessionId: 'rectangle_bound_edit',
+            context: context,
+            currentTransform: MoveTransform.zero,
+          ),
+        );
+        final next = _withInteraction(
+          base,
+          const EditingState(
+            operationId: EditOperationIds.move,
+            sessionId: 'rectangle_bound_edit',
+            context: context,
+            currentTransform: MoveTransform(dx: 6, dy: 4),
+          ),
+        );
+
+        final plan = resolveInteractionMutationRefreshPlan(
+          previous: previous,
+          next: next,
+        );
+
+        expect(plan, isNull);
+      },
+    );
+
+    test('returns null for non-fast-path edit interactions', () {
+      final base = _baseState(
+        elements: const [_textElement],
+        selectedIds: const {'text'},
+      );
+      const context = _TestEditContext(
+        startPosition: DrawPoint(x: 30, y: 30),
+        startBounds: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 70),
+        selectedIdsAtStart: {'text'},
+        selectionVersion: 1,
+        elementsVersion: 1,
+      );
+      final previous = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'text_edit',
+          context: context,
+          currentTransform: MoveTransform.zero,
+        ),
+      );
+      final next = _withInteraction(
+        base,
+        const EditingState(
+          operationId: EditOperationIds.move,
+          sessionId: 'text_edit',
+          context: context,
+          currentTransform: MoveTransform(dx: 6, dy: 4),
+        ),
+      );
+
+      final plan = resolveInteractionMutationRefreshPlan(
+        previous: previous,
+        next: next,
+      );
+
+      expect(plan, isNull);
+    });
+
     test('returns null when domain changes', () {
       final base = _baseState(elements: const [_serialElement]);
       final previous = _withInteraction(
@@ -357,6 +446,15 @@ const _arrowElement = ElementState(
   opacity: 1,
   zIndex: 0,
   data: ArrowData(),
+);
+
+const _textElement = ElementState(
+  id: 'text',
+  rect: DrawRect(minX: 20, minY: 20, maxX: 80, maxY: 80),
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: TextData(text: 'label'),
 );
 
 DrawState _baseState({
