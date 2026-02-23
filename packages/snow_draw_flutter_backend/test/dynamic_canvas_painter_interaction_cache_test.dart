@@ -497,8 +497,6 @@ DynamicCanvasRenderKey _buildRenderKey({
   textRenderingCacheRevision: 0,
   camera: state.application.view.camera,
   previewElementsById: previewElementsById,
-  optimizedDynamicElementIds: const <String>{},
-  optimizedSceneHasPotentialOccluders: false,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),

@@ -130,7 +130,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   // Keep store synchronization responsive while reducing high-frequency
   // interaction churn that can compete with text overlay rendering.
   static const _textDraftSyncMinInterval = Duration(milliseconds: 24);
-  static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const _eraserPreviewOpacityFactor = 0.5;
@@ -193,7 +192,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   var _eraserPreviewCacheRevision = 0;
   var _interactionPreviewRevision = 0;
   var _filterStyleQualityRestoreRevision = 0;
-  var _lightweightLinePreviewRevision = 0;
   var _transientDynamicFilterElementIds = const <String>{};
   DrawStateView? _mergedEraserPreviewStateView;
   var _mergedEraserPreviewRevision = -1;
@@ -689,53 +687,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final merged = <String>{...baseIds, ...transientIds};
     return Set<String>.unmodifiable(merged);
-  }
-
-  Set<String> _resolveInteractionDynamicPreviewElementIds({
-    required DrawStateView stateView,
-    required Map<String, ElementState> previewElementsById,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (plan != InteractionMutationRefreshPlan.lightweightLineDynamicOnly) {
-      return _resolveDynamicPreviewElementIdsForScene(
-        stateView,
-        previewElementsById,
-      );
-    }
-
-    final interaction = stateView.state.application.interaction;
-    if (interaction is! EditingState ||
-        !isLightweightLineEditContext(
-          context: interaction.context,
-          document: stateView.state.domain.document,
-        )) {
-      return _resolveDynamicPreviewElementIdsForScene(
-        stateView,
-        previewElementsById,
-      );
-    }
-
-    final selectedIds = interaction.context.selectedIdsAtStart;
-    if (selectedIds.isEmpty || previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-
-    final document = stateView.state.domain.document;
-    final dynamicIds = <String>{};
-    for (final id in selectedIds) {
-      final preview = previewElementsById[id];
-      if (preview == null) {
-        continue;
-      }
-      final persisted = document.getElementById(id);
-      if (persisted == null || !identical(persisted, preview)) {
-        dynamicIds.add(id);
-      }
-    }
-    if (dynamicIds.isEmpty) {
-      return const <String>{};
-    }
-    return Set<String>.unmodifiable(dynamicIds);
   }
 
   void _invalidateEraserPreviewSnapshots() {
@@ -2284,43 +2235,17 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   _CanvasSceneSnapshot _resolveCanvasSceneSnapshot(DrawStateView stateView) {
-    final interaction = stateView.state.application.interaction;
     final promoteEraserPreviewToCanvasScene =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    late final Set<String> optimizedDynamicElementIds;
     late final Map<String, ElementState> dynamicPreviewElements;
     late final int? dynamicPreviewElementsRevision;
     late final Set<String>? dynamicPreviewElementIds;
-    late final bool optimizedSceneHasPotentialOccluders;
     if (promoteEraserPreviewToCanvasScene) {
-      optimizedDynamicElementIds = const <String>{};
-      optimizedSceneHasPotentialOccluders = false;
       dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
       dynamicPreviewElementsRevision = _eraserPreviewCacheRevision;
       dynamicPreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
     } else {
-      final shouldResolveOptimization =
-          interaction is EditingState || interaction is TextEditingState;
-      final resolvedOptimizationPlan = shouldResolveOptimization
-          ? resolveDynamicSceneOptimizationPlan(view: stateView)
-          : null;
-      final optimizationPlan =
-          _shouldApplyDynamicSceneOptimizationPlan(
-            stateView: stateView,
-            interaction: interaction,
-            plan: resolvedOptimizationPlan,
-          )
-          ? resolvedOptimizationPlan
-          : null;
-      optimizedDynamicElementIds =
-          optimizationPlan?.optimizedElementIds ?? const <String>{};
-      optimizedSceneHasPotentialOccluders =
-          optimizationPlan != null &&
-          _resolveOptimizedSceneHasPotentialOccluders(
-            stateView: stateView,
-            optimizedElementIds: optimizedDynamicElementIds,
-          );
       dynamicPreviewElements = _previewElementsForCanvas(stateView);
       dynamicPreviewElementsRevision = null;
       dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
@@ -2349,8 +2274,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dynamicPreviewElements: dynamicPreviewElements,
       dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
       dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
-      optimizedDynamicElementIds: optimizedDynamicElementIds,
-      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
       creatingSnapshot: creatingSnapshot,
       isHighlightMaskVisible: isHighlightMaskVisible,
       highlightMaskConfig: highlightMask,
@@ -2359,101 +2282,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       preferFastFilterFallback: preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
-  }
-
-  bool _shouldApplyDynamicSceneOptimizationPlan({
-    required DrawStateView stateView,
-    required InteractionState interaction,
-    required DynamicSceneOptimizationPlan? plan,
-  }) {
-    if (plan == null) {
-      return false;
-    }
-    final optimizedElementIds = plan.optimizedElementIds;
-    if (optimizedElementIds.isEmpty) {
-      return false;
-    }
-
-    final document = stateView.state.domain.document;
-    var lowestOrderIndex = -1;
-    for (final elementId in optimizedElementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
-        lowestOrderIndex = orderIndex;
-      }
-    }
-    if (lowestOrderIndex < 0) {
-      return false;
-    }
-
-    if (_shouldForceLocalizedOptimization(
-      interaction: interaction,
-      document: document,
-    )) {
-      return true;
-    }
-
-    final dynamicTailCount = document.elements.length - lowestOrderIndex;
-    final savedElementCount = dynamicTailCount - optimizedElementIds.length;
-    return savedElementCount >= _minOptimizationSavedElementCount;
-  }
-
-  // Arrow-point, lightweight-line, and single serial-number edits mutate a
-  // very small dynamic subset. Forcing localized optimization avoids
-  // repeatedly painting large dynamic tails when the selected element sits low
-  // in z.
-  bool _shouldForceLocalizedOptimization({
-    required InteractionState interaction,
-    required DocumentState document,
-  }) {
-    if (isLightweightLineEditingInteraction(
-      interaction: interaction,
-      document: document,
-    )) {
-      return true;
-    }
-    if (interaction is EditingState &&
-        interaction.context is ArrowPointEditContext) {
-      return true;
-    }
-    return SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-      interaction: interaction,
-      document: document,
-    );
-  }
-
-  bool _resolveOptimizedSceneHasPotentialOccluders({
-    required DrawStateView stateView,
-    required Set<String> optimizedElementIds,
-  }) {
-    if (optimizedElementIds.isEmpty) {
-      return false;
-    }
-    final document = stateView.state.domain.document;
-    int? minOrderIndex;
-    for (final elementId in optimizedElementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (minOrderIndex == null || orderIndex < minOrderIndex) {
-        minOrderIndex = orderIndex;
-      }
-    }
-    if (minOrderIndex == null) {
-      return false;
-    }
-
-    final elements = document.elements;
-    for (var index = minOrderIndex + 1; index < elements.length; index++) {
-      if (!optimizedElementIds.contains(elements[index].id)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   bool _isHighlightMaskVisible({
@@ -2484,38 +2312,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     previewElementsRevision:
         previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
     dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
-    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders:
-        scene.optimizedSceneHasPotentialOccluders,
     preferFastFilterFallback: scene.preferFastFilterFallback,
-    isHighlightMaskVisible: scene.isHighlightMaskVisible,
-    highlightMaskConfig: scene.highlightMaskConfig,
-    isWatermarkVisible: scene.isWatermarkVisible,
-    watermarkConfig: scene.watermarkConfig,
-    locale: locale,
-  );
-
-  DynamicCanvasRenderKey _buildDynamicRenderKeyFromCachedScene({
-    required DrawStateView stateView,
-    required SelectionConfig selectionConfig,
-    required double scaleFactor,
-    required CreatingElementSnapshot? creatingElement,
-    required InteractionDynamicSceneSnapshot scene,
-    required Locale? locale,
-    int? previewElementsRevision,
-  }) => _createDynamicRenderKey(
-    stateView: stateView,
-    selectionConfig: selectionConfig,
-    scaleFactor: scaleFactor,
-    creatingElement: creatingElement,
-    textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
-    previewElementsById: scene.previewElementsById,
-    previewElementsRevision: previewElementsRevision,
-    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
-    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders:
-        scene.optimizedSceneHasPotentialOccluders,
-    preferFastFilterFallback: false,
     isHighlightMaskVisible: scene.isHighlightMaskVisible,
     highlightMaskConfig: scene.highlightMaskConfig,
     isWatermarkVisible: scene.isWatermarkVisible,
@@ -2530,8 +2327,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required CreatingElementSnapshot? creatingElement,
     required int textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
-    required Set<String> optimizedDynamicElementIds,
-    required bool optimizedSceneHasPotentialOccluders,
     required bool preferFastFilterFallback,
     required bool isHighlightMaskVisible,
     required HighlightMaskConfig highlightMaskConfig,
@@ -2596,8 +2391,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       previewElementsById: previewElementsById,
       previewElementsRevision: previewElementsRevision,
       dynamicPreviewElementIds: dynamicPreviewElementIds,
-      optimizedDynamicElementIds: optimizedDynamicElementIds,
-      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
       preferFastFilterFallback: preferFastFilterFallback,
       scaleFactor: scaleFactor,
       selectionConfig: selectionConfig,
@@ -2728,73 +2521,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         forcedPreviewElementsRevision: ++_interactionPreviewRevision,
       );
     });
-  }
-
-  /// Reuses cached dynamic-scene metadata for interaction-only updates.
-  ///
-  /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
-  /// single-canvas updates while the document topology remains stable.
-  /// Rebuilding full scene metadata on every pointer frame is redundant, so
-  /// this fast path reuses the previous dynamic render key and only resolves
-  /// the latest preview subset.
-  bool _tryRefreshCachedInteractionCanvasSnapshot(
-    DrawState state, {
-    required DrawState previousState,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (!identical(previousState.domain, state.domain) || !mounted) {
-      return false;
-    }
-
-    final previousDynamicSnapshot = _canvasSnapshotNotifier.value;
-    final previousRenderKey = previousDynamicSnapshot.renderKey;
-    if (previousRenderKey.documentVersion !=
-        state.domain.document.elementsVersion) {
-      return false;
-    }
-
-    final stateView = _buildStateView(state);
-    final previewElementsRevision =
-        plan == InteractionMutationRefreshPlan.lightweightLineDynamicOnly
-        ? ++_lightweightLinePreviewRevision
-        : ++_interactionPreviewRevision;
-    final cachedMetadata = CachedInteractionDynamicMetadata(
-      optimizedDynamicElementIds: previousRenderKey.optimizedDynamicElementIds,
-      optimizedSceneHasPotentialOccluders:
-          previousRenderKey.optimizedSceneHasPotentialOccluders,
-      isHighlightMaskVisible: previousRenderKey.isHighlightMaskVisible,
-      highlightMaskConfig: previousRenderKey.highlightMaskConfig,
-      isWatermarkVisible: previousRenderKey.isWatermarkVisible,
-      watermarkConfig: previousRenderKey.watermarkConfig,
-    );
-    final scene = resolveInteractionDynamicSceneFromCachedKey(
-      stateView: stateView,
-      cachedMetadata: cachedMetadata,
-      resolvePreviewElements: _previewElementsForCanvas,
-      resolvePreviewByOptimizedIds: (view, _) =>
-          _previewElementsForCanvas(view),
-      resolveDynamicPreviewElementIds: (view, previewElementsById) =>
-          _resolveInteractionDynamicPreviewElementIds(
-            stateView: view,
-            previewElementsById: previewElementsById,
-            plan: plan,
-          ),
-    );
-    final dynamicRenderKey = _buildDynamicRenderKeyFromCachedScene(
-      stateView: stateView,
-      selectionConfig: _resolveSelectionConfig(state),
-      scaleFactor: _effectiveScaleFactor(),
-      creatingElement: _extractCreatingSnapshot(stateView),
-      scene: scene,
-      locale: _resolveCanvasLocale(),
-      previewElementsRevision: previewElementsRevision,
-    );
-    _setCanvasSnapshot(
-      stateView: stateView,
-      renderKey: dynamicRenderKey,
-      assumeChanged: true,
-    );
-    return true;
   }
 
   Widget _buildTextEditorOverlay({
@@ -3715,20 +3441,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
       return;
     }
-    if (previousState != null) {
-      final interactionMutationPlan = resolveInteractionMutationRefreshPlan(
-        previous: previousState,
-        next: state,
-      );
-      if (interactionMutationPlan != null) {
-        _handleInteractionMutation(
-          state,
-          previousState: previousState,
-          plan: interactionMutationPlan,
-        );
-        return;
-      }
-    }
 
     if (previousState != null) {
       final changedFilterElementIds = resolveFilterStyleMutation(
@@ -3746,31 +3458,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _refreshPointerVisualsForState(state);
     _refreshCanvasSnapshots(state, assumeCanvasChanged: true);
-  }
-
-  void _handleInteractionMutation(
-    DrawState state, {
-    required DrawState previousState,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (_activePointerIds.isEmpty) {
-      _refreshPointerVisualsForState(state);
-    } else {
-      _refreshCursorAndClearHoverForState(state);
-    }
-
-    if (_tryRefreshCachedInteractionCanvasSnapshot(
-      state,
-      previousState: previousState,
-      plan: plan,
-    )) {
-      return;
-    }
-    _refreshCanvasSnapshot(
-      state,
-      assumeChanged: true,
-      forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-    );
   }
 
   void _handleConfigChange(DrawConfig _) {
@@ -3871,8 +3558,6 @@ class _CanvasSceneSnapshot {
     required this.dynamicPreviewElements,
     required this.dynamicPreviewElementsRevision,
     required this.dynamicPreviewElementIds,
-    required this.optimizedDynamicElementIds,
-    required this.optimizedSceneHasPotentialOccluders,
     required this.creatingSnapshot,
     required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
@@ -3885,8 +3570,6 @@ class _CanvasSceneSnapshot {
   final Map<String, ElementState> dynamicPreviewElements;
   final int? dynamicPreviewElementsRevision;
   final Set<String>? dynamicPreviewElementIds;
-  final Set<String> optimizedDynamicElementIds;
-  final bool optimizedSceneHasPotentialOccluders;
   final CreatingElementSnapshot? creatingSnapshot;
   final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;

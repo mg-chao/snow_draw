@@ -50,7 +50,7 @@ class CreatingElementSnapshot {
 /// - Selected/hovered element IDs (for selection outlines)
 /// - Arrow handle interaction state (including delete indicator visibility)
 /// - Document version (for selection outline refresh)
-/// - Preview and optimization state for interaction cache invalidation
+/// - Preview state for interaction cache invalidation
 /// - Camera state (position/zoom), selection/box selection config, scale factor
 @immutable
 class DynamicCanvasRenderKey {
@@ -70,8 +70,6 @@ class DynamicCanvasRenderKey {
     required this.textRenderingCacheRevision,
     required this.camera,
     required this.previewElementsById,
-    required this.optimizedDynamicElementIds,
-    required this.optimizedSceneHasPotentialOccluders,
     required this.scaleFactor,
     required this.selectionConfig,
     required this.boxSelectionConfig,
@@ -146,20 +144,6 @@ class DynamicCanvasRenderKey {
   /// This is a performance hint and does not change final visual output.
   final Set<String>? dynamicPreviewElementIds;
 
-  /// Element ids for localized dynamic-scene optimization.
-  ///
-  /// When non-empty, the dynamic painter renders only these optimized
-  /// elements and overlapping top-order occluders instead of every element
-  /// above the selection.
-  final Set<String> optimizedDynamicElementIds;
-
-  /// Whether optimized-scene rendering has any non-optimized element above
-  /// the optimized seed range.
-  ///
-  /// When `false`, dynamic painters can skip expensive occluder-resolution
-  /// queries and render optimized elements directly in z-order.
-  final bool optimizedSceneHasPotentialOccluders;
-
   /// Whether filter rendering should prioritize responsiveness this frame.
   ///
   /// This hint is used for high-frequency filter style drags where full
@@ -230,12 +214,6 @@ class DynamicCanvasRenderKey {
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.camera == camera &&
           _previewMapsEqual(other) &&
-          setEquals(
-            other.optimizedDynamicElementIds,
-            optimizedDynamicElementIds,
-          ) &&
-          other.optimizedSceneHasPotentialOccluders ==
-              optimizedSceneHasPotentialOccluders &&
           other.preferFastFilterFallback == preferFastFilterFallback &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
@@ -269,8 +247,6 @@ class DynamicCanvasRenderKey {
     textRenderingCacheRevision,
     camera,
     _previewMapHash(),
-    Object.hashAllUnordered(optimizedDynamicElementIds),
-    optimizedSceneHasPotentialOccluders,
     preferFastFilterFallback,
     scaleFactor,
     selectionConfig,

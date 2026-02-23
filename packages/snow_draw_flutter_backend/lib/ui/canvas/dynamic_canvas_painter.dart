@@ -1039,22 +1039,6 @@ class DynamicCanvasPainter extends CustomPainter {
     required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
   }) {
-    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
-
-    if (optimizedElementIds.isNotEmpty) {
-      final optimizedElements = _resolveOptimizedScene(
-        viewportRect: viewportRect,
-        optimizedElementIds: optimizedElementIds,
-      );
-      _paintElementScene(
-        canvas: canvas,
-        scale: scale,
-        viewportRect: viewportRect,
-        effectiveElements: optimizedElements,
-      );
-      return;
-    }
-
     final state = stateView.state;
     final document = state.domain.document;
     final baseVisibleElements = _visibleSceneCache.resolve(
@@ -1066,16 +1050,15 @@ class DynamicCanvasPainter extends CustomPainter {
             document.getElementById(creatingElement.element.id) != null
         ? creatingElement.element.id
         : null;
-    if (optimizedElementIds.isEmpty &&
-        _tryPaintPreviewFastPath(
-          canvas: canvas,
-          scale: scale,
-          viewportRect: viewportRect,
-          creatingElement: creatingElement,
-          excludedElementId: excludedElementId,
-          baseVisibleElements: baseVisibleElements,
-          document: document,
-        )) {
+    if (_tryPaintPreviewFastPath(
+      canvas: canvas,
+      scale: scale,
+      viewportRect: viewportRect,
+      creatingElement: creatingElement,
+      excludedElementId: excludedElementId,
+      baseVisibleElements: baseVisibleElements,
+      document: document,
+    )) {
       return;
     }
 
@@ -1198,135 +1181,6 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
     return true;
-  }
-
-  List<ElementState> _resolveOptimizedScene({
-    required DrawRect viewportRect,
-    required Set<String> optimizedElementIds,
-  }) {
-    final document = stateView.state.domain.document;
-    if (optimizedElementIds.isEmpty) {
-      return const <ElementState>[];
-    }
-
-    final previewElementsById = renderKey.previewElementsById;
-    final effectiveById = <String, ElementState>{};
-    final effectiveAabbsById = <String, DrawRect>{};
-    final seedAabbsById = <String, DrawRect>{};
-    final seedOrderIndexById = <String, int>{};
-
-    for (final elementId in optimizedElementIds) {
-      final effective =
-          previewElementsById[elementId] ?? document.getElementById(elementId);
-      if (effective == null || effective.opacity <= 0) {
-        continue;
-      }
-      final aabb = SelectionCalculator.computeElementWorldAabb(effective);
-      if (!_rectsIntersect(aabb, viewportRect)) {
-        continue;
-      }
-      effectiveById[elementId] = effective;
-      effectiveAabbsById[elementId] = aabb;
-      seedAabbsById[elementId] = aabb;
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex != null) {
-        seedOrderIndexById[elementId] = orderIndex;
-      }
-    }
-
-    if (effectiveById.isEmpty) {
-      return const <ElementState>[];
-    }
-
-    if (!renderKey.optimizedSceneHasPotentialOccluders) {
-      return _sortElementsByOrder(
-        elements: effectiveById.values,
-        resolveOrderIndex: document.getOrderIndex,
-      );
-    }
-
-    final orderIndexCache = <String, int?>{};
-    int? resolveOrderIndex(String elementId) {
-      if (orderIndexCache.containsKey(elementId)) {
-        return orderIndexCache[elementId];
-      }
-      final orderIndex = document.getOrderIndex(elementId);
-      orderIndexCache[elementId] = orderIndex;
-      return orderIndex;
-    }
-
-    DrawRect resolveAabb(ElementState element) {
-      final cached = effectiveAabbsById[element.id];
-      if (cached != null) {
-        return cached;
-      }
-      final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      effectiveAabbsById[element.id] = aabb;
-      return aabb;
-    }
-
-    for (final entry in seedAabbsById.entries) {
-      final seedElement = effectiveById[entry.key];
-      final seedOrderIndex = seedOrderIndexById[entry.key];
-      if (seedElement == null || seedOrderIndex == null) {
-        continue;
-      }
-      final queryRects = resolveOptimizedOccluderQueryRects(
-        seedElement: seedElement,
-        seedAabb: entry.value,
-      );
-      for (final queryRect in queryRects) {
-        document.visitElementsInRect(queryRect, (element) {
-          final elementId = element.id;
-          if (optimizedElementIds.contains(elementId)) {
-            return true;
-          }
-          if (effectiveById.containsKey(elementId)) {
-            return true;
-          }
-          final orderIndex = resolveOrderIndex(elementId);
-          if (orderIndex == null || orderIndex <= seedOrderIndex) {
-            return true;
-          }
-          final effective = previewElementsById[elementId] ?? element;
-          if (effective.opacity <= 0) {
-            return true;
-          }
-          final aabb = resolveAabb(effective);
-          if (!_rectsIntersect(aabb, queryRect) ||
-              !_rectsIntersect(aabb, viewportRect)) {
-            return true;
-          }
-          effectiveById[elementId] = effective;
-          return true;
-        });
-      }
-    }
-
-    return _sortElementsByOrder(
-      elements: effectiveById.values,
-      resolveOrderIndex: resolveOrderIndex,
-    );
-  }
-
-  List<ElementState> _sortElementsByOrder({
-    required Iterable<ElementState> elements,
-    required int? Function(String elementId) resolveOrderIndex,
-  }) {
-    final sorted = elements.toList(growable: false);
-    if (sorted.length < 2) {
-      return sorted;
-    }
-    sorted.sort((a, b) {
-      final orderA = resolveOrderIndex(a.id) ?? a.zIndex;
-      final orderB = resolveOrderIndex(b.id) ?? b.zIndex;
-      final orderComparison = orderA.compareTo(orderB);
-      if (orderComparison != 0) {
-        return orderComparison;
-      }
-      return a.id.compareTo(b.id);
-    });
-    return sorted;
   }
 
   void _paintElementScene({

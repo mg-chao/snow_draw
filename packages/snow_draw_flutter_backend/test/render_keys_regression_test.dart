@@ -36,40 +36,6 @@ void main() {
       expect(first.hashCode, isNot(second.hashCode));
     });
 
-    test('optimized dynamic ids participate in equality', () {
-      final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-      );
-      final optimized = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
-      );
-
-      expect(baseline, isNot(optimized));
-      expect(baseline.hashCode, isNot(optimized.hashCode));
-    });
-
-    test('optimized occluder hint participates in equality', () {
-      final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
-      );
-      final withOccluders = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
-        optimizedSceneHasPotentialOccluders: true,
-      );
-
-      expect(baseline, isNot(withOccluders));
-      expect(baseline.hashCode, isNot(withOccluders.hashCode));
-    });
-
     test('preview revision participates with map-identity fast path', () {
       final registry = DefaultElementRegistry();
       final sharedPreviewMap = <String, ElementState>{};
@@ -154,11 +120,9 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   required DefaultElementRegistry registry,
   required bool arrowDeleteIndicatorVisible,
   CreatingElementSnapshot? creatingElement,
-  Set<String> optimizedDynamicElementIds = const <String>{},
   Map<String, ElementState> previewElementsById = const {},
   int? previewElementsRevision,
   Set<String>? dynamicPreviewElementIds,
-  bool optimizedSceneHasPotentialOccluders = false,
   WatermarkConfig? watermarkConfig,
 }) => DynamicCanvasRenderKey(
   creatingElement: creatingElement,
@@ -178,8 +142,6 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   previewElementsById: previewElementsById,
   previewElementsRevision: previewElementsRevision,
   dynamicPreviewElementIds: dynamicPreviewElementIds,
-  optimizedDynamicElementIds: optimizedDynamicElementIds,
-  optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),
