@@ -5,16 +5,6 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 class FlutterArrowGeometry {
   const FlutterArrowGeometry._();
 
-  static List<Offset> resolveLocalPoints({
-    required DrawRect rect,
-    required List<DrawPoint> normalizedPoints,
-  }) => _toOffsets(
-    ArrowGeometry.resolveLocalPoints(
-      rect: rect,
-      normalizedPoints: normalizedPoints,
-    ),
-  );
-
   static List<Offset> resolveWorldPoints({
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
@@ -107,22 +97,6 @@ class FlutterArrowGeometry {
       ArrowheadStyle.none => Path(),
     };
   }
-
-  static double calculateArrowheadInset({
-    required ArrowheadStyle style,
-    required double strokeWidth,
-  }) => ArrowGeometry.calculateArrowheadInset(
-    style: style,
-    strokeWidth: strokeWidth,
-  );
-
-  static double calculateArrowheadDirectionOffset({
-    required ArrowheadStyle style,
-    required double strokeWidth,
-  }) => ArrowGeometry.calculateArrowheadDirectionOffset(
-    style: style,
-    strokeWidth: strokeWidth,
-  );
 
   static Path _buildStraightPath(List<Offset> points) {
     final path = Path()..moveTo(points.first.dx, points.first.dy);
@@ -264,21 +238,15 @@ class FlutterArrowGeometry {
     const tension = 1.0;
     final control1 = p1 + (p2 - p0) * (tension / 6);
     final control2 = p2 - (p3 - p1) * (tension / 6);
-    return _CubicSegment(
-      start: p1,
-      control1: control1,
-      control2: control2,
-      end: p2,
-    );
+    return _CubicSegment(control1: control1, control2: control2, end: p2);
   }
 }
 
 class FlutterArrowGeometryDescriptor {
-  FlutterArrowGeometryDescriptor({required this.data, required this.rect})
+  FlutterArrowGeometryDescriptor({required this.data, required DrawRect rect})
     : _coreDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
 
   final ArrowLikeData data;
-  final DrawRect rect;
   final ArrowGeometryDescriptor _coreDescriptor;
 
   late final List<Offset> localPoints = _toOffsets(
@@ -305,13 +273,11 @@ Offset? _toOffsetOrNull(DrawPoint? point) =>
 
 class _CubicSegment {
   const _CubicSegment({
-    required this.start,
     required this.control1,
     required this.control2,
     required this.end,
   });
 
-  final Offset start;
   final Offset control1;
   final Offset control2;
   final Offset end;

@@ -84,14 +84,6 @@ class SelectionCalculator {
     return bounds.center;
   }
 
-  static double? getSelectionRotationForElements(
-    List<ElementState> selectedElements,
-  ) => _singleSelectedElement(selectedElements)?.rotation;
-
-  static DrawPoint? getSelectionCenterForElements(
-    List<ElementState> selectedElements,
-  ) => _singleSelectedElement(selectedElements)?.center;
-
   static DrawRect computeElementWorldAabb(ElementState element) {
     final rect = element.rect;
     final rotation = element.rotation;

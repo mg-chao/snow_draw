@@ -55,8 +55,4 @@ class MultiSelectLifecycle {
     SelectionOverlayState current, {
     required DrawRect newBounds,
   }) => onMoveFinished(current, newBounds: newBounds);
-
-  /// Clears selection state.
-  static SelectionOverlayState onSelectionCleared() =>
-      SelectionOverlayState.empty;
 }
