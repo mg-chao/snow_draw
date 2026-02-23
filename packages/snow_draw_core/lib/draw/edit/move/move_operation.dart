@@ -13,6 +13,7 @@ import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
@@ -141,9 +142,10 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       nextDx += snappedRect.minX - targetRect.minX;
       nextDy += snappedRect.minY - targetRect.minY;
     } else if (shouldObjectSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
+      final snapDistance = resolveZoomAdjustedDistance(
+        distance: snapConfig.distance,
+        zoom: state.application.view.camera.zoom,
+      );
       final result = objectSnapService.snapMove(
         targetRect: targetRect,
         referenceElements: typedContext.referenceElements,

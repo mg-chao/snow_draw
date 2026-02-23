@@ -6,6 +6,7 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
+import '../../utils/visible_elements.dart';
 import '../preview/edit_preview.dart';
 import 'edit_errors.dart';
 import 'edit_operation_params.dart';
@@ -132,11 +133,10 @@ P requireParams<P extends EditOperationParams>(
 List<ElementState> resolveReferenceElements(
   DrawState state,
   Set<String> selectedIds,
-) => state.domain.document.elements
-    .where(
-      (element) => element.opacity > 0 && !selectedIds.contains(element.id),
-    )
-    .toList();
+) => resolveVisibleElements(
+  state.domain.document.elements,
+  excludedIds: selectedIds,
+);
 
 /// Common context-creation data shared by standard operations.
 ///

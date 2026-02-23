@@ -18,6 +18,7 @@ import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
 import '../../types/resize_mode.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/handle_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../../utils/transforms/edit_transform_context.dart';
@@ -209,9 +210,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         snapMaxY: anchorsY.contains(SnapAxisAnchor.end),
       );
     } else if (shouldObjectSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
+      final snapDistance = resolveZoomAdjustedDistance(
+        distance: snapConfig.distance,
+        zoom: state.application.view.camera.zoom,
+      );
       final result = objectSnapService.snapResize(
         targetRect: newBounds,
         referenceElements: typedContext.referenceElements,

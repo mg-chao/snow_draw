@@ -26,6 +26,7 @@ import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/combined_element_lookup.dart';
 import '../../utils/list_equality.dart';
 import '../../utils/snapping_mode.dart';
@@ -607,10 +608,10 @@ _ArrowPointComputation _compute({
 }) {
   final basePoints = context.initialPoints;
   final baseFixedSegments = context.initialFixedSegments;
-  final zoom = state.application.view.camera.zoom;
-  final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-  final handleTolerance =
-      config.selection.interaction.handleTolerance / effectiveZoom;
+  final handleTolerance = resolveZoomAdjustedDistance(
+    distance: config.selection.interaction.handleTolerance,
+    zoom: state.application.view.camera.zoom,
+  );
   final addThreshold = handleTolerance;
   final deleteThreshold = handleTolerance;
   final loopThreshold = handleTolerance * 1.5;

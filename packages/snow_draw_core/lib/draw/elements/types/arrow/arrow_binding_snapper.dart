@@ -3,6 +3,7 @@ import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/camera_zoom.dart';
 import '../../../utils/snapping_mode.dart';
 import 'arrow_binding.dart';
 import 'arrow_binding_target_cache.dart';
@@ -33,11 +34,10 @@ class ArrowBindingSnapper {
   static double resolveBindingDistance({
     required DrawState state,
     required SnapConfig snapConfig,
-  }) {
-    final zoom = state.application.view.camera.zoom;
-    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-    return snapConfig.arrowBindingDistance / effectiveZoom;
-  }
+  }) => resolveZoomAdjustedDistance(
+    distance: snapConfig.arrowBindingDistance,
+    zoom: state.application.view.camera.zoom,
+  );
 
   /// Attempts to snap to the currently preferred binding target directly.
   ///

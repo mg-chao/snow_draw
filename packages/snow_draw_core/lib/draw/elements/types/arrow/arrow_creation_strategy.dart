@@ -14,7 +14,9 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../types/snap_guides.dart';
+import '../../../utils/camera_zoom.dart';
 import '../../../utils/snapping_mode.dart';
+import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../line/line_data.dart';
 import 'arrow_binding_snapper.dart';
@@ -691,9 +693,10 @@ _PointSnapResult _snapCreatePoint({
     document: state.domain.document,
     referenceElements: referenceElements,
   );
-  final zoom = state.application.view.camera.zoom;
-  final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-  final snapDistance = snapConfig.distance / effectiveZoom;
+  final snapDistance = resolveZoomAdjustedDistance(
+    distance: snapConfig.distance,
+    zoom: state.application.view.camera.zoom,
+  );
   if (snapDistance <= 0) {
     return _PointSnapResult(position: position);
   }
@@ -952,9 +955,9 @@ class _ArrowCreationSessionData {
       return _referenceElements;
     }
     _referenceElementsVersion = document.elementsVersion;
-    return _referenceElements = document.elements
-        .where((element) => element.opacity > 0)
-        .toList(growable: false);
+    return _referenceElements = resolveVisibleElements(
+      document.elements,
+    ).toList(growable: false);
   }
 
   List<DrawRect> resolveReferenceElementAabbs({

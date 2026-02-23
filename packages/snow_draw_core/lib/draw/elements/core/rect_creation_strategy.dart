@@ -11,8 +11,10 @@ import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/snapping_mode.dart';
 import '../../utils/state_calculator.dart';
+import '../../utils/visible_elements.dart';
 import 'creation_strategy.dart';
 
 const _startAnchors = <SnapAxisAnchor>[SnapAxisAnchor.start];
@@ -76,9 +78,10 @@ class RectCreationStrategy extends CreationStrategy {
       );
     }
 
-    final zoom = state.application.view.camera.zoom;
-    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-    final snapDistance = snapConfig.distance / effectiveZoom;
+    final snapDistance = resolveZoomAdjustedDistance(
+      distance: snapConfig.distance,
+      zoom: state.application.view.camera.zoom,
+    );
     final cachedMode = _resolveCachedSnapReferences(
       state: state,
       creationMode: creatingState.creationMode,
@@ -168,7 +171,5 @@ _CachedRectCreationMode _resolveCachedSnapReferences({
   );
 }
 
-List<ElementState> _resolveReferenceElements(DrawState state) => [
-  for (final element in state.domain.document.elements)
-    if (element.opacity > 0) element,
-];
+List<ElementState> _resolveReferenceElements(DrawState state) =>
+    resolveVisibleElements(state.domain.document.elements);
