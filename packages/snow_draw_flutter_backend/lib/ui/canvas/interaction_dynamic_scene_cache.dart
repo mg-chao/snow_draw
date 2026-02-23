@@ -1,16 +1,11 @@
 import 'package:meta/meta.dart';
 
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'highlight_mask_visibility.dart';
 import 'render_keys.dart';
-import 'watermark_visibility.dart';
 
-/// Resolves dynamic preview elements based on a cached dynamic-layer split.
-typedef DynamicPreviewByLayerStartResolver =
-    Map<String, ElementState> Function(
-      DrawStateView view,
-      int? dynamicLayerStartIndex,
-    );
+/// Resolves preview elements for the unified canvas scene.
+typedef DynamicPreviewResolver =
+    Map<String, ElementState> Function(DrawStateView view);
 
 /// Resolves dynamic preview elements for a localized optimized scene.
 typedef DynamicPreviewByOptimizedIdsResolver =
@@ -30,8 +25,8 @@ typedef DynamicPreviewElementIdsResolver =
 ///
 /// Interaction-only updates (for example rectangle drag updates) often mutate
 /// only preview geometry while document topology remains stable. In those
-/// cases we can reuse layer split metadata from the previous render key and
-/// rebuild only the dynamic preview subset for the new state.
+/// cases we can reuse optimization and overlay visibility metadata from the
+/// previous render key and rebuild only the preview subset for the new state.
 @immutable
 class InteractionDynamicSceneSnapshot {
   InteractionDynamicSceneSnapshot({
@@ -39,11 +34,9 @@ class InteractionDynamicSceneSnapshot {
     required Set<String> dynamicPreviewElementIds,
     required Set<String> optimizedDynamicElementIds,
     required this.optimizedSceneHasPotentialOccluders,
-    required this.dynamicLayerStartIndex,
-    required this.rendersWholeElementScene,
-    required this.highlightMaskLayer,
+    required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
-    required this.watermarkLayer,
+    required this.isWatermarkVisible,
     required this.watermarkConfig,
   }) : previewElementsById = Map<String, ElementState>.unmodifiable(
          previewElementsById,
@@ -59,24 +52,22 @@ class InteractionDynamicSceneSnapshot {
   final Set<String> dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
   final bool optimizedSceneHasPotentialOccluders;
-  final int? dynamicLayerStartIndex;
-  final bool rendersWholeElementScene;
-  final HighlightMaskLayer highlightMaskLayer;
+  final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;
-  final WatermarkLayer watermarkLayer;
+  final bool isWatermarkVisible;
   final WatermarkConfig watermarkConfig;
 }
 
 /// Resolves the dynamic-scene payload for interaction-only updates by reusing
-/// split metadata from [previousRenderKey].
+/// metadata from [previousRenderKey].
 ///
 /// This avoids recomputing dynamic-scene optimization plans and highlight-mask
-/// routing for every pointer frame while still rebuilding preview elements for
-/// the latest state.
+/// visibility checks for every pointer frame while still rebuilding preview
+/// elements for the latest state.
 InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
   required DrawStateView stateView,
   required DynamicCanvasRenderKey previousRenderKey,
-  required DynamicPreviewByLayerStartResolver resolvePreviewByLayerStart,
+  required DynamicPreviewResolver resolvePreviewElements,
   required DynamicPreviewByOptimizedIdsResolver resolvePreviewByOptimizedIds,
   required DynamicPreviewElementIdsResolver resolveDynamicPreviewElementIds,
 }) {
@@ -85,10 +76,7 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
   final hasOptimizedDynamicElements = optimizedDynamicElementIds.isNotEmpty;
   final previewElementsById = hasOptimizedDynamicElements
       ? resolvePreviewByOptimizedIds(stateView, optimizedDynamicElementIds)
-      : resolvePreviewByLayerStart(
-          stateView,
-          previousRenderKey.dynamicLayerStartIndex,
-        );
+      : resolvePreviewElements(stateView);
   return InteractionDynamicSceneSnapshot(
     previewElementsById: previewElementsById,
     dynamicPreviewElementIds: resolveDynamicPreviewElementIds(
@@ -99,11 +87,9 @@ InteractionDynamicSceneSnapshot resolveInteractionDynamicSceneFromCachedKey({
     optimizedSceneHasPotentialOccluders:
         hasOptimizedDynamicElements &&
         previousRenderKey.optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex: previousRenderKey.dynamicLayerStartIndex,
-    rendersWholeElementScene: previousRenderKey.rendersWholeElementScene,
-    highlightMaskLayer: previousRenderKey.highlightMaskLayer,
+    isHighlightMaskVisible: previousRenderKey.isHighlightMaskVisible,
     highlightMaskConfig: previousRenderKey.highlightMaskConfig,
-    watermarkLayer: previousRenderKey.watermarkLayer,
+    isWatermarkVisible: previousRenderKey.isWatermarkVisible,
     watermarkConfig: previousRenderKey.watermarkConfig,
   );
 }

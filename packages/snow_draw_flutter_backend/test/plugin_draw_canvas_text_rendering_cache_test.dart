@@ -1,10 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/static_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -28,18 +27,14 @@ void main() {
       await tester.pump();
 
       final dynamicBefore = _dynamicRenderKey(tester);
-      final staticBefore = _staticRenderKey(tester);
       final baselineRevision = dynamicBefore.textRenderingCacheRevision;
-      expect(staticBefore.textRenderingCacheRevision, baselineRevision);
 
       invalidateTextRenderingCaches();
       await tester.pump();
 
       final dynamicAfter = _dynamicRenderKey(tester);
-      final staticAfter = _staticRenderKey(tester);
       final expectedRevision = baselineRevision + 1;
       expect(dynamicAfter.textRenderingCacheRevision, expectedRevision);
-      expect(staticAfter.textRenderingCacheRevision, expectedRevision);
     },
   );
 }
@@ -54,16 +49,4 @@ DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
     }
   }
   throw StateError('DynamicCanvasPainter not found');
-}
-
-StaticCanvasRenderKey _staticRenderKey(WidgetTester tester) {
-  for (final paint in tester.widgetList<CustomPaint>(
-    find.byType(CustomPaint),
-  )) {
-    final painter = paint.painter;
-    if (painter is StaticCanvasPainter) {
-      return painter.renderKey;
-    }
-  }
-  throw StateError('StaticCanvasPainter not found');
 }

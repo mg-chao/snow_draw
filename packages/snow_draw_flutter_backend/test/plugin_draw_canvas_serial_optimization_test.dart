@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
@@ -45,7 +45,6 @@ void main() {
 
     final dynamicPainter = _dynamicPainter(tester);
     expect(dynamicPainter.renderKey.optimizedDynamicElementIds, {'serial-1'});
-    expect(dynamicPainter.renderKey.dynamicLayerStartIndex, isNull);
   });
 }
 

@@ -1,8 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/watermark_visibility.dart';
 
 void main() {
   group('DynamicCanvasRenderKey', () {
@@ -182,15 +180,15 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
   dynamicPreviewElementIds: dynamicPreviewElementIds,
   optimizedDynamicElementIds: optimizedDynamicElementIds,
   optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-  dynamicLayerStartIndex: null,
-  rendersWholeElementScene: false,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),
   snapConfig: const SnapConfig(),
-  highlightMaskLayer: HighlightMaskLayer.none,
+  canvasConfig: const CanvasConfig(),
+  gridConfig: const GridConfig(),
+  isHighlightMaskVisible: false,
   highlightMaskConfig: const HighlightMaskConfig(),
-  watermarkLayer: WatermarkLayer.none,
+  isWatermarkVisible: false,
   watermarkConfig: watermarkConfig ?? const WatermarkConfig(),
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
