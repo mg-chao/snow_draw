@@ -1,7 +1,6 @@
-import 'dart:ui' show Color;
-
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 
 void expectNoOp<T extends Object>(T config, T Function() copy) {
   expect(copy(), same(config));
@@ -84,8 +83,8 @@ void main() {
       'element style keeps normalization behavior while avoiding no-op clones',
       () {
         const style = ElementStyleConfig(
-          color: Color(0xFF123456),
-          fillColor: Color(0xFFFFEE00),
+          color: DrawColor(0xFF123456),
+          fillColor: DrawColor(0xFFFFEE00),
           strokeWidth: 3,
           fontFamily: 'Roboto',
         );

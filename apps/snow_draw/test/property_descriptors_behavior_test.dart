@@ -1,11 +1,10 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/property_descriptor.dart';
 import 'package:snow_draw/property_descriptors.dart';
 import 'package:snow_draw/style_toolbar_state.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   group('property descriptors', () {
@@ -39,8 +38,8 @@ void main() {
       const descriptor = ColorPropertyDescriptor();
       final context = const _PropertyContextFactory(
         selectedElementTypes: {ElementType.rectangle, ElementType.text},
-        rectangleDefaults: ElementStyleConfig(color: Color(0xFF1677FF)),
-        textDefaults: ElementStyleConfig(color: Color(0xFF52C41A)),
+        rectangleDefaults: ElementStyleConfig(color: DrawColor(0xFF1677FF)),
+        textDefaults: ElementStyleConfig(color: DrawColor(0xFF52C41A)),
       ).build();
 
       expect(descriptor.getDefaultValue(context), const Color(0xFF1677FF));

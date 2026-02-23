@@ -12,7 +12,7 @@ import '../edit_operation_registry_interface.dart';
 import 'edit_error_handler.dart';
 import 'edit_errors.dart';
 import 'edit_modifiers.dart';
-import 'edit_operation_base.dart';
+import 'edit_operation.dart';
 import 'edit_operation_params.dart';
 import 'edit_result_unified.dart';
 
@@ -143,7 +143,7 @@ class EditSessionService {
 
   EditOutcome _performStart({
     required DrawState state,
-    required EditOperationBase operation,
+    required EditOperation operation,
     required EditOperationId operationId,
     required DrawPoint position,
     required EditOperationParams params,
@@ -169,7 +169,7 @@ class EditSessionService {
 
   EditOutcome _performUpdate({
     required DrawState state,
-    required EditOperationBase operation,
+    required EditOperation operation,
     required EditingState editingState,
     required DrawPoint currentPosition,
     required EditModifiers modifiers,
@@ -214,7 +214,7 @@ class EditSessionService {
 
   EditOutcome _performFinish({
     required DrawState state,
-    required EditOperationBase operation,
+    required EditOperation operation,
     required EditingState editingState,
   }) {
     _log?.info('Edit session finished', {'operationId': operation.id});
@@ -231,7 +231,7 @@ class EditSessionService {
 
   EditOutcome _performCancel({
     required DrawState state,
-    required EditOperationBase operation,
+    required EditOperation operation,
     required EditingState editingState,
   }) {
     _log?.info('Edit session cancelled', {'operationId': operation.id});
@@ -243,7 +243,7 @@ class EditSessionService {
   }
 
   EditingState _createSession({
-    required EditOperationBase operation,
+    required EditOperation operation,
     required EditOperationId operationId,
     required DrawState state,
     required DrawPoint position,
@@ -272,7 +272,7 @@ class EditSessionService {
     );
   }
 
-  ({EditOperationBase operation, EditingState editingState}) _restoreOrThrow(
+  ({EditOperation operation, EditingState editingState}) _restoreOrThrow(
     DrawState state, {
     bool validateVersions = false,
   }) {

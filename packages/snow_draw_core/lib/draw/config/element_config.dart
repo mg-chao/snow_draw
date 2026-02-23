@@ -132,10 +132,10 @@ class ElementStyleConfig {
   final double strokeWidth;
 
   /// Default color used by element types that support a primary color.
-  final Color color;
+  final DrawColor color;
 
   /// Default fill color used by element types that support fills.
-  final Color fillColor;
+  final DrawColor fillColor;
 
   /// Default stroke style used by element types that support strokes.
   final StrokeStyle strokeStyle;
@@ -177,7 +177,7 @@ class ElementStyleConfig {
   final TextVerticalAlign verticalAlign;
 
   /// Default text stroke color for text elements.
-  final Color textStrokeColor;
+  final DrawColor textStrokeColor;
 
   /// Default text stroke width for text elements.
   final double textStrokeWidth;
@@ -187,8 +187,8 @@ class ElementStyleConfig {
     int? zIndex,
     int? serialNumber,
     double? strokeWidth,
-    Color? color,
-    Color? fillColor,
+    DrawColor? color,
+    DrawColor? fillColor,
     StrokeStyle? strokeStyle,
     FillStyle? fillStyle,
     HighlightShape? highlightShape,
@@ -202,7 +202,7 @@ class ElementStyleConfig {
     Object? fontFamily = _fontFamilyUnchanged,
     TextHorizontalAlign? textAlign,
     TextVerticalAlign? verticalAlign,
-    Color? textStrokeColor,
+    DrawColor? textStrokeColor,
     double? textStrokeWidth,
   }) {
     final next = ElementStyleConfig(

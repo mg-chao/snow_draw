@@ -16,15 +16,15 @@ class SelectionRenderConfig {
        assert(cornerRadius >= 0, 'cornerRadius must be non-negative'),
        assert(controlPointSize > 0, 'controlPointSize must be positive');
   final double strokeWidth;
-  final Color strokeColor;
-  final Color cornerFillColor;
+  final DrawColor strokeColor;
+  final DrawColor cornerFillColor;
   final double cornerRadius;
   final double controlPointSize;
 
   SelectionRenderConfig copyWith({
     double? strokeWidth,
-    Color? strokeColor,
-    Color? cornerFillColor,
+    DrawColor? strokeColor,
+    DrawColor? cornerFillColor,
     double? cornerRadius,
     double? controlPointSize,
   }) {

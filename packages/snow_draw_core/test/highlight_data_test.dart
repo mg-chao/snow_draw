@@ -1,8 +1,7 @@
-import 'dart:ui';
-
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
@@ -25,8 +24,8 @@ void main() {
 
   test('HighlightData.withElementStyle applies highlight style fields', () {
     const style = ElementStyleConfig(
-      color: Color(0xFF00FF00),
-      textStrokeColor: Color(0xFF0000FF),
+      color: DrawColor(0xFF00FF00),
+      textStrokeColor: DrawColor(0xFF0000FF),
       textStrokeWidth: 3,
       highlightShape: HighlightShape.ellipse,
     );
@@ -35,8 +34,8 @@ void main() {
       const HighlightData().withElementStyle(style),
       const HighlightData(
         shape: HighlightShape.ellipse,
-        color: Color(0xFF00FF00),
-        strokeColor: Color(0xFF0000FF),
+        color: DrawColor(0xFF00FF00),
+        strokeColor: DrawColor(0xFF0000FF),
         strokeWidth: 3,
       ),
     );
@@ -44,8 +43,8 @@ void main() {
 
   test('HighlightData.withStyleUpdate applies highlight shape and strokes', () {
     const update = ElementStyleUpdate(
-      color: Color(0xFF112233),
-      textStrokeColor: Color(0xFF445566),
+      color: DrawColor(0xFF112233),
+      textStrokeColor: DrawColor(0xFF445566),
       textStrokeWidth: 4,
       highlightShape: HighlightShape.ellipse,
     );
@@ -54,8 +53,8 @@ void main() {
       const HighlightData().withStyleUpdate(update),
       const HighlightData(
         shape: HighlightShape.ellipse,
-        color: Color(0xFF112233),
-        strokeColor: Color(0xFF445566),
+        color: DrawColor(0xFF112233),
+        strokeColor: DrawColor(0xFF445566),
         strokeWidth: 4,
       ),
     );

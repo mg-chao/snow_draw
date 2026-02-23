@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
@@ -34,10 +33,10 @@ final class SerialNumberData extends ElementData
       (json['number'] as num?)?.toInt(),
       ConfigDefaults.defaultSerialNumber,
     ),
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
     ),
-    fillColor: Color(
+    fillColor: DrawColor(
       (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
     ),
     fillStyle: FillStyle.values.firstWhere(
@@ -61,8 +60,8 @@ final class SerialNumberData extends ElementData
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
 
   final int number;
-  final Color color;
-  final Color fillColor;
+  final DrawColor color;
+  final DrawColor fillColor;
   final FillStyle fillStyle;
   final double fontSize;
   final String? fontFamily;
@@ -75,8 +74,8 @@ final class SerialNumberData extends ElementData
 
   SerialNumberData copyWith({
     int? number,
-    Color? color,
-    Color? fillColor,
+    DrawColor? color,
+    DrawColor? fillColor,
     FillStyle? fillStyle,
     double? fontSize,
     Object? fontFamily = _fontFamilyUnset,
@@ -114,8 +113,8 @@ final class SerialNumberData extends ElementData
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
     number: update.serialNumber,
-    color: update.color,
-    fillColor: update.fillColor,
+    color: _resolveColor(update.color),
+    fillColor: _resolveColor(update.fillColor),
     fillStyle: update.fillStyle,
     fontSize: update.fontSize,
     fontFamily: update.fontFamily ?? _fontFamilyUnset,
@@ -177,3 +176,5 @@ String? _normalizeOptionalString(String? raw) {
   }
   return trimmed;
 }
+
+DrawColor? _resolveColor(DrawColor? color) => color;

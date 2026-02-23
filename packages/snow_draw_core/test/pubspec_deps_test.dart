@@ -2,15 +2,11 @@
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
-// Core dependencies that MUST remain importable:
+// Core dependencies that must remain importable in pure Dart.
 import 'package:collection/collection.dart';
-// Flutter SDK dependency:
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
-// Internal package imports that exercise the dependency graph:
-import 'package:snow_draw_core/draw/services/services.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
 
 void main() {
@@ -28,7 +24,7 @@ void main() {
     });
 
     test('rbush package is usable', () {
-      // Spatial indexing used by ElementIndexService.
+      // Spatial indexing used by hit-testing caches.
       // Just verify the type is accessible.
       expect(RBushBase, isNotNull);
     });
@@ -42,18 +38,12 @@ void main() {
       expect(cache.length, 2);
 
       // Adding a third entry evicts the LRU entry.
-      // Order after gets: b (front), a (back) — 'a' is evicted.
+      // Order after gets: b (front), a (back), so 'a' is evicted.
       cache.put('c', 3);
       expect(cache.length, 2);
       expect(cache.get('b'), 2);
       expect(cache.get('c'), 3);
       expect(cache.get('a'), isNull);
-    });
-
-    test('services barrel exports are accessible', () {
-      // Verify the barrel file compiles and key types are available.
-      expect(CoordinateService, isNotNull);
-      expect(ElementIndexService, isNotNull);
     });
   });
 }

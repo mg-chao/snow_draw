@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:logger/logger.dart';
 import 'package:snow_draw_core/draw/services/log/log_output.dart';
 
@@ -12,7 +12,10 @@ void main() {
     );
 
     test('rejects negative maxRecords in debug mode', () {
-      expect(() => MemoryLogCollector(maxRecords: -1), throwsAssertionError);
+      expect(
+        () => MemoryLogCollector(maxRecords: -1),
+        throwsA(isA<AssertionError>()),
+      );
     });
 
     test('stores records up to maxRecords', () {

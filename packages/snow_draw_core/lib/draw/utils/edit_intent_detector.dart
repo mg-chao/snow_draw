@@ -5,8 +5,8 @@ import '../elements/core/element_type_id.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
-import '../models/edit_enums.dart';
 import '../types/draw_point.dart';
+import '../types/resize_mode.dart';
 import 'hit_test.dart';
 
 /// Edit intent detector.

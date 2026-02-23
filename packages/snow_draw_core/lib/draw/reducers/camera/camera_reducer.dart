@@ -1,18 +1,14 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
 import '../../models/camera_state.dart';
 import '../../models/draw_state.dart';
 import '../../types/draw_point.dart';
 
-DrawState? cameraReducer(
-  DrawState state,
-  DrawAction action,
-  CameraReducerDeps _,
-) => switch (action) {
-  final MoveCamera a => _handleMoveCamera(state, a),
-  final ZoomCamera a => _handleZoomCamera(state, a),
-  _ => null,
-};
+DrawState? cameraReducer(DrawState state, DrawAction action) =>
+    switch (action) {
+      final MoveCamera a => _handleMoveCamera(state, a),
+      final ZoomCamera a => _handleZoomCamera(state, a),
+      _ => null,
+    };
 
 DrawState _handleMoveCamera(DrawState state, MoveCamera action) {
   if (action.dx == 0 && action.dy == 0) {

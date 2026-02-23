@@ -441,11 +441,8 @@ DrawPoint? _resolveBoundLocalPoint({
 }
 
 List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowLikeData data) {
-  final resolved = ArrowGeometry.resolveWorldPoints(
+  return ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  return resolved
-      .map((point) => DrawPoint(x: point.dx, y: point.dy))
-      .toList(growable: false);
 }

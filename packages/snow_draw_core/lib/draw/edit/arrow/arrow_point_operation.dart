@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../config/draw_config.dart';
@@ -88,9 +86,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       rect: element.rect,
       normalizedPoints: data.points,
     );
-    final points = resolved
-        .map((point) => DrawPoint(x: point.dx, y: point.dy))
-        .toList(growable: false);
+    final points = List<DrawPoint>.unmodifiable(resolved);
     if (points.length < 2) {
       throw const EditMissingDataError(
         dataName: 'arrow points',
@@ -942,16 +938,13 @@ DrawPoint _resolvePointPosition({
 
     // For curved arrows with 3+ points, calculate point on the actual curve
     if (arrowType == ArrowType.curved && points.length >= 3) {
-      final offsetPoints = points
-          .map((p) => Offset(p.x, p.y))
-          .toList(growable: false);
-      final curvePoint = ArrowGeometry.calculateCurvePoint(
-        points: offsetPoints,
+      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
+        points: points,
         segmentIndex: index,
         t: 0.5,
       );
       if (curvePoint != null) {
-        return DrawPoint(x: curvePoint.dx, y: curvePoint.dy);
+        return curvePoint;
       }
     }
 

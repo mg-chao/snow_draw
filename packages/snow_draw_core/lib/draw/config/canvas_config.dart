@@ -6,9 +6,9 @@ class CanvasConfig {
   const CanvasConfig({this.backgroundColor = ConfigDefaults.backgroundColor});
 
   /// Background color of the canvas.
-  final Color backgroundColor;
+  final DrawColor backgroundColor;
 
-  CanvasConfig copyWith({Color? backgroundColor}) {
+  CanvasConfig copyWith({DrawColor? backgroundColor}) {
     if (backgroundColor == null || backgroundColor == this.backgroundColor) {
       return this;
     }
@@ -42,21 +42,21 @@ class BoxSelectionConfig {
        assert(strokeWidth >= 0, 'strokeWidth must be non-negative');
 
   /// Fill color of the selection box.
-  final Color fillColor;
+  final DrawColor fillColor;
 
   /// Opacity of the fill (0.0 to 1.0).
   final double fillOpacity;
 
   /// Stroke color of the selection box border.
-  final Color strokeColor;
+  final DrawColor strokeColor;
 
   /// Stroke width of the selection box border.
   final double strokeWidth;
 
   BoxSelectionConfig copyWith({
-    Color? fillColor,
+    DrawColor? fillColor,
     double? fillOpacity,
-    Color? strokeColor,
+    DrawColor? strokeColor,
     double? strokeWidth,
   }) {
     if ((fillColor == null || fillColor == this.fillColor) &&

@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
@@ -47,6 +47,36 @@ void main() {
         expect(typeIds, hasLength(expectedTypeIds.length));
       },
     );
+
+    test('all built-in elements expose scene encoders', () {
+      final registry = createRegistryWithBuiltIns();
+      final builtInTypeValues = <String>{
+        rectangleDefinition.typeId.value,
+        arrowDefinition.typeId.value,
+        lineDefinition.typeId.value,
+        freeDrawDefinition.typeId.value,
+        filterDefinition.typeId.value,
+        highlightDefinition.typeId.value,
+        textDefinition.typeId.value,
+        serialNumberDefinition.typeId.value,
+      };
+      final missingSceneEncoders = <String>[];
+
+      for (final typeValue in builtInTypeValues) {
+        final definition = registry.getDefinitionByValue(typeValue);
+        if (definition == null) {
+          missingSceneEncoders.add(typeValue);
+        }
+      }
+
+      expect(
+        missingSceneEncoders,
+        isEmpty,
+        reason:
+            'Built-in elements must keep scene encoders to avoid falling back '
+            'to non-scene rendering paths.',
+      );
+    });
 
     test('lookups work with equivalent ElementTypeId instances', () {
       final registry = createRegistryWithBuiltIns();

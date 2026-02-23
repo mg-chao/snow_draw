@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
@@ -10,8 +10,14 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_reducer.dart';
+import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
+
+IdGenerator _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
+  var counter = startFrom;
+  return () => '$prefix-${counter++}';
+}
 
 class _Deps implements CreateElementReducerDeps {
   _Deps({
@@ -28,6 +34,9 @@ class _Deps implements CreateElementReducerDeps {
 
   @override
   final IdGenerator idGenerator;
+
+  @override
+  final TextMetricsService textMetricsService = defaultTextMetricsService;
 }
 
 void main() {
@@ -39,7 +48,7 @@ void main() {
     final deps = _Deps(
       config: DrawConfig(),
       elementRegistry: registry,
-      idGenerator: SequentialIdGenerator().call,
+      idGenerator: _testIdGenerator(),
     );
     const reducer = CreateElementReducer();
 

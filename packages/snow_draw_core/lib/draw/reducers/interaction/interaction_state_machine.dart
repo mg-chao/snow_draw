@@ -81,7 +81,7 @@ class InteractionStateMachine {
       _textEditReducer.reduce(state, action, context) ??
       selectionReducer(state, action, context) ??
       elementReducer(state, action, context) ??
-      cameraReducer(state, action, context);
+      cameraReducer(state, action);
 }
 
 const _pendingReducer = PendingStateReducer();

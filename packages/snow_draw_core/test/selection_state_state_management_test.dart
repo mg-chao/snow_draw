@@ -1,6 +1,6 @@
 import 'dart:collection';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 
 void main() {

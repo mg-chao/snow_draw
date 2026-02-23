@@ -1,17 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/l10n/app_localizations.dart';
 import 'package:snow_draw/property_initialization.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw/widgets/style_toolbar.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -85,7 +79,7 @@ void main() {
       final persisted =
           harness.store.state.domain.document.globalElements.watermark;
       expect(persisted.text, 'draft');
-      expect(persisted.color, const Color(0xFFFF0000));
+      expect(persisted.color, const DrawColor(0xFFFF0000));
       expect(harness.adapter.watermarkPreviewListenable.value, isNull);
     },
   );

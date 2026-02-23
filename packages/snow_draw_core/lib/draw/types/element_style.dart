@@ -1,6 +1,6 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
+
+import 'draw_color.dart';
 
 enum StrokeStyle { solid, dashed, dotted }
 
@@ -51,8 +51,8 @@ class ElementStyleUpdate {
     this.serialNumber,
   });
 
-  final Color? color;
-  final Color? fillColor;
+  final DrawColor? color;
+  final DrawColor? fillColor;
   final double? strokeWidth;
   final StrokeStyle? strokeStyle;
   final FillStyle? fillStyle;
@@ -67,7 +67,7 @@ class ElementStyleUpdate {
   final String? fontFamily;
   final TextHorizontalAlign? textAlign;
   final TextVerticalAlign? verticalAlign;
-  final Color? textStrokeColor;
+  final DrawColor? textStrokeColor;
   final double? textStrokeWidth;
   final int? serialNumber;
 

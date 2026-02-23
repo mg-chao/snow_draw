@@ -1,6 +1,4 @@
-import 'dart:ui';
-
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -10,9 +8,14 @@ import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_reducer.dart';
+import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
-import 'package:snow_draw_core/utils/id_generator.dart';
+
+String Function() _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
+  var counter = startFrom;
+  return () => '$prefix-${counter++}';
+}
 
 void main() {
   test('create element uses highlight defaults', () {
@@ -22,15 +25,15 @@ void main() {
     final deps = DrawContext.withDefaults(
       config: DrawConfig(
         highlightStyle: const ElementStyleConfig(
-          color: Color(0xFF00FF00),
-          textStrokeColor: Color(0xFF0000FF),
+          color: DrawColor(0xFF00FF00),
+          textStrokeColor: DrawColor(0xFF0000FF),
           textStrokeWidth: 3,
           highlightShape: HighlightShape.ellipse,
           opacity: 0.4,
         ),
       ),
       elementRegistry: registry,
-      idGenerator: SequentialIdGenerator().call,
+      idGenerator: _testIdGenerator(),
     );
 
     final next = const CreateElementReducer().reduce(
@@ -43,8 +46,8 @@ void main() {
     )!;
     final creating = next.application.interaction as CreatingState;
     final data = creating.element.data as HighlightData;
-    expect(data.color, const Color(0xFF00FF00));
-    expect(data.strokeColor, const Color(0xFF0000FF));
+    expect(data.color, const DrawColor(0xFF00FF00));
+    expect(data.strokeColor, const DrawColor(0xFF0000FF));
     expect(data.strokeWidth, 3);
     expect(data.shape, HighlightShape.ellipse);
     expect(creating.element.opacity, 0.4);

@@ -1,8 +1,8 @@
 import 'dart:math' as math;
-import 'dart:ui' show Color;
 
 import 'package:meta/meta.dart';
 
+import '../types/draw_color.dart';
 import '../types/element_style.dart';
 
 part 'selection_config.dart';
@@ -22,25 +22,25 @@ abstract class ConfigDefaults {
 
   // ===== Colors =====
   /// Primary accent color (selection outline, etc.).
-  static const primaryColor = Color(0xFF1677FF);
+  static const primaryColor = DrawColor(0xFF1677FF);
 
   /// Secondary accent color (box selection, etc.).
-  static const accentColor = Color(0xFF4096FF);
+  static const accentColor = DrawColor(0xFF4096FF);
 
   /// Canvas background color.
-  static const backgroundColor = Color(0xFFFFFFFF);
+  static const backgroundColor = DrawColor(0xFFFFFFFF);
 
   /// Default element color.
-  static const defaultColor = Color(0xFF1E1E1E);
+  static const defaultColor = DrawColor(0xFF1E1E1E);
 
   /// Default element fill color.
-  static const defaultFillColor = Color(0x00000000);
+  static const defaultFillColor = DrawColor(0x00000000);
 
   /// Default highlight fill color.
-  static const defaultHighlightColor = Color(0xFFF5222D);
+  static const defaultHighlightColor = DrawColor(0xFFF5222D);
 
   /// Default highlight stroke color.
-  static const defaultHighlightStrokeColor = Color(0xFF000000);
+  static const defaultHighlightStrokeColor = DrawColor(0xFF000000);
 
   /// Default highlight shape.
   static const HighlightShape defaultHighlightShape = HighlightShape.rectangle;
@@ -52,10 +52,10 @@ abstract class ConfigDefaults {
   static const defaultFilterStrength = 0.5;
 
   /// Default mask color.
-  static const defaultMaskColor = Color(0xFF1E1E1E);
+  static const defaultMaskColor = DrawColor(0xFF1E1E1E);
 
   /// Default watermark color.
-  static const defaultWatermarkColor = Color(0xFF1E1E1E);
+  static const defaultWatermarkColor = DrawColor(0xFF1E1E1E);
 
   /// Default watermark text (empty means disabled).
   static const defaultWatermarkText = '';
@@ -99,7 +99,7 @@ abstract class ConfigDefaults {
   static const defaultTextFontSize = 21.0;
   static const defaultSerialNumberFontSize = 16.0;
   static const String? defaultTextFontFamily = null;
-  static const defaultTextStrokeColor = Color(0xFFF8F4EC);
+  static const defaultTextStrokeColor = DrawColor(0xFFF8F4EC);
   static const defaultTextStrokeWidth = 0.0;
   static const defaultTextCornerRadius = 0.0;
   static const defaultSerialNumber = 1;
@@ -112,7 +112,7 @@ abstract class ConfigDefaults {
   static const textMaxAutoWidth = 240.0;
 
   /// Control point fill color.
-  static const controlPointFillColor = Color(0xFFFFFFFF);
+  static const controlPointFillColor = DrawColor(0xFFFFFFFF);
 
   // ===== Sizes =====
   static const defaultStrokeWidth = 2.0;
@@ -152,7 +152,7 @@ abstract class ConfigDefaults {
   static const objectSnapGapEnabled = true;
   static const objectSnapShowGuides = true;
   static const objectSnapShowGapSize = false;
-  static const objectSnapLineColor = Color(0xFFFF6B6B);
+  static const objectSnapLineColor = DrawColor(0xFFFF6B6B);
   static const double objectSnapLineWidth = 1;
   static const double objectSnapMarkerSize = 8;
   static const double objectSnapGapDashLength = 4;
@@ -165,8 +165,7 @@ abstract class ConfigDefaults {
   static const gridSize = 20.0;
   static const gridMinSize = 5.0;
   static const gridMaxSize = 100.0;
-  static const gridSizePresets = [10.0, 20.0, 40.0, 80.0];
-  static const gridLineColor = Color(0xFFBDBDBD);
+  static const gridLineColor = DrawColor(0xFFBDBDBD);
   static const gridLineOpacity = 0.45;
   static const gridMajorLineOpacity = 0.7;
   static const gridLineWidth = 1.0;

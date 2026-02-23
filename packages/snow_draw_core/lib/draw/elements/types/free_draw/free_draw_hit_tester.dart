@@ -1,14 +1,11 @@
-import 'dart:ui';
-
 import '../../../config/draw_config.dart';
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
-import '../shared/two_point_stroke_utils.dart';
+import '../shared/hit_test_geometry.dart';
 import 'free_draw_data.dart';
-import 'free_draw_visual_cache.dart';
 
 class FreeDrawHitTester implements ElementHitTester {
   const FreeDrawHitTester();
@@ -48,11 +45,10 @@ class FreeDrawHitTester implements ElementHitTester {
     if (!hasStroke && !hasFill) {
       return false;
     }
-
-    final cached = FreeDrawVisualCache.instance.resolve(
-      element: element,
-      data: data,
-    );
+    final strokePoints = _resolveStrokePoints(rect: rect, data: data);
+    if (strokePoints.length < 2) {
+      return false;
+    }
 
     if (hasStroke &&
         _hitTestStroke(
@@ -60,23 +56,49 @@ class FreeDrawHitTester implements ElementHitTester {
           data: data,
           localPosition: localPosition,
           tolerance: tolerance,
-          cached: cached,
+          strokePoints: strokePoints,
         )) {
       return true;
     }
 
     if (!hasFill ||
-        cached.pointCount < 3 ||
-        !_isInsideRect(rect, localPosition, 0)) {
+        strokePoints.length < 3 ||
+        !isPointInsideRect(rect, localPosition, 0)) {
       return false;
     }
 
-    final fillPath = cached.getOrBuildClosedFillPath();
-    final testPoint = Offset(
-      localPosition.x - rect.minX,
-      localPosition.y - rect.minY,
+    final fillOutline = _resolveClosedFillOutlinePoints(
+      strokePoints,
+      strokeWidth: data.strokeWidth,
     );
-    return fillPath.contains(testPoint);
+    if (fillOutline.length < 3) {
+      return false;
+    }
+    return isPointInsidePolygon(localPosition, fillOutline);
+  }
+
+  List<DrawPoint> _resolveStrokePoints({
+    required DrawRect rect,
+    required FreeDrawData data,
+  }) {
+    if (data.points.isEmpty) {
+      return const <DrawPoint>[];
+    }
+    final width = rect.width;
+    final height = rect.height;
+    if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
+      return const <DrawPoint>[];
+    }
+    return data.points
+        .map(
+          (point) => DrawPoint(
+            x: rect.minX + point.x * width,
+            y: rect.minY + point.y * height,
+            pressure: point.pressure,
+            timestamp: point.timestamp,
+          ),
+        )
+        .toList(growable: false);
   }
 
   DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
@@ -118,24 +140,32 @@ class FreeDrawHitTester implements ElementHitTester {
     if (!radius.isFinite || radius <= 0) {
       return false;
     }
-    if (!_isInsideRect(rect, localPosition, radius)) {
+    if (!isPointInsideRect(rect, localPosition, radius)) {
+      return false;
+    }
+    if (!rect.width.isFinite ||
+        !rect.height.isFinite ||
+        rect.width < 0 ||
+        rect.height < 0) {
       return false;
     }
 
-    final segment = resolveTwoPointStrokeSegmentWorld(
-      rect: rect,
-      startPoint: data.points.first,
-      endPoint: data.points.last,
+    final startPoint = data.points.first;
+    final endPoint = data.points.last;
+    final start = DrawPoint(
+      x: rect.minX + (startPoint.x * rect.width),
+      y: rect.minY + (startPoint.y * rect.height),
     );
-    if (segment == null) {
+    final end = DrawPoint(
+      x: rect.minX + (endPoint.x * rect.width),
+      y: rect.minY + (endPoint.y * rect.height),
+    );
+    if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
       return false;
     }
 
-    return hitTestTwoPointStrokeSegment(
-      segment: segment,
-      point: Offset(localPosition.x, localPosition.y),
-      radius: radius,
-    );
+    return distanceSquaredToSegment(localPosition, start, end) <=
+        radius * radius;
   }
 
   bool _hitTestStroke({
@@ -143,29 +173,27 @@ class FreeDrawHitTester implements ElementHitTester {
     required FreeDrawData data,
     required DrawPoint localPosition,
     required double tolerance,
-    required FreeDrawVisualEntry cached,
+    required List<DrawPoint> strokePoints,
   }) {
     final radius = (data.strokeWidth / 2) + tolerance;
     if (!radius.isFinite || radius <= 0) {
       return false;
     }
-    if (!_isInsideRect(rect, localPosition, radius)) {
+    if (!isPointInsideRect(rect, localPosition, radius)) {
       return false;
     }
 
-    final flattened = cached.getOrBuildFlattened(data.strokeWidth);
+    final flattened = _resolveFlattenedStrokePoints(
+      strokePoints: strokePoints,
+      strokeWidth: data.strokeWidth,
+    );
     if (flattened.length < 2) {
       return false;
     }
-
-    final testPoint = Offset(
-      localPosition.x - rect.minX,
-      localPosition.y - rect.minY,
-    );
     final radiusSq = radius * radius;
     for (var i = 1; i < flattened.length; i++) {
-      final distance = _distanceSquaredToSegment(
-        testPoint,
+      final distance = distanceSquaredToSegment(
+        localPosition,
         flattened[i - 1],
         flattened[i],
       );
@@ -175,31 +203,110 @@ class FreeDrawHitTester implements ElementHitTester {
     }
     return false;
   }
-}
 
-bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
-    position.x >= rect.minX - padding &&
-    position.x <= rect.maxX + padding &&
-    position.y >= rect.minY - padding &&
-    position.y <= rect.maxY + padding;
+  List<DrawPoint> _resolveFlattenedStrokePoints({
+    required List<DrawPoint> strokePoints,
+    required double strokeWidth,
+  }) {
+    if (strokePoints.length < 3) {
+      return strokePoints;
+    }
+    final closed = _sameLocation(strokePoints.first, strokePoints.last);
+    final source = closed && strokePoints.length > 3
+        ? strokePoints.sublist(0, strokePoints.length - 1)
+        : strokePoints;
+    final smoothed = _smoothStrokePoints(source, closed: closed);
+    final flattened = flattenCatmullRomDrawPoints(
+      points: smoothed,
+      strokeWidth: strokeWidth,
+      maxPoints: 256,
+    );
+    if (flattened.length < 2) {
+      return source;
+    }
+    if (closed && !_sameLocation(flattened.first, flattened.last)) {
+      return <DrawPoint>[...flattened, flattened.first];
+    }
+    return flattened;
+  }
 
-double _distanceSquaredToSegment(Offset p, Offset a, Offset b) {
-  final ab = b - a;
-  final ap = p - a;
-  final abLengthSq = ab.dx * ab.dx + ab.dy * ab.dy;
-  if (abLengthSq == 0) {
-    final dx = ap.dx;
-    final dy = ap.dy;
-    return dx * dx + dy * dy;
+  List<DrawPoint> _resolveClosedFillOutlinePoints(
+    List<DrawPoint> strokePoints, {
+    required double strokeWidth,
+  }) {
+    final flattened = _resolveFlattenedStrokePoints(
+      strokePoints: strokePoints,
+      strokeWidth: strokeWidth,
+    );
+    if (flattened.length < 3) {
+      return const <DrawPoint>[];
+    }
+    final outline = <DrawPoint>[];
+    DrawPoint? previous;
+    for (final point in flattened) {
+      if (previous != null && previous.x == point.x && previous.y == point.y) {
+        continue;
+      }
+      outline.add(point);
+      previous = point;
+    }
+    if (outline.length < 3) {
+      return const <DrawPoint>[];
+    }
+    final first = outline.first;
+    final last = outline.last;
+    if (first.x != last.x || first.y != last.y) {
+      outline.add(first);
+    }
+    return outline;
   }
-  var t = (ap.dx * ab.dx + ap.dy * ab.dy) / abLengthSq;
-  if (t < 0) {
-    t = 0;
-  } else if (t > 1) {
-    t = 1;
+
+  List<DrawPoint> _smoothStrokePoints(
+    List<DrawPoint> points, {
+    required bool closed,
+  }) {
+    if (points.length < 3) {
+      return points;
+    }
+
+    const iterations = 3;
+    final count = points.length;
+    final lastIndex = count - 1;
+
+    var src = List<DrawPoint>.of(points);
+    var dst = List<DrawPoint>.filled(count, DrawPoint.zero);
+
+    for (var iteration = 0; iteration < iterations; iteration++) {
+      if (closed) {
+        for (var index = 0; index <= lastIndex; index++) {
+          final prev = src[(index - 1 + count) % count];
+          final current = src[index];
+          final next = src[(index + 1) % count];
+          dst[index] = DrawPoint(
+            x: (prev.x + current.x * 2 + next.x) * 0.25,
+            y: (prev.y + current.y * 2 + next.y) * 0.25,
+          );
+        }
+      } else {
+        dst[0] = src[0];
+        dst[lastIndex] = src[lastIndex];
+        for (var index = 1; index < lastIndex; index++) {
+          final prev = src[index - 1];
+          final current = src[index];
+          final next = src[index + 1];
+          dst[index] = DrawPoint(
+            x: (prev.x + current.x * 2 + next.x) * 0.25,
+            y: (prev.y + current.y * 2 + next.y) * 0.25,
+          );
+        }
+      }
+      final temp = src;
+      src = dst;
+      dst = temp;
+    }
+
+    return src;
   }
-  final closest = Offset(a.dx + ab.dx * t, a.dy + ab.dy * t);
-  final dx = p.dx - closest.dx;
-  final dy = p.dy - closest.dy;
-  return dx * dx + dy * dy;
+
+  bool _sameLocation(DrawPoint a, DrawPoint b) => a.x == b.x && a.y == b.y;
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show listEquals;
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
@@ -89,6 +88,7 @@ class CreateElementReducer {
     final startResult = strategy.start(
       data: data,
       startPosition: startPosition,
+      textMetricsService: context.textMetricsService,
     );
     final nextZIndex = resolveNextZIndex(state.domain.document.elements);
 
@@ -216,6 +216,7 @@ class CreateElementReducer {
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     return _applyCreationUpdate(state, interaction, updateResult);
   }
@@ -246,6 +247,7 @@ class CreateElementReducer {
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     return _applyCreationUpdate(state, interaction, updateResult);
   }
@@ -266,6 +268,7 @@ class CreateElementReducer {
     final finishResult = strategy.finish(
       config: context.config,
       creatingState: interaction,
+      textMetricsService: context.textMetricsService,
     );
     if (!finishResult.shouldCommit) {
       return _cancelCreateElement(state);
@@ -324,6 +327,7 @@ class CreateElementReducer {
       creatingState: interaction,
       position: action.position,
       snappingMode: snappingMode,
+      textMetricsService: context.textMetricsService,
     );
     if (updateResult == null) {
       return state;
@@ -376,5 +380,20 @@ class CreateElementReducer {
       interaction.elementData == updateResult.data &&
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
-      listEquals(interaction.snapGuides, updateResult.snapGuides);
+      _listEquals(interaction.snapGuides, updateResult.snapGuides);
+}
+
+bool _listEquals<T>(List<T> left, List<T> right) {
+  if (identical(left, right)) {
+    return true;
+  }
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var i = 0; i < left.length; i++) {
+    if (left[i] != right[i]) {
+      return false;
+    }
+  }
+  return true;
 }

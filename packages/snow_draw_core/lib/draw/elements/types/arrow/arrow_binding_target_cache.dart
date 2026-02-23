@@ -150,12 +150,6 @@ class ArrowBindingTargetCache {
     );
   }
 
-  /// Clears only the cached endpoint-binding candidate while keeping target
-  /// spatial-query data.
-  void clearCandidate() {
-    _candidate = null;
-  }
-
   void reset() {
     _lastPosition = null;
     _lastDistance = 0;

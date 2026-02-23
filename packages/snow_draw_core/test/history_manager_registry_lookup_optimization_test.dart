@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry_interface.dart';

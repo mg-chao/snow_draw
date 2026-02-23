@@ -36,8 +36,3 @@ typedef EditOutcome = ({
   EditFailureReason? failureReason,
   EditOperationId? operationId,
 });
-
-extension EditOutcomeX on EditOutcome {
-  bool get isSuccess => failureReason == null;
-  bool get isFailure => !isSuccess;
-}

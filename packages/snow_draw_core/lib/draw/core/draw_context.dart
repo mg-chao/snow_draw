@@ -10,6 +10,7 @@ import '../elements/core/element_registry.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
+import '../services/text/text_metrics_service.dart';
 import 'dependency_interfaces.dart';
 
 /// Canvas context holding all injectable dependencies.
@@ -26,6 +27,7 @@ class DrawContext implements InteractionReducerDeps {
     ConfigManager? configManager,
     this.editConfigProvider = StaticEditConfigProvider.defaults,
     LogService? logService,
+    TextMetricsService? textMetricsService,
     this.eventBus,
   }) : configManager = _resolveConfigManager(
          providedConfigManager: configManager,
@@ -33,7 +35,8 @@ class DrawContext implements InteractionReducerDeps {
        ),
        editIntentMapper =
            editIntentMapper ?? EditIntentToOperationMapper.withDefaults(),
-       log = logService ?? LogService();
+       log = logService ?? LogService(),
+       textMetricsService = textMetricsService ?? defaultTextMetricsService;
 
   static ConfigManager _resolveConfigManager({
     required ConfigManager? providedConfigManager,
@@ -58,6 +61,7 @@ class DrawContext implements InteractionReducerDeps {
     ConfigManager? configManager,
     EditConfigProvider? editConfigProvider,
     LogService? logService,
+    TextMetricsService? textMetricsService,
     EventBus? eventBus,
   }) => DrawContext(
     elementRegistry: elementRegistry ?? DefaultElementRegistry(),
@@ -69,6 +73,7 @@ class DrawContext implements InteractionReducerDeps {
     configManager: configManager,
     editConfigProvider: editConfigProvider ?? StaticEditConfigProvider.defaults,
     logService: logService,
+    textMetricsService: textMetricsService,
     eventBus: eventBus,
   );
 
@@ -95,6 +100,10 @@ class DrawContext implements InteractionReducerDeps {
   @override
   final LogService log;
 
+  /// Text metrics service used by core text geometry reducers.
+  @override
+  final TextMetricsService textMetricsService;
+
   /// Event bus for UI-facing diagnostics and errors.
   @override
   final EventBus? eventBus;
@@ -118,6 +127,7 @@ class DrawContext implements InteractionReducerDeps {
     ConfigManager? configManager,
     EditConfigProvider? editConfigProvider,
     LogService? logService,
+    TextMetricsService? textMetricsService,
     EventBus? eventBus,
   }) {
     final resolvedConfigManager = _resolveCopiedConfigManager(
@@ -133,6 +143,7 @@ class DrawContext implements InteractionReducerDeps {
       configManager: resolvedConfigManager,
       editConfigProvider: editConfigProvider ?? this.editConfigProvider,
       logService: logService ?? log,
+      textMetricsService: textMetricsService ?? this.textMetricsService,
       eventBus: eventBus ?? this.eventBus,
     );
   }

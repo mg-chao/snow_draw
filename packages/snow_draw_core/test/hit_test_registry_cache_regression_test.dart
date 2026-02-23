@@ -1,18 +1,18 @@
-import 'dart:ui';
-
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
 import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/core/element_renderer.dart';
+import 'package:snow_draw_core/draw/elements/core/element_scene_encoder.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state_view.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
+import 'package:snow_draw_core/draw/render/scene/render_scene.dart';
+import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart';
@@ -67,10 +67,10 @@ ElementDefinition<_TestElementData> _testElementDefinition({
 }) => ElementDefinition<_TestElementData>(
   typeId: _TestElementData.typeIdToken,
   displayName: 'Test Element',
-  renderer: const _NoopRenderer(),
   hitTester: _ToggleHitTester(shouldHit: shouldHit),
   createDefaultData: () => const _TestElementData(),
   fromJson: (_) => const _TestElementData(),
+  sceneEncoder: const _NoopSceneEncoder(),
 );
 
 class _TestElementData extends ElementData {
@@ -103,14 +103,13 @@ class _ToggleHitTester implements ElementHitTester {
   }) => shouldHit;
 }
 
-class _NoopRenderer extends ElementTypeRenderer {
-  const _NoopRenderer();
+class _NoopSceneEncoder implements ElementSceneEncoder<_TestElementData> {
+  const _NoopSceneEncoder();
 
   @override
-  void render({
-    required Canvas canvas,
+  RenderScene encodeScene({
     required ElementState element,
-    required double scaleFactor,
-    Locale? locale,
-  }) {}
+    String? localeTag,
+    TextMetricsService? textMetricsService,
+  }) => const RenderScene(primitives: <RenderPrimitive>[]);
 }

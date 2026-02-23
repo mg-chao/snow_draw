@@ -22,6 +22,8 @@ dependencies:
   flutter_svg: ^2.2.3
   snow_draw_core:
     path: ../../packages/snow_draw_core
+  snow_draw_flutter_backend:
+    path: ../../packages/snow_draw_flutter_backend
 
 dev_dependencies:
   flutter_test:

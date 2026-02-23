@@ -1,8 +1,7 @@
-import 'dart:ui';
-
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
@@ -25,11 +24,11 @@ final class HighlightData extends ElementData
       'ellipse' => HighlightShape.ellipse,
       _ => ConfigDefaults.defaultHighlightShape,
     },
-    color: Color(
+    color: DrawColor(
       (json['color'] as int?) ??
           ConfigDefaults.defaultHighlightColor.toARGB32(),
     ),
-    strokeColor: Color(
+    strokeColor: DrawColor(
       (json['strokeColor'] as int?) ??
           ConfigDefaults.defaultHighlightStrokeColor.toARGB32(),
     ),
@@ -39,8 +38,8 @@ final class HighlightData extends ElementData
   static const typeIdToken = ElementTypeId<HighlightData>('highlight');
 
   final HighlightShape shape;
-  final Color color;
-  final Color strokeColor;
+  final DrawColor color;
+  final DrawColor strokeColor;
   final double strokeWidth;
 
   @override
@@ -48,8 +47,8 @@ final class HighlightData extends ElementData
 
   HighlightData copyWith({
     HighlightShape? shape,
-    Color? color,
-    Color? strokeColor,
+    DrawColor? color,
+    DrawColor? strokeColor,
     double? strokeWidth,
   }) => HighlightData(
     shape: shape ?? this.shape,
@@ -68,8 +67,8 @@ final class HighlightData extends ElementData
 
   @override
   HighlightData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: update.color ?? color,
-    strokeColor: update.textStrokeColor ?? strokeColor,
+    color: _resolveColor(update.color, color),
+    strokeColor: _resolveColor(update.textStrokeColor, strokeColor),
     strokeWidth: update.textStrokeWidth ?? strokeWidth,
     shape: update.highlightShape ?? shape,
   );
@@ -93,4 +92,7 @@ final class HighlightData extends ElementData
 
   @override
   int get hashCode => Object.hash(shape, color, strokeColor, strokeWidth);
+
+  static DrawColor _resolveColor(DrawColor? next, DrawColor fallback) =>
+      next ?? fallback;
 }

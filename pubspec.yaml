@@ -9,6 +9,7 @@ environment:
 workspace:
   - apps/snow_draw
   - packages/snow_draw_core
+  - packages/snow_draw_flutter_backend
 dev_dependencies:
   lint_hard: ^7.1.0
   melos: ^7.3.0
@@ -17,7 +18,25 @@ melos:
   scripts:
     analyze:
       description: Run static analysis (read-only, suitable for CI).
-      run: dart run melos exec -- flutter analyze
+      run: dart run melos run analyze:core && dart run melos run analyze:backend && dart run melos run analyze:app
+
+    analyze:core:
+      description: Run static analysis for the pure-Dart core package.
+      packageFilters:
+        scope: snow_draw_core
+      exec: dart analyze
+
+    analyze:backend:
+      description: Run static analysis for the Flutter backend package.
+      packageFilters:
+        scope: snow_draw_flutter_backend
+      exec: flutter analyze
+
+    analyze:app:
+      description: Run static analysis for the app package.
+      packageFilters:
+        scope: snow_draw
+      exec: flutter analyze
 
     format:check:
       description: Check formatting without modifying files.
@@ -26,13 +45,123 @@ melos:
     lint:
       description: Run all static analysis checks and auto-fix.
       run: |
-        dart run melos exec -- flutter analyze
+        dart run melos run analyze
         dart run melos exec -- dart format .
         dart run melos exec -- dart fix --apply
 
+    check:core-purity:
+      description: Block new Flutter/UI imports and Flutter dependencies in core.
+      run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart && dart run tools/check_core_dependency_graph_purity.dart
+
+    check:core-draw-purity:
+      description: Enforce no Flutter/UI imports under core draw library.
+      run: dart run tools/check_core_draw_import_purity.dart
+
+    check:core-ui-boundary:
+      description: Ensure UI/rendering Dart files do not re-enter core package.
+      run: dart run tools/check_core_ui_boundary.dart
+
+    check:core-entrypoint:
+      description: Ensure core package entrypoint exports the expected pure-Dart APIs.
+      run: dart run tools/check_core_entrypoint_exports.dart
+
+    check:workspace-core-deep-import-boundary:
+      description: Block deep core draw imports outside the core package.
+      run: dart run tools/check_workspace_core_deep_import_boundary.dart
+
+    check:workspace-backend-deep-import-boundary:
+      description: Block deep backend imports outside the backend package.
+      run: dart run tools/check_workspace_backend_deep_import_boundary.dart
+
+    check:backend-legacy:
+      description: Block backend legacy namespace imports and source files.
+      run: dart run tools/check_backend_legacy_namespace.dart
+
+    check:backend-app-import-boundary:
+      description: Prevent backend package imports from depending on app package code.
+      run: dart run tools/check_backend_app_import_boundary.dart
+
+    check:backend-test-app-import-boundary:
+      description: Prevent backend test imports from depending on app package code.
+      run: dart run tools/check_backend_test_app_import_boundary.dart
+
+    check:backend-pubspec-boundary:
+      description: Prevent backend package metadata from depending on app package.
+      run: dart run tools/check_backend_pubspec_boundary.dart
+
+    check:backend-dependency-graph:
+      description: Validate backend dependency graph boundaries (core/flutter reachable, app unreachable).
+      run: dart run tools/check_backend_dependency_graph_boundary.dart
+
+    check:backend-core-entrypoint-import-boundary:
+      description: Keep backend boundary files on core package entrypoint imports only.
+      run: dart run tools/check_backend_core_entrypoint_import_boundary.dart
+
+    check:backend-test-core-entrypoint-import-boundary:
+      description: Keep backend test files on core package entrypoint imports only.
+      run: dart run tools/check_backend_test_core_entrypoint_import_boundary.dart
+
+    check:app-backend-import-boundary:
+      description: Keep app imports on backend package entrypoint APIs only.
+      run: dart run tools/check_app_backend_import_boundary.dart
+
+    check:app-core-import-boundary:
+      description: Keep app imports on core package entrypoint APIs only.
+      run: dart run tools/check_app_core_import_boundary.dart
+
+    check:app-pubspec-backend:
+      description: Ensure app pubspec keeps required core/backend dependencies.
+      run: dart run tools/check_app_pubspec_backend_dependency.dart
+
+    check:app-dependency-graph:
+      description: Validate app dependency graph reaches core/backend/flutter.
+      run: dart run tools/check_app_dependency_graph_boundary.dart
+
+    check:backend-entrypoint:
+      description: Ensure backend package entrypoint exports required public APIs.
+      run: dart run tools/check_backend_entrypoint_exports.dart
+
+    check:ci-workflow:
+      description: Ensure CI workflow executes required quality gates in order.
+      run: dart run tools/check_ci_workflow_guards.dart
+
+    check:backend-compatibility-core-import-boundary:
+      description: Keep backend compatibility tests on core entrypoint imports only.
+      run: dart run tools/check_backend_compatibility_core_import_boundary.dart
+
+    check:backend-compatibility-backend-import-boundary:
+      description: Keep backend compatibility tests on backend entrypoint imports only.
+      run: dart run tools/check_backend_compatibility_backend_import_boundary.dart
+
+    check:architecture:
+      description: Run architecture boundary and purity guards.
+      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-draw-purity && dart run melos run check:core-ui-boundary && dart run melos run check:core-entrypoint && dart run melos run check:workspace-core-deep-import-boundary && dart run melos run check:workspace-backend-deep-import-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-test-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-core-entrypoint-import-boundary && dart run melos run check:backend-test-core-entrypoint-import-boundary && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-core-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
+
+    check:compatibility-contracts:
+      description: Run focused compatibility tests for stable schema and type contracts.
+      run: dart test packages/snow_draw_core/test/melos_compatibility_script_wiring_test.dart && dart test packages/snow_draw_core/test/core_entrypoint_contract_test.dart && dart test packages/snow_draw_core/test/element_serialization_compatibility_test.dart && dart test packages/snow_draw_core/test/element_default_json_compatibility_test.dart && dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart && dart test packages/snow_draw_core/test/element_registry_characterization_test.dart && dart test packages/snow_draw_core/test/built_in_scene_encoder_support_test.dart && dart test packages/snow_draw_core/test/draw_config_defaults_compatibility_test.dart && dart test packages/snow_draw_core/test/action_payload_immutability_test.dart && dart test packages/snow_draw_core/test/action_type_name_compatibility_test.dart && dart test packages/snow_draw_core/test/types/draw_color_test.dart && dart test packages/snow_draw_core/test/text_metrics_service_compatibility_test.dart && dart test packages/snow_draw_core/test/draw_context_text_metrics_compatibility_test.dart && dart test packages/snow_draw_core/test/scene_encoder_slice_a_test.dart packages/snow_draw_core/test/scene_encoder_slice_b_test.dart packages/snow_draw_core/test/scene_encoder_slice_c_test.dart packages/snow_draw_core/test/scene_encoder_slice_d_test.dart && dart run melos run check:backend-compatibility-core-import-boundary && dart run melos run check:backend-compatibility-backend-import-boundary && flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart packages/snow_draw_flutter_backend/test/built_in_scene_encoder_routing_test.dart packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart
+
+    test:core:
+      description: Run tests for the pure-Dart core package.
+      packageFilters:
+        scope: snow_draw_core
+      exec: dart test
+
+    test:backend:
+      description: Run tests for the Flutter backend package.
+      packageFilters:
+        scope: snow_draw_flutter_backend
+      exec: flutter test
+
+    test:app:
+      description: Run tests for the app package.
+      packageFilters:
+        scope: snow_draw
+      exec: flutter test
+
     test:
       description: Run tests in all packages.
-      run: dart run melos exec -- flutter test
+      run: dart run melos run test:core && dart run melos run test:backend && dart run melos run test:app
 
     run:windows:
       description: Run the snow_draw app on Windows.

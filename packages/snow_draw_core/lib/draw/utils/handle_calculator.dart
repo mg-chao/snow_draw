@@ -1,6 +1,6 @@
-import '../models/edit_enums.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
+import '../types/resize_mode.dart';
 
 /// Selection handle geometry calculator.
 ///

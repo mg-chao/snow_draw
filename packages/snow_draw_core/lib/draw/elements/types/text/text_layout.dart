@@ -1,476 +1,305 @@
-import 'dart:ui' as ui;
+import 'dart:math' as math;
 
-import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
 
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/element_style.dart';
-import '../../../utils/lru_cache.dart';
 import 'text_data.dart';
 
-const _fallbackText = ' ';
-const _fontMetricsProbeText = 'Mg';
-const textLayoutHeightBehavior = TextHeightBehavior();
-const TextScaler textLayoutTextScaler = TextScaler.noScaling;
-const textCursorWidth = 1.2;
-const textCaretGap = 1.0;
-const double textCaretMargin = textCursorWidth + textCaretGap;
-const _textLayoutHorizontalPaddingFactor = 0.01;
-const _textBackgroundHorizontalPaddingFactor = 0.32;
-const _textBackgroundVerticalPaddingFactor = 0.1;
-
-/// Lightweight layout result using `dart:ui.Paragraph` directly.
-///
-/// Avoids the overhead of `TextPainter` for callers that only need
-/// metrics (size, line height, baseline). The [paragraph] can still
-/// be drawn with `canvas.drawParagraph` or queried for positions.
-///
-/// [lineMetrics] is computed lazily to keep the hot render/layout path cheap.
+/// Lightweight text size snapshot in logical pixels.
 @immutable
-class TextLayoutMetrics {
-  TextLayoutMetrics({
-    required this.paragraph,
-    required this.size,
-    required this.lineHeight,
-    required List<ui.LineMetrics>? lineMetrics,
-    required this.baseline,
-    required this.ascent,
-    required this.descent,
-    required this.unscaledAscent,
-    required this.leading,
-  }) : _lineMetrics = lineMetrics;
+class TextLayoutSize {
+  /// Creates a text size snapshot.
+  const TextLayoutSize({required this.width, required this.height});
 
-  /// The laid-out paragraph. Use for painting via
-  /// `canvas.drawParagraph` or querying glyph positions.
-  final ui.Paragraph paragraph;
-  final Size size;
-  final double lineHeight;
-  final List<ui.LineMetrics>? _lineMetrics;
-  late final List<ui.LineMetrics> lineMetrics =
-      _lineMetrics ?? paragraph.computeLineMetrics();
-  final double baseline;
-  final double ascent;
-  final double descent;
-  final double unscaledAscent;
-  final double leading;
+  /// Width in logical pixels.
+  final double width;
 
-  /// Wraps this result in a [TextPainter]-backed [PainterTextLayoutMetrics].
-  ///
-  /// Only call this when you need `TextPainter` APIs such as
-  /// `getPositionForOffset` or `getBoxesForSelection`. The painter
-  /// is created lazily and cached.
-  PainterTextLayoutMetrics toPainterMetrics({
-    required TextData data,
-    required double maxWidth,
-    double? minWidth,
-    TextWidthBasis widthBasis = TextWidthBasis.longestLine,
-    TextStyle? styleOverride,
-    Locale? locale,
-  }) => layoutTextWithPainter(
-    data: data,
-    maxWidth: maxWidth,
-    minWidth: minWidth,
-    widthBasis: widthBasis,
-    styleOverride: styleOverride,
-    locale: locale,
-  );
+  /// Height in logical pixels.
+  final double height;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextLayoutSize && other.width == width && other.height == height;
+
+  @override
+  int get hashCode => Object.hash(width, height);
 }
 
-/// Extended layout result that includes a [TextPainter].
-///
-/// Use only when `TextPainter`-specific APIs are needed (cursor
-/// positioning, selection boxes, etc.). Prefer [TextLayoutMetrics]
-/// for all other cases.
+/// Lightweight background box snapshot in local text coordinates.
 @immutable
-class PainterTextLayoutMetrics extends TextLayoutMetrics {
-  PainterTextLayoutMetrics({
-    required this.painter,
-    required super.paragraph,
-    required super.size,
-    required super.lineHeight,
-    required super.lineMetrics,
-    required super.baseline,
-    required super.ascent,
-    required super.descent,
-    required super.unscaledAscent,
-    required super.leading,
+class TextRangeBox {
+  /// Creates a text range box.
+  const TextRangeBox({
+    required this.left,
+    required this.top,
+    required this.right,
+    required this.bottom,
   });
 
-  /// The [TextPainter] for APIs like `getPositionForOffset`.
-  final TextPainter painter;
+  /// Left edge in local text coordinates.
+  final double left;
+
+  /// Top edge in local text coordinates.
+  final double top;
+
+  /// Right edge in local text coordinates.
+  final double right;
+
+  /// Bottom edge in local text coordinates.
+  final double bottom;
 }
 
-// ---------------------------------------------------------------------------
-// Caches
-// ---------------------------------------------------------------------------
+/// Core layout snapshot used by scene encoding and reducer tests.
+@immutable
+class TextLayoutMetrics {
+  /// Creates core text layout metrics.
+  const TextLayoutMetrics({
+    required this.size,
+    required this.lineHeight,
+    required this.lineMetrics,
+    required this.maxWidth,
+    required this.horizontalAlign,
+    required this.text,
+  });
 
-/// Primary layout cache keyed on text + font + width.
-final _paragraphCache = LruCache<_LayoutCacheKey, TextLayoutMetrics>(
-  maxEntries: 256,
-);
+  /// Total text bounds in logical pixels.
+  final TextLayoutSize size;
 
-/// Font-metrics cache (width-independent) for better hit rates during
-/// resize operations.
-final _fontMetricsCache = LruCache<_FontMetricsCacheKey, _FontMetrics>(
-  maxEntries: 64,
-);
+  /// Effective line height in logical pixels.
+  final double lineHeight;
 
-/// Painter cache for the rare paths that need `TextPainter`.
-final _painterCache = LruCache<_PainterCacheKey, PainterTextLayoutMetrics>(
-  maxEntries: 64,
-);
+  /// Per-line metrics.
+  final List<TextLineMetrics> lineMetrics;
 
-/// Clears all text layout caches.
-///
-/// Call when switching documents or under memory pressure to
-/// release stale `ui.Paragraph` native resources.
+  /// Layout max width used during measurement.
+  final double maxWidth;
+
+  /// Horizontal text alignment.
+  final TextHorizontalAlign horizontalAlign;
+
+  /// Measured text (empty text is normalized to a single space).
+  final String text;
+}
+
+/// Clears any backend-provided text measurement caches.
 void clearTextLayoutCaches() {
-  _paragraphCache.clear();
-  _fontMetricsCache.clear();
-  _painterCache.clear();
+  defaultTextMetricsService.clearCaches();
 }
 
-// ---------------------------------------------------------------------------
-// Public helpers
-// ---------------------------------------------------------------------------
-
-StrutStyle resolveTextStrutStyle(TextStyle style) =>
-    StrutStyle.fromTextStyle(style, forceStrutHeight: true);
-
-double resolveTextBackgroundHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * _textBackgroundHorizontalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
-
-double resolveTextBackgroundVerticalPadding(double lineHeight) {
-  final padding = lineHeight * _textBackgroundVerticalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
-
-double resolveTextLayoutHorizontalPadding(double lineHeight) {
-  final padding = lineHeight * _textLayoutHorizontalPaddingFactor;
-  if (padding.isNaN || padding.isInfinite) {
-    return 0;
-  }
-  return padding;
-}
-
-TextStyle buildTextStyle({
+/// Scene-focused text layout helper with fixed-width behavior.
+TextLayoutMetrics layoutSceneText({
   required TextData data,
-  Color? colorOverride,
-  double? fontSizeOverride,
-  Locale? locale,
-}) => TextStyle(
-  inherit: false,
-  color: colorOverride ?? data.color,
-  fontSize: fontSizeOverride ?? data.fontSize,
-  fontFamily: _sanitizeFontFamily(data.fontFamily),
-  locale: locale,
-  textBaseline: TextBaseline.alphabetic,
+  required double width,
+  String? localeTag,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
+}) => layoutText(
+  data: data,
+  maxWidth: width,
+  minWidth: width,
+  localeTag: localeTag,
+  textMetricsService: textMetricsService,
 );
 
-// ---------------------------------------------------------------------------
-// layoutText – fast path using dart:ui.Paragraph directly
-// ---------------------------------------------------------------------------
-
-/// Lays out text and returns lightweight [TextLayoutMetrics].
-///
-/// This is the hot path used by renderers, bounds calculations, and
-/// reducers. It bypasses `TextPainter` entirely and works with
-/// `dart:ui.ParagraphBuilder` for lower overhead.
+/// Measures text with backend-agnostic [TextMetricsService].
 TextLayoutMetrics layoutText({
   required TextData data,
   required double maxWidth,
   double? minWidth,
-  Color? colorOverride,
-  TextWidthBasis widthBasis = TextWidthBasis.longestLine,
-  TextStyle? styleOverride,
-  Locale? locale,
+  String? localeTag,
   bool isResizing = false,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
-  final safeMaxWidth = maxWidth <= 0 ? 1.0 : maxWidth;
+  final safeMaxWidth = _resolveMaxWidth(maxWidth);
   final safeMinWidth = _resolveMinWidth(minWidth, safeMaxWidth);
-  final resolvedText = data.text.isEmpty ? _fallbackText : data.text;
-  final resolvedStyle =
-      styleOverride ??
-      buildTextStyle(data: data, colorOverride: colorOverride, locale: locale);
-
-  final cacheKey = _LayoutCacheKey(
-    text: resolvedText,
-    fontSize: resolvedStyle.fontSize ?? data.fontSize,
-    fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
-    fontWeight: resolvedStyle.fontWeight,
-    fontStyle: resolvedStyle.fontStyle,
-    letterSpacing: resolvedStyle.letterSpacing,
-    wordSpacing: resolvedStyle.wordSpacing,
-    height: resolvedStyle.height,
-    horizontalAlign: data.horizontalAlign,
+  final request = TextLayoutRequest(
+    data: data,
     maxWidth: safeMaxWidth,
     minWidth: safeMinWidth,
-    widthBasis: widthBasis,
-    paintKey: _TextPaintKey.fromStyle(resolvedStyle),
-    locale: locale,
+    localeTag: localeTag,
     isResizing: isResizing,
   );
+  final metrics = textMetricsService.measure(request);
 
-  return _paragraphCache.getOrCreate(cacheKey, () {
-    final paragraph = _buildParagraph(
-      text: resolvedText,
-      style: resolvedStyle,
-      align: data.horizontalAlign,
-      locale: locale,
-      maxWidth: safeMaxWidth,
-    );
-
-    final fontMetricsKey = _FontMetricsCacheKey(
-      fontSize: resolvedStyle.fontSize ?? data.fontSize,
-      fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
-      fontWeight: resolvedStyle.fontWeight,
-      fontStyle: resolvedStyle.fontStyle,
-      letterSpacing: resolvedStyle.letterSpacing,
-      wordSpacing: resolvedStyle.wordSpacing,
-      height: resolvedStyle.height,
-      locale: locale,
-    );
-
-    final fontMetrics = _fontMetricsCache.getOrCreate(
-      fontMetricsKey,
-      () => _measureFontMetrics(style: resolvedStyle, locale: locale),
-    );
-
-    return TextLayoutMetrics(
-      paragraph: paragraph,
-      size: Size(paragraph.longestLine, paragraph.height),
-      lineHeight: fontMetrics.lineHeight,
-      lineMetrics: null,
-      baseline: fontMetrics.baseline,
-      ascent: fontMetrics.ascent,
-      descent: fontMetrics.descent,
-      unscaledAscent: fontMetrics.unscaledAscent,
-      leading: fontMetrics.leading,
-    );
-  });
-}
-
-// ---------------------------------------------------------------------------
-// layoutTextWithPainter – slow path for cursor / selection queries
-// ---------------------------------------------------------------------------
-
-/// Lays out text and returns [PainterTextLayoutMetrics] with a
-/// [TextPainter].
-///
-/// Use only when you need `TextPainter`-specific APIs such as
-/// `getPositionForOffset` or `getBoxesForSelection`.
-PainterTextLayoutMetrics layoutTextWithPainter({
-  required TextData data,
-  required double maxWidth,
-  double? minWidth,
-  Color? colorOverride,
-  TextWidthBasis widthBasis = TextWidthBasis.longestLine,
-  TextStyle? styleOverride,
-  Locale? locale,
-}) {
-  final safeMaxWidth = maxWidth <= 0 ? 1.0 : maxWidth;
-  final safeMinWidth = _resolveMinWidth(minWidth, safeMaxWidth);
-  final resolvedText = data.text.isEmpty ? _fallbackText : data.text;
-  final resolvedStyle =
-      styleOverride ??
-      buildTextStyle(data: data, colorOverride: colorOverride, locale: locale);
-
-  final cacheKey = _PainterCacheKey(
-    text: resolvedText,
-    fontSize: resolvedStyle.fontSize ?? data.fontSize,
-    fontFamily: resolvedStyle.fontFamily ?? data.fontFamily,
-    horizontalAlign: data.horizontalAlign,
-    maxWidth: _quantize(safeMaxWidth),
-    minWidth: _quantize(safeMinWidth),
-    widthBasis: widthBasis,
-    paintKey: _TextPaintKey.fromStyle(resolvedStyle),
-    locale: locale,
+  final lineHeight = _sanitizeExtent(metrics.lineHeight, fallback: 1);
+  final width = _sanitizeExtent(
+    metrics.width,
+    fallback: safeMinWidth > 0 ? safeMinWidth : 1,
   );
+  final height = _sanitizeExtent(metrics.height, fallback: lineHeight);
 
-  return _painterCache.getOrCreate(cacheKey, () {
-    final strutStyle = resolveTextStrutStyle(resolvedStyle);
-    final painter = TextPainter(
-      text: TextSpan(text: resolvedText, style: resolvedStyle),
-      textAlign: _toFlutterAlign(data.horizontalAlign),
-      textDirection: TextDirection.ltr,
-      textHeightBehavior: textLayoutHeightBehavior,
-      textScaler: textLayoutTextScaler,
-      textWidthBasis: widthBasis,
-      strutStyle: strutStyle,
-      locale: locale,
-    )..layout(minWidth: safeMinWidth, maxWidth: safeMaxWidth);
+  final resolvedLines = metrics.lines.isEmpty
+      ? <TextLineMetrics>[TextLineMetrics(width: width, height: lineHeight)]
+      : metrics.lines
+            .map(
+              (line) => TextLineMetrics(
+                width: _sanitizeExtent(line.width, fallback: width),
+                height: _sanitizeExtent(line.height, fallback: lineHeight),
+              ),
+            )
+            .toList(growable: false);
 
-    final lineMetrics = painter.computeLineMetrics();
-    final fm = _extractFontMetricsFromPainter(painter, lineMetrics);
-
-    // Reuse the paragraph from the fast layout path when possible,
-    // avoiding a redundant ParagraphBuilder + layout call.
-    final fastLayout = layoutText(
-      data: data,
-      maxWidth: safeMaxWidth,
-      minWidth: safeMinWidth,
-      colorOverride: colorOverride,
-      widthBasis: widthBasis,
-      styleOverride: resolvedStyle,
-      locale: locale,
-    );
-
-    return PainterTextLayoutMetrics(
-      painter: painter,
-      paragraph: fastLayout.paragraph,
-      size: painter.size,
-      lineHeight: fm.lineHeight,
-      lineMetrics: lineMetrics,
-      baseline: fm.baseline,
-      ascent: fm.ascent,
-      descent: fm.descent,
-      unscaledAscent: fm.unscaledAscent,
-      leading: fm.leading,
-    );
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-ui.Paragraph _buildParagraph({
-  required String text,
-  required TextStyle style,
-  required TextHorizontalAlign align,
-  required Locale? locale,
-  required double maxWidth,
-}) {
-  // Build strut-equivalent line height via ParagraphStyle.
-  final fontSize = style.fontSize ?? 14.0;
-  final paragraphStyle = ui.ParagraphStyle(
-    textAlign: _toFlutterAlign(align),
-    textDirection: ui.TextDirection.ltr,
-    fontSize: fontSize,
-    fontFamily: style.fontFamily,
-    fontWeight: style.fontWeight,
-    fontStyle: style.fontStyle,
-    height: style.height,
-    textHeightBehavior: textLayoutHeightBehavior,
-    strutStyle: ui.StrutStyle(
-      fontFamily: style.fontFamily,
-      fontSize: fontSize,
-      fontWeight: style.fontWeight,
-      fontStyle: style.fontStyle,
-      height: style.height,
-      forceStrutHeight: true,
-    ),
-    locale: locale,
-  );
-
-  final textStyle = ui.TextStyle(
-    color: style.color,
-    fontSize: fontSize,
-    fontFamily: style.fontFamily,
-    fontWeight: style.fontWeight,
-    fontStyle: style.fontStyle,
-    letterSpacing: style.letterSpacing,
-    wordSpacing: style.wordSpacing,
-    height: style.height,
-    locale: locale,
-    textBaseline: ui.TextBaseline.alphabetic,
-  );
-
-  final builder = ui.ParagraphBuilder(paragraphStyle)
-    ..pushStyle(textStyle)
-    ..addText(text)
-    ..pop();
-
-  return builder.build()..layout(ui.ParagraphConstraints(width: maxWidth));
-}
-
-_FontMetrics _measureFontMetrics({
-  required TextStyle style,
-  required Locale? locale,
-}) {
-  final probeParagraph = _buildParagraph(
-    text: _fontMetricsProbeText,
-    style: style,
-    align: TextHorizontalAlign.left,
-    locale: locale,
-    maxWidth: 4096,
-  );
-  final probeLineMetrics = probeParagraph.computeLineMetrics();
-  return _extractFontMetricsFromParagraph(probeParagraph, probeLineMetrics);
-}
-
-_FontMetrics _extractFontMetricsFromPainter(
-  TextPainter painter,
-  List<ui.LineMetrics> lineMetrics,
-) => _extractFontMetrics(
-  lineMetrics: lineMetrics,
-  fallbackBaseline: painter.computeDistanceToActualBaseline(
-    TextBaseline.alphabetic,
-  ),
-  fallbackLineHeight: painter.preferredLineHeight,
-);
-
-_FontMetrics _extractFontMetricsFromParagraph(
-  ui.Paragraph paragraph,
-  List<ui.LineMetrics> lineMetrics,
-) {
-  final fallbackLineHeight = lineMetrics.isNotEmpty
-      ? lineMetrics.first.height
-      : (paragraph.height > 0 ? paragraph.height : 14.0);
-  return _extractFontMetrics(
-    lineMetrics: lineMetrics,
-    fallbackBaseline: paragraph.alphabeticBaseline,
-    fallbackLineHeight: fallbackLineHeight,
-  );
-}
-
-_FontMetrics _extractFontMetrics({
-  required List<ui.LineMetrics> lineMetrics,
-  required double fallbackBaseline,
-  required double fallbackLineHeight,
-}) {
-  final primaryLine = lineMetrics.isNotEmpty ? lineMetrics.first : null;
-
-  final baseline = primaryLine?.baseline ?? fallbackBaseline;
-  final lineHeight = primaryLine?.height ?? fallbackLineHeight;
-  final ascent = primaryLine?.ascent ?? baseline;
-  final descent = primaryLine?.descent ?? _nonNegative(lineHeight - ascent);
-  final unscaledAscent = primaryLine?.unscaledAscent ?? ascent;
-  final leading = primaryLine == null
-      ? _nonNegative(lineHeight - ascent - descent)
-      : _nonNegative(
-          primaryLine.height - primaryLine.ascent - primaryLine.descent,
-        );
-
-  return _FontMetrics(
+  return TextLayoutMetrics(
+    size: TextLayoutSize(width: width, height: height),
     lineHeight: lineHeight,
-    baseline: baseline,
-    ascent: ascent,
-    descent: descent,
-    unscaledAscent: unscaledAscent,
-    leading: leading,
+    lineMetrics: List<TextLineMetrics>.unmodifiable(resolvedLines),
+    maxWidth: safeMaxWidth,
+    horizontalAlign: data.horizontalAlign,
+    text: data.text.isEmpty ? ' ' : data.text,
   );
 }
 
-TextAlign _toFlutterAlign(TextHorizontalAlign align) {
-  switch (align) {
-    case TextHorizontalAlign.left:
-      return TextAlign.left;
-    case TextHorizontalAlign.center:
-      return TextAlign.center;
-    case TextHorizontalAlign.right:
-      return TextAlign.right;
+/// Resolves range boxes as pure geometry values.
+///
+/// The core currently uses this for full-range background rendering, so partial
+/// selections are approximated by proportional glyph widths per line.
+List<TextRangeBox> resolveTextRangeBoxes({
+  required TextLayoutMetrics layout,
+  required int start,
+  required int end,
+}) {
+  if (end <= start) {
+    return const <TextRangeBox>[];
   }
+  if (layout.lineMetrics.isEmpty) {
+    return const <TextRangeBox>[];
+  }
+
+  final textLength = layout.text.length;
+  if (textLength <= 0) {
+    return _buildFullLineBoxes(layout);
+  }
+
+  final clampedStart = start.clamp(0, textLength);
+  final clampedEnd = end.clamp(0, textLength);
+  if (clampedEnd <= clampedStart) {
+    return const <TextRangeBox>[];
+  }
+
+  if (clampedStart == 0 && clampedEnd == textLength) {
+    return _buildFullLineBoxes(layout);
+  }
+
+  final segments = _buildLineSegments(layout.text, layout.lineMetrics.length);
+  final boxes = <TextRangeBox>[];
+  var top = 0.0;
+  for (var i = 0; i < layout.lineMetrics.length; i++) {
+    final line = layout.lineMetrics[i];
+    final lineHeight = _sanitizeExtent(
+      line.height,
+      fallback: layout.lineHeight,
+    );
+    final segment = segments[i];
+
+    final overlapStart = math.max(clampedStart, segment.start);
+    final overlapEnd = math.min(clampedEnd, segment.end);
+    if (overlapEnd > overlapStart) {
+      final charCount = math.max(1, segment.end - segment.start);
+      final glyphWidth = line.width / charCount;
+      final lineLeft = _resolveAlignedLineX(layout, line.width);
+      final left = lineLeft + (overlapStart - segment.start) * glyphWidth;
+      final right = lineLeft + (overlapEnd - segment.start) * glyphWidth;
+      boxes.add(
+        TextRangeBox(
+          left: left,
+          top: top,
+          right: right,
+          bottom: top + lineHeight,
+        ),
+      );
+    }
+
+    top += lineHeight;
+  }
+
+  return boxes;
 }
 
-double _nonNegative(double value) => value < 0 ? 0 : value;
+List<TextRangeBox> _buildFullLineBoxes(TextLayoutMetrics layout) {
+  final boxes = <TextRangeBox>[];
+  var top = 0.0;
+  for (final line in layout.lineMetrics) {
+    final lineWidth = _sanitizeExtent(line.width, fallback: layout.size.width);
+    final lineHeight = _sanitizeExtent(
+      line.height,
+      fallback: layout.lineHeight,
+    );
+    final left = _resolveAlignedLineX(layout, lineWidth);
+    boxes.add(
+      TextRangeBox(
+        left: left,
+        top: top,
+        right: left + lineWidth,
+        bottom: top + lineHeight,
+      ),
+    );
+    top += lineHeight;
+  }
+  return boxes;
+}
+
+List<_LineSegment> _buildLineSegments(String text, int visualLineCount) {
+  if (visualLineCount <= 0) {
+    return const <_LineSegment>[];
+  }
+
+  final logicalLines = text.split('\n');
+  final segments = <_LineSegment>[];
+  var cursor = 0;
+  for (var i = 0; i < logicalLines.length; i++) {
+    final line = logicalLines[i];
+    final start = cursor;
+    final end = cursor + line.length;
+    segments.add(_LineSegment(start: start, end: end));
+    cursor = end;
+    if (i < logicalLines.length - 1) {
+      cursor += 1; // skip newline separator.
+    }
+  }
+
+  if (segments.isEmpty) {
+    segments.add(const _LineSegment(start: 0, end: 1));
+  }
+
+  if (segments.length >= visualLineCount) {
+    return segments.take(visualLineCount).toList(growable: false);
+  }
+
+  final padded = [...segments];
+  final fallback = segments.last;
+  while (padded.length < visualLineCount) {
+    padded.add(fallback);
+  }
+  return List<_LineSegment>.unmodifiable(padded);
+}
+
+double _resolveAlignedLineX(TextLayoutMetrics layout, double lineWidth) {
+  if (!layout.maxWidth.isFinite) {
+    return 0;
+  }
+
+  final delta = layout.maxWidth - lineWidth;
+  if (!delta.isFinite || delta <= 0) {
+    return 0;
+  }
+
+  return switch (layout.horizontalAlign) {
+    TextHorizontalAlign.left => 0,
+    TextHorizontalAlign.center => delta / 2,
+    TextHorizontalAlign.right => delta,
+  };
+}
+
+double _resolveMaxWidth(double maxWidth) {
+  if (!maxWidth.isFinite) {
+    return double.infinity;
+  }
+  if (maxWidth <= 0) {
+    return 1;
+  }
+  return maxWidth;
+}
 
 double _resolveMinWidth(double? minWidth, double maxWidth) {
   if (minWidth == null ||
@@ -479,311 +308,23 @@ double _resolveMinWidth(double? minWidth, double maxWidth) {
       minWidth.isInfinite) {
     return 0;
   }
-  if (minWidth > maxWidth) {
+  if (maxWidth.isFinite && minWidth > maxWidth) {
     return maxWidth;
   }
   return minWidth;
 }
 
-String? _sanitizeFontFamily(String? fontFamily) {
-  final trimmed = fontFamily?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
-    return null;
+double _sanitizeExtent(double value, {required double fallback}) {
+  if (value.isFinite && value > 0) {
+    return value;
   }
-  return trimmed;
-}
-
-/// Fine quantization (0.1 px).
-double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-// ---------------------------------------------------------------------------
-// Cache keys
-// ---------------------------------------------------------------------------
-
-/// Cache key for the fast [layoutText] path.
-///
-/// Includes paint attributes because callers may draw the cached
-/// `ui.Paragraph` directly (not just consume geometry).
-@immutable
-class _LayoutCacheKey {
-  _LayoutCacheKey({
-    required this.text,
-    required this.fontSize,
-    required this.fontFamily,
-    required this.fontWeight,
-    required this.fontStyle,
-    required this.letterSpacing,
-    required this.wordSpacing,
-    required this.height,
-    required this.horizontalAlign,
-    required double maxWidth,
-    required double minWidth,
-    required this.widthBasis,
-    required this.paintKey,
-    required this.locale,
-    required bool isResizing,
-  }) : maxWidth = isResizing ? _quantizeCoarse(maxWidth) : _quantize(maxWidth),
-       minWidth = isResizing ? _quantizeCoarse(minWidth) : _quantize(minWidth);
-
-  final String text;
-  final double fontSize;
-  final String? fontFamily;
-  final FontWeight? fontWeight;
-  final FontStyle? fontStyle;
-  final double? letterSpacing;
-  final double? wordSpacing;
-  final double? height;
-  final TextHorizontalAlign horizontalAlign;
-  final double maxWidth;
-  final double minWidth;
-  final TextWidthBasis widthBasis;
-  final _TextPaintKey paintKey;
-  final Locale? locale;
-
-  static double _quantizeCoarse(double value) =>
-      (value / 5).roundToDouble() * 5;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _LayoutCacheKey &&
-          other.text == text &&
-          other.fontSize == fontSize &&
-          other.fontFamily == fontFamily &&
-          other.fontWeight == fontWeight &&
-          other.fontStyle == fontStyle &&
-          other.letterSpacing == letterSpacing &&
-          other.wordSpacing == wordSpacing &&
-          other.height == height &&
-          other.horizontalAlign == horizontalAlign &&
-          other.maxWidth == maxWidth &&
-          other.minWidth == minWidth &&
-          other.widthBasis == widthBasis &&
-          other.paintKey == paintKey &&
-          other.locale == locale;
-
-  @override
-  int get hashCode => Object.hash(
-    text,
-    fontSize,
-    fontFamily,
-    fontWeight,
-    fontStyle,
-    letterSpacing,
-    wordSpacing,
-    height,
-    horizontalAlign,
-    maxWidth,
-    minWidth,
-    widthBasis,
-    paintKey,
-    locale,
-  );
-}
-
-/// Cache key for [layoutTextWithPainter] (includes paint properties).
-@immutable
-class _PainterCacheKey {
-  const _PainterCacheKey({
-    required this.text,
-    required this.fontSize,
-    required this.fontFamily,
-    required this.horizontalAlign,
-    required this.maxWidth,
-    required this.minWidth,
-    required this.widthBasis,
-    required this.paintKey,
-    required this.locale,
-  });
-
-  final String text;
-  final double fontSize;
-  final String? fontFamily;
-  final TextHorizontalAlign horizontalAlign;
-  final double maxWidth;
-  final double minWidth;
-  final TextWidthBasis widthBasis;
-  final _TextPaintKey paintKey;
-  final Locale? locale;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _PainterCacheKey &&
-          other.text == text &&
-          other.fontSize == fontSize &&
-          other.fontFamily == fontFamily &&
-          other.horizontalAlign == horizontalAlign &&
-          other.maxWidth == maxWidth &&
-          other.minWidth == minWidth &&
-          other.widthBasis == widthBasis &&
-          other.paintKey == paintKey &&
-          other.locale == locale;
-
-  @override
-  int get hashCode => Object.hash(
-    text,
-    fontSize,
-    fontFamily,
-    horizontalAlign,
-    maxWidth,
-    minWidth,
-    widthBasis,
-    paintKey,
-    locale,
-  );
+  return fallback;
 }
 
 @immutable
-class _TextPaintKey {
-  const _TextPaintKey({
-    required this.color,
-    required this.paintStyle,
-    required this.strokeWidth,
-    required this.strokeCap,
-    required this.strokeJoin,
-    required this.strokeMiterLimit,
-    required this.isAntiAlias,
-    required this.blendMode,
-    required this.shaderId,
-  });
+class _LineSegment {
+  const _LineSegment({required this.start, required this.end});
 
-  factory _TextPaintKey.fromStyle(TextStyle style) {
-    final foreground = style.foreground;
-    if (foreground == null) {
-      return _TextPaintKey(
-        color: style.color,
-        paintStyle: null,
-        strokeWidth: null,
-        strokeCap: null,
-        strokeJoin: null,
-        strokeMiterLimit: null,
-        isAntiAlias: null,
-        blendMode: null,
-        shaderId: null,
-      );
-    }
-    return _TextPaintKey(
-      color: foreground.color,
-      paintStyle: foreground.style,
-      strokeWidth: _quantizePaint(foreground.strokeWidth),
-      strokeCap: foreground.strokeCap,
-      strokeJoin: foreground.strokeJoin,
-      strokeMiterLimit: _quantizePaint(foreground.strokeMiterLimit),
-      isAntiAlias: foreground.isAntiAlias,
-      blendMode: foreground.blendMode,
-      shaderId: foreground.shader == null
-          ? null
-          : identityHashCode(foreground.shader),
-    );
-  }
-
-  final Color? color;
-  final PaintingStyle? paintStyle;
-  final double? strokeWidth;
-  final StrokeCap? strokeCap;
-  final StrokeJoin? strokeJoin;
-  final double? strokeMiterLimit;
-  final bool? isAntiAlias;
-  final BlendMode? blendMode;
-  final int? shaderId;
-
-  static double _quantizePaint(double value) =>
-      (value * 10).roundToDouble() / 10;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _TextPaintKey &&
-          other.color == color &&
-          other.paintStyle == paintStyle &&
-          other.strokeWidth == strokeWidth &&
-          other.strokeCap == strokeCap &&
-          other.strokeJoin == strokeJoin &&
-          other.strokeMiterLimit == strokeMiterLimit &&
-          other.isAntiAlias == isAntiAlias &&
-          other.blendMode == blendMode &&
-          other.shaderId == shaderId;
-
-  @override
-  int get hashCode => Object.hash(
-    color,
-    paintStyle,
-    strokeWidth,
-    strokeCap,
-    strokeJoin,
-    strokeMiterLimit,
-    isAntiAlias,
-    blendMode,
-    shaderId,
-  );
-}
-
-/// Width-independent font metrics for two-tier caching.
-@immutable
-class _FontMetrics {
-  const _FontMetrics({
-    required this.lineHeight,
-    required this.baseline,
-    required this.ascent,
-    required this.descent,
-    required this.unscaledAscent,
-    required this.leading,
-  });
-
-  final double lineHeight;
-  final double baseline;
-  final double ascent;
-  final double descent;
-  final double unscaledAscent;
-  final double leading;
-}
-
-/// Cache key for width-independent font metrics.
-@immutable
-class _FontMetricsCacheKey {
-  const _FontMetricsCacheKey({
-    required this.fontSize,
-    required this.fontFamily,
-    required this.fontWeight,
-    required this.fontStyle,
-    required this.letterSpacing,
-    required this.wordSpacing,
-    required this.height,
-    required this.locale,
-  });
-
-  final double fontSize;
-  final String? fontFamily;
-  final FontWeight? fontWeight;
-  final FontStyle? fontStyle;
-  final double? letterSpacing;
-  final double? wordSpacing;
-  final double? height;
-  final Locale? locale;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _FontMetricsCacheKey &&
-          other.fontSize == fontSize &&
-          other.fontFamily == fontFamily &&
-          other.fontWeight == fontWeight &&
-          other.fontStyle == fontStyle &&
-          other.letterSpacing == letterSpacing &&
-          other.wordSpacing == wordSpacing &&
-          other.height == height &&
-          other.locale == locale;
-
-  @override
-  int get hashCode => Object.hash(
-    fontSize,
-    fontFamily,
-    fontWeight,
-    fontStyle,
-    letterSpacing,
-    wordSpacing,
-    height,
-    locale,
-  );
+  final int start;
+  final int end;
 }

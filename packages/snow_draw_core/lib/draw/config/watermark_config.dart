@@ -21,7 +21,7 @@ class WatermarkConfig {
        assert(opacity >= 0 && opacity <= 1, 'opacity must be in [0, 1]');
 
   /// Base text color.
-  final Color color;
+  final DrawColor color;
 
   /// Watermark label. Empty text disables rendering.
   final String text;
@@ -42,7 +42,7 @@ class WatermarkConfig {
   final double opacity;
 
   WatermarkConfig copyWith({
-    Color? color,
+    DrawColor? color,
     String? text,
     double? fontSize,
     String? fontFamily,

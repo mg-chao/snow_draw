@@ -5,10 +5,10 @@ import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
+import 'draw_state.dart';
 import 'element_state.dart';
 import 'global_elements_state.dart';
 import 'interaction_state.dart';
-import 'models.dart' show DrawState;
 
 /// Effective selection view (considering edit preview).
 ///

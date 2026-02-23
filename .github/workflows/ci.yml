@@ -38,5 +38,11 @@ jobs:
       - name: Run formatting checks
         run: dart run melos run format:check
 
+      - name: Verify architecture boundaries
+        run: dart run melos run check:architecture
+
+      - name: Verify compatibility contracts
+        run: dart run melos run check:compatibility-contracts
+
       - name: Run test suite
         run: dart run melos run test

@@ -6,60 +6,46 @@ import '../edit/edit_operation_registry_interface.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
+import '../services/text/text_metrics_service.dart';
 
 /// Lightweight dependency interfaces to avoid service-locator coupling.
-abstract class HasConfig {
+abstract interface class CreateElementReducerDeps {
   DrawConfig get config;
-}
-
-abstract class HasElementRegistry {
   ElementRegistry get elementRegistry;
-}
-
-abstract class HasIdGenerator {
   IdGenerator get idGenerator;
+  TextMetricsService get textMetricsService;
 }
 
-abstract class HasEditConfigProvider {
-  EditConfigProvider get editConfigProvider;
+abstract interface class TextEditReducerDeps {
+  DrawConfig get config;
+  IdGenerator get idGenerator;
+  TextMetricsService get textMetricsService;
 }
 
-abstract class HasEditIntentMapper {
-  EditIntentToOperationMapper get editIntentMapper;
-}
-
-abstract class HasEditOperations {
-  EditOperationRegistry get editOperations;
-}
-
-abstract class HasLogService {
+abstract interface class SelectionReducerDeps {
   LogService get log;
-}
-
-abstract class HasEventBus {
   EventBus? get eventBus;
 }
 
-/// Reducer-specific dependency interfaces.
-abstract class CreateElementReducerDeps
-    implements HasConfig, HasElementRegistry, HasIdGenerator {}
+abstract interface class ElementReducerDeps {
+  LogService get log;
+  EventBus? get eventBus;
+  IdGenerator get idGenerator;
+  DrawConfig get config;
+  TextMetricsService get textMetricsService;
+}
 
-abstract class TextEditReducerDeps implements HasConfig, HasIdGenerator {}
+abstract interface class EditReducerDeps {
+  EditConfigProvider get editConfigProvider;
+}
 
-abstract class SelectionReducerDeps implements HasLogService, HasEventBus {}
+abstract interface class EditIntentResolverDeps {
+  EditIntentToOperationMapper get editIntentMapper;
+  EditOperationRegistry get editOperations;
+}
 
-abstract class ElementReducerDeps
-    implements HasLogService, HasEventBus, HasIdGenerator, HasConfig {}
-
-abstract class EditReducerDeps implements HasEditConfigProvider {}
-
-abstract class EditIntentResolverDeps
-    implements HasEditIntentMapper, HasEditOperations {}
-
-abstract class CameraReducerDeps {}
-
-/// Aggregate dependencies available on DrawContext.
-abstract class DrawContextDeps
+/// Aggregate dependencies available for interaction reducers.
+abstract interface class InteractionReducerDeps
     implements
         CreateElementReducerDeps,
         TextEditReducerDeps,
@@ -67,7 +53,3 @@ abstract class DrawContextDeps
         ElementReducerDeps,
         EditReducerDeps,
         EditIntentResolverDeps {}
-
-/// Aggregate deps for interaction state reduction.
-abstract class InteractionReducerDeps
-    implements DrawContextDeps, CameraReducerDeps {}

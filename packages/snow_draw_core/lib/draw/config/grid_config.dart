@@ -36,7 +36,7 @@ class GridConfig {
   final double size;
 
   /// Base color for grid lines.
-  final Color lineColor;
+  final DrawColor lineColor;
 
   /// Opacity for minor grid lines.
   final double lineOpacity;
@@ -58,12 +58,11 @@ class GridConfig {
 
   static const double minSize = ConfigDefaults.gridMinSize;
   static const double maxSize = ConfigDefaults.gridMaxSize;
-  static const List<double> presetSizes = ConfigDefaults.gridSizePresets;
 
   GridConfig copyWith({
     bool? enabled,
     double? size,
-    Color? lineColor,
+    DrawColor? lineColor,
     double? lineOpacity,
     double? majorLineOpacity,
     double? lineWidth,

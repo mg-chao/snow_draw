@@ -1,5 +1,3 @@
-import 'dart:ui' show Offset;
-
 import 'package:meta/meta.dart';
 
 import '../models/camera_state.dart';
@@ -39,16 +37,6 @@ class CoordinateService {
   DrawPoint worldToScreen(DrawPoint worldPoint) => DrawPoint(
     x: worldPoint.x * scaleFactor + camera.position.x,
     y: worldPoint.y * scaleFactor + camera.position.y,
-  );
-
-  /// Convenience: Flutter [Offset] -> world coordinates.
-  DrawPoint fromOffset(Offset offset) =>
-      screenToWorld(DrawPoint(x: offset.dx, y: offset.dy));
-
-  /// Convenience: world coordinates -> Flutter [Offset].
-  Offset toOffset(DrawPoint worldPoint) => Offset(
-    worldPoint.x * scaleFactor + camera.position.x,
-    worldPoint.y * scaleFactor + camera.position.y,
   );
 
   /// Screen distance -> world distance.

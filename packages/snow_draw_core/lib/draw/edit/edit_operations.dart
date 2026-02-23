@@ -1,6 +1,6 @@
 import '../types/edit_operation_id.dart';
 import 'arrow/arrow_point_operation.dart';
-import 'core/edit_operation_base.dart';
+import 'core/edit_operation.dart';
 import 'edit_operation_registry_interface.dart';
 import 'free_transform/free_transform_operation.dart';
 import 'move/move_operation.dart';
@@ -9,27 +9,23 @@ import 'rotate/rotate_operation.dart';
 
 /// Registry of configured edit operations.
 class DefaultEditOperationRegistry implements EditOperationRegistry {
-  DefaultEditOperationRegistry._(
-    Map<EditOperationId, EditOperationBase> operations,
-  ) : _operations = Map.unmodifiable(operations);
+  DefaultEditOperationRegistry._(Map<EditOperationId, EditOperation> operations)
+    : _operations = Map.unmodifiable(operations);
 
   factory DefaultEditOperationRegistry.withDefaults() =>
       DefaultEditOperationRegistry.custom(defaultOperations);
 
-  factory DefaultEditOperationRegistry.custom(
-    List<EditOperationBase> operations,
-  ) => DefaultEditOperationRegistry._({
-    for (final operation in operations) operation.id: operation,
-  });
+  factory DefaultEditOperationRegistry.custom(List<EditOperation> operations) =>
+      DefaultEditOperationRegistry._({
+        for (final operation in operations) operation.id: operation,
+      });
 
   factory DefaultEditOperationRegistry.empty() =>
-      DefaultEditOperationRegistry._(
-        const <EditOperationId, EditOperationBase>{},
-      );
-  final Map<EditOperationId, EditOperationBase> _operations;
+      DefaultEditOperationRegistry._(const <EditOperationId, EditOperation>{});
+  final Map<EditOperationId, EditOperation> _operations;
 
   /// Default operation set (reused by tests and extension points).
-  static const List<EditOperationBase> defaultOperations = [
+  static const List<EditOperation> defaultOperations = [
     MoveOperation(),
     ArrowPointOperation(),
     ResizeOperation(),
@@ -38,11 +34,11 @@ class DefaultEditOperationRegistry implements EditOperationRegistry {
   ];
 
   @override
-  EditOperationBase? getOperation(EditOperationId operationId) =>
+  EditOperation? getOperation(EditOperationId operationId) =>
       _operations[operationId];
 
   @override
-  Iterable<EditOperationBase> get allOperations => _operations.values;
+  Iterable<EditOperation> get allOperations => _operations.values;
 
   @override
   Iterable<EditOperationId> get allOperationIds => _operations.keys;

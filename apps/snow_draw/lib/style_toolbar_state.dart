@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Represents a style property value that may differ
 /// across multiple selected elements.

@@ -1,11 +1,10 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
 import 'package:snow_draw_core/draw/models/camera_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/view_state.dart';
 import 'package:snow_draw_core/draw/reducers/camera/camera_reducer.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('cameraReducer', () {
@@ -18,11 +17,7 @@ void main() {
           ),
         );
 
-        final next = cameraReducer(
-          state,
-          const ZoomCamera(scale: 2),
-          const _NoopCameraReducerDeps(),
-        )!;
+        final next = cameraReducer(state, const ZoomCamera(scale: 2))!;
         final camera = next.application.view.camera;
         expect(camera.zoom, 2);
         expect(camera.position, const DrawPoint(x: 40, y: -12));
@@ -31,8 +26,4 @@ void main() {
       },
     );
   });
-}
-
-class _NoopCameraReducerDeps implements CameraReducerDeps {
-  const _NoopCameraReducerDeps();
 }

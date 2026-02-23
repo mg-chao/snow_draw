@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
@@ -7,15 +7,7 @@ import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/events/event_bus.dart';
-import 'package:snow_draw_core/draw/models/draw_state.dart';
-import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
-import 'package:snow_draw_core/draw/store/selector.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +58,7 @@ void main() {
     await Future.wait([updateStyle, enableSnap]);
     await pumpEventQueue();
 
-    expect(store.config.rectangleStyle.color, const Color(0xFF00AA55));
+    expect(store.config.rectangleStyle.color, const DrawColor(0xFF00AA55));
     expect(store.config.snap.enabled, isTrue);
   });
 }

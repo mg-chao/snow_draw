@@ -3,12 +3,13 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../../../models/element_state.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../utils/selection_calculator.dart';
 import '../arrow/arrow_binding.dart';
 import '../text/text_data.dart';
-import '../text/text_layout.dart';
+import '../text/text_layout_constants.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
 
@@ -34,14 +35,17 @@ DrawRect resolveSerialNumberBoundTextRect({
   required ElementState serialElement,
   required SerialNumberData serialData,
   required TextData textData,
+  TextMetricsService textMetricsService = defaultTextMetricsService,
   double? gap,
 }) {
-  final layout = layoutText(data: textData, maxWidth: double.infinity);
+  final layout = textMetricsService.measure(
+    TextLayoutRequest(data: textData, maxWidth: double.infinity),
+  );
   final horizontalPadding = resolveTextLayoutHorizontalPadding(
     layout.lineHeight,
   );
-  final width = layout.size.width + horizontalPadding * 2;
-  final height = math.max(layout.size.height, layout.lineHeight);
+  final width = layout.width + horizontalPadding * 2;
+  final height = math.max(layout.height, layout.lineHeight);
   final strokeWidth = resolveSerialNumberStrokeWidth(data: serialData);
   final resolvedGap =
       gap ?? math.max(_defaultTextGap, strokeWidth * _gapStrokeMultiplier);

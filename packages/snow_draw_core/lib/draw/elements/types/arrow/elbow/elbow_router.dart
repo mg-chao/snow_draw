@@ -90,7 +90,7 @@ ElbowRoutedPoints routeElbowArrowForElement({
   final resolvedPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
-  ).map((point) => DrawPoint(x: point.dx, y: point.dy)).toList();
+  );
   final startPoint = startOverride ?? resolvedPoints.first;
   final endPoint = endOverride ?? resolvedPoints.last;
 

@@ -52,7 +52,7 @@ class SnapConfig {
   final bool showGapSize;
 
   /// Color for snap guides.
-  final Color lineColor;
+  final DrawColor lineColor;
 
   /// Stroke width for snap guides.
   final double lineWidth;
@@ -75,7 +75,7 @@ class SnapConfig {
     double? arrowBindingDistance,
     bool? showGuides,
     bool? showGapSize,
-    Color? lineColor,
+    DrawColor? lineColor,
     double? lineWidth,
     double? markerSize,
     double? gapDashLength,

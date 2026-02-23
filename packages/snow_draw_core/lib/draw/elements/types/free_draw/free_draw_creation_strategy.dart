@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
@@ -9,6 +8,7 @@ import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../services/grid_snap_service.dart';
+import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -20,7 +20,8 @@ import 'free_draw_data.dart';
 ///
 /// During interaction, the strategy keeps world-space points and an incremental
 /// preview payload in [FreeDrawCreationMode]. Solid strokes use point-only
-/// previews, while dashed/dotted strokes also carry an incremental path. This
+/// previews, while dashed/dotted strokes also carry incremental preview points.
+/// The rendering backend can rebuild a concrete path from these points. This
 /// avoids the previous O(n) normalize -> copy -> re-render loop on every
 /// pointer event.
 ///
@@ -42,6 +43,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   CreationUpdateResult start({
     required ElementData data,
     required DrawPoint startPosition,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (data is! FreeDrawData) {
       return CreationUpdateResult(
@@ -57,7 +59,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     final points = <DrawPoint>[startPosition, startPosition];
-    final previewPath = _resolvePreviewPathIfNeeded(
+    final previewPoints = _resolvePreviewPointsIfNeeded(
       strokeStyle: data.strokeStyle,
       worldPoints: points,
     );
@@ -68,7 +70,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       rect: _boundsFromPoints(points),
       creationMode: FreeDrawCreationMode(
         worldPoints: points,
-        previewPath: previewPath,
+        previewPoints: previewPoints,
       ),
     );
   }
@@ -82,6 +84,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final elementData = creatingState.elementData;
     if (elementData is! FreeDrawData) {
@@ -106,8 +109,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       normalizedPoints: elementData.points,
     );
 
-    final previewPath = _resolvePreviewPathIfNeeded(
-      existingPath: mode.previewPath,
+    final previewPoints = _resolvePreviewPointsIfNeeded(
+      existingPoints: mode.previewPoints,
       worldPoints: worldPoints,
       strokeStyle: elementData.strokeStyle,
     );
@@ -140,8 +143,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       final completedLinePoint = wasLineActive
           ? (lineCurrent ?? (worldPoints.isNotEmpty ? worldPoints.last : null))
           : null;
-      if (completedLinePoint != null && previewPath != null) {
-        _appendPreviewPoint(previewPath, completedLinePoint);
+      if (completedLinePoint != null && previewPoints != null) {
+        _appendPreviewPoint(previewPoints, completedLinePoint);
         previewChanged = true;
       }
 
@@ -149,12 +152,12 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
         strokeWidth: elementData.strokeWidth,
-        allowTailReplace: previewPath == null,
+        allowTailReplace: previewPoints == null,
       );
       if (pointMutation.hasChange) {
-        if (previewPath != null && pointMutation.appendedPoint != null) {
+        if (previewPoints != null && pointMutation.appendedPoint != null) {
           _appendPreviewPoint(
-            previewPath,
+            previewPoints,
             pointMutation.appendedPoint!,
             moveTo: worldPoints.length == 1,
           );
@@ -183,7 +186,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       creationMode: mode.copyWith(
         isLineActive: maintainAspectRatio,
         worldPoints: worldPoints,
-        previewPath: previewPath,
+        previewPoints: previewPoints,
         lineAnchor: lineAnchor,
         lineCurrent: lineCurrent,
         revision: mode.revision + 1,
@@ -200,6 +203,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (positions.isEmpty) {
       return CreationUpdateResult(
@@ -219,6 +223,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        textMetricsService: textMetricsService,
       );
     }
 
@@ -232,6 +237,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        textMetricsService: textMetricsService,
       );
     }
 
@@ -241,8 +247,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       rect: creatingState.currentRect,
       normalizedPoints: elementData.points,
     );
-    final previewPath = _resolvePreviewPathIfNeeded(
-      existingPath: mode.previewPath,
+    final previewPoints = _resolvePreviewPointsIfNeeded(
+      existingPoints: mode.previewPoints,
       worldPoints: worldPoints,
       strokeStyle: elementData.strokeStyle,
     );
@@ -254,8 +260,8 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       final completedLinePoint =
           mode.lineCurrent ??
           (worldPoints.isNotEmpty ? worldPoints.last : null);
-      if (completedLinePoint != null && previewPath != null) {
-        _appendPreviewPoint(previewPath, completedLinePoint);
+      if (completedLinePoint != null && previewPoints != null) {
+        _appendPreviewPoint(previewPoints, completedLinePoint);
         rect = _expandBoundsWithPoint(rect, completedLinePoint);
         previewChanged = true;
       }
@@ -271,14 +277,14 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         worldPoints: worldPoints,
         currentPosition: adjustedPosition,
         strokeWidth: elementData.strokeWidth,
-        allowTailReplace: previewPath == null,
+        allowTailReplace: previewPoints == null,
       );
       if (!pointMutation.hasChange) {
         continue;
       }
-      if (previewPath != null && pointMutation.appendedPoint != null) {
+      if (previewPoints != null && pointMutation.appendedPoint != null) {
         _appendPreviewPoint(
-          previewPath,
+          previewPoints,
           pointMutation.appendedPoint!,
           moveTo: worldPoints.length == 1,
         );
@@ -305,7 +311,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       creationMode: mode.copyWith(
         isLineActive: false,
         worldPoints: worldPoints,
-        previewPath: previewPath,
+        previewPoints: previewPoints,
         lineAnchor: null,
         lineCurrent: null,
         revision: mode.revision + 1,
@@ -317,6 +323,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   CreationFinishResult finish({
     required DrawConfig config,
     required CreatingState creatingState,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final data = creatingState.elementData;
     if (data is! FreeDrawData) {
@@ -382,7 +389,7 @@ class FreeDrawCreationMode extends CreationMode {
   const FreeDrawCreationMode({
     this.isLineActive = false,
     this.worldPoints,
-    this.previewPath,
+    this.previewPoints,
     this.lineAnchor,
     this.lineCurrent,
     this.revision = 0,
@@ -397,8 +404,8 @@ class FreeDrawCreationMode extends CreationMode {
   /// avoid allocating and copying on every pointer event.
   final List<DrawPoint>? worldPoints;
 
-  /// Incremental world-space preview path for non-solid stroke previews.
-  final Path? previewPath;
+  /// Incremental world-space preview points for non-solid stroke previews.
+  final List<DrawPoint>? previewPoints;
 
   /// Anchor point for the active straight segment while Shift is held.
   final DrawPoint? lineAnchor;
@@ -414,16 +421,16 @@ class FreeDrawCreationMode extends CreationMode {
   FreeDrawCreationMode copyWith({
     bool? isLineActive,
     List<DrawPoint>? worldPoints,
-    Object? previewPath = _unset,
+    Object? previewPoints = _unset,
     Object? lineAnchor = _unset,
     Object? lineCurrent = _unset,
     int? revision,
   }) => FreeDrawCreationMode(
     isLineActive: isLineActive ?? this.isLineActive,
     worldPoints: worldPoints ?? this.worldPoints,
-    previewPath: identical(previewPath, _unset)
-        ? this.previewPath
-        : previewPath as Path?,
+    previewPoints: identical(previewPoints, _unset)
+        ? this.previewPoints
+        : previewPoints as List<DrawPoint>?,
     lineAnchor: identical(lineAnchor, _unset)
         ? this.lineAnchor
         : lineAnchor as DrawPoint?,
@@ -477,55 +484,44 @@ List<DrawPoint> _resolveCreationWorldPoints({
     mode.worldPoints ??
     _resolveWorldPoints(rect: rect, normalizedPoints: normalizedPoints);
 
-Path? _resolvePreviewPathIfNeeded({
+List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   required List<DrawPoint> worldPoints,
   required StrokeStyle strokeStyle,
-  Path? existingPath,
+  List<DrawPoint>? existingPoints,
 }) {
   if (strokeStyle == StrokeStyle.solid) {
     return null;
   }
-  return existingPath ?? _buildPreviewPath(worldPoints);
+  return existingPoints ?? _buildPreviewPoints(worldPoints);
 }
 
 List<DrawPoint> _resolveWorldPoints({
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
 }) {
-  final resolved = ArrowGeometry.resolveWorldPoints(
+  return ArrowGeometry.resolveWorldPoints(
     rect: rect,
     normalizedPoints: normalizedPoints,
   );
-  return List<DrawPoint>.generate(
-    resolved.length,
-    (i) => DrawPoint(
-      x: resolved[i].dx,
-      y: resolved[i].dy,
-      pressure: i < normalizedPoints.length ? normalizedPoints[i].pressure : 0,
-    ),
-  );
 }
 
-Path _buildPreviewPath(List<DrawPoint> worldPoints) {
-  final path = Path();
+List<DrawPoint> _buildPreviewPoints(List<DrawPoint> worldPoints) {
   if (worldPoints.isEmpty) {
-    return path;
+    return <DrawPoint>[];
   }
-
-  path.moveTo(worldPoints.first.x, worldPoints.first.y);
-  for (var i = 1; i < worldPoints.length; i++) {
-    final point = worldPoints[i];
-    path.lineTo(point.x, point.y);
-  }
-  return path;
+  return List<DrawPoint>.from(worldPoints);
 }
 
-void _appendPreviewPoint(Path path, DrawPoint point, {bool moveTo = false}) {
+void _appendPreviewPoint(
+  List<DrawPoint> previewPoints,
+  DrawPoint point, {
+  bool moveTo = false,
+}) {
   if (moveTo) {
-    path.moveTo(point.x, point.y);
+    previewPoints.add(point);
     return;
   }
-  path.lineTo(point.x, point.y);
+  previewPoints.add(point);
 }
 
 DrawRect _boundsFromPoints(List<DrawPoint> points) {

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/l10n/app_localizations.dart';
 import 'package:snow_draw/property_descriptor.dart';
@@ -8,11 +8,7 @@ import 'package:snow_draw/style_toolbar_state.dart';
 import 'package:snow_draw/tool_controller.dart';
 import 'package:snow_draw/toolbar_adapter.dart';
 import 'package:snow_draw/widgets/style_toolbar.dart';
-import 'package:snow_draw_core/draw/actions/actions.dart';
-import 'package:snow_draw_core/draw/core/draw_context.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
-import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   testWidgets(
@@ -70,7 +66,7 @@ void main() {
 
     final nextConfig = store.config.copyWith(
       rectangleStyle: store.config.rectangleStyle.copyWith(
-        color: const Color(0xFF52C41A),
+        color: const DrawColor(0xFF52C41A),
       ),
     );
     await store.dispatch(UpdateConfig(nextConfig));

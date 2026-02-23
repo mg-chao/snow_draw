@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_editing_geometry.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
@@ -24,7 +24,7 @@ void main() {
     );
 
     expect(geometry.rect, rect);
-    expect(geometry.layout.size.height, greaterThan(0));
+    expect(geometry.layout.height, greaterThan(0));
     expect(geometry.layout.lineHeight, greaterThan(0));
   });
 
@@ -51,6 +51,6 @@ void main() {
       data: data,
     );
     expect(autoResizeGeometry.rect, autoResizeRect);
-    expect(autoResizeGeometry.layout.size.width, greaterThan(0));
+    expect(autoResizeGeometry.layout.width, greaterThan(0));
   });
 }
