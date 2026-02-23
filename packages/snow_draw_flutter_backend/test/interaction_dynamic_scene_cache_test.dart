@@ -1,14 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_core.dart'
-    hide resolveInteractionDynamicSceneFromCachedKey;
-import 'package:snow_draw_flutter_backend/ui/canvas/interaction_dynamic_scene_cache.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 void main() {
   group('resolveInteractionDynamicSceneFromCachedKey', () {
     test('uses optimized preview resolver when cached optimized ids exist', () {
       final stateView = _buildStateView();
-      final previousRenderKey = _buildDynamicRenderKey(
+      final cachedMetadata = _buildCachedMetadata(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
         isHighlightMaskVisible: true,
@@ -18,7 +15,7 @@ void main() {
       var previewResolverCalled = false;
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
-        previousRenderKey: previousRenderKey,
+        cachedMetadata: cachedMetadata,
         resolvePreviewElements: (view) {
           previewResolverCalled = true;
           return const <String, ElementState>{};
@@ -27,7 +24,7 @@ void main() {
           optimizedResolverCalled = true;
           expect(
             optimizedElementIds,
-            previousRenderKey.optimizedDynamicElementIds,
+            cachedMetadata.optimizedDynamicElementIds,
           );
           return {'rect': _rectangle(id: 'rect')};
         },
@@ -49,7 +46,7 @@ void main() {
 
     test('uses preview resolver when no optimized ids exist', () {
       final stateView = _buildStateView();
-      final previousRenderKey = _buildDynamicRenderKey(
+      final cachedMetadata = _buildCachedMetadata(
         optimizedDynamicElementIds: const <String>{},
         isHighlightMaskVisible: true,
         isWatermarkVisible: true,
@@ -58,7 +55,7 @@ void main() {
       var previewResolverCalled = false;
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
-        previousRenderKey: previousRenderKey,
+        cachedMetadata: cachedMetadata,
         resolvePreviewElements: (view) {
           previewResolverCalled = true;
           return {'rect': _rectangle(id: 'rect')};
@@ -83,7 +80,7 @@ void main() {
 
     test('clears occluder hint when optimized ids are empty', () {
       final stateView = _buildStateView();
-      final previousRenderKey = _buildDynamicRenderKey(
+      final cachedMetadata = _buildCachedMetadata(
         optimizedDynamicElementIds: const <String>{},
         optimizedSceneHasPotentialOccluders: true,
         isHighlightMaskVisible: true,
@@ -91,7 +88,7 @@ void main() {
 
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
-        previousRenderKey: previousRenderKey,
+        cachedMetadata: cachedMetadata,
         resolvePreviewElements: (view) => const <String, ElementState>{},
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) =>
             const <String, ElementState>{},
@@ -105,7 +102,7 @@ void main() {
 
     test('returns immutable snapshot collections', () {
       final stateView = _buildStateView();
-      final previousRenderKey = _buildDynamicRenderKey(
+      final cachedMetadata = _buildCachedMetadata(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
         isHighlightMaskVisible: true,
@@ -116,7 +113,7 @@ void main() {
       final mutableDynamicIds = <String>{'rect'};
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
-        previousRenderKey: previousRenderKey,
+        cachedMetadata: cachedMetadata,
         resolvePreviewElements: (view) => mutablePreviewElements,
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) =>
             mutablePreviewElements,
@@ -159,45 +156,19 @@ DrawStateView _buildStateView() {
   );
 }
 
-DynamicCanvasRenderKey _buildDynamicRenderKey({
+CachedInteractionDynamicMetadata _buildCachedMetadata({
   required Set<String> optimizedDynamicElementIds,
   required bool isHighlightMaskVisible,
   bool isWatermarkVisible = false,
   bool optimizedSceneHasPotentialOccluders = false,
-}) {
-  final config = DrawConfig.defaultConfig;
-  return DynamicCanvasRenderKey(
-    creatingElement: null,
-    effectiveSelection: EffectiveSelection.none,
-    boxSelectionBounds: null,
-    selectedIds: const <String>{},
-    hoveredElementId: null,
-    hoveredBindingElementId: null,
-    hoveredArrowHandle: null,
-    activeArrowHandle: null,
-    arrowDeleteIndicatorVisible: false,
-    hoverSelectionConfig: config.selection,
-    snapGuides: const [],
-    documentVersion: 1,
-    textRenderingCacheRevision: 0,
-    camera: CameraState.initial,
-    previewElementsById: const <String, ElementState>{},
-    optimizedDynamicElementIds: optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-    scaleFactor: 1,
-    selectionConfig: config.selection,
-    boxSelectionConfig: config.boxSelection,
-    snapConfig: config.snap,
-    canvasConfig: config.canvas,
-    gridConfig: config.grid,
-    isHighlightMaskVisible: isHighlightMaskVisible,
-    highlightMaskConfig: const HighlightMaskConfig(),
-    isWatermarkVisible: isWatermarkVisible,
-    watermarkConfig: const WatermarkConfig(),
-    elementRegistry: DefaultElementRegistry(),
-    performanceMonitoringEnabled: false,
-  );
-}
+}) => CachedInteractionDynamicMetadata(
+  optimizedDynamicElementIds: optimizedDynamicElementIds,
+  optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+  isHighlightMaskVisible: isHighlightMaskVisible,
+  highlightMaskConfig: const HighlightMaskConfig(),
+  isWatermarkVisible: isWatermarkVisible,
+  watermarkConfig: const WatermarkConfig(),
+);
 
 ElementState _rectangle({required String id}) => ElementState(
   id: id,

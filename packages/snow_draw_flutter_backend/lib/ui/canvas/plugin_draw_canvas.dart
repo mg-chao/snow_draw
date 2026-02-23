@@ -4,10 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snow_draw_core/snow_draw_core.dart'
-    hide
-        InteractionDynamicSceneSnapshot,
-        resolveInteractionDynamicSceneFromCachedKey;
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
@@ -21,7 +18,6 @@ import 'filter_shader_manager.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
-import 'interaction_dynamic_scene_cache.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
 
@@ -2762,9 +2758,18 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         plan == InteractionMutationRefreshPlan.lightweightLineDynamicOnly
         ? ++_lightweightLinePreviewRevision
         : ++_interactionPreviewRevision;
+    final cachedMetadata = CachedInteractionDynamicMetadata(
+      optimizedDynamicElementIds: previousRenderKey.optimizedDynamicElementIds,
+      optimizedSceneHasPotentialOccluders:
+          previousRenderKey.optimizedSceneHasPotentialOccluders,
+      isHighlightMaskVisible: previousRenderKey.isHighlightMaskVisible,
+      highlightMaskConfig: previousRenderKey.highlightMaskConfig,
+      isWatermarkVisible: previousRenderKey.isWatermarkVisible,
+      watermarkConfig: previousRenderKey.watermarkConfig,
+    );
     final scene = resolveInteractionDynamicSceneFromCachedKey(
       stateView: stateView,
-      previousRenderKey: previousRenderKey,
+      cachedMetadata: cachedMetadata,
       resolvePreviewElements: _previewElementsForCanvas,
       resolvePreviewByOptimizedIds: (view, _) =>
           _previewElementsForCanvas(view),
