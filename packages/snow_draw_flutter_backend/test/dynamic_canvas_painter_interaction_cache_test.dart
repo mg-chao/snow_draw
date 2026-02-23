@@ -501,8 +501,6 @@ DynamicCanvasRenderKey _buildRenderKey({
   previewElementsById: previewElementsById,
   optimizedDynamicElementIds: const <String>{},
   optimizedSceneHasPotentialOccluders: false,
-  dynamicLayerStartIndex: 0,
-  rendersWholeElementScene: true,
   scaleFactor: 1,
   selectionConfig: const SelectionConfig(),
   boxSelectionConfig: const BoxSelectionConfig(),

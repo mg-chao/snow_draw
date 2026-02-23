@@ -43,135 +43,6 @@ class CreatingElementSnapshot {
   int get hashCode => Object.hash(element, currentRect, creationRevision);
 }
 
-/// Render key for static canvas.
-///
-/// Captures exactly what affects the static canvas rendering:
-/// - Document elements (via version)
-/// - Camera state (position, zoom)
-/// - Preview elements (during editing)
-/// - Dynamic layer split index
-/// - Canvas/grid config, scale factor, element registry
-@immutable
-class StaticCanvasRenderKey {
-  const StaticCanvasRenderKey({
-    required this.documentVersion,
-    required this.textRenderingCacheRevision,
-    required this.camera,
-    required this.previewElementsById,
-    required this.dynamicLayerStartIndex,
-    required this.skipBaseElementScene,
-    required this.scaleFactor,
-    required this.canvasConfig,
-    required this.gridConfig,
-    required this.highlightMaskLayer,
-    required this.highlightMaskConfig,
-    required this.watermarkLayer,
-    required this.watermarkConfig,
-    required this.elementRegistry,
-    required this.performanceMonitoringEnabled,
-    this.textMetricsService = defaultTextMetricsService,
-    this.locale,
-  });
-
-  /// Document version for detecting element changes.
-  final int documentVersion;
-
-  /// Revision for text rendering cache invalidation.
-  ///
-  /// Incremented when runtime font loading clears paragraph/layout caches so
-  /// canvas painters can rebuild text paragraphs with the newly available
-  /// glyphs.
-  final int textRenderingCacheRevision;
-
-  /// Camera state for viewport.
-  final CameraState camera;
-
-  /// Preview elements during editing.
-  final Map<String, ElementState> previewElementsById;
-
-  /// First element index that renders on the dynamic layer.
-  final int? dynamicLayerStartIndex;
-
-  /// Whether static painter should skip base element scene rendering.
-  final bool skipBaseElementScene;
-
-  /// Canvas scale factor.
-  final double scaleFactor;
-
-  /// Canvas configuration.
-  final CanvasConfig canvasConfig;
-
-  /// Grid configuration.
-  final GridConfig gridConfig;
-
-  /// Highlight mask rendering layer.
-  final HighlightMaskLayer highlightMaskLayer;
-
-  /// Highlight mask configuration.
-  final HighlightMaskConfig highlightMaskConfig;
-
-  /// Watermark rendering layer.
-  final WatermarkLayer watermarkLayer;
-
-  /// Watermark configuration.
-  final WatermarkConfig watermarkConfig;
-
-  /// Element registry for rendering.
-  final ElementRegistry elementRegistry;
-
-  /// Text metrics service used while encoding text-based scenes.
-  final TextMetricsService textMetricsService;
-
-  /// Whether runtime render diagnostics logging is enabled.
-  final bool performanceMonitoringEnabled;
-
-  /// Locale used for text layout/rendering.
-  final Locale? locale;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is StaticCanvasRenderKey &&
-          other.documentVersion == documentVersion &&
-          other.textRenderingCacheRevision == textRenderingCacheRevision &&
-          other.camera == camera &&
-          mapEquals(other.previewElementsById, previewElementsById) &&
-          other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
-          other.skipBaseElementScene == skipBaseElementScene &&
-          other.scaleFactor == scaleFactor &&
-          other.canvasConfig == canvasConfig &&
-          other.gridConfig == gridConfig &&
-          other.highlightMaskLayer == highlightMaskLayer &&
-          other.highlightMaskConfig == highlightMaskConfig &&
-          other.watermarkLayer == watermarkLayer &&
-          other.watermarkConfig == watermarkConfig &&
-          other.elementRegistry == elementRegistry &&
-          identical(other.textMetricsService, textMetricsService) &&
-          other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
-          other.locale == locale;
-
-  @override
-  int get hashCode => Object.hash(
-    documentVersion,
-    textRenderingCacheRevision,
-    camera,
-    _mapHash(previewElementsById),
-    dynamicLayerStartIndex,
-    skipBaseElementScene,
-    scaleFactor,
-    canvasConfig,
-    gridConfig,
-    highlightMaskLayer,
-    highlightMaskConfig,
-    watermarkLayer,
-    watermarkConfig,
-    elementRegistry,
-    identityHashCode(textMetricsService),
-    performanceMonitoringEnabled,
-    locale,
-  );
-}
-
 /// Render key for dynamic canvas.
 ///
 /// Captures exactly what affects the dynamic canvas rendering:
@@ -181,7 +52,7 @@ class StaticCanvasRenderKey {
 /// - Selected/hovered element IDs (for selection outlines)
 /// - Arrow handle interaction state (including delete indicator visibility)
 /// - Document version (for selection outline refresh)
-/// - Preview elements and dynamic layer split index
+/// - Preview and optimization state for interaction cache invalidation
 /// - Camera state (position/zoom), selection/box selection config, scale factor
 @immutable
 class DynamicCanvasRenderKey {
@@ -203,8 +74,6 @@ class DynamicCanvasRenderKey {
     required this.previewElementsById,
     required this.optimizedDynamicElementIds,
     required this.optimizedSceneHasPotentialOccluders,
-    required this.dynamicLayerStartIndex,
-    required this.rendersWholeElementScene,
     required this.scaleFactor,
     required this.selectionConfig,
     required this.boxSelectionConfig,
@@ -292,12 +161,6 @@ class DynamicCanvasRenderKey {
   /// queries and render optimized elements directly in z-order.
   final bool optimizedSceneHasPotentialOccluders;
 
-  /// First element index that renders on the dynamic layer.
-  final int? dynamicLayerStartIndex;
-
-  /// Whether dynamic painter renders the whole element scene.
-  final bool rendersWholeElementScene;
-
   /// Whether filter rendering should prioritize responsiveness this frame.
   ///
   /// This hint is used for high-frequency filter style drags where full
@@ -371,8 +234,6 @@ class DynamicCanvasRenderKey {
           ) &&
           other.optimizedSceneHasPotentialOccluders ==
               optimizedSceneHasPotentialOccluders &&
-          other.dynamicLayerStartIndex == dynamicLayerStartIndex &&
-          other.rendersWholeElementScene == rendersWholeElementScene &&
           other.preferFastFilterFallback == preferFastFilterFallback &&
           other.scaleFactor == scaleFactor &&
           other.selectionConfig == selectionConfig &&
@@ -408,8 +269,6 @@ class DynamicCanvasRenderKey {
     _previewMapHash(),
     Object.hashAllUnordered(optimizedDynamicElementIds),
     optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex,
-    rendersWholeElementScene,
     preferFastFilterFallback,
     scaleFactor,
     selectionConfig,

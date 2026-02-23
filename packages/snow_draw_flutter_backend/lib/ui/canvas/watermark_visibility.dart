@@ -1,7 +1,7 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
 
 /// Which canvas layer renders the watermark overlay.
-enum WatermarkLayer { none, staticLayer, dynamicLayer }
+enum WatermarkLayer { none, dynamicLayer }
 
 /// Whether [config] produces visible watermark pixels.
 bool isWatermarkVisible(WatermarkConfig config) {
@@ -18,15 +18,9 @@ bool isWatermarkVisible(WatermarkConfig config) {
 /// Returns [WatermarkLayer.none] when the watermark is effectively
 /// invisible (empty text, zero opacity, or imperceptible alpha).
 /// This avoids entering the paint path at all for disabled configs.
-WatermarkLayer resolveWatermarkLayer({
-  required bool hasDynamicContent,
-  required WatermarkConfig config,
-}) {
+WatermarkLayer resolveWatermarkLayer({required WatermarkConfig config}) {
   if (!isWatermarkVisible(config)) {
     return WatermarkLayer.none;
   }
-
-  return hasDynamicContent
-      ? WatermarkLayer.dynamicLayer
-      : WatermarkLayer.staticLayer;
+  return WatermarkLayer.dynamicLayer;
 }

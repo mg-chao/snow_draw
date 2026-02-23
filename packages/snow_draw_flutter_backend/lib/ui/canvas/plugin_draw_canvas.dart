@@ -587,11 +587,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
   }
 
-  /// Extract preview elements for dynamic canvas (excludes creating elements).
-  Map<String, ElementState> _previewElementsForDynamic(
-    DrawStateView view,
-    int? dynamicLayerStartIndex,
-  ) {
+  /// Extract preview elements for the unified canvas (excludes creating elements).
+  Map<String, ElementState> _previewElementsForCanvas(DrawStateView view) {
     final interaction = view.state.application.interaction;
     if (interaction is CreatingState) {
       return const <String, ElementState>{};
@@ -603,37 +600,13 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       }
 
       final hiddenPreview = _buildHiddenTextEditingPreview(view);
-      if (hiddenPreview == null || dynamicLayerStartIndex == null) {
+      if (hiddenPreview == null) {
         return const <String, ElementState>{};
       }
-
-      final orderIndex = view.state.domain.document.getOrderIndex(
-        hiddenPreview.id,
-      );
-      if (orderIndex != null && orderIndex >= dynamicLayerStartIndex) {
-        return {hiddenPreview.id: hiddenPreview};
-      }
-      return const <String, ElementState>{};
+      return {hiddenPreview.id: hiddenPreview};
     }
 
-    if (dynamicLayerStartIndex == null) {
-      return const <String, ElementState>{};
-    }
-
-    final previewElements = view.previewElementsById;
-    if (previewElements.isEmpty) {
-      return previewElements;
-    }
-
-    final document = view.state.domain.document;
-    final filtered = <String, ElementState>{};
-    for (final entry in previewElements.entries) {
-      final orderIndex = document.getOrderIndex(entry.key);
-      if (orderIndex == null || orderIndex >= dynamicLayerStartIndex) {
-        filtered[entry.key] = entry.value;
-      }
-    }
-    return filtered;
+    return view.previewElementsById;
   }
 
   ElementState? _buildHiddenTextEditingPreview(DrawStateView view) {
@@ -815,8 +788,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       ),
     );
   }
-
-  int _resolveDynamicLayerStartIndex(DrawStateView _) => 0;
 
   /// Extract creating element snapshot from state view.
   CreatingElementSnapshot? _extractCreatingSnapshot(DrawStateView view) {
@@ -2481,7 +2452,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateView stateView,
   ) {
     final interaction = stateView.state.application.interaction;
-    final dynamicLayerStartIndex = _resolveDynamicLayerStartIndex(stateView);
     final promoteEraserPreviewToDynamicLayer =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
@@ -2518,10 +2488,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             stateView: stateView,
             optimizedElementIds: optimizedDynamicElementIds,
           );
-      dynamicPreviewElements = _previewElementsForDynamic(
-        stateView,
-        dynamicLayerStartIndex,
-      );
+      dynamicPreviewElements = _previewElementsForCanvas(stateView);
       dynamicPreviewElementsRevision = null;
       dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
         stateView,
@@ -2539,16 +2506,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
-    const dynamicLayerOwnsWholeScene = true;
     final highlightMaskLayer = _resolveHighlightMaskLayer(
       stateView: stateView,
-      hasDynamicContent: true,
       config: highlightMask,
     );
-    final watermarkLayer = resolveWatermarkLayer(
-      hasDynamicContent: true,
-      config: watermark,
-    );
+    final watermarkLayer = resolveWatermarkLayer(config: watermark);
 
     return _CanvasLayerSceneSnapshot(
       dynamicPreviewElements: dynamicPreviewElements,
@@ -2556,8 +2518,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
       optimizedDynamicElementIds: optimizedDynamicElementIds,
       optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-      dynamicLayerStartIndex: dynamicLayerStartIndex,
-      dynamicLayerOwnsWholeScene: dynamicLayerOwnsWholeScene,
       creatingSnapshot: creatingSnapshot,
       highlightMaskLayer: highlightMaskLayer,
       highlightMaskConfig: highlightMask,
@@ -2665,7 +2625,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   HighlightMaskLayer _resolveHighlightMaskLayer({
     required DrawStateView stateView,
-    required bool hasDynamicContent,
     required HighlightMaskConfig config,
   }) {
     if (config.maskOpacity <= 0) {
@@ -2674,8 +2633,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final summary = stateView.highlightMaskSceneSummary;
     return resolveHighlightMaskLayer(
       hasHighlights: summary.hasHighlights,
-      hasDynamicContent: hasDynamicContent,
-      hasDynamicHighlights: summary.hasDynamicHighlights,
       config: config,
     );
   }
@@ -2700,8 +2657,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
     optimizedSceneHasPotentialOccluders:
         scene.optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex: scene.dynamicLayerStartIndex,
-    rendersWholeElementScene: scene.dynamicLayerOwnsWholeScene,
     preferFastFilterFallback: scene.preferFastFilterFallback,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
@@ -2730,8 +2685,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
     optimizedSceneHasPotentialOccluders:
         scene.optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex: _resolveDynamicLayerStartIndex(stateView),
-    rendersWholeElementScene: true,
     preferFastFilterFallback: false,
     highlightMaskLayer: scene.highlightMaskLayer,
     highlightMaskConfig: scene.highlightMaskConfig,
@@ -2749,8 +2702,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required Map<String, ElementState> previewElementsById,
     required Set<String> optimizedDynamicElementIds,
     required bool optimizedSceneHasPotentialOccluders,
-    required int? dynamicLayerStartIndex,
-    required bool rendersWholeElementScene,
     required bool preferFastFilterFallback,
     required HighlightMaskLayer highlightMaskLayer,
     required HighlightMaskConfig highlightMaskConfig,
@@ -2779,8 +2730,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     dynamicPreviewElementIds: dynamicPreviewElementIds,
     optimizedDynamicElementIds: optimizedDynamicElementIds,
     optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex: dynamicLayerStartIndex,
-    rendersWholeElementScene: rendersWholeElementScene,
     preferFastFilterFallback: preferFastFilterFallback,
     scaleFactor: scaleFactor,
     selectionConfig: selectionConfig,
@@ -2884,13 +2833,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       );
       return;
     }
-    if (!_canRefreshFilterStyleMutationDynamically(
-      state: state,
-      changedFilterElementIds: changedFilterElementIds,
-    )) {
-      _refreshCanvasLayerSnapshots(state, assumeDynamicChanged: true);
-      return;
-    }
     _transientDynamicFilterElementIds = Set<String>.unmodifiable(
       changedFilterElementIds,
     );
@@ -2904,40 +2846,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _transientDynamicFilterElementIds = const <String>{};
     }
     _scheduleFilterStyleQualityRestore(state);
-  }
-
-  bool _canRefreshFilterStyleMutationDynamically({
-    required DrawState state,
-    required Set<String> changedFilterElementIds,
-  }) {
-    final renderKey = _dynamicLayerSnapshotNotifier.value.renderKey;
-    if (renderKey.rendersWholeElementScene) {
-      return true;
-    }
-
-    final optimizedElementIds = renderKey.optimizedDynamicElementIds;
-    if (optimizedElementIds.isNotEmpty) {
-      for (final elementId in changedFilterElementIds) {
-        if (!optimizedElementIds.contains(elementId)) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
-    if (dynamicLayerStartIndex == null) {
-      return false;
-    }
-
-    final document = state.domain.document;
-    for (final elementId in changedFilterElementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null || orderIndex < dynamicLayerStartIndex) {
-        return false;
-      }
-    }
-    return true;
   }
 
   void _scheduleFilterStyleQualityRestore(DrawState state) {
@@ -2956,11 +2864,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     });
   }
 
-  /// Reuses dynamic-scene split metadata for interaction-only updates.
+  /// Reuses cached dynamic-scene metadata for interaction-only updates.
   ///
   /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
-  /// dynamic-layer updates while the document topology remains stable.
-  /// Rebuilding full split metadata on every pointer frame is redundant, so
+  /// single-canvas updates while the document topology remains stable.
+  /// Rebuilding full scene metadata on every pointer frame is redundant, so
   /// this fast path reuses the previous dynamic render key and only resolves
   /// the latest preview subset.
   bool _tryRefreshCachedInteractionDynamicLayerSnapshot(
@@ -2987,11 +2895,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final scene = resolveInteractionDynamicSceneFromCachedKey(
       stateView: stateView,
       previousRenderKey: previousRenderKey,
-      resolvePreviewByLayerStart: _previewElementsForDynamic,
-      resolvePreviewByOptimizedIds: (view, _) => _previewElementsForDynamic(
-        view,
-        _resolveDynamicLayerStartIndex(view),
-      ),
+      resolvePreviewElements: _previewElementsForCanvas,
+      resolvePreviewByOptimizedIds: (view, _) =>
+          _previewElementsForCanvas(view),
       resolveDynamicPreviewElementIds: (view, previewElementsById) =>
           _resolveInteractionDynamicPreviewElementIds(
             stateView: view,
@@ -4110,8 +4016,6 @@ class _CanvasLayerSceneSnapshot {
     required this.dynamicPreviewElementIds,
     required this.optimizedDynamicElementIds,
     required this.optimizedSceneHasPotentialOccluders,
-    required this.dynamicLayerStartIndex,
-    required this.dynamicLayerOwnsWholeScene,
     required this.creatingSnapshot,
     required this.highlightMaskLayer,
     required this.highlightMaskConfig,
@@ -4126,8 +4030,6 @@ class _CanvasLayerSceneSnapshot {
   final Set<String>? dynamicPreviewElementIds;
   final Set<String> optimizedDynamicElementIds;
   final bool optimizedSceneHasPotentialOccluders;
-  final int? dynamicLayerStartIndex;
-  final bool dynamicLayerOwnsWholeScene;
   final CreatingElementSnapshot? creatingSnapshot;
   final HighlightMaskLayer highlightMaskLayer;
   final HighlightMaskConfig highlightMaskConfig;

@@ -8,32 +8,22 @@ const _maxLocalizedPreviewElementCount = 24;
 
 /// Dynamic-scene optimization plan for edit previews.
 ///
-/// When present, the static painter hides [staticHiddenElementIds] while the
-/// dynamic painter renders [optimizedElementIds] plus overlapping occluders.
+/// When present, the unified canvas painter renders [optimizedElementIds] plus
+/// overlapping occluders.
 @immutable
 class DynamicSceneOptimizationPlan {
-  DynamicSceneOptimizationPlan({
-    required Set<String> optimizedElementIds,
-    required Set<String> staticHiddenElementIds,
-  }) : optimizedElementIds = Set<String>.unmodifiable(optimizedElementIds),
-       staticHiddenElementIds = Set<String>.unmodifiable(
-         staticHiddenElementIds,
-       );
+  DynamicSceneOptimizationPlan({required Set<String> optimizedElementIds})
+    : optimizedElementIds = Set<String>.unmodifiable(optimizedElementIds);
 
   factory DynamicSceneOptimizationPlan.single(String elementId) =>
-      DynamicSceneOptimizationPlan(
-        optimizedElementIds: {elementId},
-        staticHiddenElementIds: {elementId},
-      );
+      DynamicSceneOptimizationPlan(optimizedElementIds: {elementId});
 
   final Set<String> optimizedElementIds;
-  final Set<String> staticHiddenElementIds;
 }
 
 /// Resolves localized dynamic-scene optimization for the current [view].
 ///
-/// Returns `null` when the interaction should keep using the regular dynamic
-/// layer split.
+/// Returns `null` when no localized optimization is applicable.
 DynamicSceneOptimizationPlan? resolveDynamicSceneOptimizationPlan({
   required DrawStateView view,
 }) {
@@ -316,10 +306,7 @@ DynamicSceneOptimizationPlan? _resolvePlanForCandidates({
     return null;
   }
 
-  return DynamicSceneOptimizationPlan(
-    optimizedElementIds: candidateIds,
-    staticHiddenElementIds: candidateIds,
-  );
+  return DynamicSceneOptimizationPlan(optimizedElementIds: candidateIds);
 }
 
 bool _canApplyLocalizedOptimizationForElement({

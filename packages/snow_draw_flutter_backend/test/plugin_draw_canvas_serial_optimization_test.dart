@@ -45,7 +45,6 @@ void main() {
 
     final dynamicPainter = _dynamicPainter(tester);
     expect(dynamicPainter.renderKey.optimizedDynamicElementIds, {'serial-1'});
-    expect(dynamicPainter.renderKey.dynamicLayerStartIndex, 0);
   });
 }
 

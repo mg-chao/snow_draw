@@ -12,18 +12,16 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
-        dynamicLayerStartIndex: null,
-        rendersWholeElementScene: false,
         highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
         watermarkLayer: WatermarkLayer.dynamicLayer,
       );
       var optimizedResolverCalled = false;
-      var layerStartResolverCalled = false;
+      var previewResolverCalled = false;
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
         previousRenderKey: previousRenderKey,
-        resolvePreviewByLayerStart: (view, dynamicLayerStartIndex) {
-          layerStartResolverCalled = true;
+        resolvePreviewElements: (view) {
+          previewResolverCalled = true;
           return const <String, ElementState>{};
         },
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) {
@@ -41,34 +39,29 @@ void main() {
       );
 
       expect(optimizedResolverCalled, isTrue);
-      expect(layerStartResolverCalled, isFalse);
+      expect(previewResolverCalled, isFalse);
       expect(scene.previewElementsById.keys, contains('rect'));
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, {'rect'});
       expect(scene.optimizedSceneHasPotentialOccluders, isTrue);
-      expect(scene.dynamicLayerStartIndex, isNull);
-      expect(scene.rendersWholeElementScene, isFalse);
       expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
       expect(scene.watermarkLayer, WatermarkLayer.dynamicLayer);
     });
 
-    test('uses layer-start preview resolver when no optimized ids exist', () {
+    test('uses preview resolver when no optimized ids exist', () {
       final stateView = _buildStateView();
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const <String>{},
-        dynamicLayerStartIndex: 8,
-        rendersWholeElementScene: true,
-        highlightMaskLayer: HighlightMaskLayer.staticLayer,
-        watermarkLayer: WatermarkLayer.staticLayer,
+        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
+        watermarkLayer: WatermarkLayer.dynamicLayer,
       );
       var optimizedResolverCalled = false;
-      var layerStartResolverCalled = false;
+      var previewResolverCalled = false;
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
         previousRenderKey: previousRenderKey,
-        resolvePreviewByLayerStart: (view, dynamicLayerStartIndex) {
-          layerStartResolverCalled = true;
-          expect(dynamicLayerStartIndex, 8);
+        resolvePreviewElements: (view) {
+          previewResolverCalled = true;
           return {'rect': _rectangle(id: 'rect')};
         },
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) {
@@ -79,16 +72,14 @@ void main() {
             previewElementsById.keys.toSet(),
       );
 
-      expect(layerStartResolverCalled, isTrue);
+      expect(previewResolverCalled, isTrue);
       expect(optimizedResolverCalled, isFalse);
       expect(scene.previewElementsById.keys, contains('rect'));
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, isEmpty);
       expect(scene.optimizedSceneHasPotentialOccluders, isFalse);
-      expect(scene.dynamicLayerStartIndex, 8);
-      expect(scene.rendersWholeElementScene, isTrue);
-      expect(scene.highlightMaskLayer, HighlightMaskLayer.staticLayer);
-      expect(scene.watermarkLayer, WatermarkLayer.staticLayer);
+      expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
+      expect(scene.watermarkLayer, WatermarkLayer.dynamicLayer);
     });
 
     test('clears occluder hint when optimized ids are empty', () {
@@ -96,16 +87,13 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const <String>{},
         optimizedSceneHasPotentialOccluders: true,
-        dynamicLayerStartIndex: 4,
-        rendersWholeElementScene: true,
-        highlightMaskLayer: HighlightMaskLayer.staticLayer,
+        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
       );
 
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
         previousRenderKey: previousRenderKey,
-        resolvePreviewByLayerStart: (view, dynamicLayerStartIndex) =>
-            const <String, ElementState>{},
+        resolvePreviewElements: (view) => const <String, ElementState>{},
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) =>
             const <String, ElementState>{},
         resolveDynamicPreviewElementIds: (view, previewElementsById) =>
@@ -121,8 +109,6 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
-        dynamicLayerStartIndex: null,
-        rendersWholeElementScene: false,
         highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
       );
       final mutablePreviewElements = <String, ElementState>{
@@ -132,8 +118,7 @@ void main() {
       final scene = resolveInteractionDynamicSceneFromCachedKey(
         stateView: stateView,
         previousRenderKey: previousRenderKey,
-        resolvePreviewByLayerStart: (view, dynamicLayerStartIndex) =>
-            mutablePreviewElements,
+        resolvePreviewElements: (view) => mutablePreviewElements,
         resolvePreviewByOptimizedIds: (view, optimizedElementIds) =>
             mutablePreviewElements,
         resolveDynamicPreviewElementIds: (view, previewElementsById) =>
@@ -177,8 +162,6 @@ DrawStateView _buildStateView() {
 
 DynamicCanvasRenderKey _buildDynamicRenderKey({
   required Set<String> optimizedDynamicElementIds,
-  required int? dynamicLayerStartIndex,
-  required bool rendersWholeElementScene,
   required HighlightMaskLayer highlightMaskLayer,
   WatermarkLayer watermarkLayer = WatermarkLayer.none,
   bool optimizedSceneHasPotentialOccluders = false,
@@ -202,8 +185,6 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
     previewElementsById: const <String, ElementState>{},
     optimizedDynamicElementIds: optimizedDynamicElementIds,
     optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-    dynamicLayerStartIndex: dynamicLayerStartIndex,
-    rendersWholeElementScene: rendersWholeElementScene,
     scaleFactor: 1,
     selectionConfig: config.selection,
     boxSelectionConfig: config.boxSelection,

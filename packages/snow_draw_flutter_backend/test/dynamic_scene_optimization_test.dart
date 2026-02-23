@@ -39,7 +39,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'rect-1'});
-      expect(plan.staticHiddenElementIds, {'rect-1'});
     });
 
     test('optimizes arrow-point edits even without preview deltas', () {
@@ -75,7 +74,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'arrow-1'});
-      expect(plan.staticHiddenElementIds, {'arrow-1'});
     });
 
     test('optimizes lightweight line point edits to a localized scene', () {
@@ -112,7 +110,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'line-1'});
-      expect(plan.staticHiddenElementIds, {'line-1'});
     });
 
     test('optimizes free-draw move edits to a localized scene', () {
@@ -149,7 +146,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'free-1'});
-      expect(plan.staticHiddenElementIds, {'free-1'});
     });
 
     test('optimizes highlight edit previews to a localized scene', () {
@@ -186,7 +182,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'hl-1'});
-      expect(plan.staticHiddenElementIds, {'hl-1'});
     });
 
     test(
@@ -342,7 +337,6 @@ void main() {
 
         expect(plan, isNotNull);
         expect(plan!.optimizedElementIds, {'serial-1', 'text-1'});
-        expect(plan.staticHiddenElementIds, {'serial-1', 'text-1'});
       },
     );
 
@@ -442,7 +436,6 @@ void main() {
 
       expect(plan, isNotNull);
       expect(plan!.optimizedElementIds, {'text-1'});
-      expect(plan.staticHiddenElementIds, {'text-1'});
     });
 
     test('skips text-edit optimization for new text drafts', () {

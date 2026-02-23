@@ -51,7 +51,6 @@ void main() {
         await tester.pump();
 
         final dynamicPainter = _dynamicPainter(tester);
-        expect(dynamicPainter.renderKey.dynamicLayerStartIndex, 0);
         final previewElement =
             dynamicPainter.renderKey.previewElementsById[elementId];
         expect(previewElement, isNotNull);

@@ -926,23 +926,9 @@ class DynamicCanvasPainter extends CustomPainter {
     required DrawRect viewportRect,
     required CreatingElementSnapshot? creatingElement,
   }) {
-    final dynamicLayerStartIndex = renderKey.dynamicLayerStartIndex;
-    final rendersWholeScene = renderKey.rendersWholeElementScene;
     final optimizedElementIds = renderKey.optimizedDynamicElementIds;
 
-    if (dynamicLayerStartIndex == null && !rendersWholeScene) {
-      if (optimizedElementIds.isEmpty) {
-        final previewOnlyElements = _resolvePreviewOnlyScene(
-          viewportRect: viewportRect,
-        );
-        _paintElementScene(
-          canvas: canvas,
-          scale: scale,
-          viewportRect: viewportRect,
-          effectiveElements: previewOnlyElements,
-        );
-        return;
-      }
+    if (optimizedElementIds.isNotEmpty) {
       final optimizedElements = _resolveOptimizedScene(
         viewportRect: viewportRect,
         optimizedElementIds: optimizedElementIds,
@@ -958,11 +944,9 @@ class DynamicCanvasPainter extends CustomPainter {
 
     final state = stateView.state;
     final document = state.domain.document;
-    final minOrderIndex = rendersWholeScene ? null : dynamicLayerStartIndex;
     final baseVisibleElements = _visibleSceneCache.resolve(
       document: document,
       viewportRect: viewportRect,
-      minOrderIndex: minOrderIndex,
     );
     final excludedElementId =
         creatingElement != null &&
@@ -986,7 +970,6 @@ class DynamicCanvasPainter extends CustomPainter {
       document: document,
       viewportRect: viewportRect,
       baseVisibleElements: baseVisibleElements,
-      minOrderIndex: minOrderIndex,
       previewElementsById: renderKey.previewElementsById,
       excludedElementId: excludedElementId,
     );
@@ -1102,42 +1085,6 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
     return true;
-  }
-
-  List<ElementState> _resolvePreviewOnlyScene({
-    required DrawRect viewportRect,
-  }) {
-    final previewElements = renderKey.previewElementsById;
-    if (previewElements.isEmpty) {
-      return const <ElementState>[];
-    }
-
-    final visible = <ElementState>[];
-    for (final preview in previewElements.values) {
-      if (preview.opacity <= 0) {
-        continue;
-      }
-      final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-      if (!_rectsIntersect(aabb, viewportRect)) {
-        continue;
-      }
-      visible.add(preview);
-    }
-    if (visible.length < 2) {
-      return visible;
-    }
-
-    final document = stateView.state.domain.document;
-    visible.sort((a, b) {
-      final orderA = document.getOrderIndex(a.id) ?? a.zIndex;
-      final orderB = document.getOrderIndex(b.id) ?? b.zIndex;
-      final orderComparison = orderA.compareTo(orderB);
-      if (orderComparison != 0) {
-        return orderComparison;
-      }
-      return a.id.compareTo(b.id);
-    });
-    return visible;
   }
 
   List<ElementState> _resolveOptimizedScene({
