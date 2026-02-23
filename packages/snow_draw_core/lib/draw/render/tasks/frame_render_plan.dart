@@ -30,4 +30,34 @@ class FrameRenderPlan {
     camera: CameraState.initial,
     scaleFactor: 1,
   );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FrameRenderPlan &&
+          other.camera == camera &&
+          other.scaleFactor == scaleFactor &&
+          other.localeTag == localeTag &&
+          _taskListEquals(other.tasks, tasks);
+
+  @override
+  int get hashCode =>
+      Object.hash(_taskListHash(tasks), camera, scaleFactor, localeTag);
 }
+
+bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int _taskListHash(List<RenderTask> tasks) => Object.hashAll(tasks);

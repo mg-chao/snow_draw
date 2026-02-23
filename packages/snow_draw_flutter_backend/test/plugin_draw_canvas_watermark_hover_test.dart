@@ -2,9 +2,9 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +33,7 @@ void main() {
       );
 
       await _hoverAt(tester, const Offset(170, 120));
-      expect(_canvasRenderKey(tester).hoveredElementId, isNotNull);
+      expect(_hasHoverSelectionPreview(_canvasRenderKey(tester)), isTrue);
     });
 
     testWidgets('watermark mode suppresses hover selection preview', (
@@ -47,7 +47,7 @@ void main() {
       );
 
       await _hoverAt(tester, const Offset(170, 120));
-      expect(_canvasRenderKey(tester).hoveredElementId, isNull);
+      expect(_hasHoverSelectionPreview(_canvasRenderKey(tester)), isFalse);
     });
 
     testWidgets('switching to watermark mode uses basic canvas cursor', (
@@ -135,4 +135,13 @@ MouseCursor _canvasCursor(WidgetTester tester) {
     matching: find.byType(MouseRegion),
   );
   return tester.widget<MouseRegion>(mouseRegionFinder).cursor;
+}
+
+bool _hasHoverSelectionPreview(SceneCanvasRenderKey renderKey) {
+  for (final task in renderKey.framePlan.tasks) {
+    if (task is HoverOutlineRenderTask) {
+      return true;
+    }
+  }
+  return false;
 }

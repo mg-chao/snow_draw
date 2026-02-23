@@ -4,15 +4,15 @@ import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
 void main() {
   group('SceneCanvasRenderKey', () {
-    test('delete indicator visibility participates in equality', () {
+    test('frame plan differences participate in equality', () {
       final registry = DefaultElementRegistry();
       final hidden = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: _arrowOverlayFramePlan(deleteIndicatorVisible: false),
       );
       final visible = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: true,
+        framePlan: _arrowOverlayFramePlan(deleteIndicatorVisible: true),
       );
 
       expect(hidden, isNot(visible));
@@ -23,12 +23,12 @@ void main() {
       final registry = DefaultElementRegistry();
       final first = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
         creatingElement: _creatingElementSnapshot(revision: 1),
       );
       final second = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
         creatingElement: _creatingElementSnapshot(revision: 2),
       );
 
@@ -40,11 +40,11 @@ void main() {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
       );
       final withPreview = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
         previewElementsById: const {
           'line-1': ElementState(
             id: 'line-1',
@@ -61,16 +61,17 @@ void main() {
       expect(baseline.hashCode, isNot(withPreview.hashCode));
     });
 
-    test('watermark config participates in equality', () {
+    test('watermark task differences participate in equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: _watermarkFramePlan(const WatermarkConfig()),
       );
       final changedWatermark = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        watermarkConfig: const WatermarkConfig(text: 'CONFIDENTIAL'),
+        framePlan: _watermarkFramePlan(
+          const WatermarkConfig(text: 'CONFIDENTIAL'),
+        ),
       );
 
       expect(baseline, isNot(changedWatermark));
@@ -81,39 +82,21 @@ void main() {
 
 SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
-  required bool arrowDeleteIndicatorVisible,
+  required FrameRenderPlan framePlan,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
-  WatermarkConfig? watermarkConfig,
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
-  effectiveSelection: EffectiveSelection.none,
-  boxSelectionBounds: null,
-  selectedIds: const <String>{},
-  hoveredElementId: null,
   hoveredBindingElementId: null,
   hoveredArrowHandle: null,
-  activeArrowHandle: null,
-  arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
-  hoverSelectionConfig: const SelectionConfig(),
-  snapGuides: const [],
+  selectionConfig: const SelectionConfig(),
   documentVersion: 1,
   textRenderingCacheRevision: 0,
-  camera: CameraState.initial,
   previewElementsById: previewElementsById,
-  scaleFactor: 1,
-  selectionConfig: const SelectionConfig(),
-  boxSelectionConfig: const BoxSelectionConfig(),
-  snapConfig: const SnapConfig(),
-  canvasConfig: const CanvasConfig(),
-  gridConfig: const GridConfig(),
-  isHighlightMaskVisible: false,
-  highlightMaskConfig: const HighlightMaskConfig(),
-  isWatermarkVisible: false,
-  watermarkConfig: watermarkConfig ?? const WatermarkConfig(),
+  preferFastFilterFallback: false,
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
-  framePlan: FrameRenderPlan.empty,
+  framePlan: framePlan,
 );
 
 CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>
@@ -129,3 +112,30 @@ CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>
       currentRect: const DrawRect(maxX: 10, maxY: 10),
       creationRevision: revision,
     );
+
+FrameRenderPlan _arrowOverlayFramePlan({
+  required bool deleteIndicatorVisible,
+}) => FrameRenderPlan(
+  tasks: <RenderTask>[
+    ArrowPointOverlayRenderTask(
+      handles: const <ArrowPointHandle>[
+        ArrowPointHandle(
+          elementId: 'arrow-1',
+          kind: ArrowPointKind.turning,
+          index: 0,
+          position: DrawPoint(x: 12, y: 16),
+        ),
+      ],
+      selectionConfig: const SelectionConfig(),
+      deleteIndicatorVisible: deleteIndicatorVisible,
+    ),
+  ],
+  camera: CameraState.initial,
+  scaleFactor: 1,
+);
+
+FrameRenderPlan _watermarkFramePlan(WatermarkConfig config) => FrameRenderPlan(
+  tasks: <RenderTask>[WatermarkRenderTask(config: config)],
+  camera: CameraState.initial,
+  scaleFactor: 1,
+);

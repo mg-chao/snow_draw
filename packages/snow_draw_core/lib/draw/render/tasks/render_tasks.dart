@@ -39,6 +39,18 @@ sealed class ElementRenderTask<T extends ElementData> extends RenderTask {
 
   /// Optional locale hint used by text-capable backends.
   final String? localeTag;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other.runtimeType == runtimeType &&
+          other is ElementRenderTask &&
+          other.element == element &&
+          other.data == data &&
+          other.localeTag == localeTag;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, element, data, localeTag);
 }
 
 /// Rectangle rendering task.
@@ -127,6 +139,14 @@ final class BackgroundRenderTask extends RenderTask {
   const BackgroundRenderTask({required this.color});
 
   final DrawColor color;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BackgroundRenderTask && other.color == color;
+
+  @override
+  int get hashCode => color.hashCode;
 }
 
 /// Grid paint task.
@@ -153,6 +173,33 @@ final class GridRenderTask extends RenderTask {
   final double majorLineOpacity;
   final double minScreenSpacing;
   final double minRenderSpacing;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GridRenderTask &&
+          other.enabled == enabled &&
+          other.size == size &&
+          other.lineWidth == lineWidth &&
+          other.lineColor == lineColor &&
+          other.lineOpacity == lineOpacity &&
+          other.majorLineEvery == majorLineEvery &&
+          other.majorLineOpacity == majorLineOpacity &&
+          other.minScreenSpacing == minScreenSpacing &&
+          other.minRenderSpacing == minRenderSpacing;
+
+  @override
+  int get hashCode => Object.hash(
+    enabled,
+    size,
+    lineWidth,
+    lineColor,
+    lineOpacity,
+    majorLineEvery,
+    majorLineOpacity,
+    minScreenSpacing,
+    minRenderSpacing,
+  );
 }
 
 /// Selection-outline task.
@@ -171,6 +218,20 @@ final class SelectionOutlineRenderTask extends RenderTask {
   final double? rotation;
   final DrawPoint? rotationCenter;
   final bool dashed;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SelectionOutlineRenderTask &&
+          other.bounds == bounds &&
+          other.config == config &&
+          other.rotation == rotation &&
+          other.rotationCenter == rotationCenter &&
+          other.dashed == dashed;
+
+  @override
+  int get hashCode =>
+      Object.hash(bounds, config, rotation, rotationCenter, dashed);
 }
 
 /// Selection controls task (outline + handles).
@@ -193,6 +254,29 @@ final class SelectionControlsRenderTask extends RenderTask {
   final bool dashed;
   final double cornerHandleOffset;
   final bool showRotationHandle;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SelectionControlsRenderTask &&
+          other.bounds == bounds &&
+          other.config == config &&
+          other.rotation == rotation &&
+          other.rotationCenter == rotationCenter &&
+          other.dashed == dashed &&
+          other.cornerHandleOffset == cornerHandleOffset &&
+          other.showRotationHandle == showRotationHandle;
+
+  @override
+  int get hashCode => Object.hash(
+    bounds,
+    config,
+    rotation,
+    rotationCenter,
+    dashed,
+    cornerHandleOffset,
+    showRotationHandle,
+  );
 }
 
 /// Arrow-point overlay task.
@@ -211,6 +295,25 @@ final class ArrowPointOverlayRenderTask extends RenderTask {
   final ArrowPointHandle? activeHandle;
   final ArrowPointHandle? hoveredHandle;
   final bool deleteIndicatorVisible;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArrowPointOverlayRenderTask &&
+          _listEquals(other.handles, handles) &&
+          other.selectionConfig == selectionConfig &&
+          other.activeHandle == activeHandle &&
+          other.hoveredHandle == hoveredHandle &&
+          other.deleteIndicatorVisible == deleteIndicatorVisible;
+
+  @override
+  int get hashCode => Object.hash(
+    _listHash(handles),
+    selectionConfig,
+    activeHandle,
+    hoveredHandle,
+    deleteIndicatorVisible,
+  );
 }
 
 /// Hover-outline task.
@@ -225,6 +328,17 @@ final class HoverOutlineRenderTask extends RenderTask {
   final ElementState element;
   final SelectionConfig config;
   final bool useTextUnderlineStyle;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HoverOutlineRenderTask &&
+          other.element == element &&
+          other.config == config &&
+          other.useTextUnderlineStyle == useTextUnderlineStyle;
+
+  @override
+  int get hashCode => Object.hash(element, config, useTextUnderlineStyle);
 }
 
 /// Snap-guides overlay task.
@@ -234,6 +348,16 @@ final class SnapGuidesRenderTask extends RenderTask {
 
   final List<SnapGuide> guides;
   final SnapConfig snapConfig;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SnapGuidesRenderTask &&
+          _listEquals(other.guides, guides) &&
+          other.snapConfig == snapConfig;
+
+  @override
+  int get hashCode => Object.hash(_listHash(guides), snapConfig);
 }
 
 /// Box-select overlay task.
@@ -248,6 +372,17 @@ final class BoxSelectionRenderTask extends RenderTask {
   final DrawRect bounds;
   final BoxSelectionConfig config;
   final List<ElementState> previewElements;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BoxSelectionRenderTask &&
+          other.bounds == bounds &&
+          other.config == config &&
+          _listEquals(other.previewElements, previewElements);
+
+  @override
+  int get hashCode => Object.hash(bounds, config, _listHash(previewElements));
 }
 
 /// Highlight-mask overlay task.
@@ -260,6 +395,16 @@ final class HighlightMaskRenderTask extends RenderTask {
 
   final HighlightMaskConfig config;
   final List<ElementState> highlights;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HighlightMaskRenderTask &&
+          other.config == config &&
+          _listEquals(other.highlights, highlights);
+
+  @override
+  int get hashCode => Object.hash(config, _listHash(highlights));
 }
 
 /// Watermark overlay task.
@@ -268,4 +413,29 @@ final class WatermarkRenderTask extends RenderTask {
   const WatermarkRenderTask({required this.config});
 
   final WatermarkConfig config;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WatermarkRenderTask && other.config == config;
+
+  @override
+  int get hashCode => config.hashCode;
 }
+
+bool _listEquals<T>(List<T> a, List<T> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int _listHash<T>(List<T> values) => Object.hashAll(values);

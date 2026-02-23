@@ -104,14 +104,15 @@ class SceneCanvasPainter extends CustomPainter {
     if (!_isFreeDrawCreationInteraction(state.application.interaction)) {
       _freeDrawPreviewCache.clear();
     }
-    final camera = renderKey.camera;
-    final scale = renderKey.scaleFactor == 0 ? 1.0 : renderKey.scaleFactor;
+    final framePlan = renderKey.framePlan;
+    final camera = framePlan.camera;
+    final scale = framePlan.scaleFactor == 0 ? 1.0 : framePlan.scaleFactor;
     final plannedBackgroundTask = _firstPlannedTask<BackgroundRenderTask>();
     final plannedGridTask = _firstPlannedTask<GridRenderTask>();
     final effectiveBackgroundColor =
         plannedBackgroundTask?.color ?? ConfigDefaults.backgroundColor;
     final effectiveGridConfig = plannedGridTask == null
-        ? const GridConfig(enabled: false)
+        ? const GridConfig()
         : _gridConfigFromTask(plannedGridTask);
     _drawBackground(canvas, size, effectiveBackgroundColor);
     final viewportRect = DrawRect(
@@ -306,8 +307,8 @@ class SceneCanvasPainter extends CustomPainter {
       canvas: canvas,
       size: size,
       cameraPosition: Offset(
-        renderKey.camera.position.x,
-        renderKey.camera.position.y,
+        renderKey.framePlan.camera.position.x,
+        renderKey.framePlan.camera.position.y,
       ),
       scale: scale,
       config: config,
