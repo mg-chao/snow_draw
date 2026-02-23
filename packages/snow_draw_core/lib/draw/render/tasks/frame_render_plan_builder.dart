@@ -4,6 +4,7 @@ import '../../elements/core/element_registry_interface.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/text/text_data.dart';
+import '../../models/document_state.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
@@ -11,6 +12,7 @@ import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
 import '../../utils/arrow_binding_highlight.dart';
 import '../../utils/binding_highlight_visibility.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/selection_calculator.dart';
 import '../planning/highlight_mask_visibility.dart';
 import '../planning/watermark_visibility.dart';
@@ -70,18 +72,36 @@ class FrameRenderPlanBuilder {
   }) {
     final tasks = <RenderTask>[];
     final camera = view.state.application.view.camera;
-    final effectiveScale = scaleFactor == 0 ? 1.0 : scaleFactor;
+    final effectiveScale = resolveEffectiveZoom(scaleFactor);
     final previewElementsById = transientState.previewElementsById;
+    final document = view.state.domain.document;
 
     ElementState resolveEffectiveElement(ElementState element) =>
         previewElementsById[element.id] ?? view.effectiveElement(element);
 
     ElementState? resolveEffectiveElementById(String id) {
-      final element = view.state.domain.document.getElementById(id);
+      final element = document.getElementById(id);
       if (element == null) {
         return null;
       }
       return resolveEffectiveElement(element);
+    }
+
+    void appendElementTasks(Iterable<ElementState> elements) {
+      for (final element in elements) {
+        final definition = elementRegistry.getDefinitionByValue(
+          element.typeId.value,
+        );
+        if (definition == null) {
+          continue;
+        }
+        tasks.addAll(
+          definition.taskEncoder.encodeTasks(
+            element: element,
+            localeTag: localeTag,
+          ),
+        );
+      }
     }
 
     final canvasConfig = transientState.canvasConfig;
@@ -106,54 +126,16 @@ class FrameRenderPlanBuilder {
       );
     }
 
-    for (final element in view.elements) {
-      final effectiveElement = resolveEffectiveElement(element);
-      final definition = elementRegistry.getDefinitionByValue(
-        effectiveElement.typeId.value,
-      );
-      if (definition == null) {
-        continue;
-      }
-      tasks.addAll(
-        definition.taskEncoder.encodeTasks(
-          element: effectiveElement,
-          localeTag: localeTag,
-        ),
-      );
-    }
+    appendElementTasks([
+      for (final element in view.elements) resolveEffectiveElement(element),
+    ]);
 
     if (previewElementsById.isNotEmpty) {
-      final previewOnlyElements = <ElementState>[];
-      final document = view.state.domain.document;
-      for (final entry in previewElementsById.entries) {
-        if (document.getElementById(entry.key) != null) {
-          continue;
-        }
-        previewOnlyElements.add(entry.value);
-      }
-      if (previewOnlyElements.isNotEmpty) {
-        previewOnlyElements.sort((a, b) {
-          final zIndexComparison = a.zIndex.compareTo(b.zIndex);
-          if (zIndexComparison != 0) {
-            return zIndexComparison;
-          }
-          return a.id.compareTo(b.id);
-        });
-        for (final previewElement in previewOnlyElements) {
-          final definition = elementRegistry.getDefinitionByValue(
-            previewElement.typeId.value,
-          );
-          if (definition == null) {
-            continue;
-          }
-          tasks.addAll(
-            definition.taskEncoder.encodeTasks(
-              element: previewElement,
-              localeTag: localeTag,
-            ),
-          );
-        }
-      }
+      final previewOnlyElements = _resolvePreviewOnlyElements(
+        previewElementsById: previewElementsById,
+        document: document,
+      );
+      appendElementTasks(previewOnlyElements);
     }
 
     final highlightMaskConfig = transientState.highlightMaskConfig;
@@ -188,6 +170,10 @@ class FrameRenderPlanBuilder {
       for (final element in view.selectedElements)
         resolveEffectiveElement(element),
     ];
+    final selectedArrowData = _resolveSingleSelectedArrowData(
+      selectedCount: selectedIds.length,
+      selectedElements: selectedEffectiveElements,
+    );
     final singleSelectedElement = selectedIds.length == 1
         ? resolveEffectiveElementById(selectedIds.first)
         : null;
@@ -228,21 +214,10 @@ class FrameRenderPlanBuilder {
         }
       }
 
-      final firstSelectedData = selectedEffectiveElements.isEmpty
-          ? null
-          : selectedEffectiveElements.first.data;
-      final isSingleTwoPointArrow =
-          selectedIds.length == 1 &&
-          firstSelectedData is ArrowLikeData &&
-          firstSelectedData.points.length == 2;
+      final isSingleTwoPointArrow = selectedArrowData?.points.length == 2;
       final isSingleElbowArrow =
-          selectedIds.length == 1 &&
-          firstSelectedData is ArrowLikeData &&
-          firstSelectedData.arrowType == ArrowType.elbow;
-      final cornerHandleOffset =
-          selectedIds.length == 1 && firstSelectedData is ArrowLikeData
-          ? 8.0
-          : 0.0;
+          selectedArrowData?.arrowType == ArrowType.elbow;
+      final cornerHandleOffset = selectedArrowData == null ? 0.0 : 8.0;
 
       if (!isSingleTwoPointArrow) {
         final selectionBounds = effectiveSelection.bounds!;
@@ -310,17 +285,17 @@ class FrameRenderPlanBuilder {
       }
     }
 
-    if (singleSelectedElement != null && hoverSelectionConfig != null) {
-      if (singleSelectedElement.data is TextData) {
-        tasks.add(
-          SelectionOutlineRenderTask(
-            bounds: singleSelectedElement.rect,
-            config: hoverSelectionConfig,
-            rotation: singleSelectedElement.rotation,
-            rotationCenter: singleSelectedElement.center,
-          ),
-        );
-      }
+    if (singleSelectedElement != null &&
+        hoverSelectionConfig != null &&
+        singleSelectedElement.data is TextData) {
+      tasks.add(
+        SelectionOutlineRenderTask(
+          bounds: singleSelectedElement.rect,
+          config: hoverSelectionConfig,
+          rotation: singleSelectedElement.rotation,
+          rotationCenter: singleSelectedElement.center,
+        ),
+      );
     }
 
     final boxSelectionBounds = transientState.boxSelectionBounds;
@@ -329,9 +304,7 @@ class FrameRenderPlanBuilder {
         boxSelectionConfig != null &&
         selectionConfig != null) {
       final previewElements = <ElementState>[];
-      for (final candidate in view.state.domain.document.getElementsInRect(
-        boxSelectionBounds,
-      )) {
+      for (final candidate in document.getElementsInRect(boxSelectionBounds)) {
         final effective = resolveEffectiveElement(candidate);
         final aabb = SelectionCalculator.computeElementWorldAabb(effective);
         if (rectsIntersect(boxSelectionBounds, aabb)) {
@@ -354,6 +327,36 @@ class FrameRenderPlanBuilder {
       scaleFactor: effectiveScale,
       localeTag: localeTag,
     );
+  }
+
+  List<ElementState> _resolvePreviewOnlyElements({
+    required Map<String, ElementState> previewElementsById,
+    required DocumentState document,
+  }) {
+    final previewOnlyElements = <ElementState>[
+      for (final entry in previewElementsById.entries)
+        if (document.getElementById(entry.key) == null) entry.value,
+    ];
+    return previewOnlyElements..sort(_compareElementZOrder);
+  }
+
+  ArrowLikeData? _resolveSingleSelectedArrowData({
+    required int selectedCount,
+    required List<ElementState> selectedElements,
+  }) {
+    if (selectedCount != 1 || selectedElements.isEmpty) {
+      return null;
+    }
+    final data = selectedElements.first.data;
+    return data is ArrowLikeData ? data : null;
+  }
+
+  int _compareElementZOrder(ElementState a, ElementState b) {
+    final zIndexComparison = a.zIndex.compareTo(b.zIndex);
+    if (zIndexComparison != 0) {
+      return zIndexComparison;
+    }
+    return a.id.compareTo(b.id);
   }
 
   List<String> _resolveArrowBindingHighlightElementIds({

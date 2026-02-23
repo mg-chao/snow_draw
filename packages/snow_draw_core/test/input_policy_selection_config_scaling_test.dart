@@ -7,7 +7,7 @@ void main() {
 
     final scaled = scaleSelectionConfigForInput(
       selectionConfig: config,
-      scaleFactor: 1.0,
+      scaleFactor: 1,
     );
 
     expect(identical(scaled, config), isTrue);
@@ -30,7 +30,7 @@ void main() {
 
     final scaled = scaleSelectionConfigForInput(
       selectionConfig: config,
-      scaleFactor: 2.0,
+      scaleFactor: 2,
     );
 
     expect(scaled.render.strokeWidth, 2);
@@ -40,5 +40,22 @@ void main() {
     expect(scaled.interaction.dragThreshold, 1);
     expect(scaled.padding, 6);
     expect(scaled.rotateHandleOffset, 9);
+  });
+
+  test('falls back to identity scaling for invalid scale factors', () {
+    const config = SelectionConfig();
+    final invalidScales = <double>[0, -2, double.nan, double.infinity];
+
+    for (final scale in invalidScales) {
+      final scaled = scaleSelectionConfigForInput(
+        selectionConfig: config,
+        scaleFactor: scale,
+      );
+      expect(
+        identical(scaled, config),
+        isTrue,
+        reason: 'Expected scale $scale to use fallback scaling',
+      );
+    }
   });
 }

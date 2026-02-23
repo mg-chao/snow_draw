@@ -95,5 +95,27 @@ void main() {
         expect(encodedIds.where((id) => id == 'line-1').length, 1);
       },
     );
+
+    test('normalizes invalid scale factors to a stable fallback', () {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+
+      final view = DrawStateView.fromState(
+        DrawState(
+          domain: DomainState(document: DocumentState()),
+          application: const ApplicationState(view: ViewState()),
+        ),
+      );
+      const invalidScales = <double>[0, -1, double.nan, double.infinity];
+
+      for (final scale in invalidScales) {
+        final plan = builder.build(
+          view: view,
+          elementRegistry: registry,
+          scaleFactor: scale,
+        );
+        expect(plan.scaleFactor, 1.0, reason: 'Expected fallback for $scale');
+      }
+    });
   });
 }
