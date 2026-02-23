@@ -111,15 +111,22 @@ class MiddlewarePipeline {
         );
       }
 
+      Future<DispatchContext> resolveContextAfterNext() async {
+        if (!nextCalled) {
+          return currentContext;
+        }
+        return _resolveDownstreamContext(
+          fallbackContext: nextInputContext ?? currentContext,
+          middleware: middleware,
+          downstreamFuture: nextFuture!,
+        );
+      }
+
       try {
         final result = await middleware.invoke(currentContext, guardedNext);
         middlewareCompleted = true;
         if (nextCalled && (!nextObserved || !nextSettled)) {
-          final downstreamContext = await _resolveDownstreamContext(
-            fallbackContext: nextInputContext ?? currentContext,
-            middleware: middleware,
-            downstreamFuture: nextFuture!,
-          );
+          final downstreamContext = await resolveContextAfterNext();
           final detachedNextError = !nextObserved
               ? StateError(
                   'Middleware "${middleware.name}" called next() without '
@@ -143,11 +150,7 @@ class MiddlewarePipeline {
         switch (errorHandler.handle(error, stackTrace)) {
           case RecoveryAction.skip:
             if (nextCalled) {
-              final downstreamContext = await _resolveDownstreamContext(
-                fallbackContext: nextInputContext ?? currentContext,
-                middleware: middleware,
-                downstreamFuture: nextFuture!,
-              );
+              final downstreamContext = await resolveContextAfterNext();
               return _markSkipped(
                 context: downstreamContext,
                 middleware: middleware,
@@ -160,13 +163,7 @@ class MiddlewarePipeline {
             currentIndex += 1;
             continue;
           case RecoveryAction.stop:
-            final contextForStop = nextCalled
-                ? await _resolveDownstreamContext(
-                    fallbackContext: nextInputContext ?? currentContext,
-                    middleware: middleware,
-                    downstreamFuture: nextFuture!,
-                  )
-                : currentContext;
+            final contextForStop = await resolveContextAfterNext();
             return contextForStop.withError(
               error,
               stackTrace,

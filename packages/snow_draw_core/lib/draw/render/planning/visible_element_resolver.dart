@@ -1,4 +1,8 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import '../../models/document_state.dart';
+import '../../models/element_state.dart';
+import '../../types/draw_rect.dart';
+import '../../utils/selection_calculator.dart';
+import '../rect_intersection.dart';
 
 /// Builds a z-ordered list of visible elements with preview replacements.
 List<ElementState> resolveVisibleElementScene({
@@ -26,8 +30,7 @@ List<ElementState> resolveVisibleElementScene({
       continue;
     }
 
-    final previewAabb = SelectionCalculator.computeElementWorldAabb(preview);
-    if (!_rectsIntersect(previewAabb, viewportRect)) {
+    if (!_isInViewport(preview, viewportRect)) {
       continue;
     }
     effectiveById[elementId] = preview;
@@ -41,8 +44,7 @@ List<ElementState> resolveVisibleElementScene({
       continue;
     }
 
-    final aabb = SelectionCalculator.computeElementWorldAabb(preview);
-    if (!_rectsIntersect(aabb, viewportRect)) {
+    if (!_isInViewport(preview, viewportRect)) {
       continue;
     }
     effectiveById[previewId] = preview;
@@ -74,8 +76,8 @@ int _resolveOrderIndex({
   required ElementState element,
 }) => document.getOrderIndex(element.id) ?? element.zIndex;
 
-bool _rectsIntersect(DrawRect a, DrawRect b) =>
-    a.minX <= b.maxX &&
-    a.maxX >= b.minX &&
-    a.minY <= b.maxY &&
-    a.maxY >= b.minY;
+bool _isInViewport(ElementState element, DrawRect viewportRect) =>
+    rectsIntersect(
+      SelectionCalculator.computeElementWorldAabb(element),
+      viewportRect,
+    );

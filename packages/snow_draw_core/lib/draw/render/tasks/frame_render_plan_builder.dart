@@ -12,6 +12,7 @@ import '../../types/element_style.dart';
 import '../../utils/arrow_binding_highlight.dart';
 import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/selection_calculator.dart';
+import '../rect_intersection.dart';
 import 'frame_render_plan.dart';
 import 'render_tasks.dart';
 
@@ -72,6 +73,18 @@ class FrameRenderPlanBuilder {
     final tasks = <RenderTask>[];
     final camera = view.state.application.view.camera;
     final effectiveScale = scaleFactor == 0 ? 1.0 : scaleFactor;
+    final previewElementsById = transientState.previewElementsById;
+
+    ElementState resolveEffectiveElement(ElementState element) =>
+        previewElementsById[element.id] ?? view.effectiveElement(element);
+
+    ElementState? resolveEffectiveElementById(String id) {
+      final element = view.state.domain.document.getElementById(id);
+      if (element == null) {
+        return null;
+      }
+      return resolveEffectiveElement(element);
+    }
 
     final canvasConfig = transientState.canvasConfig;
     if (canvasConfig != null) {
@@ -96,9 +109,7 @@ class FrameRenderPlanBuilder {
     }
 
     for (final element in view.elements) {
-      final effectiveElement =
-          transientState.previewElementsById[element.id] ??
-          view.effectiveElement(element);
+      final effectiveElement = resolveEffectiveElement(element);
       final definition = elementRegistry.getDefinitionByValue(
         effectiveElement.typeId.value,
       );
@@ -141,22 +152,19 @@ class FrameRenderPlanBuilder {
     final selectedIds = view.selectedIds;
     final selectedEffectiveElements = <ElementState>[
       for (final element in view.selectedElements)
-        transientState.previewElementsById[element.id] ??
-            view.effectiveElement(element),
+        resolveEffectiveElement(element),
     ];
+    final singleSelectedElement = selectedIds.length == 1
+        ? resolveEffectiveElementById(selectedIds.first)
+        : null;
 
     final hoverSelectionConfig = transientState.hoverSelectionConfig;
     final hoveredElementId = transientState.hoveredElementId;
     if (hoveredElementId != null &&
         hoverSelectionConfig != null &&
         !selectedIds.contains(hoveredElementId)) {
-      final hovered = view.state.domain.document.getElementById(
-        hoveredElementId,
-      );
-      if (hovered != null) {
-        final effectiveHovered =
-            transientState.previewElementsById[hovered.id] ??
-            view.effectiveElement(hovered);
+      final effectiveHovered = resolveEffectiveElementById(hoveredElementId);
+      if (effectiveHovered != null) {
         tasks.add(
           HoverOutlineRenderTask(
             element: effectiveHovered,
@@ -218,44 +226,37 @@ class FrameRenderPlanBuilder {
       }
     }
 
-    if (selectionConfig != null && selectedIds.length == 1) {
-      final selectedId = selectedIds.first;
-      final selected = view.state.domain.document.getElementById(selectedId);
-      if (selected != null) {
-        final effectiveSelected =
-            transientState.previewElementsById[selected.id] ??
-            view.effectiveElement(selected);
-        final data = effectiveSelected.data;
-        if (data is ArrowLikeData) {
-          final handleTolerance =
-              selectionConfig.interaction.handleTolerance / effectiveScale;
-          final loopThreshold = handleTolerance * 1.5;
-          final baseHandleSize =
-              selectionConfig.render.controlPointSize / effectiveScale;
-          final handleSize =
-              baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
-          final overlay = ArrowPointUtils.buildOverlay(
-            element: effectiveSelected,
-            loopThreshold: loopThreshold,
-            handleSize: handleSize,
+    if (selectionConfig != null && singleSelectedElement != null) {
+      final data = singleSelectedElement.data;
+      if (data is ArrowLikeData) {
+        final handleTolerance =
+            selectionConfig.interaction.handleTolerance / effectiveScale;
+        final loopThreshold = handleTolerance * 1.5;
+        final baseHandleSize =
+            selectionConfig.render.controlPointSize / effectiveScale;
+        final handleSize =
+            baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
+        final overlay = ArrowPointUtils.buildOverlay(
+          element: singleSelectedElement,
+          loopThreshold: loopThreshold,
+          handleSize: handleSize,
+        );
+        final handles = <ArrowPointHandle>[
+          ...overlay.addablePoints,
+          ...overlay.turningPoints,
+          ...overlay.loopPoints,
+        ];
+        if (handles.isNotEmpty) {
+          tasks.add(
+            ArrowPointOverlayRenderTask(
+              handles: List<ArrowPointHandle>.unmodifiable(handles),
+              selectionConfig: selectionConfig,
+              activeHandle: transientState.activeArrowHandle,
+              hoveredHandle: transientState.hoveredArrowHandle,
+              deleteIndicatorVisible:
+                  transientState.arrowDeleteIndicatorVisible,
+            ),
           );
-          final handles = <ArrowPointHandle>[
-            ...overlay.addablePoints,
-            ...overlay.turningPoints,
-            ...overlay.loopPoints,
-          ];
-          if (handles.isNotEmpty) {
-            tasks.add(
-              ArrowPointOverlayRenderTask(
-                handles: List<ArrowPointHandle>.unmodifiable(handles),
-                selectionConfig: selectionConfig,
-                activeHandle: transientState.activeArrowHandle,
-                hoveredHandle: transientState.hoveredArrowHandle,
-                deleteIndicatorVisible:
-                    transientState.arrowDeleteIndicatorVisible,
-              ),
-            );
-          }
         }
       }
     }
@@ -275,23 +276,16 @@ class FrameRenderPlanBuilder {
       }
     }
 
-    if (selectedIds.length == 1 && hoverSelectionConfig != null) {
-      final selectedId = selectedIds.first;
-      final selected = view.state.domain.document.getElementById(selectedId);
-      if (selected != null) {
-        final effectiveSelected =
-            transientState.previewElementsById[selected.id] ??
-            view.effectiveElement(selected);
-        if (effectiveSelected.data is TextData) {
-          tasks.add(
-            SelectionOutlineRenderTask(
-              bounds: effectiveSelected.rect,
-              config: hoverSelectionConfig,
-              rotation: effectiveSelected.rotation,
-              rotationCenter: effectiveSelected.center,
-            ),
-          );
-        }
+    if (singleSelectedElement != null && hoverSelectionConfig != null) {
+      if (singleSelectedElement.data is TextData) {
+        tasks.add(
+          SelectionOutlineRenderTask(
+            bounds: singleSelectedElement.rect,
+            config: hoverSelectionConfig,
+            rotation: singleSelectedElement.rotation,
+            rotationCenter: singleSelectedElement.center,
+          ),
+        );
       }
     }
 
@@ -304,11 +298,9 @@ class FrameRenderPlanBuilder {
       for (final candidate in view.state.domain.document.getElementsInRect(
         boxSelectionBounds,
       )) {
-        final effective =
-            transientState.previewElementsById[candidate.id] ??
-            view.effectiveElement(candidate);
+        final effective = resolveEffectiveElement(candidate);
         final aabb = SelectionCalculator.computeElementWorldAabb(effective);
-        if (_rectsIntersect(boxSelectionBounds, aabb)) {
+        if (rectsIntersect(boxSelectionBounds, aabb)) {
           previewElements.add(effective);
         }
       }
@@ -389,10 +381,4 @@ class FrameRenderPlanBuilder {
     }
     target.add(elementId);
   }
-
-  bool _rectsIntersect(DrawRect a, DrawRect b) =>
-      a.minX <= b.maxX &&
-      a.maxX >= b.minX &&
-      a.minY <= b.maxY &&
-      a.maxY >= b.minY;
 }
