@@ -14,7 +14,7 @@ typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
 
 /// Scope identifier used to isolate cached filter-scene batches.
-enum FilterRenderCacheDomain { staticLayer, dynamicLayer }
+enum FilterRenderCacheDomain { canvas }
 
 /// Stable paint-context key used for cross-frame batch picture reuse.
 @immutable

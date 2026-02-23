@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_visibility.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/interaction_dynamic_scene_cache.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/watermark_visibility.dart';
 
 void main() {
   group('resolveInteractionDynamicSceneFromCachedKey', () {
@@ -12,8 +10,8 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
-        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
-        watermarkLayer: WatermarkLayer.dynamicLayer,
+        isHighlightMaskVisible: true,
+        isWatermarkVisible: true,
       );
       var optimizedResolverCalled = false;
       var previewResolverCalled = false;
@@ -44,16 +42,16 @@ void main() {
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, {'rect'});
       expect(scene.optimizedSceneHasPotentialOccluders, isTrue);
-      expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
-      expect(scene.watermarkLayer, WatermarkLayer.dynamicLayer);
+      expect(scene.isHighlightMaskVisible, isTrue);
+      expect(scene.isWatermarkVisible, isTrue);
     });
 
     test('uses preview resolver when no optimized ids exist', () {
       final stateView = _buildStateView();
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const <String>{},
-        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
-        watermarkLayer: WatermarkLayer.dynamicLayer,
+        isHighlightMaskVisible: true,
+        isWatermarkVisible: true,
       );
       var optimizedResolverCalled = false;
       var previewResolverCalled = false;
@@ -78,8 +76,8 @@ void main() {
       expect(scene.dynamicPreviewElementIds, {'rect'});
       expect(scene.optimizedDynamicElementIds, isEmpty);
       expect(scene.optimizedSceneHasPotentialOccluders, isFalse);
-      expect(scene.highlightMaskLayer, HighlightMaskLayer.dynamicLayer);
-      expect(scene.watermarkLayer, WatermarkLayer.dynamicLayer);
+      expect(scene.isHighlightMaskVisible, isTrue);
+      expect(scene.isWatermarkVisible, isTrue);
     });
 
     test('clears occluder hint when optimized ids are empty', () {
@@ -87,7 +85,7 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const <String>{},
         optimizedSceneHasPotentialOccluders: true,
-        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
+        isHighlightMaskVisible: true,
       );
 
       final scene = resolveInteractionDynamicSceneFromCachedKey(
@@ -109,7 +107,7 @@ void main() {
       final previousRenderKey = _buildDynamicRenderKey(
         optimizedDynamicElementIds: const {'rect'},
         optimizedSceneHasPotentialOccluders: true,
-        highlightMaskLayer: HighlightMaskLayer.dynamicLayer,
+        isHighlightMaskVisible: true,
       );
       final mutablePreviewElements = <String, ElementState>{
         'rect': _rectangle(id: 'rect'),
@@ -162,8 +160,8 @@ DrawStateView _buildStateView() {
 
 DynamicCanvasRenderKey _buildDynamicRenderKey({
   required Set<String> optimizedDynamicElementIds,
-  required HighlightMaskLayer highlightMaskLayer,
-  WatermarkLayer watermarkLayer = WatermarkLayer.none,
+  required bool isHighlightMaskVisible,
+  bool isWatermarkVisible = false,
   bool optimizedSceneHasPotentialOccluders = false,
 }) {
   final config = DrawConfig.defaultConfig;
@@ -191,9 +189,9 @@ DynamicCanvasRenderKey _buildDynamicRenderKey({
     snapConfig: config.snap,
     canvasConfig: config.canvas,
     gridConfig: config.grid,
-    highlightMaskLayer: highlightMaskLayer,
+    isHighlightMaskVisible: isHighlightMaskVisible,
     highlightMaskConfig: const HighlightMaskConfig(),
-    watermarkLayer: watermarkLayer,
+    isWatermarkVisible: isWatermarkVisible,
     watermarkConfig: const WatermarkConfig(),
     elementRegistry: DefaultElementRegistry(),
     performanceMonitoringEnabled: false,

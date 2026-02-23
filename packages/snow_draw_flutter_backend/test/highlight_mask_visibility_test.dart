@@ -3,26 +3,26 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_visibility.dart';
 
 void main() {
-  HighlightMaskLayer resolveLayer({
+  bool resolveVisibility({
     required bool hasHighlights,
     double maskOpacity = 0.5,
-  }) => resolveHighlightMaskLayer(
+  }) => isHighlightMaskVisible(
     hasHighlights: hasHighlights,
     config: HighlightMaskConfig(maskOpacity: maskOpacity),
   );
 
-  test('mask layer resolves to none when no highlights', () {
-    final layer = resolveLayer(hasHighlights: false, maskOpacity: 1);
-    expect(layer, HighlightMaskLayer.none);
+  test('mask visibility is false when no highlights', () {
+    final visible = resolveVisibility(hasHighlights: false, maskOpacity: 1);
+    expect(visible, isFalse);
   });
 
-  test('mask layer resolves to none when opacity is zero', () {
-    final layer = resolveLayer(hasHighlights: true, maskOpacity: 0);
-    expect(layer, HighlightMaskLayer.none);
+  test('mask visibility is false when opacity is zero', () {
+    final visible = resolveVisibility(hasHighlights: true, maskOpacity: 0);
+    expect(visible, isFalse);
   });
 
-  test('mask layer resolves to dynamic when highlights are visible', () {
-    final layer = resolveLayer(hasHighlights: true);
-    expect(layer, HighlightMaskLayer.dynamicLayer);
+  test('mask visibility is true when highlights are visible', () {
+    final visible = resolveVisibility(hasHighlights: true);
+    expect(visible, isTrue);
   });
 }

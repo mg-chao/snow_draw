@@ -22,23 +22,4 @@ void main() {
       isTrue,
     );
   });
-
-  test('watermark layer resolves to none when text is empty', () {
-    final layer = resolveWatermarkLayer(config: const WatermarkConfig());
-    expect(layer, WatermarkLayer.none);
-  });
-
-  test('watermark layer resolves to none when opacity is zero', () {
-    final layer = resolveWatermarkLayer(
-      config: const WatermarkConfig(text: 'CONFIDENTIAL', opacity: 0),
-    );
-    expect(layer, WatermarkLayer.none);
-  });
-
-  test('watermark layer resolves to dynamic when visible', () {
-    final layer = resolveWatermarkLayer(
-      config: const WatermarkConfig(text: 'CONFIDENTIAL'),
-    );
-    expect(layer, WatermarkLayer.dynamicLayer);
-  });
 }

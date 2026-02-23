@@ -18,14 +18,12 @@ import 'grid_shader_painter.dart';
 import 'highlight_interaction_scene_cache.dart';
 import 'highlight_mask_painter.dart';
 import 'highlight_mask_static_scene_cache.dart';
-import 'highlight_mask_visibility.dart';
 import 'optimized_scene_occlusion.dart';
 import 'render_keys.dart';
 import 'serial_number_connection_painter.dart';
 import 'visible_element_scene_cache.dart';
 import 'visible_element_scene_resolver.dart';
 import 'watermark_painter.dart';
-import 'watermark_visibility.dart';
 
 final ModuleLogger _dynamicCanvasFallbackLog = LogService.fallback.render;
 
@@ -140,7 +138,7 @@ class DynamicCanvasPainter extends CustomPainter {
       }
     }
 
-    if (renderKey.highlightMaskLayer == HighlightMaskLayer.dynamicLayer) {
+    if (renderKey.isHighlightMaskVisible) {
       _paintDynamicHighlightMask(
         canvas: canvas,
         viewportRect: viewportRect,
@@ -151,7 +149,7 @@ class DynamicCanvasPainter extends CustomPainter {
       _highlightMaskStaticSceneCache.clear();
     }
 
-    if (renderKey.watermarkLayer == WatermarkLayer.dynamicLayer) {
+    if (renderKey.isWatermarkVisible) {
       canvas
         ..save()
         ..scale(1 / scale, 1 / scale)
@@ -846,7 +844,7 @@ class DynamicCanvasPainter extends CustomPainter {
 
     // Dynamic highlight edits should use the same whole-mask composition path
     // as settled frames. The static-mask + modulate-hole optimization can
-    // alter dynamic layer content and produce inconsistent highlight colors.
+    // alter overlay content and produce inconsistent highlight colors.
     if (dynamicHighlights.isNotEmpty) {
       _highlightMaskStaticSceneCache.clear();
       paintHighlightMask(
@@ -1543,7 +1541,7 @@ class DynamicCanvasPainter extends CustomPainter {
   FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
     final localeTag = renderKey.locale?.toLanguageTag() ?? '';
     return FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.dynamicLayer,
+      domain: FilterRenderCacheDomain.canvas,
       documentVersion: renderKey.documentVersion,
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
       scaleKey: (scale * 1000).round(),

@@ -3,8 +3,6 @@ import 'dart:ui' show Locale;
 import 'package:flutter/foundation.dart';
 
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'highlight_mask_visibility.dart';
-import 'watermark_visibility.dart';
 
 int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
   map.entries.map((entry) => Object.hash(entry.key, entry.value)),
@@ -78,9 +76,9 @@ class DynamicCanvasRenderKey {
     required this.selectionConfig,
     required this.boxSelectionConfig,
     required this.snapConfig,
-    required this.highlightMaskLayer,
+    required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
-    required this.watermarkLayer,
+    required this.isWatermarkVisible,
     required this.watermarkConfig,
     required this.canvasConfig,
     required this.gridConfig,
@@ -179,14 +177,14 @@ class DynamicCanvasRenderKey {
   /// Snap configuration.
   final SnapConfig snapConfig;
 
-  /// Highlight mask rendering layer.
-  final HighlightMaskLayer highlightMaskLayer;
+  /// Whether highlight-mask overlay pixels should be painted.
+  final bool isHighlightMaskVisible;
 
   /// Highlight mask configuration.
   final HighlightMaskConfig highlightMaskConfig;
 
-  /// Watermark rendering layer.
-  final WatermarkLayer watermarkLayer;
+  /// Whether watermark overlay pixels should be painted.
+  final bool isWatermarkVisible;
 
   /// Watermark configuration.
   final WatermarkConfig watermarkConfig;
@@ -239,9 +237,9 @@ class DynamicCanvasRenderKey {
           other.selectionConfig == selectionConfig &&
           other.boxSelectionConfig == boxSelectionConfig &&
           other.snapConfig == snapConfig &&
-          other.highlightMaskLayer == highlightMaskLayer &&
+          other.isHighlightMaskVisible == isHighlightMaskVisible &&
           other.highlightMaskConfig == highlightMaskConfig &&
-          other.watermarkLayer == watermarkLayer &&
+          other.isWatermarkVisible == isWatermarkVisible &&
           other.watermarkConfig == watermarkConfig &&
           other.canvasConfig == canvasConfig &&
           other.gridConfig == gridConfig &&
@@ -274,9 +272,9 @@ class DynamicCanvasRenderKey {
     selectionConfig,
     boxSelectionConfig,
     snapConfig,
-    highlightMaskLayer,
+    isHighlightMaskVisible,
     highlightMaskConfig,
-    watermarkLayer,
+    isWatermarkVisible,
     watermarkConfig,
     canvasConfig,
     gridConfig,
