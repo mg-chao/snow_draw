@@ -71,26 +71,22 @@ class HistoryMiddleware extends MiddlewareBase {
     NextFunction next,
   ) async {
     final action = context.action;
-
-    if (action is Undo) {
-      return _handleUndo(context, next);
+    switch (action) {
+      case Undo _:
+        return _handleUndo(context, next);
+      case Redo _:
+        return _handleRedo(context, next);
+      case ClearHistory _:
+        context.drawContext.log.history.trace('History clear requested', {
+          'traceId': context.traceId,
+        });
+        context.historyManager.clear();
+        return next(context);
+      default:
+        final updatedContext = await next(context);
+        _recordHistory(updatedContext, action);
+        return updatedContext;
     }
-
-    if (action is Redo) {
-      return _handleRedo(context, next);
-    }
-
-    if (action is ClearHistory) {
-      context.drawContext.log.history.trace('History clear requested', {
-        'traceId': context.traceId,
-      });
-      context.historyManager.clear();
-      return next(context);
-    }
-
-    final updatedContext = await next(context);
-    _recordHistory(updatedContext, action);
-    return updatedContext;
   }
 
   Future<DispatchContext> _handleUndo(
@@ -255,37 +251,27 @@ class HistoryMiddleware extends MiddlewareBase {
     if (action is FinishEdit && _metadataFromEdit(context) == null) {
       return HistoryPolicy.none;
     }
-
-    if (action is Recordable) {
-      return HistoryPolicy.record;
-    }
-
-    if (action is NonRecordable) {
-      return HistoryPolicy.none;
-    }
-
-    return action.historyPolicy;
+    return switch (action) {
+      Recordable _ => HistoryPolicy.record,
+      NonRecordable _ => HistoryPolicy.none,
+      _ => action.historyPolicy,
+    };
   }
 
-  HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) {
-    if (action is FinishTextEdit) {
-      return _metadataFromFinishTextEdit(context, action);
-    }
-
-    if (action is FinishEdit) {
-      return action.metadata ?? _metadataFromEdit(context);
-    }
-
-    if (action is Recordable) {
-      final recordable = action as Recordable;
-      return HistoryMetadata(
-        description: recordable.historyDescription,
-        recordType: recordable.recordType,
-      );
-    }
-
-    return null;
-  }
+  HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) =>
+      switch (action) {
+        final FinishTextEdit finishTextEdit => _metadataFromFinishTextEdit(
+          context,
+          finishTextEdit,
+        ),
+        final FinishEdit finishEdit =>
+          finishEdit.metadata ?? _metadataFromEdit(context),
+        final Recordable recordable => HistoryMetadata(
+          description: recordable.historyDescription,
+          recordType: recordable.recordType,
+        ),
+        _ => null,
+      };
 
   HistoryMetadata _metadataFromFinishTextEdit(
     DispatchContext context,
@@ -354,151 +340,211 @@ class HistoryMiddleware extends MiddlewareBase {
     DrawAction action,
     HistoryMetadata? metadata,
   ) {
-    final selectionChanged =
-        context.includeSelectionInHistory &&
-        context.initialState.domain.selection !=
-            context.currentState.domain.selection;
+    final selectionChanged = _selectionChanged(context);
+    final actionChangeSet = switch (action) {
+      FinishEdit _ => _buildFinishEditChangeSet(
+        context: context,
+        metadata: metadata,
+        selectionChanged: selectionChanged,
+      ),
+      final ChangeElementZIndex zIndex => _buildZIndexChangeSet(
+        context: context,
+        elementIds: {zIndex.elementId},
+        selectionChanged: selectionChanged,
+      ),
+      final ChangeElementsZIndex zIndices => _buildZIndexChangeSet(
+        context: context,
+        elementIds: zIndices.elementIds.toSet(),
+        selectionChanged: selectionChanged,
+      ),
+      final DeleteElements delete => _buildDeleteElementsChangeSet(
+        context: context,
+        action: delete,
+        selectionChanged: selectionChanged,
+      ),
+      FinishCreateElement _ => _buildFinishCreateElementChangeSet(
+        context: context,
+        selectionChanged: selectionChanged,
+      ),
+      final FinishTextEdit finishTextEdit => _buildFinishTextEditChangeSet(
+        context: context,
+        action: finishTextEdit,
+        selectionChanged: selectionChanged,
+      ),
+      UpdateGlobalElements _ => HistoryChangeSet(
+        globalElementsChanged: true,
+        selectionChanged: selectionChanged,
+      ),
+      DuplicateElements _ => _buildDuplicateElementsChangeSet(
+        context: context,
+        selectionChanged: selectionChanged,
+      ),
+      _ => null,
+    };
 
-    if (action is FinishEdit) {
-      final affected = metadata?.affectedElementIds ?? const <String>{};
-      if (affected.isNotEmpty) {
-        final expandedAffectedIds = _expandModifiedIdsForArrowBindings(
-          elements: context.initialState.domain.document.elements,
-          modifiedIds: affected,
-        );
-        return HistoryChangeSet(
-          modifiedIds: expandedAffectedIds,
+    return actionChangeSet ??
+        _buildMetadataChangeSet(
+          metadata: metadata,
           selectionChanged: selectionChanged,
         );
-      }
+  }
+
+  bool _selectionChanged(DispatchContext context) =>
+      context.includeSelectionInHistory &&
+      context.initialState.domain.selection !=
+          context.currentState.domain.selection;
+
+  HistoryChangeSet? _buildFinishEditChangeSet({
+    required DispatchContext context,
+    required HistoryMetadata? metadata,
+    required bool selectionChanged,
+  }) {
+    final affected = metadata?.affectedElementIds ?? const <String>{};
+    if (affected.isEmpty) {
       return null;
     }
 
-    if (action is ChangeElementZIndex) {
-      final reordered = _didElementOrderChange(context);
-      return HistoryChangeSet(
-        modifiedIds: {action.elementId},
-        orderChanged: true,
-        selectionChanged: selectionChanged,
-        reindexZIndices: reordered,
-      );
-    }
+    final expandedAffectedIds = _expandModifiedIdsForArrowBindings(
+      elements: context.initialState.domain.document.elements,
+      modifiedIds: affected,
+    );
+    return HistoryChangeSet(
+      modifiedIds: expandedAffectedIds,
+      selectionChanged: selectionChanged,
+    );
+  }
 
-    if (action is ChangeElementsZIndex) {
-      final reordered = _didElementOrderChange(context);
-      return HistoryChangeSet(
-        modifiedIds: action.elementIds.toSet(),
-        orderChanged: true,
-        selectionChanged: selectionChanged,
-        reindexZIndices: reordered,
-      );
-    }
+  HistoryChangeSet _buildZIndexChangeSet({
+    required DispatchContext context,
+    required Set<String> elementIds,
+    required bool selectionChanged,
+  }) {
+    final reordered = _didElementOrderChange(context);
+    return HistoryChangeSet(
+      modifiedIds: elementIds,
+      orderChanged: true,
+      selectionChanged: selectionChanged,
+      reindexZIndices: reordered,
+    );
+  }
 
-    if (action is DeleteElements) {
-      final beforeElements = context.initialState.domain.document.elements;
-      final removedIds = action.elementIds.toSet();
-      _expandDeleteIdsForBoundSerialText(
-        elements: beforeElements,
-        removedIds: removedIds,
-      );
-      final modifiedIds = <String>{};
-      for (final element in beforeElements) {
-        if (removedIds.contains(element.id)) {
-          continue;
-        }
-        final data = element.data;
-        if (data is SerialNumberData) {
-          final boundId = data.textElementId;
-          if (boundId != null && removedIds.contains(boundId)) {
-            modifiedIds.add(element.id);
-          }
-        }
-        if (_isArrowBoundToAny(data: data, targetIds: removedIds)) {
+  HistoryChangeSet _buildDeleteElementsChangeSet({
+    required DispatchContext context,
+    required DeleteElements action,
+    required bool selectionChanged,
+  }) {
+    final beforeElements = context.initialState.domain.document.elements;
+    final removedIds = action.elementIds.toSet();
+    _expandDeleteIdsForBoundSerialText(
+      elements: beforeElements,
+      removedIds: removedIds,
+    );
+    final modifiedIds = <String>{};
+    for (final element in beforeElements) {
+      if (removedIds.contains(element.id)) {
+        continue;
+      }
+      final data = element.data;
+      if (data is SerialNumberData) {
+        final boundId = data.textElementId;
+        if (boundId != null && removedIds.contains(boundId)) {
           modifiedIds.add(element.id);
         }
       }
-      return HistoryChangeSet(
-        modifiedIds: modifiedIds,
-        removedIds: removedIds,
-        orderChanged: true,
-        selectionChanged: selectionChanged,
-      );
-    }
-
-    if (action is FinishCreateElement) {
-      final interaction = context.initialState.application.interaction;
-      if (interaction is CreatingState) {
-        return HistoryChangeSet(
-          addedIds: {interaction.elementId},
-          orderChanged: true,
-          selectionChanged: selectionChanged,
-        );
+      if (_isArrowBoundToAny(data: data, targetIds: removedIds)) {
+        modifiedIds.add(element.id);
       }
+    }
+    return HistoryChangeSet(
+      modifiedIds: modifiedIds,
+      removedIds: removedIds,
+      orderChanged: true,
+      selectionChanged: selectionChanged,
+    );
+  }
+
+  HistoryChangeSet? _buildFinishCreateElementChangeSet({
+    required DispatchContext context,
+    required bool selectionChanged,
+  }) {
+    final interaction = context.initialState.application.interaction;
+    if (interaction is! CreatingState) {
       return null;
     }
+    return HistoryChangeSet(
+      addedIds: {interaction.elementId},
+      orderChanged: true,
+      selectionChanged: selectionChanged,
+    );
+  }
 
-    if (action is FinishTextEdit) {
-      final resolved = _resolveFinishTextEditPayload(context, action);
-      final trimmed = resolved.text.trim();
-      if (trimmed.isEmpty) {
-        if (resolved.isNew) {
-          return null;
-        }
-        final modifiedIds = _dependentIdsBoundToDeletedText(
-          elements: context.initialState.domain.document.elements,
-          textElementId: resolved.elementId,
-        );
-        return HistoryChangeSet(
-          modifiedIds: modifiedIds,
-          removedIds: {resolved.elementId},
-          orderChanged: true,
-          selectionChanged: selectionChanged,
-        );
-      }
+  HistoryChangeSet? _buildFinishTextEditChangeSet({
+    required DispatchContext context,
+    required FinishTextEdit action,
+    required bool selectionChanged,
+  }) {
+    final resolved = _resolveFinishTextEditPayload(context, action);
+    final trimmed = resolved.text.trim();
+    if (trimmed.isEmpty) {
       if (resolved.isNew) {
-        return HistoryChangeSet(
-          addedIds: {resolved.elementId},
-          orderChanged: true,
-          selectionChanged: selectionChanged,
-        );
-      }
-      return HistoryChangeSet(
-        modifiedIds: {resolved.elementId},
-        selectionChanged: selectionChanged,
-      );
-    }
-
-    if (action is UpdateGlobalElements) {
-      return HistoryChangeSet(
-        globalElementsChanged: true,
-        selectionChanged: selectionChanged,
-      );
-    }
-
-    if (action is DuplicateElements) {
-      final addedIds = _addedElementIds(
-        before: context.initialState.domain.document.elements,
-        after: context.currentState.domain.document.elements,
-      );
-      if (addedIds.isEmpty) {
         return null;
       }
+      final modifiedIds = _dependentIdsBoundToDeletedText(
+        elements: context.initialState.domain.document.elements,
+        textElementId: resolved.elementId,
+      );
       return HistoryChangeSet(
-        addedIds: addedIds,
+        modifiedIds: modifiedIds,
+        removedIds: {resolved.elementId},
         orderChanged: true,
         selectionChanged: selectionChanged,
       );
     }
 
-    final affected = metadata?.affectedElementIds ?? const <String>{};
-    if (affected.isNotEmpty) {
+    if (resolved.isNew) {
       return HistoryChangeSet(
-        modifiedIds: affected,
+        addedIds: {resolved.elementId},
+        orderChanged: true,
         selectionChanged: selectionChanged,
       );
     }
 
-    return null;
+    return HistoryChangeSet(
+      modifiedIds: {resolved.elementId},
+      selectionChanged: selectionChanged,
+    );
+  }
+
+  HistoryChangeSet? _buildDuplicateElementsChangeSet({
+    required DispatchContext context,
+    required bool selectionChanged,
+  }) {
+    final addedIds = _addedElementIds(
+      before: context.initialState.domain.document.elements,
+      after: context.currentState.domain.document.elements,
+    );
+    if (addedIds.isEmpty) {
+      return null;
+    }
+    return HistoryChangeSet(
+      addedIds: addedIds,
+      orderChanged: true,
+      selectionChanged: selectionChanged,
+    );
+  }
+
+  HistoryChangeSet? _buildMetadataChangeSet({
+    required HistoryMetadata? metadata,
+    required bool selectionChanged,
+  }) {
+    final affected = metadata?.affectedElementIds ?? const <String>{};
+    if (affected.isEmpty) {
+      return null;
+    }
+    return HistoryChangeSet(
+      modifiedIds: affected,
+      selectionChanged: selectionChanged,
+    );
   }
 
   bool _requiresPersistentSnapshots({

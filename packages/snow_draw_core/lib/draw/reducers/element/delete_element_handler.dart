@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
+import '../../elements/core/element_data.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
@@ -25,21 +26,15 @@ DrawState handleDeleteElements(
     return state;
   }
 
-  final newElements = <ElementState>[];
-  for (final element in document.elements) {
-    if (deleteIds.contains(element.id)) {
-      continue;
-    }
-    newElements.add(
-      _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
-    );
-  }
-
-  final selection = state.domain.selection.selectedIds;
-  final hasSelectionRemoval = selection.any(deleteIds.contains);
-  final newSelectedIds = hasSelectionRemoval
-      ? selection.where((id) => !deleteIds.contains(id)).toSet()
-      : selection;
+  final newElements = [
+    for (final element in document.elements)
+      if (!deleteIds.contains(element.id))
+        _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
+  ];
+  final newSelectedIds = _nextSelectionAfterDeletion(
+    selectedIds: state.domain.selection.selectedIds,
+    deletedIds: deleteIds,
+  );
 
   final next = state.copyWith(
     domain: state.domain.copyWith(
@@ -137,12 +132,10 @@ DrawState handleDuplicateElements(
     seedIds: selectedIds.where(index.containsKey),
   );
 
-  final elementsToDuplicate = <ElementState>[];
-  for (final element in document.elements) {
-    if (idsToDuplicate.contains(element.id)) {
-      elementsToDuplicate.add(element);
-    }
-  }
+  final elementsToDuplicate = _elementsByIds(
+    elements: document.elements,
+    ids: idsToDuplicate,
+  );
   if (elementsToDuplicate.isEmpty) {
     return _reportDuplicateValidationFailure(
       state: state,
@@ -166,23 +159,13 @@ DrawState handleDuplicateElements(
 
   for (final element in elementsToDuplicate) {
     final newId = idMap[element.id]!;
-    var nextData = element.data;
-    if (nextData is SerialNumberData) {
-      final mapped = nextData.textElementId == null
-          ? null
-          : idMap[nextData.textElementId!];
-      nextData = nextData.copyWith(textElementId: mapped);
-    }
-    if (nextData is ArrowLikeData) {
-      nextData = _remapArrowBindings(nextData, idMap);
-    }
     final duplicated = element.copyWith(
       id: newId,
       rect: element.rect.translate(
         DrawPoint(x: action.offsetX, y: action.offsetY),
       ),
       zIndex: nextZIndex,
-      data: nextData,
+      data: _duplicateDataWithRemappedReferences(element.data, idMap),
     );
     nextZIndex++;
     newElements.add(duplicated);
@@ -198,6 +181,43 @@ DrawState handleDuplicateElements(
     ),
   );
   return applySelectionChange(next, newSelectedIds);
+}
+
+Set<String> _nextSelectionAfterDeletion({
+  required Set<String> selectedIds,
+  required Set<String> deletedIds,
+}) {
+  if (!selectedIds.any(deletedIds.contains)) {
+    return selectedIds;
+  }
+  return {
+    for (final id in selectedIds)
+      if (!deletedIds.contains(id)) id,
+  };
+}
+
+List<ElementState> _elementsByIds({
+  required Iterable<ElementState> elements,
+  required Set<String> ids,
+}) => [
+  for (final element in elements)
+    if (ids.contains(element.id)) element,
+];
+
+ElementData _duplicateDataWithRemappedReferences(
+  ElementData data,
+  Map<String, String> idMap,
+) {
+  if (data is SerialNumberData) {
+    final textElementId = data.textElementId;
+    return data.copyWith(
+      textElementId: textElementId == null ? null : idMap[textElementId],
+    );
+  }
+  if (data is ArrowLikeData) {
+    return _remapArrowBindings(data, idMap);
+  }
+  return data;
 }
 
 DrawState _reportDuplicateValidationFailure({
