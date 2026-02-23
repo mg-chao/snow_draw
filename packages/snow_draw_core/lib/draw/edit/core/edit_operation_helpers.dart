@@ -149,6 +149,7 @@ class StandardContextData<S> {
     required this.selectedIds,
     required this.selectionVersion,
     required this.elementsVersion,
+    required this.selectedElements,
     required this.elementSnapshots,
   });
 
@@ -156,6 +157,7 @@ class StandardContextData<S> {
   final Set<String> selectedIds;
   final int selectionVersion;
   final int elementsVersion;
+  final List<ElementState> selectedElements;
   final Map<String, S> elementSnapshots;
 }
 
@@ -165,20 +167,22 @@ StandardContextData<S> gatherStandardContextData<S>({
   required String operationName,
   required S Function(ElementState) toSnapshot,
   DrawRect? initialSelectionBounds,
+  SelectionDerivedData? selectionData,
 }) {
+  final resolvedSelectionData =
+      selectionData ?? SelectionDataComputer.compute(state);
+  final selectedElements = snapshotSelectedElements(state);
   final selection = state.domain.selection;
   return StandardContextData<S>(
     startBounds: requireSelectionBounds(
-      selectionData: SelectionDataComputer.compute(state),
+      selectionData: resolvedSelectionData,
       initialSelectionBounds: initialSelectionBounds,
       operationName: operationName,
     ),
     selectedIds: {...selection.selectedIds},
     selectionVersion: selection.selectionVersion,
     elementsVersion: state.domain.document.elementsVersion,
-    elementSnapshots: buildSnapshots(
-      snapshotSelectedElements(state),
-      toSnapshot,
-    ),
+    selectedElements: List<ElementState>.unmodifiable(selectedElements),
+    elementSnapshots: buildSnapshots(selectedElements, toSnapshot),
   );
 }

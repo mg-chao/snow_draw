@@ -68,38 +68,25 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       operationName: 'ResizeOperation.createContext',
     );
     final selectionData = SelectionDataComputer.compute(state);
-    final startBounds = requireSelectionBounds(
-      selectionData: selectionData,
-      initialSelectionBounds: typedParams.initialSelectionBounds,
+    final data = gatherStandardContextData(
+      state: state,
       operationName: 'ResizeOperation.createContext',
+      toSnapshot: (e) =>
+          ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
+      selectionData: selectionData,
     );
-
+    final startBounds = data.startBounds;
     final rotation = selectionData.overlayRotation ?? 0.0;
     final rotationCenter = selectionData.overlayCenter ?? startBounds.center;
-
-    final DrawPoint handleOffset;
-    if (typedParams.handleOffset != null) {
-      handleOffset = typedParams.handleOffset!;
-    } else {
-      final overlaySpace = OverlaySpace(
-        rotation: rotation,
-        origin: rotationCenter,
-      );
-      final localPointerPosition = overlaySpace.fromWorld(position);
-
-      final handlePosition = HandleCalculator.getResizeHandlePosition(
-        bounds: startBounds,
-        mode: typedParams.resizeMode,
-        padding: typedParams.selectionPadding ?? 0.0,
-      );
-
-      handleOffset = DrawPoint(
-        x: handlePosition.x - localPointerPosition.x,
-        y: handlePosition.y - localPointerPosition.y,
-      );
-    }
-
-    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
+    final handleOffset = _resolveHandleOffset(
+      params: typedParams,
+      pointerPosition: position,
+      startBounds: startBounds,
+      rotation: rotation,
+      rotationCenter: rotationCenter,
+    );
+    final selectedIdsAtStart = data.selectedIds;
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -111,22 +98,18 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       state: state,
       selectedIds: selectedIdsAtStart,
     );
-    final elementSnapshots = buildSnapshots(
-      snapshotSelectedElements(state),
-      (e) => ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
-    );
 
     return ResizeEditContext(
       startPosition: position,
       startBounds: startBounds,
       selectedIdsAtStart: selectedIdsAtStart,
-      selectionVersion: state.domain.selection.selectionVersion,
-      elementsVersion: state.domain.document.elementsVersion,
+      selectionVersion: data.selectionVersion,
+      elementsVersion: data.elementsVersion,
       resizeMode: typedParams.resizeMode,
       handleOffset: handleOffset,
       rotation: rotation,
       selectionPadding: typedParams.selectionPadding ?? 0.0,
-      elementSnapshots: elementSnapshots,
+      elementSnapshots: data.elementSnapshots,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
       forceSerialNumberAspectRatio: forceSerialNumberAspectRatio,
@@ -358,6 +341,34 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     ResizeMode.bottomRight => const [SnapAxisAnchor.end],
     ResizeMode.left || ResizeMode.right => const [],
   };
+
+  DrawPoint _resolveHandleOffset({
+    required ResizeOperationParams params,
+    required DrawPoint pointerPosition,
+    required DrawRect startBounds,
+    required double rotation,
+    required DrawPoint rotationCenter,
+  }) {
+    final explicitOffset = params.handleOffset;
+    if (explicitOffset != null) {
+      return explicitOffset;
+    }
+
+    final overlaySpace = OverlaySpace(
+      rotation: rotation,
+      origin: rotationCenter,
+    );
+    final localPointerPosition = overlaySpace.fromWorld(pointerPosition);
+    final handlePosition = HandleCalculator.getResizeHandlePosition(
+      bounds: startBounds,
+      mode: params.resizeMode,
+      padding: params.selectionPadding ?? 0.0,
+    );
+    return DrawPoint(
+      x: handlePosition.x - localPointerPosition.x,
+      y: handlePosition.y - localPointerPosition.y,
+    );
+  }
 
   bool _shouldLockSerialNumberAspectRatio({
     required DrawState state,

@@ -66,7 +66,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
     );
     final selectedIdsAtStart = data.selectedIds;
-    final targetElements = snapshotSelectedElements(state);
+    final targetElements = data.selectedElements;
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -88,7 +88,7 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       snapBoundsAtStart: snapBounds,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
-      targetElements: List<ElementState>.unmodifiable(targetElements),
+      targetElements: targetElements,
     );
   }
 
