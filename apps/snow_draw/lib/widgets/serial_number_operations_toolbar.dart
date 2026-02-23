@@ -99,7 +99,10 @@ class _SerialNumberOperationsToolbarState
   }
 
   DrawStateViewBuilder _buildStateViewBuilder(DrawStore store) =>
-      DrawStateViewBuilder(editOperations: store.context.editOperations);
+      DrawStateViewBuilder(
+        editOperations: store.context.editOperations,
+        textMetricsService: store.context.textMetricsService,
+      );
 
   _ToolbarProjection _selectProjection(DrawState state) {
     final selection = state.domain.selection;
