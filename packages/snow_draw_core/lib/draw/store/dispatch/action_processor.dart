@@ -155,12 +155,13 @@ class ActionProcessor {
     }
 
     if (_shouldUseInteractionMutationFastPath(action)) {
-      _processInteractionMutationFastPath(action);
+      await _runWithFrozenConfig(
+        () => _processInteractionMutationFastPath(action),
+      );
       return;
     }
 
-    _services.configManager.freeze();
-    try {
+    await _runWithFrozenConfig(() async {
       final initialContext = DispatchContext.initial(
         action: action,
         state: _services.stateManager.current,
@@ -184,9 +185,7 @@ class ActionProcessor {
       }
 
       _commit(initialContext: initialContext, finalContext: finalContext);
-    } finally {
-      _services.configManager.unfreeze();
-    }
+    });
   }
 
   bool _shouldUseInteractionMutationFastPath(DrawAction action) {
@@ -199,7 +198,6 @@ class ActionProcessor {
   }
 
   void _processInteractionMutationFastPath(DrawAction action) {
-    _services.configManager.freeze();
     try {
       final previousState = _services.stateManager.current;
       final transition = interactionStateMachine.reduce(
@@ -217,22 +215,19 @@ class ActionProcessor {
         hasStateChanged: !identical(previousState, transition.nextState),
       );
     } on Object catch (error, stackTrace) {
-      _services.drawContext.log.store
-          .error('Dispatch failed', error, stackTrace, {
-            'action': action.runtimeType.toString(),
-            'criticality': action.criticality.toString(),
-            'source': 'FastInteractionMutationPath',
-          });
-      _services.eventBus.emitLazy(
-        () => ErrorEvent(
-          message:
-              'Dispatch ${action.runtimeType} failed '
-              '(source: FastInteractionMutationPath)',
-          error: error,
-          stackTrace: stackTrace,
-        ),
+      _reportFastPathError(
+        action: action,
+        error: error,
+        stackTrace: stackTrace,
       );
       _rethrowIfCritical(action, error, stackTrace);
+    }
+  }
+
+  Future<void> _runWithFrozenConfig(FutureOr<void> Function() action) async {
+    _services.configManager.freeze();
+    try {
+      await action();
     } finally {
       _services.configManager.unfreeze();
     }
@@ -392,6 +387,28 @@ class ActionProcessor {
         message:
             'Dispatch ${action.runtimeType} failed '
             '(traceId: $traceId, source: $source)',
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
+  }
+
+  void _reportFastPathError({
+    required DrawAction action,
+    required Object error,
+    required StackTrace stackTrace,
+  }) {
+    _services.drawContext.log.store
+        .error('Dispatch failed', error, stackTrace, {
+          'action': action.runtimeType.toString(),
+          'criticality': action.criticality.toString(),
+          'source': 'FastInteractionMutationPath',
+        });
+    _services.eventBus.emitLazy(
+      () => ErrorEvent(
+        message:
+            'Dispatch ${action.runtimeType} failed '
+            '(source: FastInteractionMutationPath)',
         error: error,
         stackTrace: stackTrace,
       ),

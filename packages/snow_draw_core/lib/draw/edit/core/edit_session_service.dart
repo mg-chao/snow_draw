@@ -91,54 +91,70 @@ class EditSessionService {
     required DrawPoint currentPosition,
     EditModifiers modifiers = const EditModifiers(),
     EditUpdateFailurePolicy failurePolicy = EditUpdateFailurePolicy.toIdle,
-  }) => EditErrorHandlerExtension.runWithErrorHandling(
+  }) => _withRestoredSession(
     state: state,
     config: _toErrorConfig(failurePolicy),
     operationName: 'updateEdit',
+    validateVersions: true,
+    action: (restored) => _performUpdate(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+      currentPosition: currentPosition,
+      modifiers: modifiers,
+    ),
+  );
+
+  EditOutcome finish({required DrawState state}) => _withRestoredSession(
+    state: state,
+    config: EditErrorHandlerConfig.toIdle,
+    operationName: 'finishEdit',
+    validateVersions: true,
+    action: (restored) => _performFinish(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+    ),
+  );
+
+  EditOutcome cancel({required DrawState state}) => _withRestoredSession(
+    state: state,
+    config: EditErrorHandlerConfig.toIdle,
+    operationName: 'cancelEdit',
+    action: (restored) => _performCancel(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+    ),
+  );
+
+  EditOutcome _withRestoredSession({
+    required DrawState state,
+    required EditErrorHandlerConfig config,
+    required String operationName,
+    required EditOutcome Function(
+      ({EditOperation operation, EditingState editingState}) restored,
+    )
+    action,
+    bool validateVersions = false,
+  }) => EditErrorHandlerExtension.runWithErrorHandling(
+    state: state,
+    config: config,
+    operationName: operationName,
     log: _log,
     operation: () {
-      final restored = _restoreOrThrow(state, validateVersions: true);
-      return _performUpdate(
-        state: state,
-        operation: restored.operation,
-        editingState: restored.editingState,
-        currentPosition: currentPosition,
-        modifiers: modifiers,
+      final restored = _restoreOrThrow(
+        state,
+        validateVersions: validateVersions,
       );
+      return action(restored);
     },
   );
 
-  EditOutcome finish({required DrawState state}) =>
-      EditErrorHandlerExtension.runWithErrorHandling(
-        state: state,
-        config: EditErrorHandlerConfig.toIdle,
-        operationName: 'finishEdit',
-        log: _log,
-        operation: () {
-          final restored = _restoreOrThrow(state, validateVersions: true);
-          return _performFinish(
-            state: state,
-            operation: restored.operation,
-            editingState: restored.editingState,
-          );
-        },
-      );
-
-  EditOutcome cancel({required DrawState state}) =>
-      EditErrorHandlerExtension.runWithErrorHandling(
-        state: state,
-        config: EditErrorHandlerConfig.toIdle,
-        operationName: 'cancelEdit',
-        log: _log,
-        operation: () {
-          final restored = _restoreOrThrow(state);
-          return _performCancel(
-            state: state,
-            operation: restored.operation,
-            editingState: restored.editingState,
-          );
-        },
-      );
+  EditOutcome _successOutcome({
+    required DrawState state,
+    required EditOperationId operationId,
+  }) => (state: state, failureReason: null, operationId: operationId);
 
   EditErrorHandlerConfig _toErrorConfig(EditUpdateFailurePolicy policy) =>
       switch (policy) {
@@ -163,11 +179,10 @@ class EditSessionService {
       sessionId: sessionId,
     );
 
-    return (
+    return _successOutcome(
       state: state.copyWith(
         application: state.application.copyWith(interaction: session),
       ),
-      failureReason: null,
       operationId: operationId,
     );
   }
@@ -199,14 +214,13 @@ class EditSessionService {
       editingState.snapGuides,
     );
     if (transformUnchanged && guidesUnchanged) {
-      return (
+      return _successOutcome(
         state: state,
-        failureReason: null,
         operationId: editingState.operationId,
       );
     }
 
-    return (
+    return _successOutcome(
       state: state.copyWith(
         application: state.application.copyWith(
           interaction: editingState.withTransform(
@@ -215,7 +229,6 @@ class EditSessionService {
           ),
         ),
       ),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -226,7 +239,7 @@ class EditSessionService {
     required EditingState editingState,
   }) {
     _log?.info('Edit session finished', {'operationId': operation.id});
-    return (
+    return _successOutcome(
       state: runWithScopedTextMetricsService(
         textMetricsService: textMetricsService,
         action: () => operation.finish(
@@ -235,7 +248,6 @@ class EditSessionService {
           transform: editingState.currentTransform,
         ),
       ),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -246,9 +258,8 @@ class EditSessionService {
     required EditingState editingState,
   }) {
     _log?.info('Edit session cancelled', {'operationId': operation.id});
-    return (
+    return _successOutcome(
       state: operation.cancel(state: state),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -265,27 +276,27 @@ class EditSessionService {
       'operationId': operationId,
       'params': params.runtimeType.toString(),
     });
-    final context = runWithScopedTextMetricsService(
+    final sessionData = runWithScopedTextMetricsService(
       textMetricsService: textMetricsService,
-      action: () => operation.createContext(
-        state: state,
-        position: position,
-        params: params,
-      ),
-    );
-    final transform = runWithScopedTextMetricsService(
-      textMetricsService: textMetricsService,
-      action: () => operation.initialTransform(
-        state: state,
-        context: context,
-        startPosition: position,
-      ),
+      action: () {
+        final context = operation.createContext(
+          state: state,
+          position: position,
+          params: params,
+        );
+        final transform = operation.initialTransform(
+          state: state,
+          context: context,
+          startPosition: position,
+        );
+        return (context: context, transform: transform);
+      },
     );
     return EditingState(
       operationId: operationId,
       sessionId: sessionId,
-      context: context,
-      currentTransform: transform,
+      context: sessionData.context,
+      currentTransform: sessionData.transform,
     );
   }
 
