@@ -1873,6 +1873,7 @@ class DynamicCanvasPainter extends CustomPainter {
       config: config,
       rotation: element.rotation,
       rotationCenter: element.center,
+      dashed: element.data is! RectangleData,
     );
   }
 
