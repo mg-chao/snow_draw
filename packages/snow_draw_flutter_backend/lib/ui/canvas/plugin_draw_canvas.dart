@@ -246,18 +246,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _coords.screenOffsetToWorld(localPosition);
 
   Future<void> _recreatePluginCoordinator() async {
-    // Create dependencies.
-    final dependencies = ControllerDependencies(
-      dispatcher: widget.store.dispatch,
-      stateProvider: widget.store,
+    final inputLog = widget.store.context.log.input;
+
+    final pluginContext = PluginContext(
+      stateProvider: () => widget.store.state,
       contextProvider: () => widget.store.context,
       selectionConfigProvider: () =>
           _resolveSelectionConfigForInput(widget.store.state),
+      dispatcher: widget.store.dispatch,
     );
-    final inputLog = widget.store.context.log.input;
-
-    // Create plugin context.
-    final pluginContext = pluginFactory.createPluginContext(dependencies);
 
     // Build middleware list.
     final middlewares = <InputMiddleware>[
@@ -290,22 +287,26 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       middlewares: middlewares,
     );
 
-    // Register standard plugins.
-    final standardPlugins = pluginFactory.createStandardPlugins(
-      currentToolTypeId: widget.currentToolTypeId,
+    final standardPlugins = <InputPlugin>[
+      EditPlugin(),
+      TextToolPlugin(
+        currentToolTypeId: widget.currentToolTypeId,
+        isSelectionToolActive: widget.isSelectionToolActive,
+      ),
+      CreatePlugin(currentToolTypeId: widget.currentToolTypeId),
+      SelectPlugin(
+        currentToolTypeId: widget.currentToolTypeId,
+        isSelectionToolActive: widget.isSelectionToolActive,
+      ),
+      BoxSelectPlugin(),
+    ];
+    final plugins = <InputPlugin>[...standardPlugins, ...?widget.customPlugins];
+    await _pluginCoordinator.registry.registerAll(plugins);
+
+    _updateToolPlugins(
+      toolTypeId: widget.currentToolTypeId,
       isSelectionToolActive: widget.isSelectionToolActive,
     );
-
-    for (final plugin in standardPlugins) {
-      await _pluginCoordinator.registry.register(plugin);
-    }
-
-    // Register custom plugins.
-    if (widget.customPlugins != null) {
-      for (final plugin in widget.customPlugins!) {
-        await _pluginCoordinator.registry.register(plugin);
-      }
-    }
 
     // Print stats (debug mode).
     if (widget.enableDebugLogging) {

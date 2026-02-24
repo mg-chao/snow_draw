@@ -10,6 +10,7 @@ class PluginRegistry {
   final PluginContext _context;
   final List<InputPlugin> _plugins = [];
   final Map<String, InputPlugin> _pluginMap = {};
+  final Map<Type, List<InputPlugin>> _pluginsByEventType = {};
 
   /// Get all plugins.
   List<InputPlugin> get plugins => List<InputPlugin>.unmodifiable(_plugins);
@@ -60,11 +61,14 @@ class PluginRegistry {
   ///
   /// Runs plugins by priority until one returns handled.
   Future<PluginResult?> dispatch(InputEvent event) async {
-    final pluginsForEvent = _pluginsForEvent(event);
-    if (pluginsForEvent.isEmpty) {
+    final pluginsForEvent = _pluginsByEventType[event.runtimeType];
+    if (pluginsForEvent == null || pluginsForEvent.isEmpty) {
       return null;
     }
-    return _dispatchToPlugins(event: event, pluginsForEvent: pluginsForEvent);
+    return _dispatchToPlugins(
+      event: event,
+      pluginsForEvent: List<InputPlugin>.from(pluginsForEvent),
+    );
   }
 
   /// Reset all plugins.
@@ -99,6 +103,7 @@ class PluginRegistry {
     }
     _plugins.clear();
     _pluginMap.clear();
+    _pluginsByEventType.clear();
   }
 
   void _validateBatchPluginIds(List<InputPlugin> plugins) {
@@ -112,11 +117,6 @@ class PluginRegistry {
       }
     }
   }
-
-  List<InputPlugin> _pluginsForEvent(InputEvent event) => [
-    for (final plugin in _plugins)
-      if (plugin.supportedEventTypes.contains(event.runtimeType)) plugin,
-  ];
 
   void _assertPluginIdAvailable(String pluginId) {
     if (_pluginMap.containsKey(pluginId)) {
@@ -134,11 +134,22 @@ class PluginRegistry {
       _plugins.insert(insertAt, plugin);
     }
     _pluginMap[plugin.id] = plugin;
+    _rebuildEventTypeIndex();
   }
 
   void _removePlugin(InputPlugin plugin) {
     _plugins.remove(plugin);
     _pluginMap.remove(plugin.id);
+    _rebuildEventTypeIndex();
+  }
+
+  void _rebuildEventTypeIndex() {
+    _pluginsByEventType.clear();
+    for (final plugin in _plugins) {
+      for (final eventType in plugin.supportedEventTypes) {
+        (_pluginsByEventType[eventType] ??= <InputPlugin>[]).add(plugin);
+      }
+    }
   }
 
   Future<PluginResult?> _dispatchToPlugins({
@@ -260,22 +271,13 @@ class PluginRegistry {
   }
 
   /// Get plugin statistics.
-  Map<String, dynamic> getStats() {
-    final eventTypeCount = <Type, int>{};
-    for (final plugin in _plugins) {
-      for (final type in plugin.supportedEventTypes) {
-        eventTypeCount[type] = (eventTypeCount[type] ?? 0) + 1;
-      }
-    }
-
-    return {
-      'totalPlugins': _plugins.length,
-      'pluginsByPriority': _plugins
-          .map((p) => {'id': p.id, 'name': p.name, 'priority': p.priority})
-          .toList(),
-      'eventTypeHandlers': eventTypeCount.map(
-        (type, count) => MapEntry(type.toString(), count),
-      ),
-    };
-  }
+  Map<String, dynamic> getStats() => {
+    'totalPlugins': _plugins.length,
+    'pluginsByPriority': _plugins
+        .map((p) => {'id': p.id, 'name': p.name, 'priority': p.priority})
+        .toList(),
+    'eventTypeHandlers': _pluginsByEventType.map(
+      (type, handlers) => MapEntry(type.toString(), handlers.length),
+    ),
+  };
 }

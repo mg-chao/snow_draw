@@ -16,37 +16,6 @@ abstract interface class StateProvider {
   DrawState get state;
 }
 
-/// Controller dependencies.
-///
-/// Encapsulates all external dependencies a controller needs for testing or
-/// replacement.
-class ControllerDependencies implements StateProvider {
-  const ControllerDependencies({
-    required ActionDispatcher dispatcher,
-    required StateProvider stateProvider,
-    required DrawContext Function() contextProvider,
-    required SelectionConfig Function() selectionConfigProvider,
-  }) : _dispatcher = dispatcher,
-       _stateProvider = stateProvider,
-       _contextProvider = contextProvider,
-       _selectionConfigProvider = selectionConfigProvider;
-  final ActionDispatcher _dispatcher;
-  final StateProvider _stateProvider;
-  final DrawContext Function() _contextProvider;
-  final SelectionConfig Function() _selectionConfigProvider;
-
-  Future<void> dispatch(DrawAction action) => _dispatcher(action);
-
-  @override
-  DrawState get state => _stateProvider.state;
-
-  /// Get the DrawContext.
-  DrawContext get context => _contextProvider();
-
-  /// Get selection configuration.
-  SelectionConfig get selectionConfig => _selectionConfigProvider();
-}
-
 enum EditPointerDownBehavior { ignore, cancelEdit, commitEdit }
 
 /// Explicit routing policy for input while editing.
