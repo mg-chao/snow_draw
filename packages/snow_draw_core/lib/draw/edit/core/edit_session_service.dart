@@ -52,7 +52,7 @@ class EditSessionService {
     required EditSessionId sessionId,
   }) {
     if (!state.domain.selection.hasSelection) {
-      return (
+      return EditOutcome(
         state: state,
         failureReason: EditFailureReason.noSelection,
         operationId: operationId,
@@ -61,7 +61,7 @@ class EditSessionService {
 
     final operation = editOperations.getOperation(operationId);
     if (operation == null) {
-      return (
+      return EditOutcome(
         state: state,
         failureReason: EditFailureReason.unknownOperationId,
         operationId: operationId,
@@ -126,18 +126,19 @@ class EditSessionService {
   EditOutcome _withRestoredSession({
     required DrawState state,
     required String operationName,
-    required EditOutcome Function(
-      ({EditOperation operation, EditingState editingState}) restored,
-    )
-    action,
+    required EditOutcome Function(_RestoredSession restored) action,
     bool validateVersions = false,
   }) {
     final restoration = _restoreSession(
       state,
       validateVersions: validateVersions,
     );
-    if (restoration.failureReason case final reason?) {
-      return EditErrorHandler.createFailure(state: state, reason: reason);
+    final failureReason = restoration.failureReason;
+    if (failureReason != null) {
+      return EditErrorHandler.createFailure(
+        state: state,
+        reason: failureReason,
+      );
     }
 
     final restored = restoration.session!;
@@ -153,7 +154,7 @@ class EditSessionService {
   EditOutcome _successOutcome({
     required DrawState state,
     required EditOperationId operationId,
-  }) => (state: state, failureReason: null, operationId: operationId);
+  }) => EditOutcome(state: state, operationId: operationId);
 
   T _runWithTextMetrics<T>(T Function() action) =>
       runWithScopedTextMetricsService(
@@ -292,17 +293,16 @@ class EditSessionService {
     );
   }
 
-  ({
-    ({EditOperation operation, EditingState editingState})? session,
-    EditFailureReason? failureReason,
-  })
-  _restoreSession(DrawState state, {bool validateVersions = false}) {
+  _SessionRestoreResult _restoreSession(
+    DrawState state, {
+    bool validateVersions = false,
+  }) {
     final interaction = state.application.interaction;
     if (interaction is! EditingState) {
       _log?.error('Edit session restore failed', null, null, {
         'reason': 'not_editing',
       });
-      return (session: null, failureReason: EditFailureReason.notEditing);
+      return const _SessionRestoreResult.failure(EditFailureReason.notEditing);
     }
 
     final operation = editOperations.getOperation(interaction.operationId);
@@ -311,9 +311,8 @@ class EditSessionService {
         'operationId': interaction.operationId,
         'reason': 'unknown_operation',
       });
-      return (
-        session: null,
-        failureReason: EditFailureReason.unknownOperationId,
+      return const _SessionRestoreResult.failure(
+        EditFailureReason.unknownOperationId,
       );
     }
 
@@ -323,7 +322,7 @@ class EditSessionService {
         currentState: state,
       );
       if (versionConflict case final reason?) {
-        return (session: null, failureReason: reason);
+        return _SessionRestoreResult.failure(reason);
       }
     }
 
@@ -331,9 +330,8 @@ class EditSessionService {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
-    return (
-      session: (operation: operation, editingState: interaction),
-      failureReason: null,
+    return _SessionRestoreResult.success(
+      _RestoredSession(operation: operation, editingState: interaction),
     );
   }
 
@@ -366,4 +364,20 @@ class EditSessionService {
     }
     return null;
   }
+}
+
+class _RestoredSession {
+  const _RestoredSession({required this.operation, required this.editingState});
+
+  final EditOperation operation;
+  final EditingState editingState;
+}
+
+class _SessionRestoreResult {
+  const _SessionRestoreResult.success(this.session) : failureReason = null;
+
+  const _SessionRestoreResult.failure(this.failureReason) : session = null;
+
+  final _RestoredSession? session;
+  final EditFailureReason? failureReason;
 }

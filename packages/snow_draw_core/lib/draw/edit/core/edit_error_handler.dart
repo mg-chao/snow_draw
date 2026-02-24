@@ -11,13 +11,11 @@ class EditErrorHandler {
 
   static final ModuleLogger _fallbackLog = LogService.fallback.edit;
 
-  static EditOperationId? extractOperationId(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is EditingState) {
-      return interaction.operationId;
-    }
-    return null;
-  }
+  static EditOperationId? extractOperationId(DrawState state) =>
+      switch (state.application.interaction) {
+        EditingState(:final operationId) => operationId,
+        _ => null,
+      };
 
   static DrawState computeNextState(
     DrawState state, {
@@ -40,7 +38,7 @@ class EditErrorHandler {
     required EditFailureReason reason,
     EditOperationId? operationId,
     bool keepState = false,
-  }) => (
+  }) => EditOutcome(
     state: computeNextState(state, keepState: keepState),
     failureReason: reason,
     operationId: operationId ?? extractOperationId(state),
@@ -73,21 +71,16 @@ class EditErrorHandler {
   }) {
     try {
       return operation();
-    } on EditError catch (error, _) {
-      return createFailure(
-        state: state,
-        reason: mapExceptionToReason(error),
-        operationId: fallbackOperationId,
-        keepState: keepStateOnFailure,
-      );
     } on Object catch (error, stackTrace) {
-      _logUnexpectedError(
-        error,
-        stackTrace,
-        operationName,
-        log: log,
-        operationId: fallbackOperationId,
-      );
+      if (error is! EditError) {
+        _logUnexpectedError(
+          error,
+          stackTrace,
+          operationName,
+          log: log,
+          operationId: fallbackOperationId,
+        );
+      }
       return createFailure(
         state: state,
         reason: mapExceptionToReason(error),

@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../../models/draw_state.dart';
 import '../../types/edit_operation_id.dart';
 
@@ -29,9 +31,18 @@ enum EditFailureReason {
   };
 }
 
-/// Edit session outcome tuple.
-typedef EditOutcome = ({
-  DrawState state,
-  EditFailureReason? failureReason,
-  EditOperationId? operationId,
-});
+/// Edit session outcome.
+@immutable
+final class EditOutcome {
+  const EditOutcome({
+    required this.state,
+    this.failureReason,
+    this.operationId,
+  });
+
+  final DrawState state;
+  final EditFailureReason? failureReason;
+  final EditOperationId? operationId;
+
+  bool get isSuccess => failureReason == null;
+}

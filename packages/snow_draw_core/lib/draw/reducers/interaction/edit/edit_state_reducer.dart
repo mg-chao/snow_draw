@@ -9,6 +9,7 @@ import '../../../edit/core/edit_result_unified.dart';
 import '../../../edit/core/edit_session_id_generator.dart';
 import '../../../edit/core/edit_session_service.dart';
 import '../../../models/draw_state.dart';
+import '../../../types/edit_operation_id.dart';
 import '../interaction_transition.dart';
 
 /// Reducer dedicated to edit operations.
@@ -88,23 +89,25 @@ class EditStateReducer {
       currentPosition: action.currentPosition,
       modifiers: action.modifiers,
     );
-    final reason = update.failureReason;
     return InteractionTransition(
       nextState: update.state,
-      events: reason == null
-          ? const []
-          : [EditUpdateFailed(reason: reason, operationId: update.operationId)],
+      events: _failureEvents(
+        update,
+        build: (reason, operationId) =>
+            EditUpdateFailed(reason: reason, operationId: operationId),
+      ),
     );
   }
 
   InteractionTransition _reduceFinishEdit({required DrawState state}) {
     final finish = editSessionService.finish(state: state);
-    final reason = finish.failureReason;
     return InteractionTransition(
       nextState: finish.state,
-      events: reason == null
-          ? const []
-          : [EditFinishFailed(reason: reason, operationId: finish.operationId)],
+      events: _failureEvents(
+        finish,
+        build: (reason, operationId) =>
+            EditFinishFailed(reason: reason, operationId: operationId),
+      ),
     );
   }
 
@@ -124,6 +127,21 @@ class EditStateReducer {
         ),
         null => EditCancelled(operationId: outcome.operationId),
       };
+
+  List<EditSessionEvent> _failureEvents(
+    EditOutcome outcome, {
+    required EditSessionEvent Function(
+      EditFailureReason reason,
+      EditOperationId? operationId,
+    )
+    build,
+  }) {
+    final reason = outcome.failureReason;
+    if (reason == null) {
+      return const <EditSessionEvent>[];
+    }
+    return <EditSessionEvent>[build(reason, outcome.operationId)];
+  }
 
   EditOperationParams _injectParams(
     EditOperationParams params,
