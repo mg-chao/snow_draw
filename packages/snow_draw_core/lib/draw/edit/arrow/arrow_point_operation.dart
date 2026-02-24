@@ -926,9 +926,6 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
   final preferredArrowheadStyle = hasArrowhead
       ? ArrowheadStyle.standard
       : ArrowheadStyle.none;
-  final cachePolicy = context.isLineElement
-      ? ArrowBindingCachePolicy.linePointPolicy
-      : ArrowBindingCachePolicy.defaultPolicy;
   return ArrowBindingSnapper.resolveEndpointBindingCandidate(
     state: state,
     worldPoint: worldTarget,
@@ -941,7 +938,6 @@ ArrowBindingResult? _resolveEndpointBindingCandidate({
     preferredBinding: existingBinding,
     referencePoint: referencePoint,
     cache: context._bindingTargetCache,
-    cachePolicy: cachePolicy,
     excludedElementId: context.elementId,
   );
 }

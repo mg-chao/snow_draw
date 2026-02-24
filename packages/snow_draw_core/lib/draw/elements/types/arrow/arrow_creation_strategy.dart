@@ -390,7 +390,6 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     referencePoint: endpoints.segmentStart,
     targetCache: sessionData.endTargetCache,
-    cachePolicy: ArrowBindingCachePolicy.linePointPolicy,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;

@@ -17,8 +17,6 @@ class ArrowBindingCachePolicy {
   const ArrowBindingCachePolicy({
     this.targetCacheThresholdFactor = 0.4,
     this.emptyCacheThresholdFactor = 0.75,
-    this.candidateCacheThresholdFactor = 0.35,
-    this.candidateCacheReferenceThresholdFactor = 0.35,
   }) : assert(
          targetCacheThresholdFactor >= 0,
          'targetCacheThresholdFactor must be non-negative',
@@ -26,26 +24,12 @@ class ArrowBindingCachePolicy {
        assert(
          emptyCacheThresholdFactor >= 0,
          'emptyCacheThresholdFactor must be non-negative',
-       ),
-       assert(
-         candidateCacheThresholdFactor >= 0,
-         'candidateCacheThresholdFactor must be non-negative',
-       ),
-       assert(
-         candidateCacheReferenceThresholdFactor >= 0,
-         'candidateCacheReferenceThresholdFactor must be non-negative',
        );
 
   static const defaultPolicy = ArrowBindingCachePolicy();
-  static const linePointPolicy = ArrowBindingCachePolicy(
-    candidateCacheThresholdFactor: 0.45,
-    candidateCacheReferenceThresholdFactor: 0.45,
-  );
 
   final double targetCacheThresholdFactor;
   final double emptyCacheThresholdFactor;
-  final double candidateCacheThresholdFactor;
-  final double candidateCacheReferenceThresholdFactor;
 }
 
 /// Shared arrow-binding helpers used by create and edit interactions.
@@ -154,46 +138,6 @@ class ArrowBindingSnapper {
       return null;
     }
 
-    final elementsVersion = state.domain.document.elementsVersion;
-    ArrowBindingResult? cacheAndReturn(ArrowBindingResult? value) {
-      cache?.cacheCandidate(
-        position: worldPoint,
-        referencePoint: referencePoint,
-        elementsVersion: elementsVersion,
-        snapDistance: snapDistance,
-        arrowType: arrowType,
-        arrowheadStyle: arrowheadStyle,
-        shouldLookupBindings: shouldLookupBindings,
-        allowNewBinding: allowNewBinding,
-        hasBindableTargets: hasBindableTargets,
-        preferredBinding: preferredBinding,
-        excludedElementId: excludedElementId,
-        value: value,
-      );
-      return value;
-    }
-
-    final cachedCandidate = cache?.resolveCandidate(
-      position: worldPoint,
-      referencePoint: referencePoint,
-      positionThreshold:
-          snapDistance * cachePolicy.candidateCacheThresholdFactor,
-      referenceThreshold:
-          snapDistance * cachePolicy.candidateCacheReferenceThresholdFactor,
-      elementsVersion: elementsVersion,
-      snapDistance: snapDistance,
-      arrowType: arrowType,
-      arrowheadStyle: arrowheadStyle,
-      shouldLookupBindings: shouldLookupBindings,
-      allowNewBinding: allowNewBinding,
-      hasBindableTargets: hasBindableTargets,
-      preferredBinding: preferredBinding,
-      excludedElementId: excludedElementId,
-    );
-    if (cachedCandidate != null && cachedCandidate.hasValue) {
-      return cachedCandidate.value;
-    }
-
     final preferredDirect = resolvePreferredBindingCandidateDirect(
       state: state,
       worldPoint: worldPoint,
@@ -206,11 +150,11 @@ class ArrowBindingSnapper {
       excludedElementId: excludedElementId,
     );
     if (preferredDirect != null) {
-      return cacheAndReturn(preferredDirect);
+      return preferredDirect;
     }
 
     if (!allowNewBinding || !hasBindableTargets) {
-      return cacheAndReturn(null);
+      return null;
     }
 
     final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
@@ -225,11 +169,11 @@ class ArrowBindingSnapper {
       cachePolicy: cachePolicy,
     );
     if (targets.isEmpty) {
-      return cacheAndReturn(null);
+      return null;
     }
 
     if (arrowType == ArrowType.elbow) {
-      final elbowCandidate = ArrowBindingUtils.resolveElbowBindingCandidate(
+      return ArrowBindingUtils.resolveElbowBindingCandidate(
         worldPoint: worldPoint,
         targets: targets,
         snapDistance: snapDistance,
@@ -237,10 +181,9 @@ class ArrowBindingSnapper {
         allowNewBinding: allowNewBinding,
         hasArrowhead: arrowheadStyle != ArrowheadStyle.none,
       );
-      return cacheAndReturn(elbowCandidate);
     }
 
-    final candidate = ArrowBindingUtils.resolveBindingCandidate(
+    return ArrowBindingUtils.resolveBindingCandidate(
       worldPoint: worldPoint,
       targets: targets,
       snapDistance: snapDistance,
@@ -248,7 +191,6 @@ class ArrowBindingSnapper {
       allowNewBinding: allowNewBinding,
       referencePoint: referencePoint,
     );
-    return cacheAndReturn(candidate);
   }
 
   /// Resolves nearby bindable targets using [cache] when possible.
