@@ -156,23 +156,38 @@ class TextEditReducer {
     }
 
     if (action.text.trim().isEmpty) {
-      return interaction.isNew
-          ? _toIdle(state)
-          : _deleteExistingText(state, interaction);
+      return _finishEmptyText(state, interaction);
     }
 
-    final nextData = interaction.draftData.copyWith(text: action.text);
+    return _commitTextDraft(
+      state: state,
+      interaction: interaction,
+      rawText: action.text,
+      context: context,
+    );
+  }
+
+  DrawState _finishEmptyText(DrawState state, TextEditingState interaction) =>
+      interaction.isNew
+      ? _toIdle(state)
+      : _deleteExistingText(state, interaction);
+
+  DrawState _commitTextDraft({
+    required DrawState state,
+    required TextEditingState interaction,
+    required String rawText,
+    required TextEditReducerDeps context,
+  }) {
+    final nextData = interaction.draftData.copyWith(text: rawText);
     final nextRect = _resolveTextDraftRect(
       currentRect: interaction.rect,
       data: nextData,
       context: context,
     );
 
-    if (interaction.isNew) {
-      return _createTextElement(state, interaction, nextData, nextRect);
-    }
-
-    return _updateTextElement(state, interaction, nextData, nextRect);
+    return interaction.isNew
+        ? _createTextElement(state, interaction, nextData, nextRect)
+        : _updateTextElement(state, interaction, nextData, nextRect);
   }
 
   DrawState _createTextElement(

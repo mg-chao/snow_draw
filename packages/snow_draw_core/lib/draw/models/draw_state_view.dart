@@ -5,6 +5,7 @@ import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
+import 'document_state.dart';
 import 'draw_state.dart';
 import 'element_state.dart';
 import 'global_elements_state.dart';
@@ -177,50 +178,35 @@ class DrawStateView {
     final document = state.domain.document;
     final previewElementsById = _previewElementsById;
     final creatingHighlight = _resolveCreatingHighlightElement();
-    final creatingHighlightId = creatingHighlight?.id;
     if (creatingHighlight == null && previewElementsById.isEmpty) {
-      if (document.highlightElements.isEmpty) {
-        return HighlightMaskSceneSnapshot.empty;
-      }
-      return HighlightMaskSceneSnapshot(elements: document.highlightElements);
+      return _snapshotForHighlights(document.highlightElements);
     }
 
     final highlights = <ElementState>[];
     final includedIds = <String>{};
+    final creatingHighlightId = creatingHighlight?.id;
 
-    for (final element in document.highlightElements) {
-      final preview = previewElementsById[element.id];
-      final isCreatingReplacement =
-          creatingHighlightId != null && element.id == creatingHighlightId;
-      final effective = isCreatingReplacement
-          ? creatingHighlight!
-          : preview ?? element;
-      if (effective.data is! HighlightData || !includedIds.add(effective.id)) {
-        continue;
-      }
-      highlights.add(effective);
-    }
+    _appendDocumentHighlights(
+      document: document,
+      previewElementsById: previewElementsById,
+      creatingHighlight: creatingHighlight,
+      target: highlights,
+      includedIds: includedIds,
+    );
+    _appendPreviewOnlyHighlights(
+      document: document,
+      previewElementsById: previewElementsById,
+      creatingHighlightId: creatingHighlightId,
+      target: highlights,
+      includedIds: includedIds,
+    );
+    _appendIfHighlight(
+      target: highlights,
+      includedIds: includedIds,
+      element: creatingHighlight,
+    );
 
-    for (final preview in previewElementsById.values) {
-      if (preview.data is! HighlightData ||
-          preview.id == creatingHighlightId ||
-          includedIds.contains(preview.id) ||
-          document.getElementById(preview.id)?.data is HighlightData) {
-        continue;
-      }
-      highlights.add(preview);
-      includedIds.add(preview.id);
-    }
-
-    if (creatingHighlight != null && includedIds.add(creatingHighlight.id)) {
-      highlights.add(creatingHighlight);
-    }
-
-    if (highlights.isEmpty) {
-      return HighlightMaskSceneSnapshot.empty;
-    }
-
-    return HighlightMaskSceneSnapshot(elements: highlights);
+    return _snapshotForHighlights(highlights);
   }
 
   ElementState? _resolveCreatingHighlightElement() {
@@ -230,6 +216,67 @@ class DrawStateView {
       return null;
     }
     return interaction.element.copyWith(rect: interaction.currentRect);
+  }
+
+  void _appendDocumentHighlights({
+    required List<ElementState> target,
+    required Set<String> includedIds,
+    required Map<String, ElementState> previewElementsById,
+    required ElementState? creatingHighlight,
+    required DocumentState document,
+  }) {
+    final creatingHighlightId = creatingHighlight?.id;
+    for (final element in document.highlightElements) {
+      final effective = element.id == creatingHighlightId
+          ? creatingHighlight
+          : previewElementsById[element.id] ?? element;
+      _appendIfHighlight(
+        target: target,
+        includedIds: includedIds,
+        element: effective,
+      );
+    }
+  }
+
+  void _appendPreviewOnlyHighlights({
+    required DocumentState document,
+    required Map<String, ElementState> previewElementsById,
+    required String? creatingHighlightId,
+    required List<ElementState> target,
+    required Set<String> includedIds,
+  }) {
+    for (final preview in previewElementsById.values) {
+      if (preview.id == creatingHighlightId ||
+          includedIds.contains(preview.id) ||
+          document.getElementById(preview.id)?.data is HighlightData) {
+        continue;
+      }
+      _appendIfHighlight(
+        target: target,
+        includedIds: includedIds,
+        element: preview,
+      );
+    }
+  }
+
+  void _appendIfHighlight({
+    required List<ElementState> target,
+    required Set<String> includedIds,
+    required ElementState? element,
+  }) {
+    if (element == null ||
+        element.data is! HighlightData ||
+        !includedIds.add(element.id)) {
+      return;
+    }
+    target.add(element);
+  }
+
+  HighlightMaskSceneSnapshot _snapshotForHighlights(List<ElementState> values) {
+    if (values.isEmpty) {
+      return HighlightMaskSceneSnapshot.empty;
+    }
+    return HighlightMaskSceneSnapshot(elements: values);
   }
 
   @override

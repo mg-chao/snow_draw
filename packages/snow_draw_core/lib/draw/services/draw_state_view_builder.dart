@@ -6,10 +6,10 @@ import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
 import '../models/element_state.dart';
 import '../models/interaction_state.dart';
-import 'text/text_metrics_service.dart';
 import '../utils/selection_calculator.dart';
 import 'selection_data_computer.dart';
 import 'selection_geometry_resolver.dart';
+import 'text/text_metrics_service.dart';
 
 /// Builds [DrawStateView] instances.
 ///
@@ -52,18 +52,27 @@ class DrawStateViewBuilder {
 
   DrawStateView _buildUncached(DrawState state) {
     final interaction = state.application.interaction;
-    if (interaction is CreatingState) {
-      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
-    }
+    return switch (interaction) {
+      final CreatingState creating => DrawStateView.fromState(
+        state,
+        snapGuides: creating.snapGuides,
+      ),
+      final TextEditingState textEditing => _buildTextEditingPreview(
+        state: state,
+        interaction: textEditing,
+      ),
+      final EditingState editing => _buildEditingPreview(
+        state: state,
+        interaction: editing,
+      ),
+      _ => DrawStateView.fromState(state),
+    };
+  }
 
-    if (interaction is TextEditingState) {
-      return _buildTextEditingPreview(state: state, interaction: interaction);
-    }
-
-    if (interaction is! EditingState) {
-      return DrawStateView.fromState(state);
-    }
-
+  DrawStateView _buildEditingPreview({
+    required DrawState state,
+    required EditingState interaction,
+  }) {
     final preview = _previewEngine.build(
       state: state,
       editOperations: editOperations,
