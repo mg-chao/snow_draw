@@ -1,5 +1,4 @@
 import '../../../config/draw_config.dart';
-import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -25,7 +24,10 @@ class FreeDrawHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = resolveElementLocalPosition(
+      element: element,
+      position: position,
+    );
 
     if (data.points.length == 2) {
       if (data.strokeWidth <= 0) {
@@ -101,15 +103,6 @@ class FreeDrawHitTester implements ElementHitTester {
         .toList(growable: false);
   }
 
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
-  }
-
   bool _isClosed(FreeDrawData data, DrawRect rect) {
     if (data.points.length < 3) {
       return false;
@@ -135,38 +128,14 @@ class FreeDrawHitTester implements ElementHitTester {
     required FreeDrawData data,
     required DrawPoint localPosition,
     required double tolerance,
-  }) {
-    final radius = (data.strokeWidth / 2) + tolerance;
-    if (!radius.isFinite || radius <= 0) {
-      return false;
-    }
-    if (!isPointInsideRect(rect, localPosition, radius)) {
-      return false;
-    }
-    if (!rect.width.isFinite ||
-        !rect.height.isFinite ||
-        rect.width < 0 ||
-        rect.height < 0) {
-      return false;
-    }
-
-    final startPoint = data.points.first;
-    final endPoint = data.points.last;
-    final start = DrawPoint(
-      x: rect.minX + (startPoint.x * rect.width),
-      y: rect.minY + (startPoint.y * rect.height),
-    );
-    final end = DrawPoint(
-      x: rect.minX + (endPoint.x * rect.width),
-      y: rect.minY + (endPoint.y * rect.height),
-    );
-    if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
-      return false;
-    }
-
-    return distanceSquaredToSegment(localPosition, start, end) <=
-        radius * radius;
-  }
+  }) => hitTestNormalizedTwoPointStroke(
+    rect: rect,
+    normalizedStart: data.points.first,
+    normalizedEnd: data.points.last,
+    localPosition: localPosition,
+    strokeWidth: data.strokeWidth,
+    tolerance: tolerance,
+  );
 
   bool _hitTestStroke({
     required DrawRect rect,

@@ -1,7 +1,22 @@
 import 'dart:math' as math;
 
+import '../../../core/coordinates/element_space.dart';
+import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+
+/// Converts [position] into the element-local coordinate space.
+DrawPoint resolveElementLocalPosition({
+  required ElementState element,
+  required DrawPoint position,
+}) {
+  if (element.rotation == 0) {
+    return position;
+  }
+  final rect = element.rect;
+  final space = ElementSpace(rotation: element.rotation, origin: rect.center);
+  return space.fromWorld(position);
+}
 
 /// Returns whether [value] has finite coordinates.
 bool isFiniteDrawPoint(DrawPoint value) => value.x.isFinite && value.y.isFinite;
@@ -12,6 +27,45 @@ bool isPointInsideRect(DrawRect rect, DrawPoint position, double padding) =>
     position.x <= rect.maxX + padding &&
     position.y >= rect.minY - padding &&
     position.y <= rect.maxY + padding;
+
+/// Hit-tests a normalized two-point stroke against [localPosition].
+///
+/// [normalizedStart] and [normalizedEnd] are expected in [0, 1] element space.
+bool hitTestNormalizedTwoPointStroke({
+  required DrawRect rect,
+  required DrawPoint normalizedStart,
+  required DrawPoint normalizedEnd,
+  required DrawPoint localPosition,
+  required double strokeWidth,
+  required double tolerance,
+}) {
+  final radius = (strokeWidth / 2) + tolerance;
+  if (!radius.isFinite || radius <= 0) {
+    return false;
+  }
+  if (!isPointInsideRect(rect, localPosition, radius)) {
+    return false;
+  }
+  if (!rect.width.isFinite ||
+      !rect.height.isFinite ||
+      rect.width < 0 ||
+      rect.height < 0) {
+    return false;
+  }
+
+  final start = DrawPoint(
+    x: rect.minX + (normalizedStart.x * rect.width),
+    y: rect.minY + (normalizedStart.y * rect.height),
+  );
+  final end = DrawPoint(
+    x: rect.minX + (normalizedEnd.x * rect.width),
+    y: rect.minY + (normalizedEnd.y * rect.height),
+  );
+  if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
+    return false;
+  }
+  return distanceSquaredToSegment(localPosition, start, end) <= radius * radius;
+}
 
 /// Returns squared distance from point [p] to segment [a]-[b].
 double distanceSquaredToSegment(DrawPoint p, DrawPoint a, DrawPoint b) {

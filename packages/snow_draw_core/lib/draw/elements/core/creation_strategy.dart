@@ -139,3 +139,21 @@ abstract class CreationStrategy {
 abstract class PointCreationStrategy extends CreationStrategy {
   const PointCreationStrategy();
 }
+
+/// Returns whether the creation result should be committed to the document.
+///
+/// The element must satisfy both minimum size and element-level validity
+/// constraints from [config].
+bool shouldCommitCreationResult({
+  required DrawConfig config,
+  required CreatingState creatingState,
+  DrawRect? rect,
+}) {
+  final resolvedRect = rect ?? creatingState.currentRect;
+  final minSize = config.element.minCreateSize;
+  return resolvedRect.width >= minSize &&
+      resolvedRect.height >= minSize &&
+      creatingState.element
+          .copyWith(rect: resolvedRect)
+          .isValidWith(config.element);
+}

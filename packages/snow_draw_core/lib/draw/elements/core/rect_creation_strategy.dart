@@ -122,15 +122,14 @@ class RectCreationStrategy extends CreationStrategy {
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final rect = creatingState.currentRect;
-    final minSize = config.element.minCreateSize;
-    final shouldCommit =
-        rect.width >= minSize &&
-        rect.height >= minSize &&
-        creatingState.element.copyWith(rect: rect).isValidWith(config.element);
     return CreationFinishResult(
       data: creatingState.elementData,
       rect: rect,
-      shouldCommit: shouldCommit,
+      shouldCommit: shouldCommitCreationResult(
+        config: config,
+        creatingState: creatingState,
+        rect: rect,
+      ),
     );
   }
 }

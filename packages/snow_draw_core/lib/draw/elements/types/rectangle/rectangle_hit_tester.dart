@@ -1,8 +1,8 @@
-import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/element_hit_tester.dart';
+import '../shared/hit_test_geometry.dart';
 import 'rectangle_data.dart';
 
 class RectangleHitTester implements ElementHitTester {
@@ -23,7 +23,10 @@ class RectangleHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = resolveElementLocalPosition(
+      element: element,
+      position: position,
+    );
     if (_hitsStroke(
       rect: rect,
       position: localPosition,
@@ -35,15 +38,6 @@ class RectangleHitTester implements ElementHitTester {
 
     final fillOpacity = data.fillColor.a * element.opacity;
     return fillOpacity > 0 && rect.containsPoint(localPosition);
-  }
-
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
   }
 
   bool _hitsStroke({

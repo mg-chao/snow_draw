@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:meta/meta.dart';
 
+import '../../utils/observed_future.dart';
 import 'error_handling.dart';
 import 'middleware_base.dart';
 import 'middleware_context.dart';
@@ -105,7 +106,7 @@ class MiddlewarePipeline {
           () => nextSettled = true,
         );
         nextFuture = downstreamFuture;
-        return _ObservedFuture<DispatchContext>(
+        return ObservedFuture<DispatchContext>(
           downstreamFuture,
           onObserved: () => nextObserved = true,
         );
@@ -273,54 +274,4 @@ class MiddlewarePipeline {
 
   /// Check if pipeline is not empty.
   bool get isNotEmpty => middlewares.isNotEmpty;
-}
-
-class _ObservedFuture<T> implements Future<T> {
-  _ObservedFuture(this._delegate, {required void Function() onObserved})
-    : _onObserved = onObserved;
-
-  final Future<T> _delegate;
-  final void Function() _onObserved;
-  var _didObserve = false;
-
-  void _markObserved() {
-    if (_didObserve) {
-      return;
-    }
-    _didObserve = true;
-    _onObserved();
-  }
-
-  @override
-  Stream<T> asStream() {
-    _markObserved();
-    return _delegate.asStream();
-  }
-
-  @override
-  Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
-    _markObserved();
-    return _delegate.catchError(onError, test: test);
-  }
-
-  @override
-  Future<R> then<R>(
-    FutureOr<R> Function(T value) onValue, {
-    Function? onError,
-  }) {
-    _markObserved();
-    return _delegate.then<R>(onValue, onError: onError);
-  }
-
-  @override
-  Future<T> timeout(Duration timeLimit, {FutureOr<T> Function()? onTimeout}) {
-    _markObserved();
-    return _delegate.timeout(timeLimit, onTimeout: onTimeout);
-  }
-
-  @override
-  Future<T> whenComplete(FutureOr<void> Function() action) {
-    _markObserved();
-    return _delegate.whenComplete(action);
-  }
 }
