@@ -92,6 +92,41 @@ class EditErrorHandler {
     };
   }
 
+  /// Executes [operation] and converts thrown errors to [EditOutcome].
+  static EditOutcome runWithErrorHandling({
+    required DrawState state,
+    required EditErrorHandlerConfig config,
+    required EditOutcome Function() operation,
+    EditOperationId? fallbackOperationId,
+    String? operationName,
+    ModuleLogger? log,
+  }) {
+    try {
+      return operation();
+    } on EditError catch (error, _) {
+      return createFailure(
+        state: state,
+        config: config,
+        reason: mapExceptionToReason(error),
+        operationId: fallbackOperationId,
+      );
+    } on Object catch (error, stackTrace) {
+      _logUnexpectedError(
+        error,
+        stackTrace,
+        operationName,
+        log: log,
+        operationId: fallbackOperationId,
+      );
+      return createFailure(
+        state: state,
+        config: config,
+        reason: mapExceptionToReason(error),
+        operationId: fallbackOperationId,
+      );
+    }
+  }
+
   static void _logUnexpectedError(
     Object error,
     StackTrace stackTrace,
@@ -105,43 +140,5 @@ class EditErrorHandler {
       data['operationId'] = operationId;
     }
     effectiveLog.error('Unexpected edit error', error, stackTrace, data);
-  }
-}
-
-/// Higher-order wrapper for unified error handling.
-extension EditErrorHandlerExtension on EditErrorHandler {
-  static EditOutcome runWithErrorHandling({
-    required DrawState state,
-    required EditErrorHandlerConfig config,
-    required EditOutcome Function() operation,
-    EditOperationId? fallbackOperationId,
-    String? operationName,
-    ModuleLogger? log,
-  }) {
-    try {
-      return operation();
-    } on EditError catch (error, _) {
-      return EditErrorHandler.createFailure(
-        state: state,
-        config: config,
-        reason: EditErrorHandler.mapExceptionToReason(error),
-        operationId: fallbackOperationId,
-      );
-    } on Object catch (error, stackTrace) {
-      EditErrorHandler._logUnexpectedError(
-        error,
-        stackTrace,
-        operationName,
-        log: log,
-        operationId: fallbackOperationId,
-      );
-
-      return EditErrorHandler.createFailure(
-        state: state,
-        config: config,
-        reason: EditErrorHandler.mapExceptionToReason(error),
-        operationId: fallbackOperationId,
-      );
-    }
   }
 }

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:meta/meta.dart';
 
-import '../../utils/observed_future.dart';
 import 'error_handling.dart';
 import 'middleware_base.dart';
 import 'middleware_context.dart';
@@ -25,7 +24,9 @@ class MiddlewarePipeline {
   ///
   /// Returns the final context after all middlewares have executed.
   Future<DispatchContext> execute(DispatchContext initialContext) {
-    if (initialContext.shouldStop || initialContext.hasError) {
+    if (initialContext.shouldStop ||
+        initialContext.hasError ||
+        middlewares.isEmpty) {
       return Future<DispatchContext>.value(initialContext);
     }
     return _executeFromIndex(context: initialContext, index: 0);
@@ -35,155 +36,112 @@ class MiddlewarePipeline {
     required DispatchContext context,
     required int index,
   }) async {
-    var currentContext = context;
-    var currentIndex = index;
-
-    while (currentIndex < middlewares.length) {
-      if (currentContext.shouldStop || currentContext.hasError) {
-        return currentContext;
-      }
-
-      final middleware = middlewares[currentIndex];
-
-      bool shouldExecute;
-      try {
-        shouldExecute = middleware.shouldExecute(currentContext);
-      } on Object catch (error, stackTrace) {
-        final recovered = _recoverFromError(
-          context: currentContext,
-          middleware: middleware,
-          error: error,
-          stackTrace: stackTrace,
-        );
-        if (recovered.shouldStop || recovered.hasError) {
-          return recovered;
-        }
-        currentContext = recovered;
-        currentIndex += 1;
-        continue;
-      }
-
-      if (!shouldExecute) {
-        currentIndex += 1;
-        continue;
-      }
-
-      var nextCalled = false;
-      var middlewareCompleted = false;
-      var nextSettled = false;
-      var nextObserved = false;
-      DispatchContext? nextInputContext;
-      Future<DispatchContext>? nextFuture;
-      Future<DispatchContext> guardedNext(DispatchContext nextContext) {
-        if (middlewareCompleted) {
-          throw StateError(
-            'Middleware "${middleware.name}" called next() after completion',
-          );
-        }
-        if (nextCalled) {
-          throw StateError(
-            'Middleware "${middleware.name}" called next() more than once',
-          );
-        }
-        nextCalled = true;
-        nextInputContext = nextContext;
-        final downstreamCompleter = Completer<DispatchContext>();
-        unawaited(() async {
-          try {
-            downstreamCompleter.complete(
-              await Future<DispatchContext>.microtask(
-                () => _executeFromIndex(
-                  context: nextContext,
-                  index: currentIndex + 1,
-                ),
-              ),
-            );
-          } on Object catch (error, stackTrace) {
-            downstreamCompleter.completeError(error, stackTrace);
-          }
-        }());
-        final downstreamFuture = downstreamCompleter.future.whenComplete(
-          () => nextSettled = true,
-        );
-        nextFuture = downstreamFuture;
-        return ObservedFuture<DispatchContext>(
-          downstreamFuture,
-          onObserved: () => nextObserved = true,
-        );
-      }
-
-      Future<DispatchContext> resolveContextAfterNext() async {
-        if (!nextCalled) {
-          return currentContext;
-        }
-        return _resolveDownstreamContext(
-          fallbackContext: nextInputContext ?? currentContext,
-          middleware: middleware,
-          downstreamFuture: nextFuture!,
-        );
-      }
-
-      try {
-        final result = await middleware.invoke(currentContext, guardedNext);
-        middlewareCompleted = true;
-        if (nextCalled && (!nextObserved || !nextSettled)) {
-          final downstreamContext = await resolveContextAfterNext();
-          final detachedNextError = !nextObserved
-              ? StateError(
-                  'Middleware "${middleware.name}" called next() without '
-                  'awaiting or returning it. Return or await next() to '
-                  'keep pipeline order.',
-                )
-              : StateError(
-                  'Middleware "${middleware.name}" completed before next() '
-                  'finished. Return or await next() to keep pipeline order.',
-                );
-          return _recoverFromError(
-            context: downstreamContext,
-            middleware: middleware,
-            error: detachedNextError,
-            stackTrace: StackTrace.current,
-          );
-        }
-        return result;
-      } on Object catch (error, stackTrace) {
-        middlewareCompleted = true;
-        switch (errorHandler.handle(error, stackTrace)) {
-          case RecoveryAction.skip:
-            if (nextCalled) {
-              final downstreamContext = await resolveContextAfterNext();
-              return _markSkipped(
-                context: downstreamContext,
-                middleware: middleware,
-              );
-            }
-            currentContext = _markSkipped(
-              context: currentContext,
-              middleware: middleware,
-            );
-            currentIndex += 1;
-            continue;
-          case RecoveryAction.stop:
-            final contextForStop = await resolveContextAfterNext();
-            return contextForStop.withError(
-              error,
-              stackTrace,
-              source: middleware.name,
-            );
-          case RecoveryAction.propagate:
-            Error.throwWithStackTrace(error, stackTrace);
-        }
-      }
+    if (index >= middlewares.length || context.shouldStop || context.hasError) {
+      return context;
     }
 
-    return currentContext;
+    final middleware = middlewares[index];
+
+    bool shouldExecute;
+    try {
+      shouldExecute = middleware.shouldExecute(context);
+    } on Object catch (error, stackTrace) {
+      final recovered = _recoverFromError(
+        context: context,
+        middleware: middleware,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      if (recovered.shouldStop || recovered.hasError) {
+        return recovered;
+      }
+      return _executeFromIndex(context: recovered, index: index + 1);
+    }
+
+    if (!shouldExecute) {
+      return _executeFromIndex(context: context, index: index + 1);
+    }
+
+    return _invokeMiddleware(
+      context: context,
+      index: index,
+      middleware: middleware,
+    );
+  }
+
+  Future<DispatchContext> _invokeMiddleware({
+    required DispatchContext context,
+    required int index,
+    required Middleware middleware,
+  }) async {
+    var nextCalled = false;
+    DispatchContext? nextInputContext;
+    Future<DispatchContext>? downstreamFuture;
+
+    Future<DispatchContext> guardedNext(DispatchContext nextContext) {
+      if (nextCalled) {
+        throw StateError(
+          'Middleware "${middleware.name}" called next() more than once',
+        );
+      }
+      nextCalled = true;
+      nextInputContext = nextContext;
+      final completer = Completer<DispatchContext>();
+      unawaited(() async {
+        try {
+          completer.complete(
+            await _executeFromIndex(context: nextContext, index: index + 1),
+          );
+        } on Object catch (error, stackTrace) {
+          completer.completeError(error, stackTrace);
+        }
+      }());
+      final future = completer.future;
+      downstreamFuture = future;
+      return future;
+    }
+
+    try {
+      return await middleware.invoke(context, guardedNext);
+    } on Object catch (error, stackTrace) {
+      final recovery = errorHandler.handle(error, stackTrace);
+      final downstreamContext = await _resolveDownstreamContext(
+        fallbackContext: nextInputContext ?? context,
+        middleware: middleware,
+        downstreamFuture: downstreamFuture,
+      );
+
+      switch (recovery) {
+        case RecoveryAction.skip:
+          final skipped = _markSkipped(
+            context: downstreamContext,
+            middleware: middleware,
+          );
+          if (nextCalled || skipped.shouldStop || skipped.hasError) {
+            return skipped;
+          }
+          return _executeFromIndex(context: skipped, index: index + 1);
+        case RecoveryAction.stop:
+          return downstreamContext.withError(
+            error,
+            stackTrace,
+            source: middleware.name,
+          );
+        case RecoveryAction.propagate:
+          Error.throwWithStackTrace(error, stackTrace);
+      }
+    }
   }
 
   Future<DispatchContext> _resolveDownstreamContext({
     required DispatchContext fallbackContext,
     required Middleware middleware,
-    required Future<DispatchContext> downstreamFuture,
+    required Future<DispatchContext>? downstreamFuture,
   }) async {
+    if (downstreamFuture == null) {
+      return fallbackContext;
+    }
+
     try {
       return await downstreamFuture;
     } on Object catch (error, stackTrace) {

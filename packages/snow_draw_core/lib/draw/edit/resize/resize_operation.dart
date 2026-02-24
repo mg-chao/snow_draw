@@ -22,6 +22,7 @@ import '../../utils/camera_zoom.dart';
 import '../../utils/handle_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../../utils/transforms/edit_transform_context.dart';
+import '../../utils/transforms/resize_anchor_point.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
@@ -33,7 +34,6 @@ import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
 import '../core/standard_finish_mixin.dart';
 import 'bounds/bounds_calculation.dart';
-import 'bounds/resize_geometry.dart';
 
 class ResizeOperation extends EditOperation with StandardFinishMixin {
   const ResizeOperation();

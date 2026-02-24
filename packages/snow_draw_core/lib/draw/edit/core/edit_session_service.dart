@@ -69,7 +69,7 @@ class EditSessionService {
       );
     }
 
-    return EditErrorHandlerExtension.runWithErrorHandling(
+    return EditErrorHandler.runWithErrorHandling(
       state: state,
       config: EditErrorHandlerConfig.keepState,
       fallbackOperationId: operationId,
@@ -137,7 +137,7 @@ class EditSessionService {
     )
     action,
     bool validateVersions = false,
-  }) => EditErrorHandlerExtension.runWithErrorHandling(
+  }) => EditErrorHandler.runWithErrorHandling(
     state: state,
     config: config,
     operationName: operationName,
