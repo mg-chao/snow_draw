@@ -167,16 +167,16 @@ class HistoryMiddleware extends MiddlewareBase {
   HistorySnapshot _buildSnapshotBefore({
     required DispatchContext context,
     required bool includeSelection,
-  }) => PersistentSnapshot.fromState(
-    context.initialState,
+  }) => context.snapshotBuilder.buildSnapshotFromState(
+    state: context.initialState,
     includeSelection: includeSelection,
   );
 
   HistorySnapshot _buildSnapshotAfter({
     required DispatchContext context,
     required bool includeSelection,
-  }) => PersistentSnapshot.fromState(
-    context.currentState,
+  }) => context.snapshotBuilder.buildSnapshotFromState(
+    state: context.currentState,
     includeSelection: includeSelection,
   );
 

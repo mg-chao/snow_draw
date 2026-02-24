@@ -6,8 +6,8 @@ import '../edit/core/edit_config_provider.dart';
 import '../edit/core/edit_intent_to_operation_mapper.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../edit/edit_operations.dart';
-import '../elements/core/element_registry.dart';
 import '../elements/core/element_registry_interface.dart';
+import '../elements/registration.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
 import '../services/text/text_metrics_service.dart';
@@ -44,20 +44,24 @@ class DrawContext implements InteractionReducerDeps {
     LogService? logService,
     TextMetricsService? textMetricsService,
     EventBus? eventBus,
-  }) => DrawContext(
-    elementRegistry: elementRegistry ?? DefaultElementRegistry(),
-    editOperations:
-        editOperations ?? DefaultEditOperationRegistry.withDefaults(),
-    idGenerator: idGenerator ?? RandomStringIdGenerator().call,
-    editIntentMapper: editIntentMapper,
-    configManager: configManager,
-    editConfigProvider: editConfigProvider ?? StaticEditConfigProvider.defaults,
-    logService: logService,
-    textMetricsService: textMetricsService,
-    eventBus: eventBus,
-  );
-
-  factory DrawContext.defaultContext() => DrawContext.withDefaults();
+  }) {
+    final resolvedRegistry = resolveElementRegistry(
+      elementRegistry: elementRegistry,
+    );
+    return DrawContext(
+      elementRegistry: resolvedRegistry,
+      editOperations:
+          editOperations ?? DefaultEditOperationRegistry.withDefaults(),
+      idGenerator: idGenerator ?? RandomStringIdGenerator().call,
+      editIntentMapper: editIntentMapper,
+      configManager: configManager,
+      editConfigProvider:
+          editConfigProvider ?? StaticEditConfigProvider.defaults,
+      logService: logService,
+      textMetricsService: textMetricsService,
+      eventBus: eventBus,
+    );
+  }
   @override
   final ElementRegistry elementRegistry;
   @override

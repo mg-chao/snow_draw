@@ -76,7 +76,7 @@ class ValidationMiddleware extends MiddlewareBase {
         details: {'traceId': context.traceId},
       ),
     );
-    return context.withStop(message).withMetadata('validationError', message);
+    return context.withStop(message);
   }
 }
 

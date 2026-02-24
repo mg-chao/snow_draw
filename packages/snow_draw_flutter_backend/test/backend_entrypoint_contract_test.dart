@@ -50,36 +50,19 @@ void main() {
         final customRegistry = DefaultElementRegistry();
         final customContext = createFlutterDrawContext(
           elementRegistry: customRegistry,
-          registerBuiltInElementDefinitions: false,
         );
-        expect(customContext.elementRegistry.registeredTypeIds, isEmpty);
+        expect(customContext.elementRegistry.registeredTypeIds, isNotEmpty);
       },
     );
 
-    test(
-      'allows custom read-only registries when built-in registration is off',
-      () {
-        const readOnlyRegistry = _ReadOnlyElementRegistry();
-        final context = createFlutterDrawContext(
-          elementRegistry: readOnlyRegistry,
-          registerBuiltInElementDefinitions: false,
-        );
-
-        expect(context.elementRegistry, same(readOnlyRegistry));
-      },
-    );
-
-    test(
-      'fails fast for custom registries when built-in registration is on',
-      () {
-        expect(
-          () => createFlutterDrawContext(
-            elementRegistry: const _ReadOnlyElementRegistry(),
-          ),
-          throwsA(isA<ArgumentError>()),
-        );
-      },
-    );
+    test('fails fast for custom read-only registries', () {
+      expect(
+        () => createFlutterDrawContext(
+          elementRegistry: const _ReadOnlyElementRegistry(),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
 
     test('registers built-ins for custom mutable registries', () {
       final mutableRegistry = _MutableElementRegistryProxy();

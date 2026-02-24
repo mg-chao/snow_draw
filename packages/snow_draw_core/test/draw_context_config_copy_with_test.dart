@@ -1,6 +1,7 @@
 import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:test/test.dart';
 
@@ -40,6 +41,15 @@ void main() {
 
       expect(context.configManager, same(manager));
       expect(context.config, equals(manager.current));
+    });
+
+    test('withDefaults eagerly registers built-in element definitions', () {
+      final context = DrawContext.withDefaults();
+
+      expect(
+        context.elementRegistry.supports(RectangleData.typeIdToken),
+        isTrue,
+      );
     });
   });
 }

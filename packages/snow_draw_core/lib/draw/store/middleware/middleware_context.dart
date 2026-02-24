@@ -32,7 +32,6 @@ class DispatchContext {
     required this.isBatching,
     required this.includeSelectionInHistory,
     required this.events,
-    required this.metadata,
     required this.shouldStop,
     required this.stopReason,
     required this.error,
@@ -64,7 +63,6 @@ class DispatchContext {
     isBatching: isBatching,
     includeSelectionInHistory: includeSelectionInHistory,
     events: const [],
-    metadata: const {},
     shouldStop: false,
     stopReason: null,
     error: null,
@@ -83,7 +81,6 @@ class DispatchContext {
   final bool isBatching;
   final bool includeSelectionInHistory;
   final List<EditSessionEvent> events;
-  final Map<String, dynamic> metadata;
   final bool shouldStop;
   final String? stopReason;
   final Object? error;
@@ -103,7 +100,6 @@ class DispatchContext {
     bool? isBatching,
     bool? includeSelectionInHistory,
     List<EditSessionEvent>? events,
-    Map<String, dynamic>? metadata,
     bool? shouldStop,
     String? stopReason,
     Object? error,
@@ -123,7 +119,6 @@ class DispatchContext {
     includeSelectionInHistory:
         includeSelectionInHistory ?? this.includeSelectionInHistory,
     events: events ?? this.events,
-    metadata: metadata ?? this.metadata,
     shouldStop: shouldStop ?? this.shouldStop,
     stopReason: stopReason ?? this.stopReason,
     error: error ?? this.error,
@@ -135,8 +130,6 @@ class DispatchContext {
   bool get hasError => error != null;
 
   bool get hasStateChanged => currentState != initialState;
-
-  T? getMetadata<T>(String key) => metadata[key] as T?;
 
   DispatchContext withCurrentState(DrawState newState) =>
       copyWith(currentState: newState);
@@ -158,11 +151,6 @@ class DispatchContext {
     shouldStop: true,
     stopReason: 'Error: $error',
   );
-
-  DispatchContext withMetadata(String key, dynamic value) {
-    final updated = Map<String, dynamic>.from(metadata)..[key] = value;
-    return copyWith(metadata: updated);
-  }
 
   @override
   String toString() =>

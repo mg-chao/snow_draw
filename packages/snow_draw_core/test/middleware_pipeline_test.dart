@@ -1,8 +1,6 @@
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/store/history_manager.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_base.dart';
@@ -23,19 +21,20 @@ void main() {
     });
 
     test('creates a defensive copy of middleware list', () {
-      final source = <Middleware>[const _FlagMetadataMiddleware('first')];
+      final source = <Middleware>[const _PassThroughMiddleware()];
       final pipeline = MiddlewarePipeline(middlewares: source);
 
-      source.add(const _FlagMetadataMiddleware('second'));
+      source.add(const _PassThroughMiddleware());
 
       expect(pipeline.length, 1);
     });
 
     test('stops pipeline when middleware invoke throws', () async {
+      final counter = _InvocationCounter();
       final pipeline = MiddlewarePipeline(
-        middlewares: const [
+        middlewares: [
           _ThrowingInvokeMiddleware(),
-          _FlagMetadataMiddleware('afterInvokeError'),
+          _CountingMiddleware(counter: counter),
         ],
       );
 
@@ -44,7 +43,7 @@ void main() {
       expect(result.hasError, isTrue);
       expect(result.error, isA<FormatException>());
       expect(result.errorSource, 'ThrowInvoke');
-      expect(result.getMetadata<bool>('afterInvokeError'), isNull);
+      expect(counter.value, 0);
     });
 
     test(
@@ -112,6 +111,7 @@ void main() {
           middlewares: [
             const _ThrowAfterNextMiddleware(),
             _CountingMiddleware(counter: counter),
+            const _OffsetStateMiddleware(dx: 1),
           ],
         );
 
@@ -121,7 +121,7 @@ void main() {
         expect(result.hasError, isTrue);
         expect(result.error, isA<FormatException>());
         expect(result.errorSource, 'ThrowAfterNext');
-        expect(result.getMetadata<bool>('fromThrowAfterNext'), isTrue);
+        expect(_cameraX(result.currentState), 6);
       },
     );
 
@@ -131,7 +131,7 @@ void main() {
         final pipeline = MiddlewarePipeline(
           middlewares: const [
             _StateErrorAfterNextMiddleware(),
-            _FlagMetadataMiddleware('downstreamReached'),
+            _OffsetStateMiddleware(dx: 4),
           ],
         );
 
@@ -140,8 +140,7 @@ void main() {
         expect(result.hasError, isTrue);
         expect(result.error, isA<StateError>());
         expect(result.errorSource, 'StateErrorAfterNext');
-        expect(result.getMetadata<bool>('stateErrorAfterNext'), isTrue);
-        expect(result.getMetadata<bool>('downstreamReached'), isTrue);
+        expect(_cameraX(result.currentState), 6);
       },
     );
 
@@ -196,9 +195,7 @@ void main() {
 }
 
 DispatchContext _createInitialContext() {
-  final registry = DefaultElementRegistry();
-  registerBuiltInElements(registry);
-  final drawContext = DrawContext.withDefaults(elementRegistry: registry);
+  final drawContext = DrawContext.withDefaults();
   final historyManager = HistoryManager(logService: drawContext.log);
   const snapshotBuilder = SnapshotBuilder();
   final editSessionService = EditSessionService.fromRegistry(
@@ -220,6 +217,20 @@ DispatchContext _createInitialContext() {
   );
 }
 
+double _cameraX(DrawState state) => state.application.view.camera.position.x;
+
+DispatchContext _offsetContextState(DispatchContext context, double dx) {
+  final state = context.currentState;
+  final nextState = state.copyWith(
+    application: state.application.copyWith(
+      view: state.application.view.copyWith(
+        camera: state.application.view.camera.translated(dx, 0),
+      ),
+    ),
+  );
+  return context.withCurrentState(nextState);
+}
+
 class _ThrowingInvokeMiddleware extends MiddlewareBase {
   const _ThrowingInvokeMiddleware();
 
@@ -229,18 +240,6 @@ class _ThrowingInvokeMiddleware extends MiddlewareBase {
   @override
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
       Future<DispatchContext>.error(const FormatException('Bad invoke'));
-}
-
-class _FlagMetadataMiddleware extends MiddlewareBase {
-  const _FlagMetadataMiddleware(this.key);
-
-  final String key;
-
-  @override
-  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
-    final updated = context.withMetadata(key, true);
-    return next(updated);
-  }
 }
 
 class _DoubleNextMiddleware extends MiddlewareBase {
@@ -270,7 +269,7 @@ class _ThrowAfterNextMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    await next(context.withMetadata('fromThrowAfterNext', true));
+    await next(_offsetContextState(context, 5));
     throw const FormatException('Bad invoke after next');
   }
 }
@@ -286,8 +285,19 @@ class _StateErrorAfterNextMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    await next(context.withMetadata('stateErrorAfterNext', true));
+    await next(_offsetContextState(context, 2));
     throw StateError('Bad invoke after next');
+  }
+}
+
+class _OffsetStateMiddleware extends MiddlewareBase {
+  const _OffsetStateMiddleware({required this.dx});
+
+  final double dx;
+
+  @override
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
+    return next(_offsetContextState(context, dx));
   }
 }
 

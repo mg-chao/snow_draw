@@ -29,17 +29,6 @@ void main() {
         throwsA(isA<ArgumentError>()),
       );
     });
-
-    test('keeps read-only registries when built-ins are disabled', () {
-      const registry = _ReadOnlyElementRegistry();
-
-      final resolved = resolveElementRegistry(
-        elementRegistry: registry,
-        registerBuiltInElementDefinitions: false,
-      );
-
-      expect(resolved, same(registry));
-    });
   });
 }
 

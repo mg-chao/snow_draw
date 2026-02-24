@@ -10,8 +10,8 @@ import '../services/text/flutter_text_metrics_service.dart';
 /// consistent layout behavior with the backend renderer.
 ///
 /// Pass a custom [ElementRegistry] when consumers need full control over
-/// registration. Built-in auto-registration requires
-/// [MutableElementRegistry].
+/// registration. Custom registries must implement [MutableElementRegistry]
+/// because built-ins are always installed.
 ///
 /// [textMetricsService] and [eventBus] can be overridden for tests or hosts
 /// that need custom instrumentation.
@@ -22,12 +22,8 @@ DrawContext createFlutterDrawContext({
   LogService? logService,
   TextMetricsService? textMetricsService,
   EventBus? eventBus,
-  bool registerBuiltInElementDefinitions = true,
 }) {
-  final registry = resolveElementRegistry(
-    elementRegistry: elementRegistry,
-    registerBuiltInElementDefinitions: registerBuiltInElementDefinitions,
-  );
+  final registry = resolveElementRegistry(elementRegistry: elementRegistry);
 
   return DrawContext.withDefaults(
     elementRegistry: registry,
