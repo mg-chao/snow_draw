@@ -10,8 +10,8 @@ import 'serial_number_connection_painter.dart';
 /// Cached serial number connector resolver.
 ///
 /// Maintains a cached index of serial number bindings and computed connectors
-/// to avoid rebuilding on every paint cycle. Uses version-based invalidation
-/// to avoid rebuilding the index when the document is unchanged.
+/// to avoid rebuilding on every paint cycle. Rebuilds the index only when the
+/// document element list identity changes.
 class SerialNumberConnectorCache {
   SerialNumberConnectorCache._();
 
@@ -21,7 +21,7 @@ class SerialNumberConnectorCache {
     volatileTextElementIds: <String>{},
   );
 
-  var _cachedDocumentVersion = -1;
+  List<ElementState>? _cachedElements;
   Map<String, String> _bindingIndex = const {};
   Map<String, Set<String>> _reverseBindingIndex = const {};
   Map<String, _CachedConnectorEntry> _connectorCache = const {};
@@ -46,10 +46,9 @@ class SerialNumberConnectorCache {
     }
 
     // Check if we need to rebuild the binding index
-    final documentVersion = document.elementsVersion;
-    if (_shouldRebuildIndex(documentVersion)) {
+    if (_shouldRebuildIndex(document)) {
       _rebuildBindingIndex(document);
-      _cachedDocumentVersion = documentVersion;
+      _cachedElements = document.elements;
     }
 
     final visibleTextIds = _normalizeVisibleTextIds(
@@ -96,14 +95,14 @@ class SerialNumberConnectorCache {
 
   /// Invalidates the cache, forcing a full rebuild on next resolve.
   void invalidate() {
-    _cachedDocumentVersion = -1;
+    _cachedElements = null;
     _bindingIndex = const {};
     _reverseBindingIndex = const {};
     _connectorCache = const {};
   }
 
-  bool _shouldRebuildIndex(int documentVersion) =>
-      _cachedDocumentVersion != documentVersion;
+  bool _shouldRebuildIndex(DocumentState document) =>
+      !identical(_cachedElements, document.elements);
 
   void _rebuildBindingIndex(DocumentState document) {
     final newIndex = <String, String>{};

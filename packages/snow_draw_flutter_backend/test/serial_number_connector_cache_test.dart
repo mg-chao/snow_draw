@@ -381,6 +381,56 @@ void main() {
     expect(connectors['text'], isNotNull);
     expect(connectors['text']!.length, 1);
   });
+
+  test('keeps stable connector instances when only global elements change', () {
+    const text = ElementState(
+      id: 'text',
+      rect: DrawRect(minX: 120, minY: 80, maxX: 220, maxY: 120),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: TextData(text: 'A'),
+    );
+    const serial = ElementState(
+      id: 'serial',
+      rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: SerialNumberData(textElementId: 'text'),
+    );
+
+    final state = _stateWithElements([text, serial]);
+    final baseSnapshot = resolveSerialNumberConnectorSnapshot(
+      DrawStateView.withPreview(
+        state: state,
+        previewElementsById: const {},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+    );
+    final baselineConnector = baseSnapshot.connectorsByTextId['text']!.single;
+
+    final nextDocument = state.domain.document.copyWith(
+      globalElements: state.domain.document.globalElements.copyWith(
+        watermark: const WatermarkConfig(text: 'INTERNAL'),
+      ),
+    );
+    final nextState = state.copyWith(
+      domain: state.domain.copyWith(document: nextDocument),
+    );
+    final nextSnapshot = resolveSerialNumberConnectorSnapshot(
+      DrawStateView.withPreview(
+        state: nextState,
+        previewElementsById: const {},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+    );
+    final updatedConnector = nextSnapshot.connectorsByTextId['text']!.single;
+
+    expect(identical(updatedConnector, baselineConnector), isTrue);
+  });
 }
 
 DrawState _stateWithElements(List<ElementState> elements) {
