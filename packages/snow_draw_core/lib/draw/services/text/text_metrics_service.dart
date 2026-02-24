@@ -124,7 +124,7 @@ final class FallbackTextMetricsService implements TextMetricsService {
 
   @override
   TextMetrics measure(TextLayoutRequest request) {
-    final fontSize = _sanitizePositive(
+    final fontSize = sanitizePositiveExtent(
       request.data.fontSize,
       fallback: _defaultFontSize,
     );
@@ -163,9 +163,9 @@ final class FallbackTextMetricsService implements TextMetricsService {
         width = cappedMinWidth;
       }
     }
-    width = _sanitizePositive(width, fallback: glyphWidth);
+    width = sanitizePositiveExtent(width, fallback: glyphWidth);
 
-    final height = _sanitizePositive(
+    final height = sanitizePositiveExtent(
       lineHeight * lineMetrics.length,
       fallback: lineHeight,
     );
@@ -191,7 +191,7 @@ final class FallbackTextMetricsService implements TextMetricsService {
     required double maxWidth,
   }) {
     final graphemeCount = line.isEmpty ? 1 : line.runes.length;
-    final rawWidth = _sanitizePositive(
+    final rawWidth = sanitizePositiveExtent(
       graphemeCount * glyphWidth,
       fallback: glyphWidth,
     );
@@ -205,17 +205,13 @@ final class FallbackTextMetricsService implements TextMetricsService {
     for (var i = 0; i < wraps; i++) {
       final remaining = rawWidth - (maxWidth * i);
       final lineWidth = i == wraps - 1
-          ? _sanitizePositive(remaining, fallback: math.min(rawWidth, maxWidth))
+          ? sanitizePositiveExtent(
+              remaining,
+              fallback: math.min(rawWidth, maxWidth),
+            )
           : maxWidth;
       lineMetrics.add(TextLineMetrics(width: lineWidth, height: lineHeight));
     }
-  }
-
-  static double _sanitizePositive(double value, {required double fallback}) {
-    if (value.isFinite && value > 0) {
-      return value;
-    }
-    return fallback;
   }
 }
 

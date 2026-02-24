@@ -229,15 +229,33 @@ bool _shouldRelayoutSerialNumber(ElementStyleUpdate update) =>
   required ArrowData data,
   required Map<String, ElementState> elementsById,
 }) {
+  final sanitizedData = data.copyWith(
+    fixedSegments: null,
+    startIsSpecial: null,
+    endIsSpecial: null,
+  );
+  final layout = _resolveArrowLayout(
+    element: element,
+    data: sanitizedData,
+    elementsById: elementsById,
+  );
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: layout.points,
+    rect: layout.rect,
+  );
+  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
+  return (rect: layout.rect, data: updatedData);
+}
+
+({DrawRect rect, List<DrawPoint> points}) _resolveArrowLayout({
+  required ElementState element,
+  required ArrowData data,
+  required Map<String, ElementState> elementsById,
+}) {
   if (data.arrowType == ArrowType.elbow) {
-    final elbowData = data.copyWith(
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    );
     final routed = routeElbowArrowForElement(
       element: element,
-      data: elbowData,
+      data: data,
       elementsById: elementsById,
     );
     final result = computeArrowRectAndPoints(
@@ -246,36 +264,17 @@ bool _shouldRelayoutSerialNumber(ElementStyleUpdate update) =>
       rotation: element.rotation,
       arrowType: data.arrowType,
     );
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: result.localPoints,
-      rect: result.rect,
-    );
-    final updatedData = elbowData.copyWith(points: normalized);
-    return (rect: result.rect, data: updatedData);
+    return (rect: result.rect, points: result.localPoints);
   }
-
-  final sanitizedData = data.copyWith(
-    fixedSegments: null,
-    startIsSpecial: null,
-    endIsSpecial: null,
-  );
 
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
-    normalizedPoints: sanitizedData.points,
+    normalizedPoints: data.points,
   );
-
-  final newRect = ArrowGeometry.calculatePathBounds(
+  final rect = ArrowGeometry.calculatePathBounds(
     worldPoints: worldPoints,
     arrowType: data.arrowType,
   );
 
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: worldPoints,
-    rect: newRect,
-  );
-
-  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
-
-  return (rect: newRect, data: updatedData);
+  return (rect: rect, points: worldPoints);
 }

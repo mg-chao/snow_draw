@@ -350,7 +350,7 @@ ArrowBinding? _resolveBindingOverride({
   required ArrowBinding? override,
   required bool overrideIsSet,
   required ArrowBinding? fallback,
-}) => overrideIsSet ? override : (override ?? fallback);
+}) => overrideIsSet ? override : fallback;
 
 bool _isEndpointActive({
   required List<DrawPoint> basePoints,
