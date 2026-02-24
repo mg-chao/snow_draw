@@ -247,14 +247,6 @@ class DefaultDrawStore implements DrawStore {
     final snapshot = HistoryManagerSnapshot.fromJson(
       json,
       elementRegistry: context.elementRegistry,
-      onUnknownElement: (info) {
-        context.log.history.warning('Unknown element in history', {
-          'type': info.elementType,
-          'id': info.elementId,
-          'source': info.source,
-          'error': info.error?.toString(),
-        });
-      },
     );
     restoreHistory(snapshot);
   }

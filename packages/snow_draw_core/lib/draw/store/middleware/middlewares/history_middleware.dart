@@ -203,14 +203,11 @@ class HistoryMiddleware extends MiddlewareBase {
     DispatchContext context,
     DrawAction action,
   ) {
-    if (action is FinishEdit && _metadataFromEdit(context) == null) {
+    if (action is FinishEdit &&
+        _metadataFromFinishEdit(context, action) == null) {
       return HistoryPolicy.none;
     }
-    return switch (action) {
-      Recordable _ => HistoryPolicy.record,
-      NonRecordable _ => HistoryPolicy.none,
-      _ => action.historyPolicy,
-    };
+    return action.historyPolicy;
   }
 
   HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) =>
@@ -219,8 +216,10 @@ class HistoryMiddleware extends MiddlewareBase {
           context,
           finishTextEdit,
         ),
-        final FinishEdit finishEdit =>
-          finishEdit.metadata ?? _metadataFromEdit(context),
+        final FinishEdit finishEdit => _metadataFromFinishEdit(
+          context,
+          finishEdit,
+        ),
         final Recordable recordable => HistoryMetadata(
           description: recordable.historyDescription,
           recordType: recordable.recordType,
@@ -228,12 +227,17 @@ class HistoryMiddleware extends MiddlewareBase {
         _ => null,
       };
 
+  HistoryMetadata? _metadataFromFinishEdit(
+    DispatchContext context,
+    FinishEdit action,
+  ) => action.metadata ?? _metadataFromEdit(context);
+
   HistoryMetadata? _metadataFromFinishTextEdit(
     DispatchContext context,
     FinishTextEdit action,
   ) {
-    final outcome = _resolveFinishTextEditOutcome(context, action);
-    return switch (outcome.kind) {
+    final kind = _resolveFinishTextEditOutcomeKind(context, action);
+    return switch (kind) {
       _FinishTextEditOutcomeKind.delete => HistoryMetadata(
         description: 'Delete text',
         recordType: HistoryRecordType.delete,
@@ -250,40 +254,30 @@ class HistoryMiddleware extends MiddlewareBase {
     };
   }
 
-  ({String elementId, bool isNew, String text}) _resolveFinishTextEditPayload(
+  ({bool isNew, String text}) _resolveFinishTextEditPayload(
     DispatchContext context,
     FinishTextEdit action,
   ) {
     final interaction = context.initialState.application.interaction;
     if (interaction is TextEditingState) {
-      return (
-        elementId: interaction.elementId,
-        isNew: interaction.isNew,
-        text: action.text,
-      );
+      return (isNew: interaction.isNew, text: action.text);
     }
 
-    return (
-      elementId: action.elementId,
-      isNew: action.isNew,
-      text: action.text,
-    );
+    return (isNew: action.isNew, text: action.text);
   }
 
-  ({String elementId, _FinishTextEditOutcomeKind kind})
-  _resolveFinishTextEditOutcome(
+  _FinishTextEditOutcomeKind _resolveFinishTextEditOutcomeKind(
     DispatchContext context,
     FinishTextEdit action,
   ) {
     final payload = _resolveFinishTextEditPayload(context, action);
     final hasText = payload.text.trim().isNotEmpty;
-    final kind = switch ((payload.isNew, hasText)) {
+    return switch ((payload.isNew, hasText)) {
       (true, false) => _FinishTextEditOutcomeKind.noop,
       (false, false) => _FinishTextEditOutcomeKind.delete,
       (true, true) => _FinishTextEditOutcomeKind.create,
       (false, true) => _FinishTextEditOutcomeKind.edit,
     };
-    return (elementId: payload.elementId, kind: kind);
   }
 
   HistoryMetadata? _metadataFromEdit(DispatchContext context) {

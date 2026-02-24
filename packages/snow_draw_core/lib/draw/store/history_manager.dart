@@ -1,10 +1,7 @@
-import 'package:meta/meta.dart';
-
 import '../actions/history_coalescing.dart';
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
-import '../elements/core/unknown_element_data.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
 import '../models/draw_state.dart';
@@ -16,8 +13,6 @@ import '../types/draw_color.dart';
 import '../types/draw_rect.dart';
 import 'history_delta.dart';
 import 'snapshot.dart';
-
-final ModuleLogger _historyFallbackLog = LogService.fallback.history;
 
 /// Manages undo/redo history as a linear sequence of deltas.
 class HistoryManager {
@@ -320,29 +315,6 @@ class _HistoryEntry {
   );
 }
 
-@immutable
-class UnknownElementInfo {
-  const UnknownElementInfo({
-    required this.elementType,
-    required this.elementId,
-    required this.source,
-    this.error,
-    this.stackTrace,
-  });
-
-  final String elementType;
-  final String elementId;
-  final String source;
-  final Object? error;
-  final StackTrace? stackTrace;
-
-  @override
-  String toString() =>
-      'UnknownElement(type: $elementType, id: $elementId, source: $source)';
-}
-
-typedef UnknownElementReporter = void Function(UnknownElementInfo info);
-
 class HistoryManagerSnapshot {
   const HistoryManagerSnapshot._({
     required List<_HistoryEntry> entries,
@@ -361,12 +333,7 @@ class HistoryManagerSnapshot {
   static HistoryManagerSnapshot fromJson(
     Map<String, dynamic> json, {
     required ElementRegistry elementRegistry,
-    UnknownElementReporter? onUnknownElement,
-  }) => _historySnapshotCodec.decode(
-    json,
-    elementRegistry,
-    onUnknownElement: onUnknownElement,
-  );
+  }) => _historySnapshotCodec.decode(json, elementRegistry);
 }
 
 class _HistorySnapshotCodec {
@@ -381,9 +348,8 @@ class _HistorySnapshotCodec {
 
   HistoryManagerSnapshot decode(
     Map<String, dynamic> json,
-    ElementRegistry elementRegistry, {
-    UnknownElementReporter? onUnknownElement,
-  }) {
+    ElementRegistry elementRegistry,
+  ) {
     final version = json['version'];
     if (version is! int) {
       throw StateError('History snapshot version is missing or invalid');
@@ -404,7 +370,6 @@ class _HistorySnapshotCodec {
       final delta = _deltaFromJson(
         _requireMapField(entryData, 'delta'),
         elementRegistry,
-        onUnknownElement: onUnknownElement,
       );
       final metadataJson = _asJsonMap(entryData['metadata']);
       final coalescingJson = _asJsonMap(entryData['coalescing']);
@@ -477,10 +442,10 @@ class _HistorySnapshotCodec {
       );
 
   DateTime _decodeRecordedAt(Object? raw) {
-    if (raw is int) {
-      return DateTime.fromMillisecondsSinceEpoch(raw);
+    if (raw is! int) {
+      throw StateError('History snapshot field "recordedAtMs" is invalid');
     }
-    return DateTime.fromMillisecondsSinceEpoch(0);
+    return DateTime.fromMillisecondsSinceEpoch(raw);
   }
 
   int _requireInt(Map<String, dynamic> json, String key) {
@@ -505,6 +470,24 @@ class _HistorySnapshotCodec {
       throw StateError('History snapshot field "$key" is missing or invalid');
     }
     return value;
+  }
+
+  List<String> _requireStringList(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value is! List) {
+      throw StateError('History snapshot field "$key" is missing or invalid');
+    }
+
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! String) {
+        throw StateError(
+          'History snapshot field "$key" contains a non-string value',
+        );
+      }
+      result.add(item);
+    }
+    return result;
   }
 
   Map<String, dynamic> _requireMapField(Map<String, dynamic> json, String key) {
@@ -539,20 +522,17 @@ class _HistorySnapshotCodec {
 
   HistoryDelta _deltaFromJson(
     Map<String, dynamic> json,
-    ElementRegistry elementRegistry, {
-    UnknownElementReporter? onUnknownElement,
-  }) {
+    ElementRegistry elementRegistry,
+  ) {
     final beforeElements = _decodeElementMap(
       json['beforeElements'],
       elementRegistry,
       source: 'beforeElements',
-      onUnknownElement: onUnknownElement,
     );
     final afterElements = _decodeElementMap(
       json['afterElements'],
       elementRegistry,
       source: 'afterElements',
-      onUnknownElement: onUnknownElement,
     );
 
     final orderBefore = _asStringList(json['orderBefore']);
@@ -573,6 +553,14 @@ class _HistorySnapshotCodec {
       json['selectionAfter'],
       _selectionFromJson,
     );
+    final reindexZIndicesRaw = json['reindexZIndices'];
+    final reindexZIndices = reindexZIndicesRaw == null
+        ? false
+        : (reindexZIndicesRaw is bool
+              ? reindexZIndicesRaw
+              : throw StateError(
+                  'History snapshot field "reindexZIndices" is invalid',
+                ));
 
     return HistoryDelta.fromData(
       beforeElements: beforeElements,
@@ -583,7 +571,7 @@ class _HistorySnapshotCodec {
       orderAfter: orderAfter,
       selectionBefore: selectionBefore,
       selectionAfter: selectionAfter,
-      reindexZIndices: json['reindexZIndices'] as bool? ?? false,
+      reindexZIndices: reindexZIndices,
     );
   }
 
@@ -599,10 +587,8 @@ class _HistorySnapshotCodec {
 
   ElementState _elementFromJson(
     Map<String, dynamic> json,
-    ElementRegistry elementRegistry, {
-    UnknownElementReporter? onUnknownElement,
-    String source = 'unknown',
-  }) {
+    ElementRegistry elementRegistry,
+  ) {
     final id = _requireString(json, 'id');
     final type = _requireString(json, 'type');
     final dataJson = _requireMapField(json, 'data');
@@ -611,8 +597,6 @@ class _HistorySnapshotCodec {
       elementType: type,
       elementId: id,
       dataJson: dataJson,
-      source: source,
-      onUnknownElement: onUnknownElement,
     );
 
     return ElementState(
@@ -629,7 +613,6 @@ class _HistorySnapshotCodec {
     Object? rawElementsJson,
     ElementRegistry elementRegistry, {
     required String source,
-    UnknownElementReporter? onUnknownElement,
   }) {
     final elementsJson = _asJsonMap(rawElementsJson);
     if (elementsJson == null) {
@@ -646,12 +629,7 @@ class _HistorySnapshotCodec {
           'History snapshot element payload is invalid for id "${entry.key}"',
         );
       }
-      decoded[entry.key] = _elementFromJson(
-        elementJson,
-        elementRegistry,
-        onUnknownElement: onUnknownElement,
-        source: source,
-      );
+      decoded[entry.key] = _elementFromJson(elementJson, elementRegistry);
     }
     return decoded;
   }
@@ -676,11 +654,7 @@ class _HistorySnapshotCodec {
     if (raw is! List) {
       return null;
     }
-
-    return <String>[
-      for (final value in raw)
-        if (value is String) value,
-    ];
+    return raw.cast<String>();
   }
 
   T? _decodeOptionalJson<T>(
@@ -699,62 +673,15 @@ class _HistorySnapshotCodec {
     required String elementType,
     required String elementId,
     required Map<String, dynamic> dataJson,
-    required String source,
-    required UnknownElementReporter? onUnknownElement,
   }) {
     final definition = elementRegistry.getDefinitionByValue(elementType);
     if (definition == null) {
-      _reportUnknownElement(
-        onUnknownElement: onUnknownElement,
-        elementType: elementType,
-        elementId: elementId,
-        source: '$source:definition_missing',
+      throw StateError(
+        'Unknown element type "$elementType" while decoding history for '
+        'element "$elementId"',
       );
-      return UnknownElementData(originalType: elementType, rawData: dataJson);
     }
-
-    try {
-      return definition.fromJson(dataJson);
-    } on Object catch (error, stackTrace) {
-      _reportUnknownElement(
-        onUnknownElement: onUnknownElement,
-        elementType: elementType,
-        elementId: elementId,
-        source: '$source:deserialization_error',
-        error: error,
-        stackTrace: stackTrace,
-      );
-      return UnknownElementData(originalType: elementType, rawData: dataJson);
-    }
-  }
-
-  void _reportUnknownElement({
-    required UnknownElementReporter? onUnknownElement,
-    required String elementType,
-    required String elementId,
-    required String source,
-    Object? error,
-    StackTrace? stackTrace,
-  }) {
-    final info = UnknownElementInfo(
-      elementType: elementType,
-      elementId: elementId,
-      source: source,
-      error: error,
-      stackTrace: stackTrace,
-    );
-
-    if (onUnknownElement != null) {
-      onUnknownElement(info);
-      return;
-    }
-
-    _historyFallbackLog.warning('Unknown element in history', {
-      'type': elementType,
-      'id': elementId,
-      'source': source,
-      'error': error?.toString(),
-    });
+    return definition.fromJson(dataJson);
   }
 
   Map<String, dynamic> _selectionToJson(SelectionState selection) => {
@@ -764,10 +691,8 @@ class _HistorySnapshotCodec {
 
   SelectionState _selectionFromJson(Map<String, dynamic> json) =>
       SelectionState(
-        selectedIds:
-            (json['selectedIds'] as List<dynamic>?)?.cast<String>().toSet() ??
-            const {},
-        selectionVersion: json['selectionVersion'] as int? ?? 0,
+        selectedIds: _requireStringList(json, 'selectedIds').toSet(),
+        selectionVersion: _requireInt(json, 'selectionVersion'),
       );
 
   Map<String, dynamic> _globalElementsToJson(GlobalElementsState elements) => {
@@ -778,11 +703,9 @@ class _HistorySnapshotCodec {
   GlobalElementsState _globalElementsFromJson(Map<String, dynamic> json) =>
       GlobalElementsState(
         highlightMask: _highlightMaskFromJson(
-          (json['highlightMask'] as Map<String, dynamic>?) ?? const {},
+          _requireMapField(json, 'highlightMask'),
         ),
-        watermark: _watermarkFromJson(
-          (json['watermark'] as Map<String, dynamic>?) ?? const {},
-        ),
+        watermark: _watermarkFromJson(_requireMapField(json, 'watermark')),
       );
 
   Map<String, dynamic> _highlightMaskToJson(HighlightMaskConfig config) => {
@@ -792,11 +715,8 @@ class _HistorySnapshotCodec {
 
   HighlightMaskConfig _highlightMaskFromJson(Map<String, dynamic> json) =>
       HighlightMaskConfig(
-        maskColor: DrawColor(
-          json['maskColor'] as int? ??
-              ConfigDefaults.defaultMaskColor.toARGB32(),
-        ),
-        maskOpacity: (json['maskOpacity'] as num?)?.toDouble() ?? 0,
+        maskColor: DrawColor(_requireInt(json, 'maskColor')),
+        maskOpacity: _requireDouble(json, 'maskOpacity'),
       );
 
   Map<String, dynamic> _watermarkToJson(WatermarkConfig config) => {
@@ -809,26 +729,16 @@ class _HistorySnapshotCodec {
     'opacity': config.opacity,
   };
 
-  WatermarkConfig _watermarkFromJson(
-    Map<String, dynamic> json,
-  ) => WatermarkConfig(
-    color: DrawColor(
-      json['color'] as int? ?? ConfigDefaults.defaultWatermarkColor.toARGB32(),
-    ),
-    text: json['text'] as String? ?? ConfigDefaults.defaultWatermarkText,
-    fontSize:
-        (json['fontSize'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultWatermarkFontSize,
-    fontFamily: json['fontFamily'] as String? ?? '',
-    angle:
-        (json['angle'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultWatermarkAngle,
-    gap:
-        (json['gap'] as num?)?.toDouble() ?? ConfigDefaults.defaultWatermarkGap,
-    opacity:
-        (json['opacity'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultWatermarkOpacity,
-  );
+  WatermarkConfig _watermarkFromJson(Map<String, dynamic> json) =>
+      WatermarkConfig(
+        color: DrawColor(_requireInt(json, 'color')),
+        text: _requireString(json, 'text'),
+        fontSize: _requireDouble(json, 'fontSize'),
+        fontFamily: _requireString(json, 'fontFamily'),
+        angle: _requireDouble(json, 'angle'),
+        gap: _requireDouble(json, 'gap'),
+        opacity: _requireDouble(json, 'opacity'),
+      );
 
   Map<String, dynamic> _rectToJson(DrawRect rect) => {
     'minX': rect.minX,
@@ -853,25 +763,43 @@ class _HistorySnapshotCodec {
   };
 
   HistoryMetadata _metadataFromJson(Map<String, dynamic> json) {
-    final typeName = json['recordType'] as String? ?? 'other';
-    final recordType = HistoryRecordType.values.firstWhere(
-      (value) => value.name == typeName,
-      orElse: () => HistoryRecordType.other,
-    );
+    final typeName = _requireString(json, 'recordType');
+    final recordType = _parseRecordType(typeName);
+    final timestampRaw = json['timestamp'];
+    if (timestampRaw is! String) {
+      throw StateError(
+        'History snapshot field "timestamp" is missing or invalid',
+      );
+    }
+    final parsedTimestamp = DateTime.parse(timestampRaw);
+    final extraRaw = json['extra'];
+    Map<String, dynamic>? extra;
+    if (extraRaw != null) {
+      extra = _asJsonMap(extraRaw);
+      if (extra == null) {
+        throw StateError('History snapshot field "extra" is invalid');
+      }
+    }
 
     return HistoryMetadata(
-      description: json['description'] as String? ?? '',
+      description: _requireString(json, 'description'),
       recordType: recordType,
-      affectedElementIds:
-          (json['affectedElementIds'] as List<dynamic>?)
-              ?.cast<String>()
-              .toSet() ??
-          const {},
-      timestamp: json['timestamp'] == null
-          ? null
-          : DateTime.parse(json['timestamp'] as String),
-      extra: json['extra'] as Map<String, dynamic>?,
+      affectedElementIds: _requireStringList(
+        json,
+        'affectedElementIds',
+      ).toSet(),
+      timestamp: parsedTimestamp,
+      extra: extra,
     );
+  }
+
+  HistoryRecordType _parseRecordType(String name) {
+    for (final type in HistoryRecordType.values) {
+      if (type.name == name) {
+        return type;
+      }
+    }
+    throw StateError('Unsupported history record type: $name');
   }
 }
 

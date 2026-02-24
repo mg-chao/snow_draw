@@ -168,7 +168,7 @@ class UpdateCreatingElementBatch extends DrawAction {
       'snapOverride: $snapOverride)';
 }
 
-class AddArrowPoint extends DrawAction implements NonRecordable {
+class AddArrowPoint extends DrawAction {
   const AddArrowPoint({required this.position, this.snapOverride = false});
 
   final DrawPoint position;
@@ -176,10 +176,6 @@ class AddArrowPoint extends DrawAction implements NonRecordable {
 
   @override
   bool get conflictsWithEditing => true;
-
-  @override
-  String get nonRecordableReason =>
-      'AddArrowPoint is an intermediate create state.';
 
   @override
   String toString() =>
@@ -457,7 +453,7 @@ class CreateSerialNumberTextElements extends DrawAction implements Recordable {
   String toString() => 'CreateSerialNumberTextElements(ids: $elementIds)';
 }
 
-class StartTextEdit extends DrawAction implements NonRecordable {
+class StartTextEdit extends DrawAction {
   const StartTextEdit({required this.position, this.elementId});
 
   /// Element id to edit. If null, a new text element is created.
@@ -468,23 +464,15 @@ class StartTextEdit extends DrawAction implements NonRecordable {
   bool get conflictsWithEditing => true;
 
   @override
-  String get nonRecordableReason =>
-      'StartTextEdit starts a text editing session.';
-
-  @override
   String toString() =>
       'StartTextEdit(elementId: $elementId, position: $position)';
 }
 
-class UpdateTextEdit extends DrawAction implements NonRecordable {
+class UpdateTextEdit extends DrawAction {
   const UpdateTextEdit({required this.text, this.rect});
 
   final String text;
   final DrawRect? rect;
-
-  @override
-  String get nonRecordableReason =>
-      'UpdateTextEdit is an intermediate edit state.';
 
   @override
   String toString() =>
@@ -496,13 +484,8 @@ class UpdateTextEdit extends DrawAction implements NonRecordable {
 /// This action is used when system fonts are loaded asynchronously and text
 /// shaping metrics change. It refreshes bounds for auto-resizing text without
 /// recording a history entry.
-class RefreshAutoResizeTextLayoutsAfterFontLoad extends DrawAction
-    implements NonRecordable {
+class RefreshAutoResizeTextLayoutsAfterFontLoad extends DrawAction {
   const RefreshAutoResizeTextLayoutsAfterFontLoad();
-
-  @override
-  String get nonRecordableReason =>
-      'Font-load layout refresh is a derived non-user state update.';
 }
 
 class FinishTextEdit extends DrawAction implements Recordable {
@@ -541,22 +524,18 @@ class FinishTextEdit extends DrawAction implements Recordable {
   String toString() => 'FinishTextEdit(elementId: $elementId, isNew: $isNew)';
 }
 
-class CancelTextEdit extends DrawAction implements NonRecordable {
+class CancelTextEdit extends DrawAction {
   const CancelTextEdit();
 
   @override
   bool get conflictsWithEditing => true;
-
-  @override
-  String get nonRecordableReason =>
-      'CancelTextEdit aborts a text editing session.';
 }
 
 // ============================================================================
 // Edit actions
 // ============================================================================
 
-class StartEdit extends DrawAction implements NonRecordable {
+class StartEdit extends DrawAction {
   const StartEdit({
     required this.operationId,
     required this.position,
@@ -567,14 +546,10 @@ class StartEdit extends DrawAction implements NonRecordable {
   final EditOperationParams params;
 
   @override
-  String get nonRecordableReason =>
-      'StartEdit represents an intermediate edit session state.';
-
-  @override
   String toString() => 'StartEdit(id: $operationId, position: $position)';
 }
 
-class UpdateEdit extends DrawAction implements NonRecordable {
+class UpdateEdit extends DrawAction {
   const UpdateEdit({
     required this.currentPosition,
     this.modifiers = const EditModifiers(),
@@ -585,10 +560,6 @@ class UpdateEdit extends DrawAction implements NonRecordable {
 
   /// Modifier state captured by input layer.
   final EditModifiers modifiers;
-
-  @override
-  String get nonRecordableReason =>
-      'UpdateEdit represents an intermediate edit session state.';
 
   @override
   String toString() => 'UpdateEdit(currentPosition: $currentPosition)';
@@ -612,13 +583,9 @@ class FinishEdit extends DrawAction implements Recordable {
       metadata?.recordType ?? HistoryRecordType.edit;
 }
 
-class CancelEdit extends DrawAction implements NonRecordable {
+class CancelEdit extends DrawAction {
   const CancelEdit({this.reason = EditCancelReason.userCancelled});
   final EditCancelReason reason;
-
-  @override
-  String get nonRecordableReason =>
-      'CancelEdit indicates the session was aborted.';
 
   @override
   String toString() => 'CancelEdit(reason: $reason)';
