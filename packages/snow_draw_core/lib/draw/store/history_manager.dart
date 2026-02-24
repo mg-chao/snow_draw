@@ -725,14 +725,17 @@ class _HistorySnapshotCodec {
       throw StateError('Unsupported history snapshot version: $version');
     }
 
-    final nodesData = json['nodes'] as List<dynamic>? ?? const [];
+    final nodesData = (json['nodes'] as List<dynamic>?) ?? const [];
     final byId = <int, _HistoryNode>{};
 
     for (final entry in nodesData) {
-      final data = entry as Map<String, dynamic>;
-      final id = data['id'] as int;
-      final deltaJson = data['delta'] as Map<String, dynamic>?;
-      final metadataJson = data['metadata'] as Map<String, dynamic>?;
+      final data = _asJsonMap(entry);
+      final id = data?['id'] as int?;
+      if (id == null) {
+        continue;
+      }
+      final deltaJson = _asJsonMap(data?['delta']);
+      final metadataJson = _asJsonMap(data?['metadata']);
       byId[id] = _HistoryNode(
         id: id,
         parent: null,
@@ -749,19 +752,27 @@ class _HistorySnapshotCodec {
     }
 
     for (final entry in nodesData) {
-      final data = entry as Map<String, dynamic>;
-      final id = data['id'] as int;
-      final node = byId[id]!;
-      final parentId = data['parentId'] as int?;
-      if (parentId != null) {
-        node.parent = byId[parentId];
+      final data = _asJsonMap(entry);
+      final id = data?['id'] as int?;
+      if (id == null) {
+        continue;
       }
-      final childrenIds = (data['children'] as List<dynamic>? ?? const [])
-          .cast<int>();
+      final node = byId[id];
+      if (node == null) {
+        continue;
+      }
+      final parentId = data?['parentId'] as int?;
+      if (parentId != null) {
+        final parent = byId[parentId];
+        if (parent != null) {
+          _linkNodes(parent: parent, child: node);
+        }
+      }
+      final childrenIds = _asIntList(data?['children']);
       for (final childId in childrenIds) {
         final child = byId[childId];
         if (child != null) {
-          node.children.add(child);
+          _linkNodes(parent: node, child: child);
         }
       }
     }
@@ -820,46 +831,46 @@ class _HistorySnapshotCodec {
     UnknownElementReporter? onUnknownElement,
   }) {
     final beforeElements = _decodeElementMap(
-      (json['beforeElements'] as Map?)?.cast<String, dynamic>(),
+      json['beforeElements'],
       elementRegistry,
       source: 'beforeElements',
       onUnknownElement: onUnknownElement,
     );
     final afterElements = _decodeElementMap(
-      (json['afterElements'] as Map?)?.cast<String, dynamic>(),
+      json['afterElements'],
       elementRegistry,
       source: 'afterElements',
       onUnknownElement: onUnknownElement,
     );
 
-    final orderBefore = (json['orderBefore'] as List<dynamic>?)?.cast<String>();
-    final orderAfter = (json['orderAfter'] as List<dynamic>?)?.cast<String>();
-    final globalElementsBeforeJson =
-        json['globalElementsBefore'] as Map<String, dynamic>?;
-    final globalElementsAfterJson =
-        json['globalElementsAfter'] as Map<String, dynamic>?;
-
-    final selectionBeforeJson =
-        json['selectionBefore'] as Map<String, dynamic>?;
-    final selectionAfterJson = json['selectionAfter'] as Map<String, dynamic>?;
+    final orderBefore = _asStringList(json['orderBefore']);
+    final orderAfter = _asStringList(json['orderAfter']);
+    final globalElementsBefore = _decodeOptionalJson(
+      json['globalElementsBefore'],
+      _globalElementsFromJson,
+    );
+    final globalElementsAfter = _decodeOptionalJson(
+      json['globalElementsAfter'],
+      _globalElementsFromJson,
+    );
+    final selectionBefore = _decodeOptionalJson(
+      json['selectionBefore'],
+      _selectionFromJson,
+    );
+    final selectionAfter = _decodeOptionalJson(
+      json['selectionAfter'],
+      _selectionFromJson,
+    );
 
     return HistoryDelta.fromData(
       beforeElements: beforeElements,
       afterElements: afterElements,
-      globalElementsBefore: globalElementsBeforeJson == null
-          ? null
-          : _globalElementsFromJson(globalElementsBeforeJson),
-      globalElementsAfter: globalElementsAfterJson == null
-          ? null
-          : _globalElementsFromJson(globalElementsAfterJson),
+      globalElementsBefore: globalElementsBefore,
+      globalElementsAfter: globalElementsAfter,
       orderBefore: orderBefore,
       orderAfter: orderAfter,
-      selectionBefore: selectionBeforeJson == null
-          ? null
-          : _selectionFromJson(selectionBeforeJson),
-      selectionAfter: selectionAfterJson == null
-          ? null
-          : _selectionFromJson(selectionAfterJson),
+      selectionBefore: selectionBefore,
+      selectionAfter: selectionAfter,
       reindexZIndices: json['reindexZIndices'] as bool? ?? false,
     );
   }
@@ -884,10 +895,7 @@ class _HistorySnapshotCodec {
         json['id'] as String? ??
         'unknown-${DateTime.now().microsecondsSinceEpoch}';
     final type = json['type'] as String? ?? 'unknown';
-    final rawData = json['data'];
-    final dataJson = rawData is Map<String, dynamic>
-        ? rawData
-        : const <String, dynamic>{};
+    final dataJson = _asJsonMap(json['data']) ?? const <String, dynamic>{};
     final data = _decodeElementData(
       elementRegistry: elementRegistry,
       elementType: type,
@@ -899,7 +907,7 @@ class _HistorySnapshotCodec {
 
     return ElementState(
       id: id,
-      rect: _rectFromJson((json['rect'] as Map<String, dynamic>?) ?? const {}),
+      rect: _rectFromJson(_asJsonMap(json['rect']) ?? const {}),
       rotation: (json['rotation'] as num?)?.toDouble() ?? 0.0,
       opacity: (json['opacity'] as num?)?.toDouble() ?? 1.0,
       zIndex: json['zIndex'] as int? ?? 0,
@@ -908,16 +916,18 @@ class _HistorySnapshotCodec {
   }
 
   Map<String, ElementState> _decodeElementMap(
-    Map<String, dynamic>? elementsJson,
+    Object? rawElementsJson,
     ElementRegistry elementRegistry, {
     required String source,
     UnknownElementReporter? onUnknownElement,
   }) {
     final decoded = <String, ElementState>{};
-    for (final entry in (elementsJson ?? const <String, dynamic>{}).entries) {
-      final elementJson = entry.value is Map<String, dynamic>
-          ? entry.value as Map<String, dynamic>
-          : const <String, dynamic>{};
+    final elementsJson = _asJsonMap(rawElementsJson);
+    if (elementsJson == null) {
+      return decoded;
+    }
+    for (final entry in elementsJson.entries) {
+      final elementJson = _asJsonMap(entry.value) ?? const <String, dynamic>{};
       decoded[entry.key] = _elementFromJson(
         elementJson,
         elementRegistry,
@@ -926,6 +936,66 @@ class _HistorySnapshotCodec {
       );
     }
     return decoded;
+  }
+
+  void _linkNodes({required _HistoryNode parent, required _HistoryNode child}) {
+    if (identical(parent, child)) {
+      return;
+    }
+    final currentParent = child.parent;
+    if (currentParent != null && !identical(currentParent, parent)) {
+      return;
+    }
+    child.parent = parent;
+    if (!parent.children.contains(child)) {
+      parent.children.add(child);
+    }
+  }
+
+  Map<String, dynamic>? _asJsonMap(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final mapped = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        return null;
+      }
+      mapped[key] = entry.value;
+    }
+    return mapped;
+  }
+
+  List<int> _asIntList(Object? raw) {
+    if (raw is! List) {
+      return const [];
+    }
+    return <int>[
+      for (final value in raw)
+        if (value is int) value,
+    ];
+  }
+
+  List<String>? _asStringList(Object? raw) {
+    if (raw is! List) {
+      return null;
+    }
+    return <String>[
+      for (final value in raw)
+        if (value is String) value,
+    ];
+  }
+
+  T? _decodeOptionalJson<T>(
+    Object? raw,
+    T Function(Map<String, dynamic> json) decoder,
+  ) {
+    final jsonMap = _asJsonMap(raw);
+    if (jsonMap == null) {
+      return null;
+    }
+    return decoder(jsonMap);
   }
 
   ElementData _decodeElementData({
