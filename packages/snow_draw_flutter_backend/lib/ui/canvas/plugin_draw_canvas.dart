@@ -598,17 +598,21 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final previewElement = view.previewElementsById[interaction.elementId];
-    final sourceElement =
-        previewElement ??
-        view.state.domain.document.getElementById(interaction.elementId);
+    final documentElement = view.state.domain.document.getElementById(
+      interaction.elementId,
+    );
+    final sourceElement = previewElement ?? documentElement;
     if (sourceElement?.data is! TextData) {
       return null;
     }
     final element = sourceElement!;
-    if (element.opacity == 0) {
+    final hiddenData = documentElement?.data is TextData
+        ? documentElement!.data
+        : element.data;
+    if (_doubleEquals(element.opacity, 0) && element.data == hiddenData) {
       return element;
     }
-    return element.copyWith(opacity: 0);
+    return element.copyWith(opacity: 0, data: hiddenData);
   }
 
   Map<String, ElementState> _resolveEraserPreviewElements(
@@ -2445,8 +2449,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required SceneCanvasRenderKey renderKey,
   }) {
     final currentSnapshot = _canvasSnapshotNotifier.value;
-    if (currentSnapshot.renderKey == renderKey &&
-        identical(currentSnapshot.stateView, stateView)) {
+    if (currentSnapshot.renderKey == renderKey) {
       return;
     }
 

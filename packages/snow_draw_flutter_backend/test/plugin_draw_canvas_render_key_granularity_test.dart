@@ -35,6 +35,7 @@ void main() {
 
     final after = _canvasRenderKey(tester);
 
+    expect(after, same(before));
     expect(after, equals(before));
     expect(
       after.sceneContentFingerprint,
