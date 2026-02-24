@@ -188,10 +188,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
-  var _eraserPreviewCacheRevision = 0;
-  DrawStateView? _mergedEraserPreviewStateView;
-  var _mergedEraserPreviewRevision = -1;
-  var _mergedEraserPreviewElements = const <String, ElementState>{};
   final _eraserHitTesterByType =
       <ElementTypeId<ElementData>, ElementHitTester?>{};
   final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
@@ -605,23 +601,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (stateView.previewElementsById.isEmpty) {
       return pending;
     }
-    if (identical(_mergedEraserPreviewStateView, stateView) &&
-        _mergedEraserPreviewRevision == _eraserPreviewCacheRevision) {
-      return _mergedEraserPreviewElements;
-    }
-    final merged = Map<String, ElementState>.of(stateView.previewElementsById)
-      ..addAll(pending);
-    _mergedEraserPreviewStateView = stateView;
-    _mergedEraserPreviewRevision = _eraserPreviewCacheRevision;
-    return _mergedEraserPreviewElements =
-        Map<String, ElementState>.unmodifiable(merged);
-  }
-
-  void _invalidateEraserPreviewSnapshots() {
-    _eraserPreviewCacheRevision += 1;
-    _mergedEraserPreviewRevision = -1;
-    _mergedEraserPreviewElements = const <String, ElementState>{};
-    _mergedEraserPreviewStateView = null;
+    return Map<String, ElementState>.unmodifiable({
+      ...stateView.previewElementsById,
+      ...pending,
+    });
   }
 
   Widget? _buildEraserCursorOverlay() {
@@ -1145,7 +1128,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pendingErasePreviewElementsById[element.id] = element.copyWith(
       opacity: previewOpacity,
     );
-    _invalidateEraserPreviewSnapshots();
     return true;
   }
 
@@ -1155,7 +1137,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
-    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
@@ -1180,7 +1161,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!hadPendingPreview) {
       return;
     }
-    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
 
