@@ -14,8 +14,8 @@ class FrameRenderPlan {
     this.localeTag,
   });
 
-  /// Ordered tasks to execute for the frame.
-  final List<RenderTask> tasks;
+  /// Ordered frame tasks to execute for the frame.
+  final List<FrameRenderTask> tasks;
 
   /// Camera transform snapshot.
   final CameraState camera;
@@ -33,7 +33,7 @@ class FrameRenderPlan {
   final String? localeTag;
 
   static const empty = FrameRenderPlan(
-    tasks: <RenderTask>[],
+    tasks: <FrameRenderTask>[],
     camera: CameraState.initial,
     scaleFactor: 1,
   );
@@ -58,7 +58,7 @@ class FrameRenderPlan {
   );
 }
 
-bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
+bool _taskListEquals(List<FrameRenderTask> a, List<FrameRenderTask> b) {
   if (identical(a, b)) {
     return true;
   }
@@ -73,4 +73,4 @@ bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
   return true;
 }
 
-int _taskListHash(List<RenderTask> tasks) => Object.hashAll(tasks);
+int _taskListHash(List<FrameRenderTask> tasks) => Object.hashAll(tasks);

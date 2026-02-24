@@ -67,7 +67,7 @@ class FrameRenderPlanBuilder {
     FrameRenderTransientState transientState =
         const FrameRenderTransientState(),
   }) {
-    final tasks = <RenderTask>[];
+    final tasks = <FrameRenderTask>[];
     final camera = view.state.application.view.camera;
     final effectiveScale = resolveEffectiveZoom(scaleFactor);
     final previewElementsById = transientState.previewElementsById;
@@ -280,7 +280,7 @@ class FrameRenderPlanBuilder {
     }
 
     return FrameRenderPlan(
-      tasks: List<RenderTask>.unmodifiable(tasks),
+      tasks: List<FrameRenderTask>.unmodifiable(tasks),
       camera: camera,
       scaleFactor: effectiveScale,
       sceneRevision: document.elementsVersion,

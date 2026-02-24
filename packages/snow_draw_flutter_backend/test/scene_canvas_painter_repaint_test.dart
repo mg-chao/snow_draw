@@ -46,7 +46,7 @@ void main() {
         elementRegistry: registry,
         performanceMonitoringEnabled: false,
         framePlan: FrameRenderPlan(
-          tasks: const <RenderTask>[],
+          tasks: const <FrameRenderTask>[],
           camera: CameraState.initial,
           scaleFactor: 1,
           sceneRevision: initialState.domain.document.elementsVersion,
@@ -59,7 +59,7 @@ void main() {
         elementRegistry: registry,
         performanceMonitoringEnabled: false,
         framePlan: FrameRenderPlan(
-          tasks: const <RenderTask>[],
+          tasks: const <FrameRenderTask>[],
           camera: CameraState.initial,
           scaleFactor: 1,
           sceneRevision: updatedDocument.elementsVersion,

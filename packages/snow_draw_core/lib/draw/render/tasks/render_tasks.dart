@@ -23,6 +23,12 @@ sealed class RenderTask {
   const RenderTask();
 }
 
+/// Base type for frame-level tasks consumed by the scene painter.
+@immutable
+sealed class FrameRenderTask extends RenderTask {
+  const FrameRenderTask();
+}
+
 /// Base type for element render tasks produced by core.
 @immutable
 sealed class ElementRenderTask<T extends ElementData> extends RenderTask {
@@ -136,7 +142,7 @@ final class FilterRenderTask extends ElementRenderTask<FilterData> {
 
 /// Background paint task.
 @immutable
-final class BackgroundRenderTask extends RenderTask {
+final class BackgroundRenderTask extends FrameRenderTask {
   const BackgroundRenderTask({required this.color});
 
   final DrawColor color;
@@ -152,7 +158,7 @@ final class BackgroundRenderTask extends RenderTask {
 
 /// Grid paint task.
 @immutable
-final class GridRenderTask extends RenderTask {
+final class GridRenderTask extends FrameRenderTask {
   const GridRenderTask({
     required this.enabled,
     required this.size,
@@ -205,7 +211,7 @@ final class GridRenderTask extends RenderTask {
 
 /// Selection-outline task.
 @immutable
-final class SelectionOutlineRenderTask extends RenderTask {
+final class SelectionOutlineRenderTask extends FrameRenderTask {
   const SelectionOutlineRenderTask({
     required this.bounds,
     required this.config,
@@ -237,7 +243,7 @@ final class SelectionOutlineRenderTask extends RenderTask {
 
 /// Selection controls task (outline + handles).
 @immutable
-final class SelectionControlsRenderTask extends RenderTask {
+final class SelectionControlsRenderTask extends FrameRenderTask {
   const SelectionControlsRenderTask({
     required this.bounds,
     required this.config,
@@ -282,7 +288,7 @@ final class SelectionControlsRenderTask extends RenderTask {
 
 /// Arrow-point overlay task.
 @immutable
-final class ArrowPointOverlayRenderTask extends RenderTask {
+final class ArrowPointOverlayRenderTask extends FrameRenderTask {
   const ArrowPointOverlayRenderTask({
     required this.handles,
     required this.selectionConfig,
@@ -319,7 +325,7 @@ final class ArrowPointOverlayRenderTask extends RenderTask {
 
 /// Arrow-binding highlight task.
 @immutable
-final class ArrowBindingHighlightRenderTask extends RenderTask {
+final class ArrowBindingHighlightRenderTask extends FrameRenderTask {
   const ArrowBindingHighlightRenderTask({
     required this.elementIds,
     required this.strokeColor,
@@ -341,7 +347,7 @@ final class ArrowBindingHighlightRenderTask extends RenderTask {
 
 /// Hover-outline task.
 @immutable
-final class HoverOutlineRenderTask extends RenderTask {
+final class HoverOutlineRenderTask extends FrameRenderTask {
   const HoverOutlineRenderTask({
     required this.element,
     required this.config,
@@ -366,7 +372,7 @@ final class HoverOutlineRenderTask extends RenderTask {
 
 /// Snap-guides overlay task.
 @immutable
-final class SnapGuidesRenderTask extends RenderTask {
+final class SnapGuidesRenderTask extends FrameRenderTask {
   const SnapGuidesRenderTask({required this.guides, required this.snapConfig});
 
   final List<SnapGuide> guides;
@@ -385,7 +391,7 @@ final class SnapGuidesRenderTask extends RenderTask {
 
 /// Box-select overlay task.
 @immutable
-final class BoxSelectionRenderTask extends RenderTask {
+final class BoxSelectionRenderTask extends FrameRenderTask {
   const BoxSelectionRenderTask({
     required this.bounds,
     required this.config,
@@ -414,7 +420,7 @@ final class BoxSelectionRenderTask extends RenderTask {
 
 /// Highlight-mask overlay task.
 @immutable
-final class HighlightMaskRenderTask extends RenderTask {
+final class HighlightMaskRenderTask extends FrameRenderTask {
   const HighlightMaskRenderTask({
     required this.config,
     required this.highlights,
@@ -436,7 +442,7 @@ final class HighlightMaskRenderTask extends RenderTask {
 
 /// Watermark overlay task.
 @immutable
-final class WatermarkRenderTask extends RenderTask {
+final class WatermarkRenderTask extends FrameRenderTask {
   const WatermarkRenderTask({required this.config});
 
   final WatermarkConfig config;

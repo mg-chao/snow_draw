@@ -86,19 +86,19 @@ void main() {
       const baseTask = BackgroundRenderTask(color: DrawColor(0xFFFFFFFF));
       const changedTask = BackgroundRenderTask(color: DrawColor(0xFF000000));
       const first = FrameRenderPlan(
-        tasks: <RenderTask>[baseTask],
+        tasks: <FrameRenderTask>[baseTask],
         camera: CameraState.initial,
         scaleFactor: 1,
         localeTag: 'en',
       );
       const second = FrameRenderPlan(
-        tasks: <RenderTask>[baseTask],
+        tasks: <FrameRenderTask>[baseTask],
         camera: CameraState.initial,
         scaleFactor: 1,
         localeTag: 'en',
       );
       const differentTask = FrameRenderPlan(
-        tasks: <RenderTask>[changedTask],
+        tasks: <FrameRenderTask>[changedTask],
         camera: CameraState.initial,
         scaleFactor: 1,
         localeTag: 'en',

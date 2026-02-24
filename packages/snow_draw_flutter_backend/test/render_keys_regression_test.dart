@@ -120,7 +120,7 @@ void main() {
       final baseline = _buildCanvasRenderKey(
         registry: registry,
         framePlan: const FrameRenderPlan(
-          tasks: <RenderTask>[],
+          tasks: <FrameRenderTask>[],
           camera: CameraState.initial,
           scaleFactor: 1,
           sceneRevision: 1,
@@ -129,7 +129,7 @@ void main() {
       final changed = _buildCanvasRenderKey(
         registry: registry,
         framePlan: const FrameRenderPlan(
-          tasks: <RenderTask>[],
+          tasks: <FrameRenderTask>[],
           camera: CameraState.initial,
           scaleFactor: 1,
           sceneRevision: 2,
@@ -173,7 +173,7 @@ CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>
 FrameRenderPlan _arrowOverlayFramePlan({
   required bool deleteIndicatorVisible,
 }) => FrameRenderPlan(
-  tasks: <RenderTask>[
+  tasks: <FrameRenderTask>[
     ArrowPointOverlayRenderTask(
       handles: const <ArrowPointHandle>[
         ArrowPointHandle(
@@ -192,7 +192,7 @@ FrameRenderPlan _arrowOverlayFramePlan({
 );
 
 FrameRenderPlan _watermarkFramePlan(WatermarkConfig config) => FrameRenderPlan(
-  tasks: <RenderTask>[WatermarkRenderTask(config: config)],
+  tasks: <FrameRenderTask>[WatermarkRenderTask(config: config)],
   camera: CameraState.initial,
   scaleFactor: 1,
 );

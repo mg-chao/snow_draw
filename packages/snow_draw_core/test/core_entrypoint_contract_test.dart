@@ -55,7 +55,9 @@ void main() {
       );
 
       const plan = FrameRenderPlan(
-        tasks: <RenderTask>[BackgroundRenderTask(color: DrawColor(0xFFFFFFFF))],
+        tasks: <FrameRenderTask>[
+          BackgroundRenderTask(color: DrawColor(0xFFFFFFFF)),
+        ],
         camera: CameraState.initial,
         scaleFactor: 1,
       );

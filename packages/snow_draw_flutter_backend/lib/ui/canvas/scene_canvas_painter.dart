@@ -65,7 +65,7 @@ class SceneCanvasPainter extends CustomPainter {
   /// Precomputed effective state view (needed for paint).
   final DrawStateView stateView;
 
-  T? _firstPlannedTask<T extends RenderTask>() {
+  T? _firstPlannedTask<T extends FrameRenderTask>() {
     for (final task in renderKey.framePlan.tasks) {
       if (task is T) {
         return task;
@@ -74,7 +74,7 @@ class SceneCanvasPainter extends CustomPainter {
     return null;
   }
 
-  List<T> _plannedTasks<T extends RenderTask>() {
+  List<T> _plannedTasks<T extends FrameRenderTask>() {
     final tasks = <T>[];
     for (final task in renderKey.framePlan.tasks) {
       if (task is T) {
