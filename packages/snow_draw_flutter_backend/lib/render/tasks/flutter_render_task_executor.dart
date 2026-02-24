@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:snow_draw_core/snow_draw_core.dart';
 
-import '../free_draw/free_draw_path_utils.dart';
+import '../free_draw/free_draw_visual_cache.dart';
 import '../geometry/arrow_geometry.dart';
 import '../patterns/stroke_pattern_utils.dart';
 import '../text/text_renderer.dart';
@@ -265,19 +265,14 @@ class FlutterRenderTaskExecutor {
   }) {
     final element = task.element;
     final data = task.data;
-    final localPoints = resolveFreeDrawLocalPoints(
-      rect: element.rect,
-      points: data.points,
+    final visualEntry = FreeDrawVisualCache.instance.resolve(
+      element: element,
+      data: data,
     );
-    if (localPoints.length < 2) {
+    if (visualEntry.pointCount < 2) {
       return;
     }
-
-    final worldPoints = <Offset>[
-      for (final point in localPoints)
-        Offset(point.dx + element.rect.minX, point.dy + element.rect.minY),
-    ];
-    final path = buildFreeDrawSmoothPath(worldPoints);
+    final path = visualEntry.path;
 
     final strokeColor = _withOpacity(data.color, element.opacity);
     final fillColor = _withOpacity(data.fillColor, element.opacity);
@@ -291,6 +286,7 @@ class FlutterRenderTaskExecutor {
 
     canvas.save();
     _applyElementRotation(canvas, element);
+    canvas.translate(element.rect.minX, element.rect.minY);
 
     if (fillVisible) {
       final fillPath = Path.from(path)..close();
@@ -586,12 +582,13 @@ class FlutterRenderTaskExecutor {
   }
 
   bool _isFreeDrawClosed({required FreeDrawData data, required DrawRect rect}) {
-    if (data.points.length < 3) {
+    final points = data.points;
+    if (points.length < 3) {
       return false;
     }
 
-    final first = data.points.first;
-    final last = data.points.last;
+    final first = points.first;
+    final last = points.last;
     if (first == last) {
       return true;
     }

@@ -11,13 +11,13 @@ void main() {
   test('hits open stroke when one rect dimension is zero', () {
     const element = ElementState(
       id: 'free_draw_zero_width',
-      rect: DrawRect(minX: 20, minY: 0, maxX: 20, maxY: 120),
+      rect: DrawRect(minX: 20, maxX: 20, maxY: 120),
       rotation: 0,
       opacity: 1,
       zIndex: 0,
       data: FreeDrawData(
         points: <DrawPoint>[
-          DrawPoint(x: 0, y: 0),
+          DrawPoint.zero,
           DrawPoint(x: 0, y: 0.5),
           DrawPoint(x: 0, y: 1),
         ],
@@ -47,13 +47,72 @@ void main() {
           DrawPoint(x: 0.96063709, y: 0.99990010),
           DrawPoint(x: 0.76643711, y: 0.05118744),
         ],
-        strokeWidth: 2,
       ),
     );
 
-    const samplePoint = DrawPoint(x: 54.15096985275884, y: 46.22328000171696);
+    const samplePoint = DrawPoint(x: 23, y: 35);
     final hit = tester.hitTest(element: element, position: samplePoint);
 
     expect(hit, isTrue);
+  });
+
+  test('uses canonical points for hit testing', () {
+    const element = ElementState(
+      id: 'free_draw_baked_points',
+      rect: DrawRect(maxX: 100, maxY: 100),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: FreeDrawData(
+        points: <DrawPoint>[DrawPoint(x: 0.5, y: 0), DrawPoint(x: 0.5, y: 1)],
+        strokeWidth: 8,
+      ),
+    );
+
+    final hit = tester.hitTest(
+      element: element,
+      position: const DrawPoint(x: 50, y: 50),
+    );
+
+    expect(hit, isTrue);
+  });
+
+  test('cache reuses geometry when element rect is translated', () {
+    const data = FreeDrawData(
+      points: <DrawPoint>[
+        DrawPoint.zero,
+        DrawPoint(x: 0.5, y: 0.5),
+        DrawPoint(x: 1, y: 1),
+      ],
+      strokeWidth: 8,
+    );
+    const original = ElementState(
+      id: 'free_draw_cache_move',
+      rect: DrawRect(maxX: 100, maxY: 100),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: data,
+    );
+    const moved = ElementState(
+      id: 'free_draw_cache_move',
+      rect: DrawRect(minX: 200, minY: 120, maxX: 300, maxY: 220),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: data,
+    );
+
+    final warmupHit = tester.hitTest(
+      element: original,
+      position: const DrawPoint(x: 50, y: 50),
+    );
+    final movedHit = tester.hitTest(
+      element: moved,
+      position: const DrawPoint(x: 250, y: 170),
+    );
+
+    expect(warmupHit, isTrue);
+    expect(movedHit, isTrue);
   });
 }

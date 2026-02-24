@@ -24,7 +24,8 @@ import 'free_draw_data.dart';
 /// avoids the previous O(n) normalize -> copy -> re-render loop on every
 /// pointer event.
 ///
-/// Normalization is now performed once at finish time.
+/// Normalization is performed once at finish time and produces the final
+/// persisted free-draw points used by render/hit-test paths.
 @immutable
 class FreeDrawCreationStrategy extends CreationStrategy {
   const FreeDrawCreationStrategy();
@@ -362,9 +363,11 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       worldPoints: points,
       rect: rect,
     );
+    final baked = _buildBakedNormalizedPoints(worldPoints: points, rect: rect);
+    final finalizedPoints = baked ?? normalized;
 
     return CreationFinishResult(
-      data: data.copyWith(points: normalized),
+      data: data.copyWith(points: finalizedPoints),
       rect: rect,
       shouldCommit: true,
     );
@@ -545,6 +548,94 @@ double _pathLength(List<DrawPoint> points) {
   }
   return length;
 }
+
+List<DrawPoint>? _buildBakedNormalizedPoints({
+  required List<DrawPoint> worldPoints,
+  required DrawRect rect,
+}) {
+  if (worldPoints.length < 3) {
+    return null;
+  }
+
+  final closed = _sameLocation(worldPoints.first, worldPoints.last);
+  final source = closed && worldPoints.length > 3
+      ? worldPoints.sublist(0, worldPoints.length - 1)
+      : worldPoints;
+  if (source.length < 3) {
+    return null;
+  }
+
+  final smoothed = _smoothStrokePointsForBake(source, closed: closed);
+  if (smoothed.length < 3) {
+    return null;
+  }
+
+  final bakedWorldPoints =
+      closed && !_sameLocation(smoothed.first, smoothed.last)
+      ? <DrawPoint>[...smoothed, smoothed.first]
+      : smoothed;
+  if (bakedWorldPoints.length < 3) {
+    return null;
+  }
+
+  return ArrowGeometry.normalizePoints(
+    worldPoints: bakedWorldPoints,
+    rect: rect,
+  );
+}
+
+List<DrawPoint> _smoothStrokePointsForBake(
+  List<DrawPoint> points, {
+  required bool closed,
+}) {
+  if (points.length < 3) {
+    return points;
+  }
+
+  const iterations = 3;
+  final count = points.length;
+  final lastIndex = count - 1;
+
+  var src = List<DrawPoint>.of(points);
+  var dst = List<DrawPoint>.filled(count, DrawPoint.zero);
+
+  for (var iteration = 0; iteration < iterations; iteration++) {
+    if (closed) {
+      for (var index = 0; index <= lastIndex; index++) {
+        final prev = src[(index - 1 + count) % count];
+        final current = src[index];
+        final next = src[(index + 1) % count];
+        dst[index] = DrawPoint(
+          x: (prev.x + current.x * 2 + next.x) * 0.25,
+          y: (prev.y + current.y * 2 + next.y) * 0.25,
+          pressure: current.pressure,
+          timestamp: current.timestamp,
+        );
+      }
+    } else {
+      dst[0] = src[0];
+      dst[lastIndex] = src[lastIndex];
+      for (var index = 1; index < lastIndex; index++) {
+        final prev = src[index - 1];
+        final current = src[index];
+        final next = src[index + 1];
+        dst[index] = DrawPoint(
+          x: (prev.x + current.x * 2 + next.x) * 0.25,
+          y: (prev.y + current.y * 2 + next.y) * 0.25,
+          pressure: current.pressure,
+          timestamp: current.timestamp,
+        );
+      }
+    }
+    final temp = src;
+    src = dst;
+    dst = temp;
+  }
+
+  return src;
+}
+
+bool _sameLocation(DrawPoint a, DrawPoint b) => a.x == b.x && a.y == b.y;
 
 /// Appends a new point with smoothing and minimum-distance filtering.
 ///
