@@ -341,18 +341,62 @@ class HitTest {
         context: context,
         tolerance: tolerance,
       )) {
-        return HitTestResult(
-          handleType: HandleType.rotate,
-          cursorHint: CursorHint.rotate,
-          selectionRotation: rotation,
-          target: HitTestTarget.handle,
+        return _buildHandleHitResult(
+          handle: HandleType.rotate,
+          rotation: rotation,
           isInSelectionPadding: isInSelectionPadding,
         );
       }
     }
 
-    // Check 4 corner handles first (higher priority for precise
-    // resizing). Use handleBounds for corner positions.
+    final cornerHandle = _resolveCornerHandle(
+      handleBounds: handleBounds,
+      position: position,
+      context: context,
+      tolerance: tolerance,
+    );
+    if (cornerHandle != null) {
+      return _buildHandleHitResult(
+        handle: cornerHandle,
+        rotation: rotation,
+        isInSelectionPadding: isInSelectionPadding,
+      );
+    }
+
+    final edgeHandle = _resolveEdgeHandle(
+      paddedBounds: paddedBounds,
+      position: testPosition,
+      tolerance: tolerance,
+    );
+    if (edgeHandle != null) {
+      return _buildHandleHitResult(
+        handle: edgeHandle,
+        rotation: rotation,
+        isInSelectionPadding: isInSelectionPadding,
+      );
+    }
+
+    return null;
+  }
+
+  HitTestResult _buildHandleHitResult({
+    required HandleType handle,
+    required double rotation,
+    required bool isInSelectionPadding,
+  }) => HitTestResult(
+    handleType: handle,
+    cursorHint: _cursorHintForHandle(handle),
+    selectionRotation: rotation,
+    target: HitTestTarget.handle,
+    isInSelectionPadding: isInSelectionPadding,
+  );
+
+  HandleType? _resolveCornerHandle({
+    required DrawRect handleBounds,
+    required DrawPoint position,
+    required _SelectionHitContext context,
+    required double tolerance,
+  }) {
     final minX = handleBounds.minX;
     final minY = handleBounds.minY;
     final maxX = handleBounds.maxX;
@@ -365,15 +409,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.topLeft,
-        cursorHint: _cursorHintForHandle(HandleType.topLeft),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.topLeft;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: maxX,
@@ -381,15 +418,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.topRight,
-        cursorHint: _cursorHintForHandle(HandleType.topRight),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.topRight;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: maxX,
@@ -397,15 +427,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.bottomRight,
-        cursorHint: _cursorHintForHandle(HandleType.bottomRight),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.bottomRight;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: minX,
@@ -413,54 +436,29 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.bottomLeft,
-        cursorHint: _cursorHintForHandle(HandleType.bottomLeft),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.bottomLeft;
     }
 
-    // Check 4 edges (excluding corner regions).
-    // Perform edge checks in local space.
-    if (_testTopEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.top,
-        cursorHint: CursorHint.resizeUp,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testRightEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.right,
-        cursorHint: CursorHint.resizeRight,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testBottomEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.bottom,
-        cursorHint: CursorHint.resizeDown,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testLeftEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.left,
-        cursorHint: CursorHint.resizeLeft,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
+    return null;
+  }
 
+  HandleType? _resolveEdgeHandle({
+    required DrawRect paddedBounds,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
+    if (_testTopEdge(paddedBounds, position, tolerance)) {
+      return HandleType.top;
+    }
+    if (_testRightEdge(paddedBounds, position, tolerance)) {
+      return HandleType.right;
+    }
+    if (_testBottomEdge(paddedBounds, position, tolerance)) {
+      return HandleType.bottom;
+    }
+    if (_testLeftEdge(paddedBounds, position, tolerance)) {
+      return HandleType.left;
+    }
     return null;
   }
 

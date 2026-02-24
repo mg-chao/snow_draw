@@ -269,33 +269,8 @@ class ArrowGeometry {
     return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
   }
 
-  static DrawRect _boundsFromPoints(List<DrawPoint> points) {
-    if (points.isEmpty) {
-      return const DrawRect();
-    }
-
-    var minX = points.first.x;
-    var maxX = points.first.x;
-    var minY = points.first.y;
-    var maxY = points.first.y;
-
-    for (final point in points.skip(1)) {
-      if (point.x < minX) {
-        minX = point.x;
-      }
-      if (point.x > maxX) {
-        maxX = point.x;
-      }
-      if (point.y < minY) {
-        minY = point.y;
-      }
-      if (point.y > maxY) {
-        maxY = point.y;
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
+  static DrawRect _boundsFromPoints(List<DrawPoint> points) =>
+      DrawRect.fromPointCloud(points);
 
   static double _clamp01(double value) {
     if (!value.isFinite) {

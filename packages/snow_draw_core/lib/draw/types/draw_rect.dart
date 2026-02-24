@@ -17,6 +17,31 @@ class DrawRect {
 
   factory DrawRect.fromPoint(DrawPoint point) =>
       DrawRect.fromPoints(point, point);
+
+  /// Builds bounds that contain all [points].
+  ///
+  /// Returns `DrawRect()` when [points] is empty.
+  factory DrawRect.fromPointCloud(Iterable<DrawPoint> points) {
+    final iterator = points.iterator;
+    if (!iterator.moveNext()) {
+      return const DrawRect();
+    }
+
+    var minX = iterator.current.x;
+    var minY = iterator.current.y;
+    var maxX = minX;
+    var maxY = minY;
+
+    while (iterator.moveNext()) {
+      final point = iterator.current;
+      minX = min(minX, point.x);
+      minY = min(minY, point.y);
+      maxX = max(maxX, point.x);
+      maxY = max(maxY, point.y);
+    }
+
+    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  }
   final double minX;
   final double minY;
   final double maxX;
@@ -42,6 +67,23 @@ class DrawRect {
     maxX: maxX + position.x,
     maxY: maxY + position.y,
   );
+
+  /// Returns bounds expanded to include [point].
+  DrawRect expandToInclude(DrawPoint point) => DrawRect(
+    minX: min(minX, point.x),
+    minY: min(minY, point.y),
+    maxX: max(maxX, point.x),
+    maxY: max(maxY, point.y),
+  );
+
+  /// Returns bounds expanded to include every point in [points].
+  DrawRect expandToIncludeAll(Iterable<DrawPoint> points) {
+    var expanded = this;
+    for (final point in points) {
+      expanded = expanded.expandToInclude(point);
+    }
+    return expanded;
+  }
 
   /// Returns whether this rectangle contains [point].
   /// Note: this does not account for rotation.

@@ -481,33 +481,8 @@ List<DrawPoint>? _resolvePreviewPointsIfNeeded({
 void _appendPreviewPoint(List<DrawPoint> previewPoints, DrawPoint point) =>
     previewPoints.add(point);
 
-DrawRect _boundsFromPoints(List<DrawPoint> points) {
-  if (points.isEmpty) {
-    return const DrawRect();
-  }
-
-  var minX = points.first.x;
-  var maxX = points.first.x;
-  var minY = points.first.y;
-  var maxY = points.first.y;
-
-  for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
+DrawRect _boundsFromPoints(List<DrawPoint> points) =>
+    DrawRect.fromPointCloud(points);
 
 /// Expands [current] to include the last two points of [points].
 DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
@@ -515,52 +490,12 @@ DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
     return current;
   }
 
-  var minX = current.minX;
-  var maxX = current.maxX;
-  var minY = current.minY;
-  var maxY = current.maxY;
-
   final start = points.length > 2 ? points.length - 2 : 0;
-  for (var i = start; i < points.length; i++) {
-    final point = points[i];
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return current.expandToIncludeAll(points.skip(start));
 }
 
-DrawRect _expandBoundsWithPoint(DrawRect current, DrawPoint point) {
-  var minX = current.minX;
-  var maxX = current.maxX;
-  var minY = current.minY;
-  var maxY = current.maxY;
-
-  if (point.x < minX) {
-    minX = point.x;
-  }
-  if (point.x > maxX) {
-    maxX = point.x;
-  }
-  if (point.y < minY) {
-    minY = point.y;
-  }
-  if (point.y > maxY) {
-    maxY = point.y;
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
+DrawRect _expandBoundsWithPoint(DrawRect current, DrawPoint point) =>
+    current.expandToInclude(point);
 
 List<DrawPoint> _removeAdjacentDuplicates(List<DrawPoint> points) {
   if (points.length <= 1) {
