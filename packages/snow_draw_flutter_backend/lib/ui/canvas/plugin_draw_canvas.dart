@@ -206,8 +206,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
   late final EraserStrokeProcessor _eraserStrokeProcessor;
-  DrawState? _cachedState;
-  DrawStateView? _cachedStateView;
   SelectionConfig? _cachedInputSelectionConfigSource;
   SelectionConfig? _cachedInputSelectionConfig;
   double? _cachedInputSelectionScale;
@@ -414,8 +412,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cancelPendingTextDraftSyncDispatch();
         _lastTextDraftSyncAt = null;
         _textDraftDispatcher.reset();
-        _cachedState = null;
-        _cachedStateView = null;
         _cachedInputSelectionConfigSource = null;
         _cachedInputSelectionConfig = null;
         _cachedInputSelectionScale = null;
@@ -2166,17 +2162,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       ? SystemMouseCursors.basic
       : _defaultCursor;
 
-  DrawStateView _buildStateView(DrawState state) {
-    final cachedState = _cachedState;
-    final cachedView = _cachedStateView;
-    if (cachedView != null && identical(cachedState, state)) {
-      return cachedView;
-    }
-    final nextView = _stateViewBuilder.build(state);
-    _cachedState = state;
-    _cachedStateView = nextView;
-    return nextView;
-  }
+  DrawStateView _buildStateView(DrawState state) =>
+      _stateViewBuilder.build(state);
 
   _CanvasRenderInputs _resolveCanvasRenderInputs(DrawStateView stateView) {
     final promoteEraserPreviewToRenderInputs =
