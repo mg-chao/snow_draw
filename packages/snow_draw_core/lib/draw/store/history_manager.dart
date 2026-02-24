@@ -20,56 +20,10 @@ import 'snapshot.dart';
 
 final ModuleLogger _historyFallbackLog = LogService.fallback.history;
 
-/// Manages undo/redo history as a branching tree of deltas.
-///
-/// ## Tree Structure
-///
-/// History is stored as a tree where:
-/// - Each **node** represents a state in the history
-/// - Each **edge** (parent→child) represents a delta (state change)
-/// - The **root** node is the initial state (no delta)
-/// - The **current** node is the active state the user sees
-///
-/// ``` md
-///        root
-///         |
-///      delta1
-///         |
-///       node1 ← current
-///       /   \
-///   delta2  delta3
-///     /       \
-///  node2     node3
-/// ```
-///
-/// ## Branching Behavior
-///
-/// When the user undoes and then makes a new change, a **branch** is created:
-/// 1. User creates element A (node1)
-/// 2. User undoes → back to root
-/// 3. User creates element B → creates node2 as a sibling of node1
-///
-/// Both branches are preserved. The user can redo to either node1 or node2.
-///
-/// ## Navigation
-///
-/// - **Undo**: Move current pointer to parent node, apply delta backward
-/// - **Redo**: Move current pointer to a child node, apply delta forward
-/// - **Branch selection**: When multiple children exist, user can choose which
-///   branch to follow during redo
-///
-/// ## Pruning
-///
-/// To prevent unbounded memory growth, the tree is pruned when depth exceeds
-/// [maxHistoryLength]. Pruning removes old nodes while preserving recent
-/// branch points (up to [maxBranchPoints]) to maintain user's branching
-/// history where it matters most.
+/// Manages undo/redo history as a linear sequence of deltas.
 class HistoryManager {
-  HistoryManager({
-    this.maxHistoryLength = 50,
-    this.maxBranchPoints = 8,
-    LogService? logService,
-  }) : _log = logService?.history {
+  HistoryManager({this.maxHistoryLength = 50, LogService? logService})
+    : _log = logService?.history {
     if (maxHistoryLength < 1) {
       throw ArgumentError.value(
         maxHistoryLength,
@@ -77,49 +31,30 @@ class HistoryManager {
         'must be greater than or equal to 1',
       );
     }
-    if (maxBranchPoints < 0) {
-      throw ArgumentError.value(
-        maxBranchPoints,
-        'maxBranchPoints',
-        'must be greater than or equal to 0',
-      );
-    }
-    _root = _HistoryNode.root(_nextNodeId++);
-    _normalizeRootPayload();
-    _current = _root;
   }
+
   final int maxHistoryLength;
-  final int maxBranchPoints;
-  late _HistoryNode _root;
-  late _HistoryNode _current;
   final ModuleLogger? _log;
-  var _nextNodeId = 0;
 
-  bool get canUndo => _current.parent != null;
-  bool get canRedo => _current.children.isNotEmpty;
+  final _entries = <_HistoryEntry>[];
+  var _cursor = -1;
+  var _nextEntryId = 0;
 
-  int get undoLength => _pathFromRoot(_current).length - 1;
-  int get redoLength => _defaultRedoPath().length;
+  bool get canUndo => _cursor >= 0;
+  bool get canRedo => _cursor < _entries.length - 1;
 
-  List<String> get undoDescriptions => _pathFromRoot(
-    _current,
-  ).skip(1).map((entry) => entry.metadata?.description ?? '').toList();
+  int get undoLength => _cursor + 1;
+  int get redoLength => _entries.length - _cursor - 1;
 
-  List<String> get redoDescriptions => _defaultRedoPath()
-      .map((entry) => entry.metadata?.description ?? '')
-      .toList();
+  List<String> get undoDescriptions => <String>[
+    for (var index = 0; index <= _cursor; index++)
+      _entries[index].metadata?.description ?? '',
+  ];
 
-  List<HistoryBranch> get redoBranches => _current.children
-      .asMap()
-      .entries
-      .map(
-        (entry) => HistoryBranch(
-          index: entry.key,
-          nodeId: entry.value.id,
-          metadata: entry.value.metadata,
-        ),
-      )
-      .toList();
+  List<String> get redoDescriptions => <String>[
+    for (var index = _cursor + 1; index < _entries.length; index++)
+      _entries[index].metadata?.description ?? '',
+  ];
 
   bool record(
     HistorySnapshot before,
@@ -132,6 +67,7 @@ class HistoryManager {
     DateTime? recordedAt,
   }) {
     final now = recordedAt ?? DateTime.now();
+
     if (coalescing != null && currentState != null) {
       final coalesced = _tryCoalesceCurrentRecord(
         after: after,
@@ -156,25 +92,27 @@ class HistoryManager {
       return false;
     }
 
-    final node = _HistoryNode(
-      id: _nextNodeId++,
-      parent: _current,
+    _dropRedoEntries();
+
+    final entry = _HistoryEntry(
+      id: _nextEntryId++,
       delta: delta,
       metadata: metadata,
       coalescing: coalescing,
       recordedAt: now,
     );
-    _current.children.add(node);
-    _current = node;
+    _entries.add(entry);
+    _cursor = _entries.length - 1;
+
     _log?.trace('History record', {
-      'nodeId': node.id,
-      'parentId': node.parent?.id,
+      'entryId': entry.id,
       'description': metadata?.description,
       'changedElements':
           delta.beforeElements.length + delta.afterElements.length,
       'orderChanged': delta.orderBefore != null,
       'selectionChanged': delta.selectionChanged,
     });
+
     _pruneIfNeeded();
     return true;
   }
@@ -193,9 +131,8 @@ class HistoryManager {
       return null;
     }
 
-    final currentNode = _current;
-    final parent = currentNode.parent!;
-    final currentDelta = currentNode.delta!;
+    final currentEntry = _entries[_cursor];
+    final currentDelta = currentEntry.delta;
     final parentState = _resolveCurrentParentState(
       currentState: currentState,
       currentDelta: currentDelta,
@@ -212,25 +149,24 @@ class HistoryManager {
       changes: changes,
       includeSelection: includeSelection,
     );
+
     if (!mergedDelta.hasChanges) {
-      parent.children.remove(currentNode);
-      _current = parent;
-      _log?.trace('History coalesced and removed empty node', {
-        'parentId': parent.id,
+      _entries.removeAt(_cursor);
+      _cursor -= 1;
+      _log?.trace('History coalesced and removed empty entry', {
         'coalescingKey': coalescing.key,
       });
       return false;
     }
 
-    currentNode
+    currentEntry
       ..delta = mergedDelta
       ..metadata = metadata
       ..coalescing = coalescing
       ..recordedAt = recordedAt;
 
-    _log?.trace('History coalesced into current node', {
-      'nodeId': currentNode.id,
-      'parentId': parent.id,
+    _log?.trace('History coalesced into current entry', {
+      'entryId': currentEntry.id,
       'coalescingKey': coalescing.key,
       'description': metadata?.description,
     });
@@ -257,6 +193,7 @@ class HistoryManager {
       currentDelta: currentDelta,
       incomingChanges: changes,
     );
+
     final mergedBefore = _snapshotForCoalescedState(
       state: parentState,
       changes: mergedChanges,
@@ -267,6 +204,7 @@ class HistoryManager {
       changes: mergedChanges,
       includeSelection: includeSelection,
     );
+
     return HistoryDelta.fromSnapshots(
       mergedBefore,
       mergedAfter,
@@ -343,16 +281,14 @@ class HistoryManager {
     required HistoryCoalescing coalescing,
     required DateTime recordedAt,
   }) {
-    if (_current.parent == null ||
-        _current.delta == null ||
-        _current.children.isNotEmpty) {
+    if (_entries.isEmpty || _cursor != _entries.length - 1) {
       return false;
     }
-    final active = _current.coalescing;
+    final active = _entries[_cursor].coalescing;
     if (active == null || active.key != coalescing.key) {
       return false;
     }
-    final expiresAt = _current.recordedAt.add(coalescing.window);
+    final expiresAt = _entries[_cursor].recordedAt.add(coalescing.window);
     return !recordedAt.isAfter(expiresAt);
   }
 
@@ -364,7 +300,7 @@ class HistoryManager {
       return currentDelta.applyBackward(currentState);
     } on Object catch (error) {
       _log?.warning('History coalescing anchor resolution failed', {
-        'nodeId': _current.id,
+        'cursor': _cursor,
         'error': error.toString(),
       });
       return null;
@@ -372,31 +308,29 @@ class HistoryManager {
   }
 
   DrawState? undo(DrawState currentState) {
-    final node = _current;
-    final parent = node.parent;
-    if (parent == null) {
-      _log?.trace('History undo skipped', {'reason': 'no_parent'});
+    if (!canUndo) {
+      _log?.trace('History undo skipped', {'reason': 'empty'});
       return null;
     }
 
-    final restoredState = node.delta!.applyBackward(currentState);
-    _log?.trace('History undo', {'nodeId': node.id, 'parentId': parent.id});
-    _current = parent;
+    final entry = _entries[_cursor];
+    final restoredState = entry.delta.applyBackward(currentState);
+    _cursor -= 1;
+    _log?.trace('History undo', {'entryId': entry.id});
     return restoredState;
   }
 
-  DrawState? redo(DrawState currentState, {int? branchIndex}) {
-    final target = _resolveRedoTarget(branchIndex);
-    if (target == null) {
+  DrawState? redo(DrawState currentState) {
+    if (!canRedo) {
+      _log?.trace('History redo skipped', {'reason': 'empty'});
       return null;
     }
 
-    final restoredState = target.node.delta!.applyForward(currentState);
-    _log?.trace('History redo', {
-      'nodeId': target.node.id,
-      'branchIndex': target.index,
-    });
-    _current = target.node;
+    final targetIndex = _cursor + 1;
+    final entry = _entries[targetIndex];
+    final restoredState = entry.delta.applyForward(currentState);
+    _cursor = targetIndex;
+    _log?.trace('History redo', {'entryId': entry.id});
     return restoredState;
   }
 
@@ -405,216 +339,82 @@ class HistoryManager {
       'undoLength': undoLength,
       'redoLength': redoLength,
     });
-    _nextNodeId = 0;
-    _root = _HistoryNode.root(_nextNodeId++);
-    _normalizeRootPayload();
-    _current = _root;
+    _entries.clear();
+    _cursor = -1;
+    _nextEntryId = 0;
   }
 
-  HistoryManagerSnapshot snapshot() {
-    final clone = _cloneTree(_root);
-    return HistoryManagerSnapshot._(clone.root, _current.id, _nextNodeId);
-  }
+  HistoryManagerSnapshot snapshot() => HistoryManagerSnapshot._(
+    entries: _cloneEntries(_entries),
+    cursor: _cursor,
+    nextEntryId: _nextEntryId,
+  );
 
   void restore(HistoryManagerSnapshot snapshot) {
-    final clone = _cloneTree(snapshot._root);
-    _root = clone.root;
-    _normalizeRootPayload();
-    _current = clone.byId[snapshot._currentId] ?? _root;
-    _nextNodeId = _resolveNextNodeId(
-      requestedNextNodeId: snapshot._nextNodeId,
-      minNextNodeId: _maxNodeId(_root) + 1,
+    _entries
+      ..clear()
+      ..addAll(_cloneEntries(snapshot._entries));
+
+    _cursor = _clampCursor(snapshot._cursor, _entries.length);
+    _nextEntryId = _resolveNextEntryId(
+      requestedNextEntryId: snapshot._nextEntryId,
+      minNextEntryId: _nextEntryIdFromEntries(_entries),
     );
   }
 
-  /// Returns the path from root to the given node.
-  ///
-  /// Walks up the tree from [node] to root, collecting all nodes along the way.
-  /// Returns the path in root-first order (reversed from traversal order).
-  ///
-  /// Used to calculate depth and identify branch points along the current path.
-  List<_HistoryNode> _pathFromRoot(_HistoryNode node) {
-    final path = <_HistoryNode>[];
-    var current = node;
-    while (true) {
-      path.add(current);
-      if (current.parent == null) {
-        break;
-      }
-      current = current.parent!;
-    }
-    return path.reversed.toList();
-  }
-
-  /// Returns the default redo path from current node to a leaf.
-  ///
-  /// When multiple redo branches exist, this determines which branch to follow
-  /// by default. Always follows the **last child** at each branch point, which
-  /// corresponds to the most recently created branch.
-  ///
-  /// Used to calculate redo depth and provide redo descriptions.
-  List<_HistoryNode> _defaultRedoPath() {
-    final path = <_HistoryNode>[];
-    var current = _current;
-    while (current.children.isNotEmpty) {
-      current = current.children.last;
-      path.add(current);
-    }
-    return path;
-  }
-
-  /// Prunes the history tree when it exceeds maximum depth.
-  ///
-  /// ## Algorithm Overview
-  ///
-  /// When the path from root to current exceeds [maxHistoryLength], old nodes
-  /// are removed by making a deeper node the new root. This algorithm balances
-  /// two goals:
-  /// 1. **Limit depth**: Keep history within memory bounds
-  /// 2. **Preserve branches**: Maintain recent branch points for user
-  ///  navigation
-  ///
-  /// ## Basic Pruning (No Branch Preservation)
-  ///
-  /// Without branch preservation, pruning simply counts back from current:
-  /// ``` md
-  /// depth = 52, maxHistoryLength = 50
-  /// stepsToMove = 52 - 50 = 2
-  /// newRoot = current.parent.parent (2 steps up)
-  /// ```
-  ///
-  /// ## Branch Point Preservation
-  ///
-  /// When [maxBranchPoints] > 0, pruning can move the new root slightly
-  /// earlier to preserve nearby branch points. The move-back window is
-  /// capped to [maxBranchPoints] steps before the basic pruning boundary.
-  ///
-  /// This keeps memory bounded while retaining recent branching context:
-  /// max depth <= maxHistoryLength + maxBranchPoints.
-  ///
-  /// ## Implementation Steps
-  ///
-  /// 1. Calculate basic newRoot index from [maxHistoryLength]
-  /// 2. Scan backward up to [maxBranchPoints] steps
-  /// 3. Move newRoot to include recent branch points in that window
-  /// 4. Detach newRoot from parent to make it the new root
-  void _pruneIfNeeded() {
-    final path = _pathFromRoot(_current);
-    final depth = path.length - 1;
-    if (depth <= maxHistoryLength) {
+  void _dropRedoEntries() {
+    if (!canRedo) {
       return;
     }
-
-    final candidateIndex = depth - maxHistoryLength;
-    final resolvedIndex = _resolvePruneRootIndex(path, candidateIndex);
-
-    final newRoot = path[resolvedIndex];
-    final oldParent = newRoot.parent;
-    if (oldParent == null) {
-      return;
-    }
-
-    oldParent.children.remove(newRoot);
-    _root = newRoot;
-    _normalizeRootPayload();
-    _log?.debug('History pruned', {
-      'newRootId': newRoot.id,
-      'depth': depth,
-      'maxHistoryLength': maxHistoryLength,
-      'maxBranchPoints': maxBranchPoints,
-      'candidateIndex': candidateIndex,
-      'resolvedIndex': resolvedIndex,
+    final removeStart = _cursor + 1;
+    final removedCount = _entries.length - removeStart;
+    _entries.removeRange(removeStart, _entries.length);
+    _log?.trace('History redo entries discarded', {
+      'removedCount': removedCount,
     });
   }
 
-  void _normalizeRootPayload() {
-    _normalizeRootNode(_root);
+  void _pruneIfNeeded() {
+    final overflow = _entries.length - maxHistoryLength;
+    if (overflow <= 0) {
+      return;
+    }
+
+    _entries.removeRange(0, overflow);
+    _cursor -= overflow;
+    if (_cursor < -1) {
+      _cursor = -1;
+    }
+
+    _log?.debug('History pruned', {
+      'overflow': overflow,
+      'maxHistoryLength': maxHistoryLength,
+    });
   }
-
-  ({int index, _HistoryNode node})? _resolveRedoTarget(int? branchIndex) {
-    if (_current.children.isEmpty) {
-      _log?.trace('History redo skipped', {'reason': 'no_children'});
-      return null;
-    }
-
-    final resolvedIndex = branchIndex ?? _current.children.length - 1;
-    if (!_isValidRedoBranchIndex(resolvedIndex)) {
-      _log?.trace('History redo skipped', {
-        'reason': 'invalid_branch',
-        'branchIndex': branchIndex,
-      });
-      return null;
-    }
-    return (index: resolvedIndex, node: _current.children[resolvedIndex]);
-  }
-
-  bool _isValidRedoBranchIndex(int index) =>
-      index >= 0 && index < _current.children.length;
-
-  int _resolvePruneRootIndex(List<_HistoryNode> path, int candidateIndex) {
-    if (maxBranchPoints <= 0) {
-      return candidateIndex;
-    }
-
-    var resolvedIndex = candidateIndex;
-    final earliestAllowedIndex = candidateIndex - maxBranchPoints;
-    for (
-      var index = candidateIndex - 1;
-      index >= 0 && index >= earliestAllowedIndex;
-      index--
-    ) {
-      if (_isBranchPoint(path[index])) {
-        resolvedIndex = index;
-      }
-    }
-    return resolvedIndex;
-  }
-
-  bool _isBranchPoint(_HistoryNode node) => node.children.length > 1;
 }
 
-@immutable
-class HistoryBranch {
-  const HistoryBranch({
-    required this.index,
-    required this.nodeId,
-    this.metadata,
-  });
-  final int index;
-  final int nodeId;
-  final HistoryMetadata? metadata;
-
-  String get description => metadata?.description ?? '';
-}
-
-class _HistoryNode {
-  _HistoryNode({
+class _HistoryEntry {
+  _HistoryEntry({
     required this.id,
-    required this.parent,
     required this.delta,
     required this.metadata,
+    required this.coalescing,
     required this.recordedAt,
-    this.coalescing,
-    List<_HistoryNode>? children,
-  }) : children = children ?? [];
+  });
 
-  _HistoryNode.root(this.id)
-    : parent = null,
-      delta = null,
-      metadata = null,
-      coalescing = null,
-      recordedAt = DateTime.fromMillisecondsSinceEpoch(0),
-      children = [];
   final int id;
-  _HistoryNode? parent;
-  final List<_HistoryNode> children;
-  HistoryDelta? delta;
+  HistoryDelta delta;
   HistoryMetadata? metadata;
   HistoryCoalescing? coalescing;
   DateTime recordedAt;
 
-  @override
-  String toString() => 'HistoryNode(id: $id, children: ${children.length})';
+  _HistoryEntry copy() => _HistoryEntry(
+    id: id,
+    delta: delta,
+    metadata: metadata,
+    coalescing: coalescing,
+    recordedAt: recordedAt,
+  );
 }
 
 @immutable
@@ -626,6 +426,7 @@ class UnknownElementInfo {
     this.error,
     this.stackTrace,
   });
+
   final String elementType;
   final String elementId;
   final String source;
@@ -640,10 +441,17 @@ class UnknownElementInfo {
 typedef UnknownElementReporter = void Function(UnknownElementInfo info);
 
 class HistoryManagerSnapshot {
-  const HistoryManagerSnapshot._(this._root, this._currentId, this._nextNodeId);
-  final _HistoryNode _root;
-  final int _currentId;
-  final int _nextNodeId;
+  const HistoryManagerSnapshot._({
+    required List<_HistoryEntry> entries,
+    required int cursor,
+    required int nextEntryId,
+  }) : _entries = entries,
+       _cursor = cursor,
+       _nextEntryId = nextEntryId;
+
+  final List<_HistoryEntry> _entries;
+  final int _cursor;
+  final int _nextEntryId;
 
   Map<String, dynamic> toJson() => _historySnapshotCodec.encode(this);
 
@@ -658,58 +466,15 @@ class HistoryManagerSnapshot {
   );
 }
 
-class _HistoryTreeClone {
-  const _HistoryTreeClone({required this.root, required this.byId});
-  final _HistoryNode root;
-  final Map<int, _HistoryNode> byId;
-}
-
-_HistoryTreeClone _cloneTree(_HistoryNode root) {
-  final byId = <int, _HistoryNode>{};
-
-  _HistoryNode cloneNode(_HistoryNode node) {
-    final cloned = _HistoryNode(
-      id: node.id,
-      parent: null,
-      delta: node.delta,
-      metadata: node.metadata,
-      coalescing: node.coalescing,
-      recordedAt: node.recordedAt,
-    );
-    byId[cloned.id] = cloned;
-    for (final child in node.children) {
-      final childClone = cloneNode(child)..parent = cloned;
-      cloned.children.add(childClone);
-    }
-    return cloned;
-  }
-
-  final clonedRoot = cloneNode(root);
-  return _HistoryTreeClone(root: clonedRoot, byId: byId);
-}
-
 class _HistorySnapshotCodec {
-  static const _version = 1;
+  static const _version = 2;
 
-  Map<String, dynamic> encode(HistoryManagerSnapshot snapshot) {
-    final nodes = <Map<String, dynamic>>[];
-    void visit(_HistoryNode node) {
-      nodes.add(_encodeNode(node));
-      for (final child in node.children) {
-        visit(child);
-      }
-    }
-
-    visit(snapshot._root);
-
-    return {
-      'version': _version,
-      'rootId': snapshot._root.id,
-      'currentId': snapshot._currentId,
-      'nextNodeId': snapshot._nextNodeId,
-      'nodes': nodes,
-    };
-  }
+  Map<String, dynamic> encode(HistoryManagerSnapshot snapshot) => {
+    'version': _version,
+    'cursor': snapshot._cursor,
+    'nextEntryId': snapshot._nextEntryId,
+    'entries': [for (final entry in snapshot._entries) _encodeEntry(entry)],
+  };
 
   HistoryManagerSnapshot decode(
     Map<String, dynamic> json,
@@ -724,107 +489,96 @@ class _HistorySnapshotCodec {
       throw StateError('Unsupported history snapshot version: $version');
     }
 
-    final nodesData = _requireNodesData(json['nodes']);
-    final byId = <int, _HistoryNode>{};
-    for (final nodeData in nodesData) {
-      final id = _requireNodeId(nodeData);
-      if (byId.containsKey(id)) {
-        throw StateError('Duplicate history node id: $id');
+    final entriesData = _requireEntriesData(json['entries']);
+    final entries = <_HistoryEntry>[];
+    final seenIds = <int>{};
+    for (final entryData in entriesData) {
+      final id = _requireInt(entryData, 'id');
+      if (!seenIds.add(id)) {
+        throw StateError('Duplicate history entry id: $id');
       }
-      final deltaJson = _asJsonMap(nodeData['delta']);
-      final metadataJson = _asJsonMap(nodeData['metadata']);
-      byId[id] = _HistoryNode(
-        id: id,
-        parent: null,
-        delta: deltaJson == null
-            ? null
-            : _deltaFromJson(
-                deltaJson,
-                elementRegistry,
-                onUnknownElement: onUnknownElement,
-              ),
-        metadata: metadataJson == null ? null : _metadataFromJson(metadataJson),
-        recordedAt: DateTime.fromMillisecondsSinceEpoch(0),
+
+      final delta = _deltaFromJson(
+        _requireMapField(entryData, 'delta'),
+        elementRegistry,
+        onUnknownElement: onUnknownElement,
+      );
+      final metadataJson = _asJsonMap(entryData['metadata']);
+      final coalescingJson = _asJsonMap(entryData['coalescing']);
+
+      entries.add(
+        _HistoryEntry(
+          id: id,
+          delta: delta,
+          metadata: metadataJson == null
+              ? null
+              : _metadataFromJson(metadataJson),
+          coalescing: coalescingJson == null
+              ? null
+              : _coalescingFromJson(coalescingJson),
+          recordedAt: _decodeRecordedAt(entryData['recordedAtMs']),
+        ),
       );
     }
-    final rootId = _requireInt(json, 'rootId');
-    _linkNodesByParentId(byId: byId, nodeData: nodesData, rootId: rootId);
 
-    final root = byId[rootId];
-    if (root == null) {
-      throw StateError('History snapshot root node is missing: $rootId');
-    }
-    final currentId = json['currentId'] as int? ?? rootId;
-    final maxNodeId = byId.keys.reduce((a, b) => a > b ? a : b);
-    final nextNodeId = _resolveNextNodeId(
-      requestedNextNodeId: json['nextNodeId'] as int?,
-      minNextNodeId: maxNodeId + 1,
+    final cursor = _clampCursor(
+      json['cursor'] as int? ?? entries.length - 1,
+      entries.length,
+    );
+    final nextEntryId = _resolveNextEntryId(
+      requestedNextEntryId: json['nextEntryId'] as int?,
+      minNextEntryId: _nextEntryIdFromEntries(entries),
     );
 
-    _normalizeRootNode(root);
-    return HistoryManagerSnapshot._(root, currentId, nextNodeId);
+    return HistoryManagerSnapshot._(
+      entries: entries,
+      cursor: cursor,
+      nextEntryId: nextEntryId,
+    );
   }
 
-  void _linkNodesByParentId({
-    required Map<int, _HistoryNode> byId,
-    required List<Map<String, dynamic>> nodeData,
-    required int rootId,
-  }) {
-    for (final node in nodeData) {
-      final childId = _requireNodeId(node);
-      final parentId = node['parentId'];
-      if (parentId == null) {
-        if (childId != rootId) {
-          throw StateError(
-            'History snapshot node $childId is missing parentId',
-          );
-        }
-        continue;
-      }
-      if (parentId is! int) {
-        throw StateError(
-          'History snapshot parent id is invalid for node $childId',
-        );
-      }
-      if (childId == rootId) {
-        throw StateError('History snapshot root node must not have a parent');
-      }
-      if (parentId == childId) {
-        throw StateError(
-          'History snapshot contains self-referencing node: $childId',
-        );
-      }
-      final child = byId[childId];
-      final parent = byId[parentId];
-      if (child == null || parent == null) {
-        throw StateError(
-          'History snapshot links missing node(s): '
-          'child=$childId parent=$parentId',
-        );
-      }
-      _linkNodes(parent: parent, child: child);
-    }
-  }
-
-  List<Map<String, dynamic>> _requireNodesData(Object? raw) {
+  List<Map<String, dynamic>> _requireEntriesData(Object? raw) {
     if (raw is! List) {
-      throw StateError('History snapshot nodes must be a list');
+      throw StateError('History snapshot entries must be a list');
     }
-    final nodes = <Map<String, dynamic>>[];
-    for (final entry in raw) {
-      final node = _asJsonMap(entry);
-      if (node == null) {
-        throw StateError('History snapshot contains an invalid node entry');
+
+    final entries = <Map<String, dynamic>>[];
+    for (final value in raw) {
+      final entry = _asJsonMap(value);
+      if (entry == null) {
+        throw StateError('History snapshot contains an invalid entry');
       }
-      nodes.add(node);
+      entries.add(entry);
     }
-    if (nodes.isEmpty) {
-      throw StateError('History snapshot does not contain any nodes');
-    }
-    return nodes;
+    return entries;
   }
 
-  int _requireNodeId(Map<String, dynamic> node) => _requireInt(node, 'id');
+  Map<String, dynamic> _encodeEntry(_HistoryEntry entry) => {
+    'id': entry.id,
+    'delta': _deltaToJson(entry.delta),
+    if (entry.metadata != null) 'metadata': _metadataToJson(entry.metadata!),
+    if (entry.coalescing != null)
+      'coalescing': _coalescingToJson(entry.coalescing!),
+    'recordedAtMs': entry.recordedAt.millisecondsSinceEpoch,
+  };
+
+  Map<String, dynamic> _coalescingToJson(HistoryCoalescing coalescing) => {
+    'key': coalescing.key,
+    'windowMs': coalescing.window.inMilliseconds,
+  };
+
+  HistoryCoalescing _coalescingFromJson(Map<String, dynamic> json) =>
+      HistoryCoalescing(
+        key: _requireString(json, 'key'),
+        window: Duration(milliseconds: _requireInt(json, 'windowMs')),
+      );
+
+  DateTime _decodeRecordedAt(Object? raw) {
+    if (raw is int) {
+      return DateTime.fromMillisecondsSinceEpoch(raw);
+    }
+    return DateTime.fromMillisecondsSinceEpoch(0);
+  }
 
   int _requireInt(Map<String, dynamic> json, String key) {
     final value = json[key];
@@ -857,13 +611,6 @@ class _HistorySnapshotCodec {
     }
     return value;
   }
-
-  Map<String, dynamic> _encodeNode(_HistoryNode node) => {
-    'id': node.id,
-    'parentId': node.parent?.id,
-    if (node.delta != null) 'delta': _deltaToJson(node.delta!),
-    if (node.metadata != null) 'metadata': _metadataToJson(node.metadata!),
-  };
 
   Map<String, dynamic> _deltaToJson(HistoryDelta delta) => {
     'beforeElements': delta.beforeElements.map(
@@ -943,7 +690,7 @@ class _HistorySnapshotCodec {
     'rotation': element.rotation,
     'opacity': element.opacity,
     'zIndex': element.zIndex,
-    'type': element.typeId.value,
+    'type': element.data.typeId.value,
     'data': element.data.toJson(),
   };
 
@@ -987,6 +734,7 @@ class _HistorySnapshotCodec {
         'History snapshot element map "$source" is missing or invalid',
       );
     }
+
     final decoded = <String, ElementState>{};
     for (final entry in elementsJson.entries) {
       final elementJson = _asJsonMap(entry.value);
@@ -1005,42 +753,11 @@ class _HistorySnapshotCodec {
     return decoded;
   }
 
-  void _linkNodes({required _HistoryNode parent, required _HistoryNode child}) {
-    if (identical(parent, child)) {
-      return;
-    }
-    final currentParent = child.parent;
-    if (currentParent != null && !identical(currentParent, parent)) {
-      return;
-    }
-    if (_createsParentCycle(parent: parent, child: child)) {
-      return;
-    }
-    child.parent = parent;
-    if (!parent.children.contains(child)) {
-      parent.children.add(child);
-    }
-  }
-
-  bool _createsParentCycle({
-    required _HistoryNode parent,
-    required _HistoryNode child,
-  }) {
-    _HistoryNode? current = parent;
-    final visited = <_HistoryNode>{};
-    while (current != null && visited.add(current)) {
-      if (identical(current, child)) {
-        return true;
-      }
-      current = current.parent;
-    }
-    return false;
-  }
-
   Map<String, dynamic>? _asJsonMap(Object? raw) {
     if (raw is! Map) {
       return null;
     }
+
     final mapped = <String, dynamic>{};
     for (final entry in raw.entries) {
       final key = entry.key;
@@ -1056,6 +773,7 @@ class _HistorySnapshotCodec {
     if (raw is! List) {
       return null;
     }
+
     return <String>[
       for (final value in raw)
         if (value is String) value,
@@ -1127,6 +845,7 @@ class _HistorySnapshotCodec {
       onUnknownElement(info);
       return;
     }
+
     _historyFallbackLog.warning('Unknown element in history', {
       'type': elementType,
       'id': elementId,
@@ -1255,35 +974,42 @@ class _HistorySnapshotCodec {
 
 final _historySnapshotCodec = _HistorySnapshotCodec();
 
-void _normalizeRootNode(_HistoryNode root) {
-  final parent = root.parent;
-  if (parent != null) {
-    parent.children.remove(root);
-  }
-  root
-    ..parent = null
-    ..delta = null
-    ..metadata = null
-    ..coalescing = null;
-}
+List<_HistoryEntry> _cloneEntries(Iterable<_HistoryEntry> entries) => [
+  for (final entry in entries) entry.copy(),
+];
 
-int _resolveNextNodeId({
-  required int? requestedNextNodeId,
-  required int minNextNodeId,
+int _resolveNextEntryId({
+  required int? requestedNextEntryId,
+  required int minNextEntryId,
 }) {
-  final resolved = requestedNextNodeId ?? minNextNodeId;
-  return resolved < minNextNodeId ? minNextNodeId : resolved;
+  final resolved = requestedNextEntryId ?? minNextEntryId;
+  return resolved < minNextEntryId ? minNextEntryId : resolved;
 }
 
-int _maxNodeId(_HistoryNode root) {
-  var maxId = root.id;
-  final stack = <_HistoryNode>[root];
-  while (stack.isNotEmpty) {
-    final node = stack.removeLast();
-    if (node.id > maxId) {
-      maxId = node.id;
-    }
-    stack.addAll(node.children);
+int _nextEntryIdFromEntries(List<_HistoryEntry> entries) {
+  if (entries.isEmpty) {
+    return 0;
   }
-  return maxId;
+
+  var maxId = entries.first.id;
+  for (var index = 1; index < entries.length; index++) {
+    final id = entries[index].id;
+    if (id > maxId) {
+      maxId = id;
+    }
+  }
+  return maxId + 1;
+}
+
+int _clampCursor(int cursor, int entryCount) {
+  if (entryCount == 0) {
+    return -1;
+  }
+  if (cursor < -1) {
+    return -1;
+  }
+  if (cursor >= entryCount) {
+    return entryCount - 1;
+  }
+  return cursor;
 }

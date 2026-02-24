@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -10,6 +9,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('History z-index incremental optimization', () {
@@ -224,13 +224,13 @@ DrawState _stateWithStaleZIndexes() => DrawState(
 );
 
 Map<String, dynamic> _latestHistoryDelta(Map<String, dynamic> historyJson) {
-  final nodes = historyJson['nodes'] as List<dynamic>? ?? const [];
-  for (var index = nodes.length - 1; index >= 0; index--) {
-    final node = nodes[index];
-    if (node is! Map<String, dynamic>) {
+  final entries = historyJson['entries'] as List<dynamic>? ?? const [];
+  for (var index = entries.length - 1; index >= 0; index--) {
+    final entry = entries[index];
+    if (entry is! Map<String, dynamic>) {
       continue;
     }
-    final delta = node['delta'];
+    final delta = entry['delta'];
     if (delta is Map<String, dynamic>) {
       return delta;
     }
