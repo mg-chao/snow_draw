@@ -2,8 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../core/dependency_interfaces.dart';
-import '../../../elements/types/arrow/arrow_like_data.dart';
-import '../../../elements/types/serial_number/serial_number_data.dart';
+import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_editing_geometry.dart';
 import '../../../models/draw_state.dart';
@@ -249,6 +248,7 @@ class TextEditReducer {
     required List<ElementState> elements,
     required String deletedTextId,
   }) {
+    final deletedIds = <String>{deletedTextId};
     final nextElements = <ElementState>[];
     var changed = false;
 
@@ -258,16 +258,10 @@ class TextEditReducer {
         continue;
       }
 
-      final updatedElement =
-          _resolveSerialUnbindUpdate(
-            element: element,
-            deletedTextId: deletedTextId,
-          ) ??
-          _resolveArrowUnbindUpdate(
-            element: element,
-            deletedTextId: deletedTextId,
-          ) ??
-          element;
+      final updatedElement = clearElementDependenciesForIds(
+        element: element,
+        targetIds: deletedIds,
+      );
 
       if (updatedElement != element) {
         changed = true;
@@ -304,43 +298,4 @@ class TextEditReducer {
 
   DrawState _toIdle(DrawState state) =>
       state.copyWith(application: state.application.toIdle());
-
-  ElementState? _resolveSerialUnbindUpdate({
-    required ElementState element,
-    required String deletedTextId,
-  }) {
-    final data = element.data;
-    if (data is! SerialNumberData || data.textElementId != deletedTextId) {
-      return null;
-    }
-    return element.copyWith(data: data.copyWith(textElementId: null));
-  }
-
-  ElementState? _resolveArrowUnbindUpdate({
-    required ElementState element,
-    required String deletedTextId,
-  }) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      return null;
-    }
-
-    final startBinding = data.startBinding;
-    final endBinding = data.endBinding;
-    final clearStart =
-        startBinding != null && startBinding.elementId == deletedTextId;
-    final clearEnd =
-        endBinding != null && endBinding.elementId == deletedTextId;
-    if (!clearStart && !clearEnd) {
-      return null;
-    }
-
-    final nextData = data.copyWith(
-      startBinding: clearStart ? null : startBinding,
-      endBinding: clearEnd ? null : endBinding,
-      startIsSpecial: clearStart ? null : data.startIsSpecial,
-      endIsSpecial: clearEnd ? null : data.endIsSpecial,
-    );
-    return element.copyWith(data: nextData);
-  }
 }

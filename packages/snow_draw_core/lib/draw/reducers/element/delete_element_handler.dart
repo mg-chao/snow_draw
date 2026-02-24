@@ -50,30 +50,7 @@ ElementState _applyDeleteElementUpdates({
   if (!isElementDependentOnIds(element: element, targetIds: deleteIds)) {
     return element;
   }
-
-  final data = element.data;
-  if (data is SerialNumberData) {
-    return element.copyWith(data: data.copyWith(textElementId: null));
-  }
-
-  if (data is! ArrowLikeData) {
-    return element;
-  }
-  final startBinding = data.startBinding;
-  final endBinding = data.endBinding;
-  final clearStart =
-      startBinding != null && deleteIds.contains(startBinding.elementId);
-  final clearEnd =
-      endBinding != null && deleteIds.contains(endBinding.elementId);
-
-  return element.copyWith(
-    data: data.copyWith(
-      startBinding: clearStart ? null : startBinding,
-      endBinding: clearEnd ? null : endBinding,
-      startIsSpecial: clearStart ? null : data.startIsSpecial,
-      endIsSpecial: clearEnd ? null : data.endIsSpecial,
-    ),
-  );
+  return clearElementDependenciesForIds(element: element, targetIds: deleteIds);
 }
 
 DrawState handleDuplicateElements(

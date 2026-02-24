@@ -102,3 +102,51 @@ Set<String> collectDependentElementIds({
   }
   return dependentIds;
 }
+
+/// Clears references from [element] that target any id in [targetIds].
+///
+/// Serial-number text links and arrow endpoint bindings are both supported.
+/// When no dependency points to [targetIds], the original [element] is
+/// returned unchanged.
+ElementState clearElementDependenciesForIds({
+  required ElementState element,
+  required Set<String> targetIds,
+  bool includeSerialBindings = true,
+  bool includeArrowBindings = true,
+}) {
+  if (targetIds.isEmpty) {
+    return element;
+  }
+
+  final data = element.data;
+  if (includeSerialBindings && data is SerialNumberData) {
+    final boundId = data.textElementId;
+    if (boundId != null && targetIds.contains(boundId)) {
+      return element.copyWith(data: data.copyWith(textElementId: null));
+    }
+    return element;
+  }
+
+  if (!includeArrowBindings || data is! ArrowLikeData) {
+    return element;
+  }
+
+  final startBinding = data.startBinding;
+  final endBinding = data.endBinding;
+  final clearStart =
+      startBinding != null && targetIds.contains(startBinding.elementId);
+  final clearEnd =
+      endBinding != null && targetIds.contains(endBinding.elementId);
+  if (!clearStart && !clearEnd) {
+    return element;
+  }
+
+  return element.copyWith(
+    data: data.copyWith(
+      startBinding: clearStart ? null : startBinding,
+      endBinding: clearEnd ? null : endBinding,
+      startIsSpecial: clearStart ? null : data.startIsSpecial,
+      endIsSpecial: clearEnd ? null : data.endIsSpecial,
+    ),
+  );
+}

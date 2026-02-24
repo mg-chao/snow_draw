@@ -12,8 +12,8 @@ import '../models/element_state.dart';
 import '../models/global_elements_state.dart';
 import '../models/selection_state.dart';
 import '../services/log/log_service.dart';
-import '../types/draw_rect.dart';
 import '../types/draw_color.dart';
+import '../types/draw_rect.dart';
 import 'history_change_set.dart';
 import 'history_delta.dart';
 import 'snapshot.dart';
@@ -727,15 +727,20 @@ class _HistorySnapshotCodec {
 
     final nodesData = (json['nodes'] as List<dynamic>?) ?? const [];
     final byId = <int, _HistoryNode>{};
+    final nodeDataById = <int, Map<String, dynamic>>{};
 
     for (final entry in nodesData) {
-      final data = _asJsonMap(entry);
-      final id = data?['id'] as int?;
+      final decodedData = _asJsonMap(entry);
+      if (decodedData == null) {
+        continue;
+      }
+      final id = decodedData['id'] as int?;
       if (id == null) {
         continue;
       }
-      final deltaJson = _asJsonMap(data?['delta']);
-      final metadataJson = _asJsonMap(data?['metadata']);
+      nodeDataById[id] = decodedData;
+      final deltaJson = _asJsonMap(decodedData['delta']);
+      final metadataJson = _asJsonMap(decodedData['metadata']);
       byId[id] = _HistoryNode(
         id: id,
         parent: null,
@@ -751,31 +756,7 @@ class _HistorySnapshotCodec {
       );
     }
 
-    for (final entry in nodesData) {
-      final data = _asJsonMap(entry);
-      final id = data?['id'] as int?;
-      if (id == null) {
-        continue;
-      }
-      final node = byId[id];
-      if (node == null) {
-        continue;
-      }
-      final parentId = data?['parentId'] as int?;
-      if (parentId != null) {
-        final parent = byId[parentId];
-        if (parent != null) {
-          _linkNodes(parent: parent, child: node);
-        }
-      }
-      final childrenIds = _asIntList(data?['children']);
-      for (final childId in childrenIds) {
-        final child = byId[childId];
-        if (child != null) {
-          _linkNodes(parent: node, child: child);
-        }
-      }
-    }
+    _linkDecodedNodes(byId: byId, nodeDataById: nodeDataById);
 
     final rootId = json['rootId'] as int? ?? 0;
     final currentId = json['currentId'] as int? ?? rootId;
@@ -787,12 +768,90 @@ class _HistorySnapshotCodec {
       minNextNodeId: maxNodeId + 1,
     );
 
-    final root = (byId[rootId] ?? _HistoryNode.root(rootId))
+    final root = byId[rootId] ?? _HistoryNode.root(rootId);
+    _normalizeDecodedRoot(root);
+    return HistoryManagerSnapshot._(root, currentId, nextNodeId);
+  }
+
+  void _linkDecodedNodes({
+    required Map<int, _HistoryNode> byId,
+    required Map<int, Map<String, dynamic>> nodeDataById,
+  }) {
+    final parentAssignments = _resolveDecodedParentAssignments(
+      byId: byId,
+      nodeDataById: nodeDataById,
+    );
+    for (final entry in parentAssignments.entries) {
+      final child = byId[entry.key];
+      final parent = byId[entry.value];
+      if (parent == null || child == null) {
+        continue;
+      }
+      _linkNodes(parent: parent, child: child);
+    }
+  }
+
+  Map<int, int> _resolveDecodedParentAssignments({
+    required Map<int, _HistoryNode> byId,
+    required Map<int, Map<String, dynamic>> nodeDataById,
+  }) {
+    final explicitParents = <int, int>{};
+    for (final entry in nodeDataById.entries) {
+      final childId = entry.key;
+      final parentId = entry.value['parentId'] as int?;
+      if (_isValidParentAssignment(
+        byId: byId,
+        parentId: parentId,
+        childId: childId,
+      )) {
+        explicitParents[childId] = parentId!;
+      }
+    }
+
+    final implicitParents = <int, int>{};
+    for (final entry in nodeDataById.entries) {
+      final parentId = entry.key;
+      final childrenIds = _asIntList(entry.value['children']);
+      for (final childId in childrenIds) {
+        if (explicitParents.containsKey(childId) ||
+            implicitParents.containsKey(childId)) {
+          continue;
+        }
+        if (!_isValidParentAssignment(
+          byId: byId,
+          parentId: parentId,
+          childId: childId,
+        )) {
+          continue;
+        }
+        implicitParents[childId] = parentId;
+      }
+    }
+
+    return <int, int>{...implicitParents, ...explicitParents};
+  }
+
+  bool _isValidParentAssignment({
+    required Map<int, _HistoryNode> byId,
+    required int? parentId,
+    required int childId,
+  }) {
+    if (parentId == null || parentId == childId) {
+      return false;
+    }
+    return byId.containsKey(parentId) && byId.containsKey(childId);
+  }
+
+  void _normalizeDecodedRoot(_HistoryNode root) {
+    final parent = root.parent;
+    if (parent != null) {
+      parent.children.remove(root);
+    }
+    root
       ..parent = null
       ..delta = null
       ..metadata = null
       ..coalescing = null;
-    return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
   Map<String, dynamic> _encodeNode(_HistoryNode node) => {

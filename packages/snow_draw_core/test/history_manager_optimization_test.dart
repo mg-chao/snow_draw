@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
@@ -11,6 +10,7 @@ import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/store/history_manager.dart';
 import 'package:snow_draw_core/draw/store/snapshot.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('History manager optimizations', () {
@@ -253,6 +253,68 @@ void main() {
       );
     });
   });
+
+  group('History snapshot decode linking', () {
+    test('parentId wins over conflicting children references', () {
+      final snapshotJson = <String, dynamic>{
+        'version': 1,
+        'rootId': 0,
+        'currentId': 0,
+        'nextNodeId': 3,
+        'nodes': [
+          {
+            'id': 0,
+            'children': [1],
+          },
+          {
+            'id': 1,
+            'parentId': 0,
+            'children': [2],
+          },
+          {'id': 2, 'parentId': 0, 'children': const <int>[]},
+        ],
+      };
+
+      final manager = HistoryManager()
+        ..restore(
+          HistoryManagerSnapshot.fromJson(
+            snapshotJson,
+            elementRegistry: _buildRegistry(),
+          ),
+        );
+
+      final branchIds = manager.redoBranches
+          .map((branch) => branch.nodeId)
+          .toSet();
+      expect(branchIds, equals({1, 2}));
+    });
+
+    test('children fallback still links legacy snapshots without parentId', () {
+      final snapshotJson = <String, dynamic>{
+        'version': 1,
+        'rootId': 0,
+        'currentId': 0,
+        'nextNodeId': 2,
+        'nodes': [
+          {
+            'id': 0,
+            'children': [1],
+          },
+          {'id': 1, 'children': const <int>[]},
+        ],
+      };
+
+      final manager = HistoryManager()
+        ..restore(
+          HistoryManagerSnapshot.fromJson(
+            snapshotJson,
+            elementRegistry: _buildRegistry(),
+          ),
+        );
+
+      expect(manager.redoBranches.map((branch) => branch.nodeId), equals([1]));
+    });
+  });
 }
 
 PersistentSnapshot _snapshot(DrawState state) =>
@@ -290,3 +352,9 @@ List<Map<String, dynamic>> _nodesFromSnapshot(
 
 int _stateStep(DrawState state) =>
     state.domain.document.elements.single.rect.minX.round();
+
+DefaultElementRegistry _buildRegistry() {
+  final registry = DefaultElementRegistry();
+  registerBuiltInElements(registry);
+  return registry;
+}
