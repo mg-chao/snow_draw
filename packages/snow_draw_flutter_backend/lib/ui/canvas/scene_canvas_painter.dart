@@ -928,7 +928,7 @@ class SceneCanvasPainter extends CustomPainter {
     final serialConnectorCacheRevision =
         sceneAnalysis.shouldPaintSerialConnectors
         ? _resolveSerialConnectorCacheRevision(
-            documentElementsVersion: document.elementsVersion,
+            sceneRevision: renderKey.framePlan.sceneRevision,
             previewElementsById: previewElements,
             visibleTextIds: sceneAnalysis.visibleTextIds,
           )
@@ -1027,11 +1027,11 @@ class SceneCanvasPainter extends CustomPainter {
   }
 
   int _resolveSerialConnectorCacheRevision({
-    required int documentElementsVersion,
+    required int sceneRevision,
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) => Object.hash(
-    documentElementsVersion,
+    sceneRevision,
     Object.hashAllUnordered(visibleTextIds),
     Object.hashAllUnordered(
       previewElementsById.entries.map(

@@ -37,8 +37,8 @@ void main() {
 
     expect(after, isNot(equals(before)));
     expect(
-      after.documentElementsVersion,
-      isNot(equals(before.documentElementsVersion)),
+      after.framePlan.sceneRevision,
+      isNot(equals(before.framePlan.sceneRevision)),
     );
   });
 
@@ -71,8 +71,8 @@ void main() {
 
     expect(after, isNot(equals(before)));
     expect(
-      after.documentElementsVersion,
-      isNot(equals(before.documentElementsVersion)),
+      after.framePlan.sceneRevision,
+      isNot(equals(before.framePlan.sceneRevision)),
     );
   });
 }

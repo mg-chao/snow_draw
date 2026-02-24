@@ -44,7 +44,8 @@ class CreatingElementSnapshot {
 /// Render key for the single scene canvas.
 ///
 /// [framePlan] is the authoritative source for non-element paint tasks in the
-/// single-canvas path (background, overlays, guides, etc.).
+/// single-canvas path (background, overlays, guides, etc.) and carries the
+/// committed scene revision for element invalidation.
 ///
 /// Element scene pixels are resolved from [DrawStateView] and preview snapshots
 /// in the backend painter, so backend-only fields remain part of this key.
@@ -52,7 +53,6 @@ class CreatingElementSnapshot {
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
-    required this.documentElementsVersion,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required this.elementRegistry,
@@ -66,13 +66,6 @@ class SceneCanvasRenderKey {
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
-
-  /// Persisted document version used for scene invalidation.
-  ///
-  /// The unified canvas painter resolves visible elements from [DrawStateView],
-  /// so this version tracks committed document mutations while
-  /// [previewElementsById] and [creatingElement] track transient preview state.
-  final int documentElementsVersion;
 
   /// Revision for text rendering cache invalidation.
   ///
@@ -103,7 +96,6 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
-          other.documentElementsVersion == documentElementsVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
           other.elementRegistry == elementRegistry &&
@@ -115,7 +107,6 @@ class SceneCanvasRenderKey {
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
-    documentElementsVersion,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
     elementRegistry,

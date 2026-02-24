@@ -69,8 +69,8 @@ void main() {
 
       expect(keyAfter, isNot(equals(keyBefore)));
       expect(
-        keyAfter.documentElementsVersion,
-        equals(keyBefore.documentElementsVersion),
+        keyAfter.framePlan.sceneRevision,
+        equals(keyBefore.framePlan.sceneRevision),
       );
     },
   );
@@ -136,8 +136,8 @@ void main() {
 
     expect(keyAfter, isNot(equals(keyBefore)));
     expect(
-      keyAfter.documentElementsVersion,
-      equals(keyBefore.documentElementsVersion),
+      keyAfter.framePlan.sceneRevision,
+      equals(keyBefore.framePlan.sceneRevision),
     );
   });
 

@@ -41,21 +41,29 @@ void main() {
 
       final beforeKey = SceneCanvasRenderKey(
         creatingElement: null,
-        documentElementsVersion: initialState.domain.document.elementsVersion,
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,
         performanceMonitoringEnabled: false,
-        framePlan: FrameRenderPlan.empty,
+        framePlan: FrameRenderPlan(
+          tasks: const <RenderTask>[],
+          camera: CameraState.initial,
+          scaleFactor: 1,
+          sceneRevision: initialState.domain.document.elementsVersion,
+        ),
       );
       final afterKey = SceneCanvasRenderKey(
         creatingElement: null,
-        documentElementsVersion: updatedDocument.elementsVersion,
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,
         performanceMonitoringEnabled: false,
-        framePlan: FrameRenderPlan.empty,
+        framePlan: FrameRenderPlan(
+          tasks: const <RenderTask>[],
+          camera: CameraState.initial,
+          scaleFactor: 1,
+          sceneRevision: updatedDocument.elementsVersion,
+        ),
       );
 
       final previousPainter = SceneCanvasPainter(

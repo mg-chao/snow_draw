@@ -115,17 +115,25 @@ void main() {
       expect(baseline.hashCode, isNot(changedWatermark.hashCode));
     });
 
-    test('document element version participates in equality', () {
+    test('frame plan scene revision participates in equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
         registry: registry,
-        framePlan: FrameRenderPlan.empty,
-        documentElementsVersion: 1,
+        framePlan: const FrameRenderPlan(
+          tasks: <RenderTask>[],
+          camera: CameraState.initial,
+          scaleFactor: 1,
+          sceneRevision: 1,
+        ),
       );
       final changed = _buildCanvasRenderKey(
         registry: registry,
-        framePlan: FrameRenderPlan.empty,
-        documentElementsVersion: 2,
+        framePlan: const FrameRenderPlan(
+          tasks: <RenderTask>[],
+          camera: CameraState.initial,
+          scaleFactor: 1,
+          sceneRevision: 2,
+        ),
       );
 
       expect(baseline, isNot(changed));
@@ -137,12 +145,10 @@ void main() {
 SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
   required FrameRenderPlan framePlan,
-  int documentElementsVersion = 0,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
-  documentElementsVersion: documentElementsVersion,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,
   elementRegistry: registry,

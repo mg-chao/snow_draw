@@ -293,6 +293,7 @@ class FrameRenderPlanBuilder {
       tasks: List<RenderTask>.unmodifiable(tasks),
       camera: camera,
       scaleFactor: effectiveScale,
+      sceneRevision: document.elementsVersion,
       localeTag: localeTag,
     );
   }

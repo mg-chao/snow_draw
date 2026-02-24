@@ -10,6 +10,7 @@ class FrameRenderPlan {
     required this.tasks,
     required this.camera,
     required this.scaleFactor,
+    this.sceneRevision = 0,
     this.localeTag,
   });
 
@@ -21,6 +22,12 @@ class FrameRenderPlan {
 
   /// Effective scale factor used for world/canvas transforms.
   final double scaleFactor;
+
+  /// Monotonic scene revision for element-level invalidation.
+  ///
+  /// Backends that render element pixels outside of [tasks] can still use this
+  /// revision to detect committed scene mutations deterministically.
+  final int sceneRevision;
 
   /// Optional locale hint for text layout/rendering.
   final String? localeTag;
@@ -37,12 +44,18 @@ class FrameRenderPlan {
       other is FrameRenderPlan &&
           other.camera == camera &&
           other.scaleFactor == scaleFactor &&
+          other.sceneRevision == sceneRevision &&
           other.localeTag == localeTag &&
           _taskListEquals(other.tasks, tasks);
 
   @override
-  int get hashCode =>
-      Object.hash(_taskListHash(tasks), camera, scaleFactor, localeTag);
+  int get hashCode => Object.hash(
+    _taskListHash(tasks),
+    camera,
+    scaleFactor,
+    sceneRevision,
+    localeTag,
+  );
 }
 
 bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
