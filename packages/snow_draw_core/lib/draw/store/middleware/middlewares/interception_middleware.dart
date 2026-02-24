@@ -33,10 +33,11 @@ class InterceptionMiddleware extends MiddlewareBase {
   int get priority => 900; // High priority - intercept early
 
   @override
-  bool shouldExecute(DispatchContext context) => interceptors.isNotEmpty;
-
-  @override
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
+    if (interceptors.isEmpty) {
+      return next(context);
+    }
+
     for (final interceptor in interceptors) {
       if (!interceptor(context.currentState, context.action)) {
         // Block the action - don't call next(context)

@@ -29,7 +29,10 @@ class HistoryMiddleware extends MiddlewareBase {
   int get priority => 400;
 
   @override
-  bool shouldExecute(DispatchContext context) {
+  Future<DispatchContext> invoke(
+    DispatchContext context,
+    NextFunction next,
+  ) async {
     final action = context.action;
     final log = context.drawContext.log.history;
 
@@ -38,36 +41,26 @@ class HistoryMiddleware extends MiddlewareBase {
         'action': action.runtimeType.toString(),
         'traceId': context.traceId,
       });
-      return true;
+    } else {
+      final policy = _resolveHistoryPolicy(context, action);
+      if (policy != HistoryPolicy.record) {
+        log.trace('History middleware skipped', {
+          'action': action.runtimeType.toString(),
+          'reason': 'policy',
+          'policy': policy.name,
+        });
+        return next(context);
+      }
+
+      if (context.isBatching) {
+        log.trace('History middleware skipped', {
+          'action': action.runtimeType.toString(),
+          'reason': 'batching',
+        });
+        return next(context);
+      }
     }
 
-    final policy = _resolveHistoryPolicy(context, action);
-    if (policy != HistoryPolicy.record) {
-      log.trace('History middleware skipped', {
-        'action': action.runtimeType.toString(),
-        'reason': 'policy',
-        'policy': policy.name,
-      });
-      return false;
-    }
-
-    if (context.isBatching) {
-      log.trace('History middleware skipped', {
-        'action': action.runtimeType.toString(),
-        'reason': 'batching',
-      });
-      return false;
-    }
-
-    return true;
-  }
-
-  @override
-  Future<DispatchContext> invoke(
-    DispatchContext context,
-    NextFunction next,
-  ) async {
-    final action = context.action;
     switch (action) {
       case Undo _:
         return _handleUndo(context, next);

@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
@@ -10,6 +9,7 @@ import 'package:snow_draw_core/draw/store/middleware/middleware_base.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_context.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_pipeline.dart';
 import 'package:snow_draw_core/draw/store/snapshot_builder.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('MiddlewarePipeline', () {
@@ -31,7 +31,7 @@ void main() {
       expect(pipeline.length, 1);
     });
 
-    test('skips middleware when invoke throws FormatException', () async {
+    test('stops pipeline when middleware invoke throws', () async {
       final pipeline = MiddlewarePipeline(
         middlewares: const [
           _ThrowingInvokeMiddleware(),
@@ -41,24 +41,10 @@ void main() {
 
       final result = await pipeline.execute(_createInitialContext());
 
-      expect(result.hasError, isFalse);
-      expect(result.getMetadata<bool>('skipped_ThrowInvoke'), isTrue);
-      expect(result.getMetadata<bool>('afterInvokeError'), isTrue);
-    });
-
-    test('routes shouldExecute errors through error handler', () async {
-      final pipeline = MiddlewarePipeline(
-        middlewares: const [
-          _ThrowingShouldExecuteMiddleware(),
-          _FlagMetadataMiddleware('afterShouldExecuteError'),
-        ],
-      );
-
-      final result = await pipeline.execute(_createInitialContext());
-
-      expect(result.hasError, isFalse);
-      expect(result.getMetadata<bool>('skipped_ThrowShouldExecute'), isTrue);
-      expect(result.getMetadata<bool>('afterShouldExecuteError'), isTrue);
+      expect(result.hasError, isTrue);
+      expect(result.error, isA<FormatException>());
+      expect(result.errorSource, 'ThrowInvoke');
+      expect(result.getMetadata<bool>('afterInvokeError'), isNull);
     });
 
     test(
@@ -119,7 +105,7 @@ void main() {
     });
 
     test(
-      'does not re-run downstream middleware when skipping after next',
+      'captures post-next middleware errors without re-running downstream',
       () async {
         final counter = _InvocationCounter();
         final pipeline = MiddlewarePipeline(
@@ -132,9 +118,10 @@ void main() {
         final result = await pipeline.execute(_createInitialContext());
 
         expect(counter.value, 1);
-        expect(result.hasError, isFalse);
+        expect(result.hasError, isTrue);
+        expect(result.error, isA<FormatException>());
+        expect(result.errorSource, 'ThrowAfterNext');
         expect(result.getMetadata<bool>('fromThrowAfterNext'), isTrue);
-        expect(result.getMetadata<bool>('skipped_ThrowAfterNext'), isTrue);
       },
     );
 
@@ -242,22 +229,6 @@ class _ThrowingInvokeMiddleware extends MiddlewareBase {
   @override
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
       Future<DispatchContext>.error(const FormatException('Bad invoke'));
-}
-
-class _ThrowingShouldExecuteMiddleware extends MiddlewareBase {
-  const _ThrowingShouldExecuteMiddleware();
-
-  @override
-  String get name => 'ThrowShouldExecute';
-
-  @override
-  bool shouldExecute(DispatchContext context) {
-    throw const FormatException('Bad shouldExecute');
-  }
-
-  @override
-  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
-      next(context);
 }
 
 class _FlagMetadataMiddleware extends MiddlewareBase {
