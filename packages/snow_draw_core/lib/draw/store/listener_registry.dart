@@ -33,7 +33,6 @@ class ListenerRegistry {
   final ListenerErrorHandler? _onError;
   final LinkedHashMap<StateChangeListener<DrawState>, _ListenerEntry>
   _listeners = LinkedHashMap();
-  var _filteredListenerCount = 0;
 
   /// Register a listener.
   ///
@@ -51,18 +50,9 @@ class ListenerRegistry {
   }) {
     final normalizedChangeMask = _normalizeChangeMask(changeTypes);
 
-    final previousEntry = _listeners[listener];
-    if (previousEntry?.isFiltered ?? false) {
-      _filteredListenerCount -= 1;
-    }
-
     // Existing listeners keep their original order in the linked map.
     final entry = _ListenerEntry(listener, normalizedChangeMask);
     _listeners[listener] = entry;
-
-    if (entry.isFiltered) {
-      _filteredListenerCount += 1;
-    }
 
     return () => unregister(listener);
   }
@@ -71,10 +61,7 @@ class ListenerRegistry {
   ///
   /// Removes the listener. O(1) removal with ordering preserved.
   void unregister(StateChangeListener<DrawState> listener) {
-    final removed = _listeners.remove(listener);
-    if (removed?.isFiltered ?? false) {
-      _filteredListenerCount -= 1;
-    }
+    _listeners.remove(listener);
   }
 
   /// Notify all listeners.
@@ -86,12 +73,16 @@ class ListenerRegistry {
       return;
     }
 
+    final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
+    final hasFilteredListeners = entriesSnapshot.any(
+      (entry) => entry.isFiltered,
+    );
+
     // Fast path for the common case: no listeners use change filters.
-    if (_filteredListenerCount == 0) {
+    if (!hasFilteredListeners) {
       if (!_hasTrackedChanges(previous, next)) {
         return;
       }
-      final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
       _notifyEntries(entriesSnapshot, next);
       return;
     }
@@ -100,7 +91,6 @@ class ListenerRegistry {
     if (changeMask == 0) {
       return;
     }
-    final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
     _notifyEntries(entriesSnapshot, next, changeMask: changeMask);
   }
 
@@ -127,7 +117,6 @@ class ListenerRegistry {
   /// Clear all listeners.
   void clear() {
     _listeners.clear();
-    _filteredListenerCount = 0;
   }
 
   /// Get listener count.

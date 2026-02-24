@@ -18,9 +18,6 @@ import 'text/text_metrics_service.dart';
 @immutable
 class DrawStateViewBuilder {
   static const _sharedPreviewEngine = EditPreviewEngine();
-  static final Expando<_DrawStateViewCacheEntry> _stateViewCache = Expando(
-    'draw_state_view_cache',
-  );
 
   const DrawStateViewBuilder({
     required this.editOperations,
@@ -31,24 +28,7 @@ class DrawStateViewBuilder {
   final TextMetricsService textMetricsService;
   final EditPreviewEngine _previewEngine;
 
-  DrawStateView build(DrawState state) {
-    final cached = _stateViewCache[state];
-    if (cached != null &&
-        identical(cached.editOperations, editOperations) &&
-        identical(cached.textMetricsService, textMetricsService) &&
-        identical(cached.previewEngine, _previewEngine)) {
-      return cached.view;
-    }
-
-    final nextView = _buildUncached(state);
-    _stateViewCache[state] = _DrawStateViewCacheEntry(
-      editOperations: editOperations,
-      textMetricsService: textMetricsService,
-      previewEngine: _previewEngine,
-      view: nextView,
-    );
-    return nextView;
-  }
+  DrawStateView build(DrawState state) => _buildUncached(state);
 
   DrawStateView _buildUncached(DrawState state) {
     final interaction = state.application.interaction;
@@ -204,19 +184,4 @@ class DrawStateViewBuilder {
       hasSelection: true,
     );
   }
-}
-
-@immutable
-class _DrawStateViewCacheEntry {
-  const _DrawStateViewCacheEntry({
-    required this.editOperations,
-    required this.textMetricsService,
-    required this.previewEngine,
-    required this.view,
-  });
-
-  final EditOperationRegistry editOperations;
-  final TextMetricsService textMetricsService;
-  final EditPreviewEngine previewEngine;
-  final DrawStateView view;
 }

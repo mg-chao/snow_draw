@@ -169,22 +169,28 @@ class EditApply {
   static List<ElementState> replaceElementsById({
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
-    // Optional fast path for O(1) id-to-index lookup.
-    // Unresolved ids fall back to a linear scan.
     int? Function(String id)? resolveIndex,
   }) {
     if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
     }
 
-    List<ElementState>? result;
-    void applyReplacement(int index, ElementState replacement) {
-      result ??= List<ElementState>.of(elements, growable: false);
-      result![index] = replacement;
+    List<ElementState>? updatedElements;
+
+    void applyReplacementAt(int index, ElementState replacement) {
+      final current = (updatedElements ?? elements)[index];
+      if (replacement == current) {
+        return;
+      }
+
+      updatedElements ??= List<ElementState>.of(elements, growable: false);
+      updatedElements![index] = replacement;
     }
 
-    final pending = <String, ElementState>{...replacementsById};
-    if (resolveIndex != null) {
+    final unresolvedIds = <String>{};
+    if (resolveIndex == null) {
+      unresolvedIds.addAll(replacementsById.keys);
+    } else {
       for (final entry in replacementsById.entries) {
         final index = resolveIndex(entry.key);
         if (!_isResolvedIndexValid(
@@ -192,36 +198,26 @@ class EditApply {
           id: entry.key,
           elements: elements,
         )) {
+          unresolvedIds.add(entry.key);
           continue;
         }
-
-        pending.remove(entry.key);
-        final resolvedIndex = index!;
-        final replacement = entry.value;
-        final current = (result ?? elements)[resolvedIndex];
-        if (replacement == current) {
-          continue;
-        }
-
-        applyReplacement(resolvedIndex, replacement);
+        applyReplacementAt(index!, entry.value);
       }
     }
 
-    if (pending.isEmpty) {
-      return result ?? elements;
+    if (unresolvedIds.isEmpty) {
+      return updatedElements ?? elements;
     }
 
     for (var i = 0; i < elements.length; i++) {
-      final current = (result ?? elements)[i];
-      final replacement = pending[current.id];
-      if (replacement == null || replacement == current) {
+      final elementId = (updatedElements ?? elements)[i].id;
+      if (!unresolvedIds.contains(elementId)) {
         continue;
       }
-
-      applyReplacement(i, replacement);
+      applyReplacementAt(i, replacementsById[elementId]!);
     }
 
-    return result ?? elements;
+    return updatedElements ?? elements;
   }
 }
 
