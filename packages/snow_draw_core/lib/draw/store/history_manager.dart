@@ -528,11 +528,7 @@ class HistoryManager {
   }
 
   void _normalizeRootPayload() {
-    _root
-      ..parent = null
-      ..delta = null
-      ..metadata = null
-      ..coalescing = null;
+    _normalizeRootNode(_root);
   }
 
   ({int index, _HistoryNode node})? _resolveRedoTarget(int? branchIndex) {
@@ -769,7 +765,7 @@ class _HistorySnapshotCodec {
     );
 
     final root = byId[rootId] ?? _HistoryNode.root(rootId);
-    _normalizeDecodedRoot(root);
+    _normalizeRootNode(root);
     return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
@@ -795,40 +791,42 @@ class _HistorySnapshotCodec {
     required Map<int, _HistoryNode> byId,
     required Map<int, Map<String, dynamic>> nodeDataById,
   }) {
-    final explicitParents = <int, int>{};
-    for (final entry in nodeDataById.entries) {
-      final childId = entry.key;
-      final parentId = entry.value['parentId'] as int?;
-      if (_isValidParentAssignment(
+    final assignments = <int, int>{};
+
+    void assignIfValid({
+      required int childId,
+      required int? parentId,
+      bool overwrite = false,
+    }) {
+      if (!overwrite && assignments.containsKey(childId)) {
+        return;
+      }
+      if (!_isValidParentAssignment(
         byId: byId,
         parentId: parentId,
         childId: childId,
       )) {
-        explicitParents[childId] = parentId!;
+        return;
       }
+      assignments[childId] = parentId!;
     }
 
-    final implicitParents = <int, int>{};
+    for (final entry in nodeDataById.entries) {
+      assignIfValid(
+        childId: entry.key,
+        parentId: entry.value['parentId'] as int?,
+        overwrite: true,
+      );
+    }
+
     for (final entry in nodeDataById.entries) {
       final parentId = entry.key;
-      final childrenIds = _asIntList(entry.value['children']);
-      for (final childId in childrenIds) {
-        if (explicitParents.containsKey(childId) ||
-            implicitParents.containsKey(childId)) {
-          continue;
-        }
-        if (!_isValidParentAssignment(
-          byId: byId,
-          parentId: parentId,
-          childId: childId,
-        )) {
-          continue;
-        }
-        implicitParents[childId] = parentId;
+      for (final childId in _asIntList(entry.value['children'])) {
+        assignIfValid(childId: childId, parentId: parentId);
       }
     }
 
-    return <int, int>{...implicitParents, ...explicitParents};
+    return assignments;
   }
 
   bool _isValidParentAssignment({
@@ -840,18 +838,6 @@ class _HistorySnapshotCodec {
       return false;
     }
     return byId.containsKey(parentId) && byId.containsKey(childId);
-  }
-
-  void _normalizeDecodedRoot(_HistoryNode root) {
-    final parent = root.parent;
-    if (parent != null) {
-      parent.children.remove(root);
-    }
-    root
-      ..parent = null
-      ..delta = null
-      ..metadata = null
-      ..coalescing = null;
   }
 
   Map<String, dynamic> _encodeNode(_HistoryNode node) => {
@@ -1005,10 +991,28 @@ class _HistorySnapshotCodec {
     if (currentParent != null && !identical(currentParent, parent)) {
       return;
     }
+    if (_createsParentCycle(parent: parent, child: child)) {
+      return;
+    }
     child.parent = parent;
     if (!parent.children.contains(child)) {
       parent.children.add(child);
     }
+  }
+
+  bool _createsParentCycle({
+    required _HistoryNode parent,
+    required _HistoryNode child,
+  }) {
+    _HistoryNode? current = parent;
+    final visited = <_HistoryNode>{};
+    while (current != null && visited.add(current)) {
+      if (identical(current, child)) {
+        return true;
+      }
+      current = current.parent;
+    }
+    return false;
   }
 
   Map<String, dynamic>? _asJsonMap(Object? raw) {
@@ -1238,6 +1242,18 @@ class _HistorySnapshotCodec {
 }
 
 final _historySnapshotCodec = _HistorySnapshotCodec();
+
+void _normalizeRootNode(_HistoryNode root) {
+  final parent = root.parent;
+  if (parent != null) {
+    parent.children.remove(root);
+  }
+  root
+    ..parent = null
+    ..delta = null
+    ..metadata = null
+    ..coalescing = null;
+}
 
 int _resolveNextNodeId({
   required int? requestedNextNodeId,

@@ -202,16 +202,8 @@ class ObjectSnapService {
     referenceElements: referenceElements,
     snapDistance: snapDistance,
     referenceAabbs: referenceAabbs,
-    targetAnchorsX: const [
-      SnapAxisAnchor.start,
-      SnapAxisAnchor.center,
-      SnapAxisAnchor.end,
-    ],
-    targetAnchorsY: const [
-      SnapAxisAnchor.start,
-      SnapAxisAnchor.center,
-      SnapAxisAnchor.end,
-    ],
+    targetAnchorsX: _allAnchors,
+    targetAnchorsY: _allAnchors,
     targetElements: targetElements,
     targetOffset: targetOffset,
     enablePointSnaps: enablePointSnaps,
@@ -938,20 +930,12 @@ class ObjectSnapService {
                 _pointPerpendicularWeight +
             _pointAlignmentStrength(candidate) * _pointAnchorWeight,
       ),
-      _SnapKind.gapCenter => _clamp01(
-        (_gapStrengthScore(
+      _SnapKind.gapCenter || _SnapKind.gapSide => _clamp01(
+        _gapStrengthScore(
               distanceStrength,
               candidate.gapFrequency ?? 0,
-              isCenter: true,
-            )) *
-            _gapStrengthScale,
-      ),
-      _SnapKind.gapSide => _clamp01(
-        (_gapStrengthScore(
-              distanceStrength,
-              candidate.gapFrequency ?? 0,
-              isCenter: false,
-            )) *
+              isCenter: candidate.kind == _SnapKind.gapCenter,
+            ) *
             _gapStrengthScale,
       ),
     };

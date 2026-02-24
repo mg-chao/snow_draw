@@ -42,13 +42,16 @@ class SelectionCalculator {
     if (selectedElements.isEmpty) {
       return null;
     }
+
     final singleElement = _singleSelectedElement(selectedElements);
     if (singleElement != null) {
       return singleElement.rect;
     }
 
-    return selectionOverlay.multiSelectOverlay?.bounds ??
-        computeSelectionBoundsForElements(selectedElements)!;
+    return _resolveMultiSelectOverlayBounds(
+      selectedElements: selectedElements,
+      selectionOverlay: selectionOverlay,
+    );
   }
 
   static double? computeOverlayRotationForSelection({
@@ -78,10 +81,10 @@ class SelectionCalculator {
       return singleElement.center;
     }
 
-    final bounds =
-        selectionOverlay.multiSelectOverlay?.bounds ??
-        computeSelectionBoundsForElements(selectedElements)!;
-    return bounds.center;
+    return _resolveMultiSelectOverlayBounds(
+      selectedElements: selectedElements,
+      selectionOverlay: selectionOverlay,
+    )?.center;
   }
 
   static DrawRect computeElementWorldAabb(ElementState element) {
@@ -108,6 +111,13 @@ class SelectionCalculator {
 
   static ElementState? _singleSelectedElement(List<ElementState> selected) =>
       selected.length == 1 ? selected.first : null;
+
+  static DrawRect? _resolveMultiSelectOverlayBounds({
+    required List<ElementState> selectedElements,
+    required SelectionOverlayState selectionOverlay,
+  }) =>
+      selectionOverlay.multiSelectOverlay?.bounds ??
+      computeSelectionBoundsForElements(selectedElements);
 
   static DrawRect _expandBounds(DrawRect a, DrawRect b) => DrawRect(
     minX: math.min(a.minX, b.minX),
