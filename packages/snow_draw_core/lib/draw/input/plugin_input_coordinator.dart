@@ -136,9 +136,8 @@ class PluginInputCoordinator {
   }
 
   Future<PluginResult?> _processEvent(InputEvent event) async {
-    final state = _pluginContext.state;
     final middlewareContext = MiddlewareContext(
-      state: state,
+      state: _pluginContext.state,
       log: _pluginContext.context.log.input,
     );
 
@@ -149,7 +148,7 @@ class PluginInputCoordinator {
       );
     }
 
-    return _registry.dispatch(processedEvent, state);
+    return _registry.dispatch(processedEvent);
   }
 
   void _logProcessingError({

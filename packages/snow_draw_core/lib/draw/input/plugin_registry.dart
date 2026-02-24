@@ -59,7 +59,7 @@ class PluginRegistry {
   /// Dispatch an event to all plugins.
   ///
   /// Runs plugins by priority until one returns handled.
-  Future<PluginResult?> dispatch(InputEvent event, DrawState state) async {
+  Future<PluginResult?> dispatch(InputEvent event) async {
     final pluginsForEvent = _pluginsForEvent(event);
     if (pluginsForEvent.isEmpty) {
       return null;
@@ -74,7 +74,6 @@ class PluginRegistry {
       } else {
         finalResult = await _dispatchToPlugins(
           event: event,
-          state: state,
           pluginsForEvent: pluginsForEvent,
         );
       }
@@ -160,17 +159,14 @@ class PluginRegistry {
 
   Future<PluginResult?> _dispatchToPlugins({
     required InputEvent event,
-    required DrawState state,
     required List<InputPlugin> pluginsForEvent,
   }) async {
     PluginResult? finalResult;
-    for (var i = 0; i < pluginsForEvent.length; i += 1) {
-      final plugin = pluginsForEvent[i];
-      final pluginState = i == 0 ? state : _context.state;
+    for (final plugin in pluginsForEvent) {
       final canHandle = _canHandle(
         plugin: plugin,
         event: event,
-        state: pluginState,
+        state: _context.state,
       );
       if (!canHandle) {
         continue;

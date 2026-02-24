@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
@@ -9,6 +8,7 @@ import 'package:snow_draw_core/draw/input/plugin_input_coordinator.dart';
 import 'package:snow_draw_core/draw/input/plugin_registry.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('PluginRegistry dispatch hooks', () {
@@ -37,7 +37,7 @@ void main() {
 
       await registry.registerAll([pluginA, pluginB]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, const PluginResult.handled(message: 'A handled'));
       expect(handleCallsB, 0);
@@ -67,7 +67,7 @@ void main() {
 
       await registry.registerAll([intercepting, observer]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, isNotNull);
       expect(result!.isHandled, isTrue);
@@ -98,7 +98,7 @@ void main() {
 
       await registry.registerAll([throwing, fallback]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, const PluginResult.handled(message: 'fallback handled'));
       expect(fallbackHandled, 1);
@@ -135,7 +135,7 @@ void main() {
 
         await registry.registerAll([throwing, fallback]);
 
-        final result = await registry.dispatch(_pointerDown(), state);
+        final result = await registry.dispatch(_pointerDown());
 
         expect(result, const PluginResult.handled(message: 'fallback handled'));
         expect(fallbackHandled, 1);
@@ -167,7 +167,7 @@ void main() {
 
       await registry.registerAll([moveOnlyInterceptor, downHandler]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, const PluginResult.handled(message: 'down handled'));
       expect(downHandled, 1);
@@ -197,7 +197,7 @@ void main() {
 
         await registry.registerAll([downPlugin, movePlugin]);
 
-        final result = await registry.dispatch(_pointerDown(), DrawState());
+        final result = await registry.dispatch(_pointerDown());
 
         expect(result, const PluginResult.handled(message: 'down'));
         expect(downAfterCalls, [result]);

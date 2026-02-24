@@ -13,6 +13,7 @@ import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
 import '../../types/element_style.dart';
 import '../../utils/edit_intent_detector.dart';
+import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
 
@@ -34,16 +35,11 @@ class SelectPlugin extends DrawInputPlugin {
            PointerCancelInputEvent,
          },
        );
-  static const _doubleClickThreshold = Duration(milliseconds: 500);
-  static const double _doubleClickToleranceMultiplier = 2;
+  final _arrowHandleDoubleTapTracker = DoubleTapTracker<ArrowPointHandle>();
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
   bool isSelectionToolActive;
-
-  DateTime? _lastArrowHandleClickTime;
-  DrawPoint? _lastArrowHandleClickPosition;
-  ArrowPointHandle? _lastArrowHandleClickHandle;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -57,6 +53,11 @@ class SelectPlugin extends DrawInputPlugin {
   @override
   bool canHandle(InputEvent _, DrawState state) =>
       !_isSelectionBehaviorDisabled && _routingPolicy.allowSelection(state);
+
+  @override
+  void reset() {
+    _arrowHandleDoubleTapTracker.clear();
+  }
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) => switch (event) {
@@ -102,7 +103,7 @@ class SelectPlugin extends DrawInputPlugin {
       final now = DateTime.now();
       final data = _arrowDataForElement(stateView, intent.elementId);
       if (data == null) {
-        _clearArrowHandleClickState();
+        _arrowHandleDoubleTapTracker.clear();
       } else {
         final handle = _resolveArrowHandleForIntent(
           intent: intent,
@@ -113,8 +114,14 @@ class SelectPlugin extends DrawInputPlugin {
           handle: handle,
           data: data,
         );
-        if (canDoubleClick && _isDoubleClick(handle, position, now)) {
-          _clearArrowHandleClickState();
+        if (canDoubleClick &&
+            _arrowHandleDoubleTapTracker.isDoubleTap(
+              target: handle,
+              position: position,
+              now: now,
+              baseTolerance: selectionConfig.interaction.handleTolerance,
+            )) {
+          _arrowHandleDoubleTapTracker.clear();
           final doubleClickIntent = StartArrowPointIntent(
             elementId: intent.elementId,
             pointKind: intent.pointKind,
@@ -129,13 +136,17 @@ class SelectPlugin extends DrawInputPlugin {
           );
         }
         if (canDoubleClick) {
-          _recordArrowHandleClick(handle, position, now);
+          _arrowHandleDoubleTapTracker.recordTap(
+            target: handle,
+            position: position,
+            now: now,
+          );
         } else {
-          _clearArrowHandleClickState();
+          _arrowHandleDoubleTapTracker.clear();
         }
       }
     } else {
-      _clearArrowHandleClickState();
+      _arrowHandleDoubleTapTracker.clear();
     }
 
     if (intent is SelectIntent && intent.deferSelectionForDrag) {
@@ -405,44 +416,5 @@ class SelectPlugin extends DrawInputPlugin {
     }
     final pointCount = data.points.length;
     return handle.index > 0 && handle.index < pointCount - 1;
-  }
-
-  bool _isDoubleClick(
-    ArrowPointHandle handle,
-    DrawPoint position,
-    DateTime now,
-  ) {
-    final lastTime = _lastArrowHandleClickTime;
-    final lastPosition = _lastArrowHandleClickPosition;
-    final lastHandle = _lastArrowHandleClickHandle;
-    if (lastTime == null || lastPosition == null || lastHandle == null) {
-      return false;
-    }
-    if (now.difference(lastTime) > _doubleClickThreshold) {
-      return false;
-    }
-    if (lastHandle != handle) {
-      return false;
-    }
-    final tolerance =
-        selectionConfig.interaction.handleTolerance *
-        _doubleClickToleranceMultiplier;
-    return lastPosition.distanceSquared(position) <= tolerance * tolerance;
-  }
-
-  void _recordArrowHandleClick(
-    ArrowPointHandle handle,
-    DrawPoint position,
-    DateTime now,
-  ) {
-    _lastArrowHandleClickHandle = handle;
-    _lastArrowHandleClickPosition = position;
-    _lastArrowHandleClickTime = now;
-  }
-
-  void _clearArrowHandleClickState() {
-    _lastArrowHandleClickHandle = null;
-    _lastArrowHandleClickPosition = null;
-    _lastArrowHandleClickTime = null;
   }
 }

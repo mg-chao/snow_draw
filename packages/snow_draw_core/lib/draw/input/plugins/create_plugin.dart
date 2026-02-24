@@ -10,6 +10,7 @@ import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
 import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
+import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
 import '../pointer_sample_resampler.dart';
@@ -33,11 +34,11 @@ class CreatePlugin extends DrawInputPlugin {
          },
        );
 
-  static const _doubleClickThreshold = Duration(milliseconds: 500);
-  static const double _doubleClickToleranceMultiplier = 2;
   static const _maxFreeDrawBatchSamples = 96;
+  static const _pointCreationTapTarget = 'point_creation';
 
   final InputRoutingPolicy _routingPolicy;
+  final _doubleTapTracker = DoubleTapTracker<String>();
   DrawStateViewBuilder? _stateViewBuilder;
 
   ElementTypeId<ElementData>? currentToolTypeId;
@@ -45,8 +46,6 @@ class CreatePlugin extends DrawInputPlugin {
   DrawPoint? _pointerDownPosition;
   var _isDragging = false;
   var _isMultiPoint = false;
-  DateTime? _lastClickTime;
-  DrawPoint? _lastClickPosition;
   DrawPoint? _lastUpdatePosition;
   KeyModifiers? _lastUpdateModifiers;
 
@@ -208,12 +207,22 @@ class CreatePlugin extends DrawInputPlugin {
     final now = DateTime.now();
     if (!wasMultiPoint) {
       _isMultiPoint = true;
-      _recordClick(event.position, now);
+      _doubleTapTracker.recordTap(
+        target: _pointCreationTapTarget,
+        position: event.position,
+        now: now,
+      );
       return handled(message: 'Create multi-point started');
     }
 
     final isDoubleClick =
-        !wasMeaningfulDrag && _isDoubleClick(event.position, now);
+        !wasMeaningfulDrag &&
+        _doubleTapTracker.isDoubleTap(
+          target: _pointCreationTapTarget,
+          position: event.position,
+          now: now,
+          baseTolerance: selectionConfig.interaction.handleTolerance,
+        );
 
     if (_isElbowArrowCreating(state)) {
       await _dispatchCreatingUpdate(event.position, event.modifiers);
@@ -234,7 +243,11 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
-    _recordClick(event.position, now);
+    _doubleTapTracker.recordTap(
+      target: _pointCreationTapTarget,
+      position: event.position,
+      now: now,
+    );
     return handled(message: 'Create point added');
   }
 
@@ -281,31 +294,6 @@ class CreatePlugin extends DrawInputPlugin {
     }
     final data = interaction.elementData;
     return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
-  }
-
-  bool _isDoubleClick(DrawPoint position, DateTime now) {
-    final lastTime = _lastClickTime;
-    final lastPosition = _lastClickPosition;
-    if (lastTime == null || lastPosition == null) {
-      return false;
-    }
-    if (now.difference(lastTime) > _doubleClickThreshold) {
-      return false;
-    }
-    final tolerance =
-        selectionConfig.interaction.handleTolerance *
-        _doubleClickToleranceMultiplier;
-    return lastPosition.distanceSquared(position) <= tolerance * tolerance;
-  }
-
-  void _recordClick(DrawPoint position, DateTime now) {
-    _lastClickPosition = position;
-    _lastClickTime = now;
-  }
-
-  void _clearClickState() {
-    _lastClickTime = null;
-    _lastClickPosition = null;
   }
 
   bool _shouldDispatchCreatingUpdate(
@@ -358,7 +346,7 @@ class CreatePlugin extends DrawInputPlugin {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
-    _clearClickState();
+    _doubleTapTracker.clear();
   }
 
   void _resetUpdateSignature() {
