@@ -65,7 +65,6 @@ class DrawContext implements InteractionReducerDeps {
 
   /// Configuration manager (single source of truth).
   final ConfigManager configManager;
-  @override
   final EditIntentToOperationMapper editIntentMapper;
 
   /// Logging service.

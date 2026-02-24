@@ -289,12 +289,10 @@ class SelectPlugin extends DrawInputPlugin {
         await dispatch(const ClearSelection());
         return;
       default:
-        await dispatch(
-          EditIntentAction(
-            intent: intent,
-            position: position,
-            modifiers: modifiers,
-          ),
+        await _dispatchMappedStartEdit(
+          intent: intent,
+          position: position,
+          modifiers: modifiers,
         );
         return;
     }
@@ -305,16 +303,46 @@ class SelectPlugin extends DrawInputPlugin {
     required DrawPoint position,
     required EditModifiers modifiers,
   }) async {
-    final wasEditing = state.application.isEditing;
-    await dispatch(
-      EditIntentAction(
-        intent: intent,
-        position: position,
-        modifiers: modifiers,
-      ),
+    final startEdit = _mapToStartEdit(
+      intent: intent,
+      position: position,
+      modifiers: modifiers,
     );
+    if (startEdit == null) {
+      return false;
+    }
+
+    final wasEditing = state.application.isEditing;
+    await dispatch(startEdit);
     return !wasEditing && state.application.isEditing;
   }
+
+  Future<void> _dispatchMappedStartEdit({
+    required EditIntent intent,
+    required DrawPoint position,
+    required EditModifiers modifiers,
+  }) async {
+    final startEdit = _mapToStartEdit(
+      intent: intent,
+      position: position,
+      modifiers: modifiers,
+    );
+    if (startEdit == null) {
+      return;
+    }
+    await dispatch(startEdit);
+  }
+
+  StartEdit? _mapToStartEdit({
+    required EditIntent intent,
+    required DrawPoint position,
+    required EditModifiers modifiers,
+  }) => drawContext.editIntentMapper.mapToStartEdit(
+    intent: intent,
+    position: position,
+    modifiers: modifiers,
+    editOperations: drawContext.editOperations,
+  );
 
   Future<void> _updateEditFromEvent(PointerMoveInputEvent event) => dispatch(
     UpdateEdit(

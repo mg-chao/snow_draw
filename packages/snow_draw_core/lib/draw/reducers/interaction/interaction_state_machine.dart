@@ -32,11 +32,6 @@ class InteractionStateMachine {
     required EditSessionService editSessionService,
     required EditSessionIdGenerator sessionIdGenerator,
   }) {
-    final resolvedAction = _resolveEditIntentAction(action, context);
-    if (resolvedAction == null) {
-      return InteractionTransition.unchanged(state);
-    }
-
     // 1) Edit operations.
     final editReducer = EditStateReducer(
       editSessionService: editSessionService,
@@ -45,7 +40,7 @@ class InteractionStateMachine {
 
     final editResult = editReducer.reduce(
       state: state,
-      action: resolvedAction,
+      action: action,
       context: context,
     );
     if (editResult != null) {
@@ -53,7 +48,7 @@ class InteractionStateMachine {
     }
 
     // 2) Other interaction and domain reducers.
-    final reduced = reduceState(state, resolvedAction, context);
+    final reduced = reduceState(state, action, context);
     if (reduced != null) {
       return InteractionTransition(nextState: reduced);
     }
@@ -84,18 +79,3 @@ const _createReducer = CreateElementReducer();
 const _textEditReducer = TextEditReducer();
 
 const interactionStateMachine = InteractionStateMachine();
-
-DrawAction? _resolveEditIntentAction(
-  DrawAction action,
-  EditIntentResolverDeps context,
-) {
-  if (action is! EditIntentAction) {
-    return action;
-  }
-  return context.editIntentMapper.mapToStartEdit(
-    intent: action.intent,
-    position: action.position,
-    modifiers: action.modifiers,
-    editOperations: context.editOperations,
-  );
-}

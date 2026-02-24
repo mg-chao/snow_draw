@@ -45,15 +45,8 @@ class EditStateReducer {
     required DrawState state,
     required InteractionReducerDeps context,
   }) {
-    var currentState = state;
-
-    if (currentState.application.isEditing) {
-      final cancel = editSessionService.cancel(state: currentState);
-      currentState = cancel.state;
-    }
-
     final start = editSessionService.start(
-      state: currentState,
+      state: state,
       operationId: action.operationId,
       position: action.position,
       params: _injectParams(action.params, context.config),

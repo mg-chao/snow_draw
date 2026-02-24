@@ -12,7 +12,6 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
-import '../utils/edit_intent_detector.dart';
 import 'history_coalescing.dart';
 import 'history_policy.dart';
 
@@ -565,20 +564,6 @@ class CancelEdit extends DrawAction {
 
   @override
   String toString() => 'CancelEdit(reason: $reason)';
-}
-
-class EditIntentAction extends DrawAction {
-  const EditIntentAction({
-    required this.intent,
-    required this.position,
-    this.modifiers = const EditModifiers(),
-  });
-  final EditIntent intent;
-  final DrawPoint position;
-  final EditModifiers modifiers;
-
-  @override
-  String toString() => 'EditIntentAction(intent: $intent, position: $position)';
 }
 
 class SetDragPending extends DrawAction {

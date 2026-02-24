@@ -227,7 +227,7 @@ class ActionProcessor {
     if (action is CancelEdit || action is UpdateEdit || action is FinishEdit) {
       return null;
     }
-    if (action is StartEdit || action is EditIntentAction) {
+    if (action is StartEdit) {
       return EditCancelReason.newEditStarted;
     }
     if (action is Undo && !_services.historyManager.canUndo) {

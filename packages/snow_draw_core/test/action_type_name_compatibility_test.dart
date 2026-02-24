@@ -128,13 +128,6 @@ void main() {
         expectedTypeName: 'CancelEdit',
       ),
       _ActionTypeSample(
-        action: const EditIntentAction(
-          intent: ClearSelectionIntent(),
-          position: DrawPoint.zero,
-        ),
-        expectedTypeName: 'EditIntentAction',
-      ),
-      _ActionTypeSample(
         action: const SetDragPending(
           pointerDownPosition: DrawPoint.zero,
           intent: PendingMoveIntent(),

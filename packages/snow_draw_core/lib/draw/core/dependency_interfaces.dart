@@ -1,6 +1,5 @@
 import '../../utils/id_generator.dart';
 import '../config/draw_config.dart';
-import '../edit/core/edit_intent_to_operation_mapper.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../events/event_bus.dart';
@@ -34,16 +33,12 @@ abstract interface class ElementReducerDeps {
   TextMetricsService get textMetricsService;
 }
 
-abstract interface class EditIntentResolverDeps {
-  EditIntentToOperationMapper get editIntentMapper;
-  EditOperationRegistry get editOperations;
-}
-
 /// Aggregate dependencies available for interaction reducers.
 abstract interface class InteractionReducerDeps
     implements
         CreateElementReducerDeps,
         TextEditReducerDeps,
         SelectionReducerDeps,
-        ElementReducerDeps,
-        EditIntentResolverDeps {}
+        ElementReducerDeps {
+  EditOperationRegistry get editOperations;
+}

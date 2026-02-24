@@ -30,9 +30,10 @@ void main() {
       );
       const arrow = ArrowData(strokeStyle: StrokeStyle.dotted);
       const interaction = IdleState();
-      const intentAction = EditIntentAction(
-        intent: StartRotateIntent(),
+      const startEdit = StartEdit(
+        operationId: EditOperationIds.rotate,
         position: DrawPoint.zero,
+        params: RotateOperationParams(),
       );
 
       expect(registry.registeredTypeIds, isNotEmpty);
@@ -40,7 +41,7 @@ void main() {
       expect(arrow.strokeStyle, StrokeStyle.dotted);
       expect(normalizedArrowPoints.length, 2);
       expect(interaction, isA<InteractionState>());
-      expect(intentAction.intent, isA<EditIntent>());
+      expect(startEdit.operationId, EditOperationIds.rotate);
     });
 
     test('exports coordinate and render-task contracts', () {
