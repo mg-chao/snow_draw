@@ -69,9 +69,9 @@ class SceneCanvasRenderKey {
 
   /// Fingerprint of scene inputs that can affect element-layer pixels.
   ///
-  /// This is intentionally finer-grained than document-wide revisions so
-  /// offscreen mutations that cannot affect the current frame do not trigger
-  /// unnecessary canvas repaints.
+  /// This tracks coarse scene-content revisions (document + preview snapshots)
+  /// and is combined with [framePlan] so any visible canvas output change
+  /// triggers a repaint.
   final int sceneContentFingerprint;
 
   /// Revision for text rendering cache invalidation.

@@ -8,7 +8,7 @@ import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('offscreen style updates keep canvas render key stable', (
+  testWidgets('offscreen style updates refresh canvas render key', (
     tester,
   ) async {
     final store = _createStoreWithVisibleAndOffscreenElements();
@@ -35,11 +35,10 @@ void main() {
 
     final after = _canvasRenderKey(tester);
 
-    expect(after, same(before));
-    expect(after, equals(before));
+    expect(after, isNot(equals(before)));
     expect(
       after.sceneContentFingerprint,
-      equals(before.sceneContentFingerprint),
+      isNot(equals(before.sceneContentFingerprint)),
     );
   });
 
