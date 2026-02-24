@@ -83,22 +83,30 @@ ElementState _unbindArrowElement({
     return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
   }
 
-  final updatedData = switch (data) {
-    final ArrowData value => value.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    ),
-    final LineData value => value.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    ),
-    _ => data.copyWith(),
-  };
+  final updatedData = _clearBindings(data);
   return element.copyWith(data: updatedData);
+}
+
+ArrowLikeData _clearBindings(ArrowLikeData data) {
+  if (data is ArrowData) {
+    return data.copyWith(
+      startBinding: null,
+      endBinding: null,
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
+    );
+  }
+  if (data is LineData) {
+    return data.copyWith(
+      startBinding: null,
+      endBinding: null,
+      fixedSegments: null,
+      startIsSpecial: null,
+      endIsSpecial: null,
+    );
+  }
+  throw StateError(
+    'Unsupported ArrowLikeData type for binding cleanup: ${data.runtimeType}',
+  );
 }

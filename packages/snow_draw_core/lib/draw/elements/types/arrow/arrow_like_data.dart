@@ -6,6 +6,9 @@ import 'elbow/elbow_fixed_segment.dart';
 
 /// Shared interface for arrow-like path elements (arrows, curved lines).
 abstract class ArrowLikeData extends ElementData {
+  /// Sentinel used by [copyWith] to represent "keep current nullable field".
+  static const unset = Object();
+
   List<DrawPoint> get points;
   double get strokeWidth;
   StrokeStyle get strokeStyle;
@@ -25,10 +28,10 @@ abstract class ArrowLikeData extends ElementData {
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
-    ArrowBinding? startBinding,
-    ArrowBinding? endBinding,
-    List<ElbowFixedSegment>? fixedSegments,
-    bool? startIsSpecial,
-    bool? endIsSpecial,
+    Object? startBinding = unset,
+    Object? endBinding = unset,
+    Object? fixedSegments = unset,
+    Object? startIsSpecial = unset,
+    Object? endIsSpecial = unset,
   });
 }

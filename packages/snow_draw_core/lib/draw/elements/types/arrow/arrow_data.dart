@@ -19,7 +19,6 @@ import 'elbow/elbow_fixed_segment.dart';
 final class ArrowData extends ElementData
     with ElementStyleConfigurableData, ElementStyleUpdatableData
     implements ArrowLikeData {
-  static const _unset = Object();
   static const List<DrawPoint> _defaultPoints = [
     DrawPoint.zero,
     DrawPoint(x: 1, y: 1),
@@ -118,11 +117,11 @@ final class ArrowData extends ElementData
     ArrowType? arrowType,
     ArrowheadStyle? startArrowhead,
     ArrowheadStyle? endArrowhead,
-    Object? startBinding = _unset,
-    Object? endBinding = _unset,
-    Object? fixedSegments = _unset,
-    Object? startIsSpecial = _unset,
-    Object? endIsSpecial = _unset,
+    Object? startBinding = ArrowLikeData.unset,
+    Object? endBinding = ArrowLikeData.unset,
+    Object? fixedSegments = ArrowLikeData.unset,
+    Object? startIsSpecial = ArrowLikeData.unset,
+    Object? endIsSpecial = ArrowLikeData.unset,
   }) => ArrowData(
     points: points == null ? this.points : List<DrawPoint>.unmodifiable(points),
     color: color ?? this.color,
@@ -131,23 +130,26 @@ final class ArrowData extends ElementData
     arrowType: arrowType ?? this.arrowType,
     startArrowhead: startArrowhead ?? this.startArrowhead,
     endArrowhead: endArrowhead ?? this.endArrowhead,
-    startBinding: identical(startBinding, _unset)
-        ? this.startBinding
-        : startBinding as ArrowBinding?,
-    endBinding: identical(endBinding, _unset)
-        ? this.endBinding
-        : endBinding as ArrowBinding?,
-    fixedSegments: identical(fixedSegments, _unset)
-        ? this.fixedSegments
-        : ArrowLikeDataCodec.normalizeFixedSegments(
-            fixedSegments as List<ElbowFixedSegment>?,
-          ),
-    startIsSpecial: identical(startIsSpecial, _unset)
-        ? this.startIsSpecial
-        : startIsSpecial as bool?,
-    endIsSpecial: identical(endIsSpecial, _unset)
-        ? this.endIsSpecial
-        : endIsSpecial as bool?,
+    startBinding: ArrowLikeDataCodec.resolveBindingUpdate(
+      rawBinding: startBinding,
+      currentBinding: this.startBinding,
+    ),
+    endBinding: ArrowLikeDataCodec.resolveBindingUpdate(
+      rawBinding: endBinding,
+      currentBinding: this.endBinding,
+    ),
+    fixedSegments: ArrowLikeDataCodec.resolveFixedSegmentsUpdate(
+      rawFixedSegments: fixedSegments,
+      currentFixedSegments: this.fixedSegments,
+    ),
+    startIsSpecial: ArrowLikeDataCodec.resolveNullableBoolUpdate(
+      rawValue: startIsSpecial,
+      currentValue: this.startIsSpecial,
+    ),
+    endIsSpecial: ArrowLikeDataCodec.resolveNullableBoolUpdate(
+      rawValue: endIsSpecial,
+      currentValue: this.endIsSpecial,
+    ),
   );
 
   @override
@@ -173,7 +175,7 @@ final class ArrowData extends ElementData
   @override
   Map<String, dynamic> toJson() => {
     'typeId': typeId.value,
-    'points': points.map((point) => {'x': point.x, 'y': point.y}).toList(),
+    'points': ArrowLikeDataCodec.encodePoints(points),
     'color': color.toARGB32(),
     'strokeWidth': strokeWidth,
     'strokeStyle': strokeStyle.name,
@@ -182,7 +184,7 @@ final class ArrowData extends ElementData
     'endArrowhead': endArrowhead.name,
     'startBinding': startBinding?.toJson(),
     'endBinding': endBinding?.toJson(),
-    'fixedSegments': fixedSegments?.map((segment) => segment.toJson()).toList(),
+    'fixedSegments': ArrowLikeDataCodec.encodeFixedSegments(fixedSegments),
     'startIsSpecial': startIsSpecial,
     'endIsSpecial': endIsSpecial,
   };
