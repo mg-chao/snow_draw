@@ -11,8 +11,8 @@ void main() {
       expect(registry.supports(TextData.typeIdToken), isTrue);
     });
 
-    test('supports custom mutable registries', () {
-      final registry = _MutableElementRegistryProxy();
+    test('supports custom registries', () {
+      final registry = _CustomElementRegistryProxy();
 
       final resolved = resolveElementRegistry(elementRegistry: registry);
 
@@ -20,45 +20,18 @@ void main() {
       expect(resolved.supports(FilterData.typeIdToken), isTrue);
       expect(resolved.supports(SerialNumberData.typeIdToken), isTrue);
     });
-
-    test('throws for read-only registries when built-ins are enabled', () {
-      expect(
-        () => resolveElementRegistry(
-          elementRegistry: const _ReadOnlyElementRegistry(),
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
-    });
   });
 }
 
-class _ReadOnlyElementRegistry implements ElementRegistry {
-  const _ReadOnlyElementRegistry();
-
-  @override
-  ElementDefinition<T>? getDefinition<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => null;
-
-  @override
-  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
-      null;
-
-  @override
-  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
-      const <ElementTypeId<ElementData>>[];
-
-  @override
-  bool supports<T extends ElementData>(ElementTypeId<T> typeId) => false;
-
-  @override
-  bool supportsTypeValue(String typeValue) => false;
-}
-
-class _MutableElementRegistryProxy implements MutableElementRegistry {
-  _MutableElementRegistryProxy();
+class _CustomElementRegistryProxy implements ElementRegistry {
+  _CustomElementRegistryProxy();
 
   final DefaultElementRegistry _delegate = DefaultElementRegistry();
+
+  @override
+  void register<T extends ElementData>(ElementDefinition<T> definition) {
+    _delegate.register(definition);
+  }
 
   @override
   ElementDefinition<T>? getDefinition<T extends ElementData>(
@@ -72,11 +45,6 @@ class _MutableElementRegistryProxy implements MutableElementRegistry {
   @override
   Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
       _delegate.registeredTypeIds;
-
-  @override
-  void register<T extends ElementData>(ElementDefinition<T> definition) {
-    _delegate.register(definition);
-  }
 
   @override
   bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>

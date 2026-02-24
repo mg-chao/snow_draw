@@ -10,7 +10,7 @@ import 'element_type_id.dart';
 /// This enables open/closed behavior: adding a new element type is done by
 /// registering a new [ElementDefinition], without modifying core render or
 /// hit-test code.
-class DefaultElementRegistry implements MutableElementRegistry {
+class DefaultElementRegistry implements ElementRegistry {
   /// Creates a new registry instance.
   DefaultElementRegistry();
   final Map<String, ElementDefinition<ElementData>> _definitionsByTypeValue =

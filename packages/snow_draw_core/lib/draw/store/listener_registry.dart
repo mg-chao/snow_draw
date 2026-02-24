@@ -9,16 +9,6 @@ import 'draw_store_interface.dart';
 typedef ListenerErrorHandler =
     void Function(Object error, StackTrace stackTrace);
 
-const int _documentChangeMask = 1 << 0;
-const int _selectionChangeMask = 1 << 1;
-const int _viewChangeMask = 1 << 2;
-const int _interactionChangeMask = 1 << 3;
-const int _allChangeMask =
-    _documentChangeMask |
-    _selectionChangeMask |
-    _viewChangeMask |
-    _interactionChangeMask;
-
 /// Listener registry.
 ///
 /// Manages registration, unregistration, and notification of state
@@ -48,10 +38,10 @@ class ListenerRegistry {
     StateChangeListener<DrawState> listener, {
     Set<DrawStateChange>? changeTypes,
   }) {
-    final normalizedChangeMask = _normalizeChangeMask(changeTypes);
+    final normalizedChangeTypes = _normalizeChangeTypes(changeTypes);
 
     // Existing listeners keep their original order in the linked map.
-    final entry = _ListenerEntry(listener, normalizedChangeMask);
+    final entry = _ListenerEntry(listener, normalizedChangeTypes);
     _listeners[listener] = entry;
 
     return () => unregister(listener);
@@ -74,23 +64,23 @@ class ListenerRegistry {
     }
 
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-    final stateChangeMask = _computeChangeMask(previous, next);
-    if (stateChangeMask == 0) {
+    final stateChanges = _computeChanges(previous, next);
+    if (stateChanges.isEmpty) {
       return;
     }
-    _notifyEntries(entriesSnapshot, next, stateChangeMask: stateChangeMask);
+    _notifyEntries(entriesSnapshot, next, stateChanges: stateChanges);
   }
 
   void _notifyEntries(
     List<_ListenerEntry> entries,
     DrawState next, {
-    required int stateChangeMask,
+    required Set<DrawStateChange> stateChanges,
   }) {
     for (final entry in entries) {
       if (!_isCurrentEntry(entry)) {
         continue;
       }
-      if (!entry.matches(stateChangeMask)) {
+      if (!entry.matches(stateChanges)) {
         continue;
       }
       try {
@@ -118,17 +108,11 @@ class ListenerRegistry {
   bool _isCurrentEntry(_ListenerEntry entry) =>
       identical(_listeners[entry.listener], entry);
 
-  int _normalizeChangeMask(Set<DrawStateChange>? value) {
+  Set<DrawStateChange>? _normalizeChangeTypes(Set<DrawStateChange>? value) {
     if (value == null || value.isEmpty) {
-      return _allChangeMask;
+      return null;
     }
-
-    var mask = 0;
-    for (final change in value) {
-      mask |= _maskForChange(change);
-    }
-
-    return mask;
+    return Set<DrawStateChange>.unmodifiable(value);
   }
 }
 
@@ -136,31 +120,42 @@ class ListenerRegistry {
 ///
 /// Internal class that stores a listener and its normalized change mask.
 class _ListenerEntry {
-  _ListenerEntry(this.listener, this.changeMask);
+  _ListenerEntry(this.listener, this.changeTypes);
   final StateChangeListener<DrawState> listener;
-  final int changeMask;
+  final Set<DrawStateChange>? changeTypes;
 
-  /// Returns true when this listener should receive the current change mask.
-  bool matches(int stateChangeMask) => (changeMask & stateChangeMask) != 0;
+  /// Returns true when this listener should receive the current changes.
+  bool matches(Set<DrawStateChange> stateChanges) {
+    final interested = changeTypes;
+    if (interested == null) {
+      return true;
+    }
+    for (final change in stateChanges) {
+      if (interested.contains(change)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
-int _computeChangeMask(DrawState previous, DrawState next) {
-  var mask = 0;
+Set<DrawStateChange> _computeChanges(DrawState previous, DrawState next) {
+  final changes = <DrawStateChange>{};
 
   if (_documentChanged(previous, next)) {
-    mask |= _documentChangeMask;
+    changes.add(DrawStateChange.document);
   }
   if (_selectionChanged(previous, next)) {
-    mask |= _selectionChangeMask;
+    changes.add(DrawStateChange.selection);
   }
   if (_viewChanged(previous, next)) {
-    mask |= _viewChangeMask;
+    changes.add(DrawStateChange.view);
   }
   if (_interactionChanged(previous, next)) {
-    mask |= _interactionChangeMask;
+    changes.add(DrawStateChange.interaction);
   }
 
-  return mask;
+  return changes;
 }
 
 bool _documentChanged(DrawState previous, DrawState next) {
@@ -216,10 +211,3 @@ bool _textEditingChanged(TextEditingState previous, TextEditingState next) =>
     previous.initialCursorPosition != next.initialCursorPosition ||
     !identical(previous.draftData, next.draftData) ||
     previous.rect != next.rect;
-
-int _maskForChange(DrawStateChange change) => switch (change) {
-  DrawStateChange.document => _documentChangeMask,
-  DrawStateChange.selection => _selectionChangeMask,
-  DrawStateChange.view => _viewChangeMask,
-  DrawStateChange.interaction => _interactionChangeMask,
-};
