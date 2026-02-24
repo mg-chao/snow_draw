@@ -31,10 +31,7 @@ class PluginRegistry {
     }
 
     await plugin.onLoad(_context);
-    _plugins.add(plugin);
-    _pluginMap[plugin.id] = plugin;
-    _isSorted = false;
-    _eventTypeIndexDirty = true;
+    _registerLoadedPlugins([plugin]);
   }
 
   /// Register plugins in batch.
@@ -51,20 +48,15 @@ class PluginRegistry {
         await plugin.onLoad(_context);
         loadedPlugins.add(plugin);
       } on Object {
-        await _rollbackPlugin(plugin);
-        for (final loadedPlugin in loadedPlugins.reversed) {
-          await _rollbackPlugin(loadedPlugin);
-        }
+        await _rollbackLoadedPlugins(
+          failedPlugin: plugin,
+          loadedPlugins: loadedPlugins,
+        );
         rethrow;
       }
     }
 
-    _plugins.addAll(plugins);
-    for (final plugin in plugins) {
-      _pluginMap[plugin.id] = plugin;
-    }
-    _isSorted = false;
-    _eventTypeIndexDirty = true;
+    _registerLoadedPlugins(plugins);
   }
 
   /// Unregister a plugin.
@@ -98,48 +90,15 @@ class PluginRegistry {
 
     PluginResult? finalResult;
     try {
-      if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
-        finalResult = const PluginResult.handled(
-          message: 'Intercepted by before hook',
-        );
-      } else {
-        for (var i = 0; i < pluginsForEvent.length; i += 1) {
-          final plugin = pluginsForEvent[i];
-          final pluginState = i == 0 ? state : _context.state;
-          final canHandle = _safeCanHandle(
-            plugin: plugin,
-            event: event,
-            state: pluginState,
-          );
-          if (!canHandle) {
-            continue;
-          }
-
-          try {
-            final result = await plugin.handleEvent(event);
-            finalResult = result;
-            if (result.shouldStopPropagation) {
-              break;
-            }
-          } on Object catch (e, stackTrace) {
-            _safeLogInputError(
-              message: 'Plugin handleEvent failed',
-              error: e,
-              stackTrace: stackTrace,
-              metadata: {
-                'plugin': plugin.name,
-                'event': event.runtimeType.toString(),
-              },
-            );
-            // Continue with the next plugin.
-          }
-        }
-      }
-
-      return finalResult;
+      finalResult = await _dispatchToPlugins(
+        event: event,
+        state: state,
+        pluginsForEvent: pluginsForEvent,
+      );
     } finally {
       await _runAfterHooks(event, finalResult, pluginsForEvent);
     }
+    return finalResult;
   }
 
   /// Reset all plugins.
@@ -232,6 +191,60 @@ class PluginRegistry {
     }
   }
 
+  Future<void> _rollbackLoadedPlugins({
+    required InputPlugin failedPlugin,
+    required List<InputPlugin> loadedPlugins,
+  }) async {
+    await _rollbackPlugin(failedPlugin);
+    for (final loadedPlugin in loadedPlugins.reversed) {
+      await _rollbackPlugin(loadedPlugin);
+    }
+  }
+
+  Future<PluginResult?> _dispatchToPlugins({
+    required InputEvent event,
+    required DrawState state,
+    required List<InputPlugin> pluginsForEvent,
+  }) async {
+    if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
+      return const PluginResult.handled(message: 'Intercepted by before hook');
+    }
+
+    PluginResult? finalResult;
+    for (var i = 0; i < pluginsForEvent.length; i += 1) {
+      final plugin = pluginsForEvent[i];
+      final pluginState = i == 0 ? state : _context.state;
+      final canHandle = _safeCanHandle(
+        plugin: plugin,
+        event: event,
+        state: pluginState,
+      );
+      if (!canHandle) {
+        continue;
+      }
+
+      try {
+        final result = await plugin.handleEvent(event);
+        finalResult = result;
+        if (result.shouldStopPropagation) {
+          break;
+        }
+      } on Object catch (e, stackTrace) {
+        _safeLogInputError(
+          message: 'Plugin handleEvent failed',
+          error: e,
+          stackTrace: stackTrace,
+          metadata: {
+            'plugin': plugin.name,
+            'event': event.runtimeType.toString(),
+          },
+        );
+        // Continue with the next plugin.
+      }
+    }
+    return finalResult;
+  }
+
   Future<bool> _isInterceptedByBeforeHooks(
     InputEvent event,
     List<InputPlugin> pluginsForEvent,
@@ -310,6 +323,19 @@ class PluginRegistry {
     } on Object {
       // Ignore logging failures so input dispatch remains resilient.
     }
+  }
+
+  void _registerLoadedPlugins(Iterable<InputPlugin> plugins) {
+    for (final plugin in plugins) {
+      _plugins.add(plugin);
+      _pluginMap[plugin.id] = plugin;
+    }
+    _markPluginGraphDirty();
+  }
+
+  void _markPluginGraphDirty() {
+    _isSorted = false;
+    _eventTypeIndexDirty = true;
   }
 
   /// Get plugin statistics.

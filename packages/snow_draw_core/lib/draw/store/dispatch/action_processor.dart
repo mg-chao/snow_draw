@@ -228,18 +228,20 @@ class ActionProcessor {
     return switch (action) {
       CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
       StartEdit _ || EditIntentAction _ => EditCancelReason.newEditStarted,
-      Undo _ =>
-        _services.historyManager.canUndo
-            ? EditCancelReason.conflictingAction
-            : null,
-      Redo _ =>
-        _services.historyManager.canRedo
+      Undo _ || Redo _ =>
+        _hasConflictingHistoryNavigation(action)
             ? EditCancelReason.conflictingAction
             : null,
       _ =>
         action.conflictsWithEditing ? EditCancelReason.conflictingAction : null,
     };
   }
+
+  bool _hasConflictingHistoryNavigation(DrawAction action) => switch (action) {
+    Undo _ => _services.historyManager.canUndo,
+    Redo _ => _services.historyManager.canRedo,
+    _ => false,
+  };
 
   void _commit({
     required DispatchContext initialContext,
