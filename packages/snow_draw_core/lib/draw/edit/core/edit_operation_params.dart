@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../../config/draw_config.dart';
 import '../../elements/types/arrow/arrow_points.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
@@ -22,34 +23,28 @@ final class ResizeOperationParams extends EditOperationParams {
   const ResizeOperationParams({
     required this.resizeMode,
     this.handleOffset,
-    this.selectionPadding,
+    this.selectionPadding = 0,
     super.initialSelectionBounds,
-  }) : assert(
-         selectionPadding == null || selectionPadding >= 0,
-         'selectionPadding must be non-negative',
-       );
+  }) : assert(selectionPadding >= 0, 'selectionPadding must be non-negative');
 
   final ResizeMode resizeMode;
 
   final DrawPoint? handleOffset;
 
-  final double? selectionPadding;
+  final double selectionPadding;
 }
 
 @immutable
 final class RotateOperationParams extends EditOperationParams {
   const RotateOperationParams({
     this.startRotationAngle,
-    this.rotationSnapAngle,
+    this.rotationSnapAngle = ConfigDefaults.rotationSnapAngle,
     super.initialSelectionBounds,
-  }) : assert(
-         rotationSnapAngle == null || rotationSnapAngle >= 0,
-         'rotationSnapAngle must be non-negative',
-       );
+  }) : assert(rotationSnapAngle >= 0, 'rotationSnapAngle must be non-negative');
 
   final double? startRotationAngle;
 
-  final double? rotationSnapAngle;
+  final double rotationSnapAngle;
 }
 
 @immutable

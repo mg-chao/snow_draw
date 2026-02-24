@@ -1,7 +1,4 @@
 import '../../../actions/draw_actions.dart';
-import '../../../config/draw_config.dart';
-import '../../../core/dependency_interfaces.dart';
-import '../../../edit/core/edit_operation_params.dart';
 import '../../../edit/core/edit_session_id_generator.dart';
 import '../../../edit/core/edit_session_service.dart';
 import '../../../models/draw_state.dart';
@@ -13,14 +10,12 @@ import '../interaction_transition.dart';
 InteractionTransition? reduceEditState({
   required DrawState state,
   required DrawAction action,
-  required InteractionReducerDeps context,
   required EditSessionService editSessionService,
   required EditSessionIdGenerator sessionIdGenerator,
 }) => switch (action) {
   final StartEdit a => _reduceStartEdit(
     action: a,
     state: state,
-    context: context,
     editSessionService: editSessionService,
     sessionIdGenerator: sessionIdGenerator,
   ),
@@ -43,7 +38,6 @@ InteractionTransition? reduceEditState({
 InteractionTransition _reduceStartEdit({
   required StartEdit action,
   required DrawState state,
-  required InteractionReducerDeps context,
   required EditSessionService editSessionService,
   required EditSessionIdGenerator sessionIdGenerator,
 }) {
@@ -51,7 +45,7 @@ InteractionTransition _reduceStartEdit({
     state: state,
     operationId: action.operationId,
     position: action.position,
-    params: _injectParams(action.params, context.config),
+    params: action.params,
     sessionId: sessionIdGenerator(),
   );
   return InteractionTransition(nextState: start.state);
@@ -85,21 +79,3 @@ InteractionTransition _reduceCancelEdit({
   final cancel = editSessionService.cancel(state: state);
   return InteractionTransition(nextState: cancel.state);
 }
-
-EditOperationParams _injectParams(
-  EditOperationParams params,
-  DrawConfig config,
-) => switch (params) {
-  final RotateOperationParams p => RotateOperationParams(
-    startRotationAngle: p.startRotationAngle,
-    rotationSnapAngle: p.rotationSnapAngle ?? ConfigDefaults.rotationSnapAngle,
-    initialSelectionBounds: p.initialSelectionBounds,
-  ),
-  final ResizeOperationParams p => ResizeOperationParams(
-    resizeMode: p.resizeMode,
-    handleOffset: p.handleOffset,
-    selectionPadding: p.selectionPadding ?? config.selection.padding,
-    initialSelectionBounds: p.initialSelectionBounds,
-  ),
-  _ => params,
-};

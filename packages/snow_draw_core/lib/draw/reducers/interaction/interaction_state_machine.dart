@@ -36,7 +36,6 @@ class InteractionStateMachine {
     final editResult = reduceEditState(
       state: state,
       action: action,
-      context: context,
       editSessionService: editSessionService,
       sessionIdGenerator: sessionIdGenerator,
     );

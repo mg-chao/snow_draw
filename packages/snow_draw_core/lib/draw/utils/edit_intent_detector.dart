@@ -220,9 +220,9 @@ final class StartMoveIntent extends EditIntent {
 }
 
 final class StartResizeIntent extends EditIntent {
-  const StartResizeIntent({required this.mode, this.selectionPadding});
+  const StartResizeIntent({required this.mode, required this.selectionPadding});
   final ResizeMode mode;
-  final double? selectionPadding;
+  final double selectionPadding;
 
   @override
   String toString() =>

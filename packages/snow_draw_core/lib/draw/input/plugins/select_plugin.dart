@@ -1,5 +1,4 @@
 import '../../actions/draw_actions.dart';
-import '../../edit/core/edit_modifiers.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -97,8 +96,6 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    final editModifiers = modifiers.toEditModifiers();
-
     if (intent is StartArrowPointIntent) {
       final now = DateTime.now();
       final data = _arrowDataForElement(stateView, intent.elementId);
@@ -128,7 +125,7 @@ class SelectPlugin extends DrawInputPlugin {
             pointIndex: intent.pointIndex,
             isDoubleClick: true,
           );
-          await _executeIntent(doubleClickIntent, position, editModifiers);
+          await _executeIntent(doubleClickIntent, position);
           return handled(
             message: handle.isFixed
                 ? 'Arrow segment released'
@@ -162,7 +159,7 @@ class SelectPlugin extends DrawInputPlugin {
       return handled(message: 'Pending select');
     }
 
-    await _executeIntent(intent, position, editModifiers);
+    await _executeIntent(intent, position);
     return handled(message: 'Selection handled');
   }
 
@@ -199,7 +196,6 @@ class SelectPlugin extends DrawInputPlugin {
             addToSelection: addToSelection,
           ),
           position: pointerDownPosition,
-          modifiers: event.modifiers.toEditModifiers(),
         );
         if (didStart) {
           await _updateEditFromEvent(event);
@@ -242,11 +238,7 @@ class SelectPlugin extends DrawInputPlugin {
     return unhandled();
   }
 
-  Future<void> _executeIntent(
-    EditIntent intent,
-    DrawPoint position,
-    EditModifiers modifiers,
-  ) async {
+  Future<void> _executeIntent(EditIntent intent, DrawPoint position) async {
     switch (intent) {
       case SelectIntent():
         await dispatch(
@@ -289,11 +281,7 @@ class SelectPlugin extends DrawInputPlugin {
         await dispatch(const ClearSelection());
         return;
       default:
-        await _dispatchMappedStartEdit(
-          intent: intent,
-          position: position,
-          modifiers: modifiers,
-        );
+        await _dispatchMappedStartEdit(intent: intent, position: position);
         return;
     }
   }
@@ -301,13 +289,8 @@ class SelectPlugin extends DrawInputPlugin {
   Future<bool> _dispatchStartEditForIntent({
     required EditIntent intent,
     required DrawPoint position,
-    required EditModifiers modifiers,
   }) async {
-    final startEdit = _mapToStartEdit(
-      intent: intent,
-      position: position,
-      modifiers: modifiers,
-    );
+    final startEdit = _mapToStartEdit(intent: intent, position: position);
     if (startEdit == null) {
       return false;
     }
@@ -320,13 +303,8 @@ class SelectPlugin extends DrawInputPlugin {
   Future<void> _dispatchMappedStartEdit({
     required EditIntent intent,
     required DrawPoint position,
-    required EditModifiers modifiers,
   }) async {
-    final startEdit = _mapToStartEdit(
-      intent: intent,
-      position: position,
-      modifiers: modifiers,
-    );
+    final startEdit = _mapToStartEdit(intent: intent, position: position);
     if (startEdit == null) {
       return;
     }
@@ -336,11 +314,10 @@ class SelectPlugin extends DrawInputPlugin {
   StartEdit? _mapToStartEdit({
     required EditIntent intent,
     required DrawPoint position,
-    required EditModifiers modifiers,
   }) => drawContext.editIntentMapper.mapToStartEdit(
     intent: intent,
     position: position,
-    modifiers: modifiers,
+    config: drawContext.config,
     editOperations: drawContext.editOperations,
   );
 

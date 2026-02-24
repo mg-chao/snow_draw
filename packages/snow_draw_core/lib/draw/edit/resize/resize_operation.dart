@@ -108,7 +108,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       resizeMode: typedParams.resizeMode,
       handleOffset: handleOffset,
       rotation: rotation,
-      selectionPadding: typedParams.selectionPadding ?? 0.0,
+      selectionPadding: typedParams.selectionPadding,
       elementSnapshots: data.elementSnapshots,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
@@ -317,7 +317,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     final handlePosition = HandleCalculator.getResizeHandlePosition(
       bounds: startBounds,
       mode: params.resizeMode,
-      padding: params.selectionPadding ?? 0.0,
+      padding: params.selectionPadding,
     );
     return DrawPoint(
       x: handlePosition.x - localPointerPosition.x,

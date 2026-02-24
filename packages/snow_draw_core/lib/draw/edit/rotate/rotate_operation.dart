@@ -78,7 +78,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       elementsVersion: data.elementsVersion,
       startAngle: startAngle,
       baseRotation: baseRotation,
-      rotationSnapAngle: typedParams.rotationSnapAngle ?? 0.0,
+      rotationSnapAngle: typedParams.rotationSnapAngle,
       elementSnapshots: data.elementSnapshots,
     );
   }
