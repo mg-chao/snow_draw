@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../../../config/draw_config.dart';
+import '../../../services/text/text_layout_constraints.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -223,7 +224,7 @@ SerialNumberTextLayout layoutSerialNumberText({
   TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
   final sanitizedFamily = normalizeOptionalTrimmedString(data.fontFamily);
-  final resolvedLocaleTag = _normalizeLocaleTag(localeTag);
+  final resolvedLocaleTag = normalizeOptionalTrimmedString(localeTag);
   final fontScale = _resolveSerialNumberFontScale(data.fontSize);
   final geometryKey = _TextGeometryKey(
     number: data.number,
@@ -244,6 +245,7 @@ SerialNumberTextLayout layoutSerialNumberText({
     _textGeometryBuildCount += 1;
     return _buildTextGeometry(
       data: data,
+      fontFamily: sanitizedFamily,
       localeTag: resolvedLocaleTag,
       textMetricsService: textMetricsService,
     );
@@ -325,6 +327,7 @@ SerialNumberVisualBounds? _scaleVisualBounds(
 
 _TextGeometry _buildTextGeometry({
   required SerialNumberData data,
+  required String? fontFamily,
   required String? localeTag,
   required TextMetricsService textMetricsService,
 }) {
@@ -333,7 +336,7 @@ _TextGeometry _buildTextGeometry({
       data: TextData(
         text: data.number.toString(),
         fontSize: _canonicalSerialNumberFontSize,
-        fontFamily: normalizeOptionalTrimmedString(data.fontFamily),
+        fontFamily: fontFamily,
         horizontalAlign: TextHorizontalAlign.center,
       ),
       maxWidth: double.infinity,
@@ -341,9 +344,9 @@ _TextGeometry _buildTextGeometry({
     ),
   );
 
-  final width = _sanitizeExtent(metrics.width, fallback: 1);
-  final lineHeight = _sanitizeExtent(metrics.lineHeight, fallback: 1);
-  final height = _sanitizeExtent(metrics.height, fallback: lineHeight);
+  final width = sanitizePositiveExtent(metrics.width, fallback: 1);
+  final lineHeight = sanitizePositiveExtent(metrics.lineHeight, fallback: 1);
+  final height = sanitizePositiveExtent(metrics.height, fallback: lineHeight);
 
   return _TextGeometry(
     size: SerialNumberLayoutSize(width: width, height: height),
@@ -369,13 +372,6 @@ double _resolveSerialNumberFontScale(double fontSize) {
 }
 
 bool _doubleEquals(double a, double b) => (a - b).abs() <= 0.0001;
-
-double _sanitizeExtent(double value, {required double fallback}) {
-  if (value.isFinite && value > 0) {
-    return value;
-  }
-  return fallback;
-}
 
 double resolveSerialNumberDiameter({
   required SerialNumberData data,
@@ -428,15 +424,4 @@ DrawRect resolveSerialNumberRect({
     maxX: origin.x + diameter,
     maxY: origin.y + diameter,
   );
-}
-
-String? _normalizeLocaleTag(String? localeTag) {
-  if (localeTag == null || localeTag.isEmpty) {
-    return null;
-  }
-  final normalized = localeTag.trim();
-  if (normalized.isEmpty) {
-    return null;
-  }
-  return normalized;
 }

@@ -16,6 +16,16 @@ import 'edit_operation.dart';
 import 'edit_operation_params.dart';
 import 'edit_result_unified.dart';
 
+typedef _RestoredSession = ({
+  EditOperation operation,
+  EditingState editingState,
+});
+
+typedef _SessionRestoreResult = ({
+  _RestoredSession? session,
+  EditFailureReason? failureReason,
+});
+
 /// Edit action pipeline (route A): keep store-side session handling,
 /// but centralize the orchestration into a small, testable service.
 @immutable
@@ -302,7 +312,7 @@ class EditSessionService {
       _log?.error('Edit session restore failed', null, null, {
         'reason': 'not_editing',
       });
-      return const _SessionRestoreResult.failure(EditFailureReason.notEditing);
+      return (session: null, failureReason: EditFailureReason.notEditing);
     }
 
     final operation = editOperations.getOperation(interaction.operationId);
@@ -311,8 +321,9 @@ class EditSessionService {
         'operationId': interaction.operationId,
         'reason': 'unknown_operation',
       });
-      return const _SessionRestoreResult.failure(
-        EditFailureReason.unknownOperationId,
+      return (
+        session: null,
+        failureReason: EditFailureReason.unknownOperationId,
       );
     }
 
@@ -322,7 +333,7 @@ class EditSessionService {
         currentState: state,
       );
       if (versionConflict case final reason?) {
-        return _SessionRestoreResult.failure(reason);
+        return (session: null, failureReason: reason);
       }
     }
 
@@ -330,8 +341,9 @@ class EditSessionService {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
-    return _SessionRestoreResult.success(
-      _RestoredSession(operation: operation, editingState: interaction),
+    return (
+      session: (operation: operation, editingState: interaction),
+      failureReason: null,
     );
   }
 
@@ -364,20 +376,4 @@ class EditSessionService {
     }
     return null;
   }
-}
-
-class _RestoredSession {
-  const _RestoredSession({required this.operation, required this.editingState});
-
-  final EditOperation operation;
-  final EditingState editingState;
-}
-
-class _SessionRestoreResult {
-  const _SessionRestoreResult.success(this.session) : failureReason = null;
-
-  const _SessionRestoreResult.failure(this.failureReason) : session = null;
-
-  final _RestoredSession? session;
-  final EditFailureReason? failureReason;
 }

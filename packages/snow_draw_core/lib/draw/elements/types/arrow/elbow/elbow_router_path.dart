@@ -565,8 +565,11 @@ List<DrawPoint> _ensureOrthogonalPath({
 // Sparse grid routing (merged from elbow_router_grid.dart)
 // ---------------------------------------------------------------------------
 
-/// Forces grid routing to fail so fallback paths can be exercised in tests.
+/// Legacy test hook retained as a no-op.
+///
+/// Grid routing no longer has a force-fail branch.
 @visibleForTesting
+@Deprecated('No effect. Grid routing no longer supports forced failure.')
 var elbowForceGridFailure = false;
 
 @immutable
@@ -853,9 +856,6 @@ List<_ElbowGridNode>? _tryRouteGridPath({
   required DrawPoint endExit,
   required List<DrawRect> obstacles,
 }) {
-  if (elbowForceGridFailure) {
-    return null;
-  }
   final startNode = grid.nodeForPoint(startExit);
   final endNode = grid.nodeForPoint(endExit);
   if (startNode == null || endNode == null) {

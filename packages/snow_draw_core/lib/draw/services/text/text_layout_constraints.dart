@@ -8,3 +8,11 @@ double resolveTextMaxWidth(double maxWidth) {
   }
   return maxWidth;
 }
+
+/// Returns [value] when it is finite and positive, otherwise [fallback].
+double sanitizePositiveExtent(double value, {required double fallback}) {
+  if (value.isFinite && value > 0) {
+    return value;
+  }
+  return fallback;
+}
