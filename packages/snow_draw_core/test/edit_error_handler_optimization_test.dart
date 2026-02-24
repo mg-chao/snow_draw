@@ -1,7 +1,6 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_error_handler.dart';
-import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_result_unified.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
 import 'package:snow_draw_core/draw/edit/edit_operations.dart';
@@ -23,10 +22,15 @@ void main() {
     test('toIdle policy keeps identity when state is already idle', () {
       final state = DrawState.initial();
 
-      final next = EditErrorHandler.computeNextState(
-        state,
-        ErrorStatePolicy.toIdle,
-      );
+      final next = EditErrorHandler.computeNextState(state, keepState: false);
+
+      expect(identical(next, state), isTrue);
+    });
+
+    test('keepState branch keeps identity', () {
+      final state = DrawState.initial();
+
+      final next = EditErrorHandler.computeNextState(state, keepState: true);
 
       expect(identical(next, state), isTrue);
     });
@@ -56,12 +60,11 @@ void main() {
       },
     );
 
-    test('update with keepState policy still preserves identity', () {
+    test('update when not editing preserves identity', () {
       final state = DrawState.initial();
       final outcome = createService().update(
         state: state,
         currentPosition: DrawPoint.zero,
-        failurePolicy: EditUpdateFailurePolicy.keepState,
       );
 
       expectNotEditingNoOp(outcome, state);

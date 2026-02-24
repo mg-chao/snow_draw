@@ -5,21 +5,6 @@ import '../../types/edit_operation_id.dart';
 import 'edit_errors.dart';
 import 'edit_result_unified.dart';
 
-/// State transition policy when an edit error occurs.
-enum ErrorStatePolicy { toIdle, keepState }
-
-/// Configuration for error handling behavior.
-class EditErrorHandlerConfig {
-  const EditErrorHandlerConfig({this.statePolicy = ErrorStatePolicy.toIdle});
-  final ErrorStatePolicy statePolicy;
-
-  static const toIdle = EditErrorHandlerConfig();
-
-  static const keepState = EditErrorHandlerConfig(
-    statePolicy: ErrorStatePolicy.keepState,
-  );
-}
-
 /// Centralized edit error handling utilities.
 class EditErrorHandler {
   const EditErrorHandler._();
@@ -34,8 +19,11 @@ class EditErrorHandler {
     return null;
   }
 
-  static DrawState computeNextState(DrawState state, ErrorStatePolicy policy) {
-    if (policy == ErrorStatePolicy.keepState) {
+  static DrawState computeNextState(
+    DrawState state, {
+    required bool keepState,
+  }) {
+    if (keepState) {
       return state;
     }
 
@@ -49,11 +37,11 @@ class EditErrorHandler {
 
   static EditOutcome createFailure({
     required DrawState state,
-    required EditErrorHandlerConfig config,
     required EditFailureReason reason,
     EditOperationId? operationId,
+    bool keepState = false,
   }) => (
-    state: computeNextState(state, config.statePolicy),
+    state: computeNextState(state, keepState: keepState),
     failureReason: reason,
     operationId: operationId ?? extractOperationId(state),
   );
@@ -95,8 +83,8 @@ class EditErrorHandler {
   /// Executes [operation] and converts thrown errors to [EditOutcome].
   static EditOutcome runWithErrorHandling({
     required DrawState state,
-    required EditErrorHandlerConfig config,
     required EditOutcome Function() operation,
+    bool keepStateOnFailure = false,
     EditOperationId? fallbackOperationId,
     String? operationName,
     ModuleLogger? log,
@@ -106,9 +94,9 @@ class EditErrorHandler {
     } on EditError catch (error, _) {
       return createFailure(
         state: state,
-        config: config,
         reason: mapExceptionToReason(error),
         operationId: fallbackOperationId,
+        keepState: keepStateOnFailure,
       );
     } on Object catch (error, stackTrace) {
       _logUnexpectedError(
@@ -120,9 +108,9 @@ class EditErrorHandler {
       );
       return createFailure(
         state: state,
-        config: config,
         reason: mapExceptionToReason(error),
         operationId: fallbackOperationId,
+        keepState: keepStateOnFailure,
       );
     }
   }

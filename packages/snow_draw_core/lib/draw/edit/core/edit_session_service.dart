@@ -71,7 +71,7 @@ class EditSessionService {
 
     return EditErrorHandler.runWithErrorHandling(
       state: state,
-      config: EditErrorHandlerConfig.keepState,
+      keepStateOnFailure: true,
       fallbackOperationId: operationId,
       operationName: 'startEdit',
       log: _log,
@@ -90,10 +90,8 @@ class EditSessionService {
     required DrawState state,
     required DrawPoint currentPosition,
     EditModifiers modifiers = const EditModifiers(),
-    EditUpdateFailurePolicy failurePolicy = EditUpdateFailurePolicy.toIdle,
   }) => _withRestoredSession(
     state: state,
-    config: _toErrorConfig(failurePolicy),
     operationName: 'updateEdit',
     validateVersions: true,
     action: (restored) => _performUpdate(
@@ -107,7 +105,6 @@ class EditSessionService {
 
   EditOutcome finish({required DrawState state}) => _withRestoredSession(
     state: state,
-    config: EditErrorHandlerConfig.toIdle,
     operationName: 'finishEdit',
     validateVersions: true,
     action: (restored) => _performFinish(
@@ -119,7 +116,6 @@ class EditSessionService {
 
   EditOutcome cancel({required DrawState state}) => _withRestoredSession(
     state: state,
-    config: EditErrorHandlerConfig.toIdle,
     operationName: 'cancelEdit',
     action: (restored) => _performCancel(
       state: state,
@@ -130,7 +126,6 @@ class EditSessionService {
 
   EditOutcome _withRestoredSession({
     required DrawState state,
-    required EditErrorHandlerConfig config,
     required String operationName,
     required EditOutcome Function(
       ({EditOperation operation, EditingState editingState}) restored,
@@ -139,7 +134,6 @@ class EditSessionService {
     bool validateVersions = false,
   }) => EditErrorHandler.runWithErrorHandling(
     state: state,
-    config: config,
     operationName: operationName,
     log: _log,
     operation: () {
@@ -161,12 +155,6 @@ class EditSessionService {
         textMetricsService: textMetricsService,
         action: action,
       );
-
-  EditErrorHandlerConfig _toErrorConfig(EditUpdateFailurePolicy policy) =>
-      switch (policy) {
-        EditUpdateFailurePolicy.toIdle => EditErrorHandlerConfig.toIdle,
-        EditUpdateFailurePolicy.keepState => EditErrorHandlerConfig.keepState,
-      };
 
   EditOutcome _performStart({
     required DrawState state,

@@ -4,7 +4,6 @@ import '../../../actions/draw_actions.dart';
 import '../../../core/dependency_interfaces.dart';
 import '../../../edit/core/edit_config.dart';
 import '../../../edit/core/edit_event_factory.dart';
-import '../../../edit/core/edit_modifiers.dart';
 import '../../../edit/core/edit_operation_params.dart';
 import '../../../edit/core/edit_result_unified.dart';
 import '../../../edit/core/edit_session_id_generator.dart';
@@ -22,11 +21,9 @@ class EditStateReducer {
   const EditStateReducer({
     required this.editSessionService,
     required this.sessionIdGenerator,
-    this.updateFailurePolicy = EditUpdateFailurePolicy.toIdle,
   });
   final EditSessionService editSessionService;
   final EditSessionIdGenerator sessionIdGenerator;
-  final EditUpdateFailurePolicy updateFailurePolicy;
 
   /// Try to handle edit-related actions.
   ///
@@ -90,7 +87,6 @@ class EditStateReducer {
       state: state,
       currentPosition: action.currentPosition,
       modifiers: action.modifiers,
-      failurePolicy: updateFailurePolicy,
     );
     final reason = update.failureReason;
     return InteractionTransition(

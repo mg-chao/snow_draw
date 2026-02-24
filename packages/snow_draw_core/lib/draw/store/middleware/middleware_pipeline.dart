@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:meta/meta.dart';
 
 import 'error_handling.dart';
@@ -86,17 +84,7 @@ class MiddlewarePipeline {
       }
       nextCalled = true;
       nextInputContext = nextContext;
-      final completer = Completer<DispatchContext>();
-      unawaited(() async {
-        try {
-          completer.complete(
-            await _executeFromIndex(context: nextContext, index: index + 1),
-          );
-        } on Object catch (error, stackTrace) {
-          completer.completeError(error, stackTrace);
-        }
-      }());
-      final future = completer.future;
+      final future = _executeFromIndex(context: nextContext, index: index + 1);
       downstreamFuture = future;
       return future;
     }
@@ -117,10 +105,9 @@ class MiddlewarePipeline {
             context: downstreamContext,
             middleware: middleware,
           );
-          if (nextCalled || skipped.shouldStop || skipped.hasError) {
-            return skipped;
-          }
-          return _executeFromIndex(context: skipped, index: index + 1);
+          return (nextCalled || skipped.shouldStop || skipped.hasError)
+              ? skipped
+              : _executeFromIndex(context: skipped, index: index + 1);
         case RecoveryAction.stop:
           return downstreamContext.withError(
             error,

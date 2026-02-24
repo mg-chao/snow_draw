@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
-import '../../edit/core/edit_modifiers.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
@@ -34,8 +33,6 @@ class InteractionStateMachine {
     required InteractionReducerDeps context,
     required EditSessionService editSessionService,
     required EditSessionIdGenerator sessionIdGenerator,
-    EditUpdateFailurePolicy updateFailurePolicy =
-        EditUpdateFailurePolicy.toIdle,
   }) {
     final resolvedAction = _resolveEditIntentAction(action, context);
     if (resolvedAction == null) {
@@ -46,7 +43,6 @@ class InteractionStateMachine {
     final editReducer = EditStateReducer(
       editSessionService: editSessionService,
       sessionIdGenerator: sessionIdGenerator,
-      updateFailurePolicy: updateFailurePolicy,
     );
 
     final editResult = editReducer.reduce(
