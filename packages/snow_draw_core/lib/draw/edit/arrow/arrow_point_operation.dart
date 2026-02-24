@@ -26,6 +26,7 @@ import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_style.dart';
+import '../../utils/arrow_point_metrics.dart';
 import '../../utils/camera_zoom.dart';
 import '../../utils/combined_element_lookup.dart';
 import '../../utils/list_equality.dart';
@@ -607,9 +608,8 @@ _ArrowPointComputation _compute({
     distance: config.selection.interaction.handleTolerance,
     zoom: state.application.view.camera.zoom,
   );
-  final addThreshold = handleTolerance;
-  final deleteThreshold = handleTolerance;
-  final loopThreshold = handleTolerance * 1.5;
+  final thresholdSquared = handleTolerance * handleTolerance;
+  final loopThreshold = resolveArrowPointLoopThreshold(handleTolerance);
   final baseFixedSegmentsResult = baseFixedSegments.isEmpty
       ? null
       : baseFixedSegments;
@@ -647,7 +647,7 @@ _ArrowPointComputation _compute({
     }
     if (!nextDidInsert) {
       final distanceSq = currentPosition.distanceSquared(context.startPosition);
-      if (distanceSq >= addThreshold * addThreshold) {
+      if (distanceSq >= thresholdSquared) {
         nextDidInsert = true;
       } else {
         return _noOpComputation(
@@ -734,10 +734,8 @@ _ArrowPointComputation _compute({
     final targetPoint = updatedPoints[activeIndex];
     final prev = updatedPoints[activeIndex - 1];
     final next = updatedPoints[activeIndex + 1];
-    if (targetPoint.distanceSquared(prev) <=
-            deleteThreshold * deleteThreshold ||
-        targetPoint.distanceSquared(next) <=
-            deleteThreshold * deleteThreshold) {
+    if (targetPoint.distanceSquared(prev) <= thresholdSquared ||
+        targetPoint.distanceSquared(next) <= thresholdSquared) {
       shouldDelete = true;
     }
   }

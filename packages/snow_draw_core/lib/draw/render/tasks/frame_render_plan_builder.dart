@@ -8,6 +8,7 @@ import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../types/draw_rect.dart';
 import '../../utils/arrow_binding_highlight.dart';
+import '../../utils/arrow_point_metrics.dart';
 import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/camera_zoom.dart';
 import '../../utils/selection_calculator.dart';
@@ -199,11 +200,10 @@ class FrameRenderPlanBuilder {
     if (selectionConfig != null && singleSelection.arrowData != null) {
       final handleTolerance =
           selectionConfig.interaction.handleTolerance / effectiveScale;
-      final loopThreshold = handleTolerance * 1.5;
+      final loopThreshold = resolveArrowPointLoopThreshold(handleTolerance);
       final baseHandleSize =
           selectionConfig.render.controlPointSize / effectiveScale;
-      final handleSize =
-          baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
+      final handleSize = resolveArrowPointHandleSize(baseHandleSize);
       final overlay = ArrowPointUtils.buildOverlay(
         element: singleSelectedElement!,
         loopThreshold: loopThreshold,

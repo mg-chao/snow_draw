@@ -7,6 +7,7 @@ import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
 import '../types/draw_point.dart';
 import '../types/resize_mode.dart';
+import 'arrow_point_metrics.dart';
 import 'hit_test.dart';
 
 /// Edit intent detector.
@@ -158,11 +159,10 @@ class EditIntentDetector {
     }
 
     final hitRadius = config.interaction.handleTolerance;
-    // Apply multiplier for arrow point handles to make them larger
-    final handleSize =
-        config.render.controlPointSize *
-        ConfigDefaults.arrowPointSizeMultiplier;
-    final loopThreshold = hitRadius * 1.5;
+    final handleSize = resolveArrowPointHandleSize(
+      config.render.controlPointSize,
+    );
+    final loopThreshold = resolveArrowPointLoopThreshold(hitRadius);
     final handle = ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,

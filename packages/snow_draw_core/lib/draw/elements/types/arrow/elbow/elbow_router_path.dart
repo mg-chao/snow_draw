@@ -565,13 +565,6 @@ List<DrawPoint> _ensureOrthogonalPath({
 // Sparse grid routing (merged from elbow_router_grid.dart)
 // ---------------------------------------------------------------------------
 
-/// Legacy test hook retained as a no-op.
-///
-/// Grid routing no longer has a force-fail branch.
-@visibleForTesting
-@Deprecated('No effect. Grid routing no longer supports forced failure.')
-var elbowForceGridFailure = false;
-
 @immutable
 final class _ElbowGrid {
   const _ElbowGrid({

@@ -8,15 +8,7 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'elbow_test_utils.dart';
 
 void main() {
-  setUp(() {
-    elbowForceGridFailure = true;
-  });
-
-  tearDown(() {
-    elbowForceGridFailure = false;
-  });
-
-  test('grid fallback respects end heading when start is unbound', () {
+  test('fallback routing respects end heading when start is unbound', () {
     const endRect = DrawRect(minX: 200, minY: 100, maxX: 300, maxY: 200);
     final endElement = elbowRectangleElement(id: 'end', rect: endRect);
 
@@ -35,35 +27,32 @@ void main() {
     _expectApproachFromRight(result.points);
   });
 
-  test(
-    'grid fallback respects both endpoint headings when grid routing fails',
-    () {
-      const startRect = DrawRect(minX: 300, minY: 300, maxX: 400, maxY: 400);
-      const endRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
-      final startElement = elbowRectangleElement(id: 'start', rect: startRect);
-      final endElement = elbowRectangleElement(id: 'end', rect: endRect);
+  test('fallback routing respects both endpoint headings', () {
+    const startRect = DrawRect(minX: 300, minY: 300, maxX: 400, maxY: 400);
+    const endRect = DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200);
+    final startElement = elbowRectangleElement(id: 'start', rect: startRect);
+    final endElement = elbowRectangleElement(id: 'end', rect: endRect);
 
-      final result = routeElbowArrow(
-        start: DrawPoint(x: startRect.centerX, y: startRect.centerY),
-        end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
-        startBinding: const ArrowBinding(
-          elementId: 'start',
-          anchor: DrawPoint(x: 0.5, y: 0),
-        ),
-        endBinding: const ArrowBinding(
-          elementId: 'end',
-          anchor: DrawPoint(x: 1, y: 0.5),
-        ),
-        elementsById: {'start': startElement, 'end': endElement},
-        startArrowhead: ArrowheadStyle.triangle,
-        endArrowhead: ArrowheadStyle.triangle,
-      );
+    final result = routeElbowArrow(
+      start: DrawPoint(x: startRect.centerX, y: startRect.centerY),
+      end: DrawPoint(x: endRect.centerX, y: endRect.centerY),
+      startBinding: const ArrowBinding(
+        elementId: 'start',
+        anchor: DrawPoint(x: 0.5, y: 0),
+      ),
+      endBinding: const ArrowBinding(
+        elementId: 'end',
+        anchor: DrawPoint(x: 1, y: 0.5),
+      ),
+      elementsById: {'start': startElement, 'end': endElement},
+      startArrowhead: ArrowheadStyle.triangle,
+      endArrowhead: ArrowheadStyle.triangle,
+    );
 
-      _expectOrthogonalFallbackPath(result.points);
-      _expectDepartureUpward(result.points);
-      _expectApproachFromRight(result.points);
-    },
-  );
+    _expectOrthogonalFallbackPath(result.points);
+    _expectDepartureUpward(result.points);
+    _expectApproachFromRight(result.points);
+  });
 }
 
 void _expectOrthogonalFallbackPath(List<DrawPoint> points) {
