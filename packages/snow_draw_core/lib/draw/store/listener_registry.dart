@@ -74,20 +74,6 @@ class ListenerRegistry {
     }
 
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-    final hasScopedListeners = entriesSnapshot.any(
-      (entry) => entry.changeMask != _allChangeMask,
-    );
-
-    // Fast path for the common case: listeners subscribe to all tracked
-    // changes.
-    if (!hasScopedListeners) {
-      if (!_hasTrackedChanges(previous, next)) {
-        return;
-      }
-      _notifyEntries(entriesSnapshot, next, stateChangeMask: _allChangeMask);
-      return;
-    }
-
     final stateChangeMask = _computeChangeMask(previous, next);
     if (stateChangeMask == 0) {
       return;
@@ -176,12 +162,6 @@ int _computeChangeMask(DrawState previous, DrawState next) {
 
   return mask;
 }
-
-bool _hasTrackedChanges(DrawState previous, DrawState next) =>
-    _documentChanged(previous, next) ||
-    _selectionChanged(previous, next) ||
-    _viewChanged(previous, next) ||
-    _interactionChanged(previous, next);
 
 bool _documentChanged(DrawState previous, DrawState next) {
   final previousDocument = previous.domain.document;

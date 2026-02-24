@@ -224,7 +224,7 @@ void main() {
         expect(okPlugin.loadCount, 1);
         expect(okPlugin.unloadCount, 1);
         expect(failingPlugin.loadCount, 1);
-        expect(failingPlugin.unloadCount, 1);
+        expect(failingPlugin.unloadCount, 0);
         expect(registry.pluginCount, 0);
         expect(registry.isRegistered('ok'), isFalse);
         expect(registry.isRegistered('failing'), isFalse);
@@ -232,7 +232,7 @@ void main() {
     );
 
     test(
-      'rethrows the original onLoad error when rollback logging also fails',
+      'rethrows the original onLoad error without unloading failed plugin',
       () async {
         final state = DrawState();
         final context = PluginContext(
@@ -260,7 +260,7 @@ void main() {
         );
 
         expect(failingPlugin.loadCount, 1);
-        expect(failingPlugin.unloadCount, 1);
+        expect(failingPlugin.unloadCount, 0);
         expect(registry.pluginCount, 0);
         expect(registry.isRegistered('failing'), isFalse);
       },

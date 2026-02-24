@@ -236,10 +236,7 @@ class PluginRegistry {
       try {
         await plugin.onLoad(_context);
       } on Object {
-        await _rollbackLoadedPlugins(
-          failedPlugin: plugin,
-          loadedPlugins: loadedPlugins,
-        );
+        await _rollbackLoadedPlugins(loadedPlugins: loadedPlugins);
         rethrow;
       }
       loadedPlugins.add(plugin);
@@ -248,10 +245,8 @@ class PluginRegistry {
   }
 
   Future<void> _rollbackLoadedPlugins({
-    required InputPlugin failedPlugin,
     required List<InputPlugin> loadedPlugins,
   }) async {
-    await _rollbackPlugin(failedPlugin);
     for (final loadedPlugin in loadedPlugins.reversed) {
       await _rollbackPlugin(loadedPlugin);
     }

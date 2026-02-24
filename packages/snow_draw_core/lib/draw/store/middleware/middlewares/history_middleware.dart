@@ -196,33 +196,25 @@ class HistoryMiddleware extends MiddlewareBase {
   ) => action.metadata ?? _metadataFromEdit(context);
 
   HistoryMetadata? _metadataFromFinishTextEdit(FinishTextEdit action) {
-    final kind = _resolveFinishTextEditOutcomeKind(action);
-    return switch (kind) {
-      _FinishTextEditOutcomeKind.delete => HistoryMetadata(
+    final hasText = action.text.trim().isNotEmpty;
+    if (!hasText && action.isNew) {
+      return null;
+    }
+
+    return switch ((action.isNew, hasText)) {
+      (false, false) => HistoryMetadata(
         description: 'Delete text',
         recordType: HistoryRecordType.delete,
       ),
-      _FinishTextEditOutcomeKind.create => HistoryMetadata(
+      (true, true) => HistoryMetadata(
         description: 'Create text',
         recordType: HistoryRecordType.create,
       ),
-      _FinishTextEditOutcomeKind.edit => HistoryMetadata(
+      (false, true) => HistoryMetadata(
         description: 'Edit text',
         recordType: HistoryRecordType.edit,
       ),
-      _FinishTextEditOutcomeKind.noop => null,
-    };
-  }
-
-  _FinishTextEditOutcomeKind _resolveFinishTextEditOutcomeKind(
-    FinishTextEdit action,
-  ) {
-    final hasText = action.text.trim().isNotEmpty;
-    return switch ((action.isNew, hasText)) {
-      (true, false) => _FinishTextEditOutcomeKind.noop,
-      (false, false) => _FinishTextEditOutcomeKind.delete,
-      (true, true) => _FinishTextEditOutcomeKind.create,
-      (false, true) => _FinishTextEditOutcomeKind.edit,
+      _ => null,
     };
   }
 
@@ -245,5 +237,3 @@ class HistoryMiddleware extends MiddlewareBase {
     );
   }
 }
-
-enum _FinishTextEditOutcomeKind { create, edit, delete, noop }
