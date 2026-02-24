@@ -24,31 +24,11 @@ DrawState handleUpdateElementsStyle(
   ElementReducerDeps context,
 ) {
   final targetIds = action.elementIds.toSet();
-  if (targetIds.isEmpty) {
+  if (targetIds.isEmpty || !action.hasUpdates) {
     return state;
   }
 
-  final styleUpdate = ElementStyleUpdate(
-    color: action.color,
-    fillColor: action.fillColor,
-    strokeWidth: action.strokeWidth,
-    strokeStyle: action.strokeStyle,
-    fillStyle: action.fillStyle,
-    filterType: action.filterType,
-    filterStrength: action.filterStrength,
-    cornerRadius: action.cornerRadius,
-    arrowType: action.arrowType,
-    startArrowhead: action.startArrowhead,
-    endArrowhead: action.endArrowhead,
-    fontSize: action.fontSize,
-    fontFamily: action.fontFamily,
-    textAlign: action.textAlign,
-    verticalAlign: action.verticalAlign,
-    textStrokeColor: action.textStrokeColor,
-    textStrokeWidth: action.textStrokeWidth,
-    highlightShape: action.highlightShape,
-    serialNumber: action.serialNumber,
-  );
+  final styleUpdate = action.styleUpdate;
 
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;

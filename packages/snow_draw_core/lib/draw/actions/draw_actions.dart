@@ -338,6 +338,38 @@ class UpdateElementsStyle extends DrawAction {
   @override
   final HistoryCoalescing? historyCoalescing;
 
+  /// Style payload applied to style-updatable element data.
+  ///
+  /// Opacity is intentionally excluded because it lives on element state
+  /// rather than element data payloads.
+  ElementStyleUpdate get styleUpdate => ElementStyleUpdate(
+    color: color,
+    fillColor: fillColor,
+    strokeWidth: strokeWidth,
+    strokeStyle: strokeStyle,
+    fillStyle: fillStyle,
+    filterType: filterType,
+    filterStrength: filterStrength,
+    cornerRadius: cornerRadius,
+    arrowType: arrowType,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+    fontSize: fontSize,
+    fontFamily: fontFamily,
+    textAlign: textAlign,
+    verticalAlign: verticalAlign,
+    textStrokeColor: textStrokeColor,
+    textStrokeWidth: textStrokeWidth,
+    highlightShape: highlightShape,
+    serialNumber: serialNumber,
+  );
+
+  /// Whether this action contains any data-payload style updates.
+  bool get hasStyleUpdates => !styleUpdate.isEmpty;
+
+  /// Whether this action has any effective updates (style payload or opacity).
+  bool get hasUpdates => hasStyleUpdates || opacity != null;
+
   @override
   bool get conflictsWithEditing => true;
 

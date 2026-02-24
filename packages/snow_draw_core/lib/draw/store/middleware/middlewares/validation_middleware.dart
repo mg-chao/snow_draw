@@ -139,7 +139,7 @@ ValidationResult _validateUpdateElementsStyle(
       'UpdateElementsStyle requires elementIds',
     );
   }
-  if (!_hasStyleUpdates(update)) {
+  if (!update.hasUpdates) {
     return const ValidationResult.invalid(
       'UpdateElementsStyle has no fields to update',
     );
@@ -212,25 +212,3 @@ ValidationResult _requireElementId(String elementId, String actionName) {
   }
   return const ValidationResult.valid();
 }
-
-bool _hasStyleUpdates(UpdateElementsStyle update) =>
-    update.color != null ||
-    update.fillColor != null ||
-    update.strokeWidth != null ||
-    update.strokeStyle != null ||
-    update.fillStyle != null ||
-    update.filterType != null ||
-    update.filterStrength != null ||
-    update.cornerRadius != null ||
-    update.arrowType != null ||
-    update.startArrowhead != null ||
-    update.endArrowhead != null ||
-    update.fontSize != null ||
-    update.fontFamily != null ||
-    update.textAlign != null ||
-    update.verticalAlign != null ||
-    update.opacity != null ||
-    update.textStrokeColor != null ||
-    update.textStrokeWidth != null ||
-    update.highlightShape != null ||
-    update.serialNumber != null;

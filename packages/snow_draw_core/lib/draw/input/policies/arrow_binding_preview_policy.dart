@@ -1,5 +1,6 @@
 import '../../config/draw_config.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_binding_snapper.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_point.dart';
@@ -9,18 +10,10 @@ import '../../utils/snapping_mode.dart';
 bool shouldPreviewArrowBinding({
   required SnapConfig snapConfig,
   required SnappingMode snappingMode,
-}) {
-  if (!snapConfig.enableArrowBinding) {
-    return false;
-  }
-  if (snappingMode == SnappingMode.grid) {
-    return false;
-  }
-  if (snapConfig.enabled && snappingMode == SnappingMode.none) {
-    return false;
-  }
-  return true;
-}
+}) => ArrowBindingSnapper.shouldAttemptBinding(
+  snapConfig: snapConfig,
+  snappingMode: snappingMode,
+);
 
 /// Resolves bindable targets near [position].
 List<ElementState> resolveArrowBindingTargets({
