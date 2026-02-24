@@ -18,11 +18,13 @@ class FilterRenderCacheContext {
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
+    this.serialConnectorRevision = 0,
   });
 
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
+  final int serialConnectorRevision;
 
   @override
   bool operator ==(Object other) =>
@@ -30,11 +32,16 @@ class FilterRenderCacheContext {
       other is FilterRenderCacheContext &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
-          other.localeTag == localeTag;
+          other.localeTag == localeTag &&
+          other.serialConnectorRevision == serialConnectorRevision;
 
   @override
-  int get hashCode =>
-      Object.hash(textRenderingCacheRevision, scaleKey, localeTag);
+  int get hashCode => Object.hash(
+    textRenderingCacheRevision,
+    scaleKey,
+    localeTag,
+    serialConnectorRevision,
+  );
 }
 
 /// Factory interface for creating filter kernels.
@@ -1803,6 +1810,7 @@ class _BatchPictureContextSignature {
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
+    required this.serialConnectorRevision,
   });
 
   factory _BatchPictureContextSignature.fromContext(
@@ -1811,11 +1819,13 @@ class _BatchPictureContextSignature {
     textRenderingCacheRevision: context.textRenderingCacheRevision,
     scaleKey: context.scaleKey,
     localeTag: context.localeTag,
+    serialConnectorRevision: context.serialConnectorRevision,
   );
 
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
+  final int serialConnectorRevision;
 
   @override
   bool operator ==(Object other) =>
@@ -1823,11 +1833,16 @@ class _BatchPictureContextSignature {
       other is _BatchPictureContextSignature &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
-          other.localeTag == localeTag;
+          other.localeTag == localeTag &&
+          other.serialConnectorRevision == serialConnectorRevision;
 
   @override
-  int get hashCode =>
-      Object.hash(textRenderingCacheRevision, scaleKey, localeTag);
+  int get hashCode => Object.hash(
+    textRenderingCacheRevision,
+    scaleKey,
+    localeTag,
+    serialConnectorRevision,
+  );
 }
 
 @immutable

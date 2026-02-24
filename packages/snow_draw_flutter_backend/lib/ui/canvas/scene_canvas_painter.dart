@@ -868,9 +868,10 @@ class SceneCanvasPainter extends CustomPainter {
       return;
     }
 
-    final filterCacheContext = sceneContext.shouldPaintSerialConnectors
-        ? null
-        : _buildFilterCacheContext(scale: scale);
+    final filterCacheContext = _buildFilterCacheContext(
+      scale: scale,
+      serialConnectorRevision: sceneContext.serialConnectorCacheRevision,
+    );
     filterSegmentRenderer.paint(
       canvas: canvas,
       elements: effectiveElements,
@@ -924,6 +925,14 @@ class SceneCanvasPainter extends CustomPainter {
             connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
             volatileTextElementIds: <String>{},
           );
+    final serialConnectorCacheRevision =
+        sceneAnalysis.shouldPaintSerialConnectors
+        ? _resolveSerialConnectorCacheRevision(
+            documentElementsVersion: document.elementsVersion,
+            previewElementsById: previewElements,
+            visibleTextIds: sceneAnalysis.visibleTextIds,
+          )
+        : 0;
     final interactionVolatileElementIds = _resolveVolatileElementIds(
       volatilePreviewIds: volatilePreviewIds,
       creatingFilterId: creatingFilterId,
@@ -935,6 +944,7 @@ class SceneCanvasPainter extends CustomPainter {
       shouldPaintSerialConnectors: sceneAnalysis.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
       volatileElementIds: interactionVolatileElementIds,
+      serialConnectorCacheRevision: serialConnectorCacheRevision,
     );
   }
 
@@ -1016,12 +1026,30 @@ class SceneCanvasPainter extends CustomPainter {
     }
   }
 
-  FilterRenderCacheContext _buildFilterCacheContext({required double scale}) {
+  int _resolveSerialConnectorCacheRevision({
+    required int documentElementsVersion,
+    required Map<String, ElementState> previewElementsById,
+    required Set<String> visibleTextIds,
+  }) => Object.hash(
+    documentElementsVersion,
+    Object.hashAllUnordered(visibleTextIds),
+    Object.hashAllUnordered(
+      previewElementsById.entries.map(
+        (entry) => Object.hash(entry.key, entry.value),
+      ),
+    ),
+  );
+
+  FilterRenderCacheContext _buildFilterCacheContext({
+    required double scale,
+    int serialConnectorRevision = 0,
+  }) {
     final localeTag = renderKey.locale?.toLanguageTag() ?? '';
     return FilterRenderCacheContext(
       textRenderingCacheRevision: renderKey.textRenderingCacheRevision,
       scaleKey: (scale * 1000).round(),
       localeTag: localeTag,
+      serialConnectorRevision: serialConnectorRevision,
     );
   }
 
@@ -2207,12 +2235,14 @@ class _SceneRenderContext {
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
     required this.volatileElementIds,
+    required this.serialConnectorCacheRevision,
   });
 
   final bool hasFilterElement;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
   final Set<String> volatileElementIds;
+  final int serialConnectorCacheRevision;
 }
 
 class _SceneRenderAnalysis {

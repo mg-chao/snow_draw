@@ -552,6 +552,69 @@ void main() {
     recorder.endRecording();
   });
 
+  test('batch cache invalidates when serial connector revision changes', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContextV1 = FilterRenderCacheContext(
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+      serialConnectorRevision: 11,
+    );
+    const cacheContextV2 = FilterRenderCacheContext(
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+      serialConnectorRevision: 12,
+    );
+    const baseElement = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 160, maxY: 90),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const filterElement = ElementState(
+      id: 'filter',
+      rect: DrawRect(maxX: 80, maxY: 80),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.inversion),
+    );
+    const sceneElements = [baseElement, filterElement];
+
+    void paintFrame(FilterRenderCacheContext cacheContext) {
+      renderer.paint(
+        canvas: canvas,
+        elements: sceneElements,
+        cacheContext: cacheContext,
+        volatileElementIds: const {'filter'},
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 160, 90),
+            Paint()..color = const Color(0xFF225588),
+          );
+        },
+      );
+    }
+
+    paintFrame(cacheContextV1);
+    final firstFrame = renderer.lastDiagnostics;
+    paintFrame(cacheContextV2);
+    final secondFrame = renderer.lastDiagnostics;
+
+    expect(firstFrame.batchCacheMisses, greaterThanOrEqualTo(1));
+    expect(secondFrame.batchCacheHits, 0);
+    expect(secondFrame.batchCacheMisses, greaterThanOrEqualTo(1));
+    recorder.endRecording();
+  });
+
   test('batch cache eviction keeps in-flight batch pictures valid', () async {
     final renderer = FilterSegmentRenderer(
       segmentBuilder: const _SplitNonFilterSegmentBuilder(),
