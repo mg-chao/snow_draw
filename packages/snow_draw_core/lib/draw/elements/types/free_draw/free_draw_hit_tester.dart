@@ -88,7 +88,7 @@ class FreeDrawHitTester implements ElementHitTester {
     }
     final width = rect.width;
     final height = rect.height;
-    if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
+    if (!width.isFinite || !height.isFinite || width < 0 || height < 0) {
       return const <DrawPoint>[];
     }
     return data.points
@@ -189,6 +189,8 @@ class FreeDrawHitTester implements ElementHitTester {
       points: smoothed,
       strokeWidth: strokeWidth,
       maxPoints: 256,
+      tension: 0.5,
+      useOpenEndpointPhantomPoints: !closed,
     );
     if (flattened.length < 2) {
       return source;

@@ -192,11 +192,16 @@ CubicDrawSegment buildCatmullRomCubicSegment(
   List<DrawPoint> points,
   int index, {
   double tension = 1.0,
+  DrawPoint? phantomFirst,
+  DrawPoint? phantomLast,
 }) {
-  final p0 = index == 0 ? points[index] : points[index - 1];
+  final lastIndex = points.length - 1;
+  final p0 = index == 0 ? (phantomFirst ?? points[index]) : points[index - 1];
   final p1 = points[index];
   final p2 = points[index + 1];
-  final p3 = index + 2 < points.length ? points[index + 2] : points[index + 1];
+  final p3 = index + 2 <= lastIndex
+      ? points[index + 2]
+      : (phantomLast ?? points[index + 1]);
 
   final control1 = DrawPoint(
     x: p1.x + (p2.x - p0.x) * (tension / 6),
@@ -219,6 +224,8 @@ List<DrawPoint> flattenCatmullRomDrawPoints({
   required List<DrawPoint> points,
   required double strokeWidth,
   int maxPoints = 120,
+  double tension = 1.0,
+  bool useOpenEndpointPhantomPoints = false,
 }) {
   if (points.isEmpty) {
     return const <DrawPoint>[];
@@ -231,12 +238,29 @@ List<DrawPoint> flattenCatmullRomDrawPoints({
   final tolerance = math.max(0.5, step * 0.35);
   final toleranceSq = tolerance * tolerance;
 
+  DrawPoint? phantomFirst;
+  DrawPoint? phantomLast;
+  if (useOpenEndpointPhantomPoints && points.length >= 2) {
+    final first = points.first;
+    final second = points[1];
+    final penultimate = points[points.length - 2];
+    final last = points.last;
+    phantomFirst = first + (first - second);
+    phantomLast = last + (last - penultimate);
+  }
+
   final flattened = <DrawPoint>[points.first];
   for (var i = 0; i < points.length - 1; i++) {
     if (flattened.length >= maxPoints) {
       break;
     }
-    final segment = buildCatmullRomCubicSegment(points, i);
+    final segment = buildCatmullRomCubicSegment(
+      points,
+      i,
+      tension: tension,
+      phantomFirst: phantomFirst,
+      phantomLast: phantomLast,
+    );
     _flattenCubicSegment(
       segment: segment,
       toleranceSq: toleranceSq,
