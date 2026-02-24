@@ -58,24 +58,6 @@ class EditErrorHandler {
       EditTransformTypeMismatchError _ ||
       EditParamsTypeMismatchError _ ||
       AssertionError _ => EditFailureReason.invalidParams,
-
-      EditVersionConflictError(conflictType: 'selection') =>
-        EditFailureReason.selectionChanged,
-      EditVersionConflictError(conflictType: 'elements') =>
-        EditFailureReason.elementsChanged,
-      EditVersionConflictError() => EditFailureReason.operationFailed,
-
-      EditSessionRestoreError(failureType: SessionRestoreFailure.notEditing) =>
-        EditFailureReason.notEditing,
-      EditSessionRestoreError(
-        failureType: SessionRestoreFailure.unknownOperation,
-      ) =>
-        EditFailureReason.unknownOperationId,
-      EditSessionRestoreError(
-        failureType: SessionRestoreFailure.sessionDataInvalid,
-      ) =>
-        EditFailureReason.sessionRestoreFailed,
-
       _ => EditFailureReason.operationFailed,
     };
   }

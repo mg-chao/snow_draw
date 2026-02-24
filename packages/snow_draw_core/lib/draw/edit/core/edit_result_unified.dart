@@ -6,7 +6,6 @@ enum EditFailureReason {
   /// Session/dispatch failures.
   notEditing,
   unknownOperationId,
-  sessionRestoreFailed,
 
   /// State conflicts.
   selectionChanged,

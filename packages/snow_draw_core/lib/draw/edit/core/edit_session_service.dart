@@ -11,7 +11,6 @@ import '../../types/edit_operation_id.dart';
 import '../../types/snap_guides.dart';
 import '../edit_operation_registry_interface.dart';
 import 'edit_error_handler.dart';
-import 'edit_errors.dart';
 import 'edit_modifiers.dart';
 import 'edit_operation.dart';
 import 'edit_operation_params.dart';
@@ -132,18 +131,24 @@ class EditSessionService {
     )
     action,
     bool validateVersions = false,
-  }) => EditErrorHandler.runWithErrorHandling(
-    state: state,
-    operationName: operationName,
-    log: _log,
-    operation: () {
-      final restored = _restoreOrThrow(
-        state,
-        validateVersions: validateVersions,
-      );
-      return action(restored);
-    },
-  );
+  }) {
+    final restoration = _restoreSession(
+      state,
+      validateVersions: validateVersions,
+    );
+    if (restoration.failureReason case final reason?) {
+      return EditErrorHandler.createFailure(state: state, reason: reason);
+    }
+
+    final restored = restoration.session!;
+    return EditErrorHandler.runWithErrorHandling(
+      state: state,
+      operationName: operationName,
+      log: _log,
+      fallbackOperationId: restored.editingState.operationId,
+      operation: () => action(restored),
+    );
+  }
 
   EditOutcome _successOutcome({
     required DrawState state,
@@ -287,18 +292,17 @@ class EditSessionService {
     );
   }
 
-  ({EditOperation operation, EditingState editingState}) _restoreOrThrow(
-    DrawState state, {
-    bool validateVersions = false,
-  }) {
+  ({
+    ({EditOperation operation, EditingState editingState})? session,
+    EditFailureReason? failureReason,
+  })
+  _restoreSession(DrawState state, {bool validateVersions = false}) {
     final interaction = state.application.interaction;
     if (interaction is! EditingState) {
       _log?.error('Edit session restore failed', null, null, {
         'reason': 'not_editing',
       });
-      throw const EditSessionRestoreError(
-        failureType: SessionRestoreFailure.notEditing,
-      );
+      return (session: null, failureReason: EditFailureReason.notEditing);
     }
 
     final operation = editOperations.getOperation(interaction.operationId);
@@ -307,58 +311,59 @@ class EditSessionService {
         'operationId': interaction.operationId,
         'reason': 'unknown_operation',
       });
-      throw EditSessionRestoreError(
-        failureType: SessionRestoreFailure.unknownOperation,
-        operationId: interaction.operationId,
+      return (
+        session: null,
+        failureReason: EditFailureReason.unknownOperationId,
       );
     }
 
     if (validateVersions) {
-      _validateVersionOrThrow(editingState: interaction, currentState: state);
+      final versionConflict = _resolveVersionConflict(
+        editingState: interaction,
+        currentState: state,
+      );
+      if (versionConflict case final reason?) {
+        return (session: null, failureReason: reason);
+      }
     }
 
     _log?.trace('Edit session restored', {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
-    return (operation: operation, editingState: interaction);
+    return (
+      session: (operation: operation, editingState: interaction),
+      failureReason: null,
+    );
   }
 
-  void _validateVersionOrThrow({
+  EditFailureReason? _resolveVersionConflict({
     required EditingState editingState,
     required DrawState currentState,
   }) {
     final context = editingState.context;
-
-    _throwVersionConflictIfMismatch(
-      conflictType: 'selection',
-      expectedVersion: context.selectionVersion,
-      actualVersion: currentState.domain.selection.selectionVersion,
-      operationId: editingState.operationId,
-    );
-    _throwVersionConflictIfMismatch(
-      conflictType: 'elements',
-      expectedVersion: context.elementsVersion,
-      actualVersion: currentState.domain.document.elementsVersion,
-      operationId: editingState.operationId,
-    );
-  }
-
-  void _throwVersionConflictIfMismatch({
-    required String conflictType,
-    required int expectedVersion,
-    required int actualVersion,
-    required EditOperationId operationId,
-  }) {
-    if (expectedVersion == actualVersion) {
-      return;
+    final currentSelectionVersion =
+        currentState.domain.selection.selectionVersion;
+    if (context.selectionVersion != currentSelectionVersion) {
+      _log?.warning('Edit session version conflict', {
+        'operationId': editingState.operationId,
+        'type': 'selection',
+        'expected': context.selectionVersion,
+        'actual': currentSelectionVersion,
+      });
+      return EditFailureReason.selectionChanged;
     }
 
-    throw EditVersionConflictError(
-      conflictType: conflictType,
-      expectedVersion: expectedVersion,
-      actualVersion: actualVersion,
-      operationId: operationId,
-    );
+    final currentElementsVersion = currentState.domain.document.elementsVersion;
+    if (context.elementsVersion != currentElementsVersion) {
+      _log?.warning('Edit session version conflict', {
+        'operationId': editingState.operationId,
+        'type': 'elements',
+        'expected': context.elementsVersion,
+        'actual': currentElementsVersion,
+      });
+      return EditFailureReason.elementsChanged;
+    }
+    return null;
   }
 }

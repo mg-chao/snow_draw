@@ -3,7 +3,6 @@ import 'package:meta/meta.dart';
 import '../../core/app_error.dart';
 import '../../core/error_context.dart';
 import '../../types/edit_context.dart' show EditContext;
-import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart' show EditTransform;
 import 'edit_operation_params.dart' show EditOperationParams;
 
@@ -153,59 +152,6 @@ class EditMissingDataError extends EditError {
     return 'EditMissingDataError: ${operationPrefix}Missing required data: '
         '$dataName';
   }
-}
-
-/// Thrown when a version conflict is detected during edit operations.
-@immutable
-class EditVersionConflictError extends EditError {
-  const EditVersionConflictError({
-    required this.conflictType,
-    required this.expectedVersion,
-    required this.actualVersion,
-    this.operationId,
-  });
-  final String conflictType; // 'selection' | 'elements'
-  final int expectedVersion;
-  final int actualVersion;
-  final EditOperationId? operationId;
-
-  @override
-  ErrorSeverity get severity => ErrorSeverity.recoverable;
-
-  @override
-  String toString() {
-    final operationSuffix = operationId == null
-        ? ''
-        : ' (operationId: $operationId)';
-    return 'EditVersionConflictError: $conflictType version mismatch '
-        '(expected: $expectedVersion, actual: $actualVersion)'
-        '$operationSuffix';
-  }
-}
-
-enum SessionRestoreFailure { notEditing, unknownOperation, sessionDataInvalid }
-
-/// Thrown when session restoration fails.
-@immutable
-class EditSessionRestoreError extends EditError {
-  const EditSessionRestoreError({
-    required this.failureType,
-    this.operationId,
-    this.additionalInfo,
-  });
-  final SessionRestoreFailure failureType;
-  final EditOperationId? operationId;
-  final String? additionalInfo;
-
-  @override
-  ErrorSeverity get severity => ErrorSeverity.fatal;
-
-  @override
-  String toString() => <String>[
-    'EditSessionRestoreError: $failureType',
-    if (operationId != null) '(operationId: $operationId)',
-    if (additionalInfo != null) '- $additionalInfo',
-  ].join(' ');
 }
 
 /// Wrapper for errors with additional context information.
