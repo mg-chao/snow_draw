@@ -5,7 +5,7 @@ import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   test(
-    'repaints when scene content fingerprint changes after style updates',
+    'repaints when frame plan scene revision changes after style updates',
     () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
@@ -41,7 +41,6 @@ void main() {
 
       final beforeKey = SceneCanvasRenderKey(
         creatingElement: null,
-        visibleSceneFingerprint: Object.hash(baseElement.id, baseElement),
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,
@@ -55,7 +54,6 @@ void main() {
       );
       final afterKey = SceneCanvasRenderKey(
         creatingElement: null,
-        visibleSceneFingerprint: Object.hash(styledElement.id, styledElement),
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,

@@ -8,35 +8,6 @@ int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
   map.entries.map((entry) => Object.hash(entry.key, entry.value)),
 );
 
-bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
-  if (identical(a, b)) {
-    return true;
-  }
-  if (a.length != b.length) {
-    return false;
-  }
-  for (var index = 0; index < a.length; index++) {
-    if (a[index] != b[index]) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool _framePlanVisualEquals(FrameRenderPlan a, FrameRenderPlan b) =>
-    identical(a, b) ||
-    (a.camera == b.camera &&
-        a.scaleFactor == b.scaleFactor &&
-        a.localeTag == b.localeTag &&
-        _taskListEquals(a.tasks, b.tasks));
-
-int _framePlanVisualHash(FrameRenderPlan framePlan) => Object.hash(
-  Object.hashAll(framePlan.tasks),
-  framePlan.camera,
-  framePlan.scaleFactor,
-  framePlan.localeTag,
-);
-
 /// Snapshot of element creation state for render key comparison.
 @immutable
 class CreatingElementSnapshot {
@@ -76,14 +47,11 @@ class CreatingElementSnapshot {
 /// single-canvas path (background, overlays, guides, etc.).
 ///
 /// Element scene pixels are resolved from [DrawStateView] and preview
-/// snapshots in the backend painter. [visibleSceneFingerprint] captures the
-/// effective visible element scene so offscreen-only document updates do not
-/// force canvas repaints.
+/// snapshots in the backend painter.
 @immutable
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
-    required this.visibleSceneFingerprint,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required this.elementRegistry,
@@ -97,9 +65,6 @@ class SceneCanvasRenderKey {
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
-
-  /// Fingerprint of currently visible effective elements.
-  final int visibleSceneFingerprint;
 
   /// Revision for text rendering cache invalidation.
   ///
@@ -130,25 +95,23 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
-          other.visibleSceneFingerprint == visibleSceneFingerprint &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
           other.elementRegistry == elementRegistry &&
           identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale &&
-          _framePlanVisualEquals(other.framePlan, framePlan);
+          other.framePlan == framePlan;
 
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
-    visibleSceneFingerprint,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
     elementRegistry,
     identityHashCode(textMetricsService),
     performanceMonitoringEnabled,
     locale,
-    _framePlanVisualHash(framePlan),
+    framePlan,
   ]);
 }

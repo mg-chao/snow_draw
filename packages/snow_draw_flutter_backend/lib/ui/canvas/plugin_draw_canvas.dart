@@ -2246,16 +2246,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         previewElementsById: previewElementsById,
       ),
     );
-    final visibleSceneFingerprint = _resolveVisibleSceneFingerprint(
-      stateView: stateView,
-      framePlan: framePlan,
-      previewElementsById: previewElementsById,
-      creatingElement: creatingElement,
-    );
 
     return SceneCanvasRenderKey(
       creatingElement: creatingElement,
-      visibleSceneFingerprint: visibleSceneFingerprint,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
       elementRegistry: elementRegistry,
@@ -2264,47 +2257,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       locale: locale,
       framePlan: framePlan,
     );
-  }
-
-  int _resolveVisibleSceneFingerprint({
-    required DrawStateView stateView,
-    required FrameRenderPlan framePlan,
-    required Map<String, ElementState> previewElementsById,
-    required CreatingElementSnapshot? creatingElement,
-  }) {
-    final camera = framePlan.camera;
-    final scale = framePlan.scaleFactor == 0 ? 1.0 : framePlan.scaleFactor;
-    final viewportRect = DrawRect(
-      minX: -camera.position.x / scale,
-      minY: -camera.position.y / scale,
-      maxX: (widget.size.width - camera.position.x) / scale,
-      maxY: (widget.size.height - camera.position.y) / scale,
-    );
-    final document = stateView.state.domain.document;
-    final excludedElementId =
-        creatingElement != null &&
-            document.getElementById(creatingElement.element.id) != null
-        ? creatingElement.element.id
-        : null;
-    var effectiveElements = resolveVisibleElementScene(
-      document: document,
-      viewportRect: viewportRect,
-      previewElementsById: previewElementsById,
-      excludedElementId: excludedElementId,
-    );
-
-    if (creatingElement != null && creatingElement.element.data is FilterData) {
-      final previewFilter = creatingElement.element.copyWith(
-        rect: creatingElement.currentRect,
-      );
-      effectiveElements = List<ElementState>.of(effectiveElements)
-        ..add(previewFilter);
-    }
-
-    return Object.hashAll([
-      viewportRect,
-      for (final element in effectiveElements) Object.hash(element.id, element),
-    ]);
   }
 
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
