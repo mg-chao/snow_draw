@@ -20,8 +20,6 @@ import 'text/text_edit_reducer.dart';
 /// Responsibilities:
 /// 1. Dispatch actions to sub-reducers in priority order
 /// 2. Coordinate state transitions across subsystems
-///
-/// Returns explicit transition events from reducers.
 @immutable
 class InteractionStateMachine {
   const InteractionStateMachine();

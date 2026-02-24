@@ -6,7 +6,6 @@ import '../../actions/draw_actions.dart';
 import '../../config/config_manager.dart';
 import '../../core/dependency_interfaces.dart';
 import '../../edit/core/edit_cancel_reason.dart';
-import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
@@ -37,7 +36,6 @@ class ActionProcessorServices {
     required this.isBatching,
     required this.includeSelectionInHistory,
     required this.eventBus,
-    required this.publishEditEvents,
   });
   final InteractionReducerDeps drawContext;
   final StateManager stateManager;
@@ -50,7 +48,6 @@ class ActionProcessorServices {
   final bool Function() isBatching;
   final bool includeSelectionInHistory;
   final EventBus eventBus;
-  final void Function(List<EditSessionEvent> events) publishEditEvents;
 }
 
 class ActionProcessor {
@@ -257,7 +254,6 @@ class ActionProcessor {
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
       action: initialContext.action,
-      events: finalContext.events,
       hasStateChanged: finalContext.hasStateChanged,
     );
   }
@@ -267,17 +263,12 @@ class ActionProcessor {
     required DrawState nextState,
     required DrawAction action,
     required bool hasStateChanged,
-    required List<EditSessionEvent> events,
   }) {
     if (hasStateChanged) {
       _services.stateManager.update(nextState);
       if (!_services.isBatching()) {
         _services.listenerRegistry.notify(previousState, nextState);
       }
-    }
-
-    if (events.isNotEmpty) {
-      _services.publishEditEvents(events);
     }
 
     _emitEditSessionEvents(

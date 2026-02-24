@@ -24,10 +24,6 @@ class ReductionMiddleware extends MiddlewareBase {
       sessionIdGenerator: context.sessionIdGenerator,
     );
 
-    return next(
-      context
-          .withCurrentState(transition.nextState)
-          .withEvents(transition.events),
-    );
+    return next(context.withCurrentState(transition.nextState));
   }
 }

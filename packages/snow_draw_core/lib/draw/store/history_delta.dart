@@ -7,7 +7,6 @@ import '../models/global_elements_state.dart';
 import '../models/interaction_state.dart';
 import '../models/selection_overlay_state.dart';
 import '../models/selection_state.dart';
-import 'history_change_set.dart';
 import 'snapshot.dart';
 
 @immutable
@@ -26,52 +25,32 @@ class HistoryDelta {
 
   factory HistoryDelta.fromSnapshots(
     HistorySnapshot before,
-    HistorySnapshot after, {
-    HistoryChangeSet? changes,
-  }) {
+    HistorySnapshot after,
+  ) {
     final beforeById = before.elementMap;
     final afterById = after.elementMap;
 
     final beforeElements = <String, ElementState>{};
     final afterElements = <String, ElementState>{};
-
-    // Reordering actions can implicitly update many elements (for example
-    // z-index reindexing), so targeted element diffing is only safe when
-    // order is unchanged.
-    final useTargetedElementDiff =
-        changes != null && changes.hasElementChanges && !changes.orderChanged;
-
-    if (useTargetedElementDiff) {
-      _collectChangedElementsById(
-        beforeById: beforeById,
-        afterById: afterById,
-        changedIds: changes.allElementIds,
-        beforeElements: beforeElements,
-        afterElements: afterElements,
-      );
-    } else {
-      _collectChangedElementsByScan(
-        beforeById: beforeById,
-        afterById: afterById,
-        beforeElements: beforeElements,
-        afterElements: afterElements,
-      );
-    }
+    _collectChangedElementsByScan(
+      beforeById: beforeById,
+      afterById: afterById,
+      beforeElements: beforeElements,
+      afterElements: afterElements,
+    );
 
     List<String>? orderBefore;
     List<String>? orderAfter;
-    if (changes?.orderChanged ?? true) {
-      final beforeOrder = before.order;
-      final afterOrder = after.order;
-      if (beforeOrder != null && afterOrder != null) {
-        final orderChanged = !const ListEquality<String>().equals(
-          beforeOrder,
-          afterOrder,
-        );
-        if (orderChanged) {
-          orderBefore = List<String>.unmodifiable(beforeOrder);
-          orderAfter = List<String>.unmodifiable(afterOrder);
-        }
+    final beforeOrder = before.order;
+    final afterOrder = after.order;
+    if (beforeOrder != null && afterOrder != null) {
+      final orderChanged = !const ListEquality<String>().equals(
+        beforeOrder,
+        afterOrder,
+      );
+      if (orderChanged) {
+        orderBefore = List<String>.unmodifiable(beforeOrder);
+        orderAfter = List<String>.unmodifiable(afterOrder);
       }
     }
 
@@ -100,7 +79,7 @@ class HistoryDelta {
       orderAfter: orderAfter,
       selectionBefore: selectionBefore,
       selectionAfter: selectionAfter,
-      reindexZIndices: changes?.reindexZIndices ?? false,
+      reindexZIndices: false,
     );
   }
   final Map<String, ElementState> beforeElements;
@@ -209,30 +188,6 @@ void _collectChangedElementsByScan({
   for (final entry in afterById.entries) {
     if (!beforeById.containsKey(entry.key)) {
       afterElements[entry.key] = entry.value;
-    }
-  }
-}
-
-void _collectChangedElementsById({
-  required Map<String, ElementState> beforeById,
-  required Map<String, ElementState> afterById,
-  required Set<String> changedIds,
-  required Map<String, ElementState> beforeElements,
-  required Map<String, ElementState> afterElements,
-}) {
-  for (final id in changedIds) {
-    final beforeElement = beforeById[id];
-    final afterElement = afterById[id];
-
-    if (beforeElement == afterElement) {
-      continue;
-    }
-
-    if (beforeElement != null) {
-      beforeElements[id] = beforeElement;
-    }
-    if (afterElement != null) {
-      afterElements[id] = afterElement;
     }
   }
 }

@@ -5,7 +5,6 @@ import '../config/config_manager.dart';
 import '../config/draw_config.dart';
 import '../core/callbacks.dart';
 import '../core/draw_context.dart';
-import '../edit/core/edit_event_factory.dart';
 import '../edit/core/edit_session_service.dart';
 import '../events/event_bus.dart';
 import '../models/draw_state.dart';
@@ -32,8 +31,7 @@ class DefaultDrawStore implements DrawStore {
     EventBus? eventBus,
   }) : _ownsEventBus = eventBus == null && context.eventBus == null,
        _eventBus = eventBus ?? context.eventBus ?? EventBus(),
-       _snapshotBuilder = snapshotBuilder,
-       _editEventController = StreamController<EditSessionEvent>.broadcast() {
+       _snapshotBuilder = snapshotBuilder {
     this.context = context.eventBus == _eventBus
         ? context
         : context.copyWith(eventBus: _eventBus);
@@ -73,7 +71,6 @@ class DefaultDrawStore implements DrawStore {
       isBatching: () => _isBatching,
       includeSelectionInHistory: includeSelectionInHistory,
       eventBus: _eventBus,
-      publishEditEvents: _publishEditEvents,
     );
 
     _actionProcessor = ActionProcessor(services: services, pipeline: _pipeline);
@@ -87,7 +84,6 @@ class DefaultDrawStore implements DrawStore {
 
   late final HistoryManager _historyManager;
   late final EditSessionService _editSessionService;
-  final StreamController<EditSessionEvent> _editEventController;
   final SnapshotBuilder _snapshotBuilder;
   final bool _ownsEventBus;
   final EventBus _eventBus;
@@ -136,9 +132,6 @@ class DefaultDrawStore implements DrawStore {
     onDone: onDone,
     cancelOnError: cancelOnError,
   );
-
-  /// Edit diagnostic event stream.
-  Stream<EditSessionEvent> get editEvents => _editEventController.stream;
 
   @override
   VoidCallback listen(
@@ -250,7 +243,6 @@ class DefaultDrawStore implements DrawStore {
     _actionProcessor.dispose();
 
     unawaited(_configManager.dispose());
-    unawaited(_editEventController.close());
     if (_ownsEventBus) {
       unawaited(_eventBus.dispose());
     }
@@ -265,22 +257,5 @@ class DefaultDrawStore implements DrawStore {
       'sessionId': sessionId,
     });
     return sessionId;
-  }
-
-  void _publishEditEvents(List<EditSessionEvent> events) {
-    for (final event in events) {
-      final operationId = switch (event) {
-        EditStartFailed(:final operationId) => operationId,
-        EditUpdateFailed(:final operationId) => operationId,
-        EditFinishFailed(:final operationId) => operationId,
-        EditCancelled(:final operationId) => operationId,
-        EditCancelFailed(:final operationId) => operationId,
-      };
-      context.log.edit.debug('Edit session event published', {
-        'event': event.runtimeType.toString(),
-        'operationId': operationId,
-      });
-      _editEventController.add(event);
-    }
   }
 }

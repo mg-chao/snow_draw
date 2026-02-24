@@ -1,24 +1,15 @@
 import 'package:meta/meta.dart';
 
-import '../../edit/core/edit_event_factory.dart';
 import '../../models/draw_state.dart';
 
 /// Interaction state transition result.
-///
-/// Carries the next state plus any explicit edit session events to emit.
 @immutable
 class InteractionTransition {
-  const InteractionTransition({
-    required this.nextState,
-    this.events = const [],
-  });
+  const InteractionTransition({required this.nextState});
 
   /// State unchanged.
-  const InteractionTransition.unchanged(
-    DrawState state, {
-    List<EditSessionEvent> events = const [],
-  }) : this(nextState: state, events: events);
+  const InteractionTransition.unchanged(DrawState state)
+    : this(nextState: state);
 
   final DrawState nextState;
-  final List<EditSessionEvent> events;
 }

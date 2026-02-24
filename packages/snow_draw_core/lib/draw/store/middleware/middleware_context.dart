@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
 import '../../core/dependency_interfaces.dart';
-import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
@@ -44,7 +43,6 @@ class DispatchContext {
     required this.sessionIdGenerator,
     required this.isBatching,
     required this.includeSelectionInHistory,
-    required this.events,
     required this.shouldStop,
     required this.stopReason,
     required this.failure,
@@ -73,7 +71,6 @@ class DispatchContext {
     sessionIdGenerator: sessionIdGenerator,
     isBatching: isBatching,
     includeSelectionInHistory: includeSelectionInHistory,
-    events: const [],
     shouldStop: false,
     stopReason: null,
     failure: null,
@@ -89,7 +86,6 @@ class DispatchContext {
   final EditSessionIdGenerator sessionIdGenerator;
   final bool isBatching;
   final bool includeSelectionInHistory;
-  final List<EditSessionEvent> events;
   final bool shouldStop;
   final String? stopReason;
   final DispatchFailure? failure;
@@ -111,13 +107,6 @@ class DispatchContext {
     return _copy(currentState: newState);
   }
 
-  DispatchContext withEvents(List<EditSessionEvent> newEvents) {
-    if (newEvents.isEmpty) {
-      return this;
-    }
-    return _copy(events: [...events, ...newEvents]);
-  }
-
   DispatchContext withStop(String reason) =>
       _copy(shouldStop: true, stopReason: reason);
 
@@ -137,7 +126,6 @@ class DispatchContext {
 
   DispatchContext _copy({
     DrawState? currentState,
-    List<EditSessionEvent>? events,
     bool? shouldStop,
     String? stopReason,
     DispatchFailure? failure,
@@ -152,7 +140,6 @@ class DispatchContext {
     sessionIdGenerator: sessionIdGenerator,
     isBatching: isBatching,
     includeSelectionInHistory: includeSelectionInHistory,
-    events: events ?? this.events,
     shouldStop: shouldStop ?? this.shouldStop,
     stopReason: stopReason ?? this.stopReason,
     failure: failure ?? this.failure,
@@ -166,6 +153,5 @@ class DispatchContext {
       'traceId: $traceId, '
       'hasError: $hasError, '
       'isTerminal: $isTerminal, '
-      'stateChanged: $hasStateChanged, '
-      'events: ${events.length})';
+      'stateChanged: $hasStateChanged)';
 }
