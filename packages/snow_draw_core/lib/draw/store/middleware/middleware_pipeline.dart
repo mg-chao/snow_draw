@@ -42,17 +42,15 @@ class MiddlewarePipeline {
     var nextCalled = false;
     DispatchContext? downstreamContext;
 
-    Future<DispatchContext> guardedNext(DispatchContext nextContext) {
+    Future<DispatchContext> guardedNext(DispatchContext nextContext) async {
       if (nextCalled) {
         throw StateError(
           'Middleware "${middleware.name}" called next() more than once',
         );
       }
       nextCalled = true;
-      return _executeFromIndex(nextContext, index + 1).then((result) {
-        downstreamContext = result;
-        return result;
-      });
+      downstreamContext = await _executeFromIndex(nextContext, index + 1);
+      return downstreamContext!;
     }
 
     try {

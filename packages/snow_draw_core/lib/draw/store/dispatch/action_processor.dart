@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
@@ -60,11 +59,10 @@ class ActionProcessor {
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
   final MiddlewarePipeline _pipeline;
-  final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
+  var _dispatchTail = Future<void>.value();
 
-  var _isProcessing = false;
   var _isDisposed = false;
 
   DrawState get state => _services.stateManager.current;
@@ -99,13 +97,6 @@ class ActionProcessor {
       return;
     }
     _isDisposed = true;
-
-    for (final task in List<_DispatchTask>.from(_queue)) {
-      task.completeWithError(
-        StateError('Dispatch queue disposed while pending'),
-      );
-    }
-    _queue.clear();
   }
 
   Future<void> _enqueue(Future<void> Function() task) {
@@ -113,25 +104,30 @@ class ActionProcessor {
       return Future.error(StateError('Dispatch queue has been disposed'));
     }
 
-    final queued = _DispatchTask(task);
-    _queue.addLast(queued);
-
-    if (!_isProcessing) {
-      unawaited(_drainQueue());
-    }
-
-    return queued.completer.future;
+    final completer = Completer<void>();
+    _dispatchTail = _dispatchTail.then<void>(
+      (_) => _runQueuedTask(task, completer),
+      onError: (_, StackTrace stackTrace) => _runQueuedTask(task, completer),
+    );
+    return completer.future;
   }
 
-  Future<void> _drainQueue() async {
-    _isProcessing = true;
+  Future<void> _runQueuedTask(
+    Future<void> Function() task,
+    Completer<void> completer,
+  ) async {
+    if (_isDisposed) {
+      completer.completeError(
+        StateError('Dispatch queue disposed while pending'),
+      );
+      return;
+    }
+
     try {
-      while (_queue.isNotEmpty) {
-        final next = _queue.removeFirst();
-        await next.run();
-      }
-    } finally {
-      _isProcessing = false;
+      await task();
+      completer.complete();
+    } on Object catch (error, stackTrace) {
+      completer.completeError(error, stackTrace);
     }
   }
 
@@ -224,12 +220,6 @@ class ActionProcessor {
       return null;
     }
 
-    if (action is CancelEdit || action is UpdateEdit || action is FinishEdit) {
-      return null;
-    }
-    if (action is StartEdit) {
-      return EditCancelReason.newEditStarted;
-    }
     if (action is Undo && !_services.historyManager.canUndo) {
       return null;
     }
@@ -237,9 +227,12 @@ class ActionProcessor {
       return null;
     }
 
-    return action.conflictsWithEditing
-        ? EditCancelReason.conflictingAction
-        : null;
+    return switch (action) {
+      CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
+      StartEdit _ => EditCancelReason.newEditStarted,
+      _ when action.conflictsWithEditing => EditCancelReason.conflictingAction,
+      _ => null,
+    };
   }
 
   void _commit({
@@ -372,60 +365,73 @@ class ActionProcessor {
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
-    if (prevInteraction is EditingState && nextInteraction is EditingState) {
-      if (prevInteraction.sessionId == nextInteraction.sessionId) {
-        _emitEvent(
-          () => EditSessionUpdatedEvent(
-            sessionId: nextInteraction.sessionId,
-            operationId: nextInteraction.operationId,
-          ),
-        );
-      } else {
-        _emitEvent(
-          () => EditSessionCancelledEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-            reason: EditCancelReason.newEditStarted,
-          ),
-        );
+    switch ((prevInteraction, nextInteraction)) {
+      case (final EditingState previous, final EditingState next):
+        _emitEditingTransition(previous: previous, next: next);
+      case (final EditingState previous, _):
+        _emitEditingEnded(previous: previous, action: action);
+      case (_, final EditingState next):
         _emitEvent(
           () => EditSessionStartedEvent(
-            sessionId: nextInteraction.sessionId,
-            operationId: nextInteraction.operationId,
+            sessionId: next.sessionId,
+            operationId: next.operationId,
           ),
         );
-      }
-      return;
+      default:
+        break;
     }
+  }
 
-    if (prevInteraction is EditingState) {
-      if (action is FinishEdit) {
-        _emitEvent(
-          () => EditSessionFinishedEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-          ),
-        );
-      } else {
-        _emitEvent(
-          () => EditSessionCancelledEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-            reason: _resolveCancelReason(action),
-          ),
-        );
-      }
-      return;
-    }
-
-    if (nextInteraction is EditingState) {
+  void _emitEditingTransition({
+    required EditingState previous,
+    required EditingState next,
+  }) {
+    if (previous.sessionId == next.sessionId) {
       _emitEvent(
-        () => EditSessionStartedEvent(
-          sessionId: nextInteraction.sessionId,
-          operationId: nextInteraction.operationId,
+        () => EditSessionUpdatedEvent(
+          sessionId: next.sessionId,
+          operationId: next.operationId,
         ),
       );
+      return;
     }
+
+    _emitEvent(
+      () => EditSessionCancelledEvent(
+        sessionId: previous.sessionId,
+        operationId: previous.operationId,
+        reason: EditCancelReason.newEditStarted,
+      ),
+    );
+    _emitEvent(
+      () => EditSessionStartedEvent(
+        sessionId: next.sessionId,
+        operationId: next.operationId,
+      ),
+    );
+  }
+
+  void _emitEditingEnded({
+    required EditingState previous,
+    required DrawAction action,
+  }) {
+    if (action is FinishEdit) {
+      _emitEvent(
+        () => EditSessionFinishedEvent(
+          sessionId: previous.sessionId,
+          operationId: previous.operationId,
+        ),
+      );
+      return;
+    }
+
+    _emitEvent(
+      () => EditSessionCancelledEvent(
+        sessionId: previous.sessionId,
+        operationId: previous.operationId,
+        reason: _resolveCancelReason(action),
+      ),
+    );
   }
 
   void _emitStateChangeEvents({
@@ -490,34 +496,4 @@ class ActionProcessor {
     StartEdit _ => EditCancelReason.newEditStarted,
     _ => EditCancelReason.userCancelled,
   };
-}
-
-class _DispatchTask {
-  _DispatchTask(Future<void> Function() task)
-    : _task = task,
-      completer = Completer<void>();
-  final Completer<void> completer;
-  final Future<void> Function() _task;
-
-  Future<void> run() async {
-    try {
-      await _task();
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    } on Object catch (error, stackTrace) {
-      completeWithError(error, stackTrace);
-    }
-  }
-
-  void completeWithError(Object error, [StackTrace? stackTrace]) {
-    if (completer.isCompleted) {
-      return;
-    }
-    if (stackTrace != null) {
-      completer.completeError(error, stackTrace);
-    } else {
-      completer.completeError(error);
-    }
-  }
 }
