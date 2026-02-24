@@ -3,7 +3,7 @@ import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
 import '../../types/edit_operation_id.dart';
 import 'edit_errors.dart';
-import 'edit_result_unified.dart';
+import 'edit_result.dart';
 
 /// Centralized edit error handling utilities.
 class EditErrorHandler {

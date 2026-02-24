@@ -14,7 +14,7 @@ import 'edit_error_handler.dart';
 import 'edit_modifiers.dart';
 import 'edit_operation.dart';
 import 'edit_operation_params.dart';
-import 'edit_result_unified.dart';
+import 'edit_result.dart';
 
 typedef _RestoredSession = ({
   EditOperation operation,

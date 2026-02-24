@@ -33,15 +33,12 @@ class InteractionStateMachine {
     required EditSessionIdGenerator sessionIdGenerator,
   }) {
     // 1) Edit operations.
-    final editReducer = EditStateReducer(
-      editSessionService: editSessionService,
-      sessionIdGenerator: sessionIdGenerator,
-    );
-
-    final editResult = editReducer.reduce(
+    final editResult = reduceEditState(
       state: state,
       action: action,
       context: context,
+      editSessionService: editSessionService,
+      sessionIdGenerator: sessionIdGenerator,
     );
     if (editResult != null) {
       return editResult;

@@ -2,8 +2,6 @@ import 'dart:math' as math;
 
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
-import '../models/selection_overlay_state.dart';
-import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 
 class SelectionCalculator {
@@ -35,58 +33,6 @@ class SelectionCalculator {
     return bounds;
   }
 
-  static DrawRect? computeOverlayBoundsForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-
-    final singleElement = _singleSelectedElement(selectedElements);
-    if (singleElement != null) {
-      return singleElement.rect;
-    }
-
-    return _resolveMultiSelectOverlayBounds(
-      selectedElements: selectedElements,
-      selectionOverlay: selectionOverlay,
-    );
-  }
-
-  static double? computeOverlayRotationForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-
-    final rotation =
-        _singleSelectedElement(selectedElements)?.rotation ??
-        selectionOverlay.multiSelectOverlay?.rotation ??
-        0.0;
-    return rotation == 0.0 ? null : rotation;
-  }
-
-  static DrawPoint? computeOverlayCenterForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-    final singleElement = _singleSelectedElement(selectedElements);
-    if (singleElement != null) {
-      return singleElement.center;
-    }
-
-    return _resolveMultiSelectOverlayBounds(
-      selectedElements: selectedElements,
-      selectionOverlay: selectionOverlay,
-    )?.center;
-  }
-
   static DrawRect computeElementWorldAabb(ElementState element) {
     final rect = element.rect;
     final rotation = element.rotation;
@@ -111,13 +57,6 @@ class SelectionCalculator {
 
   static ElementState? _singleSelectedElement(List<ElementState> selected) =>
       selected.length == 1 ? selected.first : null;
-
-  static DrawRect? _resolveMultiSelectOverlayBounds({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) =>
-      selectionOverlay.multiSelectOverlay?.bounds ??
-      computeSelectionBoundsForElements(selectedElements);
 
   static DrawRect _expandBounds(DrawRect a, DrawRect b) => DrawRect(
     minX: math.min(a.minX, b.minX),

@@ -45,18 +45,6 @@ class EventBus {
     return _activeTypedChannels.any((channel) => channel.acceptsType<T>());
   }
 
-  /// Whether listeners can receive this concrete [event] instance.
-  bool hasListenersForEvent(DrawEvent event) {
-    if (_controller.isClosed) {
-      return false;
-    }
-    if (_controller.hasListener) {
-      return true;
-    }
-
-    return _activeTypedChannels.any((channel) => channel.matches(event));
-  }
-
   /// Emit an event.
   void emit(DrawEvent event) {
     tryEmit(event);
