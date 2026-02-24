@@ -135,7 +135,7 @@ class SceneCanvasPainter extends CustomPainter {
 
     final creatingElement = renderKey.creatingElement;
 
-    // Draw elements at or above the selected element to preserve z-order.
+    // Draw visible effective elements in document z-order.
     _drawSceneElements(
       canvas: canvas,
       scale: scale,

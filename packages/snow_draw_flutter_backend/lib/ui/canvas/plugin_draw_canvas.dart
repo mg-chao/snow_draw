@@ -2194,7 +2194,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final framePlan = _frameRenderPlanBuilder.build(
       view: stateView,
       scaleFactor: scaleFactor,
-      localeTag: locale?.toLanguageTag(),
       transientState: FrameRenderTransientState(
         hoveredElementId: _hoveredSelectionElementId,
         hoveredBindingElementId: _hoveredBindingElementId,
