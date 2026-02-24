@@ -53,9 +53,7 @@ abstract interface class DrawStore implements StateProvider {
   /// [listener] is invoked when the selected data changes.
   /// [equals] optionally overrides equality; defaults to selector.equals.
   /// [changeTypes] optionally narrows when the selector is re-evaluated.
-  ///
-  /// Passing `null` keeps the legacy behavior and evaluates on all tracked
-  /// state changes.
+  /// Omit (or pass an empty set) to evaluate on all tracked state changes.
   ///
   /// Returns a callback to unsubscribe.
   VoidCallback select<T>(

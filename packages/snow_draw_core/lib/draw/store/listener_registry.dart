@@ -40,7 +40,7 @@ class ListenerRegistry {
   /// [changeTypes] optionally specifies which change types the listener cares
   /// about.
   ///
-  /// Passing `null` or an empty set listens to all state changes.
+  /// Passing `null` or an empty set listens to all tracked state changes.
   ///
   /// If the listener is already registered, update its changeTypes
   /// (deduped).
@@ -74,36 +74,37 @@ class ListenerRegistry {
     }
 
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-    final hasFilteredListeners = entriesSnapshot.any(
-      (entry) => entry.isFiltered,
+    final hasScopedListeners = entriesSnapshot.any(
+      (entry) => entry.changeMask != _allChangeMask,
     );
 
-    // Fast path for the common case: no listeners use change filters.
-    if (!hasFilteredListeners) {
+    // Fast path for the common case: listeners subscribe to all tracked
+    // changes.
+    if (!hasScopedListeners) {
       if (!_hasTrackedChanges(previous, next)) {
         return;
       }
-      _notifyEntries(entriesSnapshot, next);
+      _notifyEntries(entriesSnapshot, next, stateChangeMask: _allChangeMask);
       return;
     }
 
-    final changeMask = _computeChangeMask(previous, next);
-    if (changeMask == 0) {
+    final stateChangeMask = _computeChangeMask(previous, next);
+    if (stateChangeMask == 0) {
       return;
     }
-    _notifyEntries(entriesSnapshot, next, changeMask: changeMask);
+    _notifyEntries(entriesSnapshot, next, stateChangeMask: stateChangeMask);
   }
 
   void _notifyEntries(
     List<_ListenerEntry> entries,
     DrawState next, {
-    int? changeMask,
+    required int stateChangeMask,
   }) {
     for (final entry in entries) {
       if (!_isCurrentEntry(entry)) {
         continue;
       }
-      if (changeMask != null && !entry.matches(changeMask)) {
+      if (!entry.matches(stateChangeMask)) {
         continue;
       }
       try {
@@ -131,18 +132,14 @@ class ListenerRegistry {
   bool _isCurrentEntry(_ListenerEntry entry) =>
       identical(_listeners[entry.listener], entry);
 
-  int? _normalizeChangeMask(Set<DrawStateChange>? value) {
+  int _normalizeChangeMask(Set<DrawStateChange>? value) {
     if (value == null || value.isEmpty) {
-      return null;
+      return _allChangeMask;
     }
 
     var mask = 0;
     for (final change in value) {
       mask |= _maskForChange(change);
-    }
-
-    if (mask == _allChangeMask) {
-      return null;
     }
 
     return mask;
@@ -155,14 +152,10 @@ class ListenerRegistry {
 class _ListenerEntry {
   _ListenerEntry(this.listener, this.changeMask);
   final StateChangeListener<DrawState> listener;
-  final int? changeMask;
-  bool get isFiltered => changeMask != null;
+  final int changeMask;
 
   /// Returns true when this listener should receive the current change mask.
-  bool matches(int stateChangeMask) {
-    final mask = changeMask;
-    return mask == null || (mask & stateChangeMask) != 0;
-  }
+  bool matches(int stateChangeMask) => (changeMask & stateChangeMask) != 0;
 }
 
 int _computeChangeMask(DrawState previous, DrawState next) {
