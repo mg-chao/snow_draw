@@ -255,7 +255,7 @@ void main() {
   });
 
   group('History snapshot decode linking', () {
-    test('parentId wins over conflicting children references', () {
+    test('decoding links nodes only through parentId', () {
       final snapshotJson = <String, dynamic>{
         'version': 1,
         'rootId': 0,
@@ -289,7 +289,7 @@ void main() {
       expect(branchIds, equals({1, 2}));
     });
 
-    test('children fallback still links legacy snapshots without parentId', () {
+    test('decode rejects snapshots where non-root nodes omit parentId', () {
       final snapshotJson = <String, dynamic>{
         'version': 1,
         'rootId': 0,
@@ -304,15 +304,13 @@ void main() {
         ],
       };
 
-      final manager = HistoryManager()
-        ..restore(
-          HistoryManagerSnapshot.fromJson(
-            snapshotJson,
-            elementRegistry: _buildRegistry(),
-          ),
-        );
-
-      expect(manager.redoBranches.map((branch) => branch.nodeId), equals([1]));
+      expect(
+        () => HistoryManagerSnapshot.fromJson(
+          snapshotJson,
+          elementRegistry: _buildRegistry(),
+        ),
+        throwsStateError,
+      );
     });
   });
 }

@@ -716,27 +716,23 @@ class _HistorySnapshotCodec {
     ElementRegistry elementRegistry, {
     UnknownElementReporter? onUnknownElement,
   }) {
-    final version = json['version'] as int? ?? _version;
+    final version = json['version'];
+    if (version is! int) {
+      throw StateError('History snapshot version is missing or invalid');
+    }
     if (version != _version) {
       throw StateError('Unsupported history snapshot version: $version');
     }
 
-    final nodesData = (json['nodes'] as List<dynamic>?) ?? const [];
+    final nodesData = _requireNodesData(json['nodes']);
     final byId = <int, _HistoryNode>{};
-    final nodeDataById = <int, Map<String, dynamic>>{};
-
-    for (final entry in nodesData) {
-      final decodedData = _asJsonMap(entry);
-      if (decodedData == null) {
-        continue;
+    for (final nodeData in nodesData) {
+      final id = _requireNodeId(nodeData);
+      if (byId.containsKey(id)) {
+        throw StateError('Duplicate history node id: $id');
       }
-      final id = decodedData['id'] as int?;
-      if (id == null) {
-        continue;
-      }
-      nodeDataById[id] = decodedData;
-      final deltaJson = _asJsonMap(decodedData['delta']);
-      final metadataJson = _asJsonMap(decodedData['metadata']);
+      final deltaJson = _asJsonMap(nodeData['delta']);
+      final metadataJson = _asJsonMap(nodeData['metadata']);
       byId[id] = _HistoryNode(
         id: id,
         parent: null,
@@ -751,94 +747,120 @@ class _HistorySnapshotCodec {
         recordedAt: DateTime.fromMillisecondsSinceEpoch(0),
       );
     }
+    final rootId = _requireInt(json, 'rootId');
+    _linkNodesByParentId(byId: byId, nodeData: nodesData, rootId: rootId);
 
-    _linkDecodedNodes(byId: byId, nodeDataById: nodeDataById);
-
-    final rootId = json['rootId'] as int? ?? 0;
+    final root = byId[rootId];
+    if (root == null) {
+      throw StateError('History snapshot root node is missing: $rootId');
+    }
     final currentId = json['currentId'] as int? ?? rootId;
-    final maxNodeId = byId.isEmpty
-        ? rootId
-        : byId.keys.reduce((a, b) => a > b ? a : b);
+    final maxNodeId = byId.keys.reduce((a, b) => a > b ? a : b);
     final nextNodeId = _resolveNextNodeId(
       requestedNextNodeId: json['nextNodeId'] as int?,
       minNextNodeId: maxNodeId + 1,
     );
 
-    final root = byId[rootId] ?? _HistoryNode.root(rootId);
     _normalizeRootNode(root);
     return HistoryManagerSnapshot._(root, currentId, nextNodeId);
   }
 
-  void _linkDecodedNodes({
+  void _linkNodesByParentId({
     required Map<int, _HistoryNode> byId,
-    required Map<int, Map<String, dynamic>> nodeDataById,
+    required List<Map<String, dynamic>> nodeData,
+    required int rootId,
   }) {
-    final parentAssignments = _resolveDecodedParentAssignments(
-      byId: byId,
-      nodeDataById: nodeDataById,
-    );
-    for (final entry in parentAssignments.entries) {
-      final child = byId[entry.key];
-      final parent = byId[entry.value];
-      if (parent == null || child == null) {
+    for (final node in nodeData) {
+      final childId = _requireNodeId(node);
+      final parentId = node['parentId'];
+      if (parentId == null) {
+        if (childId != rootId) {
+          throw StateError(
+            'History snapshot node $childId is missing parentId',
+          );
+        }
         continue;
+      }
+      if (parentId is! int) {
+        throw StateError(
+          'History snapshot parent id is invalid for node $childId',
+        );
+      }
+      if (childId == rootId) {
+        throw StateError('History snapshot root node must not have a parent');
+      }
+      if (parentId == childId) {
+        throw StateError(
+          'History snapshot contains self-referencing node: $childId',
+        );
+      }
+      final child = byId[childId];
+      final parent = byId[parentId];
+      if (child == null || parent == null) {
+        throw StateError(
+          'History snapshot links missing node(s): '
+          'child=$childId parent=$parentId',
+        );
       }
       _linkNodes(parent: parent, child: child);
     }
   }
 
-  Map<int, int> _resolveDecodedParentAssignments({
-    required Map<int, _HistoryNode> byId,
-    required Map<int, Map<String, dynamic>> nodeDataById,
-  }) {
-    final assignments = <int, int>{};
-
-    for (final entry in nodeDataById.entries) {
-      final childId = entry.key;
-      final parentId = entry.value['parentId'] as int?;
-      if (_isValidParentAssignment(
-        byId: byId,
-        parentId: parentId,
-        childId: childId,
-      )) {
-        assignments[childId] = parentId!;
-      }
+  List<Map<String, dynamic>> _requireNodesData(Object? raw) {
+    if (raw is! List) {
+      throw StateError('History snapshot nodes must be a list');
     }
-
-    for (final entry in nodeDataById.entries) {
-      final parentId = entry.key;
-      for (final childId in _asIntList(entry.value['children'])) {
-        if (assignments.containsKey(childId)) {
-          continue;
-        }
-        if (_isValidParentAssignment(
-          byId: byId,
-          parentId: parentId,
-          childId: childId,
-        )) {
-          assignments[childId] = parentId;
-        }
+    final nodes = <Map<String, dynamic>>[];
+    for (final entry in raw) {
+      final node = _asJsonMap(entry);
+      if (node == null) {
+        throw StateError('History snapshot contains an invalid node entry');
       }
+      nodes.add(node);
     }
-
-    return assignments;
+    if (nodes.isEmpty) {
+      throw StateError('History snapshot does not contain any nodes');
+    }
+    return nodes;
   }
 
-  bool _isValidParentAssignment({
-    required Map<int, _HistoryNode> byId,
-    required int? parentId,
-    required int childId,
-  }) {
-    if (parentId == null || parentId == childId) {
-      return false;
+  int _requireNodeId(Map<String, dynamic> node) => _requireInt(node, 'id');
+
+  int _requireInt(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value is! int) {
+      throw StateError('History snapshot field "$key" is missing or invalid');
     }
-    return byId.containsKey(parentId) && byId.containsKey(childId);
+    return value;
+  }
+
+  double _requireDouble(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value is! num) {
+      throw StateError('History snapshot field "$key" is missing or invalid');
+    }
+    return value.toDouble();
+  }
+
+  String _requireString(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value is! String) {
+      throw StateError('History snapshot field "$key" is missing or invalid');
+    }
+    return value;
+  }
+
+  Map<String, dynamic> _requireMapField(Map<String, dynamic> json, String key) {
+    final value = _asJsonMap(json[key]);
+    if (value == null) {
+      throw StateError('History snapshot field "$key" is missing or invalid');
+    }
+    return value;
   }
 
   Map<String, dynamic> _encodeNode(_HistoryNode node) => {
     'id': node.id,
     'parentId': node.parent?.id,
-    'children': node.children.map((child) => child.id).toList(),
     if (node.delta != null) 'delta': _deltaToJson(node.delta!),
     if (node.metadata != null) 'metadata': _metadataToJson(node.metadata!),
   };
@@ -931,11 +953,9 @@ class _HistorySnapshotCodec {
     UnknownElementReporter? onUnknownElement,
     String source = 'unknown',
   }) {
-    final id =
-        json['id'] as String? ??
-        'unknown-${DateTime.now().microsecondsSinceEpoch}';
-    final type = json['type'] as String? ?? 'unknown';
-    final dataJson = _asJsonMap(json['data']) ?? const <String, dynamic>{};
+    final id = _requireString(json, 'id');
+    final type = _requireString(json, 'type');
+    final dataJson = _requireMapField(json, 'data');
     final data = _decodeElementData(
       elementRegistry: elementRegistry,
       elementType: type,
@@ -947,10 +967,10 @@ class _HistorySnapshotCodec {
 
     return ElementState(
       id: id,
-      rect: _rectFromJson(_asJsonMap(json['rect']) ?? const {}),
-      rotation: (json['rotation'] as num?)?.toDouble() ?? 0.0,
-      opacity: (json['opacity'] as num?)?.toDouble() ?? 1.0,
-      zIndex: json['zIndex'] as int? ?? 0,
+      rect: _rectFromJson(_requireMapField(json, 'rect')),
+      rotation: _requireDouble(json, 'rotation'),
+      opacity: _requireDouble(json, 'opacity'),
+      zIndex: _requireInt(json, 'zIndex'),
       data: data,
     );
   }
@@ -961,13 +981,20 @@ class _HistorySnapshotCodec {
     required String source,
     UnknownElementReporter? onUnknownElement,
   }) {
-    final decoded = <String, ElementState>{};
     final elementsJson = _asJsonMap(rawElementsJson);
     if (elementsJson == null) {
-      return decoded;
+      throw StateError(
+        'History snapshot element map "$source" is missing or invalid',
+      );
     }
+    final decoded = <String, ElementState>{};
     for (final entry in elementsJson.entries) {
-      final elementJson = _asJsonMap(entry.value) ?? const <String, dynamic>{};
+      final elementJson = _asJsonMap(entry.value);
+      if (elementJson == null) {
+        throw StateError(
+          'History snapshot element payload is invalid for id "${entry.key}"',
+        );
+      }
       decoded[entry.key] = _elementFromJson(
         elementJson,
         elementRegistry,
@@ -1023,16 +1050,6 @@ class _HistorySnapshotCodec {
       mapped[key] = entry.value;
     }
     return mapped;
-  }
-
-  List<int> _asIntList(Object? raw) {
-    if (raw is! List) {
-      return const [];
-    }
-    return <int>[
-      for (final value in raw)
-        if (value is int) value,
-    ];
   }
 
   List<String>? _asStringList(Object? raw) {
@@ -1199,10 +1216,10 @@ class _HistorySnapshotCodec {
   };
 
   DrawRect _rectFromJson(Map<String, dynamic> json) => DrawRect(
-    minX: (json['minX'] as num?)?.toDouble() ?? 0,
-    minY: (json['minY'] as num?)?.toDouble() ?? 0,
-    maxX: (json['maxX'] as num?)?.toDouble() ?? 0,
-    maxY: (json['maxY'] as num?)?.toDouble() ?? 0,
+    minX: _requireDouble(json, 'minX'),
+    minY: _requireDouble(json, 'minY'),
+    maxX: _requireDouble(json, 'maxX'),
+    maxY: _requireDouble(json, 'maxY'),
   );
 
   Map<String, dynamic> _metadataToJson(HistoryMetadata metadata) => {
