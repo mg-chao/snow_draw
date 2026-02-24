@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../../elements/types/text/text_data.dart';
+import 'text_layout_constraints.dart';
 
 /// Request payload for text metric computation.
 @immutable
@@ -130,7 +131,7 @@ final class FallbackTextMetricsService implements TextMetricsService {
     final lineHeight = fontSize * _lineHeightFactor;
     final glyphWidth = math.max(1, fontSize * _glyphWidthFactor).toDouble();
     final text = request.data.text.isEmpty ? ' ' : request.data.text;
-    final maxWidth = _resolveMaxWidth(request.maxWidth);
+    final maxWidth = resolveTextMaxWidth(request.maxWidth);
 
     final lineMetrics = <TextLineMetrics>[];
     for (final line in text.split('\n')) {
@@ -208,16 +209,6 @@ final class FallbackTextMetricsService implements TextMetricsService {
           : maxWidth;
       lineMetrics.add(TextLineMetrics(width: lineWidth, height: lineHeight));
     }
-  }
-
-  static double _resolveMaxWidth(double maxWidth) {
-    if (!maxWidth.isFinite) {
-      return double.infinity;
-    }
-    if (maxWidth <= 0) {
-      return 1;
-    }
-    return maxWidth;
   }
 
   static double _sanitizePositive(double value, {required double fallback}) {

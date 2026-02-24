@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/string_normalization.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
@@ -46,7 +47,7 @@ final class SerialNumberData extends ElementData
     fontSize:
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultSerialNumberFontSize,
-    fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
+    fontFamily: normalizeOptionalTrimmedString(json['fontFamily'] as String?),
     strokeWidth:
         (json['strokeWidth'] as num?)?.toDouble() ??
         ConfigDefaults.defaultStrokeWidth,
@@ -54,7 +55,9 @@ final class SerialNumberData extends ElementData
       (style) => style.name == json['strokeStyle'],
       orElse: () => ConfigDefaults.defaultStrokeStyle,
     ),
-    textElementId: _normalizeOptionalString(json['textElementId'] as String?),
+    textElementId: normalizeOptionalTrimmedString(
+      json['textElementId'] as String?,
+    ),
   );
 
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
@@ -90,7 +93,7 @@ final class SerialNumberData extends ElementData
     fontSize: fontSize ?? this.fontSize,
     fontFamily: fontFamily == _fontFamilyUnset
         ? this.fontFamily
-        : _normalizeOptionalString(fontFamily as String?),
+        : normalizeOptionalTrimmedString(fontFamily as String?),
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeStyle: strokeStyle ?? this.strokeStyle,
     textElementId: identical(textElementId, _textElementIdUnset)
@@ -167,12 +170,4 @@ final class SerialNumberData extends ElementData
 int _coerceNonNegative(int? value, int fallback) {
   final resolved = value ?? fallback;
   return resolved < 0 ? 0 : resolved;
-}
-
-String? _normalizeOptionalString(String? raw) {
-  final trimmed = raw?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
-    return null;
-  }
-  return trimmed;
 }

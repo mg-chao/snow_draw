@@ -6,18 +6,14 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
+import '../../utils/selection_calculator.dart';
 import '../../utils/visible_elements.dart';
 import '../preview/edit_preview.dart';
 import 'edit_errors.dart';
 import 'edit_operation_params.dart';
 
-List<ElementState> snapshotSelectedElements(DrawState state) {
-  final document = state.domain.document;
-  return state.domain.selection.selectedIds
-      .map(document.getElementById)
-      .whereType<ElementState>()
-      .toList();
-}
+List<ElementState> snapshotSelectedElements(DrawState state) =>
+    SelectionCalculator.getSelectedElements(state);
 
 DrawRect requireSelectionBounds({
   required SelectionDerivedData selectionData,

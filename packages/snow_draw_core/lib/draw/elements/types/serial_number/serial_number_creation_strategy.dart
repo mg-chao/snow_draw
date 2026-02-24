@@ -9,6 +9,7 @@ import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../utils/snapping_mode.dart';
+import '../../../utils/string_normalization.dart';
 import '../../core/creation_strategy.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
@@ -156,7 +157,7 @@ class _SerialNumberCreationMode extends CreationMode {
     baseDiameter: baseDiameter,
     number: data.number,
     fontSize: data.fontSize,
-    fontFamily: _normalizeFontFamily(data.fontFamily),
+    fontFamily: normalizeOptionalTrimmedString(data.fontFamily),
   );
 
   final double baseDiameter;
@@ -167,13 +168,5 @@ class _SerialNumberCreationMode extends CreationMode {
   bool matches(SerialNumberData data) =>
       number == data.number &&
       fontSize == data.fontSize &&
-      fontFamily == _normalizeFontFamily(data.fontFamily);
-}
-
-String? _normalizeFontFamily(String? fontFamily) {
-  final trimmed = fontFamily?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
-    return null;
-  }
-  return trimmed;
+      fontFamily == normalizeOptionalTrimmedString(data.fontFamily);
 }

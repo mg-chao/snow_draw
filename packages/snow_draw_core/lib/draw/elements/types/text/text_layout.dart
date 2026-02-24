@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
+import '../../../services/text/text_layout_constraints.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/element_style.dart';
 import 'text_data.dart';
@@ -111,7 +112,7 @@ TextLayoutMetrics layoutText({
   bool isResizing = false,
   TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
-  final safeMaxWidth = _resolveMaxWidth(maxWidth);
+  final safeMaxWidth = resolveTextMaxWidth(maxWidth);
   final safeMinWidth = _resolveMinWidth(minWidth, safeMaxWidth);
   final request = TextLayoutRequest(
     data: data,
@@ -289,16 +290,6 @@ double _resolveAlignedLineX(TextLayoutMetrics layout, double lineWidth) {
     TextHorizontalAlign.center => delta / 2,
     TextHorizontalAlign.right => delta,
   };
-}
-
-double _resolveMaxWidth(double maxWidth) {
-  if (!maxWidth.isFinite) {
-    return double.infinity;
-  }
-  if (maxWidth <= 0) {
-    return 1;
-  }
-  return maxWidth;
 }
 
 double _resolveMinWidth(double? minWidth, double maxWidth) {

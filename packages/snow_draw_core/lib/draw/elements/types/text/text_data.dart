@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/string_normalization.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
@@ -37,7 +38,7 @@ final class TextData extends ElementData
     fontSize:
         (json['fontSize'] as num?)?.toDouble() ??
         ConfigDefaults.defaultTextFontSize,
-    fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
+    fontFamily: normalizeOptionalTrimmedString(json['fontFamily'] as String?),
     horizontalAlign: ElementDataCodec.decodeEnumByName(
       values: TextHorizontalAlign.values,
       raw: json['horizontalAlign'],
@@ -201,14 +202,6 @@ final class TextData extends ElementData
     if (identical(fontFamily, _fontFamilyUnset)) {
       return currentFontFamily;
     }
-    return _normalizeOptionalString(fontFamily as String?);
-  }
-
-  static String? _normalizeOptionalString(String? raw) {
-    final trimmed = raw?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      return null;
-    }
-    return trimmed;
+    return normalizeOptionalTrimmedString(fontFamily as String?);
   }
 }

@@ -8,6 +8,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
+import '../../../utils/string_normalization.dart';
 import '../text/text_data.dart';
 import 'serial_number_data.dart';
 
@@ -221,7 +222,7 @@ SerialNumberTextLayout layoutSerialNumberText({
   String? localeTag,
   TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
-  final sanitizedFamily = _sanitizeFontFamily(data.fontFamily);
+  final sanitizedFamily = normalizeOptionalTrimmedString(data.fontFamily);
   final resolvedLocaleTag = _normalizeLocaleTag(localeTag);
   final fontScale = _resolveSerialNumberFontScale(data.fontSize);
   final geometryKey = _TextGeometryKey(
@@ -332,7 +333,7 @@ _TextGeometry _buildTextGeometry({
       data: TextData(
         text: data.number.toString(),
         fontSize: _canonicalSerialNumberFontSize,
-        fontFamily: _sanitizeFontFamily(data.fontFamily),
+        fontFamily: normalizeOptionalTrimmedString(data.fontFamily),
         horizontalAlign: TextHorizontalAlign.center,
       ),
       maxWidth: double.infinity,
@@ -427,14 +428,6 @@ DrawRect resolveSerialNumberRect({
     maxX: origin.x + diameter,
     maxY: origin.y + diameter,
   );
-}
-
-String? _sanitizeFontFamily(String? fontFamily) {
-  final trimmed = fontFamily?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
-    return null;
-  }
-  return trimmed;
 }
 
 String? _normalizeLocaleTag(String? localeTag) {
