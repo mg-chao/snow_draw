@@ -156,11 +156,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
       if (pointMutation.hasChange) {
         if (previewPoints != null && pointMutation.appendedPoint != null) {
-          _appendPreviewPoint(
-            previewPoints,
-            pointMutation.appendedPoint!,
-            moveTo: worldPoints.length == 1,
-          );
+          _appendPreviewPoint(previewPoints, pointMutation.appendedPoint!);
         }
         previewChanged = true;
       }
@@ -283,11 +279,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         continue;
       }
       if (previewPoints != null && pointMutation.appendedPoint != null) {
-        _appendPreviewPoint(
-          previewPoints,
-          pointMutation.appendedPoint!,
-          moveTo: worldPoints.length == 1,
-        );
+        _appendPreviewPoint(previewPoints, pointMutation.appendedPoint!);
       }
       final changedPoint = pointMutation.changedPoint;
       if (changedPoint != null) {
@@ -482,7 +474,10 @@ List<DrawPoint> _resolveCreationWorldPoints({
   required List<DrawPoint> normalizedPoints,
 }) =>
     mode.worldPoints ??
-    _resolveWorldPoints(rect: rect, normalizedPoints: normalizedPoints);
+    ArrowGeometry.resolveWorldPoints(
+      rect: rect,
+      normalizedPoints: normalizedPoints,
+    );
 
 List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   required List<DrawPoint> worldPoints,
@@ -492,37 +487,11 @@ List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   if (strokeStyle == StrokeStyle.solid) {
     return null;
   }
-  return existingPoints ?? _buildPreviewPoints(worldPoints);
+  return existingPoints ?? List<DrawPoint>.from(worldPoints);
 }
 
-List<DrawPoint> _resolveWorldPoints({
-  required DrawRect rect,
-  required List<DrawPoint> normalizedPoints,
-}) {
-  return ArrowGeometry.resolveWorldPoints(
-    rect: rect,
-    normalizedPoints: normalizedPoints,
-  );
-}
-
-List<DrawPoint> _buildPreviewPoints(List<DrawPoint> worldPoints) {
-  if (worldPoints.isEmpty) {
-    return <DrawPoint>[];
-  }
-  return List<DrawPoint>.from(worldPoints);
-}
-
-void _appendPreviewPoint(
-  List<DrawPoint> previewPoints,
-  DrawPoint point, {
-  bool moveTo = false,
-}) {
-  if (moveTo) {
+void _appendPreviewPoint(List<DrawPoint> previewPoints, DrawPoint point) =>
     previewPoints.add(point);
-    return;
-  }
-  previewPoints.add(point);
-}
 
 DrawRect _boundsFromPoints(List<DrawPoint> points) {
   if (points.isEmpty) {
