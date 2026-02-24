@@ -1,8 +1,8 @@
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
+import '../../../config/draw_config.dart';
 import '../../../core/dependency_interfaces.dart';
-import '../../../edit/core/edit_config.dart';
 import '../../../edit/core/edit_event_factory.dart';
 import '../../../edit/core/edit_operation_params.dart';
 import '../../../edit/core/edit_result_unified.dart';
@@ -32,7 +32,7 @@ class EditStateReducer {
   InteractionTransition? reduce({
     required DrawState state,
     required DrawAction action,
-    required EditReducerDeps context,
+    required InteractionReducerDeps context,
   }) => switch (action) {
     final StartEdit a => _reduceStartEdit(
       action: a,
@@ -48,7 +48,7 @@ class EditStateReducer {
   InteractionTransition _reduceStartEdit({
     required StartEdit action,
     required DrawState state,
-    required EditReducerDeps context,
+    required InteractionReducerDeps context,
   }) {
     var currentState = state;
     final events = <EditSessionEvent>[];
@@ -63,10 +63,7 @@ class EditStateReducer {
       state: currentState,
       operationId: action.operationId,
       position: action.position,
-      params: _injectParams(
-        action.params,
-        context.editConfigProvider.editConfig,
-      ),
+      params: _injectParams(action.params, context.config),
       sessionId: sessionIdGenerator(),
     );
 
@@ -145,17 +142,18 @@ class EditStateReducer {
 
   EditOperationParams _injectParams(
     EditOperationParams params,
-    EditConfig config,
+    DrawConfig config,
   ) => switch (params) {
     final RotateOperationParams p => RotateOperationParams(
       startRotationAngle: p.startRotationAngle,
-      rotationSnapAngle: p.rotationSnapAngle ?? config.rotationSnapAngle,
+      rotationSnapAngle:
+          p.rotationSnapAngle ?? ConfigDefaults.rotationSnapAngle,
       initialSelectionBounds: p.initialSelectionBounds,
     ),
     final ResizeOperationParams p => ResizeOperationParams(
       resizeMode: p.resizeMode,
       handleOffset: p.handleOffset,
-      selectionPadding: p.selectionPadding ?? config.selectionPadding,
+      selectionPadding: p.selectionPadding ?? config.selection.padding,
       initialSelectionBounds: p.initialSelectionBounds,
     ),
     _ => params,

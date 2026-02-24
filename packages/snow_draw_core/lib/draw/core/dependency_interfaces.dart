@@ -1,6 +1,5 @@
 import '../../utils/id_generator.dart';
 import '../config/draw_config.dart';
-import '../edit/core/edit_config_provider.dart';
 import '../edit/core/edit_intent_to_operation_mapper.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../elements/core/element_registry_interface.dart';
@@ -35,10 +34,6 @@ abstract interface class ElementReducerDeps {
   TextMetricsService get textMetricsService;
 }
 
-abstract interface class EditReducerDeps {
-  EditConfigProvider get editConfigProvider;
-}
-
 abstract interface class EditIntentResolverDeps {
   EditIntentToOperationMapper get editIntentMapper;
   EditOperationRegistry get editOperations;
@@ -51,5 +46,4 @@ abstract interface class InteractionReducerDeps
         TextEditReducerDeps,
         SelectionReducerDeps,
         ElementReducerDeps,
-        EditReducerDeps,
         EditIntentResolverDeps {}

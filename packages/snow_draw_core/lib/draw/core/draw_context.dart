@@ -1,8 +1,6 @@
 import '../../utils/id_generator.dart';
 import '../config/config_manager.dart';
 import '../config/draw_config.dart';
-import '../edit/core/edit_config.dart';
-import '../edit/core/edit_config_provider.dart';
 import '../edit/core/edit_intent_to_operation_mapper.dart';
 import '../edit/edit_operation_registry_interface.dart';
 import '../edit/edit_operations.dart';
@@ -24,7 +22,6 @@ class DrawContext implements InteractionReducerDeps {
     required this.idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
     ConfigManager? configManager,
-    this.editConfigProvider = StaticEditConfigProvider.defaults,
     LogService? logService,
     TextMetricsService? textMetricsService,
     this.eventBus,
@@ -40,7 +37,6 @@ class DrawContext implements InteractionReducerDeps {
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
     ConfigManager? configManager,
-    EditConfigProvider? editConfigProvider,
     LogService? logService,
     TextMetricsService? textMetricsService,
     EventBus? eventBus,
@@ -55,8 +51,6 @@ class DrawContext implements InteractionReducerDeps {
       idGenerator: idGenerator ?? RandomStringIdGenerator().call,
       editIntentMapper: editIntentMapper,
       configManager: configManager,
-      editConfigProvider:
-          editConfigProvider ?? StaticEditConfigProvider.defaults,
       logService: logService,
       textMetricsService: textMetricsService,
       eventBus: eventBus,
@@ -74,10 +68,6 @@ class DrawContext implements InteractionReducerDeps {
   @override
   final EditIntentToOperationMapper editIntentMapper;
 
-  /// Edit configuration provider.
-  @override
-  final EditConfigProvider editConfigProvider;
-
   /// Logging service.
   ///
   /// Provides unified logging with modular logs and multiple outputs.
@@ -92,9 +82,6 @@ class DrawContext implements InteractionReducerDeps {
   @override
   final EventBus? eventBus;
 
-  /// Convenient access to edit configuration.
-  EditConfig get editConfig => editConfigProvider.editConfig;
-
   /// Convenient access to the current configuration.
   @override
   DrawConfig get config => configManager.current;
@@ -108,7 +95,6 @@ class DrawContext implements InteractionReducerDeps {
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
     ConfigManager? configManager,
-    EditConfigProvider? editConfigProvider,
     LogService? logService,
     TextMetricsService? textMetricsService,
     EventBus? eventBus,
@@ -118,7 +104,6 @@ class DrawContext implements InteractionReducerDeps {
     idGenerator: idGenerator ?? this.idGenerator,
     editIntentMapper: editIntentMapper ?? this.editIntentMapper,
     configManager: configManager ?? this.configManager,
-    editConfigProvider: editConfigProvider ?? this.editConfigProvider,
     logService: logService ?? log,
     textMetricsService: textMetricsService ?? this.textMetricsService,
     eventBus: eventBus ?? this.eventBus,
