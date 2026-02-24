@@ -119,54 +119,21 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       );
     }
 
-    var snapGuides = const <SnapGuide>[];
-    var nextDx = displacement.dx;
-    var nextDy = displacement.dy;
-    final targetOffset = DrawPoint(x: displacement.dx, y: displacement.dy);
-    final targetRect = typedContext.snapBounds.translate(targetOffset);
-    final snapConfig = config.snap;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappedDisplacement = _resolveSnappedDisplacement(
+      state: state,
+      context: typedContext,
+      displacement: displacement,
+      modifiers: modifiers,
       config: config,
-      ctrlPressed: modifiers.snapOverride,
     );
-    final shouldObjectSnap =
-        snappingMode == SnappingMode.object &&
-        (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
-    if (snappingMode == SnappingMode.grid) {
-      final snappedRect = gridSnapService.snapRect(
-        rect: targetRect,
-        gridSize: config.grid.size,
-        snapMinX: true,
-        snapMinY: true,
-      );
-      nextDx += snappedRect.minX - targetRect.minX;
-      nextDy += snappedRect.minY - targetRect.minY;
-    } else if (shouldObjectSnap) {
-      final snapDistance = resolveZoomAdjustedDistance(
-        distance: snapConfig.distance,
-        zoom: state.application.view.camera.zoom,
-      );
-      final result = objectSnapService.snapMove(
-        targetRect: targetRect,
-        referenceElements: typedContext.referenceElements,
-        referenceAabbs: typedContext.referenceElementAabbs,
-        snapDistance: snapDistance,
-        targetElements: typedContext.targetElements,
-        targetOffset: targetOffset,
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
-      );
-      nextDx += result.dx;
-      nextDy += result.dy;
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
-      }
-    }
 
-    final nextTransform = MoveTransform(dx: nextDx, dy: nextDy);
+    final nextTransform = MoveTransform(
+      dx: snappedDisplacement.dx,
+      dy: snappedDisplacement.dy,
+    );
     return EditUpdateResult<EditTransform>(
       transform: nextTransform,
-      snapGuides: snapGuides,
+      snapGuides: snappedDisplacement.guides,
     );
   }
 
@@ -226,4 +193,64 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     current,
     newBounds: result.multiSelectBounds!,
   );
+
+  ({double dx, double dy, List<SnapGuide> guides}) _resolveSnappedDisplacement({
+    required DrawState state,
+    required MoveEditContext context,
+    required ({double dx, double dy}) displacement,
+    required EditModifiers modifiers,
+    required DrawConfig config,
+  }) {
+    final baseDx = displacement.dx;
+    final baseDy = displacement.dy;
+    final targetOffset = DrawPoint(x: baseDx, y: baseDy);
+    final targetRect = context.snapBounds.translate(targetOffset);
+    final snapConfig = config.snap;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: modifiers.snapOverride,
+    );
+
+    switch (snappingMode) {
+      case SnappingMode.grid:
+        final snappedRect = gridSnapService.snapRect(
+          rect: targetRect,
+          gridSize: config.grid.size,
+          snapMinX: true,
+          snapMinY: true,
+        );
+        return (
+          dx: baseDx + snappedRect.minX - targetRect.minX,
+          dy: baseDy + snappedRect.minY - targetRect.minY,
+          guides: const <SnapGuide>[],
+        );
+      case SnappingMode.object:
+        if (!snapConfig.enablePointSnaps && !snapConfig.enableGapSnaps) {
+          break;
+        }
+        final snapDistance = resolveZoomAdjustedDistance(
+          distance: snapConfig.distance,
+          zoom: state.application.view.camera.zoom,
+        );
+        final result = objectSnapService.snapMove(
+          targetRect: targetRect,
+          referenceElements: context.referenceElements,
+          referenceAabbs: context.referenceElementAabbs,
+          snapDistance: snapDistance,
+          targetElements: context.targetElements,
+          targetOffset: targetOffset,
+          enablePointSnaps: snapConfig.enablePointSnaps,
+          enableGapSnaps: snapConfig.enableGapSnaps,
+        );
+        return (
+          dx: baseDx + result.dx,
+          dy: baseDy + result.dy,
+          guides: snapConfig.showGuides ? result.guides : const <SnapGuide>[],
+        );
+      case SnappingMode.none:
+        break;
+    }
+
+    return (dx: baseDx, dy: baseDy, guides: const <SnapGuide>[]);
+  }
 }
