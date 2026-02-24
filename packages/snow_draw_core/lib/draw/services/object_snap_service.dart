@@ -285,8 +285,6 @@ class ObjectSnapService {
     }
     final effectiveTargetAnchorsX = _deduplicateAnchors(targetAnchorsX);
     final effectiveTargetAnchorsY = _deduplicateAnchors(targetAnchorsY);
-    final hasAnchorsX = effectiveTargetAnchorsX.isNotEmpty;
-    final hasAnchorsY = effectiveTargetAnchorsY.isNotEmpty;
 
     final usePointToPointSnaps =
         enablePointSnaps && targetElements != null && targetElements.isNotEmpty;
@@ -313,58 +311,39 @@ class ObjectSnapService {
           )
         : null;
 
-    final candidatesX = hasAnchorsX
-        ? <_AxisCandidate>[
-            if (enablePointSnaps)
-              ..._buildPointCandidates(
-                axis: SnapAxis.x,
-                targetRect: targetRect,
-                referenceRects: referenceRects,
-                targetPoints: targetPoints,
-                referencePoints: referencePoints,
-                targetAnchors: effectiveTargetAnchorsX,
-                snapDistance: snapDistance,
-              ),
-            if (enableGapSnaps)
-              ..._buildGapCandidates(
-                axis: SnapAxis.x,
-                targetRect: targetRect,
-                referenceRects: referenceRects,
-                targetAnchors: effectiveTargetAnchorsX,
-                snapDistance: snapDistance,
-              ),
-          ]
-        : const <_AxisCandidate>[];
+    final candidatesX = _buildAxisCandidates(
+      axis: SnapAxis.x,
+      targetRect: targetRect,
+      referenceRects: referenceRects,
+      targetAnchors: effectiveTargetAnchorsX,
+      snapDistance: snapDistance,
+      targetPoints: targetPoints,
+      referencePoints: referencePoints,
+      enablePointSnaps: enablePointSnaps,
+      enableGapSnaps: enableGapSnaps,
+    );
+    final candidatesY = _buildAxisCandidates(
+      axis: SnapAxis.y,
+      targetRect: targetRect,
+      referenceRects: referenceRects,
+      targetAnchors: effectiveTargetAnchorsY,
+      snapDistance: snapDistance,
+      targetPoints: targetPoints,
+      referencePoints: referencePoints,
+      enablePointSnaps: enablePointSnaps,
+      enableGapSnaps: enableGapSnaps,
+    );
 
-    final candidatesY = hasAnchorsY
-        ? <_AxisCandidate>[
-            if (enablePointSnaps)
-              ..._buildPointCandidates(
-                axis: SnapAxis.y,
-                targetRect: targetRect,
-                referenceRects: referenceRects,
-                targetPoints: targetPoints,
-                referencePoints: referencePoints,
-                targetAnchors: effectiveTargetAnchorsY,
-                snapDistance: snapDistance,
-              ),
-            if (enableGapSnaps)
-              ..._buildGapCandidates(
-                axis: SnapAxis.y,
-                targetRect: targetRect,
-                referenceRects: referenceRects,
-                targetAnchors: effectiveTargetAnchorsY,
-                snapDistance: snapDistance,
-              ),
-          ]
-        : const <_AxisCandidate>[];
-
-    final xCandidate = hasAnchorsX
-        ? _selectBestCandidate(candidatesX, targetRect, snapDistance)
-        : null;
-    final yCandidate = hasAnchorsY
-        ? _selectBestCandidate(candidatesY, targetRect, snapDistance)
-        : null;
+    final xCandidate = _selectBestCandidate(
+      candidatesX,
+      targetRect,
+      snapDistance,
+    );
+    final yCandidate = _selectBestCandidate(
+      candidatesY,
+      targetRect,
+      snapDistance,
+    );
 
     final dx = xCandidate?.offset ?? 0;
     final dy = yCandidate?.offset ?? 0;
@@ -378,47 +357,101 @@ class ObjectSnapService {
       }
     }
 
-    if (xCandidate != null) {
-      for (final guide in _buildGuidesForCandidate(
-        xCandidate,
-        snappedRect,
-        yCandidate,
-      )) {
-        addGuide(guide);
-      }
-      if (_isGapCandidate(xCandidate)) {
-        for (final guide in _buildAssociatedGapGuides(
-          candidate: xCandidate,
-          targetRect: snappedRect,
-          referenceRects: referenceRects,
-          snapDistance: snapDistance,
-        )) {
-          addGuide(guide);
-        }
-      }
-    }
-
-    if (yCandidate != null) {
-      for (final guide in _buildGuidesForCandidate(
-        yCandidate,
-        snappedRect,
-        xCandidate,
-      )) {
-        addGuide(guide);
-      }
-      if (_isGapCandidate(yCandidate)) {
-        for (final guide in _buildAssociatedGapGuides(
-          candidate: yCandidate,
-          targetRect: snappedRect,
-          referenceRects: referenceRects,
-          snapDistance: snapDistance,
-        )) {
-          addGuide(guide);
-        }
-      }
-    }
+    _appendCandidateGuides(
+      candidate: xCandidate,
+      perpendicularCandidate: yCandidate,
+      snappedRect: snappedRect,
+      referenceRects: referenceRects,
+      snapDistance: snapDistance,
+      addGuide: addGuide,
+    );
+    _appendCandidateGuides(
+      candidate: yCandidate,
+      perpendicularCandidate: xCandidate,
+      snappedRect: snappedRect,
+      referenceRects: referenceRects,
+      snapDistance: snapDistance,
+      addGuide: addGuide,
+    );
 
     return SnapResult(dx: dx, dy: dy, guides: guides);
+  }
+
+  static List<_AxisCandidate> _buildAxisCandidates({
+    required SnapAxis axis,
+    required DrawRect targetRect,
+    required List<DrawRect> referenceRects,
+    required List<SnapAxisAnchor> targetAnchors,
+    required double snapDistance,
+    required bool enablePointSnaps,
+    required bool enableGapSnaps,
+    List<_SnapPoint>? targetPoints,
+    List<_SnapPoint>? referencePoints,
+  }) {
+    if (targetAnchors.isEmpty) {
+      return const <_AxisCandidate>[];
+    }
+
+    final candidates = <_AxisCandidate>[];
+    if (enablePointSnaps) {
+      candidates.addAll(
+        _buildPointCandidates(
+          axis: axis,
+          targetRect: targetRect,
+          referenceRects: referenceRects,
+          targetPoints: targetPoints,
+          referencePoints: referencePoints,
+          targetAnchors: targetAnchors,
+          snapDistance: snapDistance,
+        ),
+      );
+    }
+    if (enableGapSnaps) {
+      candidates.addAll(
+        _buildGapCandidates(
+          axis: axis,
+          targetRect: targetRect,
+          referenceRects: referenceRects,
+          targetAnchors: targetAnchors,
+          snapDistance: snapDistance,
+        ),
+      );
+    }
+    return candidates;
+  }
+
+  static void _appendCandidateGuides({
+    required _AxisCandidate? candidate,
+    required _AxisCandidate? perpendicularCandidate,
+    required DrawRect snappedRect,
+    required List<DrawRect> referenceRects,
+    required double snapDistance,
+    required void Function(SnapGuide guide) addGuide,
+  }) {
+    if (candidate == null) {
+      return;
+    }
+
+    for (final guide in _buildGuidesForCandidate(
+      candidate,
+      snappedRect,
+      perpendicularCandidate,
+    )) {
+      addGuide(guide);
+    }
+
+    if (!_isGapCandidate(candidate)) {
+      return;
+    }
+
+    for (final guide in _buildAssociatedGapGuides(
+      candidate: candidate,
+      targetRect: snappedRect,
+      referenceRects: referenceRects,
+      snapDistance: snapDistance,
+    )) {
+      addGuide(guide);
+    }
   }
 
   /// Builds point snap candidates by comparing target anchors to reference

@@ -170,6 +170,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     final snapConfig = config.snap;
     final anchorsX = _resolveAnchorsX(typedContext.resizeMode);
     final anchorsY = _resolveAnchorsY(typedContext.resizeMode);
+    final snapMinX = anchorsX.contains(SnapAxisAnchor.start);
+    final snapMaxX = anchorsX.contains(SnapAxisAnchor.end);
+    final snapMinY = anchorsY.contains(SnapAxisAnchor.start);
+    final snapMaxY = anchorsY.contains(SnapAxisAnchor.end);
     final canSnap = !typedContext.hasRotation && !modifiers.fromCenter;
     final snappingMode = resolveEffectiveSnappingModeForConfig(
       config: config,
@@ -187,10 +191,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       newBounds = gridSnapService.snapRect(
         rect: newBounds,
         gridSize: gridConfig.size,
-        snapMinX: anchorsX.contains(SnapAxisAnchor.start),
-        snapMaxX: anchorsX.contains(SnapAxisAnchor.end),
-        snapMinY: anchorsY.contains(SnapAxisAnchor.start),
-        snapMaxY: anchorsY.contains(SnapAxisAnchor.end),
+        snapMinX: snapMinX,
+        snapMaxX: snapMaxX,
+        snapMinY: snapMinY,
+        snapMaxY: snapMaxY,
       );
     } else if (shouldObjectSnap) {
       final snapDistance = resolveZoomAdjustedDistance(
@@ -206,15 +210,11 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         targetAnchorsY: anchorsY,
       );
       if (result.hasSnap) {
-        final moveMinX = anchorsX.contains(SnapAxisAnchor.start);
-        final moveMaxX = anchorsX.contains(SnapAxisAnchor.end);
-        final moveMinY = anchorsY.contains(SnapAxisAnchor.start);
-        final moveMaxY = anchorsY.contains(SnapAxisAnchor.end);
         newBounds = DrawRect(
-          minX: newBounds.minX + (moveMinX ? result.dx : 0),
-          minY: newBounds.minY + (moveMinY ? result.dy : 0),
-          maxX: newBounds.maxX + (moveMaxX ? result.dx : 0),
-          maxY: newBounds.maxY + (moveMaxY ? result.dy : 0),
+          minX: newBounds.minX + (snapMinX ? result.dx : 0),
+          minY: newBounds.minY + (snapMinY ? result.dy : 0),
+          maxX: newBounds.maxX + (snapMaxX ? result.dx : 0),
+          maxY: newBounds.maxY + (snapMaxY ? result.dy : 0),
         );
       }
       if (snapConfig.showGuides) {
