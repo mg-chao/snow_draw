@@ -208,6 +208,7 @@ class HitTest {
 
     // Determine corner handle offset for single arrow selections.
     ArrowLikeData? singleSelectedArrow;
+    var isSingleSelectedText = false;
     if (selectedIds.length == 1) {
       final element = state.domain.document.getElementById(selectedIds.first);
       if (element != null) {
@@ -215,6 +216,8 @@ class HitTest {
         final data = effectiveElement.data;
         if (data is ArrowLikeData) {
           singleSelectedArrow = data;
+        } else if (data is TextData) {
+          isSingleSelectedText = true;
         }
       }
     }
@@ -249,6 +252,7 @@ class HitTest {
           tolerance: actualTolerance,
           config: config,
           isInSelectionPadding: isInSelectionPadding,
+          prioritizeMoveInSelectionPadding: isSingleSelectedText,
           allowRotateHandle: !isSingleElbowArrow,
         );
         if (handleResult != null) {
@@ -320,8 +324,15 @@ class HitTest {
     required double tolerance,
     required SelectionConfig config,
     required bool isInSelectionPadding,
+    bool prioritizeMoveInSelectionPadding = false,
     bool allowRotateHandle = true,
   }) {
+    // For selected text, keep move as the primary action while the pointer is
+    // in the padded move area; only allow resize handles from outside.
+    if (prioritizeMoveInSelectionPadding && isInSelectionPadding) {
+      return null;
+    }
+
     final bounds = context.bounds;
     final paddedBounds = context.paddedBounds;
     final handleBounds = context.handleBounds;
