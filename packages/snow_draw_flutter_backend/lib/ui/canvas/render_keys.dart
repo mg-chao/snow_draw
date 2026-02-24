@@ -8,6 +8,35 @@ int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
   map.entries.map((entry) => Object.hash(entry.key, entry.value)),
 );
 
+bool _taskListEquals(List<RenderTask> a, List<RenderTask> b) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (var index = 0; index < a.length; index++) {
+    if (a[index] != b[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _framePlanVisualEquals(FrameRenderPlan a, FrameRenderPlan b) =>
+    identical(a, b) ||
+    (a.camera == b.camera &&
+        a.scaleFactor == b.scaleFactor &&
+        a.localeTag == b.localeTag &&
+        _taskListEquals(a.tasks, b.tasks));
+
+int _framePlanVisualHash(FrameRenderPlan framePlan) => Object.hash(
+  Object.hashAll(framePlan.tasks),
+  framePlan.camera,
+  framePlan.scaleFactor,
+  framePlan.localeTag,
+);
+
 /// Snapshot of element creation state for render key comparison.
 @immutable
 class CreatingElementSnapshot {
@@ -44,15 +73,17 @@ class CreatingElementSnapshot {
 /// Render key for the single scene canvas.
 ///
 /// [framePlan] is the authoritative source for non-element paint tasks in the
-/// single-canvas path (background, overlays, guides, etc.) and carries the
-/// committed scene revision for element invalidation.
+/// single-canvas path (background, overlays, guides, etc.).
 ///
-/// Element scene pixels are resolved from [DrawStateView] and preview snapshots
-/// in the backend painter, so backend-only fields remain part of this key.
+/// Element scene pixels are resolved from [DrawStateView] and preview
+/// snapshots in the backend painter. [visibleSceneFingerprint] captures the
+/// effective visible element scene so offscreen-only document updates do not
+/// force canvas repaints.
 @immutable
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
+    required this.visibleSceneFingerprint,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required this.elementRegistry,
@@ -66,6 +97,9 @@ class SceneCanvasRenderKey {
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
+
+  /// Fingerprint of currently visible effective elements.
+  final int visibleSceneFingerprint;
 
   /// Revision for text rendering cache invalidation.
   ///
@@ -96,23 +130,25 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
+          other.visibleSceneFingerprint == visibleSceneFingerprint &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
           other.elementRegistry == elementRegistry &&
           identical(other.textMetricsService, textMetricsService) &&
           other.performanceMonitoringEnabled == performanceMonitoringEnabled &&
           other.locale == locale &&
-          other.framePlan == framePlan;
+          _framePlanVisualEquals(other.framePlan, framePlan);
 
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
+    visibleSceneFingerprint,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
     elementRegistry,
     identityHashCode(textMetricsService),
     performanceMonitoringEnabled,
     locale,
-    framePlan,
+    _framePlanVisualHash(framePlan),
   ]);
 }

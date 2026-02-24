@@ -41,6 +41,7 @@ void main() {
 
       final beforeKey = SceneCanvasRenderKey(
         creatingElement: null,
+        visibleSceneFingerprint: Object.hash(baseElement.id, baseElement),
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,
@@ -54,6 +55,7 @@ void main() {
       );
       final afterKey = SceneCanvasRenderKey(
         creatingElement: null,
+        visibleSceneFingerprint: Object.hash(styledElement.id, styledElement),
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,

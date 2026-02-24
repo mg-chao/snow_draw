@@ -115,7 +115,7 @@ void main() {
       expect(baseline.hashCode, isNot(changedWatermark.hashCode));
     });
 
-    test('frame plan scene revision participates in equality', () {
+    test('frame plan scene revision is ignored for equality', () {
       final registry = DefaultElementRegistry();
       final baseline = _buildCanvasRenderKey(
         registry: registry,
@@ -136,6 +136,23 @@ void main() {
         ),
       );
 
+      expect(baseline, equals(changed));
+      expect(baseline.hashCode, equals(changed.hashCode));
+    });
+
+    test('visible scene fingerprint participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        visibleSceneFingerprint: 11,
+      );
+      final changed = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        visibleSceneFingerprint: 22,
+      );
+
       expect(baseline, isNot(changed));
       expect(baseline.hashCode, isNot(changed.hashCode));
     });
@@ -147,8 +164,10 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   required FrameRenderPlan framePlan,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
+  int visibleSceneFingerprint = 0,
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
+  visibleSceneFingerprint: visibleSceneFingerprint,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,
   elementRegistry: registry,
