@@ -8,30 +8,20 @@ import 'plugin_core.dart';
 class PluginRegistry {
   PluginRegistry({required PluginContext context}) : _context = context;
   final PluginContext _context;
-  final List<InputPlugin> _plugins = [];
-  final Map<String, InputPlugin> _pluginMap = {};
-  final Map<Type, List<InputPlugin>> _pluginsByEventType = {};
-
-  var _isSorted = true;
-  var _eventTypeIndexDirty = false;
+  final List<InputPlugin> _plugins = <InputPlugin>[];
+  final Map<String, InputPlugin> _pluginMap = <String, InputPlugin>{};
 
   /// Get all plugins.
-  List<InputPlugin> get plugins {
-    _ensureSorted();
-    return List.unmodifiable(_plugins);
-  }
+  List<InputPlugin> get plugins => List<InputPlugin>.unmodifiable(_plugins);
 
   /// Get plugin count.
   int get pluginCount => _plugins.length;
 
   /// Register a plugin.
   Future<void> register(InputPlugin plugin) async {
-    if (_pluginMap.containsKey(plugin.id)) {
-      throw StateError('Plugin with id "${plugin.id}" is already registered');
-    }
-
+    _assertPluginIdAvailable(plugin.id);
     await plugin.onLoad(_context);
-    _registerLoadedPlugins([plugin]);
+    _insertPlugin(plugin);
   }
 
   /// Register plugins in batch.
@@ -56,7 +46,9 @@ class PluginRegistry {
       }
     }
 
-    _registerLoadedPlugins(plugins);
+    for (final plugin in loadedPlugins) {
+      _insertPlugin(plugin);
+    }
   }
 
   /// Unregister a plugin.
@@ -67,9 +59,7 @@ class PluginRegistry {
     }
 
     await plugin.onUnload();
-    _plugins.remove(plugin);
-    _pluginMap.remove(pluginId);
-    _eventTypeIndexDirty = true;
+    _removePlugin(plugin);
   }
 
   /// Check whether a plugin is registered.
@@ -82,14 +72,20 @@ class PluginRegistry {
   ///
   /// Runs plugins by priority until one returns handled.
   Future<PluginResult?> dispatch(InputEvent event, DrawState state) async {
-    _ensureSorted();
-    final pluginsForEvent = _pluginsForEventType(event.runtimeType);
+    final pluginsForEvent = _pluginsForEvent(event);
     if (pluginsForEvent.isEmpty) {
       return null;
     }
 
     PluginResult? finalResult;
     try {
+      if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
+        finalResult = const PluginResult.handled(
+          message: 'Intercepted by before hook',
+        );
+        return finalResult;
+      }
+
       finalResult = await _dispatchToPlugins(
         event: event,
         state: state,
@@ -133,49 +129,52 @@ class PluginRegistry {
     }
     _plugins.clear();
     _pluginMap.clear();
-    _pluginsByEventType.clear();
-    _eventTypeIndexDirty = false;
-  }
-
-  /// Ensure plugins are sorted.
-  void _ensureSorted() {
-    if (_isSorted) {
-      return;
-    }
-    _plugins.sort((a, b) => a.priority.compareTo(b.priority));
-    _isSorted = true;
-  }
-
-  void _ensureEventTypeIndex() {
-    if (!_eventTypeIndexDirty) {
-      return;
-    }
-    _pluginsByEventType.clear();
-    for (final plugin in _plugins) {
-      for (final eventType in plugin.supportedEventTypes) {
-        (_pluginsByEventType[eventType] ??= <InputPlugin>[]).add(plugin);
-      }
-    }
-    _eventTypeIndexDirty = false;
-  }
-
-  List<InputPlugin> _pluginsForEventType(Type eventType) {
-    _ensureEventTypeIndex();
-    return _pluginsByEventType[eventType] ?? const <InputPlugin>[];
   }
 
   void _validateBatchPluginIds(List<InputPlugin> plugins) {
     final batchIds = <String>{};
     for (final plugin in plugins) {
-      if (_pluginMap.containsKey(plugin.id)) {
-        throw StateError('Plugin with id "${plugin.id}" is already registered');
-      }
+      _assertPluginIdAvailable(plugin.id);
       if (!batchIds.add(plugin.id)) {
         throw StateError(
           'Duplicate plugin id "${plugin.id}" in batch registration',
         );
       }
     }
+  }
+
+  List<InputPlugin> _pluginsForEvent(InputEvent event) {
+    final eventType = event.runtimeType;
+    final matching = <InputPlugin>[];
+    for (final plugin in _plugins) {
+      if (plugin.supportedEventTypes.contains(eventType)) {
+        matching.add(plugin);
+      }
+    }
+    return matching;
+  }
+
+  void _assertPluginIdAvailable(String pluginId) {
+    if (_pluginMap.containsKey(pluginId)) {
+      throw StateError('Plugin with id "$pluginId" is already registered');
+    }
+  }
+
+  void _insertPlugin(InputPlugin plugin) {
+    final insertAt = _plugins.indexWhere(
+      (candidate) => candidate.priority > plugin.priority,
+    );
+    if (insertAt == -1) {
+      _plugins.add(plugin);
+    } else {
+      _plugins.insert(insertAt, plugin);
+    }
+    _pluginMap[plugin.id] = plugin;
+  }
+
+  void _removePlugin(InputPlugin plugin) {
+    _plugins.remove(plugin);
+    _pluginMap.remove(plugin.id);
   }
 
   Future<void> _rollbackPlugin(InputPlugin plugin) async {
@@ -206,15 +205,11 @@ class PluginRegistry {
     required DrawState state,
     required List<InputPlugin> pluginsForEvent,
   }) async {
-    if (await _isInterceptedByBeforeHooks(event, pluginsForEvent)) {
-      return const PluginResult.handled(message: 'Intercepted by before hook');
-    }
-
     PluginResult? finalResult;
     for (var i = 0; i < pluginsForEvent.length; i += 1) {
       final plugin = pluginsForEvent[i];
       final pluginState = i == 0 ? state : _context.state;
-      final canHandle = _safeCanHandle(
+      final canHandle = _canHandle(
         plugin: plugin,
         event: event,
         state: pluginState,
@@ -223,23 +218,13 @@ class PluginRegistry {
         continue;
       }
 
-      try {
-        final result = await plugin.handleEvent(event);
-        finalResult = result;
-        if (result.shouldStopPropagation) {
-          break;
-        }
-      } on Object catch (e, stackTrace) {
-        _safeLogInputError(
-          message: 'Plugin handleEvent failed',
-          error: e,
-          stackTrace: stackTrace,
-          metadata: {
-            'plugin': plugin.name,
-            'event': event.runtimeType.toString(),
-          },
-        );
-        // Continue with the next plugin.
+      final result = await _runHandleEvent(plugin: plugin, event: event);
+      if (result == null) {
+        continue;
+      }
+      finalResult = result;
+      if (result.shouldStopPropagation) {
+        break;
       }
     }
     return finalResult;
@@ -250,26 +235,14 @@ class PluginRegistry {
     List<InputPlugin> pluginsForEvent,
   ) async {
     for (final plugin in pluginsForEvent) {
-      try {
-        if (await plugin.onBeforeEvent(event)) {
-          return true;
-        }
-      } on Object catch (e, stackTrace) {
-        _safeLogInputError(
-          message: 'Plugin beforeEvent failed',
-          error: e,
-          stackTrace: stackTrace,
-          metadata: {
-            'plugin': plugin.name,
-            'event': event.runtimeType.toString(),
-          },
-        );
+      if (await _runBeforeEvent(plugin: plugin, event: event)) {
+        return true;
       }
     }
     return false;
   }
 
-  bool _safeCanHandle({
+  bool _canHandle({
     required InputPlugin plugin,
     required InputEvent event,
     required DrawState state,
@@ -290,25 +263,73 @@ class PluginRegistry {
     }
   }
 
+  Future<PluginResult?> _runHandleEvent({
+    required InputPlugin plugin,
+    required InputEvent event,
+  }) async {
+    try {
+      return await plugin.handleEvent(event);
+    } on Object catch (e, stackTrace) {
+      _safeLogInputError(
+        message: 'Plugin handleEvent failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: {
+          'plugin': plugin.name,
+          'event': event.runtimeType.toString(),
+        },
+      );
+      return null;
+    }
+  }
+
+  Future<bool> _runBeforeEvent({
+    required InputPlugin plugin,
+    required InputEvent event,
+  }) async {
+    try {
+      return await plugin.onBeforeEvent(event);
+    } on Object catch (e, stackTrace) {
+      _safeLogInputError(
+        message: 'Plugin beforeEvent failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: {
+          'plugin': plugin.name,
+          'event': event.runtimeType.toString(),
+        },
+      );
+      return false;
+    }
+  }
+
+  Future<void> _runAfterEvent({
+    required InputPlugin plugin,
+    required InputEvent event,
+    required PluginResult? result,
+  }) async {
+    try {
+      await plugin.onAfterEvent(event, result);
+    } on Object catch (e, stackTrace) {
+      _safeLogInputError(
+        message: 'Plugin afterEvent failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: {
+          'plugin': plugin.name,
+          'event': event.runtimeType.toString(),
+        },
+      );
+    }
+  }
+
   Future<void> _runAfterHooks(
     InputEvent event,
     PluginResult? result,
     List<InputPlugin> pluginsForEvent,
   ) async {
     for (final plugin in pluginsForEvent) {
-      try {
-        await plugin.onAfterEvent(event, result);
-      } on Object catch (e, stackTrace) {
-        _safeLogInputError(
-          message: 'Plugin afterEvent failed',
-          error: e,
-          stackTrace: stackTrace,
-          metadata: {
-            'plugin': plugin.name,
-            'event': event.runtimeType.toString(),
-          },
-        );
-      }
+      await _runAfterEvent(plugin: plugin, event: event, result: result);
     }
   }
 
@@ -325,22 +346,8 @@ class PluginRegistry {
     }
   }
 
-  void _registerLoadedPlugins(Iterable<InputPlugin> plugins) {
-    for (final plugin in plugins) {
-      _plugins.add(plugin);
-      _pluginMap[plugin.id] = plugin;
-    }
-    _markPluginGraphDirty();
-  }
-
-  void _markPluginGraphDirty() {
-    _isSorted = false;
-    _eventTypeIndexDirty = true;
-  }
-
   /// Get plugin statistics.
   Map<String, dynamic> getStats() {
-    _ensureSorted();
     final eventTypeCount = <Type, int>{};
     for (final plugin in _plugins) {
       for (final type in plugin.supportedEventTypes) {
