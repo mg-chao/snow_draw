@@ -598,14 +598,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       interaction.elementId,
     );
     final sourceElement = previewElement ?? documentElement;
-    if (sourceElement?.data is! TextData) {
+    if (sourceElement == null || sourceElement.data is! TextData) {
       return null;
     }
-    final element = sourceElement!;
-    if (_doubleEquals(element.opacity, 0)) {
-      return element;
+    // Keep hidden preview data aligned with persisted text so text-only
+    // draft edits do not invalidate scene render keys.
+    final hiddenData = documentElement?.data is TextData
+        ? documentElement!.data
+        : sourceElement.data;
+    final isOpacityHidden = _doubleEquals(sourceElement.opacity, 0);
+    if (isOpacityHidden && sourceElement.data == hiddenData) {
+      return sourceElement;
     }
-    return element.copyWith(opacity: 0);
+    return sourceElement.copyWith(opacity: 0, data: hiddenData);
   }
 
   Map<String, ElementState> _resolveEraserPreviewElements(
@@ -2277,8 +2282,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required SceneCanvasRenderKey renderKey,
   }) {
     final currentSnapshot = _canvasSnapshotNotifier.value;
-    if (identical(currentSnapshot.stateView, stateView) &&
-        currentSnapshot.renderKey == renderKey) {
+    if (currentSnapshot.renderKey == renderKey) {
       return;
     }
 
