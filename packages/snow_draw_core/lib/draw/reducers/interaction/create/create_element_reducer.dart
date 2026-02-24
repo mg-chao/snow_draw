@@ -355,7 +355,7 @@ class CreateElementReducer {
       return state;
     }
 
-    final nextElement = updateResult.data == interaction.elementData
+    final nextElement = updateResult.data == interaction.element.data
         ? interaction.element
         : interaction.element.copyWith(data: updateResult.data);
     final nextInteraction = interaction.copyWith(
@@ -373,7 +373,7 @@ class CreateElementReducer {
     CreatingState interaction,
     CreationUpdateResult updateResult,
   ) =>
-      interaction.elementData == updateResult.data &&
+      interaction.element.data == updateResult.data &&
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
       snapGuideListEquals(interaction.snapGuides, updateResult.snapGuides);

@@ -99,7 +99,7 @@ abstract class CreationStrategy {
       );
 
       final baseElement = working.element;
-      final updatedElement = updateResult.data == working.elementData
+      final updatedElement = updateResult.data == working.element.data
           ? baseElement
           : baseElement.copyWith(data: updateResult.data);
 
@@ -112,7 +112,7 @@ abstract class CreationStrategy {
     }
 
     return CreationUpdateResult(
-      data: working.elementData,
+      data: working.element.data,
       rect: working.currentRect,
       creationMode: working.creationMode,
       snapGuides: working.snapGuides,

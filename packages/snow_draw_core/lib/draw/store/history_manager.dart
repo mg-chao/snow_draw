@@ -14,7 +14,6 @@ import '../models/selection_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_color.dart';
 import '../types/draw_rect.dart';
-import 'history_change_set.dart';
 import 'history_delta.dart';
 import 'snapshot.dart';
 
@@ -60,10 +59,8 @@ class HistoryManager {
     HistorySnapshot before,
     HistorySnapshot after, {
     HistoryMetadata? metadata,
-    HistoryChangeSet? changes,
     HistoryCoalescing? coalescing,
     DrawState? currentState,
-    DrawState? nextState,
     DateTime? recordedAt,
   }) {
     final now = recordedAt ?? DateTime.now();
@@ -72,10 +69,8 @@ class HistoryManager {
       final coalesced = _tryCoalesceCurrentRecord(
         after: after,
         metadata: metadata,
-        changes: changes,
         coalescing: coalescing,
         currentState: currentState,
-        nextState: nextState,
         includeSelection: before.includeSelection,
         recordedAt: now,
       );
@@ -84,7 +79,7 @@ class HistoryManager {
       }
     }
 
-    final delta = HistoryDelta.fromSnapshots(before, after, changes: changes);
+    final delta = HistoryDelta.fromSnapshots(before, after);
     if (!delta.hasChanges) {
       _log?.trace('History record skipped (no changes)', {
         'description': metadata?.description,
@@ -120,10 +115,8 @@ class HistoryManager {
   bool? _tryCoalesceCurrentRecord({
     required HistorySnapshot after,
     required HistoryMetadata? metadata,
-    required HistoryChangeSet? changes,
     required HistoryCoalescing coalescing,
     required DrawState currentState,
-    required DrawState? nextState,
     required bool includeSelection,
     required DateTime recordedAt,
   }) {
@@ -144,9 +137,6 @@ class HistoryManager {
     final mergedDelta = _buildCoalescedDelta(
       parentState: parentState,
       afterSnapshot: after,
-      currentDelta: currentDelta,
-      nextState: nextState,
-      changes: changes,
       includeSelection: includeSelection,
     );
 
@@ -176,106 +166,19 @@ class HistoryManager {
   HistoryDelta _buildCoalescedDelta({
     required DrawState parentState,
     required HistorySnapshot afterSnapshot,
-    required HistoryDelta currentDelta,
-    required DrawState? nextState,
-    required HistoryChangeSet? changes,
     required bool includeSelection,
   }) {
-    if (nextState == null || changes == null) {
-      final mergedBefore = PersistentSnapshot.fromState(
-        parentState,
-        includeSelection: includeSelection,
-      );
-      return HistoryDelta.fromSnapshots(mergedBefore, afterSnapshot);
-    }
-
-    final mergedChanges = _composeCoalescedChangeSet(
-      currentDelta: currentDelta,
-      incomingChanges: changes,
-    );
-
     final mergedBefore = _snapshotForCoalescedState(
       state: parentState,
-      changes: mergedChanges,
       includeSelection: includeSelection,
     );
-    final mergedAfter = _snapshotForCoalescedState(
-      state: nextState,
-      changes: mergedChanges,
-      includeSelection: includeSelection,
-    );
-
-    return HistoryDelta.fromSnapshots(
-      mergedBefore,
-      mergedAfter,
-      changes: mergedChanges,
-    );
-  }
-
-  HistoryChangeSet _composeCoalescedChangeSet({
-    required HistoryDelta currentDelta,
-    required HistoryChangeSet incomingChanges,
-  }) {
-    final currentElementIds = <String>{
-      ...currentDelta.beforeElements.keys,
-      ...currentDelta.afterElements.keys,
-    };
-
-    return HistoryChangeSet(
-      modifiedIds: <String>{
-        ...incomingChanges.allElementIds,
-        ...currentElementIds,
-      },
-      orderChanged:
-          incomingChanges.orderChanged || currentDelta.orderBefore != null,
-      globalElementsChanged:
-          incomingChanges.globalElementsChanged ||
-          currentDelta.globalElementsBefore != null,
-      selectionChanged:
-          incomingChanges.selectionChanged || currentDelta.selectionChanged,
-      reindexZIndices:
-          incomingChanges.reindexZIndices || currentDelta.reindexZIndices,
-    );
+    return HistoryDelta.fromSnapshots(mergedBefore, afterSnapshot);
   }
 
   HistorySnapshot _snapshotForCoalescedState({
     required DrawState state,
-    required HistoryChangeSet changes,
     required bool includeSelection,
-  }) {
-    if (!_canUseIncrementalCoalescingSnapshot(changes)) {
-      return PersistentSnapshot.fromState(
-        state,
-        includeSelection: includeSelection,
-      );
-    }
-
-    final elementsById = <String, ElementState>{};
-    if (changes.hasElementChanges) {
-      final elementMap = state.domain.document.elementMap;
-      for (final id in changes.allElementIds) {
-        final element = elementMap[id];
-        if (element != null) {
-          elementsById[id] = element;
-        }
-      }
-    }
-
-    return IncrementalSnapshot(
-      elementsById: elementsById,
-      globalElements: state.domain.document.globalElements,
-      selection: includeSelection
-          ? state.domain.selection
-          : const SelectionState(),
-      includeSelection: includeSelection,
-      order: changes.orderChanged
-          ? state.domain.document.elements.map((element) => element.id).toList()
-          : null,
-    );
-  }
-
-  bool _canUseIncrementalCoalescingSnapshot(HistoryChangeSet changes) =>
-      !changes.orderChanged || changes.reindexZIndices;
+  }) => PersistentSnapshot.fromState(state, includeSelection: includeSelection);
 
   bool _canCoalesceCurrent({
     required HistoryCoalescing coalescing,

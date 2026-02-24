@@ -12,9 +12,9 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('History z-index incremental optimization', () {
+  group('History z-index behavior', () {
     test(
-      'ChangeElementZIndex stores compact deltas and keeps undo/redo zIndex stable',
+      'ChangeElementZIndex records full snapshots and keeps undo/redo zIndex stable',
       () async {
         final store = _createStore(initialState: _stateWithElements(4));
         addTearDown(store.dispose);
@@ -27,9 +27,9 @@ void main() {
         );
 
         final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 1);
-        expect(_mapEntryCount(delta['afterElements']), 1);
-        expect(delta['reindexZIndices'], isTrue);
+        expect(_mapEntryCount(delta['beforeElements']), 4);
+        expect(_mapEntryCount(delta['afterElements']), 4);
+        expect(delta['reindexZIndices'], isNull);
 
         expect(_elementOrder(store), ['b', 'c', 'd', 'a']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
@@ -45,7 +45,7 @@ void main() {
     );
 
     test(
-      'ChangeElementsZIndex uses compact deltas and keeps undo/redo zIndex stable',
+      'ChangeElementsZIndex records full snapshots and keeps undo/redo zIndex stable',
       () async {
         final store = _createStore(initialState: _stateWithElements(4));
         addTearDown(store.dispose);
@@ -58,9 +58,9 @@ void main() {
         );
 
         final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 2);
-        expect(_mapEntryCount(delta['afterElements']), 2);
-        expect(delta['reindexZIndices'], isTrue);
+        expect(_mapEntryCount(delta['beforeElements']), 4);
+        expect(_mapEntryCount(delta['afterElements']), 4);
+        expect(delta['reindexZIndices'], isNull);
 
         expect(_elementOrder(store), ['c', 'd', 'a', 'b']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
