@@ -9,7 +9,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'text-only draft updates keep canvas render keys stable when geometry is '
+    'text-only draft updates refresh canvas render keys when geometry is '
     'unchanged',
     (tester) async {
       final registry = DefaultElementRegistry();
@@ -67,7 +67,7 @@ void main() {
 
       final keyAfter = _canvasRenderKey(tester);
 
-      expect(keyAfter, equals(keyBefore));
+      expect(keyAfter, isNot(equals(keyBefore)));
     },
   );
 

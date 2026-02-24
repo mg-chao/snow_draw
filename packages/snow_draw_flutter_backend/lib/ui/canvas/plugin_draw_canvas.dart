@@ -601,16 +601,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (sourceElement == null || sourceElement.data is! TextData) {
       return null;
     }
-    // Keep hidden preview data aligned with persisted text so text-only
-    // draft edits do not invalidate scene render keys.
-    final hiddenData = documentElement?.data is TextData
-        ? documentElement!.data
-        : sourceElement.data;
-    final isOpacityHidden = _doubleEquals(sourceElement.opacity, 0);
-    if (isOpacityHidden && sourceElement.data == hiddenData) {
+    if (_doubleEquals(sourceElement.opacity, 0)) {
       return sourceElement;
     }
-    return sourceElement.copyWith(opacity: 0, data: hiddenData);
+    return sourceElement.copyWith(opacity: 0);
   }
 
   Map<String, ElementState> _resolveEraserPreviewElements(
