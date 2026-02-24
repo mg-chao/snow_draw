@@ -51,16 +51,20 @@ class PluginInputCoordinator {
     }
 
     final queuedEvent = _QueuedInputEvent(event);
-    _enqueueOrCoalesce(queuedEvent);
-    _drainFuture ??= _drainQueue();
+    _enqueue(queuedEvent);
+    _ensureDraining();
     return queuedEvent.completer.future;
   }
 
-  void _enqueueOrCoalesce(_QueuedInputEvent incomingEvent) {
+  void _enqueue(_QueuedInputEvent incomingEvent) {
     if (_tryCoalesce(incomingEvent)) {
       return;
     }
     _queue.addLast(incomingEvent);
+  }
+
+  void _ensureDraining() {
+    _drainFuture ??= _drainQueue();
   }
 
   bool _tryCoalesce(_QueuedInputEvent incomingEvent) {
@@ -108,23 +112,26 @@ class PluginInputCoordinator {
   Future<void> _drainQueue() async {
     try {
       while (_queue.isNotEmpty) {
-        final queuedEvent = _queue.removeFirst();
-        try {
-          final result = await _processEvent(queuedEvent.event);
-          queuedEvent.complete(result);
-        } on Object catch (error, stackTrace) {
-          _logProcessingError(
-            event: queuedEvent.event,
-            error: error,
-            stackTrace: stackTrace,
-          );
-          queuedEvent.complete(
-            const PluginResult.unhandled(reason: _processingFailureReason),
-          );
-        }
+        await _drainNextQueuedEvent();
       }
     } finally {
       _drainFuture = null;
+    }
+  }
+
+  Future<void> _drainNextQueuedEvent() async {
+    final queuedEvent = _queue.removeFirst();
+    try {
+      queuedEvent.complete(await _processEvent(queuedEvent.event));
+    } on Object catch (error, stackTrace) {
+      _logProcessingError(
+        event: queuedEvent.event,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      queuedEvent.complete(
+        const PluginResult.unhandled(reason: _processingFailureReason),
+      );
     }
   }
 

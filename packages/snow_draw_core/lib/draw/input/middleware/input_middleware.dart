@@ -92,65 +92,6 @@ abstract class InputMiddlewareBase implements InputMiddleware {
 
   @override
   String get name => _name;
-
-  /// Helper: continue to the next middleware.
-  @protected
-  Future<InputEvent?> continueWith(InputEvent event, NextMiddleware next) =>
-      next(event);
-
-  /// Helper: intercept the event (stop processing).
-  @protected
-  Future<InputEvent?> intercept() async => null;
-}
-
-/// Simple middleware: implement transform only.
-abstract class SimpleMiddleware extends InputMiddlewareBase {
-  const SimpleMiddleware({required super.name});
-
-  @override
-  Future<InputEvent?> process(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  ) async {
-    final transformed = await transform(event, context);
-    if (transformed == null) {
-      return null; // Intercept.
-    }
-    return next(transformed);
-  }
-
-  /// Transform the event.
-  ///
-  /// Returning null intercepts the event.
-  Future<InputEvent?> transform(InputEvent event, MiddlewareContext context);
-}
-
-/// Conditional middleware: process based on a condition.
-abstract class ConditionalMiddleware extends InputMiddlewareBase {
-  const ConditionalMiddleware({required super.name});
-
-  @override
-  Future<InputEvent?> process(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  ) async {
-    if (await shouldProcess(event, context)) {
-      return processEvent(event, context, next);
-    }
-    return next(event);
-  }
-
-  /// Decide whether to process this event.
-  Future<bool> shouldProcess(InputEvent event, MiddlewareContext context);
-
-  /// Process the event.
-  Future<InputEvent?> processEvent(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  );
 }
 
 /// Input pipeline.
