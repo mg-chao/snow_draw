@@ -499,26 +499,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final stateView = _buildStateView(widget.store.state);
-    final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
     final locale = Localizations.maybeLocaleOf(context);
+    _syncCanvasSnapshotForBuild(locale: locale);
     final textOverlay = _buildTextEditorOverlay(
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final canvasInputs = _resolveCanvasRenderInputs(stateView);
     final eraserCursorOverlay = _buildEraserCursorOverlay();
-
-    // Build a single render key for the unified canvas painter.
-    final canvasRenderKey = _buildCanvasRenderKey(
-      stateView: stateView,
-      selectionConfig: selectionConfig,
-      scaleFactor: scaleFactor,
-      inputs: canvasInputs,
-      locale: locale,
-    );
-    _setCanvasSnapshot(stateView: stateView, renderKey: canvasRenderKey);
 
     final paintStack = Listener(
       onPointerDown: _handlePointerDown,
@@ -2287,7 +2275,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       Localizations.maybeLocaleOf(context) ??
       _canvasSnapshotNotifier.value.renderKey.locale;
 
-  void _refreshCanvasSnapshot(DrawState state) {
+  void _syncCanvasSnapshotForBuild({required Locale? locale}) {
+    final currentRenderKey = _canvasSnapshotNotifier.value.renderKey;
+    final currentScale = currentRenderKey.framePlan.scaleFactor;
+    final requestedScale = _effectiveScaleFactor();
+    final targetScale = requestedScale.isFinite && requestedScale > 0
+        ? requestedScale
+        : 1.0;
+    final scaleChanged = !_doubleEquals(currentScale, targetScale);
+    final localeChanged = currentRenderKey.locale != locale;
+    final monitoringChanged =
+        currentRenderKey.performanceMonitoringEnabled !=
+        widget.enablePerformanceMonitoring;
+    if (!scaleChanged && !localeChanged && !monitoringChanged) {
+      return;
+    }
+    _refreshCanvasSnapshot(widget.store.state, localeOverride: locale);
+  }
+
+  void _refreshCanvasSnapshot(DrawState state, {Locale? localeOverride}) {
     if (!mounted) {
       return;
     }
@@ -2295,7 +2301,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final stateView = _buildStateView(state);
     final inputs = _resolveCanvasRenderInputs(stateView);
     final scaleFactor = _effectiveScaleFactor();
-    final locale = _resolveCanvasLocale();
+    final locale = localeOverride ?? _resolveCanvasLocale();
     final canvasRenderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
