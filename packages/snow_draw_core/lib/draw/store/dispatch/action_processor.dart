@@ -71,8 +71,11 @@ class ActionProcessor {
 
   bool get isDisposed => _isDisposed;
 
-  Future<void> dispatch(DrawAction action) =>
-      _enqueue(() => _processWithExplicitCancel(action));
+  Future<void> dispatch(DrawAction action) => _enqueue(() async {
+    for (final nextAction in _expandActionsForDispatch(action)) {
+      await _process(nextAction);
+    }
+  });
 
   void syncHistoryAvailability({bool emitIfChanged = false}) {
     final canUndo = _services.historyManager.canUndo;
@@ -132,12 +135,12 @@ class ActionProcessor {
     }
   }
 
-  Future<void> _processWithExplicitCancel(DrawAction action) async {
+  List<DrawAction> _expandActionsForDispatch(DrawAction action) {
     final cancelReason = _resolveEditCancelReason(action);
-    if (cancelReason != null) {
-      await _process(CancelEdit(reason: cancelReason));
+    if (cancelReason == null) {
+      return [action];
     }
-    await _process(action);
+    return [CancelEdit(reason: cancelReason), action];
   }
 
   Future<void> _process(DrawAction action) async {
@@ -217,28 +220,27 @@ class ActionProcessor {
   }
 
   EditCancelReason? _resolveEditCancelReason(DrawAction action) {
-    final state = _services.stateManager.current;
-    if (!state.application.isEditing) {
+    if (!_services.stateManager.current.application.isEditing) {
       return null;
     }
 
-    return switch (action) {
-      CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
-      StartEdit _ || EditIntentAction _ => EditCancelReason.newEditStarted,
-      Undo _ || Redo _ =>
-        _hasConflictingHistoryNavigation(action)
-            ? EditCancelReason.conflictingAction
-            : null,
-      _ =>
-        action.conflictsWithEditing ? EditCancelReason.conflictingAction : null,
-    };
-  }
+    if (action is CancelEdit || action is UpdateEdit || action is FinishEdit) {
+      return null;
+    }
+    if (action is StartEdit || action is EditIntentAction) {
+      return EditCancelReason.newEditStarted;
+    }
+    if (action is Undo && !_services.historyManager.canUndo) {
+      return null;
+    }
+    if (action is Redo && !_services.historyManager.canRedo) {
+      return null;
+    }
 
-  bool _hasConflictingHistoryNavigation(DrawAction action) => switch (action) {
-    Undo _ => _services.historyManager.canUndo,
-    Redo _ => _services.historyManager.canRedo,
-    _ => false,
-  };
+    return action.conflictsWithEditing
+        ? EditCancelReason.conflictingAction
+        : null;
+  }
 
   void _commit({
     required DispatchContext initialContext,
@@ -370,55 +372,59 @@ class ActionProcessor {
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
-    switch ((prevInteraction, nextInteraction)) {
-      case (final EditingState previous, final EditingState next)
-          when previous.sessionId == next.sessionId:
+    if (prevInteraction is EditingState && nextInteraction is EditingState) {
+      if (prevInteraction.sessionId == nextInteraction.sessionId) {
         _emitEvent(
           () => EditSessionUpdatedEvent(
-            sessionId: next.sessionId,
-            operationId: next.operationId,
+            sessionId: nextInteraction.sessionId,
+            operationId: nextInteraction.operationId,
           ),
         );
-      case (final EditingState previous, final EditingState next):
+      } else {
         _emitEvent(
           () => EditSessionCancelledEvent(
-            sessionId: previous.sessionId,
-            operationId: previous.operationId,
+            sessionId: prevInteraction.sessionId,
+            operationId: prevInteraction.operationId,
             reason: EditCancelReason.newEditStarted,
           ),
         );
         _emitEvent(
           () => EditSessionStartedEvent(
-            sessionId: next.sessionId,
-            operationId: next.operationId,
+            sessionId: nextInteraction.sessionId,
+            operationId: nextInteraction.operationId,
           ),
         );
-      case (final EditingState previous, _):
-        if (action is FinishEdit) {
-          _emitEvent(
-            () => EditSessionFinishedEvent(
-              sessionId: previous.sessionId,
-              operationId: previous.operationId,
-            ),
-          );
-        } else {
-          _emitEvent(
-            () => EditSessionCancelledEvent(
-              sessionId: previous.sessionId,
-              operationId: previous.operationId,
-              reason: _resolveCancelReason(action),
-            ),
-          );
-        }
-      case (_, final EditingState next):
+      }
+      return;
+    }
+
+    if (prevInteraction is EditingState) {
+      if (action is FinishEdit) {
         _emitEvent(
-          () => EditSessionStartedEvent(
-            sessionId: next.sessionId,
-            operationId: next.operationId,
+          () => EditSessionFinishedEvent(
+            sessionId: prevInteraction.sessionId,
+            operationId: prevInteraction.operationId,
           ),
         );
-      default:
-        break;
+      } else {
+        _emitEvent(
+          () => EditSessionCancelledEvent(
+            sessionId: prevInteraction.sessionId,
+            operationId: prevInteraction.operationId,
+            reason: _resolveCancelReason(action),
+          ),
+        );
+      }
+      return;
+    }
+
+    if (nextInteraction is EditingState) {
+      _emitEvent(
+        () => EditSessionStartedEvent(
+          sessionId: nextInteraction.sessionId,
+          operationId: nextInteraction.operationId,
+        ),
+      );
     }
   }
 

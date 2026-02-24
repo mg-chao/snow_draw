@@ -172,13 +172,7 @@ class PluginRegistry {
         continue;
       }
 
-      final result = await _invokePluginHook<PluginResult?>(
-        plugin: plugin,
-        event: event,
-        hook: 'handleEvent',
-        run: () => plugin.handleEvent(event),
-        fallback: null,
-      );
+      final result = await _runHandleHook(plugin: plugin, event: event);
       if (result == null) {
         continue;
       }
@@ -195,13 +189,7 @@ class PluginRegistry {
     List<InputPlugin> pluginsForEvent,
   ) async {
     for (final plugin in pluginsForEvent) {
-      final intercepted = await _invokePluginHook<bool>(
-        plugin: plugin,
-        event: event,
-        hook: 'beforeEvent',
-        run: () => plugin.onBeforeEvent(event),
-        fallback: false,
-      );
+      final intercepted = await _runBeforeHook(plugin: plugin, event: event);
       if (intercepted) {
         return true;
       }
@@ -265,23 +253,76 @@ class PluginRegistry {
     }
   }
 
-  Future<T> _invokePluginHook<T>({
+  Future<bool> _runBeforeHook({
     required InputPlugin plugin,
     required InputEvent event,
-    required String hook,
-    required Future<T> Function() run,
-    required T fallback,
   }) async {
     try {
-      return await run();
+      return await plugin.onBeforeEvent(event);
     } on Object catch (e, stackTrace) {
       _safeLogInputError(
-        message: 'Plugin $hook failed',
+        message: 'Plugin beforeEvent failed',
         error: e,
         stackTrace: stackTrace,
-        metadata: _hookMetadata(plugin: plugin, event: event, hook: hook),
+        metadata: _hookMetadata(
+          plugin: plugin,
+          event: event,
+          hook: 'beforeEvent',
+        ),
       );
-      return fallback;
+      return false;
+    }
+  }
+
+  Future<PluginResult?> _runHandleHook({
+    required InputPlugin plugin,
+    required InputEvent event,
+  }) async {
+    try {
+      return await plugin.handleEvent(event);
+    } on Object catch (e, stackTrace) {
+      _safeLogInputError(
+        message: 'Plugin handleEvent failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: _hookMetadata(
+          plugin: plugin,
+          event: event,
+          hook: 'handleEvent',
+        ),
+      );
+      return null;
+    }
+  }
+
+  Future<void> _runAfterHooks(
+    InputEvent event,
+    PluginResult? result,
+    List<InputPlugin> pluginsForEvent,
+  ) async {
+    for (final plugin in pluginsForEvent) {
+      await _runAfterHook(plugin: plugin, event: event, result: result);
+    }
+  }
+
+  Future<void> _runAfterHook({
+    required InputPlugin plugin,
+    required InputEvent event,
+    required PluginResult? result,
+  }) async {
+    try {
+      await plugin.onAfterEvent(event, result);
+    } on Object catch (e, stackTrace) {
+      _safeLogInputError(
+        message: 'Plugin afterEvent failed',
+        error: e,
+        stackTrace: stackTrace,
+        metadata: _hookMetadata(
+          plugin: plugin,
+          event: event,
+          hook: 'afterEvent',
+        ),
+      );
     }
   }
 
@@ -294,25 +335,6 @@ class PluginRegistry {
     'event': event.runtimeType.toString(),
     'hook': hook,
   };
-
-  Future<void> _runAfterHooks(
-    InputEvent event,
-    PluginResult? result,
-    List<InputPlugin> pluginsForEvent,
-  ) async {
-    for (final plugin in pluginsForEvent) {
-      await _invokePluginHook<Object?>(
-        plugin: plugin,
-        event: event,
-        hook: 'afterEvent',
-        run: () async {
-          await plugin.onAfterEvent(event, result);
-          return null;
-        },
-        fallback: null,
-      );
-    }
-  }
 
   void _safeLogInputError({
     required String message,
