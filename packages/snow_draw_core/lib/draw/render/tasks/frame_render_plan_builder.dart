@@ -7,11 +7,11 @@ import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../types/draw_rect.dart';
-import '../../types/element_style.dart';
 import '../../utils/arrow_binding_highlight.dart';
 import '../../utils/binding_highlight_visibility.dart';
 import '../../utils/camera_zoom.dart';
 import '../../utils/selection_calculator.dart';
+import '../../utils/single_selection_profile.dart';
 import '../planning/highlight_mask_visibility.dart';
 import '../planning/watermark_visibility.dart';
 import '../rect_intersection.dart';
@@ -138,13 +138,11 @@ class FrameRenderPlanBuilder {
       for (final element in view.selectedElements)
         resolveEffectiveElement(element),
     ];
-    final selectedArrowData = _resolveSingleSelectedArrowData(
-      selectedCount: selectedIds.length,
-      selectedElements: selectedEffectiveElements,
+    final singleSelection = resolveSingleSelectionProfile(
+      selectedIds: selectedIds,
+      resolveElementById: resolveEffectiveElementById,
     );
-    final singleSelectedElement = selectedIds.length == 1
-        ? resolveEffectiveElementById(selectedIds.first)
-        : null;
+    final singleSelectedElement = singleSelection.element;
 
     final hoverSelectionConfig = transientState.hoverSelectionConfig;
     final hoveredElementId = transientState.hoveredElementId;
@@ -182,12 +180,7 @@ class FrameRenderPlanBuilder {
         }
       }
 
-      final isSingleTwoPointArrow = selectedArrowData?.points.length == 2;
-      final isSingleElbowArrow =
-          selectedArrowData?.arrowType == ArrowType.elbow;
-      final cornerHandleOffset = selectedArrowData == null ? 0.0 : 8.0;
-
-      if (!isSingleTwoPointArrow) {
+      if (!singleSelection.isTwoPointArrow) {
         final selectionBounds = effectiveSelection.bounds!;
         tasks.add(
           SelectionControlsRenderTask(
@@ -196,45 +189,41 @@ class FrameRenderPlanBuilder {
             rotation: effectiveSelection.rotation,
             rotationCenter: effectiveSelection.center ?? selectionBounds.center,
             dashed: selectedIds.length > 1,
-            cornerHandleOffset: cornerHandleOffset,
-            showRotationHandle: !isSingleElbowArrow,
+            cornerHandleOffset: singleSelection.cornerHandleOffset,
+            showRotationHandle: !singleSelection.isElbowArrow,
           ),
         );
       }
     }
 
-    if (selectionConfig != null && singleSelectedElement != null) {
-      final data = singleSelectedElement.data;
-      if (data is ArrowLikeData) {
-        final handleTolerance =
-            selectionConfig.interaction.handleTolerance / effectiveScale;
-        final loopThreshold = handleTolerance * 1.5;
-        final baseHandleSize =
-            selectionConfig.render.controlPointSize / effectiveScale;
-        final handleSize =
-            baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
-        final overlay = ArrowPointUtils.buildOverlay(
-          element: singleSelectedElement,
-          loopThreshold: loopThreshold,
-          handleSize: handleSize,
+    if (selectionConfig != null && singleSelection.arrowData != null) {
+      final handleTolerance =
+          selectionConfig.interaction.handleTolerance / effectiveScale;
+      final loopThreshold = handleTolerance * 1.5;
+      final baseHandleSize =
+          selectionConfig.render.controlPointSize / effectiveScale;
+      final handleSize =
+          baseHandleSize * ConfigDefaults.arrowPointSizeMultiplier;
+      final overlay = ArrowPointUtils.buildOverlay(
+        element: singleSelectedElement!,
+        loopThreshold: loopThreshold,
+        handleSize: handleSize,
+      );
+      final handles = <ArrowPointHandle>[
+        ...overlay.addablePoints,
+        ...overlay.turningPoints,
+        ...overlay.loopPoints,
+      ];
+      if (handles.isNotEmpty) {
+        tasks.add(
+          ArrowPointOverlayRenderTask(
+            handles: List<ArrowPointHandle>.unmodifiable(handles),
+            selectionConfig: selectionConfig,
+            activeHandle: transientState.activeArrowHandle,
+            hoveredHandle: transientState.hoveredArrowHandle,
+            deleteIndicatorVisible: transientState.arrowDeleteIndicatorVisible,
+          ),
         );
-        final handles = <ArrowPointHandle>[
-          ...overlay.addablePoints,
-          ...overlay.turningPoints,
-          ...overlay.loopPoints,
-        ];
-        if (handles.isNotEmpty) {
-          tasks.add(
-            ArrowPointOverlayRenderTask(
-              handles: List<ArrowPointHandle>.unmodifiable(handles),
-              selectionConfig: selectionConfig,
-              activeHandle: transientState.activeArrowHandle,
-              hoveredHandle: transientState.hoveredArrowHandle,
-              deleteIndicatorVisible:
-                  transientState.arrowDeleteIndicatorVisible,
-            ),
-          );
-        }
       }
     }
 
@@ -242,6 +231,7 @@ class FrameRenderPlanBuilder {
       final highlightElementIds = _resolveArrowBindingHighlightElementIds(
         view: view,
         transientState: transientState,
+        resolveEffectiveElement: resolveEffectiveElement,
       );
       if (highlightElementIds.isNotEmpty) {
         tasks.add(
@@ -255,7 +245,7 @@ class FrameRenderPlanBuilder {
 
     if (singleSelectedElement != null &&
         hoverSelectionConfig != null &&
-        singleSelectedElement.data is TextData) {
+        singleSelection.isText) {
       tasks.add(
         SelectionOutlineRenderTask(
           bounds: singleSelectedElement.rect,
@@ -298,20 +288,11 @@ class FrameRenderPlanBuilder {
     );
   }
 
-  ArrowLikeData? _resolveSingleSelectedArrowData({
-    required int selectedCount,
-    required List<ElementState> selectedElements,
-  }) {
-    if (selectedCount != 1 || selectedElements.isEmpty) {
-      return null;
-    }
-    final data = selectedElements.first.data;
-    return data is ArrowLikeData ? data : null;
-  }
-
   List<String> _resolveArrowBindingHighlightElementIds({
     required DrawStateView view,
     required FrameRenderTransientState transientState,
+    required ElementState Function(ElementState element)
+    resolveEffectiveElement,
   }) {
     final highlightElementIds = <String>{};
     _addHighlightElementId(
@@ -330,9 +311,7 @@ class FrameRenderPlanBuilder {
         context.elementId,
       );
       if (element != null) {
-        final effectiveElement =
-            transientState.previewElementsById[element.id] ??
-            view.effectiveElement(element);
+        final effectiveElement = resolveEffectiveElement(element);
         final data = effectiveElement.data;
         if (data is ArrowLikeData) {
           final binding = resolveArrowPointEditHighlightBinding(

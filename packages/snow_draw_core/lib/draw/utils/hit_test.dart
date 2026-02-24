@@ -4,7 +4,6 @@ import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../elements/core/element_type_id.dart';
-import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../elements/types/text/text_data.dart';
 import '../models/draw_state.dart';
@@ -13,8 +12,8 @@ import '../models/element_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
-import '../types/element_style.dart';
 import '../types/resize_mode.dart';
+import 'single_selection_profile.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
 const _hitTestCacheSize = 4;
@@ -134,16 +133,16 @@ class HitTest {
   }) {
     final selection = stateView.effectiveSelection;
     final selectedIds = stateView.state.domain.selection.selectedIds;
-    if (selectedIds.length == 1) {
-      final element = stateView.state.domain.document.getElementById(
-        selectedIds.first,
-      );
-      if (element != null && element.data is ArrowLikeData) {
-        final data = element.data as ArrowLikeData;
-        if (data.points.length == 2) {
-          return false;
-        }
-      }
+    final document = stateView.state.domain.document;
+    final singleSelection = resolveSingleSelectionProfile(
+      selectedIds: selectedIds,
+      resolveElementById: (id) {
+        final element = document.getElementById(id);
+        return element == null ? null : stateView.effectiveElement(element);
+      },
+    );
+    if (singleSelection.isTwoPointArrow) {
+      return false;
     }
     final context = _buildSelectionContext(
       selection: selection,
@@ -207,30 +206,20 @@ class HitTest {
     );
 
     // Determine corner handle offset for single arrow selections.
-    ArrowLikeData? singleSelectedArrow;
-    var isSingleSelectedText = false;
-    if (selectedIds.length == 1) {
-      final element = state.domain.document.getElementById(selectedIds.first);
-      if (element != null) {
-        final effectiveElement = stateView.effectiveElement(element);
-        final data = effectiveElement.data;
-        if (data is ArrowLikeData) {
-          singleSelectedArrow = data;
-        } else if (data is TextData) {
-          isSingleSelectedText = true;
-        }
-      }
-    }
-    final cornerHandleOffset = (singleSelectedArrow != null ? 8 : 0).toDouble();
+    final singleSelection = resolveSingleSelectionProfile(
+      selectedIds: selectedIds,
+      resolveElementById: (id) {
+        final element = document.getElementById(id);
+        return element == null ? null : stateView.effectiveElement(element);
+      },
+    );
+    final cornerHandleOffset = singleSelection.cornerHandleOffset;
 
     // Check if this is a single 2-point arrow selection.
     // For 2-point arrows, skip handle hit testing since all operations
     // can be performed through the point editor.
-    final isSingleTwoPointArrow =
-        singleSelectedArrow != null && singleSelectedArrow.points.length == 2;
-    final isSingleElbowArrow =
-        singleSelectedArrow != null &&
-        singleSelectedArrow.arrowType == ArrowType.elbow;
+    final isSingleTwoPointArrow = singleSelection.isTwoPointArrow;
+    final isSingleElbowArrow = singleSelection.isElbowArrow;
 
     _SelectionHitContext? selectionContext;
     var isInSelectionPadding = false;
@@ -252,7 +241,7 @@ class HitTest {
           tolerance: actualTolerance,
           config: config,
           isInSelectionPadding: isInSelectionPadding,
-          prioritizeMoveInSelectionPadding: isSingleSelectedText,
+          prioritizeMoveInSelectionPadding: singleSelection.isText,
           allowRotateHandle: !isSingleElbowArrow,
         );
         if (handleResult != null) {
