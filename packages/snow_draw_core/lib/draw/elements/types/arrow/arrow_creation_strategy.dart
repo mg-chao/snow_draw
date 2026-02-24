@@ -390,9 +390,7 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     referencePoint: endpoints.segmentStart,
     targetCache: sessionData.endTargetCache,
-    candidateCacheThresholdFactor: _lineBindingCandidateCacheThresholdFactor,
-    candidateCacheReferenceThresholdFactor:
-        _lineBindingCandidateReferenceCacheThresholdFactor,
+    cachePolicy: ArrowBindingCachePolicy.linePointPolicy,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
@@ -451,12 +449,6 @@ CreationUpdateResult _updateLine({
 }
 
 const _loopCloseToleranceMultiplier = 1.5;
-const _defaultBindingCacheTargetThresholdFactor = 0.4;
-const _defaultBindingCacheEmptyThresholdFactor = 0.75;
-const _defaultBindingCandidateCacheThresholdFactor = 0.35;
-const _defaultBindingCandidateReferenceCacheThresholdFactor = 0.35;
-const _lineBindingCandidateCacheThresholdFactor = 0.45;
-const _lineBindingCandidateReferenceCacheThresholdFactor = 0.45;
 
 _CreationEndpointResolution _resolveCreationEndpoints({
   required DrawState state,
@@ -659,12 +651,7 @@ _BindingSnapResult _snapBindingPoint({
   ArrowBinding? preferredBinding,
   DrawPoint? referencePoint,
   ArrowBindingTargetCache? targetCache,
-  double targetCacheThresholdFactor = _defaultBindingCacheTargetThresholdFactor,
-  double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
-  double candidateCacheThresholdFactor =
-      _defaultBindingCandidateCacheThresholdFactor,
-  double candidateCacheReferenceThresholdFactor =
-      _defaultBindingCandidateReferenceCacheThresholdFactor,
+  ArrowBindingCachePolicy cachePolicy = ArrowBindingCachePolicy.defaultPolicy,
 }) {
   final snapConfig = config.snap;
   final shouldLookupBindings = ArrowBindingSnapper.shouldAttemptBinding(
@@ -694,11 +681,7 @@ _BindingSnapResult _snapBindingPoint({
     preferredBinding: preferredBinding,
     referencePoint: referencePoint,
     cache: targetCache,
-    targetCacheThresholdFactor: targetCacheThresholdFactor,
-    emptyCacheThresholdFactor: emptyCacheThresholdFactor,
-    candidateCacheThresholdFactor: candidateCacheThresholdFactor,
-    candidateCacheReferenceThresholdFactor:
-        candidateCacheReferenceThresholdFactor,
+    cachePolicy: cachePolicy,
   );
   if (candidate == null) {
     return _BindingSnapResult(position: position);
@@ -719,8 +702,7 @@ _BindingSnapResult _resolveStartBindingPoint({
   required ArrowBinding? preferredBinding,
   required DrawPoint referencePoint,
   required _ArrowCreationSessionData sessionData,
-  double targetCacheThresholdFactor = _defaultBindingCacheTargetThresholdFactor,
-  double emptyCacheThresholdFactor = _defaultBindingCacheEmptyThresholdFactor,
+  ArrowBindingCachePolicy cachePolicy = ArrowBindingCachePolicy.defaultPolicy,
 }) {
   final snapConfig = config.snap;
   final bindingEnabled = ArrowBindingSnapper.shouldAttemptBinding(
@@ -764,8 +746,7 @@ _BindingSnapResult _resolveStartBindingPoint({
     preferredBinding: preferredBinding,
     referencePoint: referencePoint,
     targetCache: sessionData.startTargetCache,
-    targetCacheThresholdFactor: targetCacheThresholdFactor,
-    emptyCacheThresholdFactor: emptyCacheThresholdFactor,
+    cachePolicy: cachePolicy,
   );
   sessionData.cacheStartBinding(
     startPosition: startPosition,

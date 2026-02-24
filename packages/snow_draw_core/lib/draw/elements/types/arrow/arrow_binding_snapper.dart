@@ -1,3 +1,5 @@
+import 'package:meta/meta.dart';
+
 import '../../../config/draw_config.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
@@ -8,11 +10,43 @@ import '../../../utils/snapping_mode.dart';
 import 'arrow_binding.dart';
 import 'arrow_binding_target_cache.dart';
 
-const _bindingCacheTargetThresholdFactor = 0.4;
-const _bindingCacheEmptyThresholdFactor = 0.75;
-const _bindingCacheCandidateThresholdFactor = 0.35;
-const _bindingCacheCandidateReferenceThresholdFactor = 0.35;
 const _preferredBindingStickinessFactor = 0.3;
+
+@immutable
+class ArrowBindingCachePolicy {
+  const ArrowBindingCachePolicy({
+    this.targetCacheThresholdFactor = 0.4,
+    this.emptyCacheThresholdFactor = 0.75,
+    this.candidateCacheThresholdFactor = 0.35,
+    this.candidateCacheReferenceThresholdFactor = 0.35,
+  }) : assert(
+         targetCacheThresholdFactor >= 0,
+         'targetCacheThresholdFactor must be non-negative',
+       ),
+       assert(
+         emptyCacheThresholdFactor >= 0,
+         'emptyCacheThresholdFactor must be non-negative',
+       ),
+       assert(
+         candidateCacheThresholdFactor >= 0,
+         'candidateCacheThresholdFactor must be non-negative',
+       ),
+       assert(
+         candidateCacheReferenceThresholdFactor >= 0,
+         'candidateCacheReferenceThresholdFactor must be non-negative',
+       );
+
+  static const defaultPolicy = ArrowBindingCachePolicy();
+  static const linePointPolicy = ArrowBindingCachePolicy(
+    candidateCacheThresholdFactor: 0.45,
+    candidateCacheReferenceThresholdFactor: 0.45,
+  );
+
+  final double targetCacheThresholdFactor;
+  final double emptyCacheThresholdFactor;
+  final double candidateCacheThresholdFactor;
+  final double candidateCacheReferenceThresholdFactor;
+}
 
 /// Shared arrow-binding helpers used by create and edit interactions.
 ///
@@ -108,12 +142,7 @@ class ArrowBindingSnapper {
     DrawPoint? referencePoint,
     ArrowBindingTargetCache? cache,
     String? excludedElementId,
-    double targetCacheThresholdFactor = _bindingCacheTargetThresholdFactor,
-    double emptyCacheThresholdFactor = _bindingCacheEmptyThresholdFactor,
-    double candidateCacheThresholdFactor =
-        _bindingCacheCandidateThresholdFactor,
-    double candidateCacheReferenceThresholdFactor =
-        _bindingCacheCandidateReferenceThresholdFactor,
+    ArrowBindingCachePolicy cachePolicy = ArrowBindingCachePolicy.defaultPolicy,
   }) {
     if (!_canResolveEndpointBindingLookup(
       snapDistance: snapDistance,
@@ -147,8 +176,10 @@ class ArrowBindingSnapper {
     final cachedCandidate = cache?.resolveCandidate(
       position: worldPoint,
       referencePoint: referencePoint,
-      positionThreshold: snapDistance * candidateCacheThresholdFactor,
-      referenceThreshold: snapDistance * candidateCacheReferenceThresholdFactor,
+      positionThreshold:
+          snapDistance * cachePolicy.candidateCacheThresholdFactor,
+      referenceThreshold:
+          snapDistance * cachePolicy.candidateCacheReferenceThresholdFactor,
       elementsVersion: elementsVersion,
       snapDistance: snapDistance,
       arrowType: arrowType,
@@ -191,8 +222,7 @@ class ArrowBindingSnapper {
       distance: searchDistance,
       cache: cache,
       excludedElementId: excludedElementId,
-      targetCacheThresholdFactor: targetCacheThresholdFactor,
-      emptyCacheThresholdFactor: emptyCacheThresholdFactor,
+      cachePolicy: cachePolicy,
     );
     if (targets.isEmpty) {
       return cacheAndReturn(null);
@@ -228,17 +258,8 @@ class ArrowBindingSnapper {
     required double distance,
     ArrowBindingTargetCache? cache,
     String? excludedElementId,
-    double targetCacheThresholdFactor = _bindingCacheTargetThresholdFactor,
-    double emptyCacheThresholdFactor = _bindingCacheEmptyThresholdFactor,
+    ArrowBindingCachePolicy cachePolicy = ArrowBindingCachePolicy.defaultPolicy,
   }) {
-    assert(
-      targetCacheThresholdFactor >= 0,
-      'targetCacheThresholdFactor must be non-negative',
-    );
-    assert(
-      emptyCacheThresholdFactor >= 0,
-      'emptyCacheThresholdFactor must be non-negative',
-    );
     if (cache == null) {
       return _resolveBindingTargets(
         state: state,
@@ -249,8 +270,8 @@ class ArrowBindingSnapper {
     }
     final elementsVersion = state.domain.document.elementsVersion;
     final thresholdFactor = cache.targets.isEmpty
-        ? emptyCacheThresholdFactor
-        : targetCacheThresholdFactor;
+        ? cachePolicy.emptyCacheThresholdFactor
+        : cachePolicy.targetCacheThresholdFactor;
     final threshold = distance * thresholdFactor;
     if (cache.isValid(
       position: position,

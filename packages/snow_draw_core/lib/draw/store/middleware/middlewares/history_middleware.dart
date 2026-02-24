@@ -139,7 +139,6 @@ class HistoryMiddleware extends MiddlewareBase {
     try {
       final snapshotBefore = _buildSnapshotBefore(
         context: context,
-        action: action,
         includeSelection: includeSelection,
       );
       final snapshotAfter = _buildSnapshotAfter(
@@ -174,22 +173,11 @@ class HistoryMiddleware extends MiddlewareBase {
 
   HistorySnapshot _buildSnapshotBefore({
     required DispatchContext context,
-    required DrawAction action,
     required bool includeSelection,
-  }) {
-    if (action.requiresPreActionSnapshot) {
-      return context.snapshotBuilder.buildSnapshotBeforeAction(
-        currentState: context.initialState,
-        action: action,
-        includeSelection: includeSelection,
-      );
-    }
-
-    return PersistentSnapshot.fromState(
-      context.initialState,
-      includeSelection: includeSelection,
-    );
-  }
+  }) => PersistentSnapshot.fromState(
+    context.initialState,
+    includeSelection: includeSelection,
+  );
 
   HistorySnapshot _buildSnapshotAfter({
     required DispatchContext context,

@@ -28,9 +28,6 @@ abstract class DrawAction
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.none;
 
-  @override
-  bool get requiresPreActionSnapshot => false;
-
   ActionCriticality get criticality => ActionCriticality.important;
 
   /// Whether this action should cancel an active edit session.
@@ -192,9 +189,6 @@ class FinishCreateElement extends DrawAction {
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
 
   @override
-  bool get requiresPreActionSnapshot => true;
-
-  @override
   String toString() => 'FinishCreateElement()';
 }
 
@@ -273,9 +267,6 @@ class ChangeElementsZIndex extends DrawAction {
 
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String toString() =>
@@ -373,9 +364,6 @@ class UpdateElementsStyle extends DrawAction {
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
 
   @override
-  bool get requiresPreActionSnapshot => true;
-
-  @override
   String toString() =>
       'UpdateElementsStyle(ids: $elementIds, opacity: $opacity)';
 }
@@ -399,9 +387,6 @@ class UpdateGlobalElements extends DrawAction implements Recordable {
 
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription {
@@ -439,9 +424,6 @@ class CreateSerialNumberTextElements extends DrawAction implements Recordable {
 
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription => 'Create serial number text';
@@ -504,9 +486,6 @@ class FinishTextEdit extends DrawAction implements Recordable {
 
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   bool get _deletesExistingText => text.trim().isEmpty && !isNew;
 
@@ -571,9 +550,6 @@ class FinishEdit extends DrawAction implements Recordable {
 
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription => metadata?.description ?? 'Edit operation';

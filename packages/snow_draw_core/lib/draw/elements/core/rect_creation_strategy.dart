@@ -11,8 +11,8 @@ import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
 import '../../utils/camera_zoom.dart';
+import '../../utils/calculators/create_calculator.dart';
 import '../../utils/snapping_mode.dart';
-import '../../utils/state_calculator.dart';
 import '../../utils/visible_elements.dart';
 import 'creation_strategy.dart';
 
@@ -56,7 +56,7 @@ class RectCreationStrategy extends CreationStrategy {
       config: config,
       snappingMode: snappingMode,
     );
-    var rect = StateCalculator.calculateCreateRect(
+    var rect = CreateCalculator.calculateCreateRect(
       startPosition: startPosition,
       currentPosition: current,
       maintainAspectRatio: maintainAspectRatio,
