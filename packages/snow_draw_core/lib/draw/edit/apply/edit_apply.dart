@@ -183,7 +183,7 @@ class EditApply {
       result![index] = replacement;
     }
 
-    final pending = <String, ElementState>{};
+    final pending = <String, ElementState>{...replacementsById};
     if (resolveIndex != null) {
       for (final entry in replacementsById.entries) {
         final index = resolveIndex(entry.key);
@@ -192,10 +192,10 @@ class EditApply {
           id: entry.key,
           elements: elements,
         )) {
-          pending[entry.key] = entry.value;
           continue;
         }
 
+        pending.remove(entry.key);
         final resolvedIndex = index!;
         final replacement = entry.value;
         final current = (result ?? elements)[resolvedIndex];
@@ -205,8 +205,6 @@ class EditApply {
 
         applyReplacement(resolvedIndex, replacement);
       }
-    } else {
-      pending.addAll(replacementsById);
     }
 
     if (pending.isEmpty) {

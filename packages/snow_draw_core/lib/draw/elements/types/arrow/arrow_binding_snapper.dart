@@ -115,11 +115,12 @@ class ArrowBindingSnapper {
     double candidateCacheReferenceThresholdFactor =
         _bindingCacheCandidateReferenceThresholdFactor,
   }) {
-    if (snapDistance <= 0 || !shouldLookupBindings) {
-      cache?.reset();
-      return null;
-    }
-    if (!allowNewBinding && preferredBinding == null) {
+    if (!_canResolveEndpointBindingLookup(
+      snapDistance: snapDistance,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      preferredBinding: preferredBinding,
+    )) {
       cache?.reset();
       return null;
     }
@@ -311,3 +312,13 @@ ArrowBindingResult? _resolveBindingCandidateForTarget({
         snapDistance: snapDistance,
         referencePoint: referencePoint,
       );
+
+bool _canResolveEndpointBindingLookup({
+  required double snapDistance,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required ArrowBinding? preferredBinding,
+}) =>
+    snapDistance > 0 &&
+    shouldLookupBindings &&
+    (allowNewBinding || preferredBinding != null);

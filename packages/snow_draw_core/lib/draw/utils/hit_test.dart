@@ -132,15 +132,7 @@ class HitTest {
     required SelectionConfig config,
   }) {
     final selection = stateView.effectiveSelection;
-    final selectedIds = stateView.state.domain.selection.selectedIds;
-    final document = stateView.state.domain.document;
-    final singleSelection = resolveSingleSelectionProfile(
-      selectedIds: selectedIds,
-      resolveElementById: (id) {
-        final element = document.getElementById(id);
-        return element == null ? null : stateView.effectiveElement(element);
-      },
-    );
+    final singleSelection = _resolveSingleSelectionProfileForView(stateView);
     if (singleSelection.isTwoPointArrow) {
       return false;
     }
@@ -206,13 +198,7 @@ class HitTest {
     );
 
     // Determine corner handle offset for single arrow selections.
-    final singleSelection = resolveSingleSelectionProfile(
-      selectedIds: selectedIds,
-      resolveElementById: (id) {
-        final element = document.getElementById(id);
-        return element == null ? null : stateView.effectiveElement(element);
-      },
-    );
+    final singleSelection = _resolveSingleSelectionProfileForView(stateView);
     final cornerHandleOffset = singleSelection.cornerHandleOffset;
 
     // Check if this is a single 2-point arrow selection.
@@ -462,6 +448,20 @@ class HitTest {
     return null;
   }
 
+  SingleSelectionProfile _resolveSingleSelectionProfileForView(
+    DrawStateView stateView,
+  ) {
+    final state = stateView.state;
+    final document = state.domain.document;
+    return resolveSingleSelectionProfile(
+      selectedIds: state.domain.selection.selectedIds,
+      resolveElementById: (id) {
+        final element = document.getElementById(id);
+        return element == null ? null : stateView.effectiveElement(element);
+      },
+    );
+  }
+
   _SelectionHitContext? _buildSelectionContext({
     required EffectiveSelection selection,
     required DrawPoint position,
@@ -613,40 +613,75 @@ class HitTest {
   }
 
   /// Tests whether the pointer hits the top edge (excluding corner regions).
-  bool _testTopEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.y, bounds.minY, tolerance)) {
-      return false;
-    }
-    return position.x > bounds.minX + tolerance &&
-        position.x < bounds.maxX - tolerance;
-  }
+  bool _testTopEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testHorizontalEdge(
+        bounds: bounds,
+        position: position,
+        edgeY: bounds.minY,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the right edge (excluding corner regions).
-  bool _testRightEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.x, bounds.maxX, tolerance)) {
-      return false;
-    }
-    return position.y > bounds.minY + tolerance &&
-        position.y < bounds.maxY - tolerance;
-  }
+  bool _testRightEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testVerticalEdge(
+        bounds: bounds,
+        position: position,
+        edgeX: bounds.maxX,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the bottom edge (excluding corner regions).
-  bool _testBottomEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.y, bounds.maxY, tolerance)) {
-      return false;
-    }
-    return position.x > bounds.minX + tolerance &&
-        position.x < bounds.maxX - tolerance;
-  }
+  bool _testBottomEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testHorizontalEdge(
+        bounds: bounds,
+        position: position,
+        edgeY: bounds.maxY,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the left edge (excluding corner regions).
-  bool _testLeftEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.x, bounds.minX, tolerance)) {
-      return false;
-    }
-    return position.y > bounds.minY + tolerance &&
-        position.y < bounds.maxY - tolerance;
-  }
+  bool _testLeftEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testVerticalEdge(
+        bounds: bounds,
+        position: position,
+        edgeX: bounds.minX,
+        tolerance: tolerance,
+      );
+
+  bool _testHorizontalEdge({
+    required DrawRect bounds,
+    required DrawPoint position,
+    required double edgeY,
+    required double tolerance,
+  }) =>
+      _isNear(position.y, edgeY, tolerance) &&
+      _isInsideEdgeSpan(
+        value: position.x,
+        min: bounds.minX,
+        max: bounds.maxX,
+        tolerance: tolerance,
+      );
+
+  bool _testVerticalEdge({
+    required DrawRect bounds,
+    required DrawPoint position,
+    required double edgeX,
+    required double tolerance,
+  }) =>
+      _isNear(position.x, edgeX, tolerance) &&
+      _isInsideEdgeSpan(
+        value: position.y,
+        min: bounds.minY,
+        max: bounds.maxY,
+        tolerance: tolerance,
+      );
+
+  bool _isInsideEdgeSpan({
+    required double value,
+    required double min,
+    required double max,
+    required double tolerance,
+  }) => value > min + tolerance && value < max - tolerance;
 
   bool _isNear(double value, double target, double tolerance) =>
       (value - target).abs() <= tolerance;

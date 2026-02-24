@@ -193,9 +193,9 @@ class HistoryMiddleware extends MiddlewareBase {
     required bool includeSelection,
     required bool useIncremental,
   }) {
-    if (useIncremental) {
-      final resolvedChanges = changes!;
-      if (action.requiresPreActionSnapshot) {
+    if (action.requiresPreActionSnapshot) {
+      if (useIncremental) {
+        final resolvedChanges = changes!;
         return context.snapshotBuilder.buildIncrementalSnapshotBeforeAction(
           currentState: context.initialState,
           action: action,
@@ -203,14 +203,6 @@ class HistoryMiddleware extends MiddlewareBase {
           includeSelection: includeSelection,
         );
       }
-      return context.snapshotBuilder.buildIncrementalSnapshotFromState(
-        state: context.initialState,
-        changes: resolvedChanges,
-        includeSelection: includeSelection,
-      );
-    }
-
-    if (action.requiresPreActionSnapshot) {
       return context.snapshotBuilder.buildSnapshotBeforeAction(
         currentState: context.initialState,
         action: action,
@@ -218,9 +210,12 @@ class HistoryMiddleware extends MiddlewareBase {
       );
     }
 
-    return PersistentSnapshot.fromState(
-      context.initialState,
+    return _buildSnapshotFromState(
+      context: context,
+      state: context.initialState,
+      changes: changes,
       includeSelection: includeSelection,
+      useIncremental: useIncremental,
     );
   }
 
@@ -229,17 +224,31 @@ class HistoryMiddleware extends MiddlewareBase {
     required HistoryChangeSet? changes,
     required bool includeSelection,
     required bool useIncremental,
+  }) => _buildSnapshotFromState(
+    context: context,
+    state: context.currentState,
+    changes: changes,
+    includeSelection: includeSelection,
+    useIncremental: useIncremental,
+  );
+
+  HistorySnapshot _buildSnapshotFromState({
+    required DispatchContext context,
+    required DrawState state,
+    required HistoryChangeSet? changes,
+    required bool includeSelection,
+    required bool useIncremental,
   }) {
     if (useIncremental) {
       return context.snapshotBuilder.buildIncrementalSnapshotFromState(
-        state: context.currentState,
+        state: state,
         changes: changes!,
         includeSelection: includeSelection,
       );
     }
 
     return PersistentSnapshot.fromState(
-      context.currentState,
+      state,
       includeSelection: includeSelection,
     );
   }
