@@ -114,16 +114,35 @@ void main() {
       expect(baseline, isNot(changedWatermark));
       expect(baseline.hashCode, isNot(changedWatermark.hashCode));
     });
+
+    test('document elements version participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final baseline = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 1,
+      );
+      final changed = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 2,
+      );
+
+      expect(baseline, isNot(changed));
+      expect(baseline.hashCode, isNot(changed.hashCode));
+    });
   });
 }
 
 SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
   required FrameRenderPlan framePlan,
+  int documentElementsVersion = 0,
   CreatingElementSnapshot? creatingElement,
   Map<String, ElementState> previewElementsById = const {},
 }) => SceneCanvasRenderKey(
   creatingElement: creatingElement,
+  documentElementsVersion: documentElementsVersion,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,
   elementRegistry: registry,

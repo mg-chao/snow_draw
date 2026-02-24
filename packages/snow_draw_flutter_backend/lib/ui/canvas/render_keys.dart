@@ -52,6 +52,7 @@ class CreatingElementSnapshot {
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
+    required this.documentElementsVersion,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required this.elementRegistry,
@@ -65,6 +66,13 @@ class SceneCanvasRenderKey {
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
+
+  /// Monotonic document scene revision.
+  ///
+  /// Tracks committed element/global-element mutations so render keys stay
+  /// sensitive to style/geometry updates even when frame-level tasks are
+  /// unchanged.
+  final int documentElementsVersion;
 
   /// Revision for text rendering cache invalidation.
   ///
@@ -95,6 +103,7 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
+          other.documentElementsVersion == documentElementsVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
           other.elementRegistry == elementRegistry &&
@@ -106,6 +115,7 @@ class SceneCanvasRenderKey {
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
+    documentElementsVersion,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
     elementRegistry,
