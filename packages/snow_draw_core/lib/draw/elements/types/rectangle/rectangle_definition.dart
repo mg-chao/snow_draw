@@ -4,12 +4,12 @@ import 'rectangle_data.dart';
 import 'rectangle_hit_tester.dart';
 import 'rectangle_task_encoder.dart';
 
-final rectangleDefinition = ElementDefinition<RectangleData>(
+const rectangleDefinition = ElementDefinition<RectangleData>(
   typeId: RectangleData.typeIdToken,
   displayName: 'Rectangle',
-  hitTester: const RectangleHitTester(),
+  hitTester: RectangleHitTester(),
   createDefaultData: RectangleData.new,
   fromJson: RectangleData.fromJson,
-  creationStrategy: const RectCreationStrategy(),
-  taskEncoder: const RectangleTaskEncoder(),
+  creationStrategy: RectCreationStrategy(),
+  taskEncoder: RectangleTaskEncoder(),
 );

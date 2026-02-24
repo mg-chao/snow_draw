@@ -87,17 +87,9 @@ class EditComputePipeline {
     required Iterable<String> updatedIds,
     required bool hasArrowLikeUpdate,
     required bool hasBindableTargetUpdate,
-  }) {
-    if (hasArrowLikeUpdate) {
-      return true;
-    }
-
-    if (!hasBindableTargetUpdate) {
-      return false;
-    }
-
-    return document.hasArrowBoundToAny(updatedIds);
-  }
+  }) =>
+      hasArrowLikeUpdate ||
+      (hasBindableTargetUpdate && document.hasArrowBoundToAny(updatedIds));
 
   static ({bool hasArrowLikeUpdate, bool hasBindableTargetUpdate})
   _resolveChangeKind(Map<String, ElementState> updatedById) {

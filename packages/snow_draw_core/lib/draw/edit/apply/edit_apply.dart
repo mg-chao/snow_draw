@@ -37,22 +37,22 @@ class EditApply {
     required Map<String, ElementState> currentElementsById,
   }) {
     final result = <String, ElementState>{};
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-
-      final newCenter = snapshot.center.translate(DrawPoint(x: dx, y: dy));
-      result[id] = current.copyWith(
-        rect: _rectFromCenter(
-          center: newCenter,
-          width: current.rect.width,
-          height: current.rect.height,
-        ),
-      );
-    }
+    final offset = DrawPoint(x: dx, y: dy);
+    _visitSelectedSnapshots<ElementMoveSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final newCenter = snapshot.center.translate(offset);
+        result[id] = current.copyWith(
+          rect: _rectFromCenter(
+            center: newCenter,
+            width: current.rect.width,
+            height: current.rect.height,
+          ),
+        );
+      },
+    );
     return result;
   }
 
@@ -65,32 +65,32 @@ class EditApply {
   }) {
     final result = <String, ElementState>{};
     const space = WorldSpace();
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-      final data = current.data;
-      if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
-        continue;
-      }
+    _visitSelectedSnapshots<ElementRotateSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final data = current.data;
+        if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
+          return;
+        }
 
-      final newRotation = snapshot.rotation + deltaAngle;
-      final newCenter = space.rotatePoint(
-        point: snapshot.center,
-        center: pivot,
-        angle: deltaAngle,
-      );
-      result[id] = current.copyWith(
-        rect: _rectFromCenter(
-          center: newCenter,
-          width: current.rect.width,
-          height: current.rect.height,
-        ),
-        rotation: newRotation,
-      );
-    }
+        final newRotation = snapshot.rotation + deltaAngle;
+        final newCenter = space.rotatePoint(
+          point: snapshot.center,
+          center: pivot,
+          angle: deltaAngle,
+        );
+        result[id] = current.copyWith(
+          rect: _rectFromCenter(
+            center: newCenter,
+            width: current.rect.width,
+            height: current.rect.height,
+          ),
+          rotation: newRotation,
+        );
+      },
+    );
     return result;
   }
 
@@ -112,56 +112,52 @@ class EditApply {
         context.resizeMode == ResizeMode.bottom;
 
     final result = <String, ElementState>{};
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-
-      final startElement = current.copyWith(
-        rect: snapshot.rect,
-        rotation: snapshot.rotation,
-      );
-      var resized = _applyResize(
-        element: startElement,
-        startBounds: context.startBounds,
-        newSelectionBounds: newSelectionBounds,
-        scaleX: scaleX,
-        scaleY: scaleY,
-        anchor: anchor,
-        overlayRotation: context.rotation,
-        isSingleSelect: isSingleSelect,
-        hasRotation: hasRotation,
-      );
-
-      if (resized.data is TextData) {
-        resized = _applyTextResize(
-          element: resized,
-          startRect: startElement.rect,
-          anchor: anchor,
-          keepCenter: keepTextCenter,
-          isVerticalResize: isVerticalResize,
+    _visitSelectedSnapshots<ElementResizeSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final startElement = current.copyWith(
+          rect: snapshot.rect,
+          rotation: snapshot.rotation,
+        );
+        var resized = _applyResize(
+          element: startElement,
+          startBounds: context.startBounds,
+          newSelectionBounds: newSelectionBounds,
           scaleX: scaleX,
+          scaleY: scaleY,
+          anchor: anchor,
+          overlayRotation: context.rotation,
+          isSingleSelect: isSingleSelect,
+          hasRotation: hasRotation,
         );
-      }
 
-      if (resized.data is SerialNumberData) {
-        resized = _applySerialNumberResize(
-          element: resized,
-          startRect: startElement.rect,
-        );
-      }
+        final resizedData = resized.data;
+        if (resizedData is TextData) {
+          resized = _applyTextResize(
+            element: resized,
+            startRect: startElement.rect,
+            anchor: anchor,
+            keepCenter: keepTextCenter,
+            isVerticalResize: isVerticalResize,
+            scaleX: scaleX,
+          );
+        } else if (resizedData is SerialNumberData) {
+          resized = _applySerialNumberResize(
+            element: resized,
+            startRect: startElement.rect,
+          );
+        } else if (resizedData is ArrowData) {
+          resized = _applyArrowResize(
+            element: resized,
+            startRect: startElement.rect,
+          );
+        }
 
-      if (resized.data is ArrowData) {
-        resized = _applyArrowResize(
-          element: resized,
-          startRect: startElement.rect,
-        );
-      }
-
-      result[id] = resized;
-    }
+        result[id] = resized;
+      },
+    );
 
     return result;
   }
@@ -235,11 +231,26 @@ bool _isResolvedIndexValid({
   required int? index,
   required String id,
   required List<ElementState> elements,
+}) =>
+    index != null &&
+    index >= 0 &&
+    index < elements.length &&
+    elements[index].id == id;
+
+void _visitSelectedSnapshots<S>({
+  required Set<String> selectedIds,
+  required Map<String, S> snapshots,
+  required Map<String, ElementState> currentElementsById,
+  required void Function(String id, S snapshot, ElementState current) visitor,
 }) {
-  if (index == null || index < 0 || index >= elements.length) {
-    return false;
+  for (final id in selectedIds) {
+    final snapshot = snapshots[id];
+    final current = currentElementsById[id];
+    if (snapshot == null || current == null) {
+      continue;
+    }
+    visitor(id, snapshot, current);
   }
-  return elements[index].id == id;
 }
 
 ElementState _applyResize({

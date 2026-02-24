@@ -318,18 +318,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     transform: ResizeTransform.incomplete(currentPosition: currentPosition),
   );
 
-  bool _shouldReturnIncompleteTransform(ResizeEditContext context) {
-    if (context.selectedIdsAtStart.isEmpty) {
-      return true;
-    }
-
-    if (!context.isMultiSelect) {
-      return false;
-    }
-
-    final startBounds = context.startBounds;
-    return startBounds.width == 0 || startBounds.height == 0;
-  }
+  bool _shouldReturnIncompleteTransform(ResizeEditContext context) =>
+      context.selectedIdsAtStart.isEmpty ||
+      (context.isMultiSelect &&
+          (context.startBounds.width == 0 || context.startBounds.height == 0));
 
   ({List<SnapAxisAnchor> x, List<SnapAxisAnchor> y}) _resolveAnchors(
     ResizeMode mode,

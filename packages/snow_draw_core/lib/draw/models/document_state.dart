@@ -130,17 +130,9 @@ class DocumentState {
       highlightElements.length;
 
   /// Returns true when any element in [elementIds] has bound arrow endpoints.
-  bool hasArrowBoundToAny(Iterable<String> elementIds) {
-    if (boundArrowTargetIds.isEmpty) {
-      return false;
-    }
-    for (final elementId in elementIds) {
-      if (boundArrowTargetIds.contains(elementId)) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool hasArrowBoundToAny(Iterable<String> elementIds) =>
+      boundArrowTargetIds.isNotEmpty &&
+      elementIds.any(boundArrowTargetIds.contains);
 
   List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) =>
       queryElementsAtPointTopDown(point, tolerance);

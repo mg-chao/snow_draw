@@ -4,12 +4,12 @@ import 'filter_data.dart';
 import 'filter_hit_tester.dart';
 import 'filter_task_encoder.dart';
 
-final filterDefinition = ElementDefinition<FilterData>(
+const filterDefinition = ElementDefinition<FilterData>(
   typeId: FilterData.typeIdToken,
   displayName: 'Filter',
-  hitTester: const FilterHitTester(),
+  hitTester: FilterHitTester(),
   createDefaultData: FilterData.new,
   fromJson: FilterData.fromJson,
-  creationStrategy: const RectCreationStrategy(),
-  taskEncoder: const FilterTaskEncoder(),
+  creationStrategy: RectCreationStrategy(),
+  taskEncoder: FilterTaskEncoder(),
 );

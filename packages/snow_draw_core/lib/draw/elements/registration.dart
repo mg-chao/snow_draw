@@ -49,7 +49,7 @@ ElementRegistry resolveElementRegistry({
   return resolved;
 }
 
-final List<ElementDefinition<ElementData>> _builtInDefinitions = [
+const List<ElementDefinition<ElementData>> _builtInDefinitions = [
   rectangleDefinition,
   arrowDefinition,
   lineDefinition,

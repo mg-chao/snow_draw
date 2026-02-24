@@ -4,12 +4,12 @@ import 'serial_number_data.dart';
 import 'serial_number_hit_tester.dart';
 import 'serial_number_task_encoder.dart';
 
-final serialNumberDefinition = ElementDefinition<SerialNumberData>(
+const serialNumberDefinition = ElementDefinition<SerialNumberData>(
   typeId: SerialNumberData.typeIdToken,
   displayName: 'Serial Number',
-  hitTester: const SerialNumberHitTester(),
+  hitTester: SerialNumberHitTester(),
   createDefaultData: SerialNumberData.new,
   fromJson: SerialNumberData.fromJson,
-  creationStrategy: const SerialNumberCreationStrategy(),
-  taskEncoder: const SerialNumberTaskEncoder(),
+  creationStrategy: SerialNumberCreationStrategy(),
+  taskEncoder: SerialNumberTaskEncoder(),
 );

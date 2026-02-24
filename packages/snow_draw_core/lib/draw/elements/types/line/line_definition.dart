@@ -4,12 +4,12 @@ import 'line_data.dart';
 import 'line_hit_tester.dart';
 import 'line_task_encoder.dart';
 
-final lineDefinition = ElementDefinition<LineData>(
+const lineDefinition = ElementDefinition<LineData>(
   typeId: LineData.typeIdToken,
   displayName: 'Line',
-  hitTester: const LineHitTester(),
+  hitTester: LineHitTester(),
   createDefaultData: LineData.new,
   fromJson: LineData.fromJson,
-  creationStrategy: const ArrowCreationStrategy(),
-  taskEncoder: const LineTaskEncoder(),
+  creationStrategy: ArrowCreationStrategy(),
+  taskEncoder: LineTaskEncoder(),
 );

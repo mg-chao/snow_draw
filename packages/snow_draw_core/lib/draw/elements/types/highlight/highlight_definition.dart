@@ -6,12 +6,12 @@ import 'highlight_task_encoder.dart';
 
 HighlightData _createDefaultHighlightData() => const HighlightData();
 
-final highlightDefinition = ElementDefinition<HighlightData>(
+const highlightDefinition = ElementDefinition<HighlightData>(
   typeId: HighlightData.typeIdToken,
   displayName: 'Highlight',
-  hitTester: const HighlightHitTester(),
+  hitTester: HighlightHitTester(),
   createDefaultData: _createDefaultHighlightData,
   fromJson: HighlightData.fromJson,
-  creationStrategy: const RectCreationStrategy(),
-  taskEncoder: const HighlightTaskEncoder(),
+  creationStrategy: RectCreationStrategy(),
+  taskEncoder: HighlightTaskEncoder(),
 );

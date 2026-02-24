@@ -4,12 +4,12 @@ import 'text_data.dart';
 import 'text_hit_tester.dart';
 import 'text_task_encoder.dart';
 
-final textDefinition = ElementDefinition<TextData>(
+const textDefinition = ElementDefinition<TextData>(
   typeId: TextData.typeIdToken,
   displayName: 'Text',
-  hitTester: const TextHitTester(),
+  hitTester: TextHitTester(),
   createDefaultData: TextData.new,
   fromJson: TextData.fromJson,
-  creationStrategy: const RectCreationStrategy(),
-  taskEncoder: const TextTaskEncoder(),
+  creationStrategy: RectCreationStrategy(),
+  taskEncoder: TextTaskEncoder(),
 );
