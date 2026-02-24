@@ -27,8 +27,6 @@ class FlutterRenderTaskExecutor {
   void executeTasks({
     required Canvas canvas,
     required List<RenderTask> tasks,
-    required ElementRegistry elementRegistry,
-    TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
     for (final task in tasks) {

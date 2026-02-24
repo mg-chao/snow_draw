@@ -139,13 +139,7 @@ class ElementRenderer {
         localeTag: locale?.toLanguageTag(),
         textMetricsService: textMetricsService,
       );
-      _taskExecutor.executeTasks(
-        canvas: canvas,
-        tasks: tasks,
-        elementRegistry: elementRegistry,
-        textMetricsService: textMetricsService,
-        locale: locale,
-      );
+      _taskExecutor.executeTasks(canvas: canvas, tasks: tasks, locale: locale);
       return true;
     } on Object catch (error, stackTrace) {
       _logFallbackWarningOnce(

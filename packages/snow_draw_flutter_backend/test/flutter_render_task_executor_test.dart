@@ -10,7 +10,6 @@ void main() {
     () {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
-      final registry = DefaultElementRegistry();
 
       final tasks = <RenderTask>[
         RectangleRenderTask(
@@ -89,7 +88,6 @@ void main() {
         () => flutterRenderTaskExecutor.executeTasks(
           canvas: canvas,
           tasks: tasks,
-          elementRegistry: registry,
         ),
         returnsNormally,
       );
