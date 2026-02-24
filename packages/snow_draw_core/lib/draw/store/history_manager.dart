@@ -1,6 +1,5 @@
 import '../actions/history_coalescing.dart';
 import '../config/draw_config.dart';
-import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
 import '../history/history_metadata.dart';
 import '../history/recordable.dart';
@@ -351,43 +350,11 @@ class _HistorySnapshotCodec {
     ElementRegistry elementRegistry,
   ) {
     final version = json['version'];
-    if (version is! int) {
-      throw StateError('History snapshot version is missing or invalid');
-    }
     if (version != _version) {
       throw StateError('Unsupported history snapshot version: $version');
     }
 
-    final entriesData = _requireEntriesData(json['entries']);
-    final entries = <_HistoryEntry>[];
-    final seenIds = <int>{};
-    for (final entryData in entriesData) {
-      final id = _requireInt(entryData, 'id');
-      if (!seenIds.add(id)) {
-        throw StateError('Duplicate history entry id: $id');
-      }
-
-      final delta = _deltaFromJson(
-        _requireMapField(entryData, 'delta'),
-        elementRegistry,
-      );
-      final metadataJson = _asJsonMap(entryData['metadata']);
-      final coalescingJson = _asJsonMap(entryData['coalescing']);
-
-      entries.add(
-        _HistoryEntry(
-          id: id,
-          delta: delta,
-          metadata: metadataJson == null
-              ? null
-              : _metadataFromJson(metadataJson),
-          coalescing: coalescingJson == null
-              ? null
-              : _coalescingFromJson(coalescingJson),
-          recordedAt: _decodeRecordedAt(entryData['recordedAtMs']),
-        ),
-      );
-    }
+    final entries = _decodeEntries(json['entries'], elementRegistry);
 
     final cursor = _clampCursor(
       json['cursor'] as int? ?? entries.length - 1,
@@ -405,18 +372,41 @@ class _HistorySnapshotCodec {
     );
   }
 
-  List<Map<String, dynamic>> _requireEntriesData(Object? raw) {
+  List<_HistoryEntry> _decodeEntries(
+    Object? raw,
+    ElementRegistry elementRegistry,
+  ) {
     if (raw is! List) {
       throw StateError('History snapshot entries must be a list');
     }
 
-    final entries = <Map<String, dynamic>>[];
-    for (final value in raw) {
-      final entry = _asJsonMap(value);
-      if (entry == null) {
+    final entries = <_HistoryEntry>[];
+    final seenIds = <int>{};
+    for (final rawEntry in raw) {
+      if (rawEntry is! Map) {
         throw StateError('History snapshot contains an invalid entry');
       }
-      entries.add(entry);
+
+      final entry = _asJsonMap(rawEntry, context: 'entry');
+      final id = _readInt(entry, 'id');
+      if (!seenIds.add(id)) {
+        throw StateError('Duplicate history entry id: $id');
+      }
+
+      entries.add(
+        _HistoryEntry(
+          id: id,
+          delta: _deltaFromJson(
+            _asJsonMap(entry['delta'], context: 'delta'),
+            elementRegistry,
+          ),
+          metadata: _metadataFromRaw(entry['metadata']),
+          coalescing: _coalescingFromRaw(entry['coalescing']),
+          recordedAt: DateTime.fromMillisecondsSinceEpoch(
+            _readInt(entry, 'recordedAtMs'),
+          ),
+        ),
+      );
     }
     return entries;
   }
@@ -430,6 +420,13 @@ class _HistorySnapshotCodec {
     'recordedAtMs': entry.recordedAt.millisecondsSinceEpoch,
   };
 
+  HistoryCoalescing? _coalescingFromRaw(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    return _coalescingFromJson(_asJsonMap(raw, context: 'coalescing'));
+  }
+
   Map<String, dynamic> _coalescingToJson(HistoryCoalescing coalescing) => {
     'key': coalescing.key,
     'windowMs': coalescing.window.inMilliseconds,
@@ -437,65 +434,96 @@ class _HistorySnapshotCodec {
 
   HistoryCoalescing _coalescingFromJson(Map<String, dynamic> json) =>
       HistoryCoalescing(
-        key: _requireString(json, 'key'),
-        window: Duration(milliseconds: _requireInt(json, 'windowMs')),
+        key: _readString(json, 'key'),
+        window: Duration(milliseconds: _readInt(json, 'windowMs')),
       );
 
-  DateTime _decodeRecordedAt(Object? raw) {
-    if (raw is! int) {
-      throw StateError('History snapshot field "recordedAtMs" is invalid');
+  int _readInt(Map<String, dynamic> json, String key) {
+    final value = json[key];
+    if (value is int) {
+      return value;
     }
-    return DateTime.fromMillisecondsSinceEpoch(raw);
+    throw StateError('History snapshot field "$key" is missing or invalid');
   }
 
-  int _requireInt(Map<String, dynamic> json, String key) {
+  double _readDouble(Map<String, dynamic> json, String key) {
     final value = json[key];
-    if (value is! int) {
-      throw StateError('History snapshot field "$key" is missing or invalid');
+    if (value is num) {
+      return value.toDouble();
     }
-    return value;
+    throw StateError('History snapshot field "$key" is missing or invalid');
   }
 
-  double _requireDouble(Map<String, dynamic> json, String key) {
+  String _readString(Map<String, dynamic> json, String key) {
     final value = json[key];
-    if (value is! num) {
-      throw StateError('History snapshot field "$key" is missing or invalid');
+    if (value is String) {
+      return value;
     }
-    return value.toDouble();
+    throw StateError('History snapshot field "$key" is missing or invalid');
   }
 
-  String _requireString(Map<String, dynamic> json, String key) {
-    final value = json[key];
-    if (value is! String) {
-      throw StateError('History snapshot field "$key" is missing or invalid');
-    }
-    return value;
-  }
-
-  List<String> _requireStringList(Map<String, dynamic> json, String key) {
-    final value = json[key];
-    if (value is! List) {
+  List<String> _readStringList(Map<String, dynamic> json, String key) {
+    final raw = json[key];
+    if (raw is! List) {
       throw StateError('History snapshot field "$key" is missing or invalid');
     }
 
-    final result = <String>[];
-    for (final item in value) {
+    final strings = <String>[];
+    for (final item in raw) {
       if (item is! String) {
         throw StateError(
           'History snapshot field "$key" contains a non-string value',
         );
       }
-      result.add(item);
+      strings.add(item);
     }
-    return result;
+    return strings;
   }
 
-  Map<String, dynamic> _requireMapField(Map<String, dynamic> json, String key) {
-    final value = _asJsonMap(json[key]);
-    if (value == null) {
-      throw StateError('History snapshot field "$key" is missing or invalid');
+  Map<String, dynamic> _asJsonMap(Object? raw, {required String context}) {
+    if (raw is! Map) {
+      throw StateError('History snapshot field "$context" is invalid');
     }
-    return value;
+    final mapped = <String, dynamic>{};
+    for (final entry in raw.entries) {
+      final key = entry.key;
+      if (key is! String) {
+        throw StateError('History snapshot field "$context" is invalid');
+      }
+      mapped[key] = entry.value;
+    }
+    return mapped;
+  }
+
+  List<String>? _readOptionalStringList(
+    Object? raw, {
+    required String context,
+  }) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is! List) {
+      throw StateError('History snapshot field "$context" is invalid');
+    }
+
+    final strings = <String>[];
+    for (final item in raw) {
+      if (item is! String) {
+        throw StateError('History snapshot field "$context" is invalid');
+      }
+      strings.add(item);
+    }
+    return strings;
+  }
+
+  Map<String, dynamic>? _readOptionalJsonMap(
+    Object? raw, {
+    required String context,
+  }) {
+    if (raw == null) {
+      return null;
+    }
+    return _asJsonMap(raw, context: context);
   }
 
   Map<String, dynamic> _deltaToJson(HistoryDelta delta) => {
@@ -524,54 +552,53 @@ class _HistorySnapshotCodec {
     Map<String, dynamic> json,
     ElementRegistry elementRegistry,
   ) {
-    final beforeElements = _decodeElementMap(
-      json['beforeElements'],
-      elementRegistry,
-      source: 'beforeElements',
-    );
-    final afterElements = _decodeElementMap(
-      json['afterElements'],
-      elementRegistry,
-      source: 'afterElements',
-    );
-
-    final orderBefore = _asStringList(json['orderBefore']);
-    final orderAfter = _asStringList(json['orderAfter']);
-    final globalElementsBefore = _decodeOptionalJson(
+    final globalBeforeJson = _readOptionalJsonMap(
       json['globalElementsBefore'],
-      _globalElementsFromJson,
+      context: 'globalElementsBefore',
     );
-    final globalElementsAfter = _decodeOptionalJson(
+    final globalAfterJson = _readOptionalJsonMap(
       json['globalElementsAfter'],
-      _globalElementsFromJson,
+      context: 'globalElementsAfter',
     );
-    final selectionBefore = _decodeOptionalJson(
+    final selectionBeforeJson = _readOptionalJsonMap(
       json['selectionBefore'],
-      _selectionFromJson,
+      context: 'selectionBefore',
     );
-    final selectionAfter = _decodeOptionalJson(
+    final selectionAfterJson = _readOptionalJsonMap(
       json['selectionAfter'],
-      _selectionFromJson,
+      context: 'selectionAfter',
     );
-    final reindexZIndicesRaw = json['reindexZIndices'];
-    final reindexZIndices = reindexZIndicesRaw == null
-        ? false
-        : (reindexZIndicesRaw is bool
-              ? reindexZIndicesRaw
-              : throw StateError(
-                  'History snapshot field "reindexZIndices" is invalid',
-                ));
 
     return HistoryDelta.fromData(
-      beforeElements: beforeElements,
-      afterElements: afterElements,
-      globalElementsBefore: globalElementsBefore,
-      globalElementsAfter: globalElementsAfter,
-      orderBefore: orderBefore,
-      orderAfter: orderAfter,
-      selectionBefore: selectionBefore,
-      selectionAfter: selectionAfter,
-      reindexZIndices: reindexZIndices,
+      beforeElements: _decodeElementMap(
+        _asJsonMap(json['beforeElements'], context: 'beforeElements'),
+        elementRegistry,
+      ),
+      afterElements: _decodeElementMap(
+        _asJsonMap(json['afterElements'], context: 'afterElements'),
+        elementRegistry,
+      ),
+      globalElementsBefore: globalBeforeJson == null
+          ? null
+          : _globalElementsFromJson(globalBeforeJson),
+      globalElementsAfter: globalAfterJson == null
+          ? null
+          : _globalElementsFromJson(globalAfterJson),
+      orderBefore: _readOptionalStringList(
+        json['orderBefore'],
+        context: 'orderBefore',
+      ),
+      orderAfter: _readOptionalStringList(
+        json['orderAfter'],
+        context: 'orderAfter',
+      ),
+      selectionBefore: selectionBeforeJson == null
+          ? null
+          : _selectionFromJson(selectionBeforeJson),
+      selectionAfter: selectionAfterJson == null
+          ? null
+          : _selectionFromJson(selectionAfterJson),
+      reindexZIndices: json['reindexZIndices'] as bool? ?? false,
     );
   }
 
@@ -585,103 +612,45 @@ class _HistorySnapshotCodec {
     'data': element.data.toJson(),
   };
 
+  Map<String, ElementState> _decodeElementMap(
+    Map<String, dynamic> elementsJson,
+    ElementRegistry elementRegistry,
+  ) => {
+    for (final entry in elementsJson.entries)
+      entry.key: _elementFromJson(
+        _asJsonMap(entry.value, context: 'element:${entry.key}'),
+        elementRegistry,
+      ),
+  };
+
   ElementState _elementFromJson(
     Map<String, dynamic> json,
     ElementRegistry elementRegistry,
   ) {
-    final id = _requireString(json, 'id');
-    final type = _requireString(json, 'type');
-    final dataJson = _requireMapField(json, 'data');
-    final data = _decodeElementData(
-      elementRegistry: elementRegistry,
-      elementType: type,
-      elementId: id,
-      dataJson: dataJson,
-    );
-
-    return ElementState(
-      id: id,
-      rect: _rectFromJson(_requireMapField(json, 'rect')),
-      rotation: _requireDouble(json, 'rotation'),
-      opacity: _requireDouble(json, 'opacity'),
-      zIndex: _requireInt(json, 'zIndex'),
-      data: data,
-    );
-  }
-
-  Map<String, ElementState> _decodeElementMap(
-    Object? rawElementsJson,
-    ElementRegistry elementRegistry, {
-    required String source,
-  }) {
-    final elementsJson = _asJsonMap(rawElementsJson);
-    if (elementsJson == null) {
-      throw StateError(
-        'History snapshot element map "$source" is missing or invalid',
-      );
-    }
-
-    final decoded = <String, ElementState>{};
-    for (final entry in elementsJson.entries) {
-      final elementJson = _asJsonMap(entry.value);
-      if (elementJson == null) {
-        throw StateError(
-          'History snapshot element payload is invalid for id "${entry.key}"',
-        );
-      }
-      decoded[entry.key] = _elementFromJson(elementJson, elementRegistry);
-    }
-    return decoded;
-  }
-
-  Map<String, dynamic>? _asJsonMap(Object? raw) {
-    if (raw is! Map) {
-      return null;
-    }
-
-    final mapped = <String, dynamic>{};
-    for (final entry in raw.entries) {
-      final key = entry.key;
-      if (key is! String) {
-        return null;
-      }
-      mapped[key] = entry.value;
-    }
-    return mapped;
-  }
-
-  List<String>? _asStringList(Object? raw) {
-    if (raw is! List) {
-      return null;
-    }
-    return raw.cast<String>();
-  }
-
-  T? _decodeOptionalJson<T>(
-    Object? raw,
-    T Function(Map<String, dynamic> json) decoder,
-  ) {
-    final jsonMap = _asJsonMap(raw);
-    if (jsonMap == null) {
-      return null;
-    }
-    return decoder(jsonMap);
-  }
-
-  ElementData _decodeElementData({
-    required ElementRegistry elementRegistry,
-    required String elementType,
-    required String elementId,
-    required Map<String, dynamic> dataJson,
-  }) {
-    final definition = elementRegistry.getDefinitionByValue(elementType);
+    final id = _readString(json, 'id');
+    final type = _readString(json, 'type');
+    final dataJson = _asJsonMap(json['data'], context: 'data');
+    final definition = elementRegistry.getDefinitionByValue(type);
     if (definition == null) {
       throw StateError(
-        'Unknown element type "$elementType" while decoding history for '
-        'element "$elementId"',
+        'Unknown element type "$type" while decoding history for element "$id"',
       );
     }
-    return definition.fromJson(dataJson);
+    return ElementState(
+      id: id,
+      rect: _rectFromJson(_asJsonMap(json['rect'], context: 'rect')),
+      rotation: _readDouble(json, 'rotation'),
+      opacity: _readDouble(json, 'opacity'),
+      zIndex: _readInt(json, 'zIndex'),
+      data: definition.fromJson(dataJson),
+    );
+  }
+
+  HistoryMetadata? _metadataFromRaw(Object? raw) {
+    if (raw == null) {
+      return null;
+    }
+    return _metadataFromJson(_asJsonMap(raw, context: 'metadata'));
   }
 
   Map<String, dynamic> _selectionToJson(SelectionState selection) => {
@@ -691,8 +660,8 @@ class _HistorySnapshotCodec {
 
   SelectionState _selectionFromJson(Map<String, dynamic> json) =>
       SelectionState(
-        selectedIds: _requireStringList(json, 'selectedIds').toSet(),
-        selectionVersion: _requireInt(json, 'selectionVersion'),
+        selectedIds: _readStringList(json, 'selectedIds').toSet(),
+        selectionVersion: _readInt(json, 'selectionVersion'),
       );
 
   Map<String, dynamic> _globalElementsToJson(GlobalElementsState elements) => {
@@ -703,9 +672,11 @@ class _HistorySnapshotCodec {
   GlobalElementsState _globalElementsFromJson(Map<String, dynamic> json) =>
       GlobalElementsState(
         highlightMask: _highlightMaskFromJson(
-          _requireMapField(json, 'highlightMask'),
+          _asJsonMap(json['highlightMask'], context: 'highlightMask'),
         ),
-        watermark: _watermarkFromJson(_requireMapField(json, 'watermark')),
+        watermark: _watermarkFromJson(
+          _asJsonMap(json['watermark'], context: 'watermark'),
+        ),
       );
 
   Map<String, dynamic> _highlightMaskToJson(HighlightMaskConfig config) => {
@@ -715,8 +686,8 @@ class _HistorySnapshotCodec {
 
   HighlightMaskConfig _highlightMaskFromJson(Map<String, dynamic> json) =>
       HighlightMaskConfig(
-        maskColor: DrawColor(_requireInt(json, 'maskColor')),
-        maskOpacity: _requireDouble(json, 'maskOpacity'),
+        maskColor: DrawColor(_readInt(json, 'maskColor')),
+        maskOpacity: _readDouble(json, 'maskOpacity'),
       );
 
   Map<String, dynamic> _watermarkToJson(WatermarkConfig config) => {
@@ -731,13 +702,13 @@ class _HistorySnapshotCodec {
 
   WatermarkConfig _watermarkFromJson(Map<String, dynamic> json) =>
       WatermarkConfig(
-        color: DrawColor(_requireInt(json, 'color')),
-        text: _requireString(json, 'text'),
-        fontSize: _requireDouble(json, 'fontSize'),
-        fontFamily: _requireString(json, 'fontFamily'),
-        angle: _requireDouble(json, 'angle'),
-        gap: _requireDouble(json, 'gap'),
-        opacity: _requireDouble(json, 'opacity'),
+        color: DrawColor(_readInt(json, 'color')),
+        text: _readString(json, 'text'),
+        fontSize: _readDouble(json, 'fontSize'),
+        fontFamily: _readString(json, 'fontFamily'),
+        angle: _readDouble(json, 'angle'),
+        gap: _readDouble(json, 'gap'),
+        opacity: _readDouble(json, 'opacity'),
       );
 
   Map<String, dynamic> _rectToJson(DrawRect rect) => {
@@ -748,10 +719,10 @@ class _HistorySnapshotCodec {
   };
 
   DrawRect _rectFromJson(Map<String, dynamic> json) => DrawRect(
-    minX: _requireDouble(json, 'minX'),
-    minY: _requireDouble(json, 'minY'),
-    maxX: _requireDouble(json, 'maxX'),
-    maxY: _requireDouble(json, 'maxY'),
+    minX: _readDouble(json, 'minX'),
+    minY: _readDouble(json, 'minY'),
+    maxX: _readDouble(json, 'maxX'),
+    maxY: _readDouble(json, 'maxY'),
   );
 
   Map<String, dynamic> _metadataToJson(HistoryMetadata metadata) => {
@@ -763,33 +734,13 @@ class _HistorySnapshotCodec {
   };
 
   HistoryMetadata _metadataFromJson(Map<String, dynamic> json) {
-    final typeName = _requireString(json, 'recordType');
-    final recordType = _parseRecordType(typeName);
-    final timestampRaw = json['timestamp'];
-    if (timestampRaw is! String) {
-      throw StateError(
-        'History snapshot field "timestamp" is missing or invalid',
-      );
-    }
-    final parsedTimestamp = DateTime.parse(timestampRaw);
-    final extraRaw = json['extra'];
-    Map<String, dynamic>? extra;
-    if (extraRaw != null) {
-      extra = _asJsonMap(extraRaw);
-      if (extra == null) {
-        throw StateError('History snapshot field "extra" is invalid');
-      }
-    }
-
+    final recordType = _parseRecordType(_readString(json, 'recordType'));
     return HistoryMetadata(
-      description: _requireString(json, 'description'),
+      description: _readString(json, 'description'),
       recordType: recordType,
-      affectedElementIds: _requireStringList(
-        json,
-        'affectedElementIds',
-      ).toSet(),
-      timestamp: parsedTimestamp,
-      extra: extra,
+      affectedElementIds: _readStringList(json, 'affectedElementIds').toSet(),
+      timestamp: DateTime.parse(_readString(json, 'timestamp')),
+      extra: _readOptionalJsonMap(json['extra'], context: 'extra'),
     );
   }
 

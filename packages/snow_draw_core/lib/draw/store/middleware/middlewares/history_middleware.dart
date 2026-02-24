@@ -242,25 +242,12 @@ class HistoryMiddleware extends MiddlewareBase {
     };
   }
 
-  ({bool isNew, String text}) _resolveFinishTextEditPayload(
-    DispatchContext context,
-    FinishTextEdit action,
-  ) {
-    final interaction = context.initialState.application.interaction;
-    if (interaction is TextEditingState) {
-      return (isNew: interaction.isNew, text: action.text);
-    }
-
-    return (isNew: action.isNew, text: action.text);
-  }
-
   _FinishTextEditOutcomeKind _resolveFinishTextEditOutcomeKind(
-    DispatchContext context,
+    DispatchContext _,
     FinishTextEdit action,
   ) {
-    final payload = _resolveFinishTextEditPayload(context, action);
-    final hasText = payload.text.trim().isNotEmpty;
-    return switch ((payload.isNew, hasText)) {
+    final hasText = action.text.trim().isNotEmpty;
+    return switch ((action.isNew, hasText)) {
       (true, false) => _FinishTextEditOutcomeKind.noop,
       (false, false) => _FinishTextEditOutcomeKind.delete,
       (true, true) => _FinishTextEditOutcomeKind.create,
