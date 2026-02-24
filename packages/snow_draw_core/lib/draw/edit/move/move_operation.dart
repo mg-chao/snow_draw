@@ -66,7 +66,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
     );
     final selectedIdsAtStart = data.selectedIds;
-    final targetElements = data.selectedElements;
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -75,7 +74,9 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       referenceElements,
     );
     final snapBounds =
-        SelectionCalculator.computeSelectionBoundsForElements(targetElements) ??
+        SelectionCalculator.computeSelectionBoundsForElements(
+          data.selectedElements,
+        ) ??
         data.startBounds;
 
     return MoveEditContext(
@@ -88,7 +89,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       snapBoundsAtStart: snapBounds,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
-      targetElements: targetElements,
     );
   }
 
@@ -237,8 +237,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
           referenceElements: context.referenceElements,
           referenceAabbs: context.referenceElementAabbs,
           snapDistance: snapDistance,
-          targetElements: context.targetElements,
-          targetOffset: targetOffset,
           enablePointSnaps: snapConfig.enablePointSnaps,
           enableGapSnaps: snapConfig.enableGapSnaps,
         );

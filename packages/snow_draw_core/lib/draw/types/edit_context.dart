@@ -67,7 +67,6 @@ final class MoveEditContext extends EditContext {
     this.snapBoundsAtStart,
     this.referenceElements = const [],
     this.referenceElementAabbs = const [],
-    this.targetElements = const [],
   });
 
   /// Starting center for each element (lean snapshot).
@@ -86,9 +85,6 @@ final class MoveEditContext extends EditContext {
 
   /// Precomputed axis-aligned bounds for [referenceElements].
   final List<DrawRect> referenceElementAabbs;
-
-  /// Selected elements captured at edit start for precise target snap points.
-  final List<ElementState> targetElements;
 
   /// Bounds used as the snap base for this move session.
   DrawRect get snapBounds => snapBoundsAtStart ?? startBounds;

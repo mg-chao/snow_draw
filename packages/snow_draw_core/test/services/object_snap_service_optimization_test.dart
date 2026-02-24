@@ -2,7 +2,6 @@ import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/services/object_snap_service.dart';
-import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/snap_guides.dart';
 
@@ -17,10 +16,8 @@ void main() {
       data: const RectangleData(),
     );
 
-    test('snapMove applies targetOffset when targetElements are provided', () {
+    test('snapMove uses targetRect as the snapping source', () {
       const service = ObjectSnapService();
-      const baseTargetRect = DrawRect(maxX: 10, maxY: 10);
-      const targetOffset = DrawPoint(x: 4, y: 0);
       const movedTargetRect = DrawRect(minX: 4, maxX: 14, maxY: 10);
 
       final result = service.snapMove(
@@ -29,8 +26,6 @@ void main() {
           element('ref', const DrawRect(minX: 15, maxX: 25, maxY: 10)),
         ],
         snapDistance: 2,
-        targetElements: [element('target', baseTargetRect)],
-        targetOffset: targetOffset,
         enableGapSnaps: false,
       );
 
@@ -43,8 +38,7 @@ void main() {
       );
     });
 
-    test('gap snapping remains active when point snapping is disabled '
-        'with target elements', () {
+    test('gap snapping remains active when point snapping is disabled', () {
       const service = ObjectSnapService();
       const targetRect = DrawRect(minX: 12, maxX: 22, maxY: 10);
 
@@ -57,7 +51,6 @@ void main() {
         snapDistance: 5,
         targetAnchorsX: const [SnapAxisAnchor.center],
         targetAnchorsY: const [],
-        targetElements: [element('target', targetRect)],
         enablePointSnaps: false,
       );
 
@@ -106,29 +99,23 @@ void main() {
 
     test('precomputed reference AABBs preserve snapMove output', () {
       const service = ObjectSnapService();
-      const baseTargetRect = DrawRect(maxX: 10, maxY: 10);
       const movedTargetRect = DrawRect(minX: 4, maxX: 14, maxY: 10);
       final references = [
         element('ref1', const DrawRect(minX: 16, maxX: 26, maxY: 10)),
         element('ref2', const DrawRect(minY: 18, maxY: 28, maxX: 10)),
       ];
       final referenceAabbs = ObjectSnapService.buildReferenceAabbs(references);
-      final targetElements = [element('target', baseTargetRect)];
 
       final uncached = service.snapMove(
         targetRect: movedTargetRect,
         referenceElements: references,
         snapDistance: 10,
-        targetElements: targetElements,
-        targetOffset: const DrawPoint(x: 4, y: 0),
       );
       final cached = service.snapMove(
         targetRect: movedTargetRect,
         referenceElements: references,
         referenceAabbs: referenceAabbs,
         snapDistance: 10,
-        targetElements: targetElements,
-        targetOffset: const DrawPoint(x: 4, y: 0),
       );
 
       expect(cached.dx, uncached.dx);
