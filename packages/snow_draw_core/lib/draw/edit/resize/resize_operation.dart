@@ -347,7 +347,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
   }) {
     final canSnap = !context.hasRotation && !modifiers.fromCenter;
     if (!canSnap) {
-      return (bounds: bounds, guides: const <SnapGuide>[]);
+      return _unsnapped(bounds);
     }
 
     final snappingMode = resolveEffectiveSnappingModeForConfig(
@@ -379,7 +379,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         snapConfig.enablePointSnaps &&
         context.referenceElements.isNotEmpty;
     if (!shouldObjectSnap) {
-      return (bounds: bounds, guides: const <SnapGuide>[]);
+      return _unsnapped(bounds);
     }
 
     final snapDistance = resolveZoomAdjustedDistance(
@@ -408,4 +408,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       guides: snapConfig.showGuides ? result.guides : const <SnapGuide>[],
     );
   }
+
+  ({DrawRect bounds, List<SnapGuide> guides}) _unsnapped(DrawRect bounds) =>
+      (bounds: bounds, guides: const <SnapGuide>[]);
 }

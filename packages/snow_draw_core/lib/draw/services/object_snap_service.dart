@@ -281,12 +281,10 @@ class ObjectSnapService {
     final usePointToPointSnaps =
         enablePointSnaps && targetElements != null && targetElements.isNotEmpty;
     final needsReferenceRects = enableGapSnaps || !usePointToPointSnaps;
-    final hasPrecomputedAabbs =
-        referenceAabbs != null &&
-        referenceAabbs.length == referenceElements.length;
-    final effectiveReferenceAabbs = hasPrecomputedAabbs
-        ? referenceAabbs
-        : _buildElementAabbs(referenceElements);
+    final effectiveReferenceAabbs = _resolveReferenceAabbs(
+      referenceElements,
+      referenceAabbs,
+    );
     final referenceRects = needsReferenceRects
         ? effectiveReferenceAabbs
         : const <DrawRect>[];
@@ -513,35 +511,29 @@ class ObjectSnapService {
     final allowedTargetAnchors = Set<SnapAxisAnchor>.of(targetAnchors);
     final candidates = <_AxisCandidate>[];
     for (final targetPoint in targetPoints) {
-      final targetAnchor = axis == SnapAxis.x
-          ? targetPoint.anchorX
-          : targetPoint.anchorY;
+      final targetAnchor = _pointAxisAnchor(targetPoint, axis);
       if (!allowedTargetAnchors.contains(targetAnchor)) {
         continue;
       }
       final targetKind = _resolvePointKind(targetPoint);
-      final targetPos = axis == SnapAxis.x
-          ? targetPoint.point.x
-          : targetPoint.point.y;
+      final targetPos = _pointAxisValue(targetPoint.point, axis);
       for (final referencePoint in referencePoints) {
         final referenceKind = _resolvePointKind(referencePoint);
-        final referencePos = axis == SnapAxis.x
-            ? referencePoint.point.x
-            : referencePoint.point.y;
+        final referencePos = _pointAxisValue(referencePoint.point, axis);
         final offset = referencePos - targetPos;
         if (offset.abs() <= snapDistance) {
-          final perpendicularDistance = axis == SnapAxis.x
-              ? (targetPoint.point.y - referencePoint.point.y).abs()
-              : (targetPoint.point.x - referencePoint.point.x).abs();
+          final perpendicularDistance = _pointPerpendicularDistance(
+            targetPoint.point,
+            referencePoint.point,
+            axis,
+          );
           candidates.add(
             _AxisCandidate.point(
               axis: axis,
               offset: offset,
               referenceRect: referencePoint.rect,
               targetAnchor: targetAnchor,
-              referenceAnchor: axis == SnapAxis.x
-                  ? referencePoint.anchorX
-                  : referencePoint.anchorY,
+              referenceAnchor: _pointAxisAnchor(referencePoint, axis),
               targetPoint: targetPoint.point,
               referencePoint: referencePoint.point,
               targetPointKind: targetKind,
@@ -1330,33 +1322,13 @@ class ObjectSnapService {
     _AxisCandidate candidate,
     DrawRect targetRect,
   ) {
-    final gapSize = candidate.gapSize!;
-    if (candidate.axis == SnapAxis.x) {
-      final y = targetRect.centerY;
-      final (startX, endX) = _gapBounds(candidate, targetRect);
-      final start = DrawPoint(x: startX, y: y);
-      final end = DrawPoint(x: endX, y: y);
-      return SnapGuide(
-        kind: SnapGuideKind.gap,
-        axis: SnapGuideAxis.horizontal,
-        start: start,
-        end: end,
-        markers: [start, end],
-        label: gapSize,
-      );
-    }
-
-    final x = targetRect.centerX;
-    final (startY, endY) = _gapBounds(candidate, targetRect);
-    final start = DrawPoint(x: x, y: startY);
-    final end = DrawPoint(x: x, y: endY);
-    return SnapGuide(
-      kind: SnapGuideKind.gap,
-      axis: SnapGuideAxis.vertical,
+    final (start, end) = _gapBounds(candidate, targetRect);
+    return _buildGapGuideForBounds(
+      axis: candidate.axis,
+      targetRect: targetRect,
       start: start,
       end: end,
-      markers: [start, end],
-      label: gapSize,
+      gapSize: candidate.gapSize!,
     );
   }
 
@@ -1555,13 +1527,16 @@ class ObjectSnapService {
     }
 
     final perpendicularAxis = _perpendicularAxis(axis);
-    final targetPerpAnchor = perpendicularCandidate?.axis == perpendicularAxis
-        ? perpendicularCandidate?.targetAnchor
+    final targetPerpAnchor =
+        perpendicularCandidate != null &&
+            perpendicularCandidate.axis == perpendicularAxis
+        ? perpendicularCandidate.targetAnchor
         : null;
     final referencePerpAnchor =
-        perpendicularCandidate?.axis == perpendicularAxis &&
-            perpendicularCandidate?.referenceRect == referenceRect
-        ? perpendicularCandidate?.referenceAnchor
+        perpendicularCandidate != null &&
+            perpendicularCandidate.axis == perpendicularAxis &&
+            perpendicularCandidate.referenceRect == referenceRect
+        ? perpendicularCandidate.referenceAnchor
         : null;
     final targetPerp = targetPerpAnchor != null
         ? _anchorPosition(targetRect, perpendicularAxis, targetPerpAnchor)
@@ -1601,6 +1576,15 @@ class ObjectSnapService {
     for (final element in elements)
       SelectionCalculator.computeElementWorldAabb(element),
   ];
+
+  static List<DrawRect> _resolveReferenceAabbs(
+    List<ElementState> referenceElements,
+    List<DrawRect>? referenceAabbs,
+  ) =>
+      referenceAabbs != null &&
+          referenceAabbs.length == referenceElements.length
+      ? referenceAabbs
+      : _buildElementAabbs(referenceElements);
 
   /// Builds reusable axis-aligned bounds for [referenceElements].
   ///
@@ -1675,20 +1659,32 @@ class ObjectSnapService {
     }
 
     final seen = <SnapAxisAnchor>{};
-    List<SnapAxisAnchor>? deduplicated;
-    for (var index = 0; index < anchors.length; index++) {
-      final anchor = anchors[index];
-      final isNew = seen.add(anchor);
-      if (isNew) {
-        deduplicated?.add(anchor);
+    final deduplicated = <SnapAxisAnchor>[];
+    var hasDuplicate = false;
+    for (final anchor in anchors) {
+      if (!seen.add(anchor)) {
+        hasDuplicate = true;
         continue;
       }
-
-      deduplicated ??= List<SnapAxisAnchor>.of(anchors.take(index));
+      deduplicated.add(anchor);
     }
-
-    return deduplicated ?? anchors;
+    return hasDuplicate ? deduplicated : anchors;
   }
+
+  static double _pointAxisValue(DrawPoint point, SnapAxis axis) =>
+      axis == SnapAxis.x ? point.x : point.y;
+
+  static SnapAxisAnchor _pointAxisAnchor(_SnapPoint point, SnapAxis axis) =>
+      axis == SnapAxis.x ? point.anchorX : point.anchorY;
+
+  static double _pointPerpendicularDistance(
+    DrawPoint a,
+    DrawPoint b,
+    SnapAxis axis,
+  ) =>
+      (_pointAxisValue(a, _perpendicularAxis(axis)) -
+              _pointAxisValue(b, _perpendicularAxis(axis)))
+          .abs();
 
   static SnapAxisAnchor _resolveAxisAnchor(
     double value,

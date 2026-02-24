@@ -793,36 +793,31 @@ class _HistorySnapshotCodec {
   }) {
     final assignments = <int, int>{};
 
-    void assignIfValid({
-      required int childId,
-      required int? parentId,
-      bool overwrite = false,
-    }) {
-      if (!overwrite && assignments.containsKey(childId)) {
-        return;
-      }
-      if (!_isValidParentAssignment(
+    for (final entry in nodeDataById.entries) {
+      final childId = entry.key;
+      final parentId = entry.value['parentId'] as int?;
+      if (_isValidParentAssignment(
         byId: byId,
         parentId: parentId,
         childId: childId,
       )) {
-        return;
+        assignments[childId] = parentId!;
       }
-      assignments[childId] = parentId!;
-    }
-
-    for (final entry in nodeDataById.entries) {
-      assignIfValid(
-        childId: entry.key,
-        parentId: entry.value['parentId'] as int?,
-        overwrite: true,
-      );
     }
 
     for (final entry in nodeDataById.entries) {
       final parentId = entry.key;
       for (final childId in _asIntList(entry.value['children'])) {
-        assignIfValid(childId: childId, parentId: parentId);
+        if (assignments.containsKey(childId)) {
+          continue;
+        }
+        if (_isValidParentAssignment(
+          byId: byId,
+          parentId: parentId,
+          childId: childId,
+        )) {
+          assignments[childId] = parentId;
+        }
       }
     }
 
