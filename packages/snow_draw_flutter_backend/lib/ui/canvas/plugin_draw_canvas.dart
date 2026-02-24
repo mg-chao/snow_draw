@@ -2281,11 +2281,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawStateView stateView,
     required SceneCanvasRenderKey renderKey,
   }) {
-    final currentSnapshot = _canvasSnapshotNotifier.value;
-    if (currentSnapshot.renderKey == renderKey) {
-      return;
-    }
-
+    // Render keys intentionally track only paint-context data. Scene element
+    // snapshots still need to propagate when the key stays stable.
     final nextSnapshot = _CanvasSnapshot(
       stateView: stateView,
       renderKey: renderKey,
