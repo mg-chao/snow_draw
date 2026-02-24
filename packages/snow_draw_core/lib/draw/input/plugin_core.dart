@@ -214,21 +214,6 @@ abstract interface class InputPlugin {
   /// - consumed: event consumed, allow other plugins to observe
   Future<PluginResult> handleEvent(InputEvent event);
 
-  /// Pre-event hook (optional).
-  ///
-  /// Called before any plugin handles the event, useful for:
-  /// - Event preprocessing
-  /// - Logging
-  /// - Performance monitoring
-  ///
-  /// Return true to intercept the event and stop processing.
-  Future<bool> onBeforeEvent(InputEvent event) async => false;
-
-  /// Post-event hook (optional).
-  ///
-  /// Called after event processing regardless of result.
-  Future<void> onAfterEvent(InputEvent event, PluginResult? result) async {}
-
   /// Reset plugin state.
   void reset() {}
 }
@@ -287,12 +272,6 @@ abstract class InputPluginBase implements InputPlugin {
   Future<void> onUnload() async {
     _context = null;
   }
-
-  @override
-  Future<bool> onBeforeEvent(InputEvent event) async => false;
-
-  @override
-  Future<void> onAfterEvent(InputEvent event, PluginResult? result) async {}
 
   @override
   void reset() {}

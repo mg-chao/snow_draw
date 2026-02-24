@@ -75,7 +75,7 @@ class ActionProcessor {
     }
   });
 
-  void syncHistoryAvailability({bool emitIfChanged = false}) {
+  void syncHistoryAvailability() {
     final canUndo = _services.historyManager.canUndo;
     final canRedo = _services.historyManager.canRedo;
     final changed = canUndo != _lastCanUndo || canRedo != _lastCanRedo;
@@ -83,7 +83,7 @@ class ActionProcessor {
     _lastCanUndo = canUndo;
     _lastCanRedo = canRedo;
 
-    if (!emitIfChanged || !changed) {
+    if (!changed) {
       return;
     }
 
@@ -473,7 +473,7 @@ class ActionProcessor {
       );
     }
 
-    syncHistoryAvailability(emitIfChanged: true);
+    syncHistoryAvailability();
   }
 
   void _emitEvent<T extends DrawEvent>(T Function() eventFactory) {

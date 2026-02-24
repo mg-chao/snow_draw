@@ -14,6 +14,7 @@ import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
 import '../pointer_sample_resampler.dart';
+import '../policies/drag_threshold_policy.dart';
 
 /// Plugin that handles element creation via the current tool.
 class CreatePlugin extends DrawInputPlugin {
@@ -124,13 +125,14 @@ class CreatePlugin extends DrawInputPlugin {
 
     if (_isPointCreating(state)) {
       final downPosition = _pointerDownPosition;
-      if (downPosition != null && !_isDragging) {
-        final threshold = selectionConfig.interaction.dragThreshold;
-        if (threshold == 0 ||
-            downPosition.distanceSquared(event.position) >=
-                threshold * threshold) {
-          _isDragging = true;
-        }
+      if (downPosition != null &&
+          !_isDragging &&
+          hasReachedDragThreshold(
+            from: downPosition,
+            to: event.position,
+            threshold: selectionConfig.interaction.dragThreshold,
+          )) {
+        _isDragging = true;
       }
     }
 
@@ -196,8 +198,11 @@ class CreatePlugin extends DrawInputPlugin {
     final wasMeaningfulDrag =
         wasDragging &&
         downPosition != null &&
-        downPosition.distanceSquared(event.position) >=
-            minCreateSize * minCreateSize;
+        hasReachedDragThreshold(
+          from: downPosition,
+          to: event.position,
+          threshold: minCreateSize,
+        );
     if (wasMeaningfulDrag && !wasMultiPoint) {
       await dispatch(const FinishCreateElement());
       _resetPointCreationState();

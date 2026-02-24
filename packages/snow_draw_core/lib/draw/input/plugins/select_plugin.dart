@@ -15,6 +15,7 @@ import '../../utils/edit_intent_detector.dart';
 import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
+import '../policies/drag_threshold_policy.dart';
 
 /// Plugin that handles selection and intent detection.
 class SelectPlugin extends DrawInputPlugin {
@@ -172,10 +173,11 @@ class SelectPlugin extends DrawInputPlugin {
 
     final pendingIntent = interaction.intent;
     final pointerDownPosition = interaction.pointerDownPosition;
-    final thresholdSquared = _dragStartThreshold * _dragStartThreshold;
-
-    if (pointerDownPosition.distanceSquared(event.position) >=
-        thresholdSquared) {
+    if (hasReachedDragThreshold(
+      from: pointerDownPosition,
+      to: event.position,
+      threshold: _dragStartThreshold,
+    )) {
       await dispatch(const ClearDragPending());
 
       if (state.domain.hasSelection) {

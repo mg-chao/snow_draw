@@ -225,7 +225,7 @@ class DefaultDrawStore implements DrawStore {
 
   void restoreHistory(HistoryManagerSnapshot snapshot) {
     _historyManager.restore(snapshot);
-    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
+    _actionProcessor.syncHistoryAvailability();
   }
 
   void _checkNotDisposed() {
