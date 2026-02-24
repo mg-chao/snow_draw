@@ -602,13 +602,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = sourceElement!;
-    final hiddenData = documentElement?.data is TextData
-        ? documentElement!.data
-        : element.data;
-    if (_doubleEquals(element.opacity, 0) && element.data == hiddenData) {
+    if (_doubleEquals(element.opacity, 0)) {
       return element;
     }
-    return element.copyWith(opacity: 0, data: hiddenData);
+    return element.copyWith(opacity: 0);
   }
 
   Map<String, ElementState> _resolveEraserPreviewElements(
