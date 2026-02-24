@@ -42,9 +42,7 @@ class EventBus {
       return true;
     }
 
-    return _typedChannels.values.any(
-      (channel) => channel.hasListeners && channel.acceptsType<T>(),
-    );
+    return _activeTypedChannels.any((channel) => channel.acceptsType<T>());
   }
 
   /// Whether listeners can receive this concrete [event] instance.
@@ -56,9 +54,7 @@ class EventBus {
       return true;
     }
 
-    return _typedChannels.values.any(
-      (channel) => channel.hasListeners && channel.matches(event),
-    );
+    return _activeTypedChannels.any((channel) => channel.matches(event));
   }
 
   /// Emit an event.
@@ -74,8 +70,8 @@ class EventBus {
 
     final hasRawListeners = _controller.hasListener;
     final typedTargets = <_TypedChannelBase>[
-      for (final channel in _typedChannels.values)
-        if (channel.hasListeners && channel.matches(event)) channel,
+      for (final channel in _activeTypedChannels)
+        if (channel.matches(event)) channel,
     ];
     if (!hasRawListeners && typedTargets.isEmpty) {
       return false;
@@ -153,14 +149,19 @@ class EventBus {
     _typedChannels.clear();
   }
 
-  bool get _hasTypedListeners =>
-      _typedChannels.values.any((channel) => channel.hasListeners);
+  bool get _hasTypedListeners => _activeTypedChannels.isNotEmpty;
+
+  Iterable<_TypedChannelBase> get _activeTypedChannels sync* {
+    for (final channel in _typedChannels.values) {
+      if (channel.hasListeners) {
+        yield channel;
+      }
+    }
+  }
 
   bool _hasPotentialTypedListenersFor<T extends DrawEvent>() =>
-      _typedChannels.values.any(
-        (channel) =>
-            channel.hasListeners &&
-            (channel.acceptsType<T>() || channel.isSubtypeOf<T>()),
+      _activeTypedChannels.any(
+        (channel) => channel.acceptsType<T>() || channel.isSubtypeOf<T>(),
       );
 }
 

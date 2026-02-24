@@ -89,7 +89,7 @@ class ActionProcessor {
       return;
     }
 
-    _services.eventBus.emitLazy(
+    _emitEvent(
       () => HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
     );
   }
@@ -344,7 +344,7 @@ class ActionProcessor {
       },
     );
 
-    _services.eventBus.emitLazy(
+    _emitEvent(
       () => ErrorEvent(
         message: _buildErrorMessage(
           action: action,
@@ -380,21 +380,21 @@ class ActionProcessor {
     switch ((prevInteraction, nextInteraction)) {
       case (final EditingState previous, final EditingState next)
           when previous.sessionId == next.sessionId:
-        _services.eventBus.emitLazy(
+        _emitEvent(
           () => EditSessionUpdatedEvent(
             sessionId: next.sessionId,
             operationId: next.operationId,
           ),
         );
       case (final EditingState previous, final EditingState next):
-        _services.eventBus.emitLazy(
+        _emitEvent(
           () => EditSessionCancelledEvent(
             sessionId: previous.sessionId,
             operationId: previous.operationId,
             reason: EditCancelReason.newEditStarted,
           ),
         );
-        _services.eventBus.emitLazy(
+        _emitEvent(
           () => EditSessionStartedEvent(
             sessionId: next.sessionId,
             operationId: next.operationId,
@@ -402,14 +402,14 @@ class ActionProcessor {
         );
       case (final EditingState previous, _):
         if (action is FinishEdit) {
-          _services.eventBus.emitLazy(
+          _emitEvent(
             () => EditSessionFinishedEvent(
               sessionId: previous.sessionId,
               operationId: previous.operationId,
             ),
           );
         } else {
-          _services.eventBus.emitLazy(
+          _emitEvent(
             () => EditSessionCancelledEvent(
               sessionId: previous.sessionId,
               operationId: previous.operationId,
@@ -418,7 +418,7 @@ class ActionProcessor {
           );
         }
       case (_, final EditingState next):
-        _services.eventBus.emitLazy(
+        _emitEvent(
           () => EditSessionStartedEvent(
             sessionId: next.sessionId,
             operationId: next.operationId,
@@ -435,7 +435,7 @@ class ActionProcessor {
   }) {
     if (previousState.domain.document.elementsVersion !=
         nextState.domain.document.elementsVersion) {
-      _services.eventBus.emitLazy(
+      _emitEvent(
         () => DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
           elementCount: nextState.domain.document.elements.length,
@@ -445,7 +445,7 @@ class ActionProcessor {
 
     if (previousState.domain.selection.selectionVersion !=
         nextState.domain.selection.selectionVersion) {
-      _services.eventBus.emitLazy(
+      _emitEvent(
         () => SelectionChangedEvent(
           selectedIds: nextState.domain.selection.selectedIds,
           selectionVersion: nextState.domain.selection.selectionVersion,
@@ -454,14 +454,14 @@ class ActionProcessor {
     }
 
     if (previousState.application.view != nextState.application.view) {
-      _services.eventBus.emitLazy(
+      _emitEvent(
         () => ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
     if (previousState.application.interaction !=
         nextState.application.interaction) {
-      _services.eventBus.emitLazy(
+      _emitEvent(
         () => InteractionChangedEvent(
           interaction: nextState.application.interaction,
         ),
@@ -469,6 +469,10 @@ class ActionProcessor {
     }
 
     syncHistoryAvailability(emitIfChanged: true);
+  }
+
+  void _emitEvent<T extends DrawEvent>(T Function() eventFactory) {
+    _services.eventBus.emitLazy<T>(eventFactory);
   }
 
   void _rethrowIfCritical(

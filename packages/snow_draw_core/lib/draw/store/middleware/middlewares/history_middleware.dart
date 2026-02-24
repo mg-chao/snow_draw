@@ -3,6 +3,7 @@ import '../../../actions/history_policy.dart';
 import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
+import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../history_change_set.dart';
@@ -91,45 +92,45 @@ class HistoryMiddleware extends MiddlewareBase {
   Future<DispatchContext> _handleUndo(
     DispatchContext context,
     NextFunction next,
-  ) {
-    context.drawContext.log.history.trace('History undo requested', {
-      'traceId': context.traceId,
-    });
-    if (!context.historyManager.canUndo) {
-      return next(context);
-    }
-
-    // Apply undo delta to current state (after reduction).
-    final restoredState = context.historyManager.undo(context.currentState);
-    if (restoredState == null) {
-      return next(context);
-    }
-
-    // Update context with restored state
-    final updatedContext = context.withCurrentState(restoredState);
-    return next(updatedContext);
-  }
+  ) => _handleHistoryNavigation(
+    context: context,
+    next: next,
+    actionName: 'undo',
+    canNavigate: context.historyManager.canUndo,
+    restore: context.historyManager.undo,
+  );
 
   Future<DispatchContext> _handleRedo(
     DispatchContext context,
     NextFunction next,
-  ) {
-    context.drawContext.log.history.trace('History redo requested', {
+  ) => _handleHistoryNavigation(
+    context: context,
+    next: next,
+    actionName: 'redo',
+    canNavigate: context.historyManager.canRedo,
+    restore: context.historyManager.redo,
+  );
+
+  Future<DispatchContext> _handleHistoryNavigation({
+    required DispatchContext context,
+    required NextFunction next,
+    required String actionName,
+    required bool canNavigate,
+    required DrawState? Function(DrawState currentState) restore,
+  }) {
+    context.drawContext.log.history.trace('History $actionName requested', {
       'traceId': context.traceId,
     });
-    if (!context.historyManager.canRedo) {
+    if (!canNavigate) {
       return next(context);
     }
 
-    // Apply redo delta to current state (after reduction).
-    final restoredState = context.historyManager.redo(context.currentState);
+    final restoredState = restore(context.currentState);
     if (restoredState == null) {
       return next(context);
     }
 
-    // Update context with restored state
-    final updatedContext = context.withCurrentState(restoredState);
-    return next(updatedContext);
+    return next(context.withCurrentState(restoredState));
   }
 
   void _recordHistory(DispatchContext context, DrawAction action) {
@@ -321,20 +322,13 @@ class HistoryMiddleware extends MiddlewareBase {
   ) {
     final payload = _resolveFinishTextEditPayload(context, action);
     final hasText = payload.text.trim().isNotEmpty;
-    if (!hasText) {
-      return (
-        elementId: payload.elementId,
-        kind: payload.isNew
-            ? _FinishTextEditOutcomeKind.noop
-            : _FinishTextEditOutcomeKind.delete,
-      );
-    }
-    return (
-      elementId: payload.elementId,
-      kind: payload.isNew
-          ? _FinishTextEditOutcomeKind.create
-          : _FinishTextEditOutcomeKind.edit,
-    );
+    final kind = switch ((payload.isNew, hasText)) {
+      (true, false) => _FinishTextEditOutcomeKind.noop,
+      (false, false) => _FinishTextEditOutcomeKind.delete,
+      (true, true) => _FinishTextEditOutcomeKind.create,
+      (false, true) => _FinishTextEditOutcomeKind.edit,
+    };
+    return (elementId: payload.elementId, kind: kind);
   }
 
   HistoryMetadata? _metadataFromEdit(DispatchContext context) {
