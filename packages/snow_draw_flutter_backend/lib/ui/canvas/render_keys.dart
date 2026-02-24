@@ -52,7 +52,7 @@ class CreatingElementSnapshot {
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
     required this.creatingElement,
-    required this.sceneContentFingerprint,
+    required this.documentElementsVersion,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
     required this.elementRegistry,
@@ -67,12 +67,12 @@ class SceneCanvasRenderKey {
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
 
-  /// Fingerprint of scene inputs that can affect element-layer pixels.
+  /// Persisted document version used for scene invalidation.
   ///
-  /// This tracks coarse scene-content revisions (document + preview snapshots)
-  /// and is combined with [framePlan] so any visible canvas output change
-  /// triggers a repaint.
-  final int sceneContentFingerprint;
+  /// The unified canvas painter resolves visible elements from [DrawStateView],
+  /// so this version tracks committed document mutations while
+  /// [previewElementsById] and [creatingElement] track transient preview state.
+  final int documentElementsVersion;
 
   /// Revision for text rendering cache invalidation.
   ///
@@ -103,7 +103,7 @@ class SceneCanvasRenderKey {
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
           other.creatingElement == creatingElement &&
-          other.sceneContentFingerprint == sceneContentFingerprint &&
+          other.documentElementsVersion == documentElementsVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
           other.elementRegistry == elementRegistry &&
@@ -115,7 +115,7 @@ class SceneCanvasRenderKey {
   @override
   int get hashCode => Object.hashAll([
     creatingElement,
-    sceneContentFingerprint,
+    documentElementsVersion,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),
     elementRegistry,

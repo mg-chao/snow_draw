@@ -2240,11 +2240,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final canvasConfig = widget.store.config.canvas;
     final gridConfig = widget.store.config.grid;
     final elementRegistry = widget.store.context.elementRegistry;
-    final sceneContentFingerprint = _computeSceneContentFingerprint(
-      stateView: stateView,
-      previewElementsById: previewElementsById,
-      creatingElement: creatingElement,
-    );
     final framePlan = _frameRenderPlanBuilder.build(
       view: stateView,
       scaleFactor: scaleFactor,
@@ -2270,7 +2265,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     return SceneCanvasRenderKey(
       creatingElement: creatingElement,
-      sceneContentFingerprint: sceneContentFingerprint,
+      documentElementsVersion: stateView.state.domain.document.elementsVersion,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
       elementRegistry: elementRegistry,
@@ -2278,34 +2273,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
       locale: locale,
       framePlan: framePlan,
-    );
-  }
-
-  int _computeSceneContentFingerprint({
-    required DrawStateView stateView,
-    required Map<String, ElementState> previewElementsById,
-    required CreatingElementSnapshot? creatingElement,
-  }) {
-    final previewFingerprint = previewElementsById.isEmpty
-        ? 0
-        : Object.hashAllUnordered(
-            previewElementsById.entries.map(
-              (entry) => Object.hash(entry.key, entry.value),
-            ),
-          );
-    final creatingFingerprint = creatingElement == null
-        ? 0
-        : Object.hash(
-            creatingElement.element.id,
-            creatingElement.element,
-            creatingElement.currentRect,
-            creatingElement.creationRevision,
-          );
-    final document = stateView.state.domain.document;
-    return Object.hash(
-      document.elementsVersion,
-      previewFingerprint,
-      creatingFingerprint,
     );
   }
 

@@ -41,7 +41,7 @@ void main() {
 
       final beforeKey = SceneCanvasRenderKey(
         creatingElement: null,
-        sceneContentFingerprint: initialState.domain.document.elementsVersion,
+        documentElementsVersion: initialState.domain.document.elementsVersion,
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,
@@ -50,7 +50,7 @@ void main() {
       );
       final afterKey = SceneCanvasRenderKey(
         creatingElement: null,
-        sceneContentFingerprint: updatedDocument.elementsVersion,
+        documentElementsVersion: updatedDocument.elementsVersion,
         textRenderingCacheRevision: 0,
         previewElementsById: const <String, ElementState>{},
         elementRegistry: registry,

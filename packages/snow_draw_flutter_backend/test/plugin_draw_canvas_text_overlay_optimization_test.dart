@@ -69,8 +69,8 @@ void main() {
 
       expect(keyAfter, equals(keyBefore));
       expect(
-        keyAfter.sceneContentFingerprint,
-        equals(keyBefore.sceneContentFingerprint),
+        keyAfter.documentElementsVersion,
+        equals(keyBefore.documentElementsVersion),
       );
     },
   );
@@ -136,8 +136,8 @@ void main() {
 
     expect(keyAfter, isNot(equals(keyBefore)));
     expect(
-      keyAfter.sceneContentFingerprint,
-      isNot(equals(keyBefore.sceneContentFingerprint)),
+      keyAfter.documentElementsVersion,
+      equals(keyBefore.documentElementsVersion),
     );
   });
 

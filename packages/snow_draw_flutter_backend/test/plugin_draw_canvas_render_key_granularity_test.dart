@@ -37,8 +37,8 @@ void main() {
 
     expect(after, isNot(equals(before)));
     expect(
-      after.sceneContentFingerprint,
-      isNot(equals(before.sceneContentFingerprint)),
+      after.documentElementsVersion,
+      isNot(equals(before.documentElementsVersion)),
     );
   });
 
@@ -71,8 +71,8 @@ void main() {
 
     expect(after, isNot(equals(before)));
     expect(
-      after.sceneContentFingerprint,
-      isNot(equals(before.sceneContentFingerprint)),
+      after.documentElementsVersion,
+      isNot(equals(before.documentElementsVersion)),
     );
   });
 }
