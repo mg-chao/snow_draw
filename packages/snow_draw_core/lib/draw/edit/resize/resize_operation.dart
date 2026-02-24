@@ -134,12 +134,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       operationName: 'ResizeOperation.update',
     );
     final startBounds = typedContext.startBounds;
-    if (typedContext.selectedIdsAtStart.isEmpty) {
-      return _incompleteUpdate(currentPosition);
-    }
-
-    if (typedContext.isMultiSelect &&
-        (startBounds.width == 0 || startBounds.height == 0)) {
+    if (_shouldReturnIncompleteTransform(typedContext)) {
       return _incompleteUpdate(currentPosition);
     }
 
@@ -168,8 +163,9 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     var snapGuides = const <SnapGuide>[];
     final gridConfig = config.grid;
     final snapConfig = config.snap;
-    final anchorsX = _resolveAnchorsX(typedContext.resizeMode);
-    final anchorsY = _resolveAnchorsY(typedContext.resizeMode);
+    final anchors = _resolveAnchors(typedContext.resizeMode);
+    final anchorsX = anchors.x;
+    final anchorsY = anchors.y;
     final snapMinX = anchorsX.contains(SnapAxisAnchor.start);
     final snapMaxX = anchorsX.contains(SnapAxisAnchor.end);
     final snapMinY = anchorsY.contains(SnapAxisAnchor.start);
@@ -322,24 +318,42 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     transform: ResizeTransform.incomplete(currentPosition: currentPosition),
   );
 
-  List<SnapAxisAnchor> _resolveAnchorsX(ResizeMode mode) => switch (mode) {
-    ResizeMode.left ||
-    ResizeMode.topLeft ||
-    ResizeMode.bottomLeft => const [SnapAxisAnchor.start],
-    ResizeMode.right ||
-    ResizeMode.topRight ||
-    ResizeMode.bottomRight => const [SnapAxisAnchor.end],
-    ResizeMode.top || ResizeMode.bottom => const [],
-  };
+  bool _shouldReturnIncompleteTransform(ResizeEditContext context) {
+    if (context.selectedIdsAtStart.isEmpty) {
+      return true;
+    }
 
-  List<SnapAxisAnchor> _resolveAnchorsY(ResizeMode mode) => switch (mode) {
-    ResizeMode.top ||
-    ResizeMode.topLeft ||
-    ResizeMode.topRight => const [SnapAxisAnchor.start],
-    ResizeMode.bottom ||
-    ResizeMode.bottomLeft ||
-    ResizeMode.bottomRight => const [SnapAxisAnchor.end],
-    ResizeMode.left || ResizeMode.right => const [],
+    if (!context.isMultiSelect) {
+      return false;
+    }
+
+    final startBounds = context.startBounds;
+    return startBounds.width == 0 || startBounds.height == 0;
+  }
+
+  ({List<SnapAxisAnchor> x, List<SnapAxisAnchor> y}) _resolveAnchors(
+    ResizeMode mode,
+  ) => switch (mode) {
+    ResizeMode.topLeft => (
+      x: const [SnapAxisAnchor.start],
+      y: const [SnapAxisAnchor.start],
+    ),
+    ResizeMode.top => (x: const [], y: const [SnapAxisAnchor.start]),
+    ResizeMode.topRight => (
+      x: const [SnapAxisAnchor.end],
+      y: const [SnapAxisAnchor.start],
+    ),
+    ResizeMode.right => (x: const [SnapAxisAnchor.end], y: const []),
+    ResizeMode.bottomRight => (
+      x: const [SnapAxisAnchor.end],
+      y: const [SnapAxisAnchor.end],
+    ),
+    ResizeMode.bottom => (x: const [], y: const [SnapAxisAnchor.end]),
+    ResizeMode.bottomLeft => (
+      x: const [SnapAxisAnchor.start],
+      y: const [SnapAxisAnchor.end],
+    ),
+    ResizeMode.left => (x: const [SnapAxisAnchor.start], y: const []),
   };
 
   DrawPoint _resolveHandleOffset({

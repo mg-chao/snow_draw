@@ -627,135 +627,27 @@ _ArrowPointComputation _compute({
   late final int activeIndex;
 
   if (context.pointKind == ArrowPointKind.addable) {
-    if (context.arrowType == ArrowType.elbow) {
-      if (context.pointIndex < 0 ||
-          context.pointIndex >= basePoints.length - 1) {
-        return _ArrowPointComputation(
-          points: basePoints,
-          didInsert: false,
-          shouldDelete: false,
-          activeIndex: null,
-          hasChanges: false,
-          startBinding: nextStartBinding,
-          endBinding: nextEndBinding,
-          fixedSegments: baseFixedSegmentsResult,
-        );
-      }
-      final segmentIndex = context.pointIndex + 1;
-      final start = basePoints[segmentIndex - 1];
-      final end = basePoints[segmentIndex];
-      final dx = (start.x - end.x).abs();
-      final dy = (start.y - end.y).abs();
-      final isHorizontal = dy <= dx;
-
-      final isBoundarySegment =
-          segmentIndex == 1 || segmentIndex == basePoints.length - 1;
-      if (isBoundarySegment) {
-        final boundary = _applyBoundarySegmentDrag(
-          basePoints: basePoints,
-          baseFixedSegments: baseFixedSegments,
-          segmentIndex: segmentIndex,
-          target: target,
-          isHorizontal: isHorizontal,
-        );
-        final fixedSegmentsResult = boundary.fixedSegments.isEmpty
-            ? null
-            : List<ElbowFixedSegment>.unmodifiable(boundary.fixedSegments);
-        final pointsChanged = !pointListEquals(basePoints, boundary.points);
-        final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
-          baseFixedSegments,
-          fixedSegmentsResult,
-        );
-
-        return _ArrowPointComputation(
-          points: List<DrawPoint>.unmodifiable(boundary.points),
-          didInsert: false,
-          shouldDelete: false,
-          activeIndex: segmentIndex == 1
-              ? context.pointIndex + 1
-              : context.pointIndex,
-          hasChanges: pointsChanged || segmentsChanged,
-          startBinding: nextStartBinding,
-          endBinding: nextEndBinding,
-          fixedSegments: fixedSegmentsResult,
-        );
-      }
-
-      final updatedPoints = List<DrawPoint>.from(basePoints);
-      final nextStart = isHorizontal
-          ? DrawPoint(x: start.x, y: target.y)
-          : DrawPoint(x: target.x, y: start.y);
-      final nextEnd = isHorizontal
-          ? DrawPoint(x: end.x, y: target.y)
-          : DrawPoint(x: target.x, y: end.y);
-      updatedPoints[segmentIndex - 1] = nextStart;
-      updatedPoints[segmentIndex] = nextEnd;
-
-      final nextFixedSegments = List<ElbowFixedSegment>.from(baseFixedSegments);
-      final existingIndex = nextFixedSegments.indexWhere(
-        (segment) => segment.index == segmentIndex,
-      );
-      if (existingIndex >= 0) {
-        final updatedSegment = nextFixedSegments[existingIndex].copyWith(
-          start: nextStart,
-          end: nextEnd,
-        );
-        nextFixedSegments[existingIndex] = updatedSegment;
-      } else {
-        nextFixedSegments.add(
-          ElbowFixedSegment(
-            index: segmentIndex,
-            start: nextStart,
-            end: nextEnd,
-          ),
-        );
-      }
-      final previousIndex = nextFixedSegments.indexWhere(
-        (segment) => segment.index == segmentIndex - 1,
-      );
-      if (previousIndex >= 0) {
-        final previous = nextFixedSegments[previousIndex];
-        nextFixedSegments[previousIndex] = previous.copyWith(end: nextStart);
-      }
-      final nextIndex = nextFixedSegments.indexWhere(
-        (segment) => segment.index == segmentIndex + 1,
-      );
-      if (nextIndex >= 0) {
-        final next = nextFixedSegments[nextIndex];
-        nextFixedSegments[nextIndex] = next.copyWith(start: nextEnd);
-      }
-
-      final fixedSegmentsResult = nextFixedSegments.isEmpty
-          ? null
-          : List<ElbowFixedSegment>.unmodifiable(nextFixedSegments);
-      final pointsChanged = !pointListEquals(basePoints, updatedPoints);
-      final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
-        baseFixedSegments,
-        fixedSegmentsResult,
-      );
-
-      return _ArrowPointComputation(
-        points: List<DrawPoint>.unmodifiable(updatedPoints),
-        didInsert: false,
-        shouldDelete: false,
-        activeIndex: context.pointIndex,
-        hasChanges: pointsChanged || segmentsChanged,
-        startBinding: nextStartBinding,
-        endBinding: nextEndBinding,
-        fixedSegments: fixedSegmentsResult,
-      );
-    }
-
-    if (context.pointIndex < 0 || context.pointIndex >= basePoints.length - 1) {
-      return _ArrowPointComputation(
+    final hasValidPointIndex = _isValidAddablePointIndex(
+      index: context.pointIndex,
+      pointCount: basePoints.length,
+    );
+    if (!hasValidPointIndex) {
+      return _noOpComputation(
         points: basePoints,
         didInsert: false,
-        shouldDelete: false,
-        activeIndex: null,
-        hasChanges: false,
         startBinding: nextStartBinding,
         endBinding: nextEndBinding,
         fixedSegments: baseFixedSegmentsResult,
+      );
+    }
+    if (context.arrowType == ArrowType.elbow) {
+      return _computeElbowAddableComputation(
+        context: context,
+        target: target,
+        basePoints: basePoints,
+        baseFixedSegments: baseFixedSegments,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
       );
     }
     if (!nextDidInsert) {
@@ -763,12 +655,9 @@ _ArrowPointComputation _compute({
       if (distanceSq >= addThreshold * addThreshold) {
         nextDidInsert = true;
       } else {
-        return _ArrowPointComputation(
+        return _noOpComputation(
           points: basePoints,
           didInsert: false,
-          shouldDelete: false,
-          activeIndex: null,
-          hasChanges: false,
           startBinding: nextStartBinding,
           endBinding: nextEndBinding,
           fixedSegments: baseFixedSegmentsResult,
@@ -779,18 +668,15 @@ _ArrowPointComputation _compute({
     updatedPoints = List<DrawPoint>.from(basePoints)
       ..insert(activeIndex, target);
   } else {
-    final index = switch (context.pointKind) {
-      ArrowPointKind.loopStart => 0,
-      ArrowPointKind.loopEnd => basePoints.length - 1,
-      _ => context.pointIndex,
-    };
-    if (index < 0 || index >= basePoints.length) {
-      return _ArrowPointComputation(
+    final index = _resolveDraggedPointIndex(
+      pointKind: context.pointKind,
+      pointIndex: context.pointIndex,
+      pointCount: basePoints.length,
+    );
+    if (index == null) {
+      return _noOpComputation(
         points: basePoints,
         didInsert: nextDidInsert,
-        shouldDelete: false,
-        activeIndex: null,
-        hasChanges: false,
         startBinding: nextStartBinding,
         endBinding: nextEndBinding,
         fixedSegments: baseFixedSegmentsResult,
@@ -878,6 +764,151 @@ _ArrowPointComputation _compute({
   );
 }
 
+_ArrowPointComputation _computeElbowAddableComputation({
+  required ArrowPointEditContext context,
+  required DrawPoint target,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment> baseFixedSegments,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+}) {
+  final segmentIndex = context.pointIndex + 1;
+  final start = basePoints[segmentIndex - 1];
+  final end = basePoints[segmentIndex];
+  final dx = (start.x - end.x).abs();
+  final dy = (start.y - end.y).abs();
+  final isHorizontal = dy <= dx;
+
+  final isBoundarySegment =
+      segmentIndex == 1 || segmentIndex == basePoints.length - 1;
+  if (isBoundarySegment) {
+    final boundary = _applyBoundarySegmentDrag(
+      basePoints: basePoints,
+      baseFixedSegments: baseFixedSegments,
+      segmentIndex: segmentIndex,
+      target: target,
+      isHorizontal: isHorizontal,
+    );
+    final fixedSegmentsResult = boundary.fixedSegments.isEmpty
+        ? null
+        : List<ElbowFixedSegment>.unmodifiable(boundary.fixedSegments);
+    final pointsChanged = !pointListEquals(basePoints, boundary.points);
+    final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+      baseFixedSegments,
+      fixedSegmentsResult,
+    );
+
+    return _ArrowPointComputation(
+      points: List<DrawPoint>.unmodifiable(boundary.points),
+      didInsert: false,
+      shouldDelete: false,
+      activeIndex: segmentIndex == 1
+          ? context.pointIndex + 1
+          : context.pointIndex,
+      hasChanges: pointsChanged || segmentsChanged,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: fixedSegmentsResult,
+    );
+  }
+
+  final updatedPoints = List<DrawPoint>.from(basePoints);
+  final nextStart = isHorizontal
+      ? DrawPoint(x: start.x, y: target.y)
+      : DrawPoint(x: target.x, y: start.y);
+  final nextEnd = isHorizontal
+      ? DrawPoint(x: end.x, y: target.y)
+      : DrawPoint(x: target.x, y: end.y);
+  updatedPoints[segmentIndex - 1] = nextStart;
+  updatedPoints[segmentIndex] = nextEnd;
+
+  final nextFixedSegments = List<ElbowFixedSegment>.from(baseFixedSegments);
+  final existingIndex = nextFixedSegments.indexWhere(
+    (segment) => segment.index == segmentIndex,
+  );
+  if (existingIndex >= 0) {
+    final updatedSegment = nextFixedSegments[existingIndex].copyWith(
+      start: nextStart,
+      end: nextEnd,
+    );
+    nextFixedSegments[existingIndex] = updatedSegment;
+  } else {
+    nextFixedSegments.add(
+      ElbowFixedSegment(index: segmentIndex, start: nextStart, end: nextEnd),
+    );
+  }
+  final previousIndex = nextFixedSegments.indexWhere(
+    (segment) => segment.index == segmentIndex - 1,
+  );
+  if (previousIndex >= 0) {
+    final previous = nextFixedSegments[previousIndex];
+    nextFixedSegments[previousIndex] = previous.copyWith(end: nextStart);
+  }
+  final nextIndex = nextFixedSegments.indexWhere(
+    (segment) => segment.index == segmentIndex + 1,
+  );
+  if (nextIndex >= 0) {
+    final next = nextFixedSegments[nextIndex];
+    nextFixedSegments[nextIndex] = next.copyWith(start: nextEnd);
+  }
+
+  final fixedSegmentsResult = nextFixedSegments.isEmpty
+      ? null
+      : List<ElbowFixedSegment>.unmodifiable(nextFixedSegments);
+  final pointsChanged = !pointListEquals(basePoints, updatedPoints);
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    fixedSegmentsResult,
+  );
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(updatedPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: context.pointIndex,
+    hasChanges: pointsChanged || segmentsChanged,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    fixedSegments: fixedSegmentsResult,
+  );
+}
+
+_ArrowPointComputation _noOpComputation({
+  required List<DrawPoint> points,
+  required bool didInsert,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required List<ElbowFixedSegment>? fixedSegments,
+}) => _ArrowPointComputation(
+  points: points,
+  didInsert: didInsert,
+  shouldDelete: false,
+  activeIndex: null,
+  hasChanges: false,
+  startBinding: startBinding,
+  endBinding: endBinding,
+  fixedSegments: fixedSegments,
+);
+
+int? _resolveDraggedPointIndex({
+  required ArrowPointKind pointKind,
+  required int pointIndex,
+  required int pointCount,
+}) {
+  final resolvedIndex = switch (pointKind) {
+    ArrowPointKind.loopStart => 0,
+    ArrowPointKind.loopEnd => pointCount - 1,
+    _ => pointIndex,
+  };
+  if (resolvedIndex < 0 || resolvedIndex >= pointCount) {
+    return null;
+  }
+  return resolvedIndex;
+}
+
+bool _isValidAddablePointIndex({required int index, required int pointCount}) =>
+    index >= 0 && index < pointCount - 1;
+
 bool _requiresBindingLookup(ArrowPointEditContext context) =>
     switch (context.pointKind) {
       ArrowPointKind.loopStart => true,
@@ -933,7 +964,7 @@ DrawPoint _resolvePointPosition({
   required ArrowType arrowType,
 }) {
   if (kind == ArrowPointKind.addable) {
-    if (index < 0 || index >= points.length - 1) {
+    if (!_isValidAddablePointIndex(index: index, pointCount: points.length)) {
       return points.first;
     }
 
