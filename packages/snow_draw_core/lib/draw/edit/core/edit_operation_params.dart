@@ -4,7 +4,6 @@ import '../../elements/types/arrow/arrow_points.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/resize_mode.dart';
-import '../free_transform/free_transform_context.dart';
 
 @immutable
 abstract class EditOperationParams {
@@ -51,16 +50,6 @@ final class RotateOperationParams extends EditOperationParams {
   final double? startRotationAngle;
 
   final double? rotationSnapAngle;
-}
-
-@immutable
-final class FreeTransformOperationParams extends EditOperationParams {
-  const FreeTransformOperationParams({
-    super.initialSelectionBounds,
-    this.initialMode = FreeTransformMode.move,
-  });
-
-  final FreeTransformMode initialMode;
 }
 
 @immutable

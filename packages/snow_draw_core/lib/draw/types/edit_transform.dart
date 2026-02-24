@@ -319,49 +319,6 @@ final class ArrowPointTransform extends EditTransform {
   );
 }
 
-@immutable
-final class CompositeTransform extends EditTransform {
-  const CompositeTransform(this.transforms);
-  final List<EditTransform> transforms;
-
-  @override
-  bool get isIdentity => transforms.every((t) => t.isIdentity);
-
-  @override
-  DrawPoint applyToPoint(DrawPoint point, {DrawPoint? pivot}) {
-    var result = point;
-    for (final transform in transforms) {
-      result = transform.applyToPoint(result, pivot: pivot);
-    }
-    return result;
-  }
-
-  @override
-  DrawRect applyToRect(DrawRect rect, {DrawPoint? pivot}) {
-    var result = rect;
-    for (final transform in transforms) {
-      result = transform.applyToRect(result, pivot: pivot);
-    }
-    return result;
-  }
-
-  CompositeTransform optimize() {
-    final optimized = <EditTransform>[
-      for (final transform in transforms)
-        if (!transform.isIdentity) transform,
-    ];
-    return CompositeTransform(optimized);
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CompositeTransform && listEquals(other.transforms, transforms);
-
-  @override
-  int get hashCode => Object.hashAll(transforms);
-}
-
 DrawPoint _scalePoint({
   required DrawPoint point,
   required DrawPoint pivot,

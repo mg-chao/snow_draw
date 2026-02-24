@@ -144,10 +144,6 @@ class EditingState extends InteractionState {
   static double _rotationDeltaFor(EditTransform transform) =>
       switch (transform) {
         RotateTransform(:final appliedAngle) => appliedAngle,
-        CompositeTransform(:final transforms) => transforms.fold(
-          0,
-          (sum, t) => sum + _rotationDeltaFor(t),
-        ),
         _ => 0.0,
       };
 

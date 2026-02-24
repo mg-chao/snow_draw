@@ -7,7 +7,6 @@ export 'draw/core/draw_context.dart';
 export 'draw/core/coordinates/element_space.dart';
 export 'draw/edit/arrow/arrow_point_operation.dart';
 export 'draw/edit/core/edit_operation_params.dart';
-export 'draw/edit/free_transform/free_transform_context.dart';
 export 'draw/elements/core/element_data.dart';
 export 'draw/elements/core/element_definition.dart';
 export 'draw/elements/core/element_hit_tester.dart';
