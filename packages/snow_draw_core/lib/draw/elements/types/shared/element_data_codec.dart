@@ -54,4 +54,14 @@ final class ElementDataCodec {
     }
     return asJsonMap(raw, fieldName: fieldName);
   }
+
+  static bool? decodeNullableBool(Object? raw, {required String fieldName}) {
+    if (raw == null) {
+      return null;
+    }
+    if (raw is bool) {
+      return raw;
+    }
+    throw FormatException('Expected bool for $fieldName');
+  }
 }

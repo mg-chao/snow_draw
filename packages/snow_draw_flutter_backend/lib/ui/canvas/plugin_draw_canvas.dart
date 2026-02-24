@@ -248,7 +248,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   Future<void> _recreatePluginCoordinator() async {
     // Create dependencies.
     final dependencies = ControllerDependencies(
-      dispatcher: widget.store.call,
+      dispatcher: widget.store.dispatch,
       stateProvider: widget.store,
       contextProvider: () => widget.store.context,
       selectionConfigProvider: () =>

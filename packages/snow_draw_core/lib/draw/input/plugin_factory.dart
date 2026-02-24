@@ -16,7 +16,7 @@ class PluginFactory {
   /// Create a PluginContext from ControllerDependencies.
   PluginContext createPluginContext(ControllerDependencies dependencies) =>
       PluginContext(
-        stateProvider: () => dependencies.currentState,
+        stateProvider: () => dependencies.state,
         contextProvider: () => dependencies.context,
         selectionConfigProvider: () => dependencies.selectionConfig,
         dispatcher: dependencies.dispatch,

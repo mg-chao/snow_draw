@@ -69,11 +69,14 @@ final class ArrowData extends ElementData
     fixedSegments: ArrowLikeDataCodec.decodeFixedSegments(
       json['fixedSegments'],
     ),
-    startIsSpecial: _decodeNullableBool(
+    startIsSpecial: ElementDataCodec.decodeNullableBool(
       json['startIsSpecial'],
-      'startIsSpecial',
+      fieldName: 'startIsSpecial',
     ),
-    endIsSpecial: _decodeNullableBool(json['endIsSpecial'], 'endIsSpecial'),
+    endIsSpecial: ElementDataCodec.decodeNullableBool(
+      json['endIsSpecial'],
+      fieldName: 'endIsSpecial',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<ArrowData>('arrow');
@@ -216,14 +219,4 @@ final class ArrowData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
-}
-
-bool? _decodeNullableBool(Object? raw, String fieldName) {
-  if (raw == null) {
-    return null;
-  }
-  if (raw is bool) {
-    return raw;
-  }
-  throw FormatException('Expected bool for $fieldName');
 }

@@ -105,9 +105,6 @@ class DefaultDrawStore implements DrawStore {
   @override
   DrawState get state => _stateManager.current;
 
-  @override
-  DrawState get currentState => state;
-
   bool get canUndo => _historyManager.canUndo;
   bool get canRedo => _historyManager.canRedo;
 
@@ -224,9 +221,6 @@ class DefaultDrawStore implements DrawStore {
     _checkNotDisposed();
     return _actionProcessor.dispatch(action);
   }
-
-  @override
-  Future<void> call(DrawAction action) => dispatch(action);
 
   Future<void> undo() => dispatch(const Undo());
 

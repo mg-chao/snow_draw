@@ -13,7 +13,7 @@ typedef ActionDispatcher = Future<void> Function(DrawAction action);
 
 /// State provider for input systems.
 abstract interface class StateProvider {
-  DrawState get currentState;
+  DrawState get state;
 }
 
 /// Controller dependencies.
@@ -38,7 +38,7 @@ class ControllerDependencies implements StateProvider {
   Future<void> dispatch(DrawAction action) => _dispatcher(action);
 
   @override
-  DrawState get currentState => _stateProvider.currentState;
+  DrawState get state => _stateProvider.state;
 
   /// Get the DrawContext.
   DrawContext get context => _contextProvider();
