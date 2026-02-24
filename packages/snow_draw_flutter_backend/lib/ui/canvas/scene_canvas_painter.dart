@@ -2132,18 +2132,15 @@ class SceneCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SceneCanvasPainter oldDelegate) =>
-      oldDelegate.renderKey != renderKey ||
-      !identical(oldDelegate.stateView, stateView);
+      oldDelegate.renderKey != renderKey;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SceneCanvasPainter &&
-          other.renderKey == renderKey &&
-          identical(other.stateView, stateView);
+      other is SceneCanvasPainter && other.renderKey == renderKey;
 
   @override
-  int get hashCode => Object.hash(renderKey, identityHashCode(stateView));
+  int get hashCode => renderKey.hashCode;
 }
 
 class _ArrowOverlayPaints {

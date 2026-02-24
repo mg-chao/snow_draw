@@ -51,6 +51,7 @@ class CreatingElementSnapshot {
 @immutable
 class SceneCanvasRenderKey {
   SceneCanvasRenderKey({
+    required this.documentElementsVersion,
     required this.creatingElement,
     required this.textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
@@ -62,6 +63,11 @@ class SceneCanvasRenderKey {
   }) : previewElementsById = previewElementsById.isEmpty
            ? const <String, ElementState>{}
            : Map<String, ElementState>.unmodifiable(previewElementsById);
+
+  /// Monotonic document element revision.
+  ///
+  /// Bumped whenever persistent scene elements/global elements change.
+  final int documentElementsVersion;
 
   /// Snapshot of element being created, or null if not creating.
   final CreatingElementSnapshot? creatingElement;
@@ -94,6 +100,7 @@ class SceneCanvasRenderKey {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is SceneCanvasRenderKey &&
+          other.documentElementsVersion == documentElementsVersion &&
           other.creatingElement == creatingElement &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           mapEquals(other.previewElementsById, previewElementsById) &&
@@ -105,6 +112,7 @@ class SceneCanvasRenderKey {
 
   @override
   int get hashCode => Object.hashAll([
+    documentElementsVersion,
     creatingElement,
     textRenderingCacheRevision,
     _mapHash(previewElementsById),

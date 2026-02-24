@@ -4,7 +4,7 @@ import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
-  test('repaints when state view identity changes', () {
+  test('does not repaint when render key is unchanged', () {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
 
@@ -12,16 +12,13 @@ void main() {
     final nextView = DrawStateView.fromState(DrawState());
 
     final key = SceneCanvasRenderKey(
+      documentElementsVersion: 0,
       creatingElement: null,
       textRenderingCacheRevision: 0,
       previewElementsById: const <String, ElementState>{},
       elementRegistry: registry,
       performanceMonitoringEnabled: false,
-      framePlan: const FrameRenderPlan(
-        tasks: <FrameRenderTask>[],
-        camera: CameraState.initial,
-        scaleFactor: 1,
-      ),
+      framePlan: FrameRenderPlan.empty,
     );
 
     final previousPainter = SceneCanvasPainter(
@@ -29,6 +26,39 @@ void main() {
       stateView: initialView,
     );
     final nextPainter = SceneCanvasPainter(renderKey: key, stateView: nextView);
+
+    expect(nextPainter.shouldRepaint(previousPainter), isFalse);
+  });
+
+  test('repaints when render key changes', () {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+
+    final view = DrawStateView.fromState(DrawState());
+    final previousPainter = SceneCanvasPainter(
+      renderKey: SceneCanvasRenderKey(
+        documentElementsVersion: 0,
+        creatingElement: null,
+        textRenderingCacheRevision: 0,
+        previewElementsById: const <String, ElementState>{},
+        elementRegistry: registry,
+        performanceMonitoringEnabled: false,
+        framePlan: FrameRenderPlan.empty,
+      ),
+      stateView: view,
+    );
+    final nextPainter = SceneCanvasPainter(
+      renderKey: SceneCanvasRenderKey(
+        documentElementsVersion: 1,
+        creatingElement: null,
+        textRenderingCacheRevision: 0,
+        previewElementsById: const <String, ElementState>{},
+        elementRegistry: registry,
+        performanceMonitoringEnabled: false,
+        framePlan: FrameRenderPlan.empty,
+      ),
+      stateView: view,
+    );
 
     expect(nextPainter.shouldRepaint(previousPainter), isTrue);
   });

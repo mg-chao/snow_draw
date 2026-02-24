@@ -4,6 +4,23 @@ import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
 void main() {
   group('SceneCanvasRenderKey', () {
+    test('document elements version participates in equality', () {
+      final registry = DefaultElementRegistry();
+      final first = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 7,
+      );
+      final second = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 8,
+      );
+
+      expect(first, isNot(second));
+      expect(first.hashCode, isNot(second.hashCode));
+    });
+
     test('frame plan differences participate in equality', () {
       final registry = DefaultElementRegistry();
       final hidden = _buildCanvasRenderKey(
@@ -121,8 +138,10 @@ SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
   required FrameRenderPlan framePlan,
   CreatingElementSnapshot? creatingElement,
+  int documentElementsVersion = 0,
   Map<String, ElementState> previewElementsById = const {},
 }) => SceneCanvasRenderKey(
+  documentElementsVersion: documentElementsVersion,
   creatingElement: creatingElement,
   textRenderingCacheRevision: 0,
   previewElementsById: previewElementsById,

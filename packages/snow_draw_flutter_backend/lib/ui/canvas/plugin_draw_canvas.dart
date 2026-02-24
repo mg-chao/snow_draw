@@ -2247,6 +2247,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     );
 
     return SceneCanvasRenderKey(
+      documentElementsVersion: stateView.state.domain.document.elementsVersion,
       creatingElement: creatingElement,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
@@ -2275,8 +2276,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     required DrawStateView stateView,
     required SceneCanvasRenderKey renderKey,
   }) {
-    // Render keys intentionally track only paint-context data. Scene element
-    // snapshots still need to propagate when the key stays stable.
     final nextSnapshot = _CanvasSnapshot(
       stateView: stateView,
       renderKey: renderKey,
@@ -3327,12 +3326,10 @@ class _CanvasSnapshot {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _CanvasSnapshot &&
-          identical(other.stateView, stateView) &&
-          other.renderKey == renderKey;
+      other is _CanvasSnapshot && other.renderKey == renderKey;
 
   @override
-  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
+  int get hashCode => renderKey.hashCode;
 }
 
 @immutable
