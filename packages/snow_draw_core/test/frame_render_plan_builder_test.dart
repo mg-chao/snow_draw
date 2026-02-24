@@ -36,7 +36,6 @@ void main() {
 
       expect(plan.tasks.whereType<ElementRenderTask>().isEmpty, isTrue);
       expect(plan.tasks.whereType<BackgroundRenderTask>().length, 1);
-      expect(plan.sceneRevision, view.state.domain.document.elementsVersion);
     });
 
     test('uses preview geometry for overlay tasks', () {

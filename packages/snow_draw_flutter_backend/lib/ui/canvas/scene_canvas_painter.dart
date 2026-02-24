@@ -928,7 +928,7 @@ class SceneCanvasPainter extends CustomPainter {
     final serialConnectorCacheRevision =
         sceneAnalysis.shouldPaintSerialConnectors
         ? _resolveSerialConnectorCacheRevision(
-            sceneRevision: renderKey.framePlan.sceneRevision,
+            documentElementsVersion: document.elementsVersion,
             previewElementsById: previewElements,
             visibleTextIds: sceneAnalysis.visibleTextIds,
           )
@@ -1027,11 +1027,11 @@ class SceneCanvasPainter extends CustomPainter {
   }
 
   int _resolveSerialConnectorCacheRevision({
-    required int sceneRevision,
+    required int documentElementsVersion,
     required Map<String, ElementState> previewElementsById,
     required Set<String> visibleTextIds,
   }) => Object.hash(
-    sceneRevision,
+    documentElementsVersion,
     Object.hashAllUnordered(visibleTextIds),
     Object.hashAllUnordered(
       previewElementsById.entries.map(
@@ -2132,15 +2132,18 @@ class SceneCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant SceneCanvasPainter oldDelegate) =>
-      oldDelegate.renderKey != renderKey;
+      oldDelegate.renderKey != renderKey ||
+      !identical(oldDelegate.stateView, stateView);
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SceneCanvasPainter && other.renderKey == renderKey;
+      other is SceneCanvasPainter &&
+          other.renderKey == renderKey &&
+          identical(other.stateView, stateView);
 
   @override
-  int get hashCode => renderKey.hashCode;
+  int get hashCode => Object.hash(renderKey, identityHashCode(stateView));
 }
 
 class _ArrowOverlayPaints {

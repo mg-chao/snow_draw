@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('offscreen style updates refresh canvas render key', (
+  testWidgets('offscreen style updates refresh painter state snapshot', (
     tester,
   ) async {
     final store = _createStoreWithVisibleAndOffscreenElements();
@@ -23,7 +22,7 @@ void main() {
     );
     await tester.pump();
 
-    final before = _canvasRenderKey(tester);
+    final before = _scenePainter(tester);
 
     await store.dispatch(
       UpdateElementsStyle(
@@ -33,16 +32,14 @@ void main() {
     );
     await tester.pump();
 
-    final after = _canvasRenderKey(tester);
+    final after = _scenePainter(tester);
 
-    expect(after, isNot(equals(before)));
-    expect(
-      after.framePlan.sceneRevision,
-      isNot(equals(before.framePlan.sceneRevision)),
-    );
+    expect(after.renderKey, equals(before.renderKey));
+    expect(identical(after.stateView, before.stateView), isFalse);
+    expect(after.shouldRepaint(before), isTrue);
   });
 
-  testWidgets('visible style updates refresh canvas render key', (
+  testWidgets('visible style updates refresh painter state snapshot', (
     tester,
   ) async {
     final store = _createStoreWithVisibleAndOffscreenElements();
@@ -57,7 +54,7 @@ void main() {
     );
     await tester.pump();
 
-    final before = _canvasRenderKey(tester);
+    final before = _scenePainter(tester);
 
     await store.dispatch(
       UpdateElementsStyle(
@@ -67,13 +64,11 @@ void main() {
     );
     await tester.pump();
 
-    final after = _canvasRenderKey(tester);
+    final after = _scenePainter(tester);
 
-    expect(after, isNot(equals(before)));
-    expect(
-      after.framePlan.sceneRevision,
-      isNot(equals(before.framePlan.sceneRevision)),
-    );
+    expect(after.renderKey, equals(before.renderKey));
+    expect(identical(after.stateView, before.stateView), isFalse);
+    expect(after.shouldRepaint(before), isTrue);
   });
 }
 
@@ -107,13 +102,13 @@ DefaultDrawStore _createStoreWithVisibleAndOffscreenElements() {
   );
 }
 
-SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
+SceneCanvasPainter _scenePainter(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
     if (painter is SceneCanvasPainter) {
-      return painter.renderKey;
+      return painter;
     }
   }
   throw StateError('SceneCanvasPainter not found');

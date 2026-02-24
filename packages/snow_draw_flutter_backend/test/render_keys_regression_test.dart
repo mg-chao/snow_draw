@@ -114,31 +114,6 @@ void main() {
       expect(baseline, isNot(changedWatermark));
       expect(baseline.hashCode, isNot(changedWatermark.hashCode));
     });
-
-    test('frame plan scene revision participates in equality', () {
-      final registry = DefaultElementRegistry();
-      final baseline = _buildCanvasRenderKey(
-        registry: registry,
-        framePlan: const FrameRenderPlan(
-          tasks: <FrameRenderTask>[],
-          camera: CameraState.initial,
-          scaleFactor: 1,
-          sceneRevision: 1,
-        ),
-      );
-      final changed = _buildCanvasRenderKey(
-        registry: registry,
-        framePlan: const FrameRenderPlan(
-          tasks: <FrameRenderTask>[],
-          camera: CameraState.initial,
-          scaleFactor: 1,
-          sceneRevision: 2,
-        ),
-      );
-
-      expect(baseline, isNot(changed));
-      expect(baseline.hashCode, isNot(changed.hashCode));
-    });
   });
 }
 

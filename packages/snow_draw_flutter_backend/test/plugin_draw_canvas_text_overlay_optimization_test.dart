@@ -68,10 +68,6 @@ void main() {
       final keyAfter = _canvasRenderKey(tester);
 
       expect(keyAfter, isNot(equals(keyBefore)));
-      expect(
-        keyAfter.framePlan.sceneRevision,
-        equals(keyBefore.framePlan.sceneRevision),
-      );
     },
   );
 
@@ -135,10 +131,6 @@ void main() {
     final keyAfter = _canvasRenderKey(tester);
 
     expect(keyAfter, isNot(equals(keyBefore)));
-    expect(
-      keyAfter.framePlan.sceneRevision,
-      equals(keyBefore.framePlan.sceneRevision),
-    );
   });
 
   testWidgets('plain text editing skips decoration overlay painter', (
