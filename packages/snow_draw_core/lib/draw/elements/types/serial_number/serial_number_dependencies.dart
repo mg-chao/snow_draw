@@ -1,6 +1,8 @@
 import 'dart:collection';
 
 import '../../../models/element_state.dart';
+import '../arrow/arrow_binding.dart';
+import '../arrow/arrow_like_data.dart';
 import 'serial_number_data.dart';
 
 /// Expands [seedIds] with transitive serial-number bound text dependencies.
@@ -34,4 +36,69 @@ Set<String> expandSerialNumberBoundTextIds({
   }
 
   return expandedIds;
+}
+
+/// Returns whether [element] references any id in [targetIds].
+///
+/// References include serial-number text bindings and/or arrow endpoint
+/// bindings based on the enabled flags.
+bool isElementDependentOnIds({
+  required ElementState element,
+  required Set<String> targetIds,
+  bool includeSerialBindings = true,
+  bool includeArrowBindings = true,
+}) {
+  if (targetIds.isEmpty) {
+    return false;
+  }
+
+  final data = element.data;
+  if (includeSerialBindings && data is SerialNumberData) {
+    final boundId = data.textElementId;
+    if (boundId != null && targetIds.contains(boundId)) {
+      return true;
+    }
+  }
+
+  if (!includeArrowBindings || data is! ArrowLikeData) {
+    return false;
+  }
+
+  return ArrowBindingUtils.isBoundToAnyTargets(
+    startBinding: data.startBinding,
+    endBinding: data.endBinding,
+    targetIds: targetIds,
+  );
+}
+
+/// Collects ids of elements that reference [targetIds].
+///
+/// Use [excludedIds] to skip source ids that are being removed.
+Set<String> collectDependentElementIds({
+  required Iterable<ElementState> elements,
+  required Set<String> targetIds,
+  Set<String> excludedIds = const <String>{},
+  bool includeSerialBindings = true,
+  bool includeArrowBindings = true,
+}) {
+  if (targetIds.isEmpty) {
+    return const <String>{};
+  }
+
+  final dependentIds = <String>{};
+  for (final element in elements) {
+    if (excludedIds.contains(element.id)) {
+      continue;
+    }
+    if (!isElementDependentOnIds(
+      element: element,
+      targetIds: targetIds,
+      includeSerialBindings: includeSerialBindings,
+      includeArrowBindings: includeArrowBindings,
+    )) {
+      continue;
+    }
+    dependentIds.add(element.id);
+  }
+  return dependentIds;
 }

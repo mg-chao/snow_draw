@@ -1,8 +1,5 @@
 import '../../../actions/draw_actions.dart';
 import '../../../actions/history_policy.dart';
-import '../../../elements/types/arrow/arrow_binding.dart';
-import '../../../elements/types/arrow/arrow_like_data.dart';
-import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
@@ -466,22 +463,11 @@ class HistoryMiddleware extends MiddlewareBase {
     if (removedIds.isEmpty) {
       return selectionChanged ? HistoryChangeSet(selectionChanged: true) : null;
     }
-    final modifiedIds = <String>{};
-    for (final element in beforeElements) {
-      if (removedIds.contains(element.id)) {
-        continue;
-      }
-      final data = element.data;
-      if (data is SerialNumberData) {
-        final boundId = data.textElementId;
-        if (boundId != null && removedIds.contains(boundId)) {
-          modifiedIds.add(element.id);
-        }
-      }
-      if (_isArrowBoundToAny(data: data, targetIds: removedIds)) {
-        modifiedIds.add(element.id);
-      }
-    }
+    final modifiedIds = collectDependentElementIds(
+      elements: beforeElements,
+      targetIds: removedIds,
+      excludedIds: removedIds,
+    );
     return HistoryChangeSet(
       modifiedIds: modifiedIds,
       removedIds: removedIds,
@@ -590,18 +576,15 @@ class HistoryMiddleware extends MiddlewareBase {
   Set<String> _expandModifiedIdsForArrowBindings({
     required Iterable<ElementState> elements,
     required Set<String> modifiedIds,
-  }) {
-    final expandedIds = <String>{...modifiedIds};
-    for (final element in elements) {
-      if (expandedIds.contains(element.id)) {
-        continue;
-      }
-      if (_isArrowBoundToAny(data: element.data, targetIds: modifiedIds)) {
-        expandedIds.add(element.id);
-      }
-    }
-    return expandedIds;
-  }
+  }) => {
+    ...modifiedIds,
+    ...collectDependentElementIds(
+      elements: elements,
+      targetIds: modifiedIds,
+      excludedIds: modifiedIds,
+      includeSerialBindings: false,
+    ),
+  };
 
   Set<String> _addedElementIds({
     required Iterable<ElementState> before,
@@ -614,38 +597,14 @@ class HistoryMiddleware extends MiddlewareBase {
     };
   }
 
-  bool _isArrowBoundToAny({
-    required Object data,
-    required Set<String> targetIds,
-  }) {
-    if (data is! ArrowLikeData) {
-      return false;
-    }
-    return ArrowBindingUtils.isBoundToAnyTargets(
-      startBinding: data.startBinding,
-      endBinding: data.endBinding,
-      targetIds: targetIds,
-    );
-  }
-
   Set<String> _dependentIdsBoundToDeletedText({
     required Iterable<ElementState> elements,
     required String textElementId,
-  }) {
-    final deletedIds = <String>{textElementId};
-    final ids = <String>{};
-    for (final element in elements) {
-      final data = element.data;
-      if (data is SerialNumberData && data.textElementId == textElementId) {
-        ids.add(element.id);
-        continue;
-      }
-      if (_isArrowBoundToAny(data: data, targetIds: deletedIds)) {
-        ids.add(element.id);
-      }
-    }
-    return ids;
-  }
+  }) => collectDependentElementIds(
+    elements: elements,
+    targetIds: {textElementId},
+    excludedIds: {textElementId},
+  );
 }
 
 enum _FinishTextEditOutcomeKind { create, edit, delete, noop }

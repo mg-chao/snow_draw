@@ -47,28 +47,20 @@ ElementState _applyDeleteElementUpdates({
   required ElementState element,
   required Set<String> deleteIds,
 }) {
+  if (!isElementDependentOnIds(element: element, targetIds: deleteIds)) {
+    return element;
+  }
+
   final data = element.data;
   if (data is SerialNumberData) {
-    final boundId = data.textElementId;
-    if (boundId == null || !deleteIds.contains(boundId)) {
-      return element;
-    }
     return element.copyWith(data: data.copyWith(textElementId: null));
   }
 
   if (data is! ArrowLikeData) {
     return element;
   }
-
   final startBinding = data.startBinding;
   final endBinding = data.endBinding;
-  if (!ArrowBindingUtils.isBoundToAnyTargets(
-    startBinding: startBinding,
-    endBinding: endBinding,
-    targetIds: deleteIds,
-  )) {
-    return element;
-  }
   final clearStart =
       startBinding != null && deleteIds.contains(startBinding.elementId);
   final clearEnd =
