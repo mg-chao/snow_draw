@@ -386,27 +386,17 @@ class HistoryManager {
   }
 
   DrawState? redo(DrawState currentState, {int? branchIndex}) {
-    if (_current.children.isEmpty) {
-      _log?.trace('History redo skipped', {'reason': 'no_children'});
+    final target = _resolveRedoTarget(branchIndex);
+    if (target == null) {
       return null;
     }
 
-    final resolvedIndex = branchIndex ?? _current.children.length - 1;
-    if (resolvedIndex < 0 || resolvedIndex >= _current.children.length) {
-      _log?.trace('History redo skipped', {
-        'reason': 'invalid_branch',
-        'branchIndex': branchIndex,
-      });
-      return null;
-    }
-
-    final child = _current.children[resolvedIndex];
-    final restoredState = child.delta!.applyForward(currentState);
+    final restoredState = target.node.delta!.applyForward(currentState);
     _log?.trace('History redo', {
-      'nodeId': child.id,
-      'branchIndex': resolvedIndex,
+      'nodeId': target.node.id,
+      'branchIndex': target.index,
     });
-    _current = child;
+    _current = target.node;
     return restoredState;
   }
 
@@ -516,23 +506,7 @@ class HistoryManager {
     }
 
     final candidateIndex = depth - maxHistoryLength;
-    var resolvedIndex = candidateIndex;
-
-    if (maxBranchPoints > 0) {
-      final earliestAllowedIndex = candidateIndex - maxBranchPoints < 0
-          ? 0
-          : candidateIndex - maxBranchPoints;
-
-      for (
-        var index = candidateIndex - 1;
-        index >= earliestAllowedIndex;
-        index--
-      ) {
-        if (path[index].children.length > 1) {
-          resolvedIndex = index;
-        }
-      }
-    }
+    final resolvedIndex = _resolvePruneRootIndex(path, candidateIndex);
 
     final newRoot = path[resolvedIndex];
     final oldParent = newRoot.parent;
@@ -560,6 +534,47 @@ class HistoryManager {
       ..metadata = null
       ..coalescing = null;
   }
+
+  ({int index, _HistoryNode node})? _resolveRedoTarget(int? branchIndex) {
+    if (_current.children.isEmpty) {
+      _log?.trace('History redo skipped', {'reason': 'no_children'});
+      return null;
+    }
+
+    final resolvedIndex = branchIndex ?? _current.children.length - 1;
+    if (!_isValidRedoBranchIndex(resolvedIndex)) {
+      _log?.trace('History redo skipped', {
+        'reason': 'invalid_branch',
+        'branchIndex': branchIndex,
+      });
+      return null;
+    }
+    return (index: resolvedIndex, node: _current.children[resolvedIndex]);
+  }
+
+  bool _isValidRedoBranchIndex(int index) =>
+      index >= 0 && index < _current.children.length;
+
+  int _resolvePruneRootIndex(List<_HistoryNode> path, int candidateIndex) {
+    if (maxBranchPoints <= 0) {
+      return candidateIndex;
+    }
+
+    var resolvedIndex = candidateIndex;
+    final earliestAllowedIndex = candidateIndex - maxBranchPoints;
+    for (
+      var index = candidateIndex - 1;
+      index >= 0 && index >= earliestAllowedIndex;
+      index--
+    ) {
+      if (_isBranchPoint(path[index])) {
+        resolvedIndex = index;
+      }
+    }
+    return resolvedIndex;
+  }
+
+  bool _isBranchPoint(_HistoryNode node) => node.children.length > 1;
 }
 
 @immutable
@@ -804,37 +819,18 @@ class _HistorySnapshotCodec {
     ElementRegistry elementRegistry, {
     UnknownElementReporter? onUnknownElement,
   }) {
-    final beforeElementsJson =
-        (json['beforeElements'] as Map?)?.cast<String, dynamic>() ??
-        const <String, dynamic>{};
-    final afterElementsJson =
-        (json['afterElements'] as Map?)?.cast<String, dynamic>() ??
-        const <String, dynamic>{};
-    final beforeElements = <String, ElementState>{};
-    final afterElements = <String, ElementState>{};
-
-    beforeElementsJson.forEach((key, value) {
-      final elementJson = value is Map<String, dynamic>
-          ? value
-          : const <String, dynamic>{};
-      beforeElements[key] = _elementFromJson(
-        elementJson,
-        elementRegistry,
-        onUnknownElement: onUnknownElement,
-        source: 'beforeElements',
-      );
-    });
-    afterElementsJson.forEach((key, value) {
-      final elementJson = value is Map<String, dynamic>
-          ? value
-          : const <String, dynamic>{};
-      afterElements[key] = _elementFromJson(
-        elementJson,
-        elementRegistry,
-        onUnknownElement: onUnknownElement,
-        source: 'afterElements',
-      );
-    });
+    final beforeElements = _decodeElementMap(
+      (json['beforeElements'] as Map?)?.cast<String, dynamic>(),
+      elementRegistry,
+      source: 'beforeElements',
+      onUnknownElement: onUnknownElement,
+    );
+    final afterElements = _decodeElementMap(
+      (json['afterElements'] as Map?)?.cast<String, dynamic>(),
+      elementRegistry,
+      source: 'afterElements',
+      onUnknownElement: onUnknownElement,
+    );
 
     final orderBefore = (json['orderBefore'] as List<dynamic>?)?.cast<String>();
     final orderAfter = (json['orderAfter'] as List<dynamic>?)?.cast<String>();
@@ -892,34 +888,14 @@ class _HistorySnapshotCodec {
     final dataJson = rawData is Map<String, dynamic>
         ? rawData
         : const <String, dynamic>{};
-
-    final definition = elementRegistry.getDefinitionByValue(type);
-
-    ElementData data;
-
-    if (definition == null) {
-      _reportUnknownElement(
-        onUnknownElement: onUnknownElement,
-        elementType: type,
-        elementId: id,
-        source: '$source:definition_missing',
-      );
-      data = UnknownElementData(originalType: type, rawData: dataJson);
-    } else {
-      try {
-        data = definition.fromJson(dataJson);
-      } on Object catch (error, stackTrace) {
-        _reportUnknownElement(
-          onUnknownElement: onUnknownElement,
-          elementType: type,
-          elementId: id,
-          source: '$source:deserialization_error',
-          error: error,
-          stackTrace: stackTrace,
-        );
-        data = UnknownElementData(originalType: type, rawData: dataJson);
-      }
-    }
+    final data = _decodeElementData(
+      elementRegistry: elementRegistry,
+      elementType: type,
+      elementId: id,
+      dataJson: dataJson,
+      source: source,
+      onUnknownElement: onUnknownElement,
+    );
 
     return ElementState(
       id: id,
@@ -929,6 +905,61 @@ class _HistorySnapshotCodec {
       zIndex: json['zIndex'] as int? ?? 0,
       data: data,
     );
+  }
+
+  Map<String, ElementState> _decodeElementMap(
+    Map<String, dynamic>? elementsJson,
+    ElementRegistry elementRegistry, {
+    required String source,
+    UnknownElementReporter? onUnknownElement,
+  }) {
+    final decoded = <String, ElementState>{};
+    for (final entry in (elementsJson ?? const <String, dynamic>{}).entries) {
+      final elementJson = entry.value is Map<String, dynamic>
+          ? entry.value as Map<String, dynamic>
+          : const <String, dynamic>{};
+      decoded[entry.key] = _elementFromJson(
+        elementJson,
+        elementRegistry,
+        onUnknownElement: onUnknownElement,
+        source: source,
+      );
+    }
+    return decoded;
+  }
+
+  ElementData _decodeElementData({
+    required ElementRegistry elementRegistry,
+    required String elementType,
+    required String elementId,
+    required Map<String, dynamic> dataJson,
+    required String source,
+    required UnknownElementReporter? onUnknownElement,
+  }) {
+    final definition = elementRegistry.getDefinitionByValue(elementType);
+    if (definition == null) {
+      _reportUnknownElement(
+        onUnknownElement: onUnknownElement,
+        elementType: elementType,
+        elementId: elementId,
+        source: '$source:definition_missing',
+      );
+      return UnknownElementData(originalType: elementType, rawData: dataJson);
+    }
+
+    try {
+      return definition.fromJson(dataJson);
+    } on Object catch (error, stackTrace) {
+      _reportUnknownElement(
+        onUnknownElement: onUnknownElement,
+        elementType: elementType,
+        elementId: elementId,
+        source: '$source:deserialization_error',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return UnknownElementData(originalType: elementType, rawData: dataJson);
+    }
   }
 
   void _reportUnknownElement({

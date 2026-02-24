@@ -84,17 +84,21 @@ final class _ElbowEditContext {
 
   // -- Endpoint drag helpers (replaces _EndpointDragContext) --
 
-  late final bool startActive =
-      (basePoints.isNotEmpty &&
-          incomingPoints.isNotEmpty &&
-          basePoints.first != incomingPoints.first) ||
-      previousStartBinding != startBinding;
+  late final bool startActive = _isEndpointActive(
+    basePoints: basePoints,
+    incomingPoints: incomingPoints,
+    isStart: true,
+    previousBinding: previousStartBinding,
+    nextBinding: startBinding,
+  );
 
-  late final bool endActive =
-      (basePoints.isNotEmpty &&
-          incomingPoints.isNotEmpty &&
-          basePoints.last != incomingPoints.last) ||
-      previousEndBinding != endBinding;
+  late final bool endActive = _isEndpointActive(
+    basePoints: basePoints,
+    incomingPoints: incomingPoints,
+    isStart: false,
+    previousBinding: previousEndBinding,
+    nextBinding: endBinding,
+  );
 
   bool get startWasBound => previousStartBinding != null;
   bool get endWasBound => previousEndBinding != null;
@@ -321,17 +325,18 @@ ElbowEditResult _finalizePath(
   List<DrawPoint> points,
   List<ElbowFixedSegment>? fixedSegments,
 ) {
-  final hasFixed = fixedSegments != null && fixedSegments.isNotEmpty;
+  final effectiveFixedSegments = fixedSegments ?? const <ElbowFixedSegment>[];
+  final hasFixed = effectiveFixedSegments.isNotEmpty;
   final pinned = _collectPinnedPoints(
     points: points,
-    fixedSegments: hasFixed ? fixedSegments : const [],
+    fixedSegments: effectiveFixedSegments,
   );
   final merged = ElbowGeometry.mergeConsecutiveSameHeading(
     points,
     pinned: pinned,
   );
   final resolvedFixed = hasFixed
-      ? _reindexFixedSegments(merged, fixedSegments)
+      ? _reindexFixedSegments(merged, effectiveFixedSegments)
       : null;
   return ElbowEditResult(
     localPoints: merged,
@@ -346,6 +351,31 @@ ArrowBinding? _resolveBindingOverride({
   required bool overrideIsSet,
   required ArrowBinding? fallback,
 }) => overrideIsSet ? override : (override ?? fallback);
+
+bool _isEndpointActive({
+  required List<DrawPoint> basePoints,
+  required List<DrawPoint> incomingPoints,
+  required bool isStart,
+  required ArrowBinding? previousBinding,
+  required ArrowBinding? nextBinding,
+}) =>
+    _didEndpointMove(
+      basePoints: basePoints,
+      incomingPoints: incomingPoints,
+      isStart: isStart,
+    ) ||
+    previousBinding != nextBinding;
+
+bool _didEndpointMove({
+  required List<DrawPoint> basePoints,
+  required List<DrawPoint> incomingPoints,
+  required bool isStart,
+}) =>
+    basePoints.isNotEmpty &&
+    incomingPoints.isNotEmpty &&
+    (isStart
+        ? basePoints.first != incomingPoints.first
+        : basePoints.last != incomingPoints.last);
 
 // ---------------------------------------------------------------------------
 // Geometry helpers (merged from elbow_edit_geometry.dart)
