@@ -2236,6 +2236,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final canvasConfig = widget.store.config.canvas;
     final gridConfig = widget.store.config.grid;
     final elementRegistry = widget.store.context.elementRegistry;
+    final sceneContentFingerprint = _computeSceneContentFingerprint(
+      stateView: stateView,
+      previewElementsById: previewElementsById,
+      creatingElement: creatingElement,
+      scaleFactor: scaleFactor,
+    );
     final framePlan = _frameRenderPlanBuilder.build(
       view: stateView,
       scaleFactor: scaleFactor,
@@ -2261,7 +2267,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     return SceneCanvasRenderKey(
       creatingElement: creatingElement,
-      documentElementsVersion: stateView.state.domain.document.elementsVersion,
+      sceneContentFingerprint: sceneContentFingerprint,
       textRenderingCacheRevision: textRenderingCacheRevision,
       previewElementsById: previewElementsById,
       elementRegistry: elementRegistry,
@@ -2270,6 +2276,155 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       locale: locale,
       framePlan: framePlan,
     );
+  }
+
+  int _computeSceneContentFingerprint({
+    required DrawStateView stateView,
+    required Map<String, ElementState> previewElementsById,
+    required CreatingElementSnapshot? creatingElement,
+    required double scaleFactor,
+  }) {
+    final document = stateView.state.domain.document;
+    final camera = stateView.state.application.view.camera;
+    final effectiveScale = _doubleEquals(scaleFactor, 0) ? 1.0 : scaleFactor;
+    final viewportRect = DrawRect(
+      minX: -camera.position.x / effectiveScale,
+      minY: -camera.position.y / effectiveScale,
+      maxX: (widget.size.width - camera.position.x) / effectiveScale,
+      maxY: (widget.size.height - camera.position.y) / effectiveScale,
+    );
+    final excludedElementId =
+        creatingElement != null &&
+            document.getElementById(creatingElement.element.id) != null
+        ? creatingElement.element.id
+        : null;
+    final visibleElements = resolveVisibleElementScene(
+      document: document,
+      viewportRect: viewportRect,
+      previewElementsById: previewElementsById,
+      excludedElementId: excludedElementId,
+    );
+
+    final sceneEntries = <Object?>[Object.hashAll(visibleElements)];
+    if (creatingElement != null && creatingElement.element.data is FilterData) {
+      sceneEntries.add(
+        creatingElement.element.copyWith(rect: creatingElement.currentRect),
+      );
+    }
+    sceneEntries.add(
+      _computeSerialConnectorDependencyFingerprint(
+        stateView: stateView,
+        previewElementsById: previewElementsById,
+        visibleElements: visibleElements,
+      ),
+    );
+    return Object.hashAll(sceneEntries);
+  }
+
+  int _computeSerialConnectorDependencyFingerprint({
+    required DrawStateView stateView,
+    required Map<String, ElementState> previewElementsById,
+    required List<ElementState> visibleElements,
+  }) {
+    final document = stateView.state.domain.document;
+    if (document.boundTextIds.isEmpty &&
+        !_hasPreviewSerialBindings(previewElementsById)) {
+      return 0;
+    }
+
+    final connectorTextIds = _resolveConnectorTextIdsForFingerprint(
+      stateView: stateView,
+      visibleElements: visibleElements,
+    );
+    if (connectorTextIds.isEmpty) {
+      return 0;
+    }
+
+    final dependencyEntries = <Object?>[];
+    final sortedTextIds = connectorTextIds.toList(growable: false)..sort();
+    for (final textId in sortedTextIds) {
+      final textElement =
+          previewElementsById[textId] ?? document.getElementById(textId);
+      if (textElement == null || textElement.data is! TextData) {
+        continue;
+      }
+      dependencyEntries
+        ..add(textId)
+        ..add(textElement);
+    }
+
+    final effectiveSerialsById = <String, ElementState>{};
+    for (final element in document.elements) {
+      final data = element.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final textId = data.textElementId;
+      if (textId == null || !connectorTextIds.contains(textId)) {
+        continue;
+      }
+      effectiveSerialsById[element.id] =
+          previewElementsById[element.id] ?? element;
+    }
+    for (final preview in previewElementsById.values) {
+      final data = preview.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final textId = data.textElementId;
+      if (textId == null || !connectorTextIds.contains(textId)) {
+        continue;
+      }
+      effectiveSerialsById[preview.id] = preview;
+    }
+
+    if (effectiveSerialsById.isNotEmpty) {
+      final sortedSerialIds = effectiveSerialsById.keys.toList(growable: false)
+        ..sort();
+      for (final serialId in sortedSerialIds) {
+        dependencyEntries
+          ..add(serialId)
+          ..add(effectiveSerialsById[serialId]);
+      }
+    }
+
+    return Object.hashAll(dependencyEntries);
+  }
+
+  bool _hasPreviewSerialBindings(
+    Map<String, ElementState> previewElementsById,
+  ) {
+    for (final preview in previewElementsById.values) {
+      final data = preview.data;
+      if (data is! SerialNumberData) {
+        continue;
+      }
+      final textId = data.textElementId;
+      if (textId != null && textId.isNotEmpty) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Set<String> _resolveConnectorTextIdsForFingerprint({
+    required DrawStateView stateView,
+    required List<ElementState> visibleElements,
+  }) {
+    final textIds = <String>{};
+    final interaction = stateView.state.application.interaction;
+    final editingTextId = interaction is TextEditingState && !interaction.isNew
+        ? interaction.elementId
+        : null;
+    for (final element in visibleElements) {
+      if (element.data is! TextData) {
+        continue;
+      }
+      if (element.opacity > 0 || element.id == editingTextId) {
+        textIds.add(element.id);
+      }
+    }
+    return textIds;
   }
 
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
