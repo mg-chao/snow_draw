@@ -71,7 +71,7 @@ void main() {
     expect(identical(affectedAfter, affectedBefore), isFalse);
   });
 
-  test('marks only affected text connectors as volatile', () {
+  test('updates only affected text connector payloads', () {
     const textA = ElementState(
       id: 'text-a',
       rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
@@ -128,45 +128,40 @@ void main() {
       ),
     );
 
-    expect(snapshot.volatileTextElementIds, {'text-a'});
     expect(snapshot.connectorsByTextId.keys, {'text-a', 'text-b'});
   });
 
-  test(
-    'ignores value-equal preview elements for volatile connector tracking',
-    () {
-      const text = ElementState(
-        id: 'text',
-        rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: TextData(text: 'A'),
-      );
-      const serial = ElementState(
-        id: 'serial',
-        rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: SerialNumberData(textElementId: 'text'),
-      );
+  test('ignores value-equal preview elements for connector resolution', () {
+    const text = ElementState(
+      id: 'text',
+      rect: DrawRect(minX: 120, minY: 80, maxX: 200, maxY: 120),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: TextData(text: 'A'),
+    );
+    const serial = ElementState(
+      id: 'serial',
+      rect: DrawRect(minX: 40, minY: 90, maxX: 72, maxY: 122),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: SerialNumberData(textElementId: 'text'),
+    );
 
-      final state = _stateWithElements([text, serial]);
-      final unchangedPreview = serial.copyWith();
-      final snapshot = resolveSerialNumberConnectorSnapshot(
-        DrawStateView.withPreview(
-          state: state,
-          previewElementsById: {unchangedPreview.id: unchangedPreview},
-          effectiveSelection: EffectiveSelection.none,
-          snapGuides: const [],
-        ),
-      );
+    final state = _stateWithElements([text, serial]);
+    final unchangedPreview = serial.copyWith();
+    final snapshot = resolveSerialNumberConnectorSnapshot(
+      DrawStateView.withPreview(
+        state: state,
+        previewElementsById: {unchangedPreview.id: unchangedPreview},
+        effectiveSelection: EffectiveSelection.none,
+        snapGuides: const [],
+      ),
+    );
 
-      expect(snapshot.volatileTextElementIds, isEmpty);
-      expect(snapshot.connectorsByTextId.keys, {'text'});
-    },
-  );
+    expect(snapshot.connectorsByTextId.keys, {'text'});
+  });
 
   test('limits connector resolution to visible text ids', () {
     const textA = ElementState(
@@ -345,7 +340,7 @@ void main() {
         snapGuides: const [],
       ),
     );
-    expect(snapshot.volatileTextElementIds, {'text'});
+    expect(snapshot.connectorsByTextId, isEmpty);
   });
 
   test('includes preview-only serial bindings', () {

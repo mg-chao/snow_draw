@@ -20,25 +20,15 @@ typedef SerialNumberConnectorMap = Map<String, List<SerialNumberTextConnector>>;
 /// Immutable snapshot of serial-number connector resolution for one frame.
 @immutable
 class SerialNumberConnectorSnapshot {
-  const SerialNumberConnectorSnapshot({
-    required this.connectorsByTextId,
-    required this.volatileTextElementIds,
-  });
+  const SerialNumberConnectorSnapshot({required this.connectorsByTextId});
 
   /// Connectors grouped by bound text element id.
   final SerialNumberConnectorMap connectorsByTextId;
-
-  /// Text ids whose connector visuals are volatile for this frame.
-  ///
-  /// Frame-level connector caching should treat these text elements as volatile
-  /// so connector removals and geometry updates are reflected immediately.
-  final Set<String> volatileTextElementIds;
 }
 
 /// Resolves serial-number connector data using the global cache.
 ///
-/// This is the preferred method for rendering as it exposes both the
-/// connector payload and the minimal volatile text set for frame rendering.
+/// This is the preferred method for rendering connector payload.
 SerialNumberConnectorSnapshot resolveSerialNumberConnectorSnapshot(
   DrawStateView stateView, {
   Map<String, ElementState>? previewElementsById,
@@ -51,8 +41,8 @@ SerialNumberConnectorSnapshot resolveSerialNumberConnectorSnapshot(
 
 /// Resolves only the serial-number connector map.
 ///
-/// Prefer [resolveSerialNumberConnectorSnapshot] when frame-level volatility
-/// checks need the connector text ids that are volatile in this frame.
+/// Prefer [resolveSerialNumberConnectorSnapshot] when connector metadata
+/// beyond the grouped map is needed.
 SerialNumberConnectorMap resolveSerialNumberConnectorMap(
   DrawStateView stateView, {
   Map<String, ElementState>? previewElementsById,

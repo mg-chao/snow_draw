@@ -403,7 +403,6 @@ void main() {
             );
           },
           cacheContext: cacheContext,
-          volatileElementIds: const {'filter'},
         );
       }
 
@@ -470,7 +469,6 @@ void main() {
             );
           },
           cacheContext: cacheContext,
-          volatileElementIds: const {'filter'},
         );
       }
 
@@ -528,7 +526,6 @@ void main() {
         canvas: canvas,
         elements: sceneElements,
         cacheContext: cacheContext,
-        volatileElementIds: const {'filter'},
         paintElement: (sceneCanvas, element) {
           if (element.id != 'base') {
             return;
@@ -591,7 +588,6 @@ void main() {
         canvas: canvas,
         elements: sceneElements,
         cacheContext: cacheContext,
-        volatileElementIds: const {'filter'},
         paintElement: (sceneCanvas, element) {
           if (element.id != 'base') {
             return;
@@ -652,7 +648,6 @@ void main() {
       canvas: canvas,
       elements: elements,
       cacheContext: cacheContext,
-      volatileElementIds: const {'filter'},
       paintElement: (sceneCanvas, element) {
         if (element.id == 'filter') {
           return;
@@ -918,16 +913,13 @@ void main() {
         data: FilterData(type: CanvasFilterType.inversion),
       );
 
-      Future<Color> renderSample({
-        required Set<String> volatileElementIds,
-      }) async {
-        final renderer = FilterSegmentRenderer();
+      Future<Color> renderSample(FilterSegmentBuilder segmentBuilder) async {
+        final renderer = FilterSegmentRenderer(segmentBuilder: segmentBuilder);
         final recorder = PictureRecorder();
         final canvas = Canvas(recorder);
         renderer.paint(
           canvas: canvas,
           elements: const [base, firstFilter, secondFilter],
-          volatileElementIds: volatileElementIds,
           paintElement: (sceneCanvas, element) {
             if (element.id != 'base') {
               return;
@@ -949,9 +941,9 @@ void main() {
         return _readPixel(bytes!, imageWidth.toInt(), const Offset(48, 48));
       }
 
-      final mergedOutput = await renderSample(volatileElementIds: const {});
+      final mergedOutput = await renderSample(const FilterSegmentBuilder());
       final splitOutput = await renderSample(
-        volatileElementIds: const {'filter-1'},
+        const _NoMergeFilterSegmentBuilder(),
       );
 
       expect(
@@ -1187,6 +1179,23 @@ class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
       );
     }
     return splitSegments;
+  }
+}
+
+class _NoMergeFilterSegmentBuilder extends FilterSegmentBuilder {
+  const _NoMergeFilterSegmentBuilder();
+
+  @override
+  List<RenderSegment> build(List<ElementState> elements) {
+    final segments = <RenderSegment>[];
+    for (final segment in super.build(elements)) {
+      if (segment is! MergedFilterSegment) {
+        segments.add(segment);
+        continue;
+      }
+      segments.addAll(segment.filters);
+    }
+    return segments;
   }
 }
 

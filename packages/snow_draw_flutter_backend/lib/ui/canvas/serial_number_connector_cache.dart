@@ -18,7 +18,6 @@ class SerialNumberConnectorCache {
   static final instance = SerialNumberConnectorCache._();
   static const _emptySnapshot = SerialNumberConnectorSnapshot(
     connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
-    volatileTextElementIds: <String>{},
   );
 
   List<ElementState>? _cachedElements;
@@ -69,17 +68,10 @@ class SerialNumberConnectorCache {
       return _emptySnapshot;
     }
 
-    // Determine which connectors need recomputation and volatile redraw.
+    // Determine which connectors need recomputation.
     final affectedSerialIds = _resolveAffectedSerialIds(
       document: document,
       previewElementsById: effectivePreviewElements,
-    );
-
-    final volatileTextElementIds = _resolveVolatileConnectorTextIds(
-      affectedSerialIds: affectedSerialIds,
-      document: document,
-      previewElementsById: effectivePreviewElements,
-      visibleTextIds: visibleTextIds,
     );
 
     // Build the connector snapshot.
@@ -89,7 +81,6 @@ class SerialNumberConnectorCache {
       affectedSerialIds: affectedSerialIds,
       candidateSerialIds: candidateSerialIds,
       visibleTextIds: visibleTextIds,
-      volatileTextElementIds: volatileTextElementIds,
     );
   }
 
@@ -172,7 +163,6 @@ class SerialNumberConnectorCache {
     required Set<String> affectedSerialIds,
     required Set<String> candidateSerialIds,
     required Set<String> visibleTextIds,
-    required Set<String> volatileTextElementIds,
   }) {
     final result = <String, List<SerialNumberTextConnector>>{};
 
@@ -222,7 +212,6 @@ class SerialNumberConnectorCache {
         // Cache only in stable document state.
         if (!isAffected && previewElementsById.isEmpty && connector != null) {
           _connectorCache[serialId] = _CachedConnectorEntry(
-            textId: textId,
             connector: connector,
           );
         }
@@ -236,59 +225,10 @@ class SerialNumberConnectorCache {
     }
 
     if (result.isEmpty) {
-      if (volatileTextElementIds.isEmpty) {
-        return _emptySnapshot;
-      }
-      return SerialNumberConnectorSnapshot(
-        connectorsByTextId: const <String, List<SerialNumberTextConnector>>{},
-        volatileTextElementIds: volatileTextElementIds,
-      );
+      return _emptySnapshot;
     }
 
-    return SerialNumberConnectorSnapshot(
-      connectorsByTextId: result,
-      volatileTextElementIds: volatileTextElementIds,
-    );
-  }
-
-  Set<String> _resolveVolatileConnectorTextIds({
-    required Set<String> affectedSerialIds,
-    required DocumentState document,
-    required Map<String, ElementState> previewElementsById,
-    required Set<String> visibleTextIds,
-  }) {
-    if (affectedSerialIds.isEmpty) {
-      return const <String>{};
-    }
-
-    final volatileTextIds = <String>{};
-
-    for (final serialId in affectedSerialIds) {
-      final previousTextId =
-          _connectorCache[serialId]?.textId ?? _bindingIndex[serialId];
-      if (previousTextId != null && visibleTextIds.contains(previousTextId)) {
-        volatileTextIds.add(previousTextId);
-      }
-
-      final effectiveSerial =
-          previewElementsById[serialId] ?? document.getElementById(serialId);
-      final data = effectiveSerial?.data;
-      if (data is! SerialNumberData) {
-        continue;
-      }
-      final textId = data.textElementId;
-      if (textId == null ||
-          textId.isEmpty ||
-          !visibleTextIds.contains(textId)) {
-        continue;
-      }
-      volatileTextIds.add(textId);
-    }
-
-    if (volatileTextIds.isEmpty) {
-      return const <String>{};
-    }
-    return volatileTextIds;
+    return SerialNumberConnectorSnapshot(connectorsByTextId: result);
   }
 
   Set<String> _normalizeVisibleTextIds({
@@ -414,9 +354,8 @@ class SerialNumberConnectorCache {
 }
 
 class _CachedConnectorEntry {
-  const _CachedConnectorEntry({required this.textId, required this.connector});
+  const _CachedConnectorEntry({required this.connector});
 
-  final String textId;
   final SerialNumberTextConnector connector;
 }
 

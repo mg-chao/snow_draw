@@ -191,7 +191,6 @@ class FilterSegmentRenderer {
     required SceneElementPainter paintElement,
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
-    Set<String> volatileElementIds = const <String>{},
   }) {
     _diagnostics.beginFrame();
     if (elements.isEmpty) {
@@ -200,13 +199,7 @@ class FilterSegmentRenderer {
     }
     final runtimePolicy = _resolveRuntimePolicy();
 
-    final baseSegments = _segmentBuilder.build(elements);
-    final segments = volatileElementIds.isEmpty
-        ? baseSegments
-        : _expandMergedSegmentsForVolatileElements(
-            baseSegments,
-            volatileElementIds: volatileElementIds,
-          );
+    final segments = _segmentBuilder.build(elements);
     if (segments.isEmpty) {
       _diagnostics.endFrame();
       return;
@@ -246,7 +239,6 @@ class FilterSegmentRenderer {
             idFingerprint: segment.idFingerprint,
             identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
-            volatileElementIds: volatileElementIds,
           ),
         );
         continue;
@@ -269,9 +261,6 @@ class FilterSegmentRenderer {
             filterElement: segment.filterElement,
             data: segment.filterData,
             visibleBounds: visibleBounds,
-            useClipCache: !volatileElementIds.contains(
-              segment.filterElement.id,
-            ),
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -282,7 +271,6 @@ class FilterSegmentRenderer {
           filterElement: segment.filterElement,
           data: segment.filterData,
           visibleBounds: visibleBounds,
-          useClipCache: !volatileElementIds.contains(segment.filterElement.id),
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -301,7 +289,6 @@ class FilterSegmentRenderer {
             scene: scene.picture,
             merged: segment,
             visibleBounds: visibleBounds,
-            volatileElementIds: volatileElementIds,
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -311,7 +298,6 @@ class FilterSegmentRenderer {
           scene: scene.picture,
           merged: segment,
           visibleBounds: visibleBounds,
-          volatileElementIds: volatileElementIds,
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -325,96 +311,6 @@ class FilterSegmentRenderer {
 
     _drawPendingScenes(canvas: canvas, pending: pending);
     _diagnostics.endFrame();
-  }
-
-  List<RenderSegment> _expandMergedSegmentsForVolatileElements(
-    List<RenderSegment> segments, {
-    required Set<String> volatileElementIds,
-  }) {
-    if (segments.isEmpty || volatileElementIds.isEmpty) {
-      return segments;
-    }
-
-    List<RenderSegment>? expanded;
-    for (var index = 0; index < segments.length; index++) {
-      final segment = segments[index];
-      if (segment is! MergedFilterSegment || segment.filters.length < 2) {
-        if (expanded != null) {
-          expanded.add(segment);
-        }
-        continue;
-      }
-
-      final groups = _splitMergedSegmentByVolatileMembership(
-        segment,
-        volatileElementIds: volatileElementIds,
-      );
-      if (groups.length == 1 && identical(groups.first, segment)) {
-        if (expanded != null) {
-          expanded.add(segment);
-        }
-        continue;
-      }
-
-      expanded ??= <RenderSegment>[
-        for (var existingIndex = 0; existingIndex < index; existingIndex++)
-          segments[existingIndex],
-      ];
-      expanded.addAll(groups);
-    }
-
-    return expanded ?? segments;
-  }
-
-  List<RenderSegment> _splitMergedSegmentByVolatileMembership(
-    MergedFilterSegment segment, {
-    required Set<String> volatileElementIds,
-  }) {
-    final filters = segment.filters;
-    var hasVolatileFilter = false;
-    var hasStaticFilter = false;
-    for (final filter in filters) {
-      if (volatileElementIds.contains(filter.filterElement.id)) {
-        hasVolatileFilter = true;
-      } else {
-        hasStaticFilter = true;
-      }
-      if (hasVolatileFilter && hasStaticFilter) {
-        break;
-      }
-    }
-    if (!hasVolatileFilter || !hasStaticFilter) {
-      return <RenderSegment>[segment];
-    }
-
-    final split = <RenderSegment>[];
-    final run = <FilterSegment>[];
-    bool? currentIsVolatile;
-
-    void flushRun() {
-      if (run.isEmpty) {
-        return;
-      }
-      if (run.length == 1) {
-        split.add(run.first);
-      } else {
-        split.add(
-          MergedFilterSegment(filters: List<FilterSegment>.unmodifiable(run)),
-        );
-      }
-      run.clear();
-    }
-
-    for (final filter in filters) {
-      final isVolatile = volatileElementIds.contains(filter.filterElement.id);
-      if (currentIsVolatile != null && currentIsVolatile != isVolatile) {
-        flushRun();
-      }
-      currentIsVolatile = isVolatile;
-      run.add(filter);
-    }
-    flushRun();
-    return split;
   }
 
   int _findLastFilterSegmentIndex(List<RenderSegment> segments) {
@@ -466,11 +362,8 @@ class FilterSegmentRenderer {
     required int? idFingerprint,
     required int? identityFingerprint,
     required FilterRenderCacheContext? cacheContext,
-    required Set<String> volatileElementIds,
   }) {
-    final canUseCache =
-        cacheContext != null &&
-        _isBatchCacheEligible(elements, volatileElementIds);
+    final canUseCache = cacheContext != null && _isBatchCacheEligible(elements);
     if (canUseCache) {
       final cacheKey = _BatchPictureCacheKey(
         contextSignature: _BatchPictureContextSignature.fromContext(
@@ -521,14 +414,12 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
-      useClipCache: useClipCache,
       runtimePolicy: runtimePolicy,
     );
     if (prepared == null) {
@@ -545,13 +436,11 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      volatileElementIds: volatileElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -594,14 +483,12 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
-      useClipCache: useClipCache,
       runtimePolicy: runtimePolicy,
     );
     canvas.drawPicture(scene);
@@ -626,13 +513,11 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      volatileElementIds: volatileElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -672,7 +557,6 @@ class FilterSegmentRenderer {
   List<_PreparedFilterPass> _prepareMergedFilterPasses({
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> volatileElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = <_PreparedFilterPass>[];
@@ -681,7 +565,6 @@ class FilterSegmentRenderer {
         filterElement: filter.filterElement,
         data: filter.filterData,
         visibleBounds: visibleBounds,
-        useClipCache: !volatileElementIds.contains(filter.filterElement.id),
         runtimePolicy: runtimePolicy,
       );
       if (pass != null) {
@@ -695,7 +578,6 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final rect = filterElement.rect;
@@ -708,7 +590,7 @@ class FilterSegmentRenderer {
       return null;
     }
 
-    final clip = _resolveClipInfo(filterElement, useCache: useClipCache);
+    final clip = _resolveClipInfo(filterElement, useCache: true);
     final clipCoverageRatio = _resolveCoverageRatio(
       region: clip.bounds,
       visibleBounds: visibleBounds,
@@ -1381,23 +1263,8 @@ class FilterSegmentRenderer {
     return _ClipInfo(bounds: path.getBounds(), path: path);
   }
 
-  bool _isBatchCacheEligible(
-    List<ElementState> elements,
-    Set<String> volatileElementIds,
-  ) {
-    if (elements.isEmpty) {
-      return false;
-    }
-    if (volatileElementIds.isEmpty) {
-      return true;
-    }
-    for (final element in elements) {
-      if (volatileElementIds.contains(element.id)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  bool _isBatchCacheEligible(List<ElementState> elements) =>
+      elements.isNotEmpty;
 
   int _batchFingerprint(List<ElementState> elements) {
     var hash = _fingerprintSeed;

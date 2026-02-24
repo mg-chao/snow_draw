@@ -883,7 +883,6 @@ class SceneCanvasPainter extends CustomPainter {
         viewportRect.width,
         viewportRect.height,
       ),
-      volatileElementIds: sceneContext.volatileElementIds,
     );
     if (renderKey.performanceMonitoringEnabled) {
       final diagnostics = filterSegmentRenderer.lastDiagnostics;
@@ -905,10 +904,6 @@ class SceneCanvasPainter extends CustomPainter {
   }) {
     final document = stateView.state.domain.document;
     final previewElements = renderKey.previewElementsById;
-    final volatilePreviewIds = _resolveVolatilePreviewElementIds(
-      previewElements,
-    );
-    final creatingFilterId = _resolveCreatingFilterId();
     final sceneAnalysis = _resolveSceneRenderAnalysis(
       document: document,
       elements: elements,
@@ -923,7 +918,6 @@ class SceneCanvasPainter extends CustomPainter {
           )
         : const SerialNumberConnectorSnapshot(
             connectorsByTextId: <String, List<SerialNumberTextConnector>>{},
-            volatileTextElementIds: <String>{},
           );
     final serialConnectorCacheRevision =
         sceneAnalysis.shouldPaintSerialConnectors
@@ -933,17 +927,11 @@ class SceneCanvasPainter extends CustomPainter {
             visibleTextIds: sceneAnalysis.visibleTextIds,
           )
         : 0;
-    final interactionVolatileElementIds = _resolveVolatileElementIds(
-      volatilePreviewIds: volatilePreviewIds,
-      creatingFilterId: creatingFilterId,
-      serialConnectorTextIds: serialConnectorSnapshot.volatileTextElementIds,
-    );
 
     return _SceneRenderContext(
       hasFilterElement: sceneAnalysis.hasFilterElement,
       shouldPaintSerialConnectors: sceneAnalysis.shouldPaintSerialConnectors,
       serialConnectors: serialConnectorSnapshot.connectorsByTextId,
-      volatileElementIds: interactionVolatileElementIds,
       serialConnectorCacheRevision: serialConnectorCacheRevision,
     );
   }
@@ -1062,51 +1050,6 @@ class SceneCanvasPainter extends CustomPainter {
     for (final element in elements) {
       paintElement(canvas, element);
     }
-  }
-
-  Set<String> _resolveVolatileElementIds({
-    required Set<String> volatilePreviewIds,
-    String? creatingFilterId,
-    Iterable<String> serialConnectorTextIds = const <String>{},
-  }) {
-    if (volatilePreviewIds.isEmpty &&
-        creatingFilterId == null &&
-        serialConnectorTextIds.isEmpty) {
-      return const <String>{};
-    }
-
-    final volatileElementIds = <String>{}..addAll(volatilePreviewIds);
-    if (creatingFilterId != null) {
-      volatileElementIds.add(creatingFilterId);
-    }
-    volatileElementIds.addAll(serialConnectorTextIds);
-    return volatileElementIds;
-  }
-
-  Set<String> _resolveVolatilePreviewElementIds(
-    Map<String, ElementState> previewElementsById,
-  ) {
-    if (previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-
-    final document = stateView.state.domain.document;
-    final volatileIds = <String>{};
-    for (final entry in previewElementsById.entries) {
-      final persisted = document.getElementById(entry.key);
-      if (persisted == null || !identical(persisted, entry.value)) {
-        volatileIds.add(entry.key);
-      }
-    }
-    return volatileIds;
-  }
-
-  String? _resolveCreatingFilterId() {
-    final creatingElement = renderKey.creatingElement?.element;
-    if (creatingElement == null || creatingElement.data is! FilterData) {
-      return null;
-    }
-    return creatingElement.id;
   }
 
   void _includeEditingTextIdForSerialConnectors({
@@ -2234,14 +2177,12 @@ class _SceneRenderContext {
     required this.hasFilterElement,
     required this.shouldPaintSerialConnectors,
     required this.serialConnectors,
-    required this.volatileElementIds,
     required this.serialConnectorCacheRevision,
   });
 
   final bool hasFilterElement;
   final bool shouldPaintSerialConnectors;
   final Map<String, List<SerialNumberTextConnector>> serialConnectors;
-  final Set<String> volatileElementIds;
   final int serialConnectorCacheRevision;
 }
 
