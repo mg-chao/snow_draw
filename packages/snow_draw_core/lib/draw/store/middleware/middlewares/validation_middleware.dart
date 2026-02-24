@@ -5,9 +5,6 @@ import '../../../events/error_events.dart';
 import '../middleware_base.dart';
 import '../middleware_context.dart';
 
-typedef ActionValidator =
-    ValidationResult Function(DrawAction action, DispatchContext context);
-
 @immutable
 class ValidationResult {
   const ValidationResult.valid() : this._(isValid: true);
@@ -22,25 +19,7 @@ class ValidationResult {
 }
 
 class ValidationMiddleware extends MiddlewareBase {
-  ValidationMiddleware({Map<Type, ActionValidator>? validators})
-    : _validators = validators ?? _defaultValidators;
-
-  static const Map<Type, ActionValidator> _defaultValidators = {
-    CreateElement: _validateCreateElement,
-    DeleteElements: _validateDeleteElements,
-    DuplicateElements: _validateDuplicateElements,
-    ChangeElementZIndex: _validateChangeElementZIndex,
-    ChangeElementsZIndex: _validateChangeElementsZIndex,
-    UpdateElementsStyle: _validateUpdateElementsStyle,
-    UpdateGlobalElements: _validateUpdateGlobalElements,
-    CreateSerialNumberTextElements: _validateCreateSerialNumberTextElements,
-    SelectElement: _validateSelectElement,
-    ZoomCamera: _validateZoomCamera,
-    Undo: _validateUndo,
-    Redo: _validateRedo,
-  };
-
-  final Map<Type, ActionValidator> _validators;
+  const ValidationMiddleware();
 
   @override
   String get name => 'Validation';
@@ -53,12 +32,7 @@ class ValidationMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    final validator = _validators[context.action.runtimeType];
-    if (validator == null) {
-      return next(context);
-    }
-
-    final result = validator(context.action, context);
+    final result = _validateAction(context);
     if (result.isValid) {
       return next(context);
     }
@@ -78,137 +52,124 @@ class ValidationMiddleware extends MiddlewareBase {
     );
     return context.withStop(message);
   }
-}
 
-ValidationResult _validateCreateElement(
-  DrawAction action,
-  DispatchContext context,
-) {
-  final create = action as CreateElement;
-  if (!context.drawContext.elementRegistry.supports(create.typeId)) {
-    return ValidationResult.invalid(
-      'Unknown element type "${create.typeId.value}"',
-    );
+  ValidationResult _validateAction(DispatchContext context) {
+    final action = context.action;
+    return switch (action) {
+      final CreateElement create => _validateCreateElement(create, context),
+      final DeleteElements delete => _validateElementIds(
+        delete.elementIds,
+        'DeleteElements',
+      ),
+      final DuplicateElements duplicate => _validateElementIds(
+        duplicate.elementIds,
+        'DuplicateElements',
+      ),
+      final ChangeElementZIndex zIndex => _validateElementId(
+        zIndex.elementId,
+        'ChangeElementZIndex',
+      ),
+      final ChangeElementsZIndex zIndexBatch => _validateElementIds(
+        zIndexBatch.elementIds,
+        'ChangeElementsZIndex',
+      ),
+      final UpdateElementsStyle updateStyle => _validateUpdateElementsStyle(
+        updateStyle,
+      ),
+      final UpdateGlobalElements updateGlobal => _validateUpdateGlobalElements(
+        updateGlobal,
+      ),
+      final CreateSerialNumberTextElements createSerial => _validateElementIds(
+        createSerial.elementIds,
+        'CreateSerialNumberTextElements',
+      ),
+      final SelectElement select => _validateElementId(
+        select.elementId,
+        'SelectElement',
+      ),
+      final ZoomCamera zoom => _validateZoomCamera(zoom),
+      Undo _ => _validateUndo(context),
+      Redo _ => _validateRedo(context),
+      _ => const ValidationResult.valid(),
+    };
   }
-  final initialData = create.initialData;
-  if (initialData != null && initialData.typeId != create.typeId) {
-    return const ValidationResult.invalid(
-      'CreateElement initialData type does not match typeId',
-    );
+
+  ValidationResult _validateCreateElement(
+    CreateElement action,
+    DispatchContext context,
+  ) {
+    if (!context.drawContext.elementRegistry.supports(action.typeId)) {
+      return ValidationResult.invalid(
+        'Unknown element type "${action.typeId.value}"',
+      );
+    }
+    final initialData = action.initialData;
+    if (initialData != null && initialData.typeId != action.typeId) {
+      return const ValidationResult.invalid(
+        'CreateElement initialData type does not match typeId',
+      );
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _validateDeleteElements(
-  DrawAction action,
-  DispatchContext _,
-) =>
-    _requireElementIds((action as DeleteElements).elementIds, 'DeleteElements');
-
-ValidationResult _validateDuplicateElements(
-  DrawAction action,
-  DispatchContext _,
-) => _requireElementIds(
-  (action as DuplicateElements).elementIds,
-  'DuplicateElements',
-);
-
-ValidationResult _validateChangeElementZIndex(
-  DrawAction action,
-  DispatchContext _,
-) => _requireElementId(
-  (action as ChangeElementZIndex).elementId,
-  'ChangeElementZIndex',
-);
-
-ValidationResult _validateChangeElementsZIndex(
-  DrawAction action,
-  DispatchContext _,
-) => _requireElementIds(
-  (action as ChangeElementsZIndex).elementIds,
-  'ChangeElementsZIndex',
-);
-
-ValidationResult _validateUpdateElementsStyle(
-  DrawAction action,
-  DispatchContext _,
-) {
-  final update = action as UpdateElementsStyle;
-  if (update.elementIds.isEmpty) {
-    return const ValidationResult.invalid(
-      'UpdateElementsStyle requires elementIds',
-    );
+  ValidationResult _validateUpdateElementsStyle(UpdateElementsStyle action) {
+    if (action.elementIds.isEmpty) {
+      return const ValidationResult.invalid(
+        'UpdateElementsStyle requires elementIds',
+      );
+    }
+    if (!action.hasUpdates) {
+      return const ValidationResult.invalid(
+        'UpdateElementsStyle has no fields to update',
+      );
+    }
+    return const ValidationResult.valid();
   }
-  if (!update.hasUpdates) {
-    return const ValidationResult.invalid(
-      'UpdateElementsStyle has no fields to update',
-    );
-  }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _validateUpdateGlobalElements(
-  DrawAction action,
-  DispatchContext _,
-) {
-  final update = action as UpdateGlobalElements;
-  if (!update.hasUpdates) {
-    return const ValidationResult.invalid(
-      'UpdateGlobalElements has no fields to update',
-    );
+  ValidationResult _validateUpdateGlobalElements(UpdateGlobalElements action) {
+    if (!action.hasUpdates) {
+      return const ValidationResult.invalid(
+        'UpdateGlobalElements has no fields to update',
+      );
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _validateCreateSerialNumberTextElements(
-  DrawAction action,
-  DispatchContext _,
-) => _requireElementIds(
-  (action as CreateSerialNumberTextElements).elementIds,
-  'CreateSerialNumberTextElements',
-);
-
-ValidationResult _validateSelectElement(DrawAction action, DispatchContext _) =>
-    _requireElementId((action as SelectElement).elementId, 'SelectElement');
-
-ValidationResult _validateZoomCamera(DrawAction action, DispatchContext _) {
-  final zoom = action as ZoomCamera;
-  if (zoom.scale.isNaN || zoom.scale.isInfinite) {
-    return const ValidationResult.invalid('ZoomCamera scale is invalid');
+  ValidationResult _validateZoomCamera(ZoomCamera action) {
+    if (action.scale.isNaN || action.scale.isInfinite) {
+      return const ValidationResult.invalid('ZoomCamera scale is invalid');
+    }
+    if (action.scale <= 0) {
+      return const ValidationResult.invalid('ZoomCamera scale must be > 0');
+    }
+    return const ValidationResult.valid();
   }
-  if (zoom.scale <= 0) {
-    return const ValidationResult.invalid('ZoomCamera scale must be > 0');
-  }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _validateUndo(DrawAction action, DispatchContext context) {
-  if (!context.historyManager.canUndo) {
-    return const ValidationResult.invalid('Cannot undo: history is empty');
+  ValidationResult _validateUndo(DispatchContext context) {
+    if (!context.historyManager.canUndo) {
+      return const ValidationResult.invalid('Cannot undo: history is empty');
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _validateRedo(DrawAction action, DispatchContext context) {
-  if (!context.historyManager.canRedo) {
-    return const ValidationResult.invalid('Cannot redo: no future history');
+  ValidationResult _validateRedo(DispatchContext context) {
+    if (!context.historyManager.canRedo) {
+      return const ValidationResult.invalid('Cannot redo: no future history');
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _requireElementIds(
-  List<String> elementIds,
-  String actionName,
-) {
-  if (elementIds.isEmpty) {
-    return ValidationResult.invalid('$actionName requires elementIds');
+  ValidationResult _validateElementIds(List<String> elementIds, String action) {
+    if (elementIds.isEmpty) {
+      return ValidationResult.invalid('$action requires elementIds');
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
-}
 
-ValidationResult _requireElementId(String elementId, String actionName) {
-  if (elementId.trim().isEmpty) {
-    return ValidationResult.invalid('$actionName needs elementId');
+  ValidationResult _validateElementId(String elementId, String action) {
+    if (elementId.trim().isEmpty) {
+      return ValidationResult.invalid('$action needs elementId');
+    }
+    return const ValidationResult.valid();
   }
-  return const ValidationResult.valid();
 }

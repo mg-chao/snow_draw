@@ -4,7 +4,6 @@ import '../../../history/history_metadata.dart';
 import '../../../history/recordable.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../snapshot.dart';
 import '../history_recording_error.dart';
 import '../middleware_base.dart';
 import '../middleware_context.dart';
@@ -29,54 +28,54 @@ class HistoryMiddleware extends MiddlewareBase {
   int get priority => 400;
 
   @override
-  Future<DispatchContext> invoke(
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
+    final action = context.action;
+    return switch (action) {
+      Undo _ => _handleUndo(context, next),
+      Redo _ => _handleRedo(context, next),
+      ClearHistory _ => _handleClearHistory(context, next),
+      _ => _handleRecordableAction(context, next),
+    };
+  }
+
+  Future<DispatchContext> _handleClearHistory(
+    DispatchContext context,
+    NextFunction next,
+  ) {
+    context.drawContext.log.history.trace('History clear requested', {
+      'traceId': context.traceId,
+    });
+    context.historyManager.clear();
+    return next(context);
+  }
+
+  Future<DispatchContext> _handleRecordableAction(
     DispatchContext context,
     NextFunction next,
   ) async {
     final action = context.action;
     final log = context.drawContext.log.history;
-
-    if (action is Undo || action is Redo || action is ClearHistory) {
-      log.trace('History middleware executing', {
+    final policy = _resolveHistoryPolicy(context, action);
+    if (policy != HistoryPolicy.record) {
+      log.trace('History middleware skipped', {
         'action': action.runtimeType.toString(),
-        'traceId': context.traceId,
+        'reason': 'policy',
+        'policy': policy.name,
       });
-    } else {
-      final policy = _resolveHistoryPolicy(context, action);
-      if (policy != HistoryPolicy.record) {
-        log.trace('History middleware skipped', {
-          'action': action.runtimeType.toString(),
-          'reason': 'policy',
-          'policy': policy.name,
-        });
-        return next(context);
-      }
-
-      if (context.isBatching) {
-        log.trace('History middleware skipped', {
-          'action': action.runtimeType.toString(),
-          'reason': 'batching',
-        });
-        return next(context);
-      }
+      return next(context);
     }
 
-    switch (action) {
-      case Undo _:
-        return _handleUndo(context, next);
-      case Redo _:
-        return _handleRedo(context, next);
-      case ClearHistory _:
-        context.drawContext.log.history.trace('History clear requested', {
-          'traceId': context.traceId,
-        });
-        context.historyManager.clear();
-        return next(context);
-      default:
-        final updatedContext = await next(context);
-        _recordHistory(updatedContext, action);
-        return updatedContext;
+    if (context.isBatching) {
+      log.trace('History middleware skipped', {
+        'action': action.runtimeType.toString(),
+        'reason': 'batching',
+      });
+      return next(context);
     }
+
+    final updatedContext = await next(context);
+    _recordHistory(updatedContext, action);
+    return updatedContext;
   }
 
   Future<DispatchContext> _handleUndo(
@@ -130,12 +129,12 @@ class HistoryMiddleware extends MiddlewareBase {
     final coalescing = action.historyCoalescing;
 
     try {
-      final snapshotBefore = _buildSnapshotBefore(
-        context: context,
+      final snapshotBefore = context.snapshotBuilder.buildSnapshotFromState(
+        state: context.initialState,
         includeSelection: includeSelection,
       );
-      final snapshotAfter = _buildSnapshotAfter(
-        context: context,
+      final snapshotAfter = context.snapshotBuilder.buildSnapshotFromState(
+        state: context.currentState,
         includeSelection: includeSelection,
       );
 
@@ -164,22 +163,6 @@ class HistoryMiddleware extends MiddlewareBase {
     }
   }
 
-  HistorySnapshot _buildSnapshotBefore({
-    required DispatchContext context,
-    required bool includeSelection,
-  }) => context.snapshotBuilder.buildSnapshotFromState(
-    state: context.initialState,
-    includeSelection: includeSelection,
-  );
-
-  HistorySnapshot _buildSnapshotAfter({
-    required DispatchContext context,
-    required bool includeSelection,
-  }) => context.snapshotBuilder.buildSnapshotFromState(
-    state: context.currentState,
-    includeSelection: includeSelection,
-  );
-
   HistoryPolicy _resolveHistoryPolicy(
     DispatchContext context,
     DrawAction action,
@@ -194,7 +177,6 @@ class HistoryMiddleware extends MiddlewareBase {
   HistoryMetadata? _buildMetadata(DispatchContext context, DrawAction action) =>
       switch (action) {
         final FinishTextEdit finishTextEdit => _metadataFromFinishTextEdit(
-          context,
           finishTextEdit,
         ),
         final FinishEdit finishEdit => _metadataFromFinishEdit(
@@ -213,11 +195,8 @@ class HistoryMiddleware extends MiddlewareBase {
     FinishEdit action,
   ) => action.metadata ?? _metadataFromEdit(context);
 
-  HistoryMetadata? _metadataFromFinishTextEdit(
-    DispatchContext context,
-    FinishTextEdit action,
-  ) {
-    final kind = _resolveFinishTextEditOutcomeKind(context, action);
+  HistoryMetadata? _metadataFromFinishTextEdit(FinishTextEdit action) {
+    final kind = _resolveFinishTextEditOutcomeKind(action);
     return switch (kind) {
       _FinishTextEditOutcomeKind.delete => HistoryMetadata(
         description: 'Delete text',
@@ -236,7 +215,6 @@ class HistoryMiddleware extends MiddlewareBase {
   }
 
   _FinishTextEditOutcomeKind _resolveFinishTextEditOutcomeKind(
-    DispatchContext _,
     FinishTextEdit action,
   ) {
     final hasText = action.text.trim().isNotEmpty;

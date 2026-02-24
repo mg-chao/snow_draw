@@ -44,7 +44,7 @@ class MiddlewarePipelineFactory {
   List<Middleware> _defaultMiddlewares({
     required List<ActionInterceptor> interceptors,
   }) => <Middleware>[
-    ValidationMiddleware(),
+    const ValidationMiddleware(),
     if (interceptors.isNotEmpty)
       InterceptionMiddleware(interceptors: interceptors),
     const ReductionMiddleware(),

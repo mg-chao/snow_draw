@@ -16,36 +16,29 @@ class MiddlewarePipeline {
   ///
   /// Returns the final context after all middlewares have executed.
   Future<DispatchContext> execute(DispatchContext initialContext) {
-    if (initialContext.shouldStop ||
-        initialContext.hasError ||
-        middlewares.isEmpty) {
+    if (middlewares.isEmpty || initialContext.isTerminal) {
       return Future<DispatchContext>.value(initialContext);
     }
-    return _executeFromIndex(context: initialContext, index: 0);
+    return _executeFromIndex(initialContext, 0);
   }
 
-  Future<DispatchContext> _executeFromIndex({
-    required DispatchContext context,
-    required int index,
-  }) async {
-    if (index >= middlewares.length || context.shouldStop || context.hasError) {
+  Future<DispatchContext> _executeFromIndex(
+    DispatchContext context,
+    int index,
+  ) async {
+    if (index >= middlewares.length || context.isTerminal) {
       return context;
     }
 
     final middleware = middlewares[index];
-
-    return _invokeMiddleware(
-      context: context,
-      index: index,
-      middleware: middleware,
-    );
+    return _invokeMiddleware(context, index, middleware);
   }
 
-  Future<DispatchContext> _invokeMiddleware({
-    required DispatchContext context,
-    required int index,
-    required Middleware middleware,
-  }) async {
+  Future<DispatchContext> _invokeMiddleware(
+    DispatchContext context,
+    int index,
+    Middleware middleware,
+  ) async {
     var nextCalled = false;
     DispatchContext? downstreamContext;
 
@@ -56,9 +49,7 @@ class MiddlewarePipeline {
         );
       }
       nextCalled = true;
-      return _executeFromIndex(context: nextContext, index: index + 1).then((
-        result,
-      ) {
+      return _executeFromIndex(nextContext, index + 1).then((result) {
         downstreamContext = result;
         return result;
       });

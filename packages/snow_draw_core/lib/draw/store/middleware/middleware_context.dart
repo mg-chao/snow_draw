@@ -17,10 +17,23 @@ String _generateTraceId() {
   return 'dispatch_${timestamp}_$sequence';
 }
 
+@immutable
+class DispatchFailure {
+  const DispatchFailure({
+    required this.error,
+    required this.stackTrace,
+    required this.source,
+  });
+
+  final Object error;
+  final StackTrace stackTrace;
+  final String? source;
+}
+
 /// Flat dispatch context for middleware execution.
 @immutable
 class DispatchContext {
-  const DispatchContext({
+  const DispatchContext._({
     required this.action,
     required this.drawContext,
     required this.initialState,
@@ -34,9 +47,7 @@ class DispatchContext {
     required this.events,
     required this.shouldStop,
     required this.stopReason,
-    required this.error,
-    required this.stackTrace,
-    required this.errorSource,
+    required this.failure,
     required this.traceId,
   });
 
@@ -51,7 +62,7 @@ class DispatchContext {
     required bool isBatching,
     required bool includeSelectionInHistory,
     String? traceId,
-  }) => DispatchContext(
+  }) => DispatchContext._(
     action: action,
     drawContext: drawContext,
     initialState: state,
@@ -65,9 +76,7 @@ class DispatchContext {
     events: const [],
     shouldStop: false,
     stopReason: null,
-    error: null,
-    stackTrace: null,
-    errorSource: null,
+    failure: null,
     traceId: traceId ?? _generateTraceId(),
   );
   final DrawAction action;
@@ -83,73 +92,71 @@ class DispatchContext {
   final List<EditSessionEvent> events;
   final bool shouldStop;
   final String? stopReason;
-  final Object? error;
-  final StackTrace? stackTrace;
-  final String? errorSource;
+  final DispatchFailure? failure;
   final String traceId;
 
-  DispatchContext copyWith({
-    DrawAction? action,
-    InteractionReducerDeps? drawContext,
-    DrawState? initialState,
-    DrawState? currentState,
-    HistoryManager? historyManager,
-    SnapshotBuilder? snapshotBuilder,
-    EditSessionService? editSessionService,
-    EditSessionIdGenerator? sessionIdGenerator,
-    bool? isBatching,
-    bool? includeSelectionInHistory,
-    List<EditSessionEvent>? events,
-    bool? shouldStop,
-    String? stopReason,
-    Object? error,
-    StackTrace? stackTrace,
-    String? errorSource,
-    String? traceId,
-  }) => DispatchContext(
-    action: action ?? this.action,
-    drawContext: drawContext ?? this.drawContext,
-    initialState: initialState ?? this.initialState,
-    currentState: currentState ?? this.currentState,
-    historyManager: historyManager ?? this.historyManager,
-    snapshotBuilder: snapshotBuilder ?? this.snapshotBuilder,
-    editSessionService: editSessionService ?? this.editSessionService,
-    sessionIdGenerator: sessionIdGenerator ?? this.sessionIdGenerator,
-    isBatching: isBatching ?? this.isBatching,
-    includeSelectionInHistory:
-        includeSelectionInHistory ?? this.includeSelectionInHistory,
-    events: events ?? this.events,
-    shouldStop: shouldStop ?? this.shouldStop,
-    stopReason: stopReason ?? this.stopReason,
-    error: error ?? this.error,
-    stackTrace: stackTrace ?? this.stackTrace,
-    errorSource: errorSource ?? this.errorSource,
-    traceId: traceId ?? this.traceId,
-  );
+  Object? get error => failure?.error;
+  StackTrace? get stackTrace => failure?.stackTrace;
+  String? get errorSource => failure?.source;
 
-  bool get hasError => error != null;
+  bool get hasError => failure != null;
+  bool get isTerminal => shouldStop || hasError;
 
   bool get hasStateChanged => currentState != initialState;
 
-  DispatchContext withCurrentState(DrawState newState) =>
-      copyWith(currentState: newState);
+  DispatchContext withCurrentState(DrawState newState) {
+    if (identical(newState, currentState)) {
+      return this;
+    }
+    return _copy(currentState: newState);
+  }
 
-  DispatchContext withEvents(List<EditSessionEvent> newEvents) =>
-      newEvents.isEmpty ? this : copyWith(events: [...events, ...newEvents]);
+  DispatchContext withEvents(List<EditSessionEvent> newEvents) {
+    if (newEvents.isEmpty) {
+      return this;
+    }
+    return _copy(events: [...events, ...newEvents]);
+  }
 
   DispatchContext withStop(String reason) =>
-      copyWith(shouldStop: true, stopReason: reason);
+      _copy(shouldStop: true, stopReason: reason);
 
   DispatchContext withError(
     Object error,
     StackTrace stackTrace, {
     String? source,
-  }) => copyWith(
-    error: error,
-    stackTrace: stackTrace,
-    errorSource: source ?? errorSource,
+  }) => _copy(
     shouldStop: true,
     stopReason: 'Error: $error',
+    failure: DispatchFailure(
+      error: error,
+      stackTrace: stackTrace,
+      source: source ?? errorSource,
+    ),
+  );
+
+  DispatchContext _copy({
+    DrawState? currentState,
+    List<EditSessionEvent>? events,
+    bool? shouldStop,
+    String? stopReason,
+    DispatchFailure? failure,
+  }) => DispatchContext._(
+    action: action,
+    drawContext: drawContext,
+    initialState: initialState,
+    currentState: currentState ?? this.currentState,
+    historyManager: historyManager,
+    snapshotBuilder: snapshotBuilder,
+    editSessionService: editSessionService,
+    sessionIdGenerator: sessionIdGenerator,
+    isBatching: isBatching,
+    includeSelectionInHistory: includeSelectionInHistory,
+    events: events ?? this.events,
+    shouldStop: shouldStop ?? this.shouldStop,
+    stopReason: stopReason ?? this.stopReason,
+    failure: failure ?? this.failure,
+    traceId: traceId,
   );
 
   @override
@@ -158,7 +165,7 @@ class DispatchContext {
       'action: ${action.runtimeType}, '
       'traceId: $traceId, '
       'hasError: $hasError, '
-      'shouldStop: $shouldStop, '
+      'isTerminal: $isTerminal, '
       'stateChanged: $hasStateChanged, '
       'events: ${events.length})';
 }
