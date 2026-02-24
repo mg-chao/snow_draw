@@ -23,41 +23,22 @@ class DrawContext implements InteractionReducerDeps {
     required this.editOperations,
     required this.idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
-    DrawConfig? config,
     ConfigManager? configManager,
     this.editConfigProvider = StaticEditConfigProvider.defaults,
     LogService? logService,
     TextMetricsService? textMetricsService,
     this.eventBus,
-  }) : configManager = _resolveConfigManager(
-         providedConfigManager: configManager,
-         providedConfig: config,
-       ),
+  }) : configManager = configManager ?? ConfigManager(DrawConfig.defaultConfig),
        editIntentMapper =
            editIntentMapper ?? EditIntentToOperationMapper.withDefaults(),
        log = logService ?? LogService(),
        textMetricsService = textMetricsService ?? defaultTextMetricsService;
-
-  static ConfigManager _resolveConfigManager({
-    required ConfigManager? providedConfigManager,
-    required DrawConfig? providedConfig,
-  }) {
-    if (providedConfigManager == null) {
-      return ConfigManager(providedConfig ?? DrawConfig.defaultConfig);
-    }
-    if (providedConfig != null &&
-        providedConfig != providedConfigManager.current) {
-      providedConfigManager.update(providedConfig);
-    }
-    return providedConfigManager;
-  }
 
   factory DrawContext.withDefaults({
     ElementRegistry? elementRegistry,
     EditOperationRegistry? editOperations,
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
-    DrawConfig? config,
     ConfigManager? configManager,
     EditConfigProvider? editConfigProvider,
     LogService? logService,
@@ -69,7 +50,6 @@ class DrawContext implements InteractionReducerDeps {
         editOperations ?? DefaultEditOperationRegistry.withDefaults(),
     idGenerator: idGenerator ?? RandomStringIdGenerator().call,
     editIntentMapper: editIntentMapper,
-    config: config,
     configManager: configManager,
     editConfigProvider: editConfigProvider ?? StaticEditConfigProvider.defaults,
     logService: logService,
@@ -123,41 +103,20 @@ class DrawContext implements InteractionReducerDeps {
     EditOperationRegistry? editOperations,
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
-    DrawConfig? config,
     ConfigManager? configManager,
     EditConfigProvider? editConfigProvider,
     LogService? logService,
     TextMetricsService? textMetricsService,
     EventBus? eventBus,
-  }) {
-    final resolvedConfigManager = _resolveCopiedConfigManager(
-      providedConfigManager: configManager,
-      providedConfig: config,
-    );
-    return DrawContext(
-      elementRegistry: elementRegistry ?? this.elementRegistry,
-      editOperations: editOperations ?? this.editOperations,
-      idGenerator: idGenerator ?? this.idGenerator,
-      editIntentMapper: editIntentMapper ?? this.editIntentMapper,
-      config: config,
-      configManager: resolvedConfigManager,
-      editConfigProvider: editConfigProvider ?? this.editConfigProvider,
-      logService: logService ?? log,
-      textMetricsService: textMetricsService ?? this.textMetricsService,
-      eventBus: eventBus ?? this.eventBus,
-    );
-  }
-
-  ConfigManager _resolveCopiedConfigManager({
-    required ConfigManager? providedConfigManager,
-    required DrawConfig? providedConfig,
-  }) {
-    if (providedConfigManager != null) {
-      return providedConfigManager;
-    }
-    if (providedConfig == null || providedConfig == configManager.current) {
-      return configManager;
-    }
-    return ConfigManager(providedConfig);
-  }
+  }) => DrawContext(
+    elementRegistry: elementRegistry ?? this.elementRegistry,
+    editOperations: editOperations ?? this.editOperations,
+    idGenerator: idGenerator ?? this.idGenerator,
+    editIntentMapper: editIntentMapper ?? this.editIntentMapper,
+    configManager: configManager ?? this.configManager,
+    editConfigProvider: editConfigProvider ?? this.editConfigProvider,
+    logService: logService ?? log,
+    textMetricsService: textMetricsService ?? this.textMetricsService,
+    eventBus: eventBus ?? this.eventBus,
+  );
 }

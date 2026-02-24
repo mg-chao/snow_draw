@@ -1,4 +1,5 @@
 import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/draw/config/config_manager.dart';
 
 import '../services/text/flutter_text_metrics_service.dart';
 
@@ -31,7 +32,7 @@ DrawContext createFlutterDrawContext({
   return DrawContext.withDefaults(
     elementRegistry: registry,
     idGenerator: idGenerator,
-    config: config,
+    configManager: config == null ? null : ConfigManager(config),
     logService: logService,
     textMetricsService: textMetricsService ?? flutterTextMetricsService,
     eventBus: eventBus,

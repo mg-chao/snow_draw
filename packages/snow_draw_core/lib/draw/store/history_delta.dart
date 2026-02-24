@@ -24,36 +24,6 @@ class HistoryDelta {
     required this.reindexZIndices,
   });
 
-  factory HistoryDelta.fromData({
-    required Map<String, ElementState> beforeElements,
-    required Map<String, ElementState> afterElements,
-    GlobalElementsState? globalElementsBefore,
-    GlobalElementsState? globalElementsAfter,
-    List<String>? orderBefore,
-    List<String>? orderAfter,
-    SelectionState? selectionBefore,
-    SelectionState? selectionAfter,
-    bool reindexZIndices = false,
-  }) => HistoryDelta._(
-    beforeElements: Map<String, ElementState>.unmodifiable(beforeElements),
-    afterElements: Map<String, ElementState>.unmodifiable(afterElements),
-    globalElementsBefore: globalElementsBefore,
-    globalElementsAfter: globalElementsAfter,
-    orderBefore: orderBefore == null
-        ? null
-        : List<String>.unmodifiable(orderBefore),
-    orderAfter: orderAfter == null
-        ? null
-        : List<String>.unmodifiable(orderAfter),
-    selectionBefore: selectionBefore == null
-        ? null
-        : _copySelection(selectionBefore),
-    selectionAfter: selectionAfter == null
-        ? null
-        : _copySelection(selectionAfter),
-    reindexZIndices: reindexZIndices,
-  );
-
   factory HistoryDelta.fromSnapshots(
     HistorySnapshot before,
     HistorySnapshot after, {

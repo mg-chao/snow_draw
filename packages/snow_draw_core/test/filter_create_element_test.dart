@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
+import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -22,11 +23,13 @@ void main() {
     registerBuiltInElements(registry);
 
     final deps = DrawContext.withDefaults(
-      config: DrawConfig(
-        filterStyle: const ElementStyleConfig(
-          filterType: CanvasFilterType.gaussianBlur,
-          filterStrength: 0.7,
-          opacity: 0.4,
+      configManager: ConfigManager(
+        DrawConfig(
+          filterStyle: const ElementStyleConfig(
+            filterType: CanvasFilterType.gaussianBlur,
+            filterStrength: 0.7,
+            opacity: 0.4,
+          ),
         ),
       ),
       elementRegistry: registry,

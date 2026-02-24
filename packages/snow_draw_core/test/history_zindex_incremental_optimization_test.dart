@@ -26,10 +26,10 @@ void main() {
           ),
         );
 
-        final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 4);
-        expect(_mapEntryCount(delta['afterElements']), 4);
-        expect(delta['reindexZIndices'], isNull);
+        final delta = store.exportHistory().entries.last.delta;
+        expect(delta.beforeElements, hasLength(4));
+        expect(delta.afterElements, hasLength(4));
+        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['b', 'c', 'd', 'a']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
@@ -57,10 +57,10 @@ void main() {
           ),
         );
 
-        final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 4);
-        expect(_mapEntryCount(delta['afterElements']), 4);
-        expect(delta['reindexZIndices'], isNull);
+        final delta = store.exportHistory().entries.last.delta;
+        expect(delta.beforeElements, hasLength(4));
+        expect(delta.afterElements, hasLength(4));
+        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['c', 'd', 'a', 'b']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
@@ -85,8 +85,8 @@ void main() {
         expect(_elementOrder(store), ['a', 'c']);
         expect(_elementZIndexes(store), [0, 2]);
 
-        final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(delta['reindexZIndices'], isNot(true));
+        final delta = store.exportHistory().entries.last.delta;
+        expect(delta.reindexZIndices, isFalse);
 
         await store.dispatch(const Undo());
         expect(_elementOrder(store), ['a', 'b', 'c']);
@@ -111,10 +111,10 @@ void main() {
           ),
         );
 
-        final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 3);
-        expect(_mapEntryCount(delta['afterElements']), 3);
-        expect(delta['reindexZIndices'], isNot(true));
+        final delta = store.exportHistory().entries.last.delta;
+        expect(delta.beforeElements, hasLength(3));
+        expect(delta.afterElements, hasLength(3));
+        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['a', 'b', 'c']);
         expect(_elementZIndexes(store), [0, 1, 2]);
@@ -142,10 +142,10 @@ void main() {
           ),
         );
 
-        final delta = _latestHistoryDelta(store.exportHistoryJson());
-        expect(_mapEntryCount(delta['beforeElements']), 3);
-        expect(_mapEntryCount(delta['afterElements']), 3);
-        expect(delta['reindexZIndices'], isNot(true));
+        final delta = store.exportHistory().entries.last.delta;
+        expect(delta.beforeElements, hasLength(3));
+        expect(delta.afterElements, hasLength(3));
+        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['a', 'b', 'c']);
         expect(_elementZIndexes(store), [0, 1, 2]);
@@ -222,28 +222,6 @@ DrawState _stateWithStaleZIndexes() => DrawState(
     ),
   ),
 );
-
-Map<String, dynamic> _latestHistoryDelta(Map<String, dynamic> historyJson) {
-  final entries = historyJson['entries'] as List<dynamic>? ?? const [];
-  for (var index = entries.length - 1; index >= 0; index--) {
-    final entry = entries[index];
-    if (entry is! Map<String, dynamic>) {
-      continue;
-    }
-    final delta = entry['delta'];
-    if (delta is Map<String, dynamic>) {
-      return delta;
-    }
-  }
-  return const {};
-}
-
-int _mapEntryCount(Object? value) {
-  if (value is Map) {
-    return value.length;
-  }
-  return 0;
-}
 
 List<String> _elementOrder(DefaultDrawStore store) =>
     store.state.domain.document.elements.map((element) => element.id).toList();

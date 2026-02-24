@@ -1,5 +1,3 @@
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/history/history_metadata.dart';
 import 'package:snow_draw_core/draw/history/recordable.dart';
@@ -93,11 +91,7 @@ void main() {
 
       recordTo(1);
 
-      final snapshotJson = manager.snapshot().toJson()..['nextEntryId'] = 0;
-      final restoredSnapshot = HistoryManagerSnapshot.fromJson(
-        snapshotJson,
-        elementRegistry: _buildRegistry(),
-      );
+      final restoredSnapshot = manager.snapshot().copyWith(nextEntryId: 0);
 
       final restored = HistoryManager(maxHistoryLength: 10)
         ..restore(restoredSnapshot);
@@ -114,14 +108,16 @@ void main() {
         isTrue,
       );
 
-      final entryIds = _entriesFromSnapshot(
-        restored.snapshot().toJson(),
-      ).map((entry) => entry['id'] as int).toList();
+      final entryIds = restored
+          .snapshot()
+          .entries
+          .map((entry) => entry.id)
+          .toList();
       expect(entryIds.toSet().length, entryIds.length);
     });
   });
 
-  group('History snapshot codec', () {
+  group('History snapshot restore', () {
     test('round trip preserves undo/redo traversal', () {
       final manager = HistoryManager(maxHistoryLength: 4);
       var state = _stateAt(0);
@@ -145,10 +141,7 @@ void main() {
       recordTo(1);
       recordTo(2);
 
-      final restoredSnapshot = HistoryManagerSnapshot.fromJson(
-        manager.snapshot().toJson(),
-        elementRegistry: _buildRegistry(),
-      );
+      final restoredSnapshot = manager.snapshot();
 
       final restored = HistoryManager(maxHistoryLength: 4)
         ..restore(restoredSnapshot);
@@ -161,7 +154,7 @@ void main() {
       expect(_stateStep(replay), equals(2));
     });
 
-    test('decode clamps out-of-range cursor values', () {
+    test('restore clamps out-of-range cursor values', () {
       final manager = HistoryManager();
       var state = _stateAt(0);
       for (var step = 1; step <= 2; step++) {
@@ -170,34 +163,13 @@ void main() {
         state = next;
       }
 
-      final snapshotJson = manager.snapshot().toJson()..['cursor'] = 999;
-      final restoredSnapshot = HistoryManagerSnapshot.fromJson(
-        snapshotJson,
-        elementRegistry: _buildRegistry(),
-      );
+      final restoredSnapshot = manager.snapshot().copyWith(cursor: 999);
       final restored = HistoryManager()..restore(restoredSnapshot);
 
       expect(restored.canUndo, isTrue);
       final undone = restored.undo(state);
       expect(undone, isNotNull);
       expect(_stateStep(undone!), equals(1));
-    });
-
-    test('decode rejects malformed entries payload', () {
-      final snapshotJson = <String, dynamic>{
-        'version': 2,
-        'cursor': 0,
-        'nextEntryId': 1,
-        'entries': ['invalid'],
-      };
-
-      expect(
-        () => HistoryManagerSnapshot.fromJson(
-          snapshotJson,
-          elementRegistry: _buildRegistry(),
-        ),
-        throwsStateError,
-      );
     });
   });
 
@@ -264,15 +236,5 @@ DrawState _stateAt(int step) {
   );
 }
 
-List<Map<String, dynamic>> _entriesFromSnapshot(
-  Map<String, dynamic> snapshotJson,
-) => (snapshotJson['entries'] as List<dynamic>).cast<Map<String, dynamic>>();
-
 int _stateStep(DrawState state) =>
     state.domain.document.elements.single.rect.minX.round();
-
-DefaultElementRegistry _buildRegistry() {
-  final registry = DefaultElementRegistry();
-  registerBuiltInElements(registry);
-  return registry;
-}

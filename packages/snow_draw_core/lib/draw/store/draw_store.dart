@@ -241,16 +241,6 @@ class DefaultDrawStore implements DrawStore {
     _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
   }
 
-  Map<String, dynamic> exportHistoryJson() => exportHistory().toJson();
-
-  void restoreHistoryJson(Map<String, dynamic> json) {
-    final snapshot = HistoryManagerSnapshot.fromJson(
-      json,
-      elementRegistry: context.elementRegistry,
-    );
-    restoreHistory(snapshot);
-  }
-
   void _checkNotDisposed() {
     if (_isDisposed) {
       throw StateError('DrawStore has been disposed and cannot be used');
