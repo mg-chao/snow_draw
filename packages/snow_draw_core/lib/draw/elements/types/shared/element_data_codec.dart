@@ -5,33 +5,53 @@ final class ElementDataCodec {
   static T decodeEnumByName<T extends Enum>({
     required List<T> values,
     required Object? raw,
-    required T fallback,
+    String? fieldName,
   }) {
     if (raw is! String) {
-      return fallback;
+      throw FormatException(
+        'Expected a string enum value for ${fieldName ?? 'field'}',
+      );
     }
-    return values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => fallback,
+
+    for (final value in values) {
+      if (value.name == raw) {
+        return value;
+      }
+    }
+
+    throw FormatException(
+      'Unsupported enum value "$raw" for ${fieldName ?? 'field'}',
     );
   }
 
-  static Map<String, dynamic>? asJsonMap(Object? raw) {
+  static Map<String, dynamic> asJsonMap(Object? raw, {String? fieldName}) {
     if (raw is Map<String, dynamic>) {
       return raw;
     }
     if (raw is! Map) {
-      return null;
+      throw FormatException('Expected a JSON map for ${fieldName ?? 'field'}');
     }
 
     final map = <String, dynamic>{};
     for (final entry in raw.entries) {
       final key = entry.key;
       if (key is! String) {
-        return null;
+        throw FormatException(
+          'Expected string keys in JSON map for ${fieldName ?? 'field'}',
+        );
       }
       map[key] = entry.value;
     }
     return map;
+  }
+
+  static Map<String, dynamic>? asNullableJsonMap(
+    Object? raw, {
+    String? fieldName,
+  }) {
+    if (raw == null) {
+      return null;
+    }
+    return asJsonMap(raw, fieldName: fieldName);
   }
 }

@@ -8,6 +8,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class SerialNumberData extends ElementData
@@ -27,38 +28,36 @@ final class SerialNumberData extends ElementData
     this.textElementId,
   });
 
-  factory SerialNumberData.fromJson(
-    Map<String, dynamic> json,
-  ) => SerialNumberData(
-    number: _coerceNonNegative(
-      (json['number'] as num?)?.toInt(),
-      ConfigDefaults.defaultSerialNumber,
-    ),
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
-    ),
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
-    fillStyle: FillStyle.values.firstWhere(
-      (style) => style.name == json['fillStyle'],
-      orElse: () => ConfigDefaults.defaultFillStyle,
-    ),
-    fontSize:
-        (json['fontSize'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultSerialNumberFontSize,
-    fontFamily: normalizeOptionalTrimmedString(json['fontFamily'] as String?),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: StrokeStyle.values.firstWhere(
-      (style) => style.name == json['strokeStyle'],
-      orElse: () => ConfigDefaults.defaultStrokeStyle,
-    ),
-    textElementId: normalizeOptionalTrimmedString(
-      json['textElementId'] as String?,
-    ),
-  );
+  factory SerialNumberData.fromJson(Map<String, dynamic> json) =>
+      SerialNumberData(
+        number: _coerceNonNegative(
+          (json['number'] as num).toInt(),
+          ConfigDefaults.defaultSerialNumber,
+        ),
+        color: DrawColor(json['color'] as int),
+        fillColor: DrawColor(json['fillColor'] as int),
+        fillStyle: ElementDataCodec.decodeEnumByName(
+          values: FillStyle.values,
+          raw: json['fillStyle'],
+          fieldName: 'fillStyle',
+        ),
+        fontSize: (json['fontSize'] as num).toDouble(),
+        fontFamily: normalizeOptionalTrimmedString(
+          _decodeNullableString(json['fontFamily'], fieldName: 'fontFamily'),
+        ),
+        strokeWidth: (json['strokeWidth'] as num).toDouble(),
+        strokeStyle: ElementDataCodec.decodeEnumByName(
+          values: StrokeStyle.values,
+          raw: json['strokeStyle'],
+          fieldName: 'strokeStyle',
+        ),
+        textElementId: normalizeOptionalTrimmedString(
+          _decodeNullableString(
+            json['textElementId'],
+            fieldName: 'textElementId',
+          ),
+        ),
+      );
 
   static const typeIdToken = ElementTypeId<SerialNumberData>('serial_number');
 
@@ -170,4 +169,14 @@ final class SerialNumberData extends ElementData
 int _coerceNonNegative(int? value, int fallback) {
   final resolved = value ?? fallback;
   return resolved < 0 ? 0 : resolved;
+}
+
+String? _decodeNullableString(Object? raw, {required String fieldName}) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is String) {
+    return raw;
+  }
+  throw FormatException('Expected string for $fieldName');
 }

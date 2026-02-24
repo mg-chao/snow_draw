@@ -7,6 +7,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class HighlightData extends ElementData
@@ -19,20 +20,14 @@ final class HighlightData extends ElementData
   });
 
   factory HighlightData.fromJson(Map<String, dynamic> json) => HighlightData(
-    shape: switch (json['shape']) {
-      'rectangle' => HighlightShape.rectangle,
-      'ellipse' => HighlightShape.ellipse,
-      _ => ConfigDefaults.defaultHighlightShape,
-    },
-    color: DrawColor(
-      (json['color'] as int?) ??
-          ConfigDefaults.defaultHighlightColor.toARGB32(),
+    shape: ElementDataCodec.decodeEnumByName(
+      values: HighlightShape.values,
+      raw: json['shape'],
+      fieldName: 'shape',
     ),
-    strokeColor: DrawColor(
-      (json['strokeColor'] as int?) ??
-          ConfigDefaults.defaultHighlightStrokeColor.toARGB32(),
-    ),
-    strokeWidth: (json['strokeWidth'] as num?)?.toDouble() ?? 0,
+    color: DrawColor(json['color'] as int),
+    strokeColor: DrawColor(json['strokeColor'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
   );
 
   static const typeIdToken = ElementTypeId<HighlightData>('highlight');

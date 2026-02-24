@@ -5,31 +5,25 @@ import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  test('RectangleData.fromJson uses defaults', () {
-    final data = RectangleData.fromJson(const {});
-
-    expect(data.cornerRadius, ConfigDefaults.defaultCornerRadius);
-    expect(data.fillColor, ConfigDefaults.defaultFillColor);
-    expect(data.color, ConfigDefaults.defaultColor);
-    expect(data.strokeWidth, ConfigDefaults.defaultStrokeWidth);
-    expect(data.strokeStyle, ConfigDefaults.defaultStrokeStyle);
-    expect(data.fillStyle, ConfigDefaults.defaultFillStyle);
+  test('RectangleData.fromJson requires canonical payload fields', () {
+    expect(
+      () => RectangleData.fromJson(const {}),
+      throwsA(anyOf(isA<TypeError>(), isA<FormatException>())),
+    );
   });
 
-  test('RectangleData.fromJson keeps legacy strokeColor fallback', () {
-    final data = RectangleData.fromJson(const {'strokeColor': 0xFF123456});
-
-    expect(data.color, const DrawColor(0xFF123456));
-  });
-
-  test('RectangleData.fromJson falls back for invalid enum values', () {
-    final data = RectangleData.fromJson(const {
-      'strokeStyle': 'invalid',
-      'fillStyle': 'invalid',
-    });
-
-    expect(data.strokeStyle, ConfigDefaults.defaultStrokeStyle);
-    expect(data.fillStyle, ConfigDefaults.defaultFillStyle);
+  test('RectangleData.fromJson rejects invalid enum values', () {
+    expect(
+      () => RectangleData.fromJson({
+        'cornerRadius': ConfigDefaults.defaultCornerRadius,
+        'fillColor': ConfigDefaults.defaultFillColor.toARGB32(),
+        'color': ConfigDefaults.defaultColor.toARGB32(),
+        'strokeWidth': ConfigDefaults.defaultStrokeWidth,
+        'strokeStyle': 'invalid',
+        'fillStyle': 'invalid',
+      }),
+      throwsA(isA<FormatException>()),
+    );
   });
 
   test('RectangleData.withStyleUpdate keeps values not included in update', () {

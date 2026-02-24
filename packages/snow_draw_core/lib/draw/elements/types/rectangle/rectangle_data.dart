@@ -24,29 +24,19 @@ final class RectangleData extends ElementData
   });
 
   factory RectangleData.fromJson(Map<String, dynamic> json) => RectangleData(
-    cornerRadius:
-        (json['cornerRadius'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultCornerRadius,
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
-    color: DrawColor(
-      (json['color'] as int?) ??
-          (json['strokeColor'] as int?) ??
-          ConfigDefaults.defaultColor.toARGB32(),
-    ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultStrokeWidth,
+    cornerRadius: (json['cornerRadius'] as num).toDouble(),
+    fillColor: DrawColor(json['fillColor'] as int),
+    color: DrawColor(json['color'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
-      fallback: ConfigDefaults.defaultStrokeStyle,
+      fieldName: 'strokeStyle',
     ),
     fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
-      fallback: ConfigDefaults.defaultFillStyle,
+      fieldName: 'fillStyle',
     ),
   );
 

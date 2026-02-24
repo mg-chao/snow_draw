@@ -9,6 +9,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class FreeDrawData extends ElementData
@@ -30,22 +31,18 @@ final class FreeDrawData extends ElementData
 
   factory FreeDrawData.fromJson(Map<String, dynamic> json) => FreeDrawData(
     points: _decodePoints(json['points']),
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
+    color: DrawColor(json['color'] as int),
+    fillColor: DrawColor(json['fillColor'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    strokeStyle: ElementDataCodec.decodeEnumByName(
+      values: StrokeStyle.values,
+      raw: json['strokeStyle'],
+      fieldName: 'strokeStyle',
     ),
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultStrokeWidth,
-    strokeStyle: StrokeStyle.values.firstWhere(
-      (style) => style.name == json['strokeStyle'],
-      orElse: () => ConfigDefaults.defaultStrokeStyle,
-    ),
-    fillStyle: FillStyle.values.firstWhere(
-      (style) => style.name == json['fillStyle'],
-      orElse: () => ConfigDefaults.defaultFillStyle,
+    fillStyle: ElementDataCodec.decodeEnumByName(
+      values: FillStyle.values,
+      raw: json['fillStyle'],
+      fieldName: 'fillStyle',
     ),
   );
 
@@ -115,32 +112,46 @@ final class FreeDrawData extends ElementData
 
   static List<DrawPoint> _decodePoints(Object? rawPoints) {
     if (rawPoints is! List) {
-      return _defaultPoints;
+      throw const FormatException('Free draw points must be a JSON array');
     }
 
     final points = <DrawPoint>[];
-    for (final entry in rawPoints.whereType<Map<Object?, Object?>>()) {
-      final point = _decodePoint(entry);
-      if (point != null) {
-        points.add(point);
-      }
+    for (final rawPoint in rawPoints) {
+      points.add(_decodePoint(rawPoint));
     }
 
     if (points.length < 2) {
-      return _defaultPoints;
+      throw const FormatException(
+        'Free draw payload must include at least two points',
+      );
     }
 
     return List<DrawPoint>.unmodifiable(points);
   }
 
-  static DrawPoint? _decodePoint(Map<Object?, Object?> pointMap) {
-    final x = (pointMap['x'] as num?)?.toDouble();
-    final y = (pointMap['y'] as num?)?.toDouble();
-    if (x == null || y == null) {
-      return null;
+  static DrawPoint _decodePoint(Object? rawPoint) {
+    final pointMap = ElementDataCodec.asJsonMap(
+      rawPoint,
+      fieldName: 'free draw point',
+    );
+    final x = pointMap['x'];
+    final y = pointMap['y'];
+    if (x is! num || y is! num) {
+      throw const FormatException(
+        'Free draw point entries must provide numeric x/y',
+      );
     }
-    final pressure = (pointMap['p'] as num?)?.toDouble() ?? 0.0;
-    return DrawPoint(x: x, y: y, pressure: pressure);
+    final pressureValue = pointMap['p'];
+    if (pressureValue != null && pressureValue is! num) {
+      throw const FormatException(
+        'Free draw point pressure must be numeric when provided',
+      );
+    }
+    return DrawPoint(
+      x: x.toDouble(),
+      y: y.toDouble(),
+      pressure: (pressureValue as num?)?.toDouble() ?? 0.0,
+    );
   }
 
   @override

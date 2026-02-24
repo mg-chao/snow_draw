@@ -31,44 +31,32 @@ final class TextData extends ElementData
   }) : autoResize = autoResize ?? ConfigDefaults.defaultTextAutoResize;
 
   factory TextData.fromJson(Map<String, dynamic> json) => TextData(
-    text: json['text'] as String? ?? '',
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
+    text: json['text'] as String,
+    color: DrawColor(json['color'] as int),
+    fontSize: (json['fontSize'] as num).toDouble(),
+    fontFamily: normalizeOptionalTrimmedString(
+      _decodeNullableString(json['fontFamily'], fieldName: 'fontFamily'),
     ),
-    fontSize:
-        (json['fontSize'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextFontSize,
-    fontFamily: normalizeOptionalTrimmedString(json['fontFamily'] as String?),
     horizontalAlign: ElementDataCodec.decodeEnumByName(
       values: TextHorizontalAlign.values,
       raw: json['horizontalAlign'],
-      fallback: ConfigDefaults.defaultTextHorizontalAlign,
+      fieldName: 'horizontalAlign',
     ),
     verticalAlign: ElementDataCodec.decodeEnumByName(
       values: TextVerticalAlign.values,
       raw: json['verticalAlign'],
-      fallback: ConfigDefaults.defaultTextVerticalAlign,
+      fieldName: 'verticalAlign',
     ),
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
+    fillColor: DrawColor(json['fillColor'] as int),
     fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
-      fallback: ConfigDefaults.defaultFillStyle,
+      fieldName: 'fillStyle',
     ),
-    strokeColor: DrawColor(
-      (json['strokeColor'] as int?) ??
-          ConfigDefaults.defaultTextStrokeColor.toARGB32(),
-    ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextStrokeWidth,
-    cornerRadius:
-        (json['cornerRadius'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextCornerRadius,
-    autoResize:
-        json['autoResize'] as bool? ?? ConfigDefaults.defaultTextAutoResize,
+    strokeColor: DrawColor(json['strokeColor'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    cornerRadius: (json['cornerRadius'] as num).toDouble(),
+    autoResize: _decodeBool(json['autoResize'], fieldName: 'autoResize'),
   );
 
   static const typeIdToken = ElementTypeId<TextData>('text');
@@ -204,4 +192,21 @@ final class TextData extends ElementData
     }
     return normalizeOptionalTrimmedString(fontFamily as String?);
   }
+}
+
+String? _decodeNullableString(Object? raw, {required String fieldName}) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is String) {
+    return raw;
+  }
+  throw FormatException('Expected string for $fieldName');
+}
+
+bool _decodeBool(Object? raw, {required String fieldName}) {
+  if (raw is bool) {
+    return raw;
+  }
+  throw FormatException('Expected bool for $fieldName');
 }

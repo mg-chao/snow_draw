@@ -42,36 +42,30 @@ final class LineData extends ElementData
        endArrowhead = ArrowheadStyle.none;
 
   factory LineData.fromJson(Map<String, dynamic> json) => LineData(
-    points: ArrowLikeDataCodec.decodePoints(
-      json['points'],
-      fallback: _defaultPoints,
-    ),
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
-    ),
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultStrokeWidth,
+    points: ArrowLikeDataCodec.decodePoints(json['points']),
+    color: DrawColor(json['color'] as int),
+    fillColor: DrawColor(json['fillColor'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
-      fallback: ConfigDefaults.defaultStrokeStyle,
+      fieldName: 'strokeStyle',
     ),
     fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
-      fallback: ConfigDefaults.defaultFillStyle,
+      fieldName: 'fillStyle',
     ),
     startBinding: ArrowLikeDataCodec.decodeBinding(json['startBinding']),
     endBinding: ArrowLikeDataCodec.decodeBinding(json['endBinding']),
     fixedSegments: ArrowLikeDataCodec.decodeFixedSegments(
       json['fixedSegments'],
     ),
-    startIsSpecial: json['startIsSpecial'] as bool?,
-    endIsSpecial: json['endIsSpecial'] as bool?,
+    startIsSpecial: _decodeNullableBool(
+      json['startIsSpecial'],
+      'startIsSpecial',
+    ),
+    endIsSpecial: _decodeNullableBool(json['endIsSpecial'], 'endIsSpecial'),
   );
 
   static const typeIdToken = ElementTypeId<LineData>('line');
@@ -231,4 +225,14 @@ final class LineData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
+}
+
+bool? _decodeNullableBool(Object? raw, String fieldName) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is bool) {
+    return raw;
+  }
+  throw FormatException('Expected bool for $fieldName');
 }

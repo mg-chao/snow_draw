@@ -7,33 +7,36 @@ import 'elbow/elbow_fixed_segment.dart';
 final class ArrowLikeDataCodec {
   const ArrowLikeDataCodec._();
 
-  static List<DrawPoint> decodePoints(
-    Object? rawPoints, {
-    required List<DrawPoint> fallback,
-  }) {
+  static List<DrawPoint> decodePoints(Object? rawPoints) {
+    if (rawPoints is! List) {
+      throw const FormatException('Arrow points must be a JSON array');
+    }
+
     final points = <DrawPoint>[];
-    if (rawPoints is List) {
-      for (final entry in rawPoints) {
-        if (entry is! Map) {
-          continue;
-        }
-        final x = (entry['x'] as num?)?.toDouble();
-        final y = (entry['y'] as num?)?.toDouble();
-        if (x != null && y != null) {
-          points.add(DrawPoint(x: x, y: y));
-        }
+    for (final rawPoint in rawPoints) {
+      final pointMap = ElementDataCodec.asJsonMap(
+        rawPoint,
+        fieldName: 'points entry',
+      );
+      final x = pointMap['x'];
+      final y = pointMap['y'];
+      if (x is! num || y is! num) {
+        throw const FormatException('Arrow points must provide numeric x/y');
       }
+      points.add(DrawPoint(x: x.toDouble(), y: y.toDouble()));
     }
 
     if (points.length < 2) {
-      return fallback;
+      throw const FormatException(
+        'Arrow payload must include at least two points',
+      );
     }
 
     return List<DrawPoint>.unmodifiable(points);
   }
 
   static ArrowBinding? decodeBinding(Object? raw) {
-    final map = ElementDataCodec.asJsonMap(raw);
+    final map = ElementDataCodec.asNullableJsonMap(raw, fieldName: 'binding');
     if (map == null) {
       return null;
     }
@@ -41,21 +44,20 @@ final class ArrowLikeDataCodec {
   }
 
   static List<ElbowFixedSegment>? decodeFixedSegments(Object? raw) {
-    if (raw is! List) {
+    if (raw == null) {
       return null;
+    }
+    if (raw is! List) {
+      throw const FormatException('fixedSegments must be a JSON array');
     }
 
     final segments = <ElbowFixedSegment>[];
     for (final entry in raw) {
-      final map = ElementDataCodec.asJsonMap(entry);
-      if (map == null) {
-        continue;
-      }
-      try {
-        segments.add(ElbowFixedSegment.fromJson(map));
-      } on FormatException {
-        // Skip invalid segment entries.
-      }
+      final map = ElementDataCodec.asJsonMap(
+        entry,
+        fieldName: 'fixedSegments entry',
+      );
+      segments.add(ElbowFixedSegment.fromJson(map));
     }
 
     return normalizeFixedSegments(segments);

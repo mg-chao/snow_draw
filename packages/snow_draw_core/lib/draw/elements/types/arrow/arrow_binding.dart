@@ -10,6 +10,7 @@ import '../../../utils/selection_calculator.dart';
 import '../rectangle/rectangle_data.dart';
 import '../serial_number/serial_number_data.dart';
 import '../serial_number/serial_number_layout.dart';
+import '../shared/element_data_codec.dart';
 import '../text/text_data.dart';
 import 'elbow/elbow_geometry.dart';
 import 'elbow/elbow_heading.dart';
@@ -26,19 +27,26 @@ final class ArrowBinding {
 
   factory ArrowBinding.fromJson(Map<String, dynamic> json) {
     final elementId = json['elementId'] as String?;
-    final anchorJson = json['anchor'];
-    if (elementId == null || anchorJson is! Map) {
+    if (elementId == null) {
       throw const FormatException('Invalid ArrowBinding payload');
     }
-    final x = (anchorJson['x'] as num?)?.toDouble() ?? 0.0;
-    final y = (anchorJson['y'] as num?)?.toDouble() ?? 0.0;
-    final mode = ArrowBindingMode.values.firstWhere(
-      (value) => value.name == json['mode'],
-      orElse: () => ArrowBindingMode.orbit,
+    final anchorJson = ElementDataCodec.asJsonMap(
+      json['anchor'],
+      fieldName: 'anchor',
+    );
+    final x = anchorJson['x'];
+    final y = anchorJson['y'];
+    if (x is! num || y is! num) {
+      throw const FormatException('ArrowBinding anchor must provide x/y');
+    }
+    final mode = ElementDataCodec.decodeEnumByName(
+      values: ArrowBindingMode.values,
+      raw: json['mode'],
+      fieldName: 'mode',
     );
     return ArrowBinding(
       elementId: elementId,
-      anchor: DrawPoint(x: _clamp01(x), y: _clamp01(y)),
+      anchor: DrawPoint(x: _clamp01(x.toDouble()), y: _clamp01(y.toDouble())),
       mode: mode,
     );
   }

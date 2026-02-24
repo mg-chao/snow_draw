@@ -41,43 +41,39 @@ final class ArrowData extends ElementData
   });
 
   factory ArrowData.fromJson(Map<String, dynamic> json) => ArrowData(
-    points: ArrowLikeDataCodec.decodePoints(
-      json['points'],
-      fallback: _defaultPoints,
-    ),
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
-    ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultStrokeWidth,
+    points: ArrowLikeDataCodec.decodePoints(json['points']),
+    color: DrawColor(json['color'] as int),
+    strokeWidth: (json['strokeWidth'] as num).toDouble(),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
-      fallback: ConfigDefaults.defaultStrokeStyle,
+      fieldName: 'strokeStyle',
     ),
     arrowType: ElementDataCodec.decodeEnumByName(
       values: ArrowType.values,
       raw: json['arrowType'],
-      fallback: ConfigDefaults.defaultArrowType,
+      fieldName: 'arrowType',
     ),
     startArrowhead: ElementDataCodec.decodeEnumByName(
       values: ArrowheadStyle.values,
       raw: json['startArrowhead'],
-      fallback: ConfigDefaults.defaultStartArrowhead,
+      fieldName: 'startArrowhead',
     ),
     endArrowhead: ElementDataCodec.decodeEnumByName(
       values: ArrowheadStyle.values,
       raw: json['endArrowhead'],
-      fallback: ConfigDefaults.defaultEndArrowhead,
+      fieldName: 'endArrowhead',
     ),
     startBinding: ArrowLikeDataCodec.decodeBinding(json['startBinding']),
     endBinding: ArrowLikeDataCodec.decodeBinding(json['endBinding']),
     fixedSegments: ArrowLikeDataCodec.decodeFixedSegments(
       json['fixedSegments'],
     ),
-    startIsSpecial: json['startIsSpecial'] as bool?,
-    endIsSpecial: json['endIsSpecial'] as bool?,
+    startIsSpecial: _decodeNullableBool(
+      json['startIsSpecial'],
+      'startIsSpecial',
+    ),
+    endIsSpecial: _decodeNullableBool(json['endIsSpecial'], 'endIsSpecial'),
   );
 
   static const typeIdToken = ElementTypeId<ArrowData>('arrow');
@@ -220,4 +216,14 @@ final class ArrowData extends ElementData
     startIsSpecial,
     endIsSpecial,
   );
+}
+
+bool? _decodeNullableBool(Object? raw, String fieldName) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is bool) {
+    return raw;
+  }
+  throw FormatException('Expected bool for $fieldName');
 }
