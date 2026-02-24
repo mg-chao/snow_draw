@@ -4,7 +4,6 @@ import '../../../config/draw_config.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../../services/grid_snap_service.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -57,7 +56,7 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final serialData = _resolveSerialData(creatingState.elementData);
-    final snappedPosition = _snapIfNeeded(
+    final snappedPosition = snapCreationPoint(
       point: currentPosition,
       config: config,
       snappingMode: snappingMode,
@@ -93,18 +92,10 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
-  }) {
-    final rect = creatingState.currentRect;
-    return CreationFinishResult(
-      data: creatingState.elementData,
-      rect: rect,
-      shouldCommit: shouldCommitCreationResult(
-        config: config,
-        creatingState: creatingState,
-        rect: rect,
-      ),
-    );
-  }
+  }) => finishCreationWithCurrentRect(
+    config: config,
+    creatingState: creatingState,
+  );
 }
 
 SerialNumberData _resolveSerialData(ElementData data) =>
@@ -112,17 +103,6 @@ SerialNumberData _resolveSerialData(ElementData data) =>
 
 _SerialNumberCreationMode? _resolveCreationMode(CreationMode mode) =>
     mode is _SerialNumberCreationMode ? mode : null;
-
-DrawPoint _snapIfNeeded({
-  required DrawPoint point,
-  required DrawConfig config,
-  required SnappingMode snappingMode,
-}) {
-  if (snappingMode != SnappingMode.grid) {
-    return point;
-  }
-  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
-}
 
 double _resolveDiameterWithMin({
   required double baseDiameter,

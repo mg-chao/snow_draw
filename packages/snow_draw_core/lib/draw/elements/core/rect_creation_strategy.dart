@@ -5,7 +5,6 @@ import '../../elements/core/element_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
-import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
 import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
@@ -47,17 +46,16 @@ class RectCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final snapToGrid = snappingMode == SnappingMode.grid;
-    final gridSize = config.grid.size;
-    final startPosition = snapToGrid
-        ? gridSnapService.snapPoint(
-            point: creatingState.startPosition,
-            gridSize: gridSize,
-          )
-        : creatingState.startPosition;
-    final current = snapToGrid
-        ? gridSnapService.snapPoint(point: currentPosition, gridSize: gridSize)
-        : currentPosition;
+    final startPosition = snapCreationPoint(
+      point: creatingState.startPosition,
+      config: config,
+      snappingMode: snappingMode,
+    );
+    final current = snapCreationPoint(
+      point: currentPosition,
+      config: config,
+      snappingMode: snappingMode,
+    );
     var rect = StateCalculator.calculateCreateRect(
       startPosition: startPosition,
       currentPosition: current,
@@ -120,18 +118,10 @@ class RectCreationStrategy extends CreationStrategy {
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
-  }) {
-    final rect = creatingState.currentRect;
-    return CreationFinishResult(
-      data: creatingState.elementData,
-      rect: rect,
-      shouldCommit: shouldCommitCreationResult(
-        config: config,
-        creatingState: creatingState,
-        rect: rect,
-      ),
-    );
-  }
+  }) => finishCreationWithCurrentRect(
+    config: config,
+    creatingState: creatingState,
+  );
 }
 
 @immutable

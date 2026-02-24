@@ -2,6 +2,7 @@ import '../../core/coordinates/overlay_space.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/resize_mode.dart';
+import 'resize_anchor_point.dart';
 
 /// Coordinate transform helpers used by resize calculations.
 class EditTransformContext {
@@ -39,7 +40,7 @@ class EditTransformContext {
     required bool resizeFromCenter,
   }) => resizeFromCenter
       ? center
-      : overlaySpace.toWorld(_oppositeBoundPointLocal(startBounds, mode));
+      : overlaySpace.toWorld(oppositeBoundPointLocal(startBounds, mode));
 
   /// Gets the padding offset for a resize mode.
   DrawPoint getPaddingOffset({
@@ -48,19 +49,6 @@ class EditTransformContext {
   }) => overlaySpace.rotateVectorToWorld(
     _handlePaddingOffsetLocal(mode, padding),
   );
-
-  /// Returns the opposite anchor point for a given resize handle [mode].
-  static DrawPoint _oppositeBoundPointLocal(DrawRect rect, ResizeMode mode) =>
-      switch (mode) {
-        ResizeMode.topLeft => DrawPoint(x: rect.maxX, y: rect.maxY),
-        ResizeMode.topRight => DrawPoint(x: rect.minX, y: rect.maxY),
-        ResizeMode.bottomRight => DrawPoint(x: rect.minX, y: rect.minY),
-        ResizeMode.bottomLeft => DrawPoint(x: rect.maxX, y: rect.minY),
-        ResizeMode.top => DrawPoint(x: rect.centerX, y: rect.maxY),
-        ResizeMode.bottom => DrawPoint(x: rect.centerX, y: rect.minY),
-        ResizeMode.left => DrawPoint(x: rect.maxX, y: rect.centerY),
-        ResizeMode.right => DrawPoint(x: rect.minX, y: rect.centerY),
-      };
 
   /// Calculates the padding offset in local coordinates for a resize mode.
   static DrawPoint _handlePaddingOffsetLocal(ResizeMode mode, double padding) =>

@@ -7,7 +7,6 @@ import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../../services/grid_snap_service.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -95,7 +94,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final adjustedPosition = _snapPointIfNeeded(
+    final adjustedPosition = snapCreationPoint(
       point: currentPosition,
       config: config,
       snappingMode: snappingMode,
@@ -264,7 +263,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     for (final rawPosition in positions) {
-      final adjustedPosition = _snapPointIfNeeded(
+      final adjustedPosition = snapCreationPoint(
         point: rawPosition,
         config: config,
         snappingMode: snappingMode,
@@ -456,17 +455,6 @@ class FreeDrawCreationMode extends CreationMode {
 
 FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
     mode is FreeDrawCreationMode ? mode : const FreeDrawCreationMode();
-
-DrawPoint _snapPointIfNeeded({
-  required DrawPoint point,
-  required DrawConfig config,
-  required SnappingMode snappingMode,
-}) {
-  if (snappingMode != SnappingMode.grid) {
-    return point;
-  }
-  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
-}
 
 List<DrawPoint> _resolveCreationWorldPoints({
   required FreeDrawCreationMode mode,

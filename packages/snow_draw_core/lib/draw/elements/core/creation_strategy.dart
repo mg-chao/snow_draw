@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
+import '../../services/grid_snap_service.dart';
 import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
@@ -156,4 +157,33 @@ bool shouldCommitCreationResult({
       creatingState.element
           .copyWith(rect: resolvedRect)
           .isValidWith(config.element);
+}
+
+/// Builds a standard finish result using the current creation rect.
+CreationFinishResult finishCreationWithCurrentRect({
+  required DrawConfig config,
+  required CreatingState creatingState,
+}) {
+  final rect = creatingState.currentRect;
+  return CreationFinishResult(
+    data: creatingState.elementData,
+    rect: rect,
+    shouldCommit: shouldCommitCreationResult(
+      config: config,
+      creatingState: creatingState,
+      rect: rect,
+    ),
+  );
+}
+
+/// Snaps [point] to the creation grid when grid snapping is active.
+DrawPoint snapCreationPoint({
+  required DrawPoint point,
+  required DrawConfig config,
+  required SnappingMode snappingMode,
+}) {
+  if (snappingMode != SnappingMode.grid) {
+    return point;
+  }
+  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
 }
