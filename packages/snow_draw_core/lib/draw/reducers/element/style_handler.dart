@@ -1,5 +1,6 @@
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
+import '../../edit/apply/edit_apply.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -74,7 +75,11 @@ DrawState handleUpdateElementsStyle(
   final nextDomain = domainChanged
       ? state.domain.copyWith(
           document: document.copyWith(
-            elements: _replaceElementsById(document.elements, replacementsById),
+            elements: EditApply.replaceElementsById(
+              elements: document.elements,
+              replacementsById: replacementsById,
+              resolveIndex: document.getOrderIndex,
+            ),
           ),
         )
       : state.domain;
@@ -96,27 +101,6 @@ DrawState handleUpdateElementsStyle(
     selectedIds,
     forceRefreshOverlay: true,
   );
-}
-
-List<ElementState> _replaceElementsById(
-  List<ElementState> elements,
-  Map<String, ElementState> replacementsById,
-) {
-  if (elements.isEmpty || replacementsById.isEmpty) {
-    return elements;
-  }
-
-  List<ElementState>? updatedElements;
-  for (var index = 0; index < elements.length; index++) {
-    final current = elements[index];
-    final replacement = replacementsById[current.id];
-    if (replacement == null || replacement == current) {
-      continue;
-    }
-    updatedElements ??= List<ElementState>.of(elements, growable: false);
-    updatedElements[index] = replacement;
-  }
-  return updatedElements ?? elements;
 }
 
 ({ElementState element, bool geometryChanged})? _resolveElementStyleUpdate({

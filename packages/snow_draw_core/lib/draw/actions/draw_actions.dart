@@ -149,16 +149,6 @@ class UpdateCreatingElementBatch extends EditingConflictAction {
     this.snapOverride = false,
   }) : positions = _freezeList(positions);
 
-  /// Creates a batch action using an already-frozen positions list.
-  ///
-  /// Callers must ensure [positions] will not be mutated after dispatch.
-  UpdateCreatingElementBatch.frozen({
-    required this.positions,
-    this.maintainAspectRatio = false,
-    this.createFromCenter = false,
-    this.snapOverride = false,
-  });
-
   /// Ordered pointer positions represented by this batched update.
   final List<DrawPoint> positions;
   final bool maintainAspectRatio;

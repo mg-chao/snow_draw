@@ -209,14 +209,9 @@ class ActionProcessor {
       return null;
     }
 
-    if (action is Undo && !_services.historyManager.canUndo) {
-      return null;
-    }
-    if (action is Redo && !_services.historyManager.canRedo) {
-      return null;
-    }
-
     return switch (action) {
+      Undo _ when !_services.historyManager.canUndo => null,
+      Redo _ when !_services.historyManager.canRedo => null,
       CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
       StartEdit _ => EditCancelReason.newEditStarted,
       _ when action.conflictsWithEditing => EditCancelReason.conflictingAction,

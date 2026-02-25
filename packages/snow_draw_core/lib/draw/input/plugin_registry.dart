@@ -17,11 +17,7 @@ class PluginRegistry {
   int get pluginCount => _plugins.length;
 
   /// Register a plugin.
-  Future<void> register(InputPlugin plugin) async {
-    _assertPluginIdAvailable(plugin.id);
-    await plugin.onLoad(_context);
-    _insertPlugin(plugin);
-  }
+  Future<void> register(InputPlugin plugin) => registerAll([plugin]);
 
   /// Register plugins in batch.
   Future<void> registerAll(List<InputPlugin> plugins) async {

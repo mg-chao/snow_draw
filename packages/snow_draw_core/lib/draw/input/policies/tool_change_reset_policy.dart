@@ -10,23 +10,14 @@ List<DrawAction> resolveToolChangeResetActions({
   bool? textIsNew,
 }) {
   final actions = <DrawAction>[];
-  if (interaction is TextEditingState) {
-    final elementId = textElementId ?? interaction.elementId;
-    actions.add(
-      FinishTextEdit(
-        elementId: elementId,
-        text: textDraftText ?? interaction.draftData.text,
-        isNew: textIsNew ?? interaction.isNew,
-      ),
-    );
-  } else if (interaction is CreatingState) {
-    actions.add(const CancelCreateElement());
-  } else if (interaction is EditingState) {
-    actions.add(const CancelEdit());
-  } else if (interaction is BoxSelectingState) {
-    actions.add(const CancelBoxSelect());
-  } else if (interaction is DragPendingState) {
-    actions.add(const ClearDragPending());
+  final interactionResetAction = _resolveInteractionResetAction(
+    interaction: interaction,
+    textElementId: textElementId,
+    textDraftText: textDraftText,
+    textIsNew: textIsNew,
+  );
+  if (interactionResetAction != null) {
+    actions.add(interactionResetAction);
   }
 
   if (includeClearSelection) {
@@ -34,3 +25,21 @@ List<DrawAction> resolveToolChangeResetActions({
   }
   return List<DrawAction>.unmodifiable(actions);
 }
+
+DrawAction? _resolveInteractionResetAction({
+  required InteractionState interaction,
+  String? textElementId,
+  String? textDraftText,
+  bool? textIsNew,
+}) => switch (interaction) {
+  TextEditingState() => FinishTextEdit(
+    elementId: textElementId ?? interaction.elementId,
+    text: textDraftText ?? interaction.draftData.text,
+    isNew: textIsNew ?? interaction.isNew,
+  ),
+  CreatingState() => const CancelCreateElement(),
+  EditingState() => const CancelEdit(),
+  BoxSelectingState() => const CancelBoxSelect(),
+  DragPendingState() => const ClearDragPending(),
+  _ => null,
+};
