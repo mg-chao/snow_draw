@@ -9,7 +9,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_validation.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
@@ -27,8 +26,6 @@ import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   group('EditContext.hasSnapshots', () {
     test('MoveEditContext reports true when snapshots present', () {
       const ctx = MoveEditContext(

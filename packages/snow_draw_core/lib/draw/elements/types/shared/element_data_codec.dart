@@ -99,10 +99,10 @@ final class ElementDataCodec {
   }
 
   static int decodeInt(Object? raw, {required String fieldName}) {
-    if (raw is num) {
-      return raw.toInt();
+    if (raw is int) {
+      return raw;
     }
-    throw FormatException('Expected integer-compatible value for $fieldName');
+    throw FormatException('Expected integer value for $fieldName');
   }
 
   static DrawPoint decodePoint(

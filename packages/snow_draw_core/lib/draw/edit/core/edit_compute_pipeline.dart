@@ -46,7 +46,6 @@ class EditComputePipeline {
       baseElements: document.elementMap,
       updatedElements: merged,
       changedElementIds: merged.keys.toSet(),
-      document: document,
     );
     for (final entry in bindingUpdates.entries) {
       if (skipBindingUpdate?.call(entry.key, entry.value) ?? false) {

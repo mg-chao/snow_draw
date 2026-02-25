@@ -1,7 +1,6 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_compute_pipeline.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
@@ -14,8 +13,6 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   DrawState stateWith(List<ElementState> elements) => DrawState(
     domain: DomainState(document: DocumentState(elements: elements)),
   );

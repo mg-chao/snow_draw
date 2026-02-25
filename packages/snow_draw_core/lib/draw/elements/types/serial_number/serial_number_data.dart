@@ -30,9 +30,8 @@ final class SerialNumberData extends ElementData
 
   factory SerialNumberData.fromJson(Map<String, dynamic> json) =>
       SerialNumberData(
-        number: _coerceNonNegative(
+        number: _clampNonNegative(
           ElementDataCodec.decodeInt(json['number'], fieldName: 'number'),
-          ConfigDefaults.defaultSerialNumber,
         ),
         color: DrawColor(json['color'] as int),
         fillColor: DrawColor(json['fillColor'] as int),
@@ -94,7 +93,7 @@ final class SerialNumberData extends ElementData
     StrokeStyle? strokeStyle,
     Object? textElementId = _textElementIdUnset,
   }) => SerialNumberData(
-    number: _coerceNonNegative(number, this.number),
+    number: _clampNonNegative(number ?? this.number),
     color: color ?? this.color,
     fillColor: fillColor ?? this.fillColor,
     fillStyle: fillStyle ?? this.fillStyle,
@@ -175,7 +174,4 @@ final class SerialNumberData extends ElementData
   );
 }
 
-int _coerceNonNegative(int? value, int fallback) {
-  final resolved = value ?? fallback;
-  return resolved < 0 ? 0 : resolved;
-}
+int _clampNonNegative(int value) => value < 0 ? 0 : value;

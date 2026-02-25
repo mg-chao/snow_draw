@@ -1,5 +1,4 @@
 import '../../../core/coordinates/element_space.dart';
-import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -17,7 +16,7 @@ import 'elbow/elbow_editing.dart';
 /// This resolver intentionally favors correctness and maintainability over
 /// incremental-cache complexity: every resolve pass scans current arrow-like
 /// elements and applies endpoint updates when their bound targets changed.
-class ArrowBindingResolver {
+final class ArrowBindingResolver {
   ArrowBindingResolver._();
 
   /// Global stateless resolver instance.
@@ -30,7 +29,6 @@ class ArrowBindingResolver {
     required Map<String, ElementState> baseElements,
     required Map<String, ElementState> updatedElements,
     required Set<String> changedElementIds,
-    DocumentState? document,
   }) {
     if (changedElementIds.isEmpty) {
       return const {};
@@ -76,12 +74,7 @@ class ArrowBindingResolver {
 
     return updates;
   }
-
-  /// No-op kept so existing tests and call sites remain source-compatible.
-  void invalidate() {}
 }
-
-typedef _EndpointUpdateResult = ({bool changed, bool updated});
 
 ElementState? _applyBindings({
   required ElementState element,
@@ -106,49 +99,48 @@ ElementState? _applyBindings({
   final isElbow = data.arrowType == ArrowType.elbow;
   final maxIterations =
       shouldUpdateStart && shouldUpdateEnd && localPoints.length == 2 ? 4 : 2;
-
-  var startUpdated = false;
-  var endUpdated = false;
+  var changedAtLeastOnce = false;
 
   for (var i = 0; i < maxIterations; i++) {
-    var changed = false;
+    var changedThisPass = false;
     final startReference = space.toWorld(localPoints[1]);
     final endReference = space.toWorld(localPoints[localPoints.length - 2]);
 
-    final startResult = _applyBoundEndpoint(
-      binding: data.startBinding,
-      shouldUpdate: shouldUpdateStart,
-      pointIndex: 0,
-      referencePoint: startReference,
-      lookup: lookup,
-      space: space,
-      isElbow: isElbow,
-      hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
-      localPoints: localPoints,
-    );
-    startUpdated = startUpdated || startResult.updated;
-    changed = changed || startResult.changed;
+    changedThisPass =
+        _applyBoundEndpoint(
+          binding: data.startBinding,
+          shouldUpdate: shouldUpdateStart,
+          pointIndex: 0,
+          referencePoint: startReference,
+          lookup: lookup,
+          space: space,
+          isElbow: isElbow,
+          hasArrowhead: data.startArrowhead != ArrowheadStyle.none,
+          localPoints: localPoints,
+        ) ||
+        changedThisPass;
 
-    final endResult = _applyBoundEndpoint(
-      binding: data.endBinding,
-      shouldUpdate: shouldUpdateEnd,
-      pointIndex: localPoints.length - 1,
-      referencePoint: endReference,
-      lookup: lookup,
-      space: space,
-      isElbow: isElbow,
-      hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
-      localPoints: localPoints,
-    );
-    endUpdated = endUpdated || endResult.updated;
-    changed = changed || endResult.changed;
+    changedThisPass =
+        _applyBoundEndpoint(
+          binding: data.endBinding,
+          shouldUpdate: shouldUpdateEnd,
+          pointIndex: localPoints.length - 1,
+          referencePoint: endReference,
+          lookup: lookup,
+          space: space,
+          isElbow: isElbow,
+          hasArrowhead: data.endArrowhead != ArrowheadStyle.none,
+          localPoints: localPoints,
+        ) ||
+        changedThisPass;
 
-    if (!changed) {
+    if (!changedThisPass) {
       break;
     }
+    changedAtLeastOnce = true;
   }
 
-  if (!startUpdated && !endUpdated) {
+  if (!changedAtLeastOnce) {
     return null;
   }
 
@@ -176,7 +168,7 @@ ElementState? _applyBindings({
   );
 }
 
-_EndpointUpdateResult _applyBoundEndpoint({
+bool _applyBoundEndpoint({
   required ArrowBinding? binding,
   required bool shouldUpdate,
   required int pointIndex,
@@ -188,7 +180,7 @@ _EndpointUpdateResult _applyBoundEndpoint({
   required List<DrawPoint> localPoints,
 }) {
   if (!shouldUpdate || binding == null) {
-    return (changed: false, updated: false);
+    return false;
   }
   final nextLocal = _resolveBoundLocalPoint(
     binding: binding,
@@ -199,14 +191,14 @@ _EndpointUpdateResult _applyBoundEndpoint({
     referencePoint: referencePoint,
   );
   if (nextLocal == null) {
-    return (changed: false, updated: false);
+    return false;
   }
 
-  final changed = nextLocal != localPoints[pointIndex];
-  if (changed) {
-    localPoints[pointIndex] = nextLocal;
+  if (nextLocal == localPoints[pointIndex]) {
+    return false;
   }
-  return (changed: changed, updated: true);
+  localPoints[pointIndex] = nextLocal;
+  return true;
 }
 
 ElementState? _applyElbowBindingResult({
