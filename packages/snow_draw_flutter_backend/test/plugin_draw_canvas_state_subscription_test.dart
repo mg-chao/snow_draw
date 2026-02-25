@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -110,7 +110,6 @@ class _RecordingDrawStore implements DrawStore {
   @override
   DrawState get state => _state;
 
-  @override
   DrawState get currentState => _state;
 
   @override
@@ -142,7 +141,6 @@ class _RecordingDrawStore implements DrawStore {
     );
   }
 
-  @override
   Future<void> call(DrawAction action) => dispatch(action);
 
   @override

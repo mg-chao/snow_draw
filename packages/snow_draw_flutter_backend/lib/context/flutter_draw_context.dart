@@ -1,5 +1,5 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_core/draw/config/config_manager.dart';
+import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../services/text/flutter_text_metrics_service.dart';
 
