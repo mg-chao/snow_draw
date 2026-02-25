@@ -194,8 +194,6 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         lookup: CombinedElementLookup(base: state.domain.document.elementMap),
         localPointsOverride: points,
         fixedSegmentsOverride: updatedFixed,
-        startBindingOverride: data.startBinding,
-        endBindingOverride: data.endBinding,
       );
       points = updated.localPoints;
       fixedSegments = updated.fixedSegments;
@@ -430,10 +428,6 @@ ElementState _buildUpdatedElement({
       lookup: CombinedElementLookup(base: elementMap),
       localPointsOverride: localPoints,
       fixedSegmentsOverride: fixedSegments,
-      startBindingOverride: transform.startBinding,
-      endBindingOverride: transform.endBinding,
-      startBindingOverrideIsSet: true,
-      endBindingOverrideIsSet: true,
       finalize: finalize,
     );
     final rectAndPoints = computeArrowRectAndPoints(

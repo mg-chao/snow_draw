@@ -76,23 +76,46 @@ class TextEditReducer {
     StartTextEdit action,
     TextEditReducerDeps context,
   ) {
-    final elementId = action.elementId;
-    if (elementId != null) {
-      final element = state.domain.document.getElementById(elementId);
-      final data = element?.data;
-      if (element == null || data is! TextData) {
-        return null;
-      }
-      return (
-        elementId: element.id,
-        draftData: data,
-        rect: element.rect,
-        isNew: false,
-        opacity: element.opacity,
-        rotation: element.rotation,
-      );
+    final existingId = action.elementId;
+    if (existingId != null) {
+      return _resolveExistingSession(state, existingId);
     }
+    return _resolveNewSession(action, context);
+  }
 
+  ({
+    String elementId,
+    TextData draftData,
+    DrawRect rect,
+    bool isNew,
+    double opacity,
+    double rotation,
+  })?
+  _resolveExistingSession(DrawState state, String elementId) {
+    final element = state.domain.document.getElementById(elementId);
+    final data = element?.data;
+    if (element == null || data is! TextData) {
+      return null;
+    }
+    return (
+      elementId: element.id,
+      draftData: data,
+      rect: element.rect,
+      isNew: false,
+      opacity: element.opacity,
+      rotation: element.rotation,
+    );
+  }
+
+  ({
+    String elementId,
+    TextData draftData,
+    DrawRect rect,
+    bool isNew,
+    double opacity,
+    double rotation,
+  })
+  _resolveNewSession(StartTextEdit action, TextEditReducerDeps context) {
     final defaults = context.config.textStyle;
     final draftData = const TextData().withElementStyle(defaults) as TextData;
     return (
@@ -212,7 +235,7 @@ class TextEditReducer {
         ),
       ),
     );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   DrawState _updateTextElement(
@@ -225,12 +248,12 @@ class TextEditReducer {
       interaction.elementId,
     );
     if (orderIndex == null) {
-      return _clearSelectionAndIdle(state);
+      return _finishTextEditing(state);
     }
 
     final currentElement = state.domain.document.elements[orderIndex];
     if (currentElement.rect == rect && currentElement.data == data) {
-      return _clearSelectionAndIdle(state);
+      return _finishTextEditing(state);
     }
 
     final nextElements = [...state.domain.document.elements];
@@ -241,7 +264,7 @@ class TextEditReducer {
         document: state.domain.document.copyWith(elements: nextElements),
       ),
     );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   DrawState _deleteExistingText(DrawState state, TextEditingState interaction) {
@@ -256,7 +279,7 @@ class TextEditReducer {
               document: state.domain.document.copyWith(elements: nextElements),
             ),
           );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   List<ElementState>? _removeTextElementAndUnbindReferences({
@@ -308,9 +331,12 @@ class TextEditReducer {
 
   DrawState _clearSelectionAndIdle(DrawState state) {
     final nextState = applySelectionChange(state, const <String>{});
-    return nextState.copyWith(application: nextState.application.toIdle());
+    return _toIdle(nextState);
   }
 
   DrawState _toIdle(DrawState state) =>
       state.copyWith(application: state.application.toIdle());
+
+  DrawState _finishTextEditing(DrawState state) =>
+      _clearSelectionAndIdle(state);
 }

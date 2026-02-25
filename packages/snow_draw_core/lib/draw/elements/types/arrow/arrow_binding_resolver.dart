@@ -417,8 +417,6 @@ ElementState? _applyElbowBindingResult({
     lookup: lookup,
     localPointsOverride: localPoints,
     fixedSegmentsOverride: data.fixedSegments,
-    startBindingOverride: data.startBinding,
-    endBindingOverride: data.endBinding,
   );
   final geometry = _resolveArrowGeometry(
     element: element,

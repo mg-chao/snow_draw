@@ -146,10 +146,8 @@ final class _ElbowEditPipeline {
     required this.lookup,
     this.localPointsOverride,
     this.fixedSegmentsOverride,
-    this.startBindingOverride,
-    this.endBindingOverride,
-    this.startBindingOverrideIsSet = false,
-    this.endBindingOverrideIsSet = false,
+    this.startBindingOverride = _bindingOverrideUnset,
+    this.endBindingOverride = _bindingOverrideUnset,
   });
 
   final ElementState element;
@@ -157,10 +155,8 @@ final class _ElbowEditPipeline {
   final CombinedElementLookup lookup;
   final List<DrawPoint>? localPointsOverride;
   final List<ElbowFixedSegment>? fixedSegmentsOverride;
-  final ArrowBinding? startBindingOverride;
-  final ArrowBinding? endBindingOverride;
-  final bool startBindingOverrideIsSet;
-  final bool endBindingOverrideIsSet;
+  final Object? startBindingOverride;
+  final Object? endBindingOverride;
 
   ElbowEditResult run() {
     final context = _buildContext();
@@ -194,12 +190,10 @@ final class _ElbowEditPipeline {
     );
     final startBinding = _resolveBindingOverride(
       override: startBindingOverride,
-      overrideIsSet: startBindingOverrideIsSet,
       fallback: data.startBinding,
     );
     final endBinding = _resolveBindingOverride(
       override: endBindingOverride,
-      overrideIsSet: endBindingOverrideIsSet,
       fallback: data.endBinding,
     );
     final previousData = element.data is ArrowData
@@ -347,10 +341,21 @@ ElbowEditResult _finalizePath(
 }
 
 ArrowBinding? _resolveBindingOverride({
-  required ArrowBinding? override,
-  required bool overrideIsSet,
+  required Object? override,
   required ArrowBinding? fallback,
-}) => overrideIsSet ? override : fallback;
+}) {
+  if (identical(override, _bindingOverrideUnset)) {
+    return fallback;
+  }
+  if (override == null || override is ArrowBinding) {
+    return override as ArrowBinding?;
+  }
+  throw ArgumentError.value(
+    override,
+    'override',
+    'Expected ArrowBinding?, null, or unset marker.',
+  );
+}
 
 bool _isEndpointActive({
   required List<DrawPoint> basePoints,

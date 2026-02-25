@@ -17,19 +17,19 @@ DrawState handleDeleteElements(
   ElementReducerDeps _,
 ) {
   final document = state.domain.document;
-  final deleteIds = expandSerialNumberBoundTextIds(
+  final deleteIds = _resolveDeleteIds(
     elements: document.elements,
-    seedIds: action.elementIds.where(document.elementMap.containsKey),
+    elementIndex: document.elementMap,
+    requestedIds: action.elementIds,
   );
   if (deleteIds.isEmpty) {
     return state;
   }
 
-  final newElements = [
-    for (final element in document.elements)
-      if (!deleteIds.contains(element.id))
-        _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
-  ];
+  final nextElements = _buildElementsAfterDeletion(
+    elements: document.elements,
+    deleteIds: deleteIds,
+  );
   final newSelectedIds = _nextSelectionAfterDeletion(
     selectedIds: state.domain.selection.selectedIds,
     deletedIds: deleteIds,
@@ -37,11 +37,29 @@ DrawState handleDeleteElements(
 
   final next = state.copyWith(
     domain: state.domain.copyWith(
-      document: document.copyWith(elements: newElements),
+      document: document.copyWith(elements: nextElements),
     ),
   );
   return applySelectionChange(next, newSelectedIds);
 }
+
+Set<String> _resolveDeleteIds({
+  required List<ElementState> elements,
+  required Map<String, ElementState> elementIndex,
+  required Iterable<String> requestedIds,
+}) => expandSerialNumberBoundTextIds(
+  elements: elements,
+  seedIds: requestedIds.where(elementIndex.containsKey),
+);
+
+List<ElementState> _buildElementsAfterDeletion({
+  required List<ElementState> elements,
+  required Set<String> deleteIds,
+}) => [
+  for (final element in elements)
+    if (!deleteIds.contains(element.id))
+      _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
+];
 
 ElementState _applyDeleteElementUpdates({
   required ElementState element,
@@ -69,18 +87,17 @@ DrawState handleDuplicateElements(
   }
 
   final document = state.domain.document;
-  final index = document.elementMap;
   final selectedIds = action.elementIds.toSet();
   final idsToDuplicate = expandSerialNumberBoundTextIds(
     elements: document.elements,
-    seedIds: selectedIds.where(index.containsKey),
+    seedIds: selectedIds.where(document.elementMap.containsKey),
   );
 
-  final elementsToDuplicate = _elementsByIds(
+  final sourceElements = _elementsByIds(
     elements: document.elements,
     ids: idsToDuplicate,
   );
-  if (elementsToDuplicate.isEmpty) {
+  if (sourceElements.isEmpty) {
     return _reportDuplicateValidationFailure(
       state: state,
       action: action,
@@ -92,39 +109,25 @@ DrawState handleDuplicateElements(
     );
   }
 
-  final idMap = <String, String>{};
-  for (final element in elementsToDuplicate) {
-    idMap[element.id] = context.idGenerator();
-  }
+  final idMap = {
+    for (final element in sourceElements) element.id: context.idGenerator(),
+  };
+  final duplicated = _buildDuplicatedElements(
+    sourceElements: sourceElements,
+    selectedIds: selectedIds,
+    idMap: idMap,
+    offsetX: action.offsetX,
+    offsetY: action.offsetY,
+    startZIndex: resolveNextZIndex(document.elements),
+  );
 
-  final newElements = <ElementState>[];
-  final newSelectedIds = <String>{};
-  var nextZIndex = resolveNextZIndex(state.domain.document.elements);
-
-  for (final element in elementsToDuplicate) {
-    final newId = idMap[element.id]!;
-    final duplicated = element.copyWith(
-      id: newId,
-      rect: element.rect.translate(
-        DrawPoint(x: action.offsetX, y: action.offsetY),
-      ),
-      zIndex: nextZIndex,
-      data: _duplicateDataWithRemappedReferences(element.data, idMap),
-    );
-    nextZIndex++;
-    newElements.add(duplicated);
-    if (selectedIds.contains(element.id)) {
-      newSelectedIds.add(newId);
-    }
-  }
-
-  final mergedElements = [...document.elements, ...newElements];
+  final mergedElements = [...document.elements, ...duplicated.elements];
   final next = state.copyWith(
     domain: state.domain.copyWith(
       document: document.copyWith(elements: mergedElements),
     ),
   );
-  return applySelectionChange(next, newSelectedIds);
+  return applySelectionChange(next, duplicated.selectedIds);
 }
 
 Set<String> _nextSelectionAfterDeletion({
@@ -147,6 +150,38 @@ List<ElementState> _elementsByIds({
   for (final element in elements)
     if (ids.contains(element.id)) element,
 ];
+
+({List<ElementState> elements, Set<String> selectedIds})
+_buildDuplicatedElements({
+  required List<ElementState> sourceElements,
+  required Set<String> selectedIds,
+  required Map<String, String> idMap,
+  required double offsetX,
+  required double offsetY,
+  required int startZIndex,
+}) {
+  final duplicatedElements = <ElementState>[];
+  final duplicatedSelectedIds = <String>{};
+  var nextZIndex = startZIndex;
+
+  for (final element in sourceElements) {
+    final newId = idMap[element.id]!;
+    duplicatedElements.add(
+      element.copyWith(
+        id: newId,
+        rect: element.rect.translate(DrawPoint(x: offsetX, y: offsetY)),
+        zIndex: nextZIndex,
+        data: _duplicateDataWithRemappedReferences(element.data, idMap),
+      ),
+    );
+    nextZIndex += 1;
+    if (selectedIds.contains(element.id)) {
+      duplicatedSelectedIds.add(newId);
+    }
+  }
+
+  return (elements: duplicatedElements, selectedIds: duplicatedSelectedIds);
+}
 
 ElementData _duplicateDataWithRemappedReferences(
   ElementData data,

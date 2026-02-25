@@ -621,10 +621,8 @@ ElbowEditResult _finalizeElbowEditResult({
   required ArrowData data,
   required CombinedElementLookup lookup,
   required ElbowEditResult result,
-  required ArrowBinding? startBindingOverride,
-  required ArrowBinding? endBindingOverride,
-  required bool startBindingOverrideIsSet,
-  required bool endBindingOverrideIsSet,
+  required Object? startBindingOverride,
+  required Object? endBindingOverride,
 }) {
   final fixedSegments = result.fixedSegments;
   if (fixedSegments == null || fixedSegments.isEmpty) {
@@ -641,7 +639,7 @@ ElbowEditResult _finalizeElbowEditResult({
       .where((segment) => !toDrop.contains(segment.index))
       .toList(growable: false);
 
-  return computeElbowEdit(
+  return _runElbowEditPipeline(
     element: element,
     data: data,
     lookup: lookup,
@@ -649,8 +647,6 @@ ElbowEditResult _finalizeElbowEditResult({
     fixedSegmentsOverride: remaining,
     startBindingOverride: startBindingOverride,
     endBindingOverride: endBindingOverride,
-    startBindingOverrideIsSet: startBindingOverrideIsSet,
-    endBindingOverrideIsSet: endBindingOverrideIsSet,
   );
 }
 

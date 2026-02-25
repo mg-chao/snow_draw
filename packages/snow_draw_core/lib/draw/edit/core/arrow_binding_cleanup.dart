@@ -3,7 +3,6 @@ import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
-import '../../elements/types/line/line_data.dart';
 import '../../models/element_state.dart';
 import '../../types/element_style.dart';
 import '../../utils/combined_element_lookup.dart';
@@ -52,8 +51,8 @@ ElementState _unbindArrowElement({
       element: element,
       data: data,
       lookup: lookup,
-      startBindingOverrideIsSet: true,
-      endBindingOverrideIsSet: true,
+      startBindingOverride: null,
+      endBindingOverride: null,
       finalize: true,
     );
     final rectAndPoints = computeArrowRectAndPoints(
@@ -87,26 +86,10 @@ ElementState _unbindArrowElement({
   return element.copyWith(data: updatedData);
 }
 
-ArrowLikeData _clearBindings(ArrowLikeData data) {
-  if (data is ArrowData) {
-    return data.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    );
-  }
-  if (data is LineData) {
-    return data.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    );
-  }
-  throw StateError(
-    'Unsupported ArrowLikeData type for binding cleanup: ${data.runtimeType}',
-  );
-}
+ArrowLikeData _clearBindings(ArrowLikeData data) => data.copyWith(
+  startBinding: null,
+  endBinding: null,
+  fixedSegments: null,
+  startIsSpecial: null,
+  endIsSpecial: null,
+);
