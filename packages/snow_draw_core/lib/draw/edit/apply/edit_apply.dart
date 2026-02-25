@@ -11,6 +11,7 @@ import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/element_state.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
@@ -142,6 +143,7 @@ class EditApply {
             keepCenter: keepTextCenter,
             isVerticalResize: isVerticalResize,
             scaleX: scaleX,
+            textMetricsService: context.textMetricsService,
           );
         } else if (resizedData is SerialNumberData) {
           resized = _applySerialNumberResize(
@@ -360,6 +362,7 @@ ElementState _applyTextResize({
   required bool keepCenter,
   required bool isVerticalResize,
   required double scaleX,
+  required TextMetricsService textMetricsService,
 }) {
   final originalData = element.data as TextData;
   var data = originalData;
@@ -392,6 +395,7 @@ ElementState _applyTextResize({
       data: data,
       targetHeight: rect.height,
       maxWidth: rect.width,
+      textMetricsService: textMetricsService,
     );
     if ((fittedFontSize - data.fontSize).abs() > _resizeTolerance) {
       data = data.copyWith(fontSize: fittedFontSize);
@@ -404,6 +408,7 @@ ElementState _applyTextResize({
     anchor: anchor,
     data: data,
     keepCenter: keepCenter,
+    textMetricsService: textMetricsService,
   );
   if (data.autoResize) {
     data = data.copyWith(autoResize: false);

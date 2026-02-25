@@ -12,17 +12,14 @@ DrawRect clampTextRectToLayout({
   TextMetricsService textMetricsService = defaultTextMetricsService,
   bool keepCenter = false,
 }) {
-  final resolvedTextMetricsService = resolveTextMetricsService(
-    textMetricsService,
-  );
-  final baseLayout = resolvedTextMetricsService.measure(
+  final baseLayout = textMetricsService.measure(
     TextLayoutRequest(data: data, maxWidth: rect.width),
   );
   final horizontalPadding = resolveTextLayoutHorizontalPadding(
     baseLayout.lineHeight,
   );
   final minWidth =
-      _resolveMinWidth(data, textMetricsService: resolvedTextMetricsService) +
+      _resolveMinWidth(data, textMetricsService: textMetricsService) +
       horizontalPadding * 2;
   final shouldClampWidth = rect.width < minWidth;
 
@@ -45,7 +42,7 @@ DrawRect clampTextRectToLayout({
   }
 
   final layout = shouldClampWidth
-      ? resolvedTextMetricsService.measure(
+      ? textMetricsService.measure(
           TextLayoutRequest(data: data, maxWidth: minWidth),
         )
       : baseLayout;
@@ -81,15 +78,12 @@ double fitTextFontSizeToHeight({
   final baseFontSize = sanitizedFontSize < safeMinFontSize
       ? safeMinFontSize
       : sanitizedFontSize;
-  final resolvedTextMetricsService = resolveTextMetricsService(
-    textMetricsService,
-  );
 
   final baseHeight = _resolveHeight(
     data: data,
     fontSize: baseFontSize,
     maxWidth: safeWidth,
-    textMetricsService: resolvedTextMetricsService,
+    textMetricsService: textMetricsService,
   );
   if ((baseHeight - safeTargetHeight).abs() <= safeTolerance) {
     return baseFontSize;
@@ -99,7 +93,7 @@ double fitTextFontSizeToHeight({
     data: data,
     fontSize: safeMinFontSize,
     maxWidth: safeWidth,
-    textMetricsService: resolvedTextMetricsService,
+    textMetricsService: textMetricsService,
   );
   if (lowHeight >= safeTargetHeight) {
     return safeMinFontSize;
@@ -113,7 +107,7 @@ double fitTextFontSizeToHeight({
           data: data,
           fontSize: high,
           maxWidth: safeWidth,
-          textMetricsService: resolvedTextMetricsService,
+          textMetricsService: textMetricsService,
         );
 
   if (highHeight < safeTargetHeight) {
@@ -124,7 +118,7 @@ double fitTextFontSizeToHeight({
         data: data,
         fontSize: high,
         maxWidth: safeWidth,
-        textMetricsService: resolvedTextMetricsService,
+        textMetricsService: textMetricsService,
       );
       attempts += 1;
     }
@@ -141,7 +135,7 @@ double fitTextFontSizeToHeight({
       data: data,
       fontSize: estimate,
       maxWidth: safeWidth,
-      textMetricsService: resolvedTextMetricsService,
+      textMetricsService: textMetricsService,
     );
     if ((estimateHeight - safeTargetHeight).abs() <= safeTolerance) {
       return estimate;
@@ -159,7 +153,7 @@ double fitTextFontSizeToHeight({
       data: data,
       fontSize: mid,
       maxWidth: safeWidth,
-      textMetricsService: resolvedTextMetricsService,
+      textMetricsService: textMetricsService,
     );
     if ((height - safeTargetHeight).abs() <= safeTolerance) {
       return mid;
