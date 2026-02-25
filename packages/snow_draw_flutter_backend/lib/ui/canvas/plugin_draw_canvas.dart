@@ -349,6 +349,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     unawaited(_recreatePluginCoordinator());
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
+      textMetricsService: widget.store.context.textMetricsService,
     );
     _syncTextEditingOverlayState(initialState);
     widget.watermarkPreviewListenable?.addListener(
@@ -428,6 +429,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
         _stateViewBuilder = DrawStateViewBuilder(
           editOperations: widget.store.context.editOperations,
+          textMetricsService: widget.store.context.textMetricsService,
         );
       }
       _eraserHitTesterByType.clear();

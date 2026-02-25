@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
@@ -77,6 +78,36 @@ abstract interface class TextMetricsService {
 
   /// Clears cached internal state, if any.
   void clearCaches();
+}
+
+final _textMetricsServiceZoneKey = Object();
+
+/// Runs [action] with [textMetricsService] scoped as the default metrics
+/// provider for APIs that rely on [defaultTextMetricsService].
+T runWithScopedTextMetricsService<T>({
+  required TextMetricsService textMetricsService,
+  required T Function() action,
+}) => runZoned(
+  action,
+  zoneValues: {_textMetricsServiceZoneKey: textMetricsService},
+);
+
+/// Resolves [textMetricsService] against the current scope.
+///
+/// When callers pass [defaultTextMetricsService], this function checks for a
+/// scoped override created by [runWithScopedTextMetricsService].
+TextMetricsService resolveTextMetricsService(
+  TextMetricsService textMetricsService,
+) {
+  if (!identical(textMetricsService, defaultTextMetricsService)) {
+    return textMetricsService;
+  }
+
+  final scoped = Zone.current[_textMetricsServiceZoneKey];
+  if (scoped is TextMetricsService) {
+    return scoped;
+  }
+  return textMetricsService;
 }
 
 /// Pure-Dart fallback used when no backend text metrics service is injected.
