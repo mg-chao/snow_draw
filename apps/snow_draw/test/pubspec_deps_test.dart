@@ -24,7 +24,7 @@ void main() {
     });
 
     test('snow_draw engine entrypoint is importable', () {
-      // The core package engine entrypoint must resolve.
+      // The engine package entrypoint must resolve.
       final cache = LruCache<String, int>(maxEntries: 2)..put('x', 42);
       expect(cache.get('x'), 42);
     });
