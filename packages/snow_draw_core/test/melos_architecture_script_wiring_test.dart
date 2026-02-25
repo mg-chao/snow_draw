@@ -34,9 +34,9 @@ void main() {
     const orderedCommands = <String>[
       'check:architecture:',
       'dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart',
-      'dart run melos run check:core-purity',
-      'dart run melos run check:core-draw-purity',
-      'dart run melos run check:core-ui-boundary',
+      'dart run melos run check:engine-purity',
+      'dart run melos run check:engine-draw-purity',
+      'dart run melos run check:engine-ui-boundary',
       'dart run melos run check:engine-entrypoint',
       'dart run melos run check:workspace-engine-deep-import-boundary',
       'dart run melos run check:workspace-backend-deep-import-boundary',
@@ -66,30 +66,30 @@ void main() {
       lastIndex = index;
     }
 
-    const orderedCorePurityChecks = <String>[
-      'check:core-purity:',
+    const orderedEnginePurityChecks = <String>[
+      'check:engine-purity:',
       'dart run tools/check_core_import_purity.dart',
       'dart run tools/check_core_pubspec_purity.dart',
       'dart run tools/check_core_dependency_graph_purity.dart',
     ];
 
-    var corePurityLastIndex = -1;
-    for (final check in orderedCorePurityChecks) {
-      final index = pubspec.indexOf(check, corePurityLastIndex + 1);
+    var enginePurityLastIndex = -1;
+    for (final check in orderedEnginePurityChecks) {
+      final index = pubspec.indexOf(check, enginePurityLastIndex + 1);
       expect(
         index,
-        greaterThan(corePurityLastIndex),
-        reason: 'Expected core purity check in order: $check',
+        greaterThan(enginePurityLastIndex),
+        reason: 'Expected engine purity check in order: $check',
       );
-      corePurityLastIndex = index;
+      enginePurityLastIndex = index;
     }
 
-    expect(pubspec, contains('check:core-ui-boundary:'));
+    expect(pubspec, contains('check:engine-ui-boundary:'));
     expect(
       pubspec,
       contains('run: dart run tools/check_core_ui_boundary.dart'),
     );
-    expect(pubspec, contains('check:core-draw-purity:'));
+    expect(pubspec, contains('check:engine-draw-purity:'));
     expect(
       pubspec,
       contains('run: dart run tools/check_core_draw_import_purity.dart'),
@@ -158,7 +158,7 @@ void main() {
         'tools/check_backend_test_core_entrypoint_import_boundary.dart',
       ),
     );
-    expect(pubspec, contains('check:core-purity:'));
+    expect(pubspec, contains('check:engine-purity:'));
     expect(pubspec, contains('tools/check_core_dependency_graph_purity.dart'));
     expect(pubspec, contains('check:ci-workflow:'));
     expect(

@@ -4,7 +4,7 @@ import '../../models/camera_state.dart';
 import '../../utils/list_equality.dart';
 import 'render_tasks.dart';
 
-/// Immutable frame-level rendering plan produced by core.
+/// Immutable frame-level rendering plan produced by engine.
 @immutable
 class FrameRenderPlan {
   const FrameRenderPlan({

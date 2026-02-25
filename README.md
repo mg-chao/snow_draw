@@ -39,9 +39,9 @@ engine owns intent and geometry, backend owns paint execution.
 
 Boundary checks are enforced with Melos scripts:
 
-- `dart run melos run check:core-purity`
-- `dart run melos run check:core-draw-purity`
-- `dart run melos run check:core-ui-boundary`
+- `dart run melos run check:engine-purity`
+- `dart run melos run check:engine-draw-purity`
+- `dart run melos run check:engine-ui-boundary`
 - `dart run melos run check:engine-entrypoint`
 - `dart run melos run check:workspace-engine-deep-import-boundary`
 - `dart run melos run check:backend-legacy`

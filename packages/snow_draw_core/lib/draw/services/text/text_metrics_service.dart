@@ -46,7 +46,7 @@ class TextLineMetrics {
   final double height;
 }
 
-/// Text metric snapshot used by core geometry logic.
+/// Text metric snapshot used by engine geometry logic.
 @immutable
 class TextMetrics {
   /// Creates text metrics.
@@ -184,6 +184,6 @@ final class FallbackTextMetricsService implements TextMetricsService {
   }
 }
 
-/// Shared default text metrics service used by core reducers.
+/// Shared default text metrics service used by engine reducers.
 const TextMetricsService defaultTextMetricsService =
     FallbackTextMetricsService();

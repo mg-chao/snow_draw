@@ -1,7 +1,7 @@
 // Tests that verify the melos workspace configuration is consistent.
 // These are compile-time smoke tests: if the workspace resolution
 // breaks, these imports will fail to resolve.
-// Cross-package import: the app depends on the core package via path.
+// Cross-package import: the app depends on the engine package via path.
 // If workspace resolution is broken, this import fails.
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -11,14 +11,14 @@ import 'package:test/test.dart';
 
 void main() {
   group('workspace resolution', () {
-    test('core package creates a DrawContext', () {
+    test('engine package creates a DrawContext', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
       final context = DrawContext.withDefaults(elementRegistry: registry);
       expect(context, isNotNull);
     });
 
-    test('core package creates a DefaultDrawStore', () {
+    test('engine package creates a DefaultDrawStore', () {
       final registry = DefaultElementRegistry();
       registerBuiltInElements(registry);
       final context = DrawContext.withDefaults(elementRegistry: registry);

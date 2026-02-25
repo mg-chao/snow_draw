@@ -4,7 +4,7 @@ import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
 
 void main() {
   group('ArrowGeometry bridge', () {
-    test('resolveWorldPoints stays aligned with core geometry math', () {
+    test('resolveWorldPoints stays aligned with engine geometry math', () {
       const rect = DrawRect(minX: 10, minY: 20, maxX: 110, maxY: 220);
       const normalizedPoints = <DrawPoint>[
         DrawPoint(x: 0.1, y: 0.2),
@@ -15,18 +15,18 @@ void main() {
         rect: rect,
         normalizedPoints: normalizedPoints,
       );
-      final corePoints = ArrowGeometry.resolveWorldPoints(
+      final enginePoints = ArrowGeometry.resolveWorldPoints(
         rect: rect,
         normalizedPoints: normalizedPoints,
       );
 
-      expect(backendPoints.length, corePoints.length);
+      expect(backendPoints.length, enginePoints.length);
       for (var i = 0; i < backendPoints.length; i++) {
-        _expectOffsetMatchesDrawPoint(backendPoints[i], corePoints[i]);
+        _expectOffsetMatchesDrawPoint(backendPoints[i], enginePoints[i]);
       }
     });
 
-    test('descriptor exposes core inset and direction outputs', () {
+    test('descriptor exposes engine inset and direction outputs', () {
       const rect = DrawRect(maxX: 200, maxY: 120);
       const data = ArrowData(
         points: <DrawPoint>[
@@ -45,37 +45,37 @@ void main() {
         data: data,
         rect: rect,
       );
-      final coreDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
+      final engineDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
 
       expect(
         backendDescriptor.localPoints.length,
-        coreDescriptor.localDrawPoints.length,
+        engineDescriptor.localDrawPoints.length,
       );
       for (var i = 0; i < backendDescriptor.localPoints.length; i++) {
         _expectOffsetMatchesDrawPoint(
           backendDescriptor.localPoints[i],
-          coreDescriptor.localDrawPoints[i],
+          engineDescriptor.localDrawPoints[i],
         );
       }
 
       expect(
         backendDescriptor.insetPoints.length,
-        coreDescriptor.insetDrawPoints.length,
+        engineDescriptor.insetDrawPoints.length,
       );
       for (var i = 0; i < backendDescriptor.insetPoints.length; i++) {
         _expectOffsetMatchesDrawPoint(
           backendDescriptor.insetPoints[i],
-          coreDescriptor.insetDrawPoints[i],
+          engineDescriptor.insetDrawPoints[i],
         );
       }
 
       _expectNullableOffsetMatchesDrawPoint(
         backendDescriptor.startDirection,
-        coreDescriptor.startDirectionPoint,
+        engineDescriptor.startDirectionPoint,
       );
       _expectNullableOffsetMatchesDrawPoint(
         backendDescriptor.endDirection,
-        coreDescriptor.endDirectionPoint,
+        engineDescriptor.endDirectionPoint,
       );
     });
   });

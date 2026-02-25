@@ -241,22 +241,22 @@ class FlutterArrowGeometry {
 
 class FlutterArrowGeometryDescriptor {
   FlutterArrowGeometryDescriptor({required this.data, required DrawRect rect})
-    : _coreDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
+    : _engineDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
 
   final ArrowLikeData data;
-  final ArrowGeometryDescriptor _coreDescriptor;
+  final ArrowGeometryDescriptor _engineDescriptor;
 
   late final List<Offset> localPoints = _toOffsets(
-    _coreDescriptor.localDrawPoints,
+    _engineDescriptor.localDrawPoints,
   );
   late final List<Offset> insetPoints = _toOffsets(
-    _coreDescriptor.insetDrawPoints,
+    _engineDescriptor.insetDrawPoints,
   );
   late final Offset? startDirection = _toOffsetOrNull(
-    _coreDescriptor.startDirectionPoint,
+    _engineDescriptor.startDirectionPoint,
   );
   late final Offset? endDirection = _toOffsetOrNull(
-    _coreDescriptor.endDirectionPoint,
+    _engineDescriptor.endDirectionPoint,
   );
 }
 

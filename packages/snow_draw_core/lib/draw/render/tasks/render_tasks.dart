@@ -29,7 +29,7 @@ sealed class FrameRenderTask extends RenderTask {
   const FrameRenderTask();
 }
 
-/// Base type for element render tasks produced by core.
+/// Base type for element render tasks produced by engine.
 @immutable
 sealed class ElementRenderTask<T extends ElementData> extends RenderTask {
   const ElementRenderTask({

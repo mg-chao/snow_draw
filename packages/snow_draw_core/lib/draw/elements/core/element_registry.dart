@@ -7,7 +7,7 @@ import 'element_type_id.dart';
 /// Runtime registry for all element types.
 ///
 /// This enables open/closed behavior: adding a new element type is done by
-/// registering a new [ElementDefinition], without modifying core render or
+/// registering a new [ElementDefinition], without modifying engine render or
 /// hit-test code.
 class DefaultElementRegistry {
   /// Creates a new registry instance.

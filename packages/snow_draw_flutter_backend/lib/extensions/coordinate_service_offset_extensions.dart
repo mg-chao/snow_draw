@@ -2,7 +2,7 @@ import 'dart:ui' show Offset;
 
 import 'package:snow_draw_core/snow_draw_engine.dart';
 
-/// Flutter offset adapters for core [CoordinateService].
+/// Flutter offset adapters for engine [CoordinateService].
 extension CoordinateServiceOffsetExtensions on CoordinateService {
   /// Converts a Flutter [Offset] in screen/widget space to world coordinates.
   DrawPoint screenOffsetToWorld(Offset offset) =>

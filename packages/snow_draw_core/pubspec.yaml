@@ -1,6 +1,6 @@
 name: snow_draw_core
 resolution: workspace
-description: "The core drawing functionality of the Snow Draw application."
+description: "The drawing engine functionality of the Snow Draw application."
 homepage: https://github.com/mg-chao/snow_draw
 
 version: 0.0.1-dev

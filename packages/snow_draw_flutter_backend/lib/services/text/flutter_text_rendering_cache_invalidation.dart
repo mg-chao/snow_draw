@@ -12,7 +12,7 @@ void _invalidateFlutterTextRenderingCaches() {
   TextRenderer.clearCaches();
 }
 
-/// Ensures Flutter-specific text rendering caches are wired into the core
+/// Ensures Flutter-specific text rendering caches are wired into the engine
 /// invalidation flow.
 void ensureFlutterTextRenderingCacheInvalidatorInstalled() {
   if (_isInstalled) {

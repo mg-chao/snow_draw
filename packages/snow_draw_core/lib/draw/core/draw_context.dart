@@ -70,7 +70,7 @@ class DrawContext {
   /// Provides unified logging with modular logs and multiple outputs.
   final LogService log;
 
-  /// Text metrics service used by core text geometry reducers.
+  /// Text metrics service used by engine text geometry reducers.
   final TextMetricsService textMetricsService;
 
   /// Event bus for UI-facing diagnostics and errors.

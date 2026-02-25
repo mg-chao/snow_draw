@@ -4,7 +4,7 @@ import '../middleware_context.dart';
 
 /// Reduction middleware that executes the InteractionStateMachine.
 ///
-/// This is the core middleware that transforms state based on actions.
+/// This is the engine middleware that transforms state based on actions.
 class ReductionMiddleware extends MiddlewareBase {
   const ReductionMiddleware();
 

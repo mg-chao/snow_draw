@@ -12,7 +12,7 @@ abstract interface class ValueListenable<T> {
   void removeListener(VoidCallback listener);
 }
 
-/// Mutable [ValueListenable] implementation for core services.
+/// Mutable [ValueListenable] implementation for engine services.
 final class ValueNotifier<T> implements ValueListenable<T> {
   /// Creates a notifier with an initial [value].
   ValueNotifier(this._value);

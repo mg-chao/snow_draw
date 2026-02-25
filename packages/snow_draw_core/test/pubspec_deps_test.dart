@@ -1,7 +1,7 @@
 // Tests that verify pubspec dependency hygiene for snow_draw_core.
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
-// Core dependencies that must remain importable in pure Dart.
+// Engine dependencies that must remain importable in pure Dart.
 import 'package:collection/collection.dart';
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 void main() {
   group('snow_draw_core dependency smoke tests', () {
     test('collection package is usable', () {
-      // collection is used throughout the core package.
+      // collection is used throughout the engine package.
       final list = [3, 1, 2];
       expect(list.sorted((a, b) => a.compareTo(b)), [1, 2, 3]);
     });
