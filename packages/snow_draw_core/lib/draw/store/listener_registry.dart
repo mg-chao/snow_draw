@@ -2,8 +2,11 @@ import 'dart:collection';
 
 import '../core/callbacks.dart';
 import '../models/draw_state.dart';
-import '../models/interaction_state.dart';
 import 'draw_store_interface.dart';
+
+final _allDrawStateChanges = Set<DrawStateChange>.unmodifiable(
+  DrawStateChange.values,
+);
 
 /// Callback invoked when a listener throws during notification.
 typedef ListenerErrorHandler =
@@ -108,9 +111,9 @@ class ListenerRegistry {
   bool _isCurrentEntry(_ListenerEntry entry) =>
       identical(_listeners[entry.listener], entry);
 
-  Set<DrawStateChange>? _normalizeChangeTypes(Set<DrawStateChange>? value) {
+  Set<DrawStateChange> _normalizeChangeTypes(Set<DrawStateChange>? value) {
     if (value == null || value.isEmpty) {
-      return null;
+      return _allDrawStateChanges;
     }
     return Set<DrawStateChange>.unmodifiable(value);
   }
@@ -122,21 +125,11 @@ class ListenerRegistry {
 class _ListenerEntry {
   _ListenerEntry(this.listener, this.changeTypes);
   final StateChangeListener<DrawState> listener;
-  final Set<DrawStateChange>? changeTypes;
+  final Set<DrawStateChange> changeTypes;
 
   /// Returns true when this listener should receive the current changes.
-  bool matches(Set<DrawStateChange> stateChanges) {
-    final interested = changeTypes;
-    if (interested == null) {
-      return true;
-    }
-    for (final change in stateChanges) {
-      if (interested.contains(change)) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool matches(Set<DrawStateChange> stateChanges) =>
+      changeTypes.any(stateChanges.contains);
 }
 
 Set<DrawStateChange> _computeChanges(DrawState previous, DrawState next) {
@@ -161,25 +154,15 @@ Set<DrawStateChange> _computeChanges(DrawState previous, DrawState next) {
 bool _documentChanged(DrawState previous, DrawState next) {
   final previousDocument = previous.domain.document;
   final nextDocument = next.domain.document;
-  if (identical(previousDocument, nextDocument)) {
-    return false;
-  }
-  if (previousDocument.elementsVersion != nextDocument.elementsVersion) {
-    return true;
-  }
-  return previousDocument != nextDocument;
+  return !identical(previousDocument, nextDocument) &&
+      previousDocument.elementsVersion != nextDocument.elementsVersion;
 }
 
 bool _selectionChanged(DrawState previous, DrawState next) {
   final previousSelection = previous.domain.selection;
   final nextSelection = next.domain.selection;
-  if (identical(previousSelection, nextSelection)) {
-    return false;
-  }
-  if (previousSelection.selectionVersion != nextSelection.selectionVersion) {
-    return true;
-  }
-  return previousSelection != nextSelection;
+  return !identical(previousSelection, nextSelection) &&
+      previousSelection.selectionVersion != nextSelection.selectionVersion;
 }
 
 bool _viewChanged(DrawState previous, DrawState next) {
@@ -191,23 +174,6 @@ bool _viewChanged(DrawState previous, DrawState next) {
 bool _interactionChanged(DrawState previous, DrawState next) {
   final previousInteraction = previous.application.interaction;
   final nextInteraction = next.application.interaction;
-  if (identical(previousInteraction, nextInteraction)) {
-    return false;
-  }
-
-  if (previousInteraction is TextEditingState &&
-      nextInteraction is TextEditingState) {
-    return _textEditingChanged(previousInteraction, nextInteraction);
-  }
-
-  return previousInteraction != nextInteraction;
+  return !identical(previousInteraction, nextInteraction) &&
+      previousInteraction != nextInteraction;
 }
-
-bool _textEditingChanged(TextEditingState previous, TextEditingState next) =>
-    previous.elementId != next.elementId ||
-    previous.isNew != next.isNew ||
-    previous.opacity != next.opacity ||
-    previous.rotation != next.rotation ||
-    previous.initialCursorPosition != next.initialCursorPosition ||
-    !identical(previous.draftData, next.draftData) ||
-    previous.rect != next.rect;

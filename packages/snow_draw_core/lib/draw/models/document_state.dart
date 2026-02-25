@@ -134,17 +134,9 @@ class DocumentState {
       boundArrowTargetIds.isNotEmpty &&
       elementIds.any(boundArrowTargetIds.contains);
 
-  List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) =>
-      queryElementsAtPointTopDown(point, tolerance);
-
   bool hasElementAtPoint(DrawPoint point, double tolerance) => _spatialIndex
       .searchPointEntries(point, tolerance, sortByZ: false)
       .isNotEmpty;
-
-  List<ElementState> getElementsInRect(DrawRect rect) {
-    final entries = _spatialIndex.searchRectEntries(rect);
-    return _collectElements(entries);
-  }
 
   /// Queries elements intersecting [rect], sorted by ascending z-order.
   ///
@@ -223,10 +215,6 @@ class DocumentState {
       }
     }
   }
-
-  List<ElementState> _collectElements(Iterable<SpatialIndexEntry> entries) => [
-    for (final entry in entries) _elementForEntry(entry),
-  ];
 
   Set<String> _buildBoundTextIds() {
     final ids = <String>{};

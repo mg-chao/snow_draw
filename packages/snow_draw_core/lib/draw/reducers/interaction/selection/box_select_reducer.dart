@@ -56,10 +56,11 @@ class BoxSelectReducer {
       return state;
     }
 
-    final selectedIds = state.domain.document
-        .getElementsInRect(interaction.bounds)
-        .map((element) => element.id)
-        .toSet();
+    final selectedIds = <String>{};
+    state.domain.document.visitElementsInRect(interaction.bounds, (element) {
+      selectedIds.add(element.id);
+      return true;
+    });
     final next = state.copyWith(application: state.application.toIdle());
     return applySelectionChange(next, selectedIds);
   }

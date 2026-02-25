@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
@@ -10,6 +9,7 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store_interface.dart';
 import 'package:snow_draw_core/draw/store/listener_registry.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   late ListenerRegistry registry;
@@ -406,81 +406,75 @@ void main() {
     expect(states, hasLength(1));
   });
 
-  test(
-    'selection listeners still detect changed ids when versions are stale',
-    () {
-      final states = <DrawState>[];
-      registry.register(states.add, changeTypes: {DrawStateChange.selection});
+  test('selection listeners ignore stale-version payload changes', () {
+    final states = <DrawState>[];
+    registry.register(states.add, changeTypes: {DrawStateChange.selection});
 
-      final previous = DrawState(
-        domain: DomainState(
-          document: DocumentState(),
-          selection: const SelectionState(
-            selectedIds: {'a'},
-            selectionVersion: 7,
-          ),
+    final previous = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'a'},
+          selectionVersion: 7,
         ),
-      );
-      final next = DrawState(
-        domain: DomainState(
-          document: DocumentState(),
-          selection: const SelectionState(
-            selectedIds: {'b'},
-            selectionVersion: 7,
-          ),
+      ),
+    );
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(),
+        selection: const SelectionState(
+          selectedIds: {'b'},
+          selectionVersion: 7,
         ),
-      );
+      ),
+    );
 
-      registry.notify(previous, next);
-      expect(states, hasLength(1));
-    },
-  );
+    registry.notify(previous, next);
+    expect(states, isEmpty);
+  });
 
-  test(
-    'document listeners still detect changed elements when versions are stale',
-    () {
-      final states = <DrawState>[];
-      registry.register(states.add, changeTypes: {DrawStateChange.document});
+  test('document listeners ignore stale-version payload changes', () {
+    final states = <DrawState>[];
+    registry.register(states.add, changeTypes: {DrawStateChange.document});
 
-      final previous = DrawState(
-        domain: DomainState(
-          document: DocumentState(
-            elements: const [
-              ElementState(
-                id: 'a',
-                rect: DrawRect(maxX: 10, maxY: 10),
-                rotation: 0,
-                opacity: 1,
-                zIndex: 0,
-                data: RectangleData(),
-              ),
-            ],
-            elementsVersion: 5,
-          ),
+    final previous = DrawState(
+      domain: DomainState(
+        document: DocumentState(
+          elements: const [
+            ElementState(
+              id: 'a',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+          ],
+          elementsVersion: 5,
         ),
-      );
-      final next = DrawState(
-        domain: DomainState(
-          document: DocumentState(
-            elements: const [
-              ElementState(
-                id: 'b',
-                rect: DrawRect(maxX: 10, maxY: 10),
-                rotation: 0,
-                opacity: 1,
-                zIndex: 0,
-                data: RectangleData(),
-              ),
-            ],
-            elementsVersion: 5,
-          ),
+      ),
+    );
+    final next = DrawState(
+      domain: DomainState(
+        document: DocumentState(
+          elements: const [
+            ElementState(
+              id: 'b',
+              rect: DrawRect(maxX: 10, maxY: 10),
+              rotation: 0,
+              opacity: 1,
+              zIndex: 0,
+              data: RectangleData(),
+            ),
+          ],
+          elementsVersion: 5,
         ),
-      );
+      ),
+    );
 
-      registry.notify(previous, next);
-      expect(states, hasLength(1));
-    },
-  );
+    registry.notify(previous, next);
+    expect(states, isEmpty);
+  });
 
   test(
     'interaction listeners detect text draft mutations via identity fast path',

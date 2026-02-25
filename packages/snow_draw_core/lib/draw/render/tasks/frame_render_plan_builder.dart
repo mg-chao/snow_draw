@@ -262,13 +262,14 @@ class FrameRenderPlanBuilder {
         boxSelectionConfig != null &&
         selectionConfig != null) {
       final previewElements = <ElementState>[];
-      for (final candidate in document.getElementsInRect(boxSelectionBounds)) {
+      document.visitElementsInRect(boxSelectionBounds, (candidate) {
         final effective = resolveEffectiveElement(candidate);
         final aabb = SelectionCalculator.computeElementWorldAabb(effective);
         if (rectsIntersect(boxSelectionBounds, aabb)) {
           previewElements.add(effective);
         }
-      }
+        return true;
+      });
       tasks.add(
         BoxSelectionRenderTask(
           bounds: boxSelectionBounds,
