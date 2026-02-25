@@ -192,12 +192,13 @@ class SelectPlugin extends DrawInputPlugin {
           ),
         };
 
-        final didStart = await _dispatchStartEditForIntent(
+        final didStart = await _dispatchMappedStartEdit(
           intent: StartMoveIntent(
             elementId: elementId,
             addToSelection: addToSelection,
           ),
           position: pointerDownPosition,
+          requireSessionStart: true,
         );
         if (didStart) {
           await _updateEditFromEvent(event);
@@ -288,29 +289,21 @@ class SelectPlugin extends DrawInputPlugin {
     }
   }
 
-  Future<bool> _dispatchStartEditForIntent({
+  Future<bool> _dispatchMappedStartEdit({
     required EditIntent intent,
     required DrawPoint position,
+    bool requireSessionStart = false,
   }) async {
     final startEdit = _mapToStartEdit(intent: intent, position: position);
     if (startEdit == null) {
       return false;
     }
-
     final wasEditing = state.application.isEditing;
     await dispatch(startEdit);
-    return !wasEditing && state.application.isEditing;
-  }
-
-  Future<void> _dispatchMappedStartEdit({
-    required EditIntent intent,
-    required DrawPoint position,
-  }) async {
-    final startEdit = _mapToStartEdit(intent: intent, position: position);
-    if (startEdit == null) {
-      return;
+    if (!requireSessionStart) {
+      return true;
     }
-    await dispatch(startEdit);
+    return !wasEditing && state.application.isEditing;
   }
 
   StartEdit? _mapToStartEdit({

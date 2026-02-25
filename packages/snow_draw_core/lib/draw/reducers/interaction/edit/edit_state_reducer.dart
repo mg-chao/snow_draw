@@ -13,69 +13,31 @@ InteractionTransition? reduceEditState({
   required EditSessionService editSessionService,
   required EditSessionIdGenerator sessionIdGenerator,
 }) => switch (action) {
-  final StartEdit a => _reduceStartEdit(
-    action: a,
-    state: state,
-    editSessionService: editSessionService,
-    sessionIdGenerator: sessionIdGenerator,
+  final StartEdit a => InteractionTransition(
+    nextState: editSessionService
+        .start(
+          state: state,
+          operationId: a.operationId,
+          position: a.position,
+          params: a.params,
+          sessionId: sessionIdGenerator(),
+        )
+        .state,
   ),
-  final UpdateEdit a => _reduceUpdateEdit(
-    action: a,
-    state: state,
-    editSessionService: editSessionService,
+  final UpdateEdit a => InteractionTransition(
+    nextState: editSessionService
+        .update(
+          state: state,
+          currentPosition: a.currentPosition,
+          modifiers: a.modifiers,
+        )
+        .state,
   ),
-  FinishEdit _ => _reduceFinishEdit(
-    state: state,
-    editSessionService: editSessionService,
+  FinishEdit _ => InteractionTransition(
+    nextState: editSessionService.finish(state: state).state,
   ),
-  CancelEdit _ => _reduceCancelEdit(
-    state: state,
-    editSessionService: editSessionService,
+  CancelEdit _ => InteractionTransition(
+    nextState: editSessionService.cancel(state: state).state,
   ),
   _ => null,
 };
-
-InteractionTransition _reduceStartEdit({
-  required StartEdit action,
-  required DrawState state,
-  required EditSessionService editSessionService,
-  required EditSessionIdGenerator sessionIdGenerator,
-}) {
-  final start = editSessionService.start(
-    state: state,
-    operationId: action.operationId,
-    position: action.position,
-    params: action.params,
-    sessionId: sessionIdGenerator(),
-  );
-  return InteractionTransition(nextState: start.state);
-}
-
-InteractionTransition _reduceUpdateEdit({
-  required UpdateEdit action,
-  required DrawState state,
-  required EditSessionService editSessionService,
-}) {
-  final update = editSessionService.update(
-    state: state,
-    currentPosition: action.currentPosition,
-    modifiers: action.modifiers,
-  );
-  return InteractionTransition(nextState: update.state);
-}
-
-InteractionTransition _reduceFinishEdit({
-  required DrawState state,
-  required EditSessionService editSessionService,
-}) {
-  final finish = editSessionService.finish(state: state);
-  return InteractionTransition(nextState: finish.state);
-}
-
-InteractionTransition _reduceCancelEdit({
-  required DrawState state,
-  required EditSessionService editSessionService,
-}) {
-  final cancel = editSessionService.cancel(state: state);
-  return InteractionTransition(nextState: cancel.state);
-}

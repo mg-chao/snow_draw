@@ -282,24 +282,18 @@ class CreatePlugin extends DrawInputPlugin {
   }
 
   bool _isPointCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    return interaction is CreatingState && interaction.isPointCreation;
+    final creating = _creatingState(state);
+    return creating != null && creating.isPointCreation;
   }
 
-  bool _isFreeDrawCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    return interaction is CreatingState &&
-        interaction.elementData is FreeDrawData;
-  }
+  bool _isFreeDrawCreating(DrawState state) =>
+      _creatingState(state)?.elementData is FreeDrawData;
 
-  bool _isElbowArrowCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return false;
-    }
-    final data = interaction.elementData;
-    return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
-  }
+  bool _isElbowArrowCreating(DrawState state) =>
+      switch (_creatingState(state)?.elementData) {
+        ArrowLikeData(:final arrowType) => arrowType == ArrowType.elbow,
+        _ => false,
+      };
 
   bool _shouldDispatchCreatingUpdate(
     DrawPoint position,
@@ -357,6 +351,11 @@ class CreatePlugin extends DrawInputPlugin {
   void _resetUpdateSignature() {
     _lastUpdatePosition = null;
     _lastUpdateModifiers = null;
+  }
+
+  CreatingState? _creatingState(DrawState state) {
+    final interaction = state.application.interaction;
+    return interaction is CreatingState ? interaction : null;
   }
 
   DrawStateView get _stateView {

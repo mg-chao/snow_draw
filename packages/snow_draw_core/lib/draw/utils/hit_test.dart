@@ -128,6 +128,29 @@ enum CursorHint {
 class HitTest {
   const HitTest();
 
+  static const _resizeModeByHandle = <HandleType, ResizeMode>{
+    HandleType.topLeft: ResizeMode.topLeft,
+    HandleType.top: ResizeMode.top,
+    HandleType.topRight: ResizeMode.topRight,
+    HandleType.right: ResizeMode.right,
+    HandleType.bottomRight: ResizeMode.bottomRight,
+    HandleType.bottom: ResizeMode.bottom,
+    HandleType.bottomLeft: ResizeMode.bottomLeft,
+    HandleType.left: ResizeMode.left,
+  };
+
+  static const _cursorHintByHandle = <HandleType, CursorHint>{
+    HandleType.topLeft: CursorHint.resizeUpLeftDownRight,
+    HandleType.bottomRight: CursorHint.resizeUpLeftDownRight,
+    HandleType.topRight: CursorHint.resizeUpRightDownLeft,
+    HandleType.bottomLeft: CursorHint.resizeUpRightDownLeft,
+    HandleType.top: CursorHint.resizeUp,
+    HandleType.bottom: CursorHint.resizeDown,
+    HandleType.left: CursorHint.resizeLeft,
+    HandleType.right: CursorHint.resizeRight,
+    HandleType.rotate: CursorHint.rotate,
+  };
+
   /// Returns true if `position` is inside the current selection overlay
   /// bounds, including the visual padding area (and taking overlay rotation
   /// into account).
@@ -662,49 +685,11 @@ class HitTest {
       (value - target).abs() <= tolerance;
 
   /// Maps a selection [handle] to a resize mode.
-  ResizeMode? getResizeModeForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.topLeft:
-        return ResizeMode.topLeft;
-      case HandleType.top:
-        return ResizeMode.top;
-      case HandleType.topRight:
-        return ResizeMode.topRight;
-      case HandleType.right:
-        return ResizeMode.right;
-      case HandleType.bottomRight:
-        return ResizeMode.bottomRight;
-      case HandleType.bottom:
-        return ResizeMode.bottom;
-      case HandleType.bottomLeft:
-        return ResizeMode.bottomLeft;
-      case HandleType.left:
-        return ResizeMode.left;
-      case HandleType.rotate:
-        return null; // Rotate is not a resize operation.
-    }
-  }
+  ResizeMode? getResizeModeForHandle(HandleType handle) =>
+      _resizeModeByHandle[handle];
 
-  CursorHint _cursorHintForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.topLeft:
-      case HandleType.bottomRight:
-        return CursorHint.resizeUpLeftDownRight;
-      case HandleType.topRight:
-      case HandleType.bottomLeft:
-        return CursorHint.resizeUpRightDownLeft;
-      case HandleType.top:
-        return CursorHint.resizeUp;
-      case HandleType.bottom:
-        return CursorHint.resizeDown;
-      case HandleType.left:
-        return CursorHint.resizeLeft;
-      case HandleType.right:
-        return CursorHint.resizeRight;
-      case HandleType.rotate:
-        return CursorHint.rotate;
-    }
-  }
+  CursorHint _cursorHintForHandle(HandleType handle) =>
+      _cursorHintByHandle[handle]!;
 }
 
 class _SelectionHitContext {

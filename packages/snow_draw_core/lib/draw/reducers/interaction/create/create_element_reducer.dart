@@ -185,10 +185,10 @@ class CreateElementReducer {
     state: state,
     context: context,
     snapOverride: action.snapOverride,
-    resolver: (session, snappingMode) => session.strategy.update(
+    resolver: (interaction, strategy, snappingMode) => strategy.update(
       state: state,
       config: context.config,
-      creatingState: session.interaction,
+      creatingState: interaction,
       currentPosition: action.currentPosition,
       maintainAspectRatio: action.maintainAspectRatio,
       createFromCenter: action.createFromCenter,
@@ -205,14 +205,14 @@ class CreateElementReducer {
     state: state,
     context: context,
     snapOverride: action.snapOverride,
-    resolver: (session, snappingMode) {
+    resolver: (interaction, strategy, snappingMode) {
       if (action.positions.isEmpty) {
         return null;
       }
-      return session.strategy.updateBatch(
+      return strategy.updateBatch(
         state: state,
         config: context.config,
-        creatingState: session.interaction,
+        creatingState: interaction,
         positions: action.positions,
         maintainAspectRatio: action.maintainAspectRatio,
         createFromCenter: action.createFromCenter,
@@ -226,21 +226,25 @@ class CreateElementReducer {
     DrawState state,
     CreateElementReducerDeps context,
   ) {
-    final session = _resolveActiveCreationSession(state, context);
-    if (session == null) {
+    final interaction = _currentCreatingState(state);
+    if (interaction == null) {
       return state;
     }
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
 
-    final finishResult = session.strategy.finish(
+    final finishResult = strategy.finish(
       config: context.config,
-      creatingState: session.interaction,
+      creatingState: interaction,
       textMetricsService: context.textMetricsService,
     );
     if (!finishResult.shouldCommit) {
       return _cancelCreateElement(state);
     }
 
-    final updatedElement = session.interaction.element.copyWith(
+    final updatedElement = interaction.element.copyWith(
       rect: finishResult.rect,
       data: finishResult.data,
       zIndex: resolveNextZIndex(state.domain.document.elements),
@@ -276,10 +280,10 @@ class CreateElementReducer {
     state: state,
     context: context,
     snapOverride: action.snapOverride,
-    resolver: (session, snappingMode) => session.strategy.addPoint(
+    resolver: (interaction, strategy, snappingMode) => strategy.addPoint(
       state: state,
       config: context.config,
-      creatingState: session.interaction,
+      creatingState: interaction,
       position: action.position,
       snappingMode: snappingMode,
       textMetricsService: context.textMetricsService,
@@ -306,44 +310,34 @@ class CreateElementReducer {
     return interaction is CreatingState ? interaction : null;
   }
 
-  _ActiveCreationSession? _resolveActiveCreationSession(
-    DrawState state,
-    CreateElementReducerDeps context,
-  ) {
-    final interaction = _currentCreatingState(state);
-    if (interaction == null) {
-      return null;
-    }
-    final strategy = _resolveCreationStrategy(
-      context,
-      interaction.element.typeId,
-    );
-    return _ActiveCreationSession(interaction: interaction, strategy: strategy);
-  }
-
   DrawState _runCreationUpdate({
     required DrawState state,
     required CreateElementReducerDeps context,
     required bool snapOverride,
     required CreationUpdateResult? Function(
-      _ActiveCreationSession session,
+      CreatingState interaction,
+      CreationStrategy strategy,
       SnappingMode snappingMode,
     )
     resolver,
   }) {
-    final session = _resolveActiveCreationSession(state, context);
-    if (session == null) {
+    final interaction = _currentCreatingState(state);
+    if (interaction == null) {
       return state;
     }
+    final strategy = _resolveCreationStrategy(
+      context,
+      interaction.element.typeId,
+    );
     final snappingMode = _resolveSnappingMode(
       config: context.config,
       snapOverride: snapOverride,
     );
-    final updateResult = resolver(session, snappingMode);
+    final updateResult = resolver(interaction, strategy, snappingMode);
     if (updateResult == null) {
       return state;
     }
-    return _applyCreationUpdate(state, session.interaction, updateResult);
+    return _applyCreationUpdate(state, interaction, updateResult);
   }
 
   DrawState _applyCreationUpdate(
@@ -377,14 +371,4 @@ class CreateElementReducer {
       interaction.currentRect == updateResult.rect &&
       interaction.creationMode == updateResult.creationMode &&
       snapGuideListEquals(interaction.snapGuides, updateResult.snapGuides);
-}
-
-class _ActiveCreationSession {
-  const _ActiveCreationSession({
-    required this.interaction,
-    required this.strategy,
-  });
-
-  final CreatingState interaction;
-  final CreationStrategy strategy;
 }
