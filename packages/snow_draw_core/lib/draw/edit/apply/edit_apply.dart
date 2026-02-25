@@ -176,6 +176,7 @@ class EditApply {
     }
 
     List<ElementState>? updatedElements;
+    Map<String, int>? indexById;
 
     void applyReplacementAt(int index, ElementState replacement) {
       final current = (updatedElements ?? elements)[index];
@@ -187,27 +188,25 @@ class EditApply {
       updatedElements![index] = replacement;
     }
 
-    if (resolveIndex != null) {
-      for (final entry in replacementsById.entries) {
-        final index = resolveIndex(entry.key);
-        if (!_isResolvedIndexValid(
-          index: index,
-          id: entry.key,
-          elements: elements,
-        )) {
-          continue;
-        }
-        applyReplacementAt(index!, entry.value);
-      }
+    int? resolveLinearIndex(String id) {
+      indexById ??= {
+        for (var index = 0; index < elements.length; index++)
+          elements[index].id: index,
+      };
+      return indexById![id];
     }
 
-    for (var i = 0; i < elements.length; i++) {
-      final elementId = (updatedElements ?? elements)[i].id;
-      final replacement = replacementsById[elementId];
-      if (replacement == null) {
+    for (final entry in replacementsById.entries) {
+      final replacementIndex = _resolveReplacementIndex(
+        id: entry.key,
+        elements: elements,
+        resolveIndex: resolveIndex,
+        resolveLinearIndex: resolveLinearIndex,
+      );
+      if (replacementIndex == null) {
         continue;
       }
-      applyReplacementAt(i, replacement);
+      applyReplacementAt(replacementIndex, entry.value);
     }
 
     return updatedElements ?? elements;
@@ -223,6 +222,19 @@ bool _isResolvedIndexValid({
     index >= 0 &&
     index < elements.length &&
     elements[index].id == id;
+
+int? _resolveReplacementIndex({
+  required String id,
+  required List<ElementState> elements,
+  required int? Function(String id)? resolveIndex,
+  required int? Function(String id) resolveLinearIndex,
+}) {
+  final resolvedIndex = resolveIndex?.call(id);
+  if (_isResolvedIndexValid(index: resolvedIndex, id: id, elements: elements)) {
+    return resolvedIndex;
+  }
+  return resolveLinearIndex(id);
+}
 
 void _visitSelectedSnapshots<S>({
   required Set<String> selectedIds,

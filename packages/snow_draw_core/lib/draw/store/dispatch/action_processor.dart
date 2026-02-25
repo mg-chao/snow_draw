@@ -20,6 +20,7 @@ import '../listener_registry.dart';
 import '../middleware/middleware_context.dart';
 import '../middleware/middleware_pipeline.dart';
 import '../snapshot_builder.dart';
+import '../state_change_detector.dart';
 import '../state_manager.dart';
 
 class ActionProcessorServices {
@@ -104,20 +105,19 @@ class ActionProcessor {
       return Future.error(StateError('Dispatch queue has been disposed'));
     }
 
+    Future<void> runTask() async {
+      if (_isDisposed) {
+        throw StateError('Dispatch queue disposed while pending');
+      }
+      await task();
+    }
+
     final scheduled = _dispatchTail.then<void>(
-      (_) => _runQueuedTask(task),
-      onError: (_, StackTrace stackTrace) => _runQueuedTask(task),
+      (_) => runTask(),
+      onError: (_, StackTrace stackTrace) => runTask(),
     );
     _dispatchTail = scheduled.catchError((Object _, StackTrace _) {});
     return scheduled;
-  }
-
-  Future<void> _runQueuedTask(Future<void> Function() task) async {
-    if (_isDisposed) {
-      throw StateError('Dispatch queue disposed while pending');
-    }
-
-    await task();
   }
 
   List<DrawAction> _expandActionsForDispatch(DrawAction action) {
@@ -427,8 +427,7 @@ class ActionProcessor {
     required DrawState previousState,
     required DrawState nextState,
   }) {
-    if (previousState.domain.document.elementsVersion !=
-        nextState.domain.document.elementsVersion) {
+    if (hasDocumentStateChanged(previousState, nextState)) {
       _emitEvent(
         () => DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
@@ -437,8 +436,7 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.domain.selection.selectionVersion !=
-        nextState.domain.selection.selectionVersion) {
+    if (hasSelectionStateChanged(previousState, nextState)) {
       _emitEvent(
         () => SelectionChangedEvent(
           selectedIds: nextState.domain.selection.selectedIds,
@@ -447,14 +445,13 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.application.view != nextState.application.view) {
+    if (hasViewStateChanged(previousState, nextState)) {
       _emitEvent(
         () => ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
-    if (previousState.application.interaction !=
-        nextState.application.interaction) {
+    if (hasInteractionStateChanged(previousState, nextState)) {
       _emitEvent(
         () => InteractionChangedEvent(
           interaction: nextState.application.interaction,

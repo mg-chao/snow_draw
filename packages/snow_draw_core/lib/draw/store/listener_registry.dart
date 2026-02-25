@@ -3,6 +3,7 @@ import 'dart:collection';
 import '../core/callbacks.dart';
 import '../models/draw_state.dart';
 import 'draw_store_interface.dart';
+import 'state_change_detector.dart';
 
 final _allDrawStateChanges = Set<DrawStateChange>.unmodifiable(
   DrawStateChange.values,
@@ -67,7 +68,7 @@ class ListenerRegistry {
     }
 
     final entriesSnapshot = List<_ListenerEntry>.of(_listeners.values);
-    final stateChanges = _computeChanges(previous, next);
+    final stateChanges = computeDrawStateChanges(previous, next);
     if (stateChanges.isEmpty) {
       return;
     }
@@ -130,50 +131,4 @@ class _ListenerEntry {
   /// Returns true when this listener should receive the current changes.
   bool matches(Set<DrawStateChange> stateChanges) =>
       changeTypes.any(stateChanges.contains);
-}
-
-Set<DrawStateChange> _computeChanges(DrawState previous, DrawState next) {
-  final changes = <DrawStateChange>{};
-
-  if (_documentChanged(previous, next)) {
-    changes.add(DrawStateChange.document);
-  }
-  if (_selectionChanged(previous, next)) {
-    changes.add(DrawStateChange.selection);
-  }
-  if (_viewChanged(previous, next)) {
-    changes.add(DrawStateChange.view);
-  }
-  if (_interactionChanged(previous, next)) {
-    changes.add(DrawStateChange.interaction);
-  }
-
-  return changes;
-}
-
-bool _documentChanged(DrawState previous, DrawState next) {
-  final previousDocument = previous.domain.document;
-  final nextDocument = next.domain.document;
-  return !identical(previousDocument, nextDocument) &&
-      previousDocument.elementsVersion != nextDocument.elementsVersion;
-}
-
-bool _selectionChanged(DrawState previous, DrawState next) {
-  final previousSelection = previous.domain.selection;
-  final nextSelection = next.domain.selection;
-  return !identical(previousSelection, nextSelection) &&
-      previousSelection.selectionVersion != nextSelection.selectionVersion;
-}
-
-bool _viewChanged(DrawState previous, DrawState next) {
-  final previousView = previous.application.view;
-  final nextView = next.application.view;
-  return !identical(previousView, nextView) && previousView != nextView;
-}
-
-bool _interactionChanged(DrawState previous, DrawState next) {
-  final previousInteraction = previous.application.interaction;
-  final nextInteraction = next.application.interaction;
-  return !identical(previousInteraction, nextInteraction) &&
-      previousInteraction != nextInteraction;
 }
