@@ -141,6 +141,31 @@ abstract class PointCreationStrategy extends CreationStrategy {
   const PointCreationStrategy();
 }
 
+/// Casts [data] to [T] for a concrete creation strategy.
+///
+/// Creation strategies are wired by element definition, so receiving a
+/// mismatched data type indicates a programming error.
+T requireCreationDataType<T extends ElementData>({
+  required ElementData data,
+  required String strategyName,
+}) {
+  if (data is T) {
+    return data;
+  }
+  throw StateError(
+    '$strategyName expects $T but received ${data.runtimeType}.',
+  );
+}
+
+/// Casts [CreatingState.elementData] to [T] for a concrete strategy phase.
+T requireCreatingElementDataType<T extends ElementData>({
+  required CreatingState creatingState,
+  required String strategyName,
+}) => requireCreationDataType<T>(
+  data: creatingState.elementData,
+  strategyName: strategyName,
+);
+
 /// Returns whether the creation result should be committed to the document.
 ///
 /// The element must satisfy both minimum size and element-level validity

@@ -45,28 +45,20 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    if (data is! FreeDrawData) {
-      return CreationUpdateResult(
-        data: data,
-        rect: DrawRect(
-          minX: startPosition.x,
-          minY: startPosition.y,
-          maxX: startPosition.x,
-          maxY: startPosition.y,
-        ),
-        creationMode: const RectCreationMode(),
-      );
-    }
+    final freeDrawData = requireCreationDataType<FreeDrawData>(
+      data: data,
+      strategyName: 'FreeDrawCreationStrategy.start',
+    );
 
     final points = <DrawPoint>[startPosition, startPosition];
     final previewPoints = _resolvePreviewPointsIfNeeded(
-      strokeStyle: data.strokeStyle,
+      strokeStyle: freeDrawData.strokeStyle,
       worldPoints: points,
     );
 
     return CreationUpdateResult(
       // Keep element data stable during creation; normalize once in finish().
-      data: data,
+      data: freeDrawData,
       rect: _boundsFromPoints(points),
       creationMode: FreeDrawCreationMode(
         worldPoints: points,
@@ -86,14 +78,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final elementData = creatingState.elementData;
-    if (elementData is! FreeDrawData) {
-      return CreationUpdateResult(
-        data: elementData,
-        rect: creatingState.currentRect,
-        creationMode: creatingState.creationMode,
-      );
-    }
+    final elementData = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.update',
+    );
 
     final adjustedPosition = snapCreationPoint(
       point: currentPosition,
@@ -223,19 +211,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final elementData = creatingState.elementData;
-    if (elementData is! FreeDrawData) {
-      return super.updateBatch(
-        state: state,
-        config: config,
-        creatingState: creatingState,
-        positions: positions,
-        maintainAspectRatio: maintainAspectRatio,
-        createFromCenter: createFromCenter,
-        snappingMode: snappingMode,
-        textMetricsService: textMetricsService,
-      );
-    }
+    final elementData = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.updateBatch',
+    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
     final worldPoints = _resolveCreationWorldPoints(
@@ -317,14 +296,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final data = creatingState.elementData;
-    if (data is! FreeDrawData) {
-      return CreationFinishResult(
-        data: data,
-        rect: creatingState.currentRect,
-        shouldCommit: false,
-      );
-    }
+    final data = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.finish',
+    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
     final worldPoints = _resolveCreationWorldPoints(

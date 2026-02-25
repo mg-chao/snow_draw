@@ -23,7 +23,10 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final serialData = _resolveSerialData(data);
+    final serialData = requireCreationDataType<SerialNumberData>(
+      data: data,
+      strategyName: 'SerialNumberCreationStrategy.start',
+    );
     final baseDiameter = resolveSerialNumberDiameter(
       data: serialData,
       textMetricsService: textMetricsService,
@@ -55,7 +58,10 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final serialData = _resolveSerialData(creatingState.elementData);
+    final serialData = requireCreatingElementDataType<SerialNumberData>(
+      creatingState: creatingState,
+      strategyName: 'SerialNumberCreationStrategy.update',
+    );
     final snappedPosition = snapCreationPoint(
       point: currentPosition,
       config: config,
@@ -97,9 +103,6 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     creatingState: creatingState,
   );
 }
-
-SerialNumberData _resolveSerialData(ElementData data) =>
-    data is SerialNumberData ? data : const SerialNumberData();
 
 _SerialNumberCreationMode? _resolveCreationMode(CreationMode mode) =>
     mode is _SerialNumberCreationMode ? mode : null;

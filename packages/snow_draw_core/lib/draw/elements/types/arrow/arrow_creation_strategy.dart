@@ -37,28 +37,20 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    if (data is! ArrowLikeData) {
-      return CreationUpdateResult(
-        data: data,
-        rect: DrawRect(
-          minX: startPosition.x,
-          minY: startPosition.y,
-          maxX: startPosition.x,
-          maxY: startPosition.y,
-        ),
-        creationMode: const RectCreationMode(),
-      );
-    }
+    final arrowData = requireCreationDataType<ArrowLikeData>(
+      data: data,
+      strategyName: 'ArrowCreationStrategy.start',
+    );
 
     final arrowRect = _calculateArrowRect(
       points: [startPosition, startPosition],
-      arrowType: data.arrowType,
+      arrowType: arrowData.arrowType,
     );
     final normalizedPoints = ArrowGeometry.normalizePoints(
       worldPoints: [startPosition, startPosition],
       rect: arrowRect,
     );
-    final updatedData = data.copyWith(points: normalizedPoints);
+    final updatedData = arrowData.copyWith(points: normalizedPoints);
     final sessionData = _ArrowCreationSessionData();
     return CreationUpdateResult(
       data: updatedData,
@@ -82,14 +74,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final elementData = creatingState.elementData;
-    if (elementData is! ArrowLikeData) {
-      return CreationUpdateResult(
-        data: elementData,
-        rect: creatingState.currentRect,
-        creationMode: creatingState.creationMode,
-      );
-    }
+    final elementData = requireCreatingElementDataType<ArrowLikeData>(
+      creatingState: creatingState,
+      strategyName: 'ArrowCreationStrategy.update',
+    );
     if (elementData is LineData) {
       return _updateLine(
         state: state,
@@ -213,10 +201,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       return null;
     }
 
-    final elementData = creatingState.elementData;
-    if (elementData is! ArrowLikeData) {
-      return null;
-    }
+    final elementData = requireCreatingElementDataType<ArrowLikeData>(
+      creatingState: creatingState,
+      strategyName: 'ArrowCreationStrategy.addPoint',
+    );
     if (elementData.arrowType == ArrowType.elbow) {
       return null;
     }
@@ -293,14 +281,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final data = creatingState.elementData;
-    if (data is! ArrowLikeData) {
-      return CreationFinishResult(
-        data: data,
-        rect: creatingState.currentRect,
-        shouldCommit: false,
-      );
-    }
+    final data = requireCreatingElementDataType<ArrowLikeData>(
+      creatingState: creatingState,
+      strategyName: 'ArrowCreationStrategy.finish',
+    );
 
     final minSize = config.element.minCreateSize;
     final finishTolerance = config.selection.interaction.handleTolerance;
