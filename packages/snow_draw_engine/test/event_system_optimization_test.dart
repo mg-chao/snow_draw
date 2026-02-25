@@ -1,0 +1,203 @@
+import 'package:snow_draw_engine/draw/actions/draw_actions.dart';
+import 'package:snow_draw_engine/draw/core/draw_context.dart';
+import 'package:snow_draw_engine/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_engine/draw/elements/registration.dart';
+import 'package:snow_draw_engine/draw/elements/types/filter/filter_data.dart';
+import 'package:snow_draw_engine/draw/events/error_events.dart';
+import 'package:snow_draw_engine/draw/events/event_bus.dart';
+import 'package:snow_draw_engine/draw/events/state_events.dart';
+import 'package:snow_draw_engine/draw/models/document_state.dart';
+import 'package:snow_draw_engine/draw/models/domain_state.dart';
+import 'package:snow_draw_engine/draw/models/draw_state.dart';
+import 'package:snow_draw_engine/draw/models/element_state.dart';
+import 'package:snow_draw_engine/draw/models/selection_state.dart';
+import 'package:snow_draw_engine/draw/store/draw_store.dart';
+import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('Event emission optimization', () {
+    test('skips state events when no listeners are registered', () async {
+      final eventBus = _RecordingEventBus(hasListeners: false);
+      addTearDown(eventBus.dispose);
+      final store = _createStore(
+        eventBus: eventBus,
+        initialState: _stateWithOneSelectedElement(),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
+      );
+
+      expect(eventBus.emittedEvents, isEmpty);
+    });
+
+    test('emits state events when listeners are registered', () async {
+      final eventBus = _RecordingEventBus(hasListeners: true);
+      addTearDown(eventBus.dispose);
+      final store = _createStore(
+        eventBus: eventBus,
+        initialState: _stateWithOneSelectedElement(),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
+      );
+
+      expect(
+        eventBus.emittedEvents.whereType<DocumentChangedEvent>(),
+        hasLength(1),
+      );
+      expect(
+        eventBus.emittedEvents.whereType<HistoryAvailabilityChangedEvent>(),
+        hasLength(1),
+      );
+    });
+
+    test('skips validation events when no listeners are registered', () async {
+      final eventBus = _RecordingEventBus(hasListeners: false);
+      addTearDown(eventBus.dispose);
+      final store = _createStore(eventBus: eventBus);
+      addTearDown(store.dispose);
+
+      await store.dispatch(DeleteElements(elementIds: []));
+
+      expect(eventBus.emittedEvents, isEmpty);
+    });
+
+    test('emits validation events when listeners are registered', () async {
+      final eventBus = _RecordingEventBus(hasListeners: true);
+      addTearDown(eventBus.dispose);
+      final store = _createStore(eventBus: eventBus);
+      addTearDown(store.dispose);
+
+      await store.dispatch(DeleteElements(elementIds: []));
+
+      final validationEvents = eventBus.emittedEvents
+          .whereType<ValidationFailedEvent>()
+          .toList();
+      expect(validationEvents, hasLength(1));
+      expect(validationEvents.single.action, equals('DeleteElements'));
+    });
+  });
+
+  group('EventBus ownership', () {
+    test(
+      'disposing store does not dispose an externally provided event bus',
+      () async {
+        final eventBus = EventBus();
+        final store = _createStore(eventBus: eventBus);
+        await _expectExternalEventBusStillActive(
+          store: store,
+          eventBus: eventBus,
+          elementsVersion: 7,
+          elementCount: 3,
+        );
+      },
+    );
+
+    test(
+      'disposing store does not dispose event bus passed via constructor',
+      () async {
+        final eventBus = EventBus();
+        final registry = DefaultElementRegistry();
+        registerBuiltInElements(registry);
+        final context = DrawContext.withDefaults(elementRegistry: registry);
+        final store = DefaultDrawStore(context: context, eventBus: eventBus);
+        await _expectExternalEventBusStillActive(
+          store: store,
+          eventBus: eventBus,
+          elementsVersion: 9,
+          elementCount: 1,
+        );
+      },
+    );
+
+    test('disposing store disposes internally owned event bus', () {
+      final store = _createStore();
+      final internalBus = store.eventBus;
+
+      store.dispose();
+
+      expect(internalBus.isDisposed, isTrue);
+    });
+  });
+}
+
+DefaultDrawStore _createStore({EventBus? eventBus, DrawState? initialState}) {
+  final registry = DefaultElementRegistry();
+  registerBuiltInElements(registry);
+  final context = DrawContext.withDefaults(
+    elementRegistry: registry,
+    eventBus: eventBus,
+  );
+  return DefaultDrawStore(context: context, initialState: initialState);
+}
+
+DrawState _stateWithOneSelectedElement() => DrawState(
+  domain: DomainState(
+    document: DocumentState(
+      elements: const [
+        ElementState(
+          id: 'target',
+          rect: DrawRect(maxX: 40, maxY: 40),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: FilterData(),
+        ),
+      ],
+    ),
+    selection: const SelectionState(selectedIds: {'target'}),
+  ),
+);
+
+Future<void> _expectExternalEventBusStillActive({
+  required DefaultDrawStore store,
+  required EventBus eventBus,
+  required int elementsVersion,
+  required int elementCount,
+}) async {
+  final received = <DocumentChangedEvent>[];
+  final subscription = eventBus.on<DocumentChangedEvent>(received.add);
+
+  addTearDown(() async {
+    await subscription.cancel();
+    await eventBus.dispose();
+  });
+
+  store.dispose();
+
+  expect(eventBus.isDisposed, isFalse);
+
+  eventBus.emit(
+    DocumentChangedEvent(
+      elementsVersion: elementsVersion,
+      elementCount: elementCount,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+
+  expect(received, hasLength(1));
+  expect(received.single.elementsVersion, equals(elementsVersion));
+  expect(received.single.elementCount, equals(elementCount));
+}
+
+class _RecordingEventBus extends EventBus {
+  _RecordingEventBus({required bool hasListeners})
+    : _shouldRecordEvents = hasListeners;
+
+  final emittedEvents = <DrawEvent>[];
+  final bool _shouldRecordEvents;
+
+  @override
+  bool emitLazy<T extends DrawEvent>(T Function() eventFactory) {
+    if (!_shouldRecordEvents) {
+      return false;
+    }
+    emittedEvents.add(eventFactory());
+    return true;
+  }
+}

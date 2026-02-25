@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../free_draw/free_draw_visual_cache.dart';
 import '../geometry/arrow_geometry.dart';

@@ -1,0 +1,58 @@
+import 'package:snow_draw_engine/draw/actions/draw_actions.dart';
+import 'package:snow_draw_engine/draw/config/config_manager.dart';
+import 'package:snow_draw_engine/draw/config/draw_config.dart';
+import 'package:snow_draw_engine/draw/core/draw_context.dart';
+import 'package:snow_draw_engine/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_engine/draw/elements/registration.dart';
+import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
+import 'package:snow_draw_engine/draw/models/draw_state.dart';
+import 'package:snow_draw_engine/draw/models/interaction_state.dart';
+import 'package:snow_draw_engine/draw/reducers/interaction/create/create_element_reducer.dart';
+import 'package:snow_draw_engine/draw/types/draw_color.dart';
+import 'package:snow_draw_engine/draw/types/draw_point.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
+import 'package:test/test.dart';
+
+String Function() _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
+  var counter = startFrom;
+  return () => '$prefix-${counter++}';
+}
+
+void main() {
+  test('create element uses highlight defaults', () {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+
+    final deps = DrawContext.withDefaults(
+      configManager: ConfigManager(
+        DrawConfig(
+          highlightStyle: const ElementStyleConfig(
+            color: DrawColor(0xFF00FF00),
+            textStrokeColor: DrawColor(0xFF0000FF),
+            textStrokeWidth: 3,
+            highlightShape: HighlightShape.ellipse,
+            opacity: 0.4,
+          ),
+        ),
+      ),
+      elementRegistry: registry,
+      idGenerator: _testIdGenerator(),
+    );
+
+    final next = const CreateElementReducer().reduce(
+      DrawState.initial(),
+      const CreateElement(
+        typeId: HighlightData.typeIdToken,
+        position: DrawPoint(x: 10, y: 10),
+      ),
+      deps,
+    )!;
+    final creating = next.application.interaction as CreatingState;
+    final data = creating.element.data as HighlightData;
+    expect(data.color, const DrawColor(0xFF00FF00));
+    expect(data.strokeColor, const DrawColor(0xFF0000FF));
+    expect(data.strokeWidth, 3);
+    expect(data.shape, HighlightShape.ellipse);
+    expect(creating.element.opacity, 0.4);
+  });
+}

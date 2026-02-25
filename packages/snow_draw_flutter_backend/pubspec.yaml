@@ -13,8 +13,8 @@ dependencies:
   flutter:
     sdk: flutter
   meta: ^1.15.0
-  snow_draw_core:
-    path: ../snow_draw_core
+  snow_draw_engine:
+    path: ../snow_draw_engine
 
 dev_dependencies:
   flutter_test:

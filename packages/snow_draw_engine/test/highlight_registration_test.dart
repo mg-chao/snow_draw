@@ -1,0 +1,13 @@
+import 'package:snow_draw_engine/draw/elements/core/element_registry.dart';
+import 'package:snow_draw_engine/draw/elements/registration.dart';
+import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
+import 'package:test/test.dart';
+
+void main() {
+  test('highlight is registered as a built-in element', () {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+
+    expect(registry.supports(HighlightData.typeIdToken), isTrue);
+  });
+}

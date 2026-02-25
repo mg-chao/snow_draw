@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';

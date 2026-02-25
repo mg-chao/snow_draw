@@ -1,6 +1,6 @@
 import 'dart:ui' show Color;
 
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 /// Flutter/UI conversions for engine [DrawColor] values.
 extension DrawColorToFlutterColor on DrawColor {

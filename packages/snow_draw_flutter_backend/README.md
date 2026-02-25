@@ -12,7 +12,7 @@ Flutter rendering backend and canvas UI layer for Snow Draw.
 
 ## Dependency Direction
 
-- Depends on: `snow_draw_core` (engine package).
+- Depends on: `snow_draw_engine` (engine package).
 - Used by: `apps/snow_draw`.
 
 App code should import this package through

@@ -1,0 +1,120 @@
+import 'package:snow_draw_engine/draw/edit/preview/edit_preview.dart';
+import 'package:snow_draw_engine/draw/elements/types/filter/filter_data.dart';
+import 'package:snow_draw_engine/draw/models/document_state.dart';
+import 'package:snow_draw_engine/draw/models/domain_state.dart';
+import 'package:snow_draw_engine/draw/models/draw_state.dart';
+import 'package:snow_draw_engine/draw/models/element_state.dart';
+import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/edit_context.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('buildSelectionPreview', () {
+    test('uses preview element geometry for selected ids', () {
+      const baseElement = ElementState(
+        id: 'a',
+        rect: DrawRect(maxX: 10, maxY: 10),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: FilterData(),
+      );
+      const previewElement = ElementState(
+        id: 'a',
+        rect: DrawRect(minX: 40, minY: 40, maxX: 70, maxY: 70),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: FilterData(),
+      );
+      final preview = _selectionPreview(
+        elements: const [baseElement],
+        selectedIds: const {'a'},
+        startBounds: baseElement.rect,
+        previewElementsById: const {'a': previewElement},
+      );
+
+      expect(preview, isNotNull);
+      expect(preview!.bounds, previewElement.rect);
+      expect(preview.center, previewElement.center);
+    });
+
+    test('falls back to document element when preview is absent', () {
+      const element = ElementState(
+        id: 'a',
+        rect: DrawRect(minX: 20, minY: 10, maxX: 60, maxY: 40),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: FilterData(),
+      );
+      final preview = _selectionPreview(
+        elements: const [element],
+        selectedIds: const {'a'},
+        startBounds: element.rect,
+        previewElementsById: const {},
+      );
+
+      expect(preview, isNotNull);
+      expect(preview!.bounds, element.rect);
+      expect(preview.center, element.center);
+    });
+
+    test('supports selected preview-only ids that are not in document', () {
+      const previewElement = ElementState(
+        id: 'ghost',
+        rect: DrawRect(minX: 5, minY: 5, maxX: 25, maxY: 30),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 3,
+        data: FilterData(),
+      );
+      final preview = _selectionPreview(
+        elements: const [],
+        selectedIds: const {'ghost'},
+        startBounds: previewElement.rect,
+        previewElementsById: const {'ghost': previewElement},
+      );
+
+      expect(preview, isNotNull);
+      expect(preview!.bounds, previewElement.rect);
+      expect(preview.center, previewElement.center);
+    });
+  });
+}
+
+SelectionPreview? _selectionPreview({
+  required List<ElementState> elements,
+  required Set<String> selectedIds,
+  required DrawRect startBounds,
+  required Map<String, ElementState> previewElementsById,
+}) {
+  final state = _state(elements: elements);
+
+  return buildSelectionPreview(
+    state: state,
+    context: _moveContext(
+      state: state,
+      selectedIds: selectedIds,
+      startBounds: startBounds,
+    ),
+    previewElementsById: previewElementsById,
+  );
+}
+
+DrawState _state({required List<ElementState> elements}) => DrawState(
+  domain: DomainState(document: DocumentState(elements: elements)),
+);
+
+MoveEditContext _moveContext({
+  required DrawState state,
+  required Set<String> selectedIds,
+  required DrawRect startBounds,
+}) => MoveEditContext(
+  startPosition: startBounds.center,
+  startBounds: startBounds,
+  selectedIdsAtStart: selectedIds,
+  selectionVersion: 0,
+  elementsVersion: state.domain.document.elementsVersion,
+  elementSnapshots: const {},
+);

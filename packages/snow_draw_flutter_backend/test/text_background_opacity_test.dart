@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:snow_draw_flutter_backend/render/text/text_renderer.dart';
 import 'package:snow_draw_flutter_backend/services/text/flutter_text_layout.dart';
 

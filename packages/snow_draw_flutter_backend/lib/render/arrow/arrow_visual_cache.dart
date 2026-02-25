@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../geometry/arrow_geometry.dart';
 import '../patterns/stroke_pattern_utils.dart';

@@ -16,7 +16,7 @@ or input behavior.
 
 ## Workspace Architecture
 
-- `packages/snow_draw_core`: pure Dart engine (state/actions/reducers,
+- `packages/snow_draw_engine`: pure Dart engine (state/actions/reducers,
   geometry, render-task planning, serialization).
 - `packages/snow_draw_flutter_backend`: Flutter backend (painters,
   render-task execution, text/shader caches, canvas widgets).

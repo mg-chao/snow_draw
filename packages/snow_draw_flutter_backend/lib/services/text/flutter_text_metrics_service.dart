@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import 'flutter_text_layout.dart';
 

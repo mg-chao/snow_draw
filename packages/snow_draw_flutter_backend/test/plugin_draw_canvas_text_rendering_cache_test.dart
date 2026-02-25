@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
