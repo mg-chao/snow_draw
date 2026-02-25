@@ -187,10 +187,7 @@ class EditApply {
       updatedElements![index] = replacement;
     }
 
-    final unresolvedIds = <String>{};
-    if (resolveIndex == null) {
-      unresolvedIds.addAll(replacementsById.keys);
-    } else {
+    if (resolveIndex != null) {
       for (final entry in replacementsById.entries) {
         final index = resolveIndex(entry.key);
         if (!_isResolvedIndexValid(
@@ -198,23 +195,19 @@ class EditApply {
           id: entry.key,
           elements: elements,
         )) {
-          unresolvedIds.add(entry.key);
           continue;
         }
         applyReplacementAt(index!, entry.value);
       }
     }
 
-    if (unresolvedIds.isEmpty) {
-      return updatedElements ?? elements;
-    }
-
     for (var i = 0; i < elements.length; i++) {
       final elementId = (updatedElements ?? elements)[i].id;
-      if (!unresolvedIds.contains(elementId)) {
+      final replacement = replacementsById[elementId];
+      if (replacement == null) {
         continue;
       }
-      applyReplacementAt(i, replacementsById[elementId]!);
+      applyReplacementAt(i, replacement);
     }
 
     return updatedElements ?? elements;

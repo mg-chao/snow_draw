@@ -104,31 +104,20 @@ class ActionProcessor {
       return Future.error(StateError('Dispatch queue has been disposed'));
     }
 
-    final completer = Completer<void>();
-    _dispatchTail = _dispatchTail.then<void>(
-      (_) => _runQueuedTask(task, completer),
-      onError: (_, StackTrace stackTrace) => _runQueuedTask(task, completer),
+    final scheduled = _dispatchTail.then<void>(
+      (_) => _runQueuedTask(task),
+      onError: (_, StackTrace stackTrace) => _runQueuedTask(task),
     );
-    return completer.future;
+    _dispatchTail = scheduled.catchError((Object _, StackTrace _) {});
+    return scheduled;
   }
 
-  Future<void> _runQueuedTask(
-    Future<void> Function() task,
-    Completer<void> completer,
-  ) async {
+  Future<void> _runQueuedTask(Future<void> Function() task) async {
     if (_isDisposed) {
-      completer.completeError(
-        StateError('Dispatch queue disposed while pending'),
-      );
-      return;
+      throw StateError('Dispatch queue disposed while pending');
     }
 
-    try {
-      await task();
-      completer.complete();
-    } on Object catch (error, stackTrace) {
-      completer.completeError(error, stackTrace);
-    }
+    await task();
   }
 
   List<DrawAction> _expandActionsForDispatch(DrawAction action) {

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:meta/meta.dart';
+
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
 import '../elements/core/element_registry_interface.dart';
@@ -13,12 +15,15 @@ import '../services/log/log_service.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/resize_mode.dart';
+import 'lru_cache.dart';
 import 'single_selection_profile.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
 const _hitTestCacheSize = 4;
 const _hitTestCacheGridSize = 4.0;
-final _hitTestCache = _HitTestCache();
+final _hitTestCache = LruCache<_HitTestCacheKey, HitTestResult>(
+  maxEntries: _hitTestCacheSize,
+);
 
 /// Hit test target.
 enum HitTestTarget { none, handle, element, selectionPadding }
@@ -167,7 +172,7 @@ class HitTest {
     final actualTolerance = tolerance ?? config.interaction.handleTolerance;
     final quantizedX = _quantizePosition(position.x);
     final quantizedY = _quantizePosition(position.y);
-    final cachedResult = _hitTestCache.lookup(
+    final cacheKey = _HitTestCacheKey(
       state: state,
       config: config,
       tolerance: actualTolerance,
@@ -176,6 +181,7 @@ class HitTest {
       positionX: quantizedX,
       positionY: quantizedY,
     );
+    final cachedResult = _hitTestCache.get(cacheKey);
     if (cachedResult != null) {
       return cachedResult;
     }
@@ -186,16 +192,10 @@ class HitTest {
     final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
         ? document.boundTextIds
         : null;
-    HitTestResult cache(HitTestResult result) => _storeCache(
-      result: result,
-      state: state,
-      config: config,
-      tolerance: actualTolerance,
-      filterTypeId: filterTypeId,
-      registry: registry,
-      positionX: quantizedX,
-      positionY: quantizedY,
-    );
+    HitTestResult cache(HitTestResult result) {
+      _hitTestCache.put(cacheKey, result);
+      return result;
+    }
 
     // Determine corner handle offset for single arrow selections.
     final singleSelection = _resolveSingleSelectionProfileForView(stateView);
@@ -528,31 +528,6 @@ class HitTest {
         testPosition.y <= paddedBounds.maxY;
   }
 
-  HitTestResult _storeCache({
-    required HitTestResult result,
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) {
-    _hitTestCache.store(
-      _HitTestCacheEntry(
-        state: state,
-        config: config,
-        tolerance: tolerance,
-        filterTypeId: filterTypeId,
-        registry: registry,
-        positionX: positionX,
-        positionY: positionY,
-        result: result,
-      ),
-    );
-    return result;
-  }
-
   int _quantizePosition(double value) =>
       (value / _hitTestCacheGridSize).floor();
 
@@ -754,8 +729,9 @@ class _SelectionHitContext {
   final DrawPoint testPosition;
 }
 
-class _HitTestCacheEntry {
-  const _HitTestCacheEntry({
+@immutable
+class _HitTestCacheKey {
+  const _HitTestCacheKey({
     required this.state,
     required this.config,
     required this.tolerance,
@@ -763,7 +739,6 @@ class _HitTestCacheEntry {
     required this.registry,
     required this.positionX,
     required this.positionY,
-    required this.result,
   });
 
   final DrawState state;
@@ -773,66 +748,29 @@ class _HitTestCacheEntry {
   final ElementRegistry registry;
   final int positionX;
   final int positionY;
-  final HitTestResult result;
 
-  bool matches({
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) =>
-      identical(this.state, state) &&
-      this.positionX == positionX &&
-      this.positionY == positionY &&
-      this.tolerance == tolerance &&
-      this.filterTypeId == filterTypeId &&
-      identical(this.registry, registry) &&
-      this.config == config;
-}
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _HitTestCacheKey &&
+          identical(other.state, state) &&
+          other.config == config &&
+          other.tolerance == tolerance &&
+          other.filterTypeId == filterTypeId &&
+          identical(other.registry, registry) &&
+          other.positionX == positionX &&
+          other.positionY == positionY;
 
-class _HitTestCache {
-  final _entries = <_HitTestCacheEntry>[];
-
-  HitTestResult? lookup({
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) {
-    for (var i = 0; i < _entries.length; i++) {
-      final entry = _entries[i];
-      if (entry.matches(
-        state: state,
-        config: config,
-        tolerance: tolerance,
-        filterTypeId: filterTypeId,
-        registry: registry,
-        positionX: positionX,
-        positionY: positionY,
-      )) {
-        if (i != 0) {
-          _entries
-            ..removeAt(i)
-            ..insert(0, entry);
-        }
-        return entry.result;
-      }
-    }
-    return null;
-  }
-
-  void store(_HitTestCacheEntry entry) {
-    if (_entries.length >= _hitTestCacheSize) {
-      _entries.removeLast();
-    }
-    _entries.insert(0, entry);
-  }
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(state),
+    config,
+    tolerance,
+    filterTypeId,
+    identityHashCode(registry),
+    positionX,
+    positionY,
+  );
 }
 
 /// Shared hit-test helper instance.
