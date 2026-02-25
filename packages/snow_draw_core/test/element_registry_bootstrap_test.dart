@@ -39,6 +39,10 @@ class _CustomElementRegistryProxy implements ElementRegistry {
   ) => _delegate.getDefinition(typeId);
 
   @override
+  ElementDefinition<T>? get<T extends ElementData>(ElementTypeId<T> typeId) =>
+      _delegate.get(typeId);
+
+  @override
   ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
       _delegate.getDefinitionByValue(typeValue);
 
@@ -53,4 +57,15 @@ class _CustomElementRegistryProxy implements ElementRegistry {
   @override
   bool supportsTypeValue(String typeValue) =>
       _delegate.supportsTypeValue(typeValue);
+
+  @override
+  ElementDefinition<T> require<T extends ElementData>(
+    ElementTypeId<T> typeId,
+  ) => _delegate.require(typeId);
+
+  @override
+  void clear() => _delegate.clear();
+
+  @override
+  DefaultElementRegistry clone() => _delegate.clone();
 }

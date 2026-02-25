@@ -3,7 +3,7 @@ import 'dart:async';
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
 import '../../config/config_manager.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../edit/core/edit_cancel_reason.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
@@ -36,7 +36,7 @@ class ActionProcessorServices {
     required this.includeSelectionInHistory,
     required this.eventBus,
   });
-  final InteractionReducerDeps drawContext;
+  final DrawContext drawContext;
   final StateManager stateManager;
   final HistoryManager historyManager;
   final ConfigManager configManager;

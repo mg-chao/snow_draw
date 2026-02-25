@@ -4,14 +4,11 @@ import '../../models/element_state.dart';
 import '../../render/tasks/render_tasks.dart';
 import '../../services/text/text_metrics_service.dart';
 import 'element_data.dart';
-import 'element_render_task_encoder.dart';
 
 /// Base implementation for strongly-typed render-task encoders.
-abstract base class TypedElementRenderTaskEncoder<T extends ElementData>
-    implements ElementRenderTaskEncoder<T> {
+abstract base class TypedElementRenderTaskEncoder<T extends ElementData> {
   const TypedElementRenderTaskEncoder();
 
-  @override
   List<RenderTask> encodeTasks({
     required ElementState element,
     String? localeTag,

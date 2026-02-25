@@ -1,13 +1,12 @@
 import '../types/edit_operation_id.dart';
 import 'arrow/arrow_point_operation.dart';
 import 'core/edit_operation.dart';
-import 'edit_operation_registry_interface.dart';
 import 'move/move_operation.dart';
 import 'resize/resize_operation.dart';
 import 'rotate/rotate_operation.dart';
 
 /// Registry of configured edit operations.
-class DefaultEditOperationRegistry implements EditOperationRegistry {
+class DefaultEditOperationRegistry {
   DefaultEditOperationRegistry._(Map<EditOperationId, EditOperation> operations)
     : _operations = Map.unmodifiable(operations);
 
@@ -31,14 +30,11 @@ class DefaultEditOperationRegistry implements EditOperationRegistry {
     RotateOperation(),
   ];
 
-  @override
   EditOperation? getOperation(EditOperationId operationId) =>
       _operations[operationId];
 
-  @override
   Iterable<EditOperation> get allOperations => _operations.values;
 
-  @override
   Iterable<EditOperationId> get allOperationIds => _operations.keys;
 
   bool hasOperation(EditOperationId operationId) =>

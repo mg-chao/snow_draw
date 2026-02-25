@@ -154,6 +154,13 @@ final class _SingleOperationRegistry implements EditOperationRegistry {
   @override
   EditOperation? getOperation(EditOperationId operationId) =>
       operationId == _operation.id ? _operation : null;
+
+  @override
+  bool hasOperation(EditOperationId operationId) =>
+      operationId == _operation.id;
+
+  @override
+  int get operationCount => 1;
 }
 
 class _GuideOnlyOperation extends EditOperation {

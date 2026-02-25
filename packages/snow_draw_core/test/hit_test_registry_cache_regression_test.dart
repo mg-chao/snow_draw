@@ -103,12 +103,14 @@ class _ToggleHitTester implements ElementHitTester {
   }) => shouldHit;
 }
 
-class _NoopTaskEncoder implements ElementRenderTaskEncoder<_TestElementData> {
+final class _NoopTaskEncoder
+    extends ElementRenderTaskEncoder<_TestElementData> {
   const _NoopTaskEncoder();
 
   @override
-  List<RenderTask> encodeTasks({
+  List<RenderTask> encodeTypedTasks({
     required ElementState element,
+    required _TestElementData data,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) => const <RenderTask>[];
