@@ -2,10 +2,8 @@
 
 #include <flutter/runtime_effect.glsl>
 
-// Output color
 out vec4 fragColor;
 
-// Uniforms
 uniform vec2 uResolution;      // Viewport size in pixels
 uniform vec4 uMaskColor;       // Mask color (premultiplied alpha)
 uniform float uHighlightCount; // Number of active highlights (max 32)
@@ -15,11 +13,10 @@ uniform float uHighlightCount; // Number of active highlights (max 32)
 uniform vec4 uBounds;
 
 // Highlight data split into three vec4 arrays so every array access
-// uses the loop index directly — a constant-index-expression that
+// uses the loop index directly, a constant-index-expression that
 // SkSL (Impeller) accepts.  The previous layout packed 9 floats per
 // highlight into a single float[288] and indexed with `i * 9 + n`,
 // which SkSL rejected as a non-constant index.
-//
 // Per-highlight layout:
 //   uHiA[i] = (centerX, centerY, halfWidth, halfHeight)
 //   uHiB[i] = (cosRot,  sinRot,  inflateX,  inflateY)
@@ -67,7 +64,7 @@ void main() {
 
     // Early-out: if this fragment is outside the combined AABB of all
     // highlights (with a small margin for AA), it is definitely in the
-    // masked region — no need to test individual highlights.
+    // masked region; no need to test individual highlights.
     if (fragCoord.x < uBounds.x || fragCoord.x > uBounds.z ||
         fragCoord.y < uBounds.y || fragCoord.y > uBounds.w) {
         fragColor = uMaskColor;

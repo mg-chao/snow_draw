@@ -85,8 +85,6 @@ final class ElbowGeometry {
     return ElbowHeading.left;
   }
 
-  // --- Methods absorbed from ElbowPathUtils ---
-
   /// Returns an axis only when the segment is axis-aligned within tolerance.
   static ElbowAxis? axisAlignedForSegment(
     DrawPoint a,

@@ -1,5 +1,4 @@
 // Tests that verify the melos workspace configuration is consistent.
-//
 // These are compile-time smoke tests: if the workspace resolution
 // breaks, these imports will fail to resolve.
 // Cross-package import: the app depends on the core package via path.

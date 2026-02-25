@@ -1,5 +1,4 @@
 // Public entrypoint for backend-agnostic Snow Draw engine APIs.
-//
 // Keep exports in this library pure Dart and independent from Flutter.
 // ignore_for_file: directives_ordering
 export 'draw/actions/actions.dart';

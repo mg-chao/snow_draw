@@ -689,10 +689,6 @@ Set<int> _fixedSegmentsWithSameHeadingAdjacency({
   return toDrop;
 }
 
-// ---------------------------------------------------------------------------
-// Routing helpers (merged from elbow_edit_routing.dart)
-// ---------------------------------------------------------------------------
-
 /// Routes an elbow sub-path in local space.
 ///
 /// When [previousFixed] or [nextFixed] are provided and no bindings

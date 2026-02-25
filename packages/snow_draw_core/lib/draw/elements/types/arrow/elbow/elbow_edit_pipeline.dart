@@ -382,10 +382,6 @@ bool _didEndpointMove({
         ? basePoints.first != incomingPoints.first
         : basePoints.last != incomingPoints.last);
 
-// ---------------------------------------------------------------------------
-// Geometry helpers (merged from elbow_edit_geometry.dart)
-// ---------------------------------------------------------------------------
-
 List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) =>
     ArrowGeometry.resolveWorldPoints(
       rect: element.rect,

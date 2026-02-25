@@ -1447,7 +1447,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final state = widget.store.state;
     final interaction = state.application.interaction;
 
-    // --- cursor early-outs that skip the hit test entirely ---
     if (_middlePanPointerId != null) {
       _updateCursorIfChanged(_draggingCursor);
       return _clearHoverState();
@@ -1501,7 +1500,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       filterTypeId: widget.currentToolTypeId,
     );
 
-    // --- derive cursor from shared hitResult ---
     MouseCursor nextCursor;
     if (_shouldForceDefaultCursor(
       state: state,
@@ -1524,7 +1522,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _updateCursorIfChanged(nextCursor);
 
-    // --- derive hover selection from shared hitResult ---
     String? hoverId;
     final canHover =
         _isPointerInside &&

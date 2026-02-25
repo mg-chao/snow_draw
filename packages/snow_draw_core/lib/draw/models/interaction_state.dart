@@ -19,10 +19,6 @@ sealed class InteractionState {
   const InteractionState();
 }
 
-// ============================================================================
-// Pending Intent (unified pending state discriminator)
-// ============================================================================
-
 @immutable
 sealed class PendingIntent {
   const PendingIntent();
@@ -151,10 +147,6 @@ class EditingState extends InteractionState {
   String toString() => 'EditingState(operationId: $operationId)';
 }
 
-// ============================================================================
-// Creation Mode (unified creation discriminator)
-// ============================================================================
-
 /// Discriminator for creation mode within [CreatingState].
 @immutable
 abstract class CreationMode {
@@ -213,10 +205,6 @@ class PointCreationMode extends CreationMode {
       'PointCreationMode(fixedPoints: ${fixedPoints.length}, '
       'currentPoint: $currentPoint)';
 }
-
-// ============================================================================
-// Creating State (unified)
-// ============================================================================
 
 @immutable
 class CreatingState extends InteractionState {

@@ -68,10 +68,6 @@ class SnapResult {
 class ObjectSnapService {
   const ObjectSnapService();
 
-  // ---------------------------------------------------------------------------
-  // Tolerance and comparison constants
-  // ---------------------------------------------------------------------------
-
   /// Floating-point comparison tolerance.
   static const _epsilon = 0.0001;
 
@@ -80,10 +76,6 @@ class ObjectSnapService {
     SnapAxisAnchor.center,
     SnapAxisAnchor.end,
   ];
-
-  // ---------------------------------------------------------------------------
-  // Candidate selection constants
-  // ---------------------------------------------------------------------------
 
   /// When comparing candidates, allow this percentage of snap distance as
   /// "slack" before distance becomes the deciding factor. This prevents
@@ -97,10 +89,6 @@ class ObjectSnapService {
   /// Candidates within this threshold are compared by secondary factors.
   static const _strengthSlack = 0.05;
 
-  // ---------------------------------------------------------------------------
-  // Point snap scoring weights (sum to 1.0)
-  // ---------------------------------------------------------------------------
-
   /// Weight for snap distance in point snap scoring.
   /// Higher values make closer snaps more strongly preferred.
   static const _pointDistanceWeight = 0.45;
@@ -113,10 +101,6 @@ class ObjectSnapService {
   /// Weight for anchor type priority in point snap scoring.
   /// Prefers center-to-center > same-anchor > mixed-anchor alignments.
   static const _pointAnchorWeight = 0.15;
-
-  // ---------------------------------------------------------------------------
-  // Gap snap scoring weights (sum to 1.0)
-  // ---------------------------------------------------------------------------
 
   /// Weight for snap distance in gap snap scoring.
   static const _gapDistanceWeight = 0.7;
@@ -132,20 +116,12 @@ class ObjectSnapService {
   /// Values < 1.0 give point snaps priority when strengths are similar.
   static const _gapStrengthScale = 0.9;
 
-  // ---------------------------------------------------------------------------
-  // Perpendicular distance calculation constants
-  // ---------------------------------------------------------------------------
-
   /// Factor of element size used for perpendicular distance range.
   /// Larger values allow snapping to more distant elements on the cross-axis.
   static const _perpendicularSizeRangeFactor = 1.5;
 
   /// Factor of snap distance used for perpendicular distance range.
   static const _perpendicularSnapRangeFactor = 4.0;
-
-  // ---------------------------------------------------------------------------
-  // Limits and priority bounds
-  // ---------------------------------------------------------------------------
 
   /// Maximum number of additional gap guides to show for matching gaps.
   static const _maxAssociatedGapGuides = 4;
@@ -1386,10 +1362,6 @@ class ObjectSnapService {
 }
 
 const objectSnapService = ObjectSnapService();
-
-// =============================================================================
-// Internal data structures
-// =============================================================================
 
 /// Type of snap: point alignment or gap alignment.
 enum _SnapKind { point, gapCenter, gapSide }

@@ -20,9 +20,7 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:test/test.dart';
 
 void main() {
-  // =========================================================================
   // 1. ThrottleMiddleware
-  // =========================================================================
 
   group('ThrottleMiddleware', () {
     test('forwards non-throttled event types unconditionally', () async {
@@ -156,9 +154,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 2. KeyModifiers.toEditModifiers
-  // =========================================================================
 
   group('KeyModifiers.toEditModifiers', () {
     test('none produces default EditModifiers', () {
@@ -207,9 +203,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 3. EditPlugin default routing: pointer-down during edit
-  // =========================================================================
 
   group('EditPlugin default routing policy', () {
     test('default policy commits edit on pointer-down instead of ignoring', () {
@@ -224,9 +218,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 4. InputRoutingPolicy: equality and basic behavior
-  // =========================================================================
 
   group('InputRoutingPolicy', () {
     test('allowSelection returns false when editing by default', () {
@@ -243,9 +235,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 5. PluginResult equality and status
-  // =========================================================================
 
   group('PluginResult', () {
     test('handled stops propagation', () {
@@ -275,9 +265,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 6. InputPipeline: middleware chain execution
-  // =========================================================================
 
   group('InputPipeline', () {
     test('empty pipeline returns event unchanged', () async {
@@ -335,9 +323,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 7. KeyModifiers equality
-  // =========================================================================
 
   group('KeyModifiers', () {
     test('equality', () {
@@ -356,9 +342,7 @@ void main() {
     });
   });
 
-  // =========================================================================
   // 8. EventFilterMiddleware
-  // =========================================================================
 
   group('EventFilterMiddleware', () {
     test('passes events matching predicate', () async {

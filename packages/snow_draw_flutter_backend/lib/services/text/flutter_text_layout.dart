@@ -91,10 +91,6 @@ class FlutterPainterTextLayoutMetrics extends FlutterTextLayoutMetrics {
   final TextPainter painter;
 }
 
-// ---------------------------------------------------------------------------
-// Caches
-// ---------------------------------------------------------------------------
-
 /// Primary layout cache keyed on text + font + width.
 final _paragraphCache = LruCache<_LayoutCacheKey, FlutterTextLayoutMetrics>(
   maxEntries: 256,
@@ -119,10 +115,6 @@ void clearTextLayoutCaches() {
   _fontMetricsCache.clear();
   _painterCache.clear();
 }
-
-// ---------------------------------------------------------------------------
-// Public helpers
-// ---------------------------------------------------------------------------
 
 StrutStyle resolveTextStrutStyle(TextStyle style) =>
     StrutStyle.fromTextStyle(style, forceStrutHeight: true);
@@ -201,10 +193,6 @@ FlutterTextLayoutMetrics layoutSceneText({
   widthBasis: TextWidthBasis.parent,
   locale: resolveTextLocale(localeTag),
 );
-
-// ---------------------------------------------------------------------------
-// layoutText - fast path using dart:ui.Paragraph directly
-// ---------------------------------------------------------------------------
 
 /// Lays out text and returns lightweight [FlutterTextLayoutMetrics].
 ///
@@ -285,10 +273,6 @@ FlutterTextLayoutMetrics layoutText({
   });
 }
 
-// ---------------------------------------------------------------------------
-// layoutTextWithPainter - slow path for cursor / selection queries
-// ---------------------------------------------------------------------------
-
 /// Lays out text and returns [FlutterPainterTextLayoutMetrics] with a
 /// [TextPainter].
 ///
@@ -364,10 +348,6 @@ FlutterPainterTextLayoutMetrics layoutTextWithPainter({
     );
   });
 }
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
 
 ui.Paragraph _buildParagraph({
   required String text,
@@ -523,10 +503,6 @@ String? _sanitizeFontFamily(String? fontFamily) {
 
 /// Fine quantization (0.1 px).
 double _quantize(double value) => (value * 10).roundToDouble() / 10;
-
-// ---------------------------------------------------------------------------
-// Cache keys
-// ---------------------------------------------------------------------------
 
 /// Cache key for the fast [layoutText] path.
 ///

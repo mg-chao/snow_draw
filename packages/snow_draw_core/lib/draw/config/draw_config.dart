@@ -20,7 +20,6 @@ part 'watermark_config.dart';
 abstract class ConfigDefaults {
   ConfigDefaults._();
 
-  // ===== Colors =====
   /// Primary accent color (selection outline, etc.).
   static const primaryColor = DrawColor(0xFF1677FF);
 
@@ -90,12 +89,10 @@ abstract class ConfigDefaults {
   /// Default element fill style.
   static const FillStyle defaultFillStyle = FillStyle.solid;
 
-  // ===== Arrow =====
   static const ArrowType defaultArrowType = ArrowType.straight;
   static const ArrowheadStyle defaultStartArrowhead = ArrowheadStyle.none;
   static const ArrowheadStyle defaultEndArrowhead = ArrowheadStyle.standard;
 
-  // ===== Text =====
   static const defaultTextFontSize = 21.0;
   static const defaultSerialNumberFontSize = 16.0;
   static const String? defaultTextFontFamily = null;
@@ -114,7 +111,6 @@ abstract class ConfigDefaults {
   /// Control point fill color.
   static const controlPointFillColor = DrawColor(0xFFFFFFFF);
 
-  // ===== Sizes =====
   static const defaultStrokeWidth = 2.0;
   static const controlPointSize = 8.0;
   static const controlPointRadius = 2.0;
@@ -127,12 +123,10 @@ abstract class ConfigDefaults {
   static const selectionStrokeWidth = 1.0;
   static const rotateHandleOffset = 12.0;
 
-  // ===== Interaction =====
   static const handleTolerance = 6.0;
   static const freeDrawCloseToleranceMultiplier = 1.5;
   static const dragThreshold = 0.0;
 
-  // ===== Elements =====
   static const minValidElementSize = 5.0;
   static const minCreateElementSize = 8.0;
   static const double minResizeElementSize = minValidElementSize;
@@ -145,7 +139,6 @@ abstract class ConfigDefaults {
   /// Use `0.0` to disable snapping when discrete rotation is enabled.
   static const double rotationSnapAngle = math.pi / 12;
 
-  // ===== Object Snapping =====
   static const objectSnapEnabled = false;
   static const double objectSnapDistance = 8;
   static const objectSnapPointEnabled = true;
@@ -160,7 +153,6 @@ abstract class ConfigDefaults {
   static const arrowBindingEnabled = true;
   static const double arrowBindingDistance = 10;
 
-  // ===== Grid =====
   static const gridEnabled = false;
   static const gridSize = 20.0;
   static const gridMinSize = 5.0;

@@ -22,8 +22,6 @@ class HandleCalculator {
     ResizeMode.left,
   ];
 
-  // ===== Resize handles =====
-
   static DrawPoint getResizeHandlePosition({
     required DrawRect bounds,
     required ResizeMode mode,
@@ -60,15 +58,11 @@ class HandleCalculator {
       ),
   };
 
-  // ===== Rotate handle =====
-
   static DrawPoint getRotateHandlePosition({
     required DrawRect bounds,
     required double margin,
     double padding = 0.0,
   }) => DrawPoint(x: bounds.centerX, y: bounds.minY - padding - margin);
-
-  // ===== Hit testing =====
 
   static bool isPointInHandle({
     required DrawPoint testPoint,

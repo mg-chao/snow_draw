@@ -349,10 +349,6 @@ class FreeDrawCreationStrategy extends CreationStrategy {
   }
 }
 
-// ============================================================
-// Public creation mode for free-draw preview.
-// ============================================================
-
 @immutable
 class FreeDrawCreationMode extends CreationMode {
   const FreeDrawCreationMode({
@@ -426,10 +422,6 @@ class FreeDrawCreationMode extends CreationMode {
       'revision: $revision'
       ')';
 }
-
-// ============================================================
-// Private helpers
-// ============================================================
 
 FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
     mode is FreeDrawCreationMode ? mode : const FreeDrawCreationMode();

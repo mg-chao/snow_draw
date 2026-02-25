@@ -33,8 +33,6 @@ class DrawState {
         application: application ?? this.application,
       );
 
-  // ============ History ============
-
   /// Get the domain snapshot used for history.
   DomainState get domainSnapshot => domain;
 

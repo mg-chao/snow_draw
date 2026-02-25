@@ -561,10 +561,6 @@ List<DrawPoint> _ensureOrthogonalPath({
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Sparse grid routing (merged from elbow_router_grid.dart)
-// ---------------------------------------------------------------------------
-
 @immutable
 final class _ElbowGrid {
   const _ElbowGrid({

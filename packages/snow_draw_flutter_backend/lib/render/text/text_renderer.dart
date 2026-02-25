@@ -470,10 +470,6 @@ class TextRenderer {
   static double _quantize(double value) => (value * 10).roundToDouble() / 10;
 }
 
-// ---------------------------------------------------------------------------
-// Supporting types
-// ---------------------------------------------------------------------------
-
 /// Content-based key for background box caching so duplicate elements
 /// with the same text and font properties share cached results.
 @immutable

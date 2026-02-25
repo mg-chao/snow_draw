@@ -1,5 +1,4 @@
 // Tests that verify pubspec dependency hygiene for snow_draw_core.
-//
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
 // Core dependencies that must remain importable in pure Dart.

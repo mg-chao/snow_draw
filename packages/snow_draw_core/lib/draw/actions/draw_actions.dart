@@ -63,10 +63,6 @@ abstract class EditingConflictHistoryRecordingAction
 
 List<T> _freezeList<T>(List<T> values) => List<T>.unmodifiable(values);
 
-// ============================================================================
-// Selection actions
-// ============================================================================
-
 class SelectElement extends EditingConflictAction {
   const SelectElement({
     required this.elementId,
@@ -89,10 +85,6 @@ class ClearSelection extends EditingConflictAction {
 class SelectAll extends EditingConflictAction {
   const SelectAll();
 }
-
-// ============================================================================
-// Element actions
-// ============================================================================
 
 class CreateElement extends EditingConflictAction {
   const CreateElement({
@@ -430,10 +422,6 @@ class CancelTextEdit extends EditingConflictAction {
   const CancelTextEdit();
 }
 
-// ============================================================================
-// Edit actions
-// ============================================================================
-
 class StartEdit extends DrawAction {
   const StartEdit({
     required this.operationId,
@@ -504,10 +492,6 @@ class ClearDragPending extends EditingConflictAction {
   String toString() => 'ClearDragPending()';
 }
 
-// ============================================================================
-// Box select actions
-// ============================================================================
-
 class StartBoxSelect extends EditingConflictAction {
   const StartBoxSelect({required this.startPosition});
   final DrawPoint startPosition;
@@ -532,10 +516,6 @@ class CancelBoxSelect extends EditingConflictAction {
   const CancelBoxSelect();
 }
 
-// ============================================================================
-// Camera actions
-// ============================================================================
-
 class MoveCamera extends DrawAction {
   const MoveCamera({required this.dx, required this.dy});
   final double dx;
@@ -553,10 +533,6 @@ class ZoomCamera extends DrawAction {
   @override
   String toString() => 'ZoomCamera(scale: $scale)';
 }
-
-// ============================================================================
-// History actions
-// ============================================================================
 
 class Undo extends DrawAction {
   const Undo();
