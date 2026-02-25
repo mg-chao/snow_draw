@@ -26,19 +26,14 @@ final class ArrowBinding {
   });
 
   factory ArrowBinding.fromJson(Map<String, dynamic> json) {
-    final elementId = json['elementId'] as String?;
-    if (elementId == null) {
-      throw const FormatException('Invalid ArrowBinding payload');
-    }
-    final anchorJson = ElementDataCodec.asJsonMap(
+    final elementId = ElementDataCodec.decodeString(
+      json['elementId'],
+      fieldName: 'elementId',
+    );
+    final anchor = ElementDataCodec.decodePoint(
       json['anchor'],
       fieldName: 'anchor',
     );
-    final x = anchorJson['x'];
-    final y = anchorJson['y'];
-    if (x is! num || y is! num) {
-      throw const FormatException('ArrowBinding anchor must provide x/y');
-    }
     final mode = ElementDataCodec.decodeEnumByName(
       values: ArrowBindingMode.values,
       raw: json['mode'],
@@ -46,7 +41,7 @@ final class ArrowBinding {
     );
     return ArrowBinding(
       elementId: elementId,
-      anchor: DrawPoint(x: _clamp01(x.toDouble()), y: _clamp01(y.toDouble())),
+      anchor: DrawPoint(x: _clamp01(anchor.x), y: _clamp01(anchor.y)),
       mode: mode,
     );
   }

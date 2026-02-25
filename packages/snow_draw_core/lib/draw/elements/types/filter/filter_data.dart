@@ -28,7 +28,10 @@ final class FilterData extends ElementData
       raw: json['type'],
       fieldName: 'type',
     ),
-    strength: (json['strength'] as num).toDouble(),
+    strength: ElementDataCodec.decodeDouble(
+      json['strength'],
+      fieldName: 'strength',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<FilterData>('filter');

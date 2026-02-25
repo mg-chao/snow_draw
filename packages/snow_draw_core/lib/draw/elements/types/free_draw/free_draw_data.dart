@@ -33,7 +33,10 @@ final class FreeDrawData extends ElementData
     points: _decodePoints(json['points']),
     color: DrawColor(json['color'] as int),
     fillColor: DrawColor(json['fillColor'] as int),
-    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
+    ),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],
@@ -130,27 +133,10 @@ final class FreeDrawData extends ElementData
   }
 
   static DrawPoint _decodePoint(Object? rawPoint) {
-    final pointMap = ElementDataCodec.asJsonMap(
+    return ElementDataCodec.decodePoint(
       rawPoint,
       fieldName: 'free draw point',
-    );
-    final x = pointMap['x'];
-    final y = pointMap['y'];
-    if (x is! num || y is! num) {
-      throw const FormatException(
-        'Free draw point entries must provide numeric x/y',
-      );
-    }
-    final pressureValue = pointMap['p'];
-    if (pressureValue != null && pressureValue is! num) {
-      throw const FormatException(
-        'Free draw point pressure must be numeric when provided',
-      );
-    }
-    return DrawPoint(
-      x: x.toDouble(),
-      y: y.toDouble(),
-      pressure: (pressureValue as num?)?.toDouble() ?? 0.0,
+      allowPressure: true,
     );
   }
 

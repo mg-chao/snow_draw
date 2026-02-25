@@ -31,7 +31,7 @@ final class SerialNumberData extends ElementData
   factory SerialNumberData.fromJson(Map<String, dynamic> json) =>
       SerialNumberData(
         number: _coerceNonNegative(
-          (json['number'] as num).toInt(),
+          ElementDataCodec.decodeInt(json['number'], fieldName: 'number'),
           ConfigDefaults.defaultSerialNumber,
         ),
         color: DrawColor(json['color'] as int),
@@ -41,18 +41,27 @@ final class SerialNumberData extends ElementData
           raw: json['fillStyle'],
           fieldName: 'fillStyle',
         ),
-        fontSize: (json['fontSize'] as num).toDouble(),
-        fontFamily: normalizeOptionalTrimmedString(
-          _decodeNullableString(json['fontFamily'], fieldName: 'fontFamily'),
+        fontSize: ElementDataCodec.decodeDouble(
+          json['fontSize'],
+          fieldName: 'fontSize',
         ),
-        strokeWidth: (json['strokeWidth'] as num).toDouble(),
+        fontFamily: normalizeOptionalTrimmedString(
+          ElementDataCodec.decodeNullableString(
+            json['fontFamily'],
+            fieldName: 'fontFamily',
+          ),
+        ),
+        strokeWidth: ElementDataCodec.decodeDouble(
+          json['strokeWidth'],
+          fieldName: 'strokeWidth',
+        ),
         strokeStyle: ElementDataCodec.decodeEnumByName(
           values: StrokeStyle.values,
           raw: json['strokeStyle'],
           fieldName: 'strokeStyle',
         ),
         textElementId: normalizeOptionalTrimmedString(
-          _decodeNullableString(
+          ElementDataCodec.decodeNullableString(
             json['textElementId'],
             fieldName: 'textElementId',
           ),
@@ -169,14 +178,4 @@ final class SerialNumberData extends ElementData
 int _coerceNonNegative(int? value, int fallback) {
   final resolved = value ?? fallback;
   return resolved < 0 ? 0 : resolved;
-}
-
-String? _decodeNullableString(Object? raw, {required String fieldName}) {
-  if (raw == null) {
-    return null;
-  }
-  if (raw is String) {
-    return raw;
-  }
-  throw FormatException('Expected string for $fieldName');
 }

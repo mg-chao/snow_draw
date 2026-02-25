@@ -24,10 +24,16 @@ final class RectangleData extends ElementData
   });
 
   factory RectangleData.fromJson(Map<String, dynamic> json) => RectangleData(
-    cornerRadius: (json['cornerRadius'] as num).toDouble(),
+    cornerRadius: ElementDataCodec.decodeDouble(
+      json['cornerRadius'],
+      fieldName: 'cornerRadius',
+    ),
     fillColor: DrawColor(json['fillColor'] as int),
     color: DrawColor(json['color'] as int),
-    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
+    ),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],

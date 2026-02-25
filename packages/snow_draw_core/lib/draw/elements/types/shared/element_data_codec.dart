@@ -1,3 +1,5 @@
+import '../../../types/draw_point.dart';
+
 /// Shared decode helpers for element JSON payloads.
 final class ElementDataCodec {
   const ElementDataCodec._();
@@ -63,5 +65,73 @@ final class ElementDataCodec {
       return raw;
     }
     throw FormatException('Expected bool for $fieldName');
+  }
+
+  static String decodeString(Object? raw, {required String fieldName}) {
+    if (raw is String) {
+      return raw;
+    }
+    throw FormatException('Expected string for $fieldName');
+  }
+
+  static String? decodeNullableString(
+    Object? raw, {
+    required String fieldName,
+  }) {
+    if (raw == null) {
+      return null;
+    }
+    return decodeString(raw, fieldName: fieldName);
+  }
+
+  static bool decodeBool(Object? raw, {required String fieldName}) {
+    if (raw is bool) {
+      return raw;
+    }
+    throw FormatException('Expected bool for $fieldName');
+  }
+
+  static double decodeDouble(Object? raw, {required String fieldName}) {
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    throw FormatException('Expected numeric value for $fieldName');
+  }
+
+  static int decodeInt(Object? raw, {required String fieldName}) {
+    if (raw is num) {
+      return raw.toInt();
+    }
+    throw FormatException('Expected integer-compatible value for $fieldName');
+  }
+
+  static DrawPoint decodePoint(
+    Object? raw, {
+    required String fieldName,
+    bool allowPressure = false,
+    String pressureFieldName = 'p',
+  }) {
+    final pointMap = asJsonMap(raw, fieldName: fieldName);
+    final x = pointMap['x'];
+    final y = pointMap['y'];
+    if (x is! num || y is! num) {
+      throw FormatException('$fieldName must provide numeric x/y');
+    }
+
+    if (!allowPressure) {
+      return DrawPoint(x: x.toDouble(), y: y.toDouble());
+    }
+
+    final pressureValue = pointMap[pressureFieldName];
+    if (pressureValue != null && pressureValue is! num) {
+      throw FormatException(
+        '$fieldName $pressureFieldName must be numeric when provided',
+      );
+    }
+    return DrawPoint(
+      x: x.toDouble(),
+      y: y.toDouble(),
+      pressure: (pressureValue as num?)?.toDouble() ?? 0.0,
+    );
   }
 }

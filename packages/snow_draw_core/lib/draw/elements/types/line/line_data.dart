@@ -44,7 +44,10 @@ final class LineData extends ElementData
     points: ArrowLikeDataCodec.decodePoints(json['points']),
     color: DrawColor(json['color'] as int),
     fillColor: DrawColor(json['fillColor'] as int),
-    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
+    ),
     strokeStyle: ElementDataCodec.decodeEnumByName(
       values: StrokeStyle.values,
       raw: json['strokeStyle'],

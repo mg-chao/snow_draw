@@ -27,7 +27,10 @@ final class HighlightData extends ElementData
     ),
     color: DrawColor(json['color'] as int),
     strokeColor: DrawColor(json['strokeColor'] as int),
-    strokeWidth: (json['strokeWidth'] as num).toDouble(),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<HighlightData>('highlight');

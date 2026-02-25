@@ -31,11 +31,17 @@ final class TextData extends ElementData
   }) : autoResize = autoResize ?? ConfigDefaults.defaultTextAutoResize;
 
   factory TextData.fromJson(Map<String, dynamic> json) => TextData(
-    text: json['text'] as String,
+    text: ElementDataCodec.decodeString(json['text'], fieldName: 'text'),
     color: DrawColor(json['color'] as int),
-    fontSize: (json['fontSize'] as num).toDouble(),
+    fontSize: ElementDataCodec.decodeDouble(
+      json['fontSize'],
+      fieldName: 'fontSize',
+    ),
     fontFamily: normalizeOptionalTrimmedString(
-      _decodeNullableString(json['fontFamily'], fieldName: 'fontFamily'),
+      ElementDataCodec.decodeNullableString(
+        json['fontFamily'],
+        fieldName: 'fontFamily',
+      ),
     ),
     horizontalAlign: ElementDataCodec.decodeEnumByName(
       values: TextHorizontalAlign.values,
@@ -54,9 +60,18 @@ final class TextData extends ElementData
       fieldName: 'fillStyle',
     ),
     strokeColor: DrawColor(json['strokeColor'] as int),
-    strokeWidth: (json['strokeWidth'] as num).toDouble(),
-    cornerRadius: (json['cornerRadius'] as num).toDouble(),
-    autoResize: _decodeBool(json['autoResize'], fieldName: 'autoResize'),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
+    ),
+    cornerRadius: ElementDataCodec.decodeDouble(
+      json['cornerRadius'],
+      fieldName: 'cornerRadius',
+    ),
+    autoResize: ElementDataCodec.decodeBool(
+      json['autoResize'],
+      fieldName: 'autoResize',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<TextData>('text');
@@ -192,21 +207,4 @@ final class TextData extends ElementData
     }
     return normalizeOptionalTrimmedString(fontFamily as String?);
   }
-}
-
-String? _decodeNullableString(Object? raw, {required String fieldName}) {
-  if (raw == null) {
-    return null;
-  }
-  if (raw is String) {
-    return raw;
-  }
-  throw FormatException('Expected string for $fieldName');
-}
-
-bool _decodeBool(Object? raw, {required String fieldName}) {
-  if (raw is bool) {
-    return raw;
-  }
-  throw FormatException('Expected bool for $fieldName');
 }
