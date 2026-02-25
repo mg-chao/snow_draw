@@ -5,7 +5,7 @@ import '../config/draw_config.dart';
 import '../core/callbacks.dart';
 import '../core/draw_context.dart';
 import '../events/event_bus.dart';
-import '../input/plugin_core.dart';
+import '../input/plugin_engine.dart';
 import '../models/draw_state.dart';
 import 'selector.dart';
 

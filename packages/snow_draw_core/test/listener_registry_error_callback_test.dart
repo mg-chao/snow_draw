@@ -1,9 +1,9 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/listener_registry.dart';
+import 'package:test/test.dart';
 
 void main() {
   late ListenerRegistry registry;

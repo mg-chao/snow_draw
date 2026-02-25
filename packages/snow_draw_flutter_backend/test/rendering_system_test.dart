@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_path_utils.dart';
 import 'package:snow_draw_flutter_backend/render/free_draw/free_draw_visual_cache.dart';
 import 'package:snow_draw_flutter_backend/render/patterns/stroke_pattern_utils.dart';

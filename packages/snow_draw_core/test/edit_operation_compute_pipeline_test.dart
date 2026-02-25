@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
@@ -19,6 +18,7 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
+import 'package:test/test.dart';
 
 const _defaultRect = DrawRect(maxX: 100, maxY: 100);
 const _boundTargetRect = DrawRect(minX: 200, minY: 40, maxX: 280, maxY: 120);
@@ -241,10 +241,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: handlePos,
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.bottomRight,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.bottomRight),
       );
       final t0 = op.initialTransform(
         state: state,
@@ -280,10 +277,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: handlePos,
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.bottomRight,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.bottomRight),
       );
       final t0 = op.initialTransform(
         state: state,
@@ -323,10 +317,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: const DrawPoint(x: 100, y: 100),
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.bottomRight,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.bottomRight),
       );
       final result = op.finish(
         state: state,
@@ -353,10 +344,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: handlePos,
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.right,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.right),
       );
       final t0 = op.initialTransform(
         state: state,

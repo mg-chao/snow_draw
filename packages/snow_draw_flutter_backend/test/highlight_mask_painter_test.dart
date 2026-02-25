@@ -1,8 +1,8 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/highlight_mask_painter.dart';
 
 const _deg45 = 0.7853981633974483;

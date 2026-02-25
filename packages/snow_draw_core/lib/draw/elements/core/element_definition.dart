@@ -28,6 +28,6 @@ class ElementDefinition<T extends ElementData> {
   final T Function(Map<String, dynamic> json) fromJson;
   final CreationStrategy? creationStrategy;
 
-  /// Core-owned render-task encoder used by backends.
+  /// Engine-owned render-task encoder used by backends.
   final TypedElementRenderTaskEncoder<T> taskEncoder;
 }

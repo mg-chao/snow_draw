@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/input/pointer_sample_resampler.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('resamplePointerSamples', () {

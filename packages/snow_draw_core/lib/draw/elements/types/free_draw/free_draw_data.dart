@@ -132,13 +132,12 @@ final class FreeDrawData extends ElementData
     return List<DrawPoint>.unmodifiable(points);
   }
 
-  static DrawPoint _decodePoint(Object? rawPoint) {
-    return ElementDataCodec.decodePoint(
-      rawPoint,
-      fieldName: 'free draw point',
-      allowPressure: true,
-    );
-  }
+  static DrawPoint _decodePoint(Object? rawPoint) =>
+      ElementDataCodec.decodePoint(
+        rawPoint,
+        fieldName: 'free draw point',
+        allowPressure: true,
+      );
 
   @override
   bool operator ==(Object other) =>

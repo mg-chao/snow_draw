@@ -2,14 +2,13 @@
 //
 // These are compile-time smoke tests: if the workspace resolution
 // breaks, these imports will fail to resolve.
-import 'package:test/test.dart';
-
 // Cross-package import: the app depends on the core package via path.
 // If workspace resolution is broken, this import fails.
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('workspace resolution', () {

@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/core/coordinates/element_space.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
@@ -8,6 +7,8 @@ import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_router.dart
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:test/test.dart';
+
 import 'elbow_test_utils.dart';
 
 void main() {

@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/text_rendering_cache_invalidation.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('invalidateTextRenderingCaches notifies listeners and callbacks', () {

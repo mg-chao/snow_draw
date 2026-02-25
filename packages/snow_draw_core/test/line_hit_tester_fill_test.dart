@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_hit_tester.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 const _tester = LineHitTester();
 const _rect = DrawRect(maxX: 100, maxY: 100);
@@ -20,10 +20,10 @@ const _closedPoints = [
 
 void main() {
   test('closed line fill hit works without stroke', () {
-    final data = LineData(
+    const data = LineData(
       points: _closedPoints,
       strokeWidth: 0,
-      fillColor: const DrawColor(0xAA1576FE),
+      fillColor: DrawColor(0xAA1576FE),
     );
     final element = _lineElement(data);
 
@@ -36,15 +36,15 @@ void main() {
   });
 
   test('open line does not report fill hit', () {
-    final data = LineData(
-      points: const [
+    const data = LineData(
+      points: [
         DrawPoint(x: 0.1, y: 0.1),
         DrawPoint(x: 0.9, y: 0.15),
         DrawPoint(x: 0.85, y: 0.85),
         DrawPoint(x: 0.15, y: 0.9),
       ],
       strokeWidth: 0,
-      fillColor: const DrawColor(0xAA1576FE),
+      fillColor: DrawColor(0xAA1576FE),
     );
     final element = _lineElement(data);
 
@@ -57,10 +57,10 @@ void main() {
   });
 
   test('closed line fill hit works for rotated elements', () {
-    final data = LineData(
+    const data = LineData(
       points: _closedPoints,
       strokeWidth: 0,
-      fillColor: const DrawColor(0xAA1576FE),
+      fillColor: DrawColor(0xAA1576FE),
     );
     final element = _lineElement(data, rotation: math.pi / 4);
 

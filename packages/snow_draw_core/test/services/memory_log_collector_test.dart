@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
 import 'package:logger/logger.dart';
 import 'package:snow_draw_core/draw/services/log/log_output.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('MemoryLogCollector', () {

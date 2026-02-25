@@ -34,7 +34,7 @@ void main() {
     const orderedCommands = <String>[
       'check:compatibility-contracts:',
       'dart test packages/snow_draw_core/test/melos_compatibility_script_wiring_test.dart',
-      'dart test packages/snow_draw_core/test/core_entrypoint_contract_test.dart',
+      'dart test packages/snow_draw_core/test/engine_entrypoint_contract_test.dart',
       'dart test packages/snow_draw_core/test/element_serialization_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_default_json_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart',
@@ -46,7 +46,7 @@ void main() {
       'dart test packages/snow_draw_core/test/types/draw_color_test.dart',
       'dart test packages/snow_draw_core/test/text_metrics_service_compatibility_test.dart',
       'dart test packages/snow_draw_core/test/draw_context_text_metrics_compatibility_test.dart',
-      'dart run melos run check:backend-compatibility-core-import-boundary',
+      'dart run melos run check:backend-compatibility-engine-import-boundary',
       'dart run melos run check:backend-compatibility-backend-import-boundary',
       'flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart',
       'packages/snow_draw_flutter_backend/test/built_in_render_task_routing_test.dart',
@@ -55,7 +55,7 @@ void main() {
 
     var lastIndex = -1;
     for (final command in orderedCommands) {
-      final index = pubspec.indexOf(command);
+      final index = pubspec.indexOf(command, lastIndex + 1);
       expect(
         index,
         greaterThan(lastIndex),
@@ -65,13 +65,14 @@ void main() {
     }
 
     final backendFlutterInvocationCount = RegExp(
-      r'flutter test packages/snow_draw_flutter_backend/test/',
+      'flutter test packages/snow_draw_flutter_backend/test/',
     ).allMatches(pubspec).length;
     expect(
       backendFlutterInvocationCount,
       1,
       reason:
-          'Expected a single backend flutter test invocation in compatibility checks',
+          'Expected a single backend flutter test invocation '
+          'in compatibility checks',
     );
   });
 }

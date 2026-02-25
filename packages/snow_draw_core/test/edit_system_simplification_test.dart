@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
@@ -24,6 +23,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('EditContext.hasSnapshots', () {
@@ -341,10 +341,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: handlePos,
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.bottomRight,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.bottomRight),
       );
       final t0 = op.initialTransform(
         state: state,

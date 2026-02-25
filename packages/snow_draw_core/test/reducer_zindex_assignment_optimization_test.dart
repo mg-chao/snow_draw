@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -14,6 +13,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('Reducer z-index assignment', () {
@@ -90,8 +90,8 @@ void main() {
               ),
             ).copyWith(
               application: DrawState().application.copyWith(
-                interaction: CreatingState(
-                  element: const ElementState(
+                interaction: const CreatingState(
+                  element: ElementState(
                     id: newId,
                     rect: createRect,
                     rotation: 0,
@@ -99,7 +99,7 @@ void main() {
                     zIndex: 0,
                     data: RectangleData(),
                   ),
-                  startPosition: const DrawPoint(x: 40, y: 40),
+                  startPosition: DrawPoint(x: 40, y: 40),
                   currentRect: createRect,
                 ),
               ),
@@ -173,8 +173,8 @@ void main() {
         const currentRect = DrawRect(minX: 50, minY: 60, maxX: 50, maxY: 60);
         final initialState = DrawState().copyWith(
           application: DrawState().application.copyWith(
-            interaction: CreatingState(
-              element: const ElementState(
+            interaction: const CreatingState(
+              element: ElementState(
                 id: 'creating-1',
                 rect: currentRect,
                 rotation: 0,

@@ -33,7 +33,7 @@ void main() {
       final counter = _InvocationCounter();
       final pipeline = MiddlewarePipeline(
         middlewares: [
-          _ThrowingInvokeMiddleware(),
+          const _ThrowingInvokeMiddleware(),
           _CountingMiddleware(counter: counter),
         ],
       );
@@ -296,9 +296,8 @@ class _OffsetStateMiddleware extends MiddlewareBase {
   final double dx;
 
   @override
-  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
-    return next(_offsetContextState(context, dx));
-  }
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
+      next(_offsetContextState(context, dx));
 }
 
 class _CountingMiddleware extends MiddlewareBase {

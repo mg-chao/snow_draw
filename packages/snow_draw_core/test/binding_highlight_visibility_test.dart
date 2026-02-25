@@ -1,7 +1,7 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/utils/binding_highlight_visibility.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('hovered arrow handles suppress binding highlight', () {

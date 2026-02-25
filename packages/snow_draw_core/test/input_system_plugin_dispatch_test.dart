@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
-import 'package:snow_draw_core/draw/input/plugin_core.dart';
+import 'package:snow_draw_core/draw/input/plugin_engine.dart';
 import 'package:snow_draw_core/draw/input/plugin_input_coordinator.dart';
 import 'package:snow_draw_core/draw/input/plugin_registry.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';

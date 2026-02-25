@@ -3,7 +3,7 @@ import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 /// Immutable signature describing the effective preview stroke style.
 ///

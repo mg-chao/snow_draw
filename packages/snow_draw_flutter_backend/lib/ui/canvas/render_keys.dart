@@ -2,7 +2,7 @@ import 'dart:ui' show Locale;
 
 import 'package:flutter/foundation.dart';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 int _mapHash<K, V>(Map<K, V> map) => Object.hashAllUnordered(
   map.entries.map((entry) => Object.hash(entry.key, entry.value)),
@@ -93,7 +93,7 @@ class SceneCanvasRenderKey {
   /// Locale used for text layout/rendering.
   final Locale? locale;
 
-  /// Core-generated frame render plan snapshot for this key.
+  /// Engine-generated frame render plan snapshot for this key.
   final FrameRenderPlan framePlan;
 
   @override

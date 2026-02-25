@@ -96,7 +96,7 @@ DefaultDrawStore _createStore({required double selectionPadding}) {
     context: context,
     initialState: DrawState(
       domain: DomainState(
-        document: DocumentState(elements: [_selectionElement]),
+        document: DocumentState(elements: const [_selectionElement]),
         selection: const SelectionState(selectedIds: {'rect-1'}),
       ),
     ),

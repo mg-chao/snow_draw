@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
@@ -12,6 +11,7 @@ import 'package:snow_draw_core/draw/elements/types/line/line_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_definition.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_definition.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('DefaultElementRegistry characterization', () {

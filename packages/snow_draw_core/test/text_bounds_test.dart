@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_bounds.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   test(
@@ -77,9 +77,9 @@ void main() {
 
   test('clampTextRectToLayout uses the provided text metrics service', () {
     const data = TextData(text: '中文中文中文中文', fontSize: 20);
-    const rect = DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 24);
+    const rect = DrawRect(maxX: 20, maxY: 24);
     const startRect = rect;
-    const anchor = DrawPoint(x: 0, y: 0);
+    const anchor = DrawPoint.zero;
 
     final fallbackClamped = clampTextRectToLayout(
       rect: rect,
@@ -122,7 +122,9 @@ final class _WideGlyphTextMetricsService implements TextMetricsService {
       final wraps = math.max(1, (rawWidth / maxWidth).ceil());
       for (var i = 0; i < wraps; i++) {
         final remaining = rawWidth - (maxWidth * i);
-        final lineWidth = i == wraps - 1 ? math.max(1.0, remaining) : maxWidth;
+        final lineWidth = i == wraps - 1
+            ? math.max(1, remaining).toDouble()
+            : maxWidth;
         lines.add(TextLineMetrics(width: lineWidth, height: lineHeight));
       }
     }

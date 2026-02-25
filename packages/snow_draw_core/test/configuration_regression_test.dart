@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:test/test.dart';
 
 Future<void> _flushAsync() => Future<void>.delayed(Duration.zero);
 

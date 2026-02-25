@@ -1,7 +1,7 @@
 import 'dart:collection';
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/models/selection_state.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('SelectionState state management', () {

@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {

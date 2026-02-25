@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -14,6 +13,7 @@ import 'package:snow_draw_core/draw/models/selection_state.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 const _textId = 'text-1';
 const _baseText = 'before';
@@ -335,12 +335,10 @@ DrawRect _autoResizeTextRect(
   String text, {
   double originX = 10,
   double originY = 10,
-}) {
-  return resolveAutoResizeTextEditingRect(
-    origin: DrawPoint(x: originX, y: originY),
-    data: TextData(text: text),
-  );
-}
+}) => resolveAutoResizeTextEditingRect(
+  origin: DrawPoint(x: originX, y: originY),
+  data: TextData(text: text),
+);
 
 DrawRect _fixedWidthTextRect({
   required DrawRect currentRect,

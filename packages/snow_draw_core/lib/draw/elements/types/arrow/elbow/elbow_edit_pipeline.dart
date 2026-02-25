@@ -386,9 +386,8 @@ bool _didEndpointMove({
 // Geometry helpers (merged from elbow_edit_geometry.dart)
 // ---------------------------------------------------------------------------
 
-List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) {
-  return ArrowGeometry.resolveWorldPoints(
-    rect: element.rect,
-    normalizedPoints: data.points,
-  );
-}
+List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) =>
+    ArrowGeometry.resolveWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );

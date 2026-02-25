@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_error_handler.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_result.dart';
@@ -6,6 +5,7 @@ import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
 import 'package:snow_draw_core/draw/edit/edit_operations.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('Edit error handling no-op optimization', () {

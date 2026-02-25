@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connection_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/serial_number_connector_cache.dart';
 

@@ -4,7 +4,7 @@ import 'dart:ui';
 
 import 'package:meta/meta.dart';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import '../../canvas/filter_shader_manager.dart';
 import 'filter_render_diagnostics.dart';
 

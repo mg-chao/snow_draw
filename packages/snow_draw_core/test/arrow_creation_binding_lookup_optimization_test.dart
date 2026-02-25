@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_creation_strategy.dart';
@@ -13,6 +12,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
+import 'package:test/test.dart';
 
 const _strategy = ArrowCreationStrategy();
 

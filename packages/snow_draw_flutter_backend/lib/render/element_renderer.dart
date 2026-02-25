@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/painting.dart';
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 import '../extensions/draw_color_extensions.dart';
 import 'patterns/stroke_pattern_utils.dart';
@@ -12,7 +12,7 @@ final ModuleLogger _renderFallbackLog = LogService.fallback.render;
 
 /// Flutter element renderer.
 ///
-/// Renders elements via core-owned render tasks.
+/// Renders elements via engine-owned render tasks.
 class ElementRenderer {
   const ElementRenderer();
 

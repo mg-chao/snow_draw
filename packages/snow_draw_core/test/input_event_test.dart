@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('PointerMoveInputEvent', () {

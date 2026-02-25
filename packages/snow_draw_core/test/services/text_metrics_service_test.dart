@@ -1,6 +1,6 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
+import 'package:test/test.dart';
 
 void main() {
   const service = FallbackTextMetricsService();

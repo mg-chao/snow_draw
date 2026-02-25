@@ -1,5 +1,5 @@
 import 'input_event.dart';
-import 'plugin_core.dart';
+import 'plugin_engine.dart';
 
 /// Plugin registry.
 ///

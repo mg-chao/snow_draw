@@ -3,13 +3,13 @@ import 'dart:collection';
 
 import 'input_event.dart';
 import 'middleware/input_middleware.dart';
-import 'plugin_core.dart';
+import 'plugin_engine.dart';
 import 'plugin_registry.dart';
 
 /// Plugin-based input coordinator.
 ///
-/// Core of the input architecture, combining middleware pipeline and plugin
-/// registry.
+/// Engine center of the input architecture, combining middleware pipeline and
+/// plugin registry.
 class PluginInputCoordinator {
   static const _processingFailureReason = 'Input processing failed';
   static const _disposedReason = 'Input coordinator disposed';

@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('channels and normalized channels are derived from argb32', () {

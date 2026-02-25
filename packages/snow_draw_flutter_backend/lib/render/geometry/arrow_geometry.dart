@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 class FlutterArrowGeometry {
   const FlutterArrowGeometry._();

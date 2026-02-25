@@ -168,8 +168,8 @@ DrawState _stateWithCreating() {
 
   return state.copyWith(
     application: state.application.copyWith(
-      interaction: CreatingState(
-        element: const ElementState(
+      interaction: const CreatingState(
+        element: ElementState(
           id: 'creating-1',
           rect: rect,
           rotation: 0,

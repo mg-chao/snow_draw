@@ -1,8 +1,8 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('HighlightData.fromJson requires canonical payload fields', () {

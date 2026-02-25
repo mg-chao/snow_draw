@@ -1,7 +1,7 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/elbow/elbow_heading.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('headingForVector prefers dominant axis and horizontal ties', () {

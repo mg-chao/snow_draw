@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
@@ -6,6 +5,7 @@ import 'package:snow_draw_core/draw/input/plugins/select_plugin.dart';
 import 'package:snow_draw_core/draw/input/plugins/text_tool_plugin.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   const event = PointerDownInputEvent(

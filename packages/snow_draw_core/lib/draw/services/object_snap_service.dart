@@ -219,7 +219,7 @@ class ObjectSnapService {
     enableGapSnaps: false,
   );
 
-  /// Core snapping calculation that both [snapMove]
+  /// Engine snapping calculation that both [snapMove]
   /// and [snapResize] delegate to.
   ///
   /// The algorithm works as follows:

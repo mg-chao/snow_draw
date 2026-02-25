@@ -1,9 +1,9 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/services/object_snap_service.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/snap_guides.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('ObjectSnapService', () {

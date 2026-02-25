@@ -1,7 +1,7 @@
 import '../../actions/draw_actions.dart';
 import '../../models/draw_state.dart';
 import '../input_event.dart';
-import '../plugin_core.dart';
+import '../plugin_engine.dart';
 
 /// Plugin that updates box selection interactions.
 class BoxSelectPlugin extends DrawInputPlugin {

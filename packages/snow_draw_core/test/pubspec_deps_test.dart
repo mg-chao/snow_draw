@@ -4,10 +4,10 @@
 // any imports or functionality.
 // Core dependencies that must remain importable in pure Dart.
 import 'package:collection/collection.dart';
-import 'package:test/test.dart';
 import 'package:meta/meta.dart';
 import 'package:rbush/rbush.dart';
 import 'package:snow_draw_core/draw/utils/lru_cache.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('snow_draw_core dependency smoke tests', () {

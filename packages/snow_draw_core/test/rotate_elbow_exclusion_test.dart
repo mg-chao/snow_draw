@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/apply/edit_apply.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -18,6 +17,8 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/element_geometry.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/hit_test.dart';
+import 'package:test/test.dart';
+
 import 'elbow_test_utils.dart';
 
 void main() {

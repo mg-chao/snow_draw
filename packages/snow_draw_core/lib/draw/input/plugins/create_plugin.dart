@@ -12,7 +12,7 @@ import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
 import '../double_tap_tracker.dart';
 import '../input_event.dart';
-import '../plugin_core.dart';
+import '../plugin_engine.dart';
 import '../pointer_sample_resampler.dart';
 import '../pointer_update_guard.dart';
 import '../policies/drag_threshold_policy.dart';

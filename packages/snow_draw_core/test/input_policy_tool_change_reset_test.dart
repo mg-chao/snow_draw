@@ -1,14 +1,14 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
   test(
     'plans finish-text-edit then clear-selection for text editing state',
     () {
-      final interaction = TextEditingState(
+      const interaction = TextEditingState(
         elementId: 'text-1',
-        draftData: const TextData(text: 'draft'),
-        rect: const DrawRect(maxX: 100, maxY: 40),
+        draftData: TextData(text: 'draft'),
+        rect: DrawRect(maxX: 100, maxY: 40),
         isNew: false,
         opacity: 1,
         rotation: 0,
@@ -30,8 +30,8 @@ void main() {
 
   test('omits clear-selection when includeClearSelection is false', () {
     final actions = resolveToolChangeResetActions(
-      interaction: CreatingState(
-        element: const ElementState(
+      interaction: const CreatingState(
+        element: ElementState(
           id: 'draft',
           rect: DrawRect(maxX: 20, maxY: 20),
           rotation: 0,

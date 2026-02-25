@@ -1,6 +1,6 @@
 export 'middleware/default_middlewares.dart';
 export 'middleware/input_middleware.dart';
-export 'plugin_core.dart';
+export 'plugin_engine.dart';
 export 'plugin_input_coordinator.dart';
 export 'plugin_registry.dart';
 export 'plugins/box_select_plugin.dart';

@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
@@ -12,6 +11,7 @@ import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_r
 import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
+import 'package:test/test.dart';
 
 String Function() _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
   var counter = startFrom;

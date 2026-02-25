@@ -1,26 +1,23 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('draw action runtime type names stay stable', () {
     final samples = <_ActionTypeSample>[
-      _ActionTypeSample(
-        action: const SelectElement(
-          elementId: 'element-1',
-          position: DrawPoint.zero,
-        ),
+      const _ActionTypeSample(
+        action: SelectElement(elementId: 'element-1', position: DrawPoint.zero),
         expectedTypeName: 'SelectElement',
       ),
-      _ActionTypeSample(
-        action: const ClearSelection(),
+      const _ActionTypeSample(
+        action: ClearSelection(),
         expectedTypeName: 'ClearSelection',
       ),
-      _ActionTypeSample(
-        action: const SelectAll(),
+      const _ActionTypeSample(
+        action: SelectAll(),
         expectedTypeName: 'SelectAll',
       ),
-      _ActionTypeSample(
-        action: const CreateElement(
+      const _ActionTypeSample(
+        action: CreateElement(
           typeId: ElementTypeId<ElementData>('compatibility_test'),
           position: DrawPoint.zero,
         ),
@@ -30,16 +27,16 @@ void main() {
         action: UpdateCreatingElement(positions: const [DrawPoint.zero]),
         expectedTypeName: 'UpdateCreatingElement',
       ),
-      _ActionTypeSample(
-        action: const AddArrowPoint(position: DrawPoint.zero),
+      const _ActionTypeSample(
+        action: AddArrowPoint(position: DrawPoint.zero),
         expectedTypeName: 'AddArrowPoint',
       ),
-      _ActionTypeSample(
-        action: const FinishCreateElement(),
+      const _ActionTypeSample(
+        action: FinishCreateElement(),
         expectedTypeName: 'FinishCreateElement',
       ),
-      _ActionTypeSample(
-        action: const CancelCreateElement(),
+      const _ActionTypeSample(
+        action: CancelCreateElement(),
         expectedTypeName: 'CancelCreateElement',
       ),
       _ActionTypeSample(
@@ -50,8 +47,8 @@ void main() {
         action: DuplicateElements(elementIds: const ['element-1']),
         expectedTypeName: 'DuplicateElements',
       ),
-      _ActionTypeSample(
-        action: const ChangeElementZIndex(
+      const _ActionTypeSample(
+        action: ChangeElementZIndex(
           elementId: 'element-1',
           operation: ZIndexOperation.bringToFront,
         ),
@@ -71,97 +68,97 @@ void main() {
         ),
         expectedTypeName: 'UpdateElementsStyle',
       ),
-      _ActionTypeSample(
-        action: const UpdateGlobalElements(),
+      const _ActionTypeSample(
+        action: UpdateGlobalElements(),
         expectedTypeName: 'UpdateGlobalElements',
       ),
       _ActionTypeSample(
         action: CreateSerialNumberTextElements(elementIds: const ['element-1']),
         expectedTypeName: 'CreateSerialNumberTextElements',
       ),
-      _ActionTypeSample(
-        action: const StartTextEdit(position: DrawPoint.zero),
+      const _ActionTypeSample(
+        action: StartTextEdit(position: DrawPoint.zero),
         expectedTypeName: 'StartTextEdit',
       ),
-      _ActionTypeSample(
-        action: const UpdateTextEdit(text: 'draft'),
+      const _ActionTypeSample(
+        action: UpdateTextEdit(text: 'draft'),
         expectedTypeName: 'UpdateTextEdit',
       ),
-      _ActionTypeSample(
-        action: const RefreshAutoResizeTextLayoutsAfterFontLoad(),
+      const _ActionTypeSample(
+        action: RefreshAutoResizeTextLayoutsAfterFontLoad(),
         expectedTypeName: 'RefreshAutoResizeTextLayoutsAfterFontLoad',
       ),
-      _ActionTypeSample(
-        action: const FinishTextEdit(
+      const _ActionTypeSample(
+        action: FinishTextEdit(
           elementId: 'element-1',
           text: 'text',
           isNew: false,
         ),
         expectedTypeName: 'FinishTextEdit',
       ),
-      _ActionTypeSample(
-        action: const CancelTextEdit(),
+      const _ActionTypeSample(
+        action: CancelTextEdit(),
         expectedTypeName: 'CancelTextEdit',
       ),
-      _ActionTypeSample(
-        action: const StartEdit(
+      const _ActionTypeSample(
+        action: StartEdit(
           operationId: EditOperationIds.move,
           position: DrawPoint.zero,
           params: MoveOperationParams(),
         ),
         expectedTypeName: 'StartEdit',
       ),
-      _ActionTypeSample(
-        action: const UpdateEdit(currentPosition: DrawPoint.zero),
+      const _ActionTypeSample(
+        action: UpdateEdit(currentPosition: DrawPoint.zero),
         expectedTypeName: 'UpdateEdit',
       ),
-      _ActionTypeSample(
-        action: const FinishEdit(),
+      const _ActionTypeSample(
+        action: FinishEdit(),
         expectedTypeName: 'FinishEdit',
       ),
-      _ActionTypeSample(
-        action: const CancelEdit(),
+      const _ActionTypeSample(
+        action: CancelEdit(),
         expectedTypeName: 'CancelEdit',
       ),
-      _ActionTypeSample(
-        action: const SetDragPending(
+      const _ActionTypeSample(
+        action: SetDragPending(
           pointerDownPosition: DrawPoint.zero,
           intent: PendingMoveIntent(),
         ),
         expectedTypeName: 'SetDragPending',
       ),
-      _ActionTypeSample(
-        action: const ClearDragPending(),
+      const _ActionTypeSample(
+        action: ClearDragPending(),
         expectedTypeName: 'ClearDragPending',
       ),
-      _ActionTypeSample(
-        action: const StartBoxSelect(startPosition: DrawPoint.zero),
+      const _ActionTypeSample(
+        action: StartBoxSelect(startPosition: DrawPoint.zero),
         expectedTypeName: 'StartBoxSelect',
       ),
-      _ActionTypeSample(
-        action: const UpdateBoxSelect(currentPosition: DrawPoint.zero),
+      const _ActionTypeSample(
+        action: UpdateBoxSelect(currentPosition: DrawPoint.zero),
         expectedTypeName: 'UpdateBoxSelect',
       ),
-      _ActionTypeSample(
-        action: const FinishBoxSelect(),
+      const _ActionTypeSample(
+        action: FinishBoxSelect(),
         expectedTypeName: 'FinishBoxSelect',
       ),
-      _ActionTypeSample(
-        action: const CancelBoxSelect(),
+      const _ActionTypeSample(
+        action: CancelBoxSelect(),
         expectedTypeName: 'CancelBoxSelect',
       ),
-      _ActionTypeSample(
-        action: const MoveCamera(dx: 1, dy: -1),
+      const _ActionTypeSample(
+        action: MoveCamera(dx: 1, dy: -1),
         expectedTypeName: 'MoveCamera',
       ),
-      _ActionTypeSample(
-        action: const ZoomCamera(scale: 1.25),
+      const _ActionTypeSample(
+        action: ZoomCamera(scale: 1.25),
         expectedTypeName: 'ZoomCamera',
       ),
-      _ActionTypeSample(action: const Undo(), expectedTypeName: 'Undo'),
-      _ActionTypeSample(action: const Redo(), expectedTypeName: 'Redo'),
-      _ActionTypeSample(
-        action: const ClearHistory(),
+      const _ActionTypeSample(action: Undo(), expectedTypeName: 'Undo'),
+      const _ActionTypeSample(action: Redo(), expectedTypeName: 'Redo'),
+      const _ActionTypeSample(
+        action: ClearHistory(),
         expectedTypeName: 'ClearHistory',
       ),
     ];

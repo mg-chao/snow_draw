@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/apply/edit_apply.dart';
 import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
@@ -20,6 +19,7 @@ import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('replaceElementsById', () {
@@ -134,10 +134,7 @@ void main() {
       final ctx = op.createContext(
         state: state,
         position: DrawPoint(x: element.rect.maxX, y: element.rect.maxY),
-        params: const ResizeOperationParams(
-          resizeMode: ResizeMode.bottomRight,
-          selectionPadding: 0,
-        ),
+        params: const ResizeOperationParams(resizeMode: ResizeMode.bottomRight),
       );
       const transform = ResizeTransform.complete(
         currentPosition: DrawPoint(x: 100, y: 100),

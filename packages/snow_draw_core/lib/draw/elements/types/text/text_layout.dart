@@ -52,10 +52,10 @@ class TextRangeBox {
   final double bottom;
 }
 
-/// Core layout snapshot used by scene encoding and reducer tests.
+/// Engine layout snapshot used by scene encoding and reducer tests.
 @immutable
 class TextLayoutMetrics {
-  /// Creates core text layout metrics.
+  /// Creates engine text layout metrics.
   const TextLayoutMetrics({
     required this.size,
     required this.lineHeight,
@@ -156,7 +156,8 @@ TextLayoutMetrics layoutText({
 
 /// Resolves range boxes as pure geometry values.
 ///
-/// The core currently uses this for full-range background rendering, so partial
+/// The engine currently uses this for full-range background rendering, so
+/// partial
 /// selections are approximated by proportional glyph widths per line.
 List<TextRangeBox> resolveTextRangeBoxes({
   required TextLayoutMetrics layout,

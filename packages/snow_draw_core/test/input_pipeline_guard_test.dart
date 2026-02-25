@@ -1,9 +1,9 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
 import 'package:snow_draw_core/draw/input/middleware/default_middlewares.dart';
 import 'package:snow_draw_core/draw/input/middleware/input_middleware.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('InputPipeline safety guards', () {

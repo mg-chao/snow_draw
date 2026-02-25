@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
@@ -8,6 +7,7 @@ import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/events/state_events.dart';
 import 'package:snow_draw_core/draw/store/draw_store.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('global element updates bump elementsVersion and emit '

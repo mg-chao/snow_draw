@@ -2,7 +2,7 @@ import '../../actions/draw_actions.dart';
 import '../../models/draw_state.dart';
 import '../../types/draw_point.dart';
 import '../input_event.dart';
-import '../plugin_core.dart';
+import '../plugin_engine.dart';
 import '../pointer_update_guard.dart';
 
 /// Plugin that manages edit sessions (move/resize/rotate).

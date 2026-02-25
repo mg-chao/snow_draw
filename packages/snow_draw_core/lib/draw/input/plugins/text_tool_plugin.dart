@@ -12,7 +12,7 @@ import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../utils/hit_test.dart';
 import '../input_event.dart';
-import '../plugin_core.dart';
+import '../plugin_engine.dart';
 
 /// Plugin that handles text tool interactions.
 class TextToolPlugin extends DrawInputPlugin {

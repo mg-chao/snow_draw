@@ -1,11 +1,10 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
-import 'package:snow_draw_core/draw/input/plugin_core.dart';
+import 'package:snow_draw_core/draw/input/plugin_engine.dart';
 import 'package:snow_draw_core/draw/input/plugins/create_plugin.dart';
 import 'package:snow_draw_core/draw/input/plugins/edit_plugin.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
@@ -16,6 +15,7 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('CreatePlugin update deduplication', () {

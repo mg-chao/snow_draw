@@ -14,7 +14,7 @@ import '../../types/element_style.dart';
 import '../../utils/edit_intent_detector.dart';
 import '../double_tap_tracker.dart';
 import '../input_event.dart';
-import '../plugin_core.dart';
+import '../plugin_engine.dart';
 import '../policies/drag_threshold_policy.dart';
 
 /// Plugin that handles selection and intent detection.

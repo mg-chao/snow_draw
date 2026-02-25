@@ -37,27 +37,27 @@ void main() {
       'dart run melos run check:core-purity',
       'dart run melos run check:core-draw-purity',
       'dart run melos run check:core-ui-boundary',
-      'dart run melos run check:core-entrypoint',
-      'dart run melos run check:workspace-core-deep-import-boundary',
+      'dart run melos run check:engine-entrypoint',
+      'dart run melos run check:workspace-engine-deep-import-boundary',
       'dart run melos run check:workspace-backend-deep-import-boundary',
       'dart run melos run check:backend-legacy',
       'dart run melos run check:backend-app-import-boundary',
       'dart run melos run check:backend-test-app-import-boundary',
       'dart run melos run check:backend-pubspec-boundary',
       'dart run melos run check:backend-dependency-graph',
-      'dart run melos run check:backend-core-entrypoint-import-boundary',
-      'dart run melos run check:backend-test-core-entrypoint-import-boundary',
+      'dart run melos run check:backend-engine-entrypoint-import-boundary',
+      'dart run melos run check:backend-test-engine-entrypoint-import-boundary',
       'dart run melos run check:backend-entrypoint',
       'dart run melos run check:ci-workflow',
       'dart run melos run check:app-backend-import-boundary',
-      'dart run melos run check:app-core-import-boundary',
+      'dart run melos run check:app-engine-import-boundary',
       'dart run melos run check:app-pubspec-backend',
       'dart run melos run check:app-dependency-graph',
     ];
 
     var lastIndex = -1;
     for (final command in orderedCommands) {
-      final index = pubspec.indexOf(command);
+      final index = pubspec.indexOf(command, lastIndex + 1);
       expect(
         index,
         greaterThan(lastIndex),
@@ -75,7 +75,7 @@ void main() {
 
     var corePurityLastIndex = -1;
     for (final check in orderedCorePurityChecks) {
-      final index = pubspec.indexOf(check);
+      final index = pubspec.indexOf(check, corePurityLastIndex + 1);
       expect(
         index,
         greaterThan(corePurityLastIndex),
@@ -94,12 +94,12 @@ void main() {
       pubspec,
       contains('run: dart run tools/check_core_draw_import_purity.dart'),
     );
-    expect(pubspec, contains('check:core-entrypoint:'));
+    expect(pubspec, contains('check:engine-entrypoint:'));
     expect(
       pubspec,
       contains('run: dart run tools/check_core_entrypoint_exports.dart'),
     );
-    expect(pubspec, contains('check:workspace-core-deep-import-boundary:'));
+    expect(pubspec, contains('check:workspace-engine-deep-import-boundary:'));
     expect(
       pubspec,
       contains(
@@ -137,7 +137,10 @@ void main() {
         'run: dart run tools/check_backend_dependency_graph_boundary.dart',
       ),
     );
-    expect(pubspec, contains('check:backend-core-entrypoint-import-boundary:'));
+    expect(
+      pubspec,
+      contains('check:backend-engine-entrypoint-import-boundary:'),
+    );
     expect(
       pubspec,
       contains(
@@ -146,7 +149,7 @@ void main() {
     );
     expect(
       pubspec,
-      contains('check:backend-test-core-entrypoint-import-boundary:'),
+      contains('check:backend-test-engine-entrypoint-import-boundary:'),
     );
     expect(
       pubspec,
@@ -167,7 +170,7 @@ void main() {
       pubspec,
       contains('run: dart run tools/check_app_pubspec_backend_dependency.dart'),
     );
-    expect(pubspec, contains('check:app-core-import-boundary:'));
+    expect(pubspec, contains('check:app-engine-import-boundary:'));
     expect(
       pubspec,
       contains('run: dart run tools/check_app_core_import_boundary.dart'),

@@ -51,7 +51,6 @@ void main() {
           data: TextData(text: 'deterministic', fontSize: 12),
           maxWidth: 120,
           localeTag: 'en-US',
-          isResizing: false,
         ),
       );
       final variant = service.measure(

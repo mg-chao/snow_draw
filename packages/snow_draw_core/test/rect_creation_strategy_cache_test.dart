@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/rect_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -10,6 +9,7 @@ import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/utils/snapping_mode.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('RectCreationStrategy snap reference caching', () {
@@ -40,8 +40,8 @@ void main() {
         ),
       );
       final config = DrawConfig();
-      final creating = CreatingState(
-        element: const ElementState(
+      const creating = CreatingState(
+        element: ElementState(
           id: 'creating-rect',
           rect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
           rotation: 0,
@@ -49,8 +49,8 @@ void main() {
           zIndex: 2,
           data: RectangleData(),
         ),
-        startPosition: const DrawPoint(x: 10, y: 10),
-        currentRect: const DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
+        startPosition: DrawPoint(x: 10, y: 10),
+        currentRect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
       );
 
       final firstUpdate = strategy.update(
@@ -95,8 +95,8 @@ void main() {
       final initialState = DrawState(
         domain: DomainState(document: DocumentState(elements: initialElements)),
       );
-      final creating = CreatingState(
-        element: const ElementState(
+      const creating = CreatingState(
+        element: ElementState(
           id: 'creating-rect',
           rect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
           rotation: 0,
@@ -104,8 +104,8 @@ void main() {
           zIndex: 1,
           data: RectangleData(),
         ),
-        startPosition: const DrawPoint(x: 10, y: 10),
-        currentRect: const DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
+        startPosition: DrawPoint(x: 10, y: 10),
+        currentRect: DrawRect(minX: 10, minY: 10, maxX: 10, maxY: 10),
       );
       final config = DrawConfig();
 
@@ -153,8 +153,8 @@ void main() {
     test('keeps plain rect creation mode when object snapping is disabled', () {
       const strategy = RectCreationStrategy();
       final state = DrawState();
-      final creating = CreatingState(
-        element: const ElementState(
+      const creating = CreatingState(
+        element: ElementState(
           id: 'creating-rect',
           rect: DrawRect(),
           rotation: 0,
@@ -163,7 +163,7 @@ void main() {
           data: RectangleData(),
         ),
         startPosition: DrawPoint.zero,
-        currentRect: const DrawRect(),
+        currentRect: DrawRect(),
       );
 
       final result = strategy.update(

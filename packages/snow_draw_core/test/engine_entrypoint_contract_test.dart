@@ -1,9 +1,9 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('core entrypoint contract', () {
-    test('exports draw context and core value types', () {
+  group('engine entrypoint contract', () {
+    test('exports draw context and engine value types', () {
       final context = DrawContext.withDefaults();
       final idGenerator = RandomStringIdGenerator();
 
@@ -46,7 +46,7 @@ void main() {
 
     test('exports coordinate and render-task contracts', () {
       const service = CoordinateService(
-        camera: CameraState(position: DrawPoint(x: 10, y: 20), zoom: 1),
+        camera: CameraState(position: DrawPoint(x: 10, y: 20)),
         scaleFactor: 2,
       );
 
@@ -76,15 +76,16 @@ void main() {
         reason: 'test-reason',
       );
 
-      cache.put('a', 1);
-      cache.put('b', 2);
+      cache
+        ..put('a', 1)
+        ..put('b', 2);
       expect(appState.view, isA<ViewState>());
       expect(domainState.document, isA<DocumentState>());
       expect(domainState.selection, isA<SelectionState>());
       expect(drawStateView.state, isA<DrawState>());
       expect(validation.action, 'test-action');
       expect(eventBus.tryEmit(validation), isFalse);
-      final invalidator = () {};
+      void invalidator() {}
       registerTextRenderingCacheInvalidator(invalidator);
       unregisterTextRenderingCacheInvalidator(invalidator);
       expect(cache.get('a'), 1);

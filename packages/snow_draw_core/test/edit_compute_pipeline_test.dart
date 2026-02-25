@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_compute_pipeline.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
@@ -11,6 +10,7 @@ import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
   DrawState stateWith(List<ElementState> elements) => DrawState(
@@ -249,7 +249,7 @@ void main() {
 }
 
 DrawRect _rectForPoints(List<DrawPoint> points) {
-  assert(points.isNotEmpty);
+  assert(points.isNotEmpty, 'points must not be empty');
 
   var minX = points.first.x;
   var maxX = points.first.x;
