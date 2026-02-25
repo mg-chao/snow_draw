@@ -166,76 +166,31 @@ class EditApply {
 
   /// Returns a list where elements with matching ids are replaced.
   ///
-  /// The original order is preserved. When [resolveIndex] is provided, it is
-  /// used as an O(1) id-to-index lookup fast path.
+  /// The original order is preserved.
   static List<ElementState> replaceElementsById({
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
-    int? Function(String id)? resolveIndex,
   }) {
     if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
     }
 
     List<ElementState>? updatedElements;
-    Map<String, int>? indexById;
-
-    void applyReplacementAt(int index, ElementState replacement) {
-      final current = (updatedElements ?? elements)[index];
+    for (var index = 0; index < elements.length; index++) {
+      final current = elements[index];
+      final replacement = replacementsById[current.id];
+      if (replacement == null) {
+        continue;
+      }
       if (replacement == current) {
-        return;
+        continue;
       }
 
       updatedElements ??= List<ElementState>.of(elements, growable: false);
-      updatedElements![index] = replacement;
+      updatedElements[index] = replacement;
     }
-
-    int? resolveLinearIndex(String id) {
-      indexById ??= {
-        for (var index = 0; index < elements.length; index++)
-          elements[index].id: index,
-      };
-      return indexById![id];
-    }
-
-    for (final entry in replacementsById.entries) {
-      final replacementIndex = _resolveReplacementIndex(
-        id: entry.key,
-        elements: elements,
-        resolveIndex: resolveIndex,
-        resolveLinearIndex: resolveLinearIndex,
-      );
-      if (replacementIndex == null) {
-        continue;
-      }
-      applyReplacementAt(replacementIndex, entry.value);
-    }
-
     return updatedElements ?? elements;
   }
-}
-
-bool _isResolvedIndexValid({
-  required int? index,
-  required String id,
-  required List<ElementState> elements,
-}) =>
-    index != null &&
-    index >= 0 &&
-    index < elements.length &&
-    elements[index].id == id;
-
-int? _resolveReplacementIndex({
-  required String id,
-  required List<ElementState> elements,
-  required int? Function(String id)? resolveIndex,
-  required int? Function(String id) resolveLinearIndex,
-}) {
-  final resolvedIndex = resolveIndex?.call(id);
-  if (_isResolvedIndexValid(index: resolvedIndex, id: id, elements: elements)) {
-    return resolvedIndex;
-  }
-  return resolveLinearIndex(id);
 }
 
 void _visitSelectedSnapshots<S>({

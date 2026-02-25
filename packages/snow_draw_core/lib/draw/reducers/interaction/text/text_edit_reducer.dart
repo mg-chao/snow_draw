@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../core/draw_context.dart';
+import '../../../edit/apply/edit_apply.dart';
 import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_editing_geometry.dart';
@@ -11,6 +12,15 @@ import '../../../models/interaction_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/reducer_utils.dart';
+
+typedef _TextEditSession = ({
+  String elementId,
+  TextData draftData,
+  DrawRect rect,
+  bool isNew,
+  double opacity,
+  double rotation,
+});
 
 /// Reducer for text editing interactions.
 @immutable
@@ -60,35 +70,16 @@ class TextEditReducer {
     );
   }
 
-  ({
-    String elementId,
-    TextData draftData,
-    DrawRect rect,
-    bool isNew,
-    double opacity,
-    double rotation,
-  })?
-  _resolveStartSession(
+  _TextEditSession? _resolveStartSession(
     DrawState state,
     StartTextEdit action,
     DrawContext context,
-  ) {
-    final existingId = action.elementId;
-    if (existingId != null) {
-      return _resolveExistingSession(state, existingId);
-    }
-    return _resolveNewSession(action, context);
-  }
+  ) => switch (action.elementId) {
+    final String elementId => _resolveExistingSession(state, elementId),
+    null => _resolveNewSession(action, context),
+  };
 
-  ({
-    String elementId,
-    TextData draftData,
-    DrawRect rect,
-    bool isNew,
-    double opacity,
-    double rotation,
-  })?
-  _resolveExistingSession(DrawState state, String elementId) {
+  _TextEditSession? _resolveExistingSession(DrawState state, String elementId) {
     final element = state.domain.document.getElementById(elementId);
     final data = element?.data;
     if (element == null || data is! TextData) {
@@ -104,15 +95,10 @@ class TextEditReducer {
     );
   }
 
-  ({
-    String elementId,
-    TextData draftData,
-    DrawRect rect,
-    bool isNew,
-    double opacity,
-    double rotation,
-  })
-  _resolveNewSession(StartTextEdit action, DrawContext context) {
+  _TextEditSession _resolveNewSession(
+    StartTextEdit action,
+    DrawContext context,
+  ) {
     final defaults = context.config.textStyle;
     final draftData = const TextData().withElementStyle(defaults) as TextData;
     return (
@@ -241,24 +227,24 @@ class TextEditReducer {
     TextData data,
     DrawRect rect,
   ) {
-    final orderIndex = state.domain.document.getOrderIndex(
-      interaction.elementId,
-    );
-    if (orderIndex == null) {
+    final document = state.domain.document;
+    final currentElement = document.getElementById(interaction.elementId);
+    if (currentElement == null) {
       return _finishTextEditing(state);
     }
-
-    final currentElement = state.domain.document.elements[orderIndex];
     if (currentElement.rect == rect && currentElement.data == data) {
       return _finishTextEditing(state);
     }
-
-    final nextElements = [...state.domain.document.elements];
-    nextElements[orderIndex] = currentElement.copyWith(rect: rect, data: data);
+    final nextElements = EditApply.replaceElementsById(
+      elements: document.elements,
+      replacementsById: {
+        interaction.elementId: currentElement.copyWith(rect: rect, data: data),
+      },
+    );
 
     final nextState = state.copyWith(
       domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: nextElements),
+        document: document.copyWith(elements: nextElements),
       ),
     );
     return _finishTextEditing(nextState);
@@ -326,14 +312,9 @@ class TextEditReducer {
     allowShrinkHeight: true,
   );
 
-  DrawState _clearSelectionAndIdle(DrawState state) {
-    final nextState = applySelectionChange(state, const <String>{});
-    return _toIdle(nextState);
-  }
-
   DrawState _toIdle(DrawState state) =>
       state.copyWith(application: state.application.toIdle());
 
   DrawState _finishTextEditing(DrawState state) =>
-      _clearSelectionAndIdle(state);
+      _toIdle(applySelectionChange(state, const <String>{}));
 }

@@ -36,11 +36,10 @@ DrawState handleUpdateElementsStyle(
   var selectionGeometryChanged = false;
 
   for (final id in targetIds) {
-    final orderIndex = document.getOrderIndex(id);
-    if (orderIndex == null) {
+    final element = document.getElementById(id);
+    if (element == null) {
       continue;
     }
-    final element = document.elements[orderIndex];
     final update = _resolveElementStyleUpdate(
       element: element,
       styleUpdate: action.styleUpdate,
@@ -78,7 +77,6 @@ DrawState handleUpdateElementsStyle(
             elements: EditApply.replaceElementsById(
               elements: document.elements,
               replacementsById: replacementsById,
-              resolveIndex: document.getOrderIndex,
             ),
           ),
         )
