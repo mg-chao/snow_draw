@@ -53,7 +53,6 @@ class DefaultDrawStore implements DrawStore {
     _editSessionService = EditSessionService.fromRegistry(
       this.context.editOperations,
       configProvider: () => _configManager.current,
-      textMetricsService: this.context.textMetricsService,
       logService: this.context.log,
     );
 

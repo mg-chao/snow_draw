@@ -1,6 +1,5 @@
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
-import '../../services/text/text_metrics_service.dart';
 import '../edit_operation_registry_interface.dart';
 import 'edit_preview.dart';
 
@@ -19,7 +18,6 @@ class EditPreviewEngine {
   EditPreview build({
     required DrawState state,
     required EditOperationRegistry editOperations,
-    TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final interaction = state.application.interaction;
     if (interaction is! EditingState) {
@@ -31,13 +29,10 @@ class EditPreviewEngine {
       return EditPreview.none;
     }
 
-    return runWithScopedTextMetricsService(
-      textMetricsService: textMetricsService,
-      action: () => operation.buildPreview(
-        state: state,
-        context: interaction.context,
-        transform: interaction.currentTransform,
-      ),
+    return operation.buildPreview(
+      state: state,
+      context: interaction.context,
+      transform: interaction.currentTransform,
     );
   }
 }

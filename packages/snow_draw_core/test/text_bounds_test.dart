@@ -75,33 +75,28 @@ void main() {
     },
   );
 
-  test(
-    'clampTextRectToLayout honors scoped text metrics service by default',
-    () {
-      const data = TextData(text: '中文中文中文中文', fontSize: 20);
-      const rect = DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 24);
-      const startRect = rect;
-      const anchor = DrawPoint(x: 0, y: 0);
+  test('clampTextRectToLayout uses the provided text metrics service', () {
+    const data = TextData(text: '中文中文中文中文', fontSize: 20);
+    const rect = DrawRect(minX: 0, minY: 0, maxX: 20, maxY: 24);
+    const startRect = rect;
+    const anchor = DrawPoint(x: 0, y: 0);
 
-      final fallbackClamped = clampTextRectToLayout(
-        rect: rect,
-        startRect: startRect,
-        anchor: anchor,
-        data: data,
-      );
-      final scopedClamped = runWithScopedTextMetricsService(
-        textMetricsService: const _WideGlyphTextMetricsService(),
-        action: () => clampTextRectToLayout(
-          rect: rect,
-          startRect: startRect,
-          anchor: anchor,
-          data: data,
-        ),
-      );
+    final fallbackClamped = clampTextRectToLayout(
+      rect: rect,
+      startRect: startRect,
+      anchor: anchor,
+      data: data,
+    );
+    final customClamped = clampTextRectToLayout(
+      rect: rect,
+      startRect: startRect,
+      anchor: anchor,
+      data: data,
+      textMetricsService: const _WideGlyphTextMetricsService(),
+    );
 
-      expect(scopedClamped.height, greaterThan(fallbackClamped.height));
-    },
-  );
+    expect(customClamped.height, greaterThan(fallbackClamped.height));
+  });
 }
 
 final class _WideGlyphTextMetricsService implements TextMetricsService {
