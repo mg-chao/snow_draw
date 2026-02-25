@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 /// Serializes config writes per [DrawStore] to avoid cross-adapter races.
 ///

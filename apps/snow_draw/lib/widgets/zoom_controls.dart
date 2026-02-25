@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 import '../l10n/app_localizations.dart';
 

@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/property_descriptor.dart';
@@ -6,7 +6,7 @@ import 'package:snow_draw/property_initialization.dart';
 import 'package:snow_draw/property_registry.dart';
 import 'package:snow_draw/style_toolbar_state.dart';
 import 'package:snow_draw/tool_controller.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 void main() {
   test('highlight toolbar priority follows the configured order', () {

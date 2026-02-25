@@ -1,4 +1,4 @@
-﻿// Tests that verify pubspec dependency hygiene for the snow_draw app.
+// Tests that verify pubspec dependency hygiene for the snow_draw app.
 //
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
 // Internal package dependency:
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_core/snow_draw_engine.dart';
 
 void main() {
   group('snow_draw app dependency smoke tests', () {
@@ -24,8 +24,8 @@ void main() {
       expect(GlobalMaterialLocalizations, isNotNull);
     });
 
-    test('snow_draw_core is importable', () {
-      // The core package path dependency must resolve.
+    test('snow_draw engine entrypoint is importable', () {
+      // The core package engine entrypoint must resolve.
       final cache = LruCache<String, int>(maxEntries: 2)..put('x', 42);
       expect(cache.get('x'), 42);
     });
