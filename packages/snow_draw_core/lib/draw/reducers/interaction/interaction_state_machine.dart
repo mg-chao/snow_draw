@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
@@ -28,7 +28,7 @@ class InteractionStateMachine {
   InteractionTransition reduce({
     required DrawState state,
     required DrawAction action,
-    required InteractionReducerDeps context,
+    required DrawContext context,
     required EditSessionService editSessionService,
     required EditSessionIdGenerator sessionIdGenerator,
   }) {
@@ -58,7 +58,7 @@ class InteractionStateMachine {
   DrawState? reduceState(
     DrawState state,
     DrawAction action,
-    InteractionReducerDeps context,
+    DrawContext context,
   ) =>
       _pendingReducer.reduce(state, action) ??
       _boxSelectReducer.reduce(state, action) ??

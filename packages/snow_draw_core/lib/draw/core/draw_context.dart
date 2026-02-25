@@ -8,13 +8,12 @@ import '../elements/registration.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
 import '../services/text/text_metrics_service.dart';
-import 'dependency_interfaces.dart';
 
 /// Canvas context holding all injectable dependencies.
 ///
 /// This replaces global singletons and enables testability and multi-canvas
 /// isolation.
-class DrawContext implements InteractionReducerDeps {
+class DrawContext {
   DrawContext({
     required this.elementRegistry,
     required this.editOperations,
@@ -30,6 +29,11 @@ class DrawContext implements InteractionReducerDeps {
        log = logService ?? LogService(),
        textMetricsService = textMetricsService ?? defaultTextMetricsService;
 
+  /// Creates a context with built-in defaults.
+  ///
+  /// If [elementRegistry] is omitted, a new registry is created and seeded
+  /// with built-in element definitions. A provided [elementRegistry] is used
+  /// as-is without additional registration.
   factory DrawContext.withDefaults({
     DefaultElementRegistry? elementRegistry,
     DefaultEditOperationRegistry? editOperations,
@@ -40,9 +44,7 @@ class DrawContext implements InteractionReducerDeps {
     TextMetricsService? textMetricsService,
     EventBus? eventBus,
   }) {
-    final resolvedRegistry = resolveElementRegistry(
-      elementRegistry: elementRegistry,
-    );
+    final resolvedRegistry = elementRegistry ?? resolveElementRegistry();
     return DrawContext(
       elementRegistry: resolvedRegistry,
       editOperations:
@@ -55,11 +57,8 @@ class DrawContext implements InteractionReducerDeps {
       eventBus: eventBus,
     );
   }
-  @override
   final DefaultElementRegistry elementRegistry;
-  @override
   final DefaultEditOperationRegistry editOperations;
-  @override
   final IdGenerator idGenerator;
 
   /// Configuration manager (single source of truth).
@@ -69,19 +68,15 @@ class DrawContext implements InteractionReducerDeps {
   /// Logging service.
   ///
   /// Provides unified logging with modular logs and multiple outputs.
-  @override
   final LogService log;
 
   /// Text metrics service used by core text geometry reducers.
-  @override
   final TextMetricsService textMetricsService;
 
   /// Event bus for UI-facing diagnostics and errors.
-  @override
   final EventBus? eventBus;
 
   /// Convenient access to the current configuration.
-  @override
   DrawConfig get config => configManager.current;
 
   /// Configuration change stream.

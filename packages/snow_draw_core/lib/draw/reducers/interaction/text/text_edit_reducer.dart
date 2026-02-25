@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
-import '../../../core/dependency_interfaces.dart';
+import '../../../core/draw_context.dart';
 import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_editing_geometry.dart';
@@ -17,22 +17,19 @@ import '../../core/reducer_utils.dart';
 class TextEditReducer {
   const TextEditReducer();
 
-  DrawState? reduce(
-    DrawState state,
-    DrawAction action,
-    TextEditReducerDeps context,
-  ) => switch (action) {
-    final StartTextEdit a => _startTextEdit(state, a, context),
-    final UpdateTextEdit a => _updateTextEdit(state, a, context),
-    final FinishTextEdit a => _finishTextEdit(state, a, context),
-    CancelTextEdit _ => _cancelTextEdit(state),
-    _ => null,
-  };
+  DrawState? reduce(DrawState state, DrawAction action, DrawContext context) =>
+      switch (action) {
+        final StartTextEdit a => _startTextEdit(state, a, context),
+        final UpdateTextEdit a => _updateTextEdit(state, a, context),
+        final FinishTextEdit a => _finishTextEdit(state, a, context),
+        CancelTextEdit _ => _cancelTextEdit(state),
+        _ => null,
+      };
 
   DrawState _startTextEdit(
     DrawState state,
     StartTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     if (state.application.interaction is TextEditingState) {
       return state;
@@ -74,7 +71,7 @@ class TextEditReducer {
   _resolveStartSession(
     DrawState state,
     StartTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     final existingId = action.elementId;
     if (existingId != null) {
@@ -115,7 +112,7 @@ class TextEditReducer {
     double opacity,
     double rotation,
   })
-  _resolveNewSession(StartTextEdit action, TextEditReducerDeps context) {
+  _resolveNewSession(StartTextEdit action, DrawContext context) {
     final defaults = context.config.textStyle;
     final draftData = const TextData().withElementStyle(defaults) as TextData;
     return (
@@ -135,7 +132,7 @@ class TextEditReducer {
   DrawState _updateTextEdit(
     DrawState state,
     UpdateTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
@@ -171,7 +168,7 @@ class TextEditReducer {
   DrawState _finishTextEdit(
     DrawState state,
     FinishTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
@@ -199,7 +196,7 @@ class TextEditReducer {
     required DrawState state,
     required TextEditingState interaction,
     required String rawText,
-    required TextEditReducerDeps context,
+    required DrawContext context,
   }) {
     final nextData = interaction.draftData.copyWith(text: rawText);
     final nextRect = _resolveTextDraftRect(
@@ -320,7 +317,7 @@ class TextEditReducer {
   DrawRect _resolveTextDraftRect({
     required DrawRect currentRect,
     required TextData data,
-    required TextEditReducerDeps context,
+    required DrawContext context,
   }) => resolveTextEditingRect(
     origin: DrawPoint(x: currentRect.minX, y: currentRect.minY),
     currentRect: currentRect,

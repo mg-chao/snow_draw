@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -21,7 +21,7 @@ import '../core/reducer_utils.dart';
 DrawState handleUpdateElementsStyle(
   DrawState state,
   UpdateElementsStyle action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   final targetIds = action.elementIds.toSet();
   if (targetIds.isEmpty || !action.hasUpdates) {
@@ -226,7 +226,7 @@ TextEditingState? _resolveTextEditingUpdate({
   required Set<String> targetIds,
   required ElementStyleUpdate styleUpdate,
   required double? opacity,
-  required ElementReducerDeps context,
+  required DrawContext context,
 }) {
   final interaction = state.application.interaction;
   if (interaction is! TextEditingState ||
@@ -245,7 +245,7 @@ TextEditingState? _applyTextEditingStyleUpdate({
   required TextEditingState interaction,
   required ElementStyleUpdate styleUpdate,
   required double? opacity,
-  required ElementReducerDeps context,
+  required DrawContext context,
 }) {
   final updatedData = styleUpdate.isEmpty
       ? interaction.draftData

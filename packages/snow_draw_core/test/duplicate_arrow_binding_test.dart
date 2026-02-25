@@ -1,49 +1,30 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
+import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/reducers/element/delete_element_handler.dart';
-import 'package:snow_draw_core/draw/services/log/log_service.dart';
-import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
-class _TestDeps implements ElementReducerDeps {
-  var _counter = 0;
-
-  @override
-  LogService get log => LogService.fallback;
-
-  @override
-  EventBus? get eventBus => null;
-
-  @override
-  String Function() get idGenerator =>
-      () => 'dup-${_counter++}';
-
-  @override
-  DrawConfig get config => DrawConfig();
-
-  @override
-  TextMetricsService get textMetricsService => defaultTextMetricsService;
+DrawContext _createDeps() {
+  var counter = 0;
+  return DrawContext.withDefaults(idGenerator: () => 'dup-${counter++}');
 }
 
 void main() {
-  late _TestDeps deps;
+  late DrawContext deps;
 
   setUp(() {
-    deps = _TestDeps();
+    deps = _createDeps();
   });
 
   group('handleDuplicateElements arrow binding remapping', () {

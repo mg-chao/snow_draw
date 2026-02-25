@@ -15,6 +15,12 @@ class DefaultElementRegistry {
   final Map<String, ElementDefinition<ElementData>> _definitionsByTypeValue =
       {};
 
+  void registerAll(Iterable<ElementDefinition<ElementData>> definitions) {
+    for (final definition in definitions) {
+      register(definition);
+    }
+  }
+
   void register<T extends ElementData>(ElementDefinition<T> definition) {
     final typeValue = definition.typeId.value;
     if (_definitionsByTypeValue.containsKey(typeValue)) {

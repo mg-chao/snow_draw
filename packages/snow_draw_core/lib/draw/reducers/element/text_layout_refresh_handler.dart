@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../elements/types/text/text_editing_geometry.dart';
 import '../../models/draw_state.dart';
@@ -11,7 +11,7 @@ import '../core/reducer_utils.dart';
 DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
   DrawState state,
   RefreshAutoResizeTextLayoutsAfterFontLoad _,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;

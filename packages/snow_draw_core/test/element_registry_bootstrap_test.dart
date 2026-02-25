@@ -12,7 +12,7 @@ void main() {
     });
 
     test('supports custom registries', () {
-      final registry = _CustomElementRegistryProxy();
+      final registry = DefaultElementRegistry();
 
       final resolved = resolveElementRegistry(elementRegistry: registry);
 
@@ -21,51 +21,4 @@ void main() {
       expect(resolved.supports(SerialNumberData.typeIdToken), isTrue);
     });
   });
-}
-
-class _CustomElementRegistryProxy implements DefaultElementRegistry {
-  _CustomElementRegistryProxy();
-
-  final DefaultElementRegistry _delegate = DefaultElementRegistry();
-
-  @override
-  void register<T extends ElementData>(ElementDefinition<T> definition) {
-    _delegate.register(definition);
-  }
-
-  @override
-  ElementDefinition<T>? getDefinition<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => _delegate.getDefinition(typeId);
-
-  @override
-  ElementDefinition<T>? get<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _delegate.get(typeId);
-
-  @override
-  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
-      _delegate.getDefinitionByValue(typeValue);
-
-  @override
-  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
-      _delegate.registeredTypeIds;
-
-  @override
-  bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _delegate.supports(typeId);
-
-  @override
-  bool supportsTypeValue(String typeValue) =>
-      _delegate.supportsTypeValue(typeValue);
-
-  @override
-  ElementDefinition<T> require<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => _delegate.require(typeId);
-
-  @override
-  void clear() => _delegate.clear();
-
-  @override
-  DefaultElementRegistry clone() => _delegate.clone();
 }

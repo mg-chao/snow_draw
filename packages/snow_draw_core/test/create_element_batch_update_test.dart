@@ -1,7 +1,8 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
+import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
+import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
@@ -9,7 +10,6 @@ import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/interaction_state.dart';
 import 'package:snow_draw_core/draw/reducers/interaction/create/create_element_reducer.dart';
-import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/utils/id_generator.dart';
 
@@ -18,36 +18,16 @@ IdGenerator _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
   return () => '$prefix-${counter++}';
 }
 
-class _Deps implements CreateElementReducerDeps {
-  _Deps({
-    required this.config,
-    required this.elementRegistry,
-    required this.idGenerator,
-  });
-
-  @override
-  final DrawConfig config;
-
-  @override
-  final DefaultElementRegistry elementRegistry;
-
-  @override
-  final IdGenerator idGenerator;
-
-  @override
-  final TextMetricsService textMetricsService = defaultTextMetricsService;
-}
-
 void main() {
   test('UpdateCreatingElementBatch advances free-draw creation '
       'in one reducer pass', () {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
 
-    final deps = _Deps(
-      config: DrawConfig(),
+    final deps = DrawContext.withDefaults(
       elementRegistry: registry,
       idGenerator: _testIdGenerator(),
+      configManager: ConfigManager(DrawConfig()),
     );
     const reducer = CreateElementReducer();
 

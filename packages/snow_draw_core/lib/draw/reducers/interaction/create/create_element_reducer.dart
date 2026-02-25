@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../config/draw_config.dart';
-import '../../../core/dependency_interfaces.dart';
+import '../../../core/draw_context.dart';
 import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../elements/core/element_definition.dart';
@@ -38,28 +38,29 @@ class CreateElementReducer {
   /// Try to handle element creation actions.
   ///
   /// Returns null if the action is not a creation operation.
-  DrawState? reduce(
-    DrawState state,
-    DrawAction action,
-    CreateElementReducerDeps context,
-  ) => switch (action) {
-    final CreateElement a => _startCreateElement(state, a, context),
-    final UpdateCreatingElement a => _updateCreatingElement(state, a, context),
-    final UpdateCreatingElementBatch a => _updateCreatingElementBatch(
-      state,
-      a,
-      context,
-    ),
-    final AddArrowPoint a => _addCreationPoint(state, a, context),
-    FinishCreateElement _ => _finishCreateElement(state, context),
-    CancelCreateElement _ => _cancelCreateElement(state),
-    _ => null,
-  };
+  DrawState? reduce(DrawState state, DrawAction action, DrawContext context) =>
+      switch (action) {
+        final CreateElement a => _startCreateElement(state, a, context),
+        final UpdateCreatingElement a => _updateCreatingElement(
+          state,
+          a,
+          context,
+        ),
+        final UpdateCreatingElementBatch a => _updateCreatingElementBatch(
+          state,
+          a,
+          context,
+        ),
+        final AddArrowPoint a => _addCreationPoint(state, a, context),
+        FinishCreateElement _ => _finishCreateElement(state, context),
+        CancelCreateElement _ => _cancelCreateElement(state),
+        _ => null,
+      };
 
   DrawState _startCreateElement(
     DrawState state,
     CreateElement action,
-    CreateElementReducerDeps context,
+    DrawContext context,
   ) {
     final config = context.config;
     final definition = _requireDefinition(context, action.typeId);
@@ -118,7 +119,7 @@ class CreateElementReducer {
   }
 
   ElementDefinition<ElementData> _requireDefinition(
-    CreateElementReducerDeps context,
+    DrawContext context,
     ElementTypeId<ElementData> typeId,
   ) {
     final definition = context.elementRegistry.getDefinition(typeId);
@@ -180,7 +181,7 @@ class CreateElementReducer {
   DrawState _updateCreatingElement(
     DrawState state,
     UpdateCreatingElement action,
-    CreateElementReducerDeps context,
+    DrawContext context,
   ) => _runCreationUpdate(
     state: state,
     context: context,
@@ -200,7 +201,7 @@ class CreateElementReducer {
   DrawState _updateCreatingElementBatch(
     DrawState state,
     UpdateCreatingElementBatch action,
-    CreateElementReducerDeps context,
+    DrawContext context,
   ) => _runCreationUpdate(
     state: state,
     context: context,
@@ -222,10 +223,7 @@ class CreateElementReducer {
     },
   );
 
-  DrawState _finishCreateElement(
-    DrawState state,
-    CreateElementReducerDeps context,
-  ) {
+  DrawState _finishCreateElement(DrawState state, DrawContext context) {
     final interaction = _currentCreatingState(state);
     if (interaction == null) {
       return state;
@@ -275,7 +273,7 @@ class CreateElementReducer {
   DrawState _addCreationPoint(
     DrawState state,
     AddArrowPoint action,
-    CreateElementReducerDeps context,
+    DrawContext context,
   ) => _runCreationUpdate(
     state: state,
     context: context,
@@ -291,7 +289,7 @@ class CreateElementReducer {
   );
 
   CreationStrategy _resolveCreationStrategy(
-    CreateElementReducerDeps context,
+    DrawContext context,
     ElementTypeId<ElementData> typeId,
   ) =>
       _requireDefinition(context, typeId).creationStrategy ??
@@ -312,7 +310,7 @@ class CreateElementReducer {
 
   DrawState _runCreationUpdate({
     required DrawState state,
-    required CreateElementReducerDeps context,
+    required DrawContext context,
     required bool snapOverride,
     required CreationUpdateResult? Function(
       CreatingState interaction,

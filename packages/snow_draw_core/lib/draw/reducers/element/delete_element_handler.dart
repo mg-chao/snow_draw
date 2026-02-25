@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -14,7 +14,7 @@ import '../core/reducer_utils.dart';
 DrawState handleDeleteElements(
   DrawState state,
   DeleteElements action,
-  ElementReducerDeps _,
+  DrawContext _,
 ) {
   final document = state.domain.document;
   final deleteIds = _resolveDeleteIds(
@@ -74,7 +74,7 @@ ElementState _applyDeleteElementUpdates({
 DrawState handleDuplicateElements(
   DrawState state,
   DuplicateElements action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   if (action.elementIds.isEmpty) {
     return _reportDuplicateValidationFailure(
@@ -202,7 +202,7 @@ ElementData _duplicateDataWithRemappedReferences(
 DrawState _reportDuplicateValidationFailure({
   required DrawState state,
   required DuplicateElements action,
-  required ElementReducerDeps context,
+  required DrawContext context,
   required String logMessage,
   required String reason,
   Map<String, dynamic>? details,

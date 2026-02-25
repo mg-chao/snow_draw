@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../elements/types/serial_number/serial_number_binding.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_data.dart';
@@ -11,7 +11,7 @@ import '../core/reducer_utils.dart';
 DrawState handleCreateSerialNumberTextElements(
   DrawState state,
   CreateSerialNumberTextElements action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   final targetIds = action.elementIds.toSet();
   if (targetIds.isEmpty) {
