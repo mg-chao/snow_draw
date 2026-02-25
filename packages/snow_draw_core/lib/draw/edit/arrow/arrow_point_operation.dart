@@ -430,7 +430,7 @@ ElementState _buildUpdatedElement({
       fixedSegmentsOverride: fixedSegments,
       finalize: finalize,
     );
-    final rectAndPoints = computeArrowRectAndPoints(
+    final geometry = resolveArrowGeometryUpdate(
       localPoints: updated.localPoints,
       oldRect: context.elementRect,
       rotation: context.rotation,
@@ -439,34 +439,28 @@ ElementState _buildUpdatedElement({
     final transformedFixedSegments = transformFixedSegments(
       segments: updated.fixedSegments,
       oldRect: context.elementRect,
-      newRect: rectAndPoints.rect,
+      newRect: geometry.rect,
       rotation: context.rotation,
     );
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: rectAndPoints.localPoints,
-      rect: rectAndPoints.rect,
-    );
     final updatedData = dataWithBindings.copyWith(
-      points: normalized,
+      points: geometry.normalizedPoints,
       fixedSegments: transformedFixedSegments,
       startIsSpecial: updated.startIsSpecial,
       endIsSpecial: updated.endIsSpecial,
     );
-    return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
+    return element.copyWith(rect: geometry.rect, data: updatedData);
   }
 
-  final rectAndPoints = computeArrowRectAndPoints(
+  final geometry = resolveArrowGeometryUpdate(
     localPoints: localPoints,
     oldRect: context.elementRect,
     rotation: context.rotation,
     arrowType: data.arrowType,
   );
-  final normalized = ArrowGeometry.normalizePoints(
-    worldPoints: rectAndPoints.localPoints,
-    rect: rectAndPoints.rect,
+  final updatedData = dataWithBindings.copyWith(
+    points: geometry.normalizedPoints,
   );
-  final updatedData = dataWithBindings.copyWith(points: normalized);
-  return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
+  return element.copyWith(rect: geometry.rect, data: updatedData);
 }
 
 @immutable

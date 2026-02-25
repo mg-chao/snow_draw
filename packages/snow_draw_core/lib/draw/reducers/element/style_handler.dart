@@ -296,47 +296,36 @@ DrawRect _resolveSerialNumberRect({
     startIsSpecial: null,
     endIsSpecial: null,
   );
-  final layout = _resolveArrowLayout(
-    element: element,
-    data: sanitizedData,
-    elementsById: elementsById,
-  );
-  final normalizedPoints = ArrowGeometry.normalizePoints(
-    worldPoints: layout.points,
-    rect: layout.rect,
-  );
-  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
-  return (rect: layout.rect, data: updatedData);
-}
-
-({DrawRect rect, List<DrawPoint> points}) _resolveArrowLayout({
-  required ElementState element,
-  required ArrowData data,
-  required Map<String, ElementState> elementsById,
-}) {
-  if (data.arrowType == ArrowType.elbow) {
+  if (sanitizedData.arrowType == ArrowType.elbow) {
     final routed = routeElbowArrowForElement(
       element: element,
-      data: data,
+      data: sanitizedData,
       elementsById: elementsById,
     );
-    final result = computeArrowRectAndPoints(
+    final geometry = resolveArrowGeometryUpdate(
       localPoints: routed.localPoints,
       oldRect: element.rect,
       rotation: element.rotation,
-      arrowType: data.arrowType,
+      arrowType: sanitizedData.arrowType,
     );
-    return (rect: result.rect, points: result.localPoints);
+    final updatedData = sanitizedData.copyWith(
+      points: geometry.normalizedPoints,
+    );
+    return (rect: geometry.rect, data: updatedData);
   }
 
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
-    normalizedPoints: data.points,
+    normalizedPoints: sanitizedData.points,
   );
   final rect = ArrowGeometry.calculatePathBounds(
     worldPoints: worldPoints,
-    arrowType: data.arrowType,
+    arrowType: sanitizedData.arrowType,
   );
-
-  return (rect: rect, points: worldPoints);
+  final normalizedPoints = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: rect,
+  );
+  final updatedData = sanitizedData.copyWith(points: normalizedPoints);
+  return (rect: rect, data: updatedData);
 }
